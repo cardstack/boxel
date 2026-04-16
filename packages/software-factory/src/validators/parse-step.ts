@@ -117,8 +117,14 @@ export interface ParseValidationDetails {
  */
 const PARSEABLE_EXTENSIONS = ['.gts', '.gjs', '.ts'];
 
+/** Absolute path to the monorepo's packages/ directory. */
+const PACKAGES_PATH = resolve(__dirname, '..', '..', '..');
+
 /** Absolute path to the monorepo's packages/base directory. */
-const BASE_PKG_PATH = resolve(__dirname, '..', '..', '..', 'base');
+const BASE_PKG_PATH = join(PACKAGES_PATH, 'base');
+
+/** Absolute path to the host package (for test helper path mappings). */
+const HOST_PKG_PATH = join(PACKAGES_PATH, 'host');
 
 /** Absolute path to the software-factory package's node_modules. */
 const NODE_MODULES_PATH = resolve(__dirname, '..', '..', 'node_modules');
@@ -508,10 +514,7 @@ export class ParseValidationStep implements ValidationStepRunner {
   // -------------------------------------------------------------------------
 
   /**
-   * Discover .gts, .gjs, and .ts files in the realm.
-   * Test files (*.test.gts, *.test.ts) are excluded — those are the
-   * test step's responsibility and require test-infra type declarations
-   * (QUnit, @universal-ember/test-support) that aren't available here.
+   * Discover .gts, .gjs, and .ts files in the realm (including test files).
    */
   private async discoverGtsFiles(targetRealmUrl: string): Promise<string[]> {
     let result = await this.fetchFilenamesFn(targetRealmUrl, {
@@ -524,12 +527,7 @@ export class ParseValidationStep implements ValidationStepRunner {
     }
 
     return result.filenames
-      .filter(
-        (f) =>
-          PARSEABLE_EXTENSIONS.some((ext) => f.endsWith(ext)) &&
-          !f.endsWith('.test.gts') &&
-          !f.endsWith('.test.ts'),
-      )
+      .filter((f) => PARSEABLE_EXTENSIONS.some((ext) => f.endsWith(ext)))
       .sort((a, b) => a.localeCompare(b));
   }
 
@@ -644,12 +642,20 @@ async function runGlintCheck(
   let tempDir = mkdtempSync(join(tmpdir(), 'sf-parse-'));
 
   try {
-    // Write files to temp dir preserving directory structure
+    // Write files to temp dir preserving directory structure.
+    // Sanitize paths to prevent directory traversal — realm file paths
+    // should never contain '..' or be absolute.
     for (let file of files) {
-      let filePath = join(tempDir, file.path);
-      let dir = dirname(filePath);
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(filePath, file.content, 'utf8');
+      let normalized = join(tempDir, file.path);
+      let resolved = resolve(normalized);
+      if (!resolved.startsWith(tempDir + '/')) {
+        log.warn(
+          `Skipping file with unsafe path: ${file.path} (resolves outside temp dir)`,
+        );
+        continue;
+      }
+      mkdirSync(dirname(resolved), { recursive: true });
+      writeFileSync(resolved, file.content, 'utf8');
     }
 
     // Write tsconfig.json — mirrors realm/tsconfig.json but with absolute
@@ -659,23 +665,34 @@ async function runGlintCheck(
     if (!cachedTsconfigContent) {
       let tsconfig = {
         compilerOptions: {
-          target: 'es2020',
+          target: 'es2022',
           allowJs: true,
-          moduleResolution: 'node16',
+          // 'bundler' resolution supports both path mappings and import.meta
+          // (test files use `import.meta.url` for module URL resolution)
+          moduleResolution: 'bundler',
           allowSyntheticDefaultImports: true,
           noEmit: true,
           baseUrl: '.',
-          module: 'node16',
+          module: 'es2022',
           strict: true,
           experimentalDecorators: true,
           skipLibCheck: true,
           noUnusedLocals: false,
           noUnusedParameters: false,
+          // qunit-dom augments QUnit's Assert type with .dom() — loaded
+          // globally in test setup, so we include it as a type reference
+          types: ['qunit-dom'],
           paths: {
             'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
+            // Host test helpers — target realm test files import from these
+            '@cardstack/host/tests/*': [`${HOST_PKG_PATH}/tests/*`],
+            '@cardstack/host/*': [`${HOST_PKG_PATH}/app/*`],
+            '@cardstack/boxel-host/commands/*': [
+              `${HOST_PKG_PATH}/app/commands/*`,
+            ],
           },
         },
-        include: ['**/*.ts', '**/*.gts'],
+        include: ['**/*.ts', '**/*.gts', '**/*.gjs'],
         exclude: ['node_modules'],
       };
       cachedTsconfigContent = JSON.stringify(tsconfig, null, 2);
@@ -699,8 +716,8 @@ async function runGlintCheck(
       '.bin',
       'ember-tsc',
     );
-    let output = await new Promise<string>((resolvePromise, _reject) => {
-      execFile(
+    let output = await new Promise<string>((resolvePromise, reject) => {
+      let child = execFile(
         emberTscBin,
         ['--noEmit', '--project', join(tempDir, 'tsconfig.json')],
         {
@@ -708,8 +725,19 @@ async function runGlintCheck(
           timeout: 120_000,
           maxBuffer: 10 * 1024 * 1024,
         },
-        (_error, stdout, stderr) => {
-          // ember-tsc exits non-zero when there are type errors — that's expected
+        (error, stdout, stderr) => {
+          // ember-tsc exits non-zero when there are type errors (expected).
+          // Distinguish that from real execution failures: ENOENT (binary
+          // not found), signal kills, and timeouts produce no TS diagnostics
+          // and should be surfaced as step failures.
+          if (error && !stdout && !stderr) {
+            reject(new Error(`ember-tsc execution failed: ${error.message}`));
+            return;
+          }
+          if (child.killed || error?.killed) {
+            reject(new Error('ember-tsc was killed (timeout or signal)'));
+            return;
+          }
           resolvePromise(stdout + stderr);
         },
       );

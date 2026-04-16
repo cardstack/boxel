@@ -124,7 +124,7 @@ module('ParseValidationStep', function () {
   // GTS/TS file discovery
   // -----------------------------------------------------------------------
 
-  test('discovers .gts, .gjs, and .ts files but not .js, .json, or test files', async function (assert) {
+  test('discovers .gts, .gjs, .ts, and test files but not .js or .json', async function (assert) {
     let discoveredFiles: string[] = [];
     let step = new ParseValidationStep(
       makeConfig({
@@ -141,6 +141,8 @@ module('ParseValidationStep', function () {
           'hello.gts': 'export class Hello {}',
           'world.gjs': 'export default class World {}',
           'utils.ts': 'export function hello() {}',
+          'hello.test.gts': 'import { test } from "qunit";',
+          'utils.test.ts': 'import { test } from "qunit";',
         }),
         searchSpecsFn: makeSearchSpecs([]),
         runGlintCheckFn: async (files) => {
@@ -153,9 +155,21 @@ module('ParseValidationStep', function () {
     let result = await step.run('https://example.test/realm/');
 
     assert.true(result.passed);
-    // .js, .json, .test.gts, .test.ts are all excluded
-    assert.deepEqual(result.files, ['hello.gts', 'utils.ts', 'world.gjs']);
-    assert.deepEqual(discoveredFiles, ['hello.gts', 'utils.ts', 'world.gjs']);
+    // .js and .json are excluded; .test.gts and .test.ts are included
+    assert.deepEqual(result.files, [
+      'hello.gts',
+      'hello.test.gts',
+      'utils.test.ts',
+      'utils.ts',
+      'world.gjs',
+    ]);
+    assert.deepEqual(discoveredFiles, [
+      'hello.gts',
+      'hello.test.gts',
+      'utils.test.ts',
+      'utils.ts',
+      'world.gjs',
+    ]);
   });
 
   // -----------------------------------------------------------------------
