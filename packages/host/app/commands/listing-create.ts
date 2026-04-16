@@ -524,7 +524,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
         max: 1,
         additionalSystemPrompt:
           'You are selecting from an existing list of catalog tags. ' +
-          "Choose the most specific descriptive tags that describes the card's subject matter, use case, or domain. " +
+          "Choose the most specific descriptive tag that describes the card's subject matter, use case, or domain. " +
           'If no tag clearly fits the subject matter, select a Source/Origin tag as a fallback (From tag pools). ' +
           'Return [] only if no appropriate tag exists.',
       },
