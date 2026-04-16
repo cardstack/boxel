@@ -327,6 +327,10 @@ async function main() {
     'software-factory/instantiate-result',
     realmServerUrl,
   ).href;
+  let parseResultsModuleUrl = new URL(
+    'software-factory/parse-result',
+    realmServerUrl,
+  ).href;
 
   let pipeline = createDefaultPipeline({
     authorization,
@@ -342,6 +346,7 @@ async function main() {
     lintResultsModuleUrl,
     evalResultsModuleUrl,
     instantiateResultsModuleUrl,
+    parseResultsModuleUrl,
   });
 
   let validationResults = await pipeline.validate(targetRealmUrl);

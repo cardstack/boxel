@@ -15,16 +15,17 @@ import type {
 
 import type { Validator } from '../issue-loop';
 
-import { NoOpStepRunner } from './noop-step';
 import { TestValidationStep } from './test-step';
 import { LintValidationStep } from './lint-step';
 import { EvalValidationStep } from './eval-step';
 import { InstantiateValidationStep } from './instantiate-step';
+import { ParseValidationStep } from './parse-step';
 
 import type { TestValidationStepConfig } from './test-step';
 import type { LintValidationStepConfig } from './lint-step';
 import type { EvalValidationStepConfig } from './eval-step';
 import type { InstantiateValidationStepConfig } from './instantiate-step';
+import type { ParseValidationStepConfig } from './parse-step';
 
 import { logger } from '../logger';
 
@@ -156,20 +157,32 @@ export interface ValidationPipelineConfig {
   lintResultsModuleUrl: string;
   evalResultsModuleUrl: string;
   instantiateResultsModuleUrl: string;
+  parseResultsModuleUrl: string;
   issueId?: string;
-  /** Injected for testing — passed through to TestValidationStep, LintValidationStep, and EvalValidationStep. */
+  /** Injected for testing — passed through to TestValidationStep, LintValidationStep, EvalValidationStep, and ParseValidationStep. */
   fetchFilenames?: TestValidationStepConfig['fetchFilenames'];
-  /** Injected for testing — passed through to InstantiateValidationStep. */
+  /** Injected for testing — passed through to InstantiateValidationStep and ParseValidationStep. */
   searchSpecsFn?: InstantiateValidationStepConfig['searchSpecsFn'];
+  /** Injected for testing — passed through to ParseValidationStep. */
+  parseSearchSpecsFn?: ParseValidationStepConfig['searchSpecsFn'];
 }
 
 /**
  * Create the default validation pipeline with all 5 steps.
- * Currently only the test step is implemented; others are NoOp placeholders.
  */
 export function createDefaultPipeline(
   config: ValidationPipelineConfig,
 ): ValidationPipeline {
+  let parseConfig: ParseValidationStepConfig = {
+    authorization: config.authorization,
+    fetch: config.fetch,
+    realmServerUrl: config.realmServerUrl,
+    parseResultsModuleUrl: config.parseResultsModuleUrl,
+    issueId: config.issueId,
+    fetchFilenames: config.fetchFilenames,
+    searchSpecsFn: config.parseSearchSpecsFn,
+  };
+
   let testConfig: TestValidationStepConfig = {
     authorization: config.authorization,
     fetch: config.fetch,
@@ -211,7 +224,7 @@ export function createDefaultPipeline(
   };
 
   return new ValidationPipeline([
-    new NoOpStepRunner('parse'),
+    new ParseValidationStep(parseConfig),
     new LintValidationStep(lintConfig),
     new EvalValidationStep(evalConfig),
     new InstantiateValidationStep(instantiateConfig),

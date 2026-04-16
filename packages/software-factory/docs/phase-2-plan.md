@@ -84,20 +84,21 @@ interface ValidationStepRunner {
 - **Lint step** (CS-10714): `{ lintResultId, filesChecked, filesWithErrors, totalViolations, violations: [{ rule, file, line, message }] }` — calls the realm's `_lint` endpoint (ESLint + Prettier + `@cardstack/boxel` rules) for each `.gts`, `.gjs`, `.ts`, `.js` file. Creates a `LintResult` card as a persistent artifact.
 - **Eval step** (CS-10715): `{ evalResultId, modulesChecked, modulesWithErrors, modules: [{ path, error, stackTrace? }] }` — evaluates each non-test `.gts` module via `_run-command` → `evaluate-module` host command → `/_prerender-module` (prerenderer sandbox). Creates an `EvalResult` card as a persistent artifact. Files matching `*.test.gts` are excluded.
 - **Instantiate step** (CS-10716): `{ instantiateResultId, cardsChecked, cardsWithErrors, cards: [{ specId, cardName, error, stackTrace? }] }` — discovers Spec cards in the realm, resolves each spec's `ref` to a card definition module, reads `linkedExamples` entries as instance data, and instantiates via `_run-command` → `instantiate-card` host command → `store.__dangerousCreateFromSerialized(...)` (prerenderer sandbox) so `Field.validate()` failures surface during instantiation. Creates an `InstantiateResult` card as a persistent artifact. Field specs (`specType: 'field'`) are excluded.
-- **Future parse step**: defines its own `details` shape
+- **Parse step** (CS-10713): `{ parseResultId, filesChecked, filesWithErrors, totalErrors, errors: [{ file, line, message }] }` — validates `.gts` files via two-phase parsing (content-tag preprocessing + TypeScript syntax checking) and `.json` card instances via structural validation (JSON syntax + card document shape). JSON validation runs against spec `linkedExamples` — same discovery as the instantiate step. Creates a `ParseResult` card as a persistent artifact.
 
-**Adding a new validation step** = creating a new module file in `src/validators/` + replacing the `NoOpStepRunner` in `createDefaultPipeline()`.
+**Adding a new validation step** = creating a new module file in `src/validators/` + wiring it into `createDefaultPipeline()`.
 
 ### Validation Artifacts: Naming and Storage
 
 All validation artifacts (test runs, lint results, future validation types) are stored in a shared `Validations/` directory in the target realm with type-prefixed names:
 
+- Parse results: `Validations/parse_{issue-slug}-{seq}.json` (e.g., `Validations/parse_sticky-note-define-core-1.json`)
 - Test runs: `Validations/test_{issue-slug}-{seq}.json` (e.g., `Validations/test_sticky-note-define-core-1.json`)
 - Lint results: `Validations/lint_{issue-slug}-{seq}.json` (e.g., `Validations/lint_sticky-note-define-core-1.json`)
 - Eval results: `Validations/eval_{issue-slug}-{seq}.json` (e.g., `Validations/eval_sticky-note-define-core-1.json`)
 - Instantiate results: `Validations/instantiate_{issue-slug}-{seq}.json` (e.g., `Validations/instantiate_sticky-note-define-core-1.json`)
 
-Each artifact is a card instance (`TestRun`, `LintResult`, `EvalResult`, or `InstantiateResult`) with `linksTo` relationships to the `Issue` and `Project` being validated.
+Each artifact is a card instance (`ParseResult`, `TestRun`, `LintResult`, `EvalResult`, or `InstantiateResult`) with `linksTo` relationships to the `Issue` and `Project` being validated.
 
 ### Validation Context Flow
 
@@ -109,6 +110,28 @@ Each artifact is a card instance (`TestRun`, `LintResult`, `EvalResult`, or `Ins
 4. The LLM never sees the raw `ValidationResults` struct — only the formatted markdown
 
 The Phase 1 `testResults` field on `AgentContext` is deprecated. All validation flows through `validationResults` (for the loop) and `validationContext` (for the LLM prompt).
+
+### Parse Step Details (CS-10713)
+
+The parse validation step (`src/validators/parse-step.ts`) verifies that `.gts` and `.json` files are syntactically valid. It replaces the `NoOpStepRunner('parse')` placeholder in the default pipeline. Unlike lint (which uses the realm's `_lint` endpoint) or eval/instantiate (which use `_run-command` through the prerenderer), the parse step runs entirely in the factory's Node process using `content-tag` and TypeScript's parser — no realm server calls beyond file reads.
+
+**GTS validation is two-phase:**
+
+1. **content-tag preprocessing** — `Preprocessor.process(source, { filename })` transforms GTS → TS by replacing `<template>` tags with their compiled equivalent. This catches GTS-specific errors: unclosed `<template>` tags, malformed template expressions, and template placement errors. content-tag throws `Parse Error at file:line:col` with extractable line/column info.
+2. **TypeScript syntax checking** — `ts.createSourceFile(filename, preprocessedCode, ScriptTarget.Latest, true)` parses the preprocessed output. The `parseDiagnostics` array on the returned `SourceFile` contains any TypeScript syntax errors (missing brackets, malformed type annotations, etc.) that content-tag didn't catch.
+
+**Important:** This is syntax-level checking only. Full type checking (unresolved imports, type mismatches) would require module resolution for URL-style imports (`https://cardstack.com/base/card-api`) which is not feasible in the factory's Node process. The eval step handles runtime module-loading errors via the prerenderer sandbox.
+
+**JSON validation uses spec-based discovery** — the same mechanism as the instantiate step. The step searches the realm for Spec cards and extracts their `linkedExamples` URLs, then reads each example instance and validates:
+
+1. JSON syntax via `JSON.parse()` (when reading raw content from mocks or non-realm sources)
+2. Card document structure: presence of `data` object, `data.type` string, `data.meta.adoptsFrom` with `module` and `name`
+
+When `readFile` returns a parsed `document` (as the realm API does for `.json` files), JSON syntax is already validated — only the structural check runs. When the realm enriches the document during indexing (adding computed fields or normalizing `adoptsFrom`), the structural check validates the enriched version, which may pass even if the raw source was incomplete. This is intentional: if the realm accepted and indexed the card, it is valid from the realm's perspective.
+
+**Bootstrap behavior:** When no `.gts` files exist and no Spec cards are found (bootstrap scenario), the step returns `passed: true` with no files checked and no artifact created. This matches the design principle: "nothing to validate is a pass."
+
+The `ParseResult` card definition (`realm/parse-result.gts`) and CRUD (`src/parse-result-cards.ts`) follow the same patterns as `LintResult` and `EvalResult` — fitted/embedded/isolated templates, a running state, `ParseFileResult` field def with nested `ParseError` entries, and links to Issue/Project.
 
 ### Lint Step Details (CS-10714)
 
@@ -190,13 +213,13 @@ The agent does **not** need to create "run tests" issues. Test execution happens
 
 Bootstrap issues (the seed issue that creates Project, KnowledgeArticles, and implementation issues) produce no testable code artifacts — only JSON card instances. Validation still runs after every inner-loop iteration, but each step gracefully handles "nothing to validate":
 
-| Step                   | Bootstrap behavior                                          |
-| ---------------------- | ----------------------------------------------------------- |
-| **Parse**              | Checks created `.json` files are valid — useful             |
-| **Lint**               | No-op for JSON card instances — pass                        |
-| **Module evaluation**  | No `.gts` modules created — no-op, pass                     |
-| **Card instantiation** | No `.gts` modules or Spec cards — pass, no artifact created |
-| **Run tests**          | No test files exist yet — vacuous pass                      |
+| Step                   | Bootstrap behavior                                                              |
+| ---------------------- | ------------------------------------------------------------------------------- |
+| **Parse**              | Checks `.gts` syntax + `.json` spec examples — pass if no specs or `.gts` files |
+| **Lint**               | No-op for JSON card instances — pass                                            |
+| **Module evaluation**  | No `.gts` modules created — no-op, pass                                         |
+| **Card instantiation** | No `.gts` modules or Spec cards — pass, no artifact created                     |
+| **Run tests**          | No test files exist yet — vacuous pass                                          |
 
 **Design principle**: No special-casing per issue type. Each validation step returns `passed: true` with an empty errors array when there is nothing to validate. "Nothing to validate" is a pass, not an error.
 

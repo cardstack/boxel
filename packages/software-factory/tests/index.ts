@@ -18,3 +18,4 @@ import './validation-pipeline.test';
 import './test-step.test';
 import './lint-step.test';
 import './eval-step.test';
+import './parse-step.test';
