@@ -7,6 +7,10 @@ import start from 'ember-exam/test-support/start';
 // eslint-disable-next-line ember/no-test-import-export
 import { loadRealmTests } from './live-test';
 import { setupQUnit } from './helpers/setup-qunit';
+// Side-effect import: registers a `__shard_warmup__` QUnit module so the
+// per-shard boot cost is absorbed by it rather than by whichever real
+// test module happens to be scheduled first on the partition.
+import './helpers/shard-warmup';
 
 const application = Application.create({
   ...config.APP,
