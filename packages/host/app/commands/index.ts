@@ -12,6 +12,7 @@ import * as CanReadRealmCommandModule from './can-read-realm';
 import * as CancelIndexingJobCommandModule from './cancel-indexing-job';
 import * as CheckCorrectnessCommandModule from './check-correctness';
 import * as CopyAndEditCommandModule from './copy-and-edit';
+import * as CopyCardAsMarkdownCommandModule from './copy-card-as-markdown';
 import * as CopyCardToRealmModule from './copy-card';
 import * as CopyCardToStackCommandModule from './copy-card-to-stack';
 import * as CopyFileToRealmCommandModule from './copy-file-to-realm';
@@ -113,6 +114,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/apply-search-replace-block',
     ApplySearchReplaceBlockCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/copy-card-as-markdown',
+    CopyCardAsMarkdownCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/copy-card',
@@ -466,6 +471,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   ApplySearchReplaceBlockCommandModule.default,
   ApplyMarkdownEditCommandModule.default,
   AskAiCommandModule.default,
+  CopyCardAsMarkdownCommandModule.default,
   CopyCardToRealmModule.default,
   CopyCardToStackCommandModule.default,
   CopyFileToRealmCommandModule.default,

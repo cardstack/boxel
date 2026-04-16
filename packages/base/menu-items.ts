@@ -1,10 +1,10 @@
 import type { BaseDef, CardCrudFunctions, CardDef } from './card-api';
 import {
-  copyCardMarkdownToClipboard,
   copyCardURLToClipboard,
   type MenuItemOptions,
 } from '@cardstack/boxel-ui/helpers';
 
+import CopyCardAsMarkdownCommand from '@cardstack/boxel-host/commands/copy-card-as-markdown';
 import CopyCardCommand from '@cardstack/boxel-host/commands/copy-card';
 import GenerateExampleCardsCommand from '@cardstack/boxel-host/commands/generate-example-cards';
 import OpenCreateListingModalCommand from '@cardstack/boxel-host/commands/open-create-listing-modal';
@@ -91,7 +91,10 @@ export function getDefaultCardMenuItems(
   if (params.menuContext === 'interact') {
     menuItems.push({
       label: 'Copy as Markdown',
-      action: () => copyCardMarkdownToClipboard(cardId),
+      action: () =>
+        new CopyCardAsMarkdownCommand(params.commandContext).execute({
+          cardId,
+        }),
       icon: ClipboardCopy,
       disabled: !cardId,
     });

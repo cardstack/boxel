@@ -1,8 +1,5 @@
 import { addClassToSVG } from './helpers/add-class-to-svg.ts';
-import {
-  copyCardMarkdownToClipboard,
-  copyCardURLToClipboard,
-} from './helpers/clipboard.ts';
+import { copyCardURLToClipboard } from './helpers/clipboard.ts';
 import cn from './helpers/cn.ts';
 import compact from './helpers/compact.ts';
 import { getContrastColor } from './helpers/contrast-color.ts';
@@ -77,7 +74,6 @@ export {
   buildCssVariableName,
   cn,
   compact,
-  copyCardMarkdownToClipboard,
   copyCardURLToClipboard,
   cssVar,
   currencyFormat,
