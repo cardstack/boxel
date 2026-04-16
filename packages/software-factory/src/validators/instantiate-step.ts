@@ -330,8 +330,29 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         }
       }
 
-      // If no examples were found/read, try instantiating with no field data
+      // If the spec declared linkedExamples but none could be read, that's a
+      // validation failure — a typoed path or permissions error should not be
+      // silently downgraded into "instantiate with no data." Only fall back to
+      // empty-data instantiation when the spec has no linkedExamples at all.
+      if (exampleInstances.length === 0 && spec.exampleUrls.length > 0) {
+        let codeRef = { module: spec.moduleUrl, name: spec.cardName };
+        let message = `All ${spec.exampleUrls.length} linkedExample(s) for spec ${spec.specId} failed to read — cannot validate instantiation. Check that example paths are correct.`;
+        log.warn(message);
+        allCardResults.push({
+          codeRef,
+          instanceId: '',
+          error: message,
+        });
+        failedCards.push({
+          instanceId: '',
+          cardName: spec.cardName,
+          error: message,
+        });
+        continue;
+      }
+
       if (exampleInstances.length === 0) {
+        // Spec has no linkedExamples — try instantiating with no field data
         exampleInstances.push({ url: '', data: '' });
       }
 

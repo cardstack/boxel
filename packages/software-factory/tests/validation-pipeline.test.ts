@@ -367,7 +367,8 @@ module('InstantiateValidationStep', function () {
     assert.true(result.passed, 'passes when only test files exist');
   });
 
-  test('passes with artifact when spec with examples all instantiate successfully', async function (assert) {
+  test('passes with artifact when spec with no examples instantiates successfully', async function (assert) {
+    // Spec has no linkedExamples — falls back to empty-data instantiation
     let step = new InstantiateValidationStep({
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
@@ -377,7 +378,7 @@ module('InstantiateValidationStep', function () {
             specId: 'Spec/my-card',
             moduleUrl: 'https://example.test/realm/my-card',
             cardName: 'MyCard',
-            exampleUrls: ['MyCard/example-1'],
+            exampleUrls: [],
           },
         ],
       }),
@@ -400,7 +401,8 @@ module('InstantiateValidationStep', function () {
     assert.strictEqual(details.cardsWithErrors, 0, '0 errors');
   });
 
-  test('fails when an example fails instantiation', async function (assert) {
+  test('fails when empty-data instantiation fails', async function (assert) {
+    // Spec has no linkedExamples — empty-data instantiation is attempted but fails
     let step = new InstantiateValidationStep({
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
@@ -410,7 +412,7 @@ module('InstantiateValidationStep', function () {
             specId: 'Spec/my-card',
             moduleUrl: 'https://example.test/realm/my-card',
             cardName: 'MyCard',
-            exampleUrls: ['MyCard/example-1'],
+            exampleUrls: [],
           },
         ],
       }),
