@@ -716,7 +716,10 @@ async function runGlintCheck(
       '.bin',
       'ember-tsc',
     );
-    let output = await new Promise<string>((resolvePromise, reject) => {
+    let { output, exitedWithError } = await new Promise<{
+      output: string;
+      exitedWithError: boolean;
+    }>((resolvePromise, reject) => {
       let child = execFile(
         emberTscBin,
         ['--noEmit', '--project', join(tempDir, 'tsconfig.json')],
@@ -738,7 +741,10 @@ async function runGlintCheck(
             reject(new Error('ember-tsc was killed (timeout or signal)'));
             return;
           }
-          resolvePromise(stdout + stderr);
+          resolvePromise({
+            output: stdout + stderr,
+            exitedWithError: !!error,
+          });
         },
       );
     });
@@ -786,6 +792,20 @@ async function runGlintCheck(
         line: parseInt(lineStr, 10),
         column: parseInt(colStr, 10),
         message,
+      });
+    }
+
+    // Safety check: if ember-tsc exited non-zero but we parsed zero
+    // diagnostics from our files, something went wrong (e.g., a runtime
+    // crash, module loader failure). Report this as a failure so we don't
+    // silently bypass parse validation.
+    if (exitedWithError && errors.length === 0) {
+      let truncatedOutput = output.slice(0, 500).trim();
+      errors.push({
+        file: files[0]?.path ?? 'unknown',
+        line: 0,
+        column: 0,
+        message: `ember-tsc exited with errors but no diagnostics matched target files. This may indicate a runtime failure in the type checker. Output: ${truncatedOutput}`,
       });
     }
 
