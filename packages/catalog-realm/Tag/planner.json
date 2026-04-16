@@ -1,20 +1,20 @@
 {
   "data": {
     "type": "card",
-    "meta": {
-      "adoptsFrom": {
-        "name": "Tag",
-        "module": "../catalog-app/listing/tag"
-      }
-    },
     "attributes": {
-      "name": "planner",
+      "name": "Planner",
       "color": "#10B981",
       "cardInfo": {
-        "name": "planner",
+        "notes": null,
+        "name": "Planner",
         "summary": "Meal planners, project planners, schedule cards, and anything focused on planning ahead.",
-        "cardThumbnailURL": null,
-        "notes": null
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/tag",
+        "name": "Tag"
       }
     },
     "relationships": {

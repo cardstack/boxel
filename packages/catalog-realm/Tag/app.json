@@ -1,20 +1,20 @@
 {
   "data": {
     "type": "card",
-    "meta": {
-      "adoptsFrom": {
-        "name": "Tag",
-        "module": "../catalog-app/listing/tag"
-      }
-    },
     "attributes": {
-      "name": "app",
+      "name": "App",
       "color": "#10B981",
       "cardInfo": {
-        "name": "app",
+        "notes": null,
+        "name": "App",
         "summary": "Full applications such as news readers, todo apps, CRMs, and other multi-feature tools.",
-        "cardThumbnailURL": null,
-        "notes": null
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/tag",
+        "name": "Tag"
       }
     },
     "relationships": {

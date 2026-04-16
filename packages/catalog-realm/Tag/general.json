@@ -1,20 +1,20 @@
 {
   "data": {
     "type": "card",
-    "meta": {
-      "adoptsFrom": {
-        "name": "Tag",
-        "module": "../catalog-app/listing/tag"
-      }
-    },
     "attributes": {
-      "name": "general",
+      "name": "General",
       "color": "#F97316",
       "cardInfo": {
-        "name": "general",
+        "notes": null,
+        "name": "General",
         "summary": "Universal fallback tag for any card or app that does not fit a more specific type.",
-        "cardThumbnailURL": null,
-        "notes": null
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/tag",
+        "name": "Tag"
       }
     },
     "relationships": {

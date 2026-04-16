@@ -1,21 +1,21 @@
 {
   "data": {
     "type": "card",
-    "meta": {
-      "adoptsFrom": {
-        "name": "Tag",
-        "module": "../catalog-app/listing/tag"
+    "attributes": {
+      "name": "Card",
+      "color": "#10B981",
+      "cardInfo": {
+        "notes": null,
+        "name": "Card",
+        "summary": "Simple single-purpose cards that display or capture one focused piece of information.",
+        "cardThumbnailURL": null
       }
     },
-    "attributes": {
-      "name": "card",
-      "cardInfo": {
-        "name": "card",
-        "summary": "Simple single-purpose cards that display or capture one focused piece of information.",
-        "cardThumbnailURL": null,
-        "notes": null
-      },
-      "color": "#10B981"
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/tag",
+        "name": "Tag"
+      }
     },
     "relationships": {
       "cardInfo.theme": {

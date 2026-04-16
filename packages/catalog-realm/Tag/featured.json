@@ -1,20 +1,20 @@
 {
   "data": {
     "type": "card",
-    "meta": {
-      "adoptsFrom": {
-        "name": "Tag",
-        "module": "../catalog-app/listing/tag"
-      }
-    },
     "attributes": {
-      "name": "featured",
+      "name": "Featured",
       "color": "#F97316",
       "cardInfo": {
-        "name": "featured",
+        "notes": null,
+        "name": "Featured",
         "summary": "Curated and highlighted listings selected by the catalog team as top picks.",
-        "cardThumbnailURL": null,
-        "notes": null
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/tag",
+        "name": "Tag"
       }
     },
     "relationships": {

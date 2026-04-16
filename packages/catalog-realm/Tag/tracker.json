@@ -1,20 +1,20 @@
 {
   "data": {
     "type": "card",
-    "meta": {
-      "adoptsFrom": {
-        "name": "Tag",
-        "module": "../catalog-app/listing/tag"
-      }
-    },
     "attributes": {
-      "name": "tracker",
+      "name": "Tracker",
       "color": "#10B981",
       "cardInfo": {
-        "name": "tracker",
+        "notes": null,
+        "name": "Tracker",
         "summary": "Habit trackers, expense trackers, progress trackers, and any card focused on monitoring over time.",
-        "cardThumbnailURL": null,
-        "notes": null
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/tag",
+        "name": "Tag"
       }
     },
     "relationships": {

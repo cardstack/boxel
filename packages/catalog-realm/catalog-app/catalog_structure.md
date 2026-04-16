@@ -219,7 +219,6 @@ Describe **what the card/app does** or **its functional purpose**:
 |-----|---------|
 | **app** | Full applications such as news readers, todo apps, CRMs, and other multi-feature tools |
 | **card** | Simple single-purpose cards that display or capture one focused piece of information |
-| **card-type** | Meta-category for organizing different card types |
 | **dashboard** | Data overview and analytics views that summarise key metrics at a glance |
 | **form** | Data entry forms, surveys, intake forms, and structured input collection cards |
 | **game** | Cards and apps for gaming, game tracking, scoreboards, turn management |
@@ -304,7 +303,7 @@ Tags use consistent colors based on their type for visual distinction:
 
 ### Key Points
 
-- 22 total tags (14 Content Type + 8 Source/Origin)
+- 21 total tags (13 Content Type + 8 Source/Origin)
 - Multiple tags can be applied to a single card/app
 - Color-coded by type for visual distinction
 - Tags provide flexible metadata beyond category structure
@@ -340,7 +339,7 @@ catalog-realm/
 │   ├── official.json                # Source/Origin - Orange
 │   ├── user-contributed.json        # Source/Origin - Orange
 │   ├── ai.json                      # Source/Origin - Orange
-│   └── ... (22 total tags)
+│   └── ... (21 total tags)
 │
 └── CATALOG_STRUCTURE.md             # This documentation
 ```

@@ -1,20 +1,20 @@
 {
   "data": {
     "type": "card",
-    "meta": {
-      "adoptsFrom": {
-        "name": "Tag",
-        "module": "../catalog-app/listing/tag"
-      }
-    },
     "attributes": {
-      "name": "dashboard",
+      "name": "Dashboard",
       "color": "#10B981",
       "cardInfo": {
-        "name": "dashboard",
+        "notes": null,
+        "name": "Dashboard",
         "summary": "Data overview and analytics views that summarise key metrics at a glance.",
-        "cardThumbnailURL": null,
-        "notes": null
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/tag",
+        "name": "Tag"
       }
     },
     "relationships": {

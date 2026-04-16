@@ -2,11 +2,11 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "skill",
+      "name": "Skill",
       "color": "#10B981",
       "cardInfo": {
         "notes": null,
-        "name": "skill",
+        "name": "Skill",
         "summary": "Cards and apps that teach, demonstrate, or practice specific AI skills, capabilities, and techniques.",
         "cardThumbnailURL": null
       }
