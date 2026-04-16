@@ -207,6 +207,7 @@ export function createDefaultPipeline(
     instantiateResultsModuleUrl: config.instantiateResultsModuleUrl,
     issueId: config.issueId,
     searchSpecsFn: config.searchSpecsFn,
+    fetchFilenames: config.fetchFilenames,
   };
 
   return new ValidationPipeline([

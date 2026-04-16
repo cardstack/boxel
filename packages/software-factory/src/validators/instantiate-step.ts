@@ -24,6 +24,7 @@ import { deriveIssueSlug } from '../factory-agent-types';
 import {
   searchRealm,
   readFile,
+  fetchRealmFilenames,
   getNextValidationSequenceNumber,
   runRealmCommand,
   type RealmFetchOptions,
@@ -58,6 +59,11 @@ export interface InstantiateValidationStepConfig {
   realmServerUrl: string;
   instantiateResultsModuleUrl: string;
   issueId?: string;
+  /** Injected for testing — defaults to fetchRealmFilenames. */
+  fetchFilenames?: (
+    realmUrl: string,
+    options?: RealmFetchOptions,
+  ) => Promise<{ filenames: string[]; error?: string }>;
   /** Injected for testing — defaults to searchRealm-based spec discovery. */
   searchSpecsFn?: (
     realmUrl: string,
@@ -109,6 +115,10 @@ export class InstantiateValidationStep implements ValidationStepRunner {
   private config: InstantiateValidationStepConfig;
   private lastSequenceNumber = 0;
 
+  private fetchFilenamesFn: (
+    realmUrl: string,
+    options?: RealmFetchOptions,
+  ) => Promise<{ filenames: string[]; error?: string }>;
   private searchSpecsFn: (
     realmUrl: string,
   ) => Promise<{ specs: SpecInfo[]; error?: string }>;
@@ -125,6 +135,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
 
   constructor(config: InstantiateValidationStepConfig) {
     this.config = config;
+    this.fetchFilenamesFn = config.fetchFilenames ?? fetchRealmFilenames;
     this.searchSpecsFn =
       config.searchSpecsFn ??
       ((realmUrl: string) => this.defaultSearchSpecs(realmUrl));
@@ -180,7 +191,35 @@ export class InstantiateValidationStep implements ValidationStepRunner {
     }
 
     if (specInfos.length === 0) {
-      log.info('No Spec cards found — nothing to validate');
+      // Check if there are .gts card modules — if so, missing specs is a failure
+      let hasModules = false;
+      try {
+        let filesResult = await this.fetchFilenamesFn(targetRealmUrl, {
+          authorization: this.config.authorization,
+          fetch: this.config.fetch,
+        });
+        hasModules = (filesResult.filenames ?? []).some(
+          (f) => f.endsWith('.gts') && !f.endsWith('.test.gts'),
+        );
+      } catch {
+        // If we can't check filenames, treat as nothing to validate
+      }
+
+      if (hasModules) {
+        return {
+          step: 'instantiate',
+          passed: false,
+          files: [],
+          errors: [
+            {
+              message:
+                'Card modules (.gts) exist but no Spec cards were found. Each entrypoint card needs a Catalog Spec with linkedExamples for instantiation validation.',
+            },
+          ],
+        };
+      }
+
+      log.info('No Spec cards or card modules found — nothing to validate');
       return { step: 'instantiate', passed: true, files: [], errors: [] };
     }
 
