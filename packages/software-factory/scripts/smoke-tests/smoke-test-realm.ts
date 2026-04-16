@@ -323,6 +323,10 @@ async function main() {
     'software-factory/eval-result',
     realmServerUrl,
   ).href;
+  let instantiateResultsModuleUrl = new URL(
+    'software-factory/instantiate-result',
+    realmServerUrl,
+  ).href;
 
   let pipeline = createDefaultPipeline({
     authorization,
@@ -337,6 +341,7 @@ async function main() {
     testResultsModuleUrl,
     lintResultsModuleUrl,
     evalResultsModuleUrl,
+    instantiateResultsModuleUrl,
   });
 
   let validationResults = await pipeline.validate(targetRealmUrl);

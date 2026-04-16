@@ -11,12 +11,9 @@ import { dirname, join } from 'node:path';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 export { SupportedMimeType };
-
-export function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
 
 /**
  * Ensure a card instance path ends with `.json`. The realm API uses

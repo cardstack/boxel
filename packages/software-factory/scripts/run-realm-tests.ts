@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 
 import { getActiveProfile, parseArgs } from '../src/boxel';
-import { ensureTrailingSlash } from '../src/realm-operations';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 type CommandOptions = {
   cwd?: string;
