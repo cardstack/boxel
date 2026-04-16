@@ -59,6 +59,17 @@ export function resolveFactoryTargetRealm(
   let serverUrl = resolveRealmServerUrl(options.realmServerUrl, url);
   let ownerUsername = resolveTargetRealmOwner();
 
+  let targetOrigin = new URL(url).origin;
+  let serverOrigin = new URL(serverUrl).origin;
+  if (targetOrigin !== serverOrigin) {
+    let profile = getActiveProfile();
+    throw new FactoryEntrypointUsageError(
+      `Target realm URL "${url}" (origin: ${targetOrigin}) does not match the realm server "${serverUrl}" (origin: ${serverOrigin}).\n` +
+        `Your active Boxel profile "${profile.profileId}" points to ${ensureTrailingSlash(profile.realmServerUrl)}.\n` +
+        `Either switch to a profile that matches the target realm (boxel profile switch), or pass --realm-server-url explicitly.`,
+    );
+  }
+
   return {
     url,
     serverUrl,

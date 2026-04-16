@@ -76,6 +76,28 @@ module('factory-target-realm', function (hooks) {
     );
   });
 
+  test('resolveFactoryTargetRealm rejects when target realm origin does not match profile', function (assert) {
+    // Profile points to staging, but target realm is localhost
+    cleanupProfile = installTestProfile({
+      username: 'hassan',
+      matrixUrl: 'https://matrix-staging.stack.cards/',
+      realmServerUrl: 'https://realms-staging.stack.cards/',
+      password: 'secret',
+    });
+
+    assert.throws(
+      () =>
+        resolveFactoryTargetRealm({
+          targetRealmUrl: 'http://localhost:4201/hassan/my-realm/',
+          realmServerUrl: null,
+        }),
+      (error: unknown) =>
+        error instanceof FactoryEntrypointUsageError &&
+        error.message.includes('does not match the realm server') &&
+        error.message.includes('boxel profile switch'),
+    );
+  });
+
   test('resolveFactoryTargetRealm rejects when no active profile is configured', function (assert) {
     cleanupProfile = installTestProfile({
       username: 'nobody',
