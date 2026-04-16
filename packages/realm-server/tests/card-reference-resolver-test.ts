@@ -279,39 +279,27 @@ module(basename(__filename), function () {
     // --- Absolute references (return as-is) ---
 
     test('absolute scoped identifier without relativeTo', function (assert) {
-      let result = resolveRRI(
-        '@cardstack/base/string',
-      );
+      let result = resolveRRI('@cardstack/base/string');
       assert.strictEqual(result, '@cardstack/base/string');
     });
 
     test('absolute scoped identifier with relativeTo is returned as-is', function (assert) {
-      let result = resolveRRI(
-        '@cardstack/base/string',
-        catalogPrefix,
-      );
+      let result = resolveRRI('@cardstack/base/string', catalogPrefix);
       assert.strictEqual(result, '@cardstack/base/string');
     });
 
     test('absolute HTTP URL without relativeTo', function (assert) {
-      let result = resolveRRI(
-        'http://localhost:4201/realm/card',
-      );
+      let result = resolveRRI('http://localhost:4201/realm/card');
       assert.strictEqual(result, 'http://localhost:4201/realm/card');
     });
 
     test('absolute HTTP URL with relativeTo is returned as-is', function (assert) {
-      let result = resolveRRI(
-        'http://localhost:4201/realm/card',
-        basePrefix,
-      );
+      let result = resolveRRI('http://localhost:4201/realm/card', basePrefix);
       assert.strictEqual(result, 'http://localhost:4201/realm/card');
     });
 
     test('absolute HTTPS URL is returned as-is', function (assert) {
-      let result = resolveRRI(
-        'https://example.com/card/123',
-      );
+      let result = resolveRRI('https://example.com/card/123');
       assert.strictEqual(result, 'https://example.com/card/123');
     });
 
