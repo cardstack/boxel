@@ -732,5 +732,26 @@ module(basename(__filename), function () {
       await vn.fetch('@test/fetch-realm/card-api', { method: 'POST' });
       assert.strictEqual(interceptedMethod, 'POST');
     });
+
+    test('@cardstack/base/card-api resolves through full fetch chain', async function (assert) {
+      let baseVN = new VirtualNetwork();
+      baseVN.addRealmMapping(
+        '@cardstack/base/',
+        'http://localhost:4201/base/',
+      );
+      let interceptedUrl: string | undefined;
+      baseVN.mount(async (req: Request) => {
+        interceptedUrl = req.url;
+        return new Response('ok', { status: 200 });
+      });
+
+      let response = await baseVN.fetch('@cardstack/base/card-api');
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(
+        interceptedUrl,
+        'http://localhost:4201/base/card-api',
+      );
+      unregisterCardReferencePrefix('@cardstack/base/');
+    });
   });
 });
