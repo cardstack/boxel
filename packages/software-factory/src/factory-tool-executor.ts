@@ -489,8 +489,20 @@ export class ToolExecutor {
         case 'realm-create': {
           let displayName = String(toolArgs['name']);
           let realmName = String(toolArgs['endpoint']);
+          let requestedServerUrl = ensureTrailingSlash(
+            String(toolArgs['realm-server-url']),
+          );
           try {
             let client = new BoxelCLIClient();
+            let active = client.getActiveProfile();
+            if (
+              active &&
+              ensureTrailingSlash(active.realmServerUrl) !== requestedServerUrl
+            ) {
+              throw new Error(
+                `realm-create cannot target "${requestedServerUrl}": active Boxel profile realm server is "${ensureTrailingSlash(active.realmServerUrl)}".`,
+              );
+            }
             let result = await client.createRealm({
               realmName,
               displayName,
