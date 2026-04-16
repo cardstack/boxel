@@ -6,6 +6,7 @@ import {
   resolveCardReference,
   resolveRRI,
   RealmPaths,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import type {
   SingleCardDocument,
@@ -616,6 +617,48 @@ module(basename(__filename), function () {
           /local\(\) requires a URL-based RealmPaths/,
         );
       });
+    });
+  });
+
+  module('VirtualNetwork.addRealmMapping', function (hooks) {
+    let vn: VirtualNetwork;
+    let prefix = '@test/realm/';
+    let target = 'http://localhost:9000/realm/';
+
+    hooks.beforeEach(function () {
+      vn = new VirtualNetwork();
+      vn.addRealmMapping(prefix, target);
+    });
+
+    hooks.afterEach(function () {
+      unregisterCardReferencePrefix(prefix);
+    });
+
+    test('populates importMap so resolveImport works', function (assert) {
+      let result = vn.resolveImport('@test/realm/card-api');
+      assert.strictEqual(result, 'http://localhost:9000/realm/card-api');
+    });
+
+    test('populates global prefixMappings so resolveCardReference works', function (assert) {
+      let result = resolveCardReference('@test/realm/Foo', undefined);
+      assert.strictEqual(result, 'http://localhost:9000/realm/Foo');
+    });
+
+    test('normalizes trailing slashes', function (assert) {
+      unregisterCardReferencePrefix(prefix);
+      let vn2 = new VirtualNetwork();
+      // No trailing slashes
+      vn2.addRealmMapping('@test/other', 'http://localhost:9000/other');
+      let result = vn2.resolveImport('@test/other/card');
+      assert.strictEqual(result, 'http://localhost:9000/other/card');
+      unregisterCardReferencePrefix('@test/other/');
+    });
+
+    test('overwrites cleanly when called twice with same prefix', function (assert) {
+      let newTarget = 'http://localhost:8000/realm/';
+      vn.addRealmMapping(prefix, newTarget);
+      let result = vn.resolveImport('@test/realm/card-api');
+      assert.strictEqual(result, 'http://localhost:8000/realm/card-api');
     });
   });
 });

@@ -1,5 +1,6 @@
-import { RealmPaths } from './paths';
+import { RealmPaths, ensureTrailingSlash } from './paths';
 import { baseRealm, isNode } from './index';
+import { registerCardReferencePrefix } from './card-reference-resolver';
 import type { ModuleDescriptor } from './package-shim-handler';
 import {
   PackageShimHandler,
@@ -19,6 +20,7 @@ export class VirtualNetwork {
   private handlers: Handler[] = [];
   private urlMappings: [string, string][] = [];
   private importMap: Map<string, (rest: string) => string> = new Map();
+  private realmMappings = new Map<string, string>();
 
   constructor(nativeFetch = createEnvironmentAwareFetch()) {
     this.nativeFetch = nativeFetch;
@@ -64,6 +66,20 @@ export class VirtualNetwork {
 
   addImportMap(prefix: string, handler: (rest: string) => string): void {
     this.importMap.set(prefix, handler);
+  }
+
+  addRealmMapping(realmIdentifier: string, targetURL: string): void {
+    let normalizedId = ensureTrailingSlash(realmIdentifier);
+    let normalizedTarget = ensureTrailingSlash(targetURL);
+    this.realmMappings.set(normalizedId, normalizedTarget);
+
+    // Backward compat bridge: populate both existing registration systems
+    // so that resolveImport and resolveCardReference continue to work
+    this.addImportMap(
+      normalizedId,
+      (rest) => new URL(rest, normalizedTarget).href,
+    );
+    registerCardReferencePrefix(normalizedId, normalizedTarget);
   }
 
   private nativeFetch: typeof globalThis.fetch;
