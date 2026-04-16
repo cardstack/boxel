@@ -1,8 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { resetProfileManager } from '@cardstack/boxel-cli/api';
+import {
+  resetProfileManager,
+  setProfileManager,
+} from '@cardstack/boxel-cli/api';
 
 export interface TestProfileOptions {
   username: string;
@@ -12,24 +15,15 @@ export interface TestProfileOptions {
 }
 
 /**
- * Installs a fake Boxel CLI profile into the real ~/.boxel-cli/profiles.json.
- * Backs up any existing file and resets the ProfileManager singleton so
- * BoxelCLIClient picks up the test profile.
+ * Installs a fake Boxel CLI profile into an isolated temp directory.
+ * Replaces the ProfileManager singleton so BoxelCLIClient picks up the
+ * test profile without touching the real ~/.boxel-cli/profiles.json.
  *
- * Returns a cleanup function that restores the original file and resets again.
+ * Returns a cleanup function that resets the singleton back to default.
  */
 export function installTestProfile(options: TestProfileOptions): () => void {
-  let configDir = join(homedir(), '.boxel-cli');
-  let profilesFile = join(configDir, 'profiles.json');
-
-  let backup: string | undefined;
-  if (existsSync(profilesFile)) {
-    backup = readFileSync(profilesFile, 'utf8');
-  }
-
-  if (!existsSync(configDir)) {
-    mkdirSync(configDir, { recursive: true });
-  }
+  let tempConfigDir = mkdtempSync(join(tmpdir(), 'boxel-test-config-'));
+  mkdirSync(tempConfigDir, { recursive: true });
 
   let profileId = `@${options.username}:localhost`;
   let config = {
@@ -43,18 +37,13 @@ export function installTestProfile(options: TestProfileOptions): () => void {
     activeProfile: profileId,
   };
 
-  writeFileSync(profilesFile, JSON.stringify(config, null, 2));
-  resetProfileManager();
+  writeFileSync(
+    join(tempConfigDir, 'profiles.json'),
+    JSON.stringify(config, null, 2),
+  );
+  setProfileManager(tempConfigDir);
 
   return () => {
-    if (backup !== undefined) {
-      writeFileSync(profilesFile, backup);
-    } else {
-      writeFileSync(
-        profilesFile,
-        JSON.stringify({ profiles: {}, activeProfile: null }),
-      );
-    }
     resetProfileManager();
   };
 }

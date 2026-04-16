@@ -4,4 +4,7 @@ export {
   type CreateRealmResult,
 } from './src/lib/boxel-cli-client';
 
-export { resetProfileManager } from './src/lib/profile-manager';
+export {
+  resetProfileManager,
+  setProfileManager,
+} from './src/lib/profile-manager';

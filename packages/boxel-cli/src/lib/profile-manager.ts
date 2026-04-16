@@ -572,3 +572,12 @@ export function getProfileManager(): ProfileManager {
 export function resetProfileManager(): void {
   _instance = null;
 }
+
+/**
+ * Replace the singleton with a ProfileManager using a custom config directory.
+ * Useful for tests that need an isolated profile without touching the real
+ * ~/.boxel-cli/profiles.json.
+ */
+export function setProfileManager(configDir: string): void {
+  _instance = new ProfileManager(configDir);
+}

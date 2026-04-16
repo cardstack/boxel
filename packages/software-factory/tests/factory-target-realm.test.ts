@@ -1,9 +1,9 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { module, test } from 'qunit';
 
-import { resetProfileManager } from '@cardstack/boxel-cli/api';
+import { setProfileManager, resetProfileManager } from '@cardstack/boxel-cli/api';
 
 import { FactoryEntrypointUsageError } from '../src/factory-entrypoint-errors';
 import {
@@ -100,35 +100,26 @@ module('factory-target-realm', function (hooks) {
   });
 
   test('resolveFactoryTargetRealm rejects when no active profile is configured', function (assert) {
-    let profilesFile = join(homedir(), '.boxel-cli', 'profiles.json');
-    let backup = existsSync(profilesFile)
-      ? readFileSync(profilesFile, 'utf8')
-      : undefined;
+    // Point the singleton at a temp dir with an empty profiles file
+    let tempConfigDir = mkdtempSync(join(tmpdir(), 'boxel-test-empty-'));
+    writeFileSync(
+      join(tempConfigDir, 'profiles.json'),
+      JSON.stringify({ profiles: {}, activeProfile: null }),
+    );
+    setProfileManager(tempConfigDir);
+    cleanupProfile = () => resetProfileManager();
 
-    try {
-      writeFileSync(
-        profilesFile,
-        JSON.stringify({ profiles: {}, activeProfile: null }),
-      );
-      resetProfileManager();
-
-      assert.throws(
-        () =>
-          resolveFactoryTargetRealm({
-            targetRealmUrl,
-            realmServerUrl: null,
-          }),
-        (error: unknown) =>
-          error instanceof FactoryEntrypointUsageError &&
-          (error.message.includes('boxel profile add') ||
-            error.message.includes('active Boxel profile')),
-      );
-    } finally {
-      if (backup !== undefined) {
-        writeFileSync(profilesFile, backup);
-      }
-      resetProfileManager();
-    }
+    assert.throws(
+      () =>
+        resolveFactoryTargetRealm({
+          targetRealmUrl,
+          realmServerUrl: null,
+        }),
+      (error: unknown) =>
+        error instanceof FactoryEntrypointUsageError &&
+        (error.message.includes('boxel profile add') ||
+          error.message.includes('active Boxel profile')),
+    );
   });
 
   test('bootstrapFactoryTargetRealm creates the realm through the API', async function (assert) {
