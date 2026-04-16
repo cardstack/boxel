@@ -223,6 +223,7 @@ export default class Monaco extends Modifier<Signature> {
     // that Glimmer tears the modifier down. Disposing on the next paint avoids
     // tearing down the instantiation service mid-bootstrap without introducing
     // an arbitrary timer.
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- Monaco dispose must wait for paint to avoid bootstrap race
     requestAnimationFrame(() => {
       editor.dispose();
       if (model && !model.isDisposed() && !model.isAttachedToEditor()) {
