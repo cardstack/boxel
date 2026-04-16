@@ -430,11 +430,10 @@ export class InstantiateValidationStep implements ValidationStepRunner {
 
   /**
    * Default spec discovery: search the realm for Spec cards using
-   * the realm server's local base module URL and extract ref + first example.
+   * the canonical Spec code reference and extract ref + linked examples.
    *
-   * The `type` filter uses the realm server's base URL (not the canonical
-   * `https://cardstack.com/base/spec`) because the canonical URL may not
-   * be indexed in isolated test realms or fresh realms.
+   * The `type` filter uses the canonical `specRef`
+   * (`https://cardstack.com/base/spec`) when querying the realm index.
    */
   private async defaultSearchSpecs(
     realmUrl: string,
@@ -504,7 +503,11 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         if (absoluteUrl.startsWith(normalizedRealmUrl)) {
           exampleUrls.push(absoluteUrl.slice(normalizedRealmUrl.length));
         } else {
-          exampleUrls.push(rawUrl);
+          // Drop example URLs that resolve outside the target realm to
+          // prevent exfiltrating the realm auth token to external URLs.
+          log.warn(
+            `Spec ${specId}: dropping linkedExample ${rawUrl} — resolves outside target realm`,
+          );
         }
       }
 

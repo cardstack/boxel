@@ -2,10 +2,12 @@
  * Host command that instantiates a card from a JSON document using the store.
  * Runs in the prerenderer's headless Chrome — the sandbox for untrusted code.
  *
- * Uses `store.add(doc, { doNotPersist: true })` to create an instance without
- * writing it back to the realm. This validates that the card definition can
- * produce a live instance from JSON — catching type mismatches, broken field
- * deserializers, and invalid relationships that `loader.import()` alone misses.
+ * Uses `store.__dangerousCreateFromSerialized(...)` to materialize a live card
+ * instance directly from serialized JSON without persisting it back to the
+ * realm. This path is chosen instead of `store.add()` because `store.add()`
+ * catches deserialization errors as warnings (appropriate for the UI), but we
+ * need `Field.validate()` failures to propagate as thrown errors so the factory
+ * can detect invalid card instances and report them to the agent.
  *
  * Used by the software-factory's InstantiateValidationStep via `_run-command`.
  */
@@ -32,7 +34,7 @@ export default class InstantiateCardCommand extends HostBaseCommand<
     return commandModule.InstantiateCardInput;
   }
 
-  requireInputFields = ['moduleUrl', 'cardName'];
+  requireInputFields = ['moduleUrl', 'cardName', 'realmUrl'];
 
   protected async run(
     input: BaseCommandModule.InstantiateCardInput,
@@ -49,9 +51,11 @@ export default class InstantiateCardCommand extends HostBaseCommand<
       throw new Error('cardName is required');
     }
 
-    if (realmUrl) {
-      this.validateModuleUrl(moduleUrl, realmUrl);
+    if (!realmUrl) {
+      throw new Error('realmUrl is required');
     }
+
+    this.validateModuleUrl(moduleUrl, realmUrl);
 
     let commandModule = await this.loadCommandModule();
 
@@ -60,6 +64,25 @@ export default class InstantiateCardCommand extends HostBaseCommand<
       let doc;
       if (input.instanceData) {
         doc = JSON.parse(input.instanceData);
+
+        // Enforce that the instance data's adoptsFrom matches the requested
+        // moduleUrl/cardName. Without this, a caller could pass a safe
+        // moduleUrl but point instanceData at an external module.
+        let adoptsFrom = doc?.data?.meta?.adoptsFrom;
+        if (adoptsFrom) {
+          if (
+            (adoptsFrom.module != null && adoptsFrom.module !== moduleUrl) ||
+            (adoptsFrom.name != null && adoptsFrom.name !== cardName)
+          ) {
+            throw new Error(
+              `instanceData adoptsFrom (${adoptsFrom.module}::${adoptsFrom.name}) does not match moduleUrl/cardName (${moduleUrl}::${cardName})`,
+            );
+          }
+        }
+        // Ensure adoptsFrom is set to the validated input values
+        doc.data ??= {};
+        doc.data.meta ??= {};
+        doc.data.meta.adoptsFrom = { module: moduleUrl, name: cardName };
       } else {
         // Minimal document — just the adoptsFrom, no field data
         doc = {
