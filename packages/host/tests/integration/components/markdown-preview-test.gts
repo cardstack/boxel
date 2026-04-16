@@ -172,12 +172,9 @@ module('Integration | markdown-preview', function (hooks) {
     class TestCard extends CardDef {
       @field title = contains(StringField);
       static markdown = class extends Component<typeof this> {
-        <template>
-          #
-          {{@model.title}}
+        <template># {{@model.title}}
 
-          Some **bold** text.
-        </template>
+Some **bold** text.</template>
       };
     }
 
@@ -213,12 +210,9 @@ module('Integration | markdown-preview', function (hooks) {
     class TestCard extends CardDef {
       @field title = contains(StringField);
       static markdown = class extends Component<typeof this> {
-        <template>
-          #
-          {{@model.title}}
+        <template># {{@model.title}}
 
-          Some **bold** text.
-        </template>
+Some **bold** text.</template>
       };
     }
 
