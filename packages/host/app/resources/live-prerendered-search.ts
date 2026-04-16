@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { setOwner } from '@ember/owner';
 import { service } from '@ember/service';
@@ -61,6 +62,17 @@ export class LivePrerenderedSearchResource extends Resource<Args> {
   @tracked private _meta: QueryResultsMeta = { page: { total: 0 } };
   #loadedScopedCssModules = new Set<string>();
   #previousSignature: string | undefined;
+
+  constructor(owner: object) {
+    super(owner);
+    registerDestructor(this, () => {
+      this.buildPrerenderedCards.cancelAll();
+      this._instances = new TrackedArray();
+      this._meta = { page: { total: 0 } };
+      this.#loadedScopedCssModules.clear();
+      this.#previousSignature = undefined;
+    });
+  }
 
   modify(_positional: never[], named: Args['named']) {
     let {
