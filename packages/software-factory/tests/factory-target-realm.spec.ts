@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -67,6 +67,13 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
     realmServerURL,
   ).href;
 
+  let tempProfileHome = createTempProfileHome(
+    targetUsername,
+    targetPassword,
+    matrixURL,
+    realmServerURL,
+  );
+
   try {
     // The factory always runs the issue loop after seed creation. Without
     // OPENROUTER_API_KEY the loop will fail when it tries to invoke the LLM
@@ -91,12 +98,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         cwd: packageRoot,
         env: {
           ...process.env,
-          HOME: createTempProfileHome(
-            targetUsername,
-            targetPassword,
-            matrixURL,
-            realmServerURL,
-          ),
+          HOME: tempProfileHome,
         },
         timeoutMs: 120_000,
       },
@@ -144,6 +146,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       'Process brief and create project artifacts',
     );
   } finally {
+    rmSync(tempProfileHome, { recursive: true, force: true });
     await new Promise<void>((r, reject) =>
       briefServer.close((err) => (err ? reject(err) : r())),
     );

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -19,7 +19,7 @@ export interface TestProfileOptions {
  * Replaces the ProfileManager singleton so BoxelCLIClient picks up the
  * test profile without touching the real ~/.boxel-cli/profiles.json.
  *
- * Returns a cleanup function that resets the singleton back to default.
+ * Returns a cleanup function that resets the singleton and removes the temp dir.
  */
 export function installTestProfile(options: TestProfileOptions): () => void {
   let tempConfigDir = mkdtempSync(join(tmpdir(), 'boxel-test-config-'));
@@ -45,5 +45,6 @@ export function installTestProfile(options: TestProfileOptions): () => void {
 
   return () => {
     resetProfileManager();
+    rmSync(tempConfigDir, { recursive: true, force: true });
   };
 }

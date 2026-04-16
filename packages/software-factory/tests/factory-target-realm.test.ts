@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { module, test } from 'qunit';
@@ -107,7 +107,10 @@ module('factory-target-realm', function (hooks) {
       JSON.stringify({ profiles: {}, activeProfile: null }),
     );
     setProfileManager(tempConfigDir);
-    cleanupProfile = () => resetProfileManager();
+    cleanupProfile = () => {
+      resetProfileManager();
+      rmSync(tempConfigDir, { recursive: true, force: true });
+    };
 
     assert.throws(
       () =>
