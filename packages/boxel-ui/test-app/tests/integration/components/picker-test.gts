@@ -92,17 +92,25 @@ module('Integration | Component | picker', function (hooks) {
 
     // Selected options should have checked checkboxes in the dropdown
     assert
-      .dom('[data-test-boxel-picker-option-row="1"] .picker-option-row__checkbox--selected')
+      .dom(
+        '[data-test-boxel-picker-option-row="1"] .picker-option-row__checkbox--selected',
+      )
       .exists('Option 1 checkbox is checked');
     assert
-      .dom('[data-test-boxel-picker-option-row="2"] .picker-option-row__checkbox--selected')
+      .dom(
+        '[data-test-boxel-picker-option-row="2"] .picker-option-row__checkbox--selected',
+      )
       .exists('Option 2 checkbox is checked');
     // Unselected options should have unchecked checkboxes
     assert
-      .dom('[data-test-boxel-picker-option-row="3"] .picker-option-row__checkbox--selected')
+      .dom(
+        '[data-test-boxel-picker-option-row="3"] .picker-option-row__checkbox--selected',
+      )
       .doesNotExist('Option 3 checkbox is unchecked');
     assert
-      .dom('[data-test-boxel-picker-option-row="4"] .picker-option-row__checkbox--selected')
+      .dom(
+        '[data-test-boxel-picker-option-row="4"] .picker-option-row__checkbox--selected',
+      )
       .doesNotExist('Option 4 checkbox is unchecked');
   });
 
@@ -224,7 +232,9 @@ module('Integration | Component | picker', function (hooks) {
     );
     // Checkbox should be checked for selected option
     assert
-      .dom('[data-test-boxel-picker-option-row="1"] .picker-option-row__checkbox--selected')
+      .dom(
+        '[data-test-boxel-picker-option-row="1"] .picker-option-row__checkbox--selected',
+      )
       .exists('Option 1 checkbox is checked after selecting');
 
     // Click again to deselect — should fall back to select-all
@@ -238,7 +248,9 @@ module('Integration | Component | picker', function (hooks) {
     );
     // Checkbox should be unchecked after deselecting
     assert
-      .dom('[data-test-boxel-picker-option-row="1"] .picker-option-row__checkbox--selected')
+      .dom(
+        '[data-test-boxel-picker-option-row="1"] .picker-option-row__checkbox--selected',
+      )
       .doesNotExist('Option 1 checkbox is unchecked after deselecting');
   });
 
@@ -347,10 +359,14 @@ module('Integration | Component | picker', function (hooks) {
     );
     // Option 1 checkbox should be checked, select-all unchecked
     assert
-      .dom('[data-test-boxel-picker-option-row="1"] .picker-option-row__checkbox--selected')
+      .dom(
+        '[data-test-boxel-picker-option-row="1"] .picker-option-row__checkbox--selected',
+      )
       .exists('Option 1 checkbox is checked');
     assert
-      .dom('[data-test-boxel-picker-option-row="select-all"] .picker-option-row__checkbox--selected')
+      .dom(
+        '[data-test-boxel-picker-option-row="select-all"] .picker-option-row__checkbox--selected',
+      )
       .doesNotExist('Select-all checkbox is unchecked');
   });
 
@@ -389,10 +405,14 @@ module('Integration | Component | picker', function (hooks) {
     );
     // Select-all checkbox should be checked, Option 1 unchecked
     assert
-      .dom('[data-test-boxel-picker-option-row="select-all"] .picker-option-row__checkbox--selected')
+      .dom(
+        '[data-test-boxel-picker-option-row="select-all"] .picker-option-row__checkbox--selected',
+      )
       .exists('Select-all checkbox is checked');
     assert
-      .dom('[data-test-boxel-picker-option-row="1"] .picker-option-row__checkbox--selected')
+      .dom(
+        '[data-test-boxel-picker-option-row="1"] .picker-option-row__checkbox--selected',
+      )
       .doesNotExist('Option 1 checkbox is unchecked after select-all');
   });
 
