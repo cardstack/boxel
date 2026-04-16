@@ -1001,9 +1001,12 @@ export default class StoreService extends Service implements StoreInterface {
    * handle persistence, identity mapping, and auto-saving. This method
    * bypasses all of that and calls `card-api.createFromSerialized` directly.
    *
-   * Use this only when you need validation errors to propagate (e.g., the
-   * software-factory's instantiate-card command which validates that a card
-   * instance can be deserialized without persisting it).
+   * `store.add()` relaxes serialization errors: `Field.validate()` failures
+   * during deserialization are caught internally and logged as console warnings
+   * rather than thrown. This is correct for the UI but not for validation use
+   * cases where errors must propagate. Use this method only when you need
+   * validation errors to throw (e.g., the software-factory's instantiate-card
+   * command which validates that a card instance can be deserialized).
    */
   async __dangerousCreateFromSerialized<T extends CardDef>(
     resource: LooseCardResource,

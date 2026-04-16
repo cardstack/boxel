@@ -4,10 +4,12 @@
  *
  * Uses `store.__dangerousCreateFromSerialized(...)` to materialize a live card
  * instance directly from serialized JSON without persisting it back to the
- * realm. This path is chosen instead of `store.add()` because `store.add()`
- * catches deserialization errors as warnings (appropriate for the UI), but we
- * need `Field.validate()` failures to propagate as thrown errors so the factory
- * can detect invalid card instances and report them to the agent.
+ * realm. We initially tried the public API (`store.add(doc, { doNotPersist: true })`)
+ * but it relaxes serialization errors — `Field.validate()` failures are caught
+ * internally and logged as console warnings rather than thrown. This is the
+ * correct behavior for the UI (a broken card should degrade gracefully), but
+ * the factory needs those validation errors to propagate as thrown exceptions
+ * so they can be reported to the agent as actionable failures.
  *
  * Used by the software-factory's InstantiateValidationStep via `_run-command`.
  */
@@ -100,12 +102,9 @@ export default class InstantiateCardCommand extends HostBaseCommand<
       }
 
       // We use __dangerousCreateFromSerialized instead of store.add because
-      // we only want to exercise the deserialization machinery and verify
-      // that the card instance can be created from JSON — we have no
-      // intention of persisting the result anywhere in the app. store.add
-      // catches deserialization errors as warnings (appropriate for UI),
-      // but we need validation errors to propagate so the factory can
-      // detect invalid card instances and report them to the agent.
+      // store.add relaxes serialization errors — Field.validate() failures
+      // are caught and logged as console warnings rather than thrown. We
+      // need those errors to propagate so the factory can report them.
       let cardId = doc?.data?.id;
       let resolveFrom = cardId ?? realmUrl;
       await this.store.__dangerousCreateFromSerialized(
