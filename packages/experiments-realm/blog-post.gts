@@ -23,6 +23,13 @@ import { formatDatetime, BlogApp as BlogAppCard } from './blog-app';
 import { BlogCategory, categoryStyle } from './blog-category';
 import { User } from './user';
 import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
+import {
+  markdownLinkForCard,
+  markdownLinksForCards,
+  markdownEmbedsForCards,
+  markdownImage,
+  formatDateTimeForMarkdown,
+} from 'https://cardstack.com/base/markdown-helpers';
 
 class EmbeddedTemplate extends Component<typeof BlogPost> {
   <template>
@@ -707,6 +714,59 @@ export class BlogPost extends CardDef {
 
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
+
+  static markdown = class Markdown extends Component<typeof this> {
+    get header(): string {
+      let parts: string[] = [];
+      parts.push(`# ${this.args.model.cardTitle ?? 'Untitled'}`);
+      if (this.args.model.cardDescription) {
+        parts.push(`*${this.args.model.cardDescription}*`);
+      }
+      let authors = markdownLinksForCards(this.args.model.authors, {
+        style: 'inline',
+      });
+      let publishDate = formatDateTimeForMarkdown(
+        this.args.model.publishDate ?? undefined,
+      );
+      let byline: string[] = [];
+      if (authors) byline.push(`By ${authors}`);
+      if (publishDate) byline.push(publishDate);
+      if (byline.length) parts.push(byline.join(' | '));
+      let categories = markdownLinksForCards(this.args.model.categories, {
+        style: 'inline',
+      });
+      if (categories) parts.push(`Categories: ${categories}`);
+      let blog = markdownLinkForCard(this.args.model.blog);
+      if (blog) parts.push(`Blog: ${blog}`);
+      let image = this.args.model.featuredImage?.imageUrl;
+      if (image) {
+        parts.push(
+          markdownImage(this.args.model.cardTitle ?? 'Featured image', image),
+        );
+      }
+      return parts.join('\n\n');
+    }
+    get footer(): string {
+      let parts: string[] = [];
+      let editors = markdownLinksForCards(this.args.model.editors, {
+        style: 'inline',
+      });
+      if (editors) parts.push(`*Edited by ${editors}*`);
+      let authorEmbeds = markdownEmbedsForCards(this.args.model.authors, {
+        size: 'strip',
+      });
+      if (authorEmbeds) {
+        parts.push(`---\n\n## About the Authors\n\n${authorEmbeds}`);
+      }
+      return parts.join('\n\n');
+    }
+    <template>{{this.header}}
+
+{{@model.body}}
+
+{{this.footer}}</template>
+  };
+
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <article>

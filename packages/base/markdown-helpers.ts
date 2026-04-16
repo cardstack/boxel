@@ -84,6 +84,129 @@ export function markdownLink(
   return `[${safeText}](${encodedHref})`;
 }
 
+// CS-10797: Convenience helpers for rendering linksTo / linksToMany
+// relationships as markdown links. Template authors call these explicitly;
+// they are not wired into default markdown rendering.
+
+// Minimal shape expected from a linked card — keeps this module free of
+// heavyweight card-api imports.
+interface CardLike {
+  id?: string;
+  cardTitle?: string;
+}
+
+// Returns `[text](card.id)` for a single linked card. Falls back to
+// `card.cardTitle` when `text` is omitted. Returns `''` for null/undefined
+// cards so callers can handle placeholders themselves.
+export function markdownLinkForCard(
+  card: CardLike | null | undefined,
+  text?: string,
+): string {
+  if (!card) {
+    return '';
+  }
+  let linkText = text ?? card.cardTitle ?? '';
+  return markdownLink(linkText, card.id);
+}
+
+interface MarkdownLinksForCardsOptions {
+  style?: 'list' | 'inline';
+  text?: (card: CardLike) => string;
+}
+
+// Renders an array of linked cards as markdown links.
+// `style: 'list'` (default) emits `- [Title](id)` per line.
+// `style: 'inline'` emits comma-separated `[A](idA), [B](idB)`.
+// Null entries in the array are skipped. Empty / all-null arrays return `''`.
+export function markdownLinksForCards(
+  cards: (CardLike | null | undefined)[] | null | undefined,
+  options?: MarkdownLinksForCardsOptions,
+): string {
+  if (!cards) {
+    return '';
+  }
+  let style = options?.style ?? 'list';
+  let textFn = options?.text;
+  let links: string[] = [];
+  for (let card of cards) {
+    if (!card) continue;
+    let linkText = textFn ? textFn(card) : undefined;
+    let link = markdownLinkForCard(card, linkText);
+    if (link) {
+      links.push(link);
+    }
+  }
+  if (links.length === 0) {
+    return '';
+  }
+  if (style === 'inline') {
+    return links.join(', ');
+  }
+  return links.map((l) => `- ${l}`).join('\n');
+}
+
+// CS-10797: Convenience helpers for embedding cards using BFM (Boxel File
+// Model) syntax. Inline embeds render the card inline (`:card[URL]`), block
+// embeds render on their own line (`::card[URL]` or `::card[URL | spec]`).
+
+interface MarkdownEmbedOptions {
+  // 'inline' produces `:card[URL]`, 'block' produces `::card[URL]`.
+  // Default: 'block'.
+  kind?: 'inline' | 'block';
+  // Size specifier appended after `|` in block embeds (e.g. 'fitted 250x40',
+  // 'isolated', 'strip'). Ignored for inline embeds.
+  size?: string;
+}
+
+// Returns a BFM card-reference directive for a single card.
+// Returns `''` for null/undefined cards.
+export function markdownEmbedForCard(
+  card: CardLike | null | undefined,
+  options?: MarkdownEmbedOptions,
+): string {
+  if (!card?.id) {
+    return '';
+  }
+  let kind = options?.kind ?? 'block';
+  if (kind === 'inline') {
+    return `:card[${card.id}]`;
+  }
+  let size = options?.size;
+  if (size) {
+    return `::card[${card.id} | ${size}]`;
+  }
+  return `::card[${card.id}]`;
+}
+
+interface MarkdownEmbedsOptions extends MarkdownEmbedOptions {
+  // Separator between embeds. Defaults to '\n\n' for block, ', ' for inline.
+  separator?: string;
+}
+
+// Renders an array of cards as BFM card-reference directives.
+// Null entries are skipped. Empty / all-null arrays return `''`.
+export function markdownEmbedsForCards(
+  cards: (CardLike | null | undefined)[] | null | undefined,
+  options?: MarkdownEmbedsOptions,
+): string {
+  if (!cards) {
+    return '';
+  }
+  let embeds: string[] = [];
+  for (let card of cards) {
+    let embed = markdownEmbedForCard(card, options);
+    if (embed) {
+      embeds.push(embed);
+    }
+  }
+  if (embeds.length === 0) {
+    return '';
+  }
+  let kind = options?.kind ?? 'block';
+  let separator = options?.separator ?? (kind === 'inline' ? ' ' : '\n\n');
+  return embeds.join(separator);
+}
+
 // CS-10787: Build a fenced code block. The fence is made of at least three
 // backticks, expanded to be longer than any run of backticks in the content
 // so the fence isn't prematurely closed. An optional language identifier
