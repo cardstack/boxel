@@ -116,9 +116,7 @@ export async function loadRealmTests(application) {
         const message = err?.stack ?? err?.message ?? String(err);
         // Log to CI stdout so the failure is visible in the job log as well as
         // the junit report.
-        console.error(
-          `[live-test] Failed to import ${moduleURL}:\n${message}`,
-        );
+        console.error(`[live-test] Failed to import ${moduleURL}:\n${message}`);
         const failureModuleName = `Live Tests | Failed import: ${moduleURL}`;
         QUnit.module(failureModuleName, function () {
           QUnit.test('module failed to import', function (assert) {

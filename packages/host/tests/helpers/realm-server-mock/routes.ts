@@ -313,9 +313,10 @@ function registerCatalogRoutes() {
   registerRealmServerRoute({
     path: '/_catalog-realms',
     handler: async () => {
-      let catalogURLs = (catalogRealmURLOverrides.length > 0
-        ? [...catalogRealmURLOverrides, ENV.resolvedSkillsRealmURL]
-        : [ENV.resolvedCatalogRealmURL, ENV.resolvedSkillsRealmURL]
+      let catalogURLs = (
+        catalogRealmURLOverrides.length > 0
+          ? [...catalogRealmURLOverrides, ENV.resolvedSkillsRealmURL]
+          : [ENV.resolvedCatalogRealmURL, ENV.resolvedSkillsRealmURL]
       )
         .filter(Boolean)
         .map((url) => ensureTrailingSlash(url as string));

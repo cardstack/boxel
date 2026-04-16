@@ -9,7 +9,11 @@ import {
 import type NetworkService from '@cardstack/host/services/network';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import { getRealmServerRoute, registerDefaultRoutes, setCatalogRealmURL } from './routes';
+import {
+  getRealmServerRoute,
+  registerDefaultRoutes,
+  setCatalogRealmURL,
+} from './routes';
 
 export { setCatalogRealmURL };
 
