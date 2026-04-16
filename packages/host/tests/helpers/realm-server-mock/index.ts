@@ -9,7 +9,14 @@ import {
 import type NetworkService from '@cardstack/host/services/network';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import { getRealmServerRoute, registerDefaultRoutes } from './routes';
+import {
+  getRealmServerRoute,
+  registerDefaultRoutes,
+  resetCatalogRealmURL,
+  setCatalogRealmURL,
+} from './routes';
+
+export { resetCatalogRealmURL, setCatalogRealmURL };
 
 import type { EnsureSessionRoom, RealmServerMockState } from './types';
 
