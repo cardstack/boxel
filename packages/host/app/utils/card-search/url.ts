@@ -18,8 +18,6 @@ export function resolveSearchKeyAsURL(
   if (!isURLSearchKey(searchKey)) {
     return undefined;
   }
-  let maybeIndexCardURL = availableRealmURLs.find(
-    (u) => u === searchKey + '/',
-  );
+  let maybeIndexCardURL = availableRealmURLs.find((u) => u === searchKey + '/');
   return maybeIndexCardURL ?? searchKey;
 }

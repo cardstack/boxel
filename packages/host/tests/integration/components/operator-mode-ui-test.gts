@@ -14,8 +14,8 @@ import GlimmerComponent from '@glimmer/component';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { TypeSummariesResource } from '@cardstack/host/resources/type-summaries';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
+import { TypeSummariesResource } from '@cardstack/host/resources/type-summaries';
 
 import { percySnapshot, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
@@ -557,7 +557,25 @@ module('Integration | operator-mode | ui', function (hooks) {
       '[data-test-boxel-picker-option-row]:not([data-test-boxel-picker-option-row="select-all"])',
     );
     assert.ok(typeOptions.length > 0, 'at least one type option is available');
+    let firstOptionId = typeOptions[0].getAttribute(
+      'data-test-boxel-picker-option-row',
+    );
+
+    // Before selecting, the first type option checkbox should be unchecked
+    assert
+      .dom(
+        `[data-test-boxel-picker-option-row="${firstOptionId}"] .picker-option-row__checkbox--selected`,
+      )
+      .doesNotExist('type option checkbox is unchecked before selecting');
+
     await click(typeOptions[0] as HTMLElement);
+
+    // After selecting, the type option checkbox should be checked
+    assert
+      .dom(
+        `[data-test-boxel-picker-option-row="${firstOptionId}"] .picker-option-row__checkbox--selected`,
+      )
+      .exists('type option checkbox is checked after selecting');
 
     // Sheet should expand to results mode after selecting a type filter
     await waitFor('[data-test-search-sheet="search-results"]');
@@ -602,60 +620,41 @@ module('Integration | operator-mode | ui', function (hooks) {
         'realm picker shows shortLabel "All" when select-all is active',
       );
 
-    // Type a search term to trigger search results
-    await typeIn('[data-test-search-field]', 'Person');
-    await click('[data-test-search-sheet] .search-sheet-content');
-    await waitFor('[data-test-search-label]', { timeout: 8000 });
-    await waitFor('[data-test-search-realms]', { timeout: 3000 });
-
-    // Helper function to get current selected realms
-    const getSelectedRealms = () => {
-      const attr = document
-        .querySelector('[data-test-search-realms]')
-        ?.getAttribute('data-test-search-realms');
-      return attr?.split(',').map((r) => r.trim()) ?? [];
-    };
-
-    // Verify initial realm filtering includes test realm
-    let selectedRealms = getSelectedRealms();
-    assert.ok(
-      selectedRealms.some(
-        (r) => r.includes('test-realm') && r.includes('/test'),
-      ),
-      'search should initially include the test realm',
-    );
-
-    // Select only the test realm in the picker to verify filter updates
-    const trigger =
+    // Open realm picker to verify initial state
+    const realmPickerTrigger =
       document.querySelector(
         '[data-test-realm-picker] .ember-power-select-trigger',
       ) ?? document.querySelector('[data-test-realm-picker]');
-    await click(trigger as HTMLElement);
+    await click(realmPickerTrigger as HTMLElement);
     await waitFor('.ember-power-select-option', { timeout: 3000 });
 
-    // Realm select-all option should show count
+    // Initially, select-all should be selected with checked checkbox
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText('Select All (', 'realm select-all shows count');
+    assert
+      .dom(
+        '[data-test-boxel-picker-option-row="select-all"] .picker-option-row__checkbox--selected',
+      )
+      .exists('select-all checkbox is checked by default');
 
-    const options = document.querySelectorAll('.ember-power-select-option');
-    const testRealmOption = Array.from(options).find((el) =>
-      el.textContent?.includes(ctx.realmName),
-    );
-    assert.ok(testRealmOption, `option for "${ctx.realmName}" should exist`);
-    await click(testRealmOption as HTMLElement);
+    // Select only the test realm
+    assert
+      .dom(`[data-test-boxel-picker-option-label="${ctx.realmName}"]`)
+      .exists(`option for "${ctx.realmName}" should exist`);
+    await click(`[data-test-boxel-picker-option-label="${ctx.realmName}"]`);
 
-    // Verify the filter was applied
-    await waitUntil(() => getSelectedRealms().includes(testRealmURL), {
-      timeout: 5000,
-    });
-    selectedRealms = getSelectedRealms();
-    assert.ok(
-      selectedRealms.some(
-        (r) => r.includes('test-realm') && r.includes('/test'),
-      ),
-      'search should be filtered to the test realm after selection',
-    );
+    // Verify the test realm checkbox is checked and select-all is unchecked
+    assert
+      .dom(
+        `[data-test-boxel-picker-option-label="${ctx.realmName}"] .picker-option-row__checkbox--selected`,
+      )
+      .exists('test realm checkbox is checked after clicking');
+    assert
+      .dom(
+        '[data-test-boxel-picker-option-row="select-all"] .picker-option-row__checkbox--selected',
+      )
+      .doesNotExist('select-all checkbox is unchecked after selecting a realm');
   });
 
   test('clicking outside search sheet resets search input and realm filter', async function (assert) {
@@ -669,45 +668,29 @@ module('Integration | operator-mode | ui', function (hooks) {
     await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
 
-    // Helper to get selected realm URLs from data attribute
-    const getSelectedRealms = () => {
-      const attr = document
-        .querySelector('[data-test-search-realms]')
-        ?.getAttribute('data-test-search-realms');
-      return attr?.split(',').map((r) => r.trim()) ?? [];
-    };
-
-    // Open search sheet and type a search term
+    // Open search sheet
     await click(`[data-test-open-search-field]`);
     assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
 
-    await typeIn('[data-test-search-field]', 'Person');
-    await click('[data-test-search-sheet] .search-sheet-content');
-    await waitFor('[data-test-search-label]', { timeout: 8000 });
-    await waitFor('[data-test-search-realms]', { timeout: 3000 });
-
-    // Record initial realm state (all realms selected by default)
-    let initialRealms = getSelectedRealms();
-
-    // Select a specific realm in the picker
-    const trigger =
+    // Open realm picker and select a specific realm
+    let realmPickerTrigger =
       document.querySelector(
         '[data-test-realm-picker] .ember-power-select-trigger',
       ) ?? document.querySelector('[data-test-realm-picker]');
-    await click(trigger as HTMLElement);
+    await click(realmPickerTrigger as HTMLElement);
     await waitFor('.ember-power-select-option', { timeout: 3000 });
 
-    const options = document.querySelectorAll('.ember-power-select-option');
-    const testRealmOption = Array.from(options).find((el) =>
-      el.textContent?.includes(ctx.realmName),
-    );
-    assert.ok(testRealmOption, `option for "${ctx.realmName}" should exist`);
-    await click(testRealmOption as HTMLElement);
+    assert
+      .dom(`[data-test-boxel-picker-option-label="${ctx.realmName}"]`)
+      .exists(`option for "${ctx.realmName}" should exist`);
+    await click(`[data-test-boxel-picker-option-label="${ctx.realmName}"]`);
 
-    // Verify filter was applied (only selected realm)
-    await waitUntil(() => getSelectedRealms().includes(testRealmURL), {
-      timeout: 5000,
-    });
+    // Verify the test realm checkbox is checked
+    assert
+      .dom(
+        `[data-test-boxel-picker-option-label="${ctx.realmName}"] .picker-option-row__checkbox--selected`,
+      )
+      .exists('test realm checkbox is checked after clicking');
 
     // Close by clicking outside
     await click(`[data-test-operator-mode-stack]`);
@@ -722,14 +705,13 @@ module('Integration | operator-mode | ui', function (hooks) {
       .dom('[data-test-search-field]')
       .hasValue('', 'search input is cleared after clicking outside');
 
-    // Assert realm filter is reset to all realms
-    await waitFor('[data-test-search-realms]', { timeout: 3000 });
-    let reopenedRealms = getSelectedRealms();
-    assert.deepEqual(
-      reopenedRealms,
-      initialRealms,
-      'realm filter is reset to all realms after clicking outside',
-    );
+    // Assert realm filter is reset — picker trigger should show "All"
+    assert
+      .dom('[data-test-realm-picker] [data-test-boxel-picker-selected-item]')
+      .hasText(
+        'All',
+        'realm filter is reset to select-all after clicking outside',
+      );
   });
 
   test('displays card in interact mode when clicking `Open in Interact Mode` menu in preview panel', async function (assert) {
@@ -1408,6 +1390,13 @@ module('Integration | operator-mode | ui', function (hooks) {
     // Select Pet
     await click('[data-test-boxel-picker-option-label="Pet"]');
 
+    // Pet checkbox should be checked after selecting
+    assert
+      .dom(
+        '[data-test-boxel-picker-option-label="Pet"] .picker-option-row__checkbox--selected',
+      )
+      .exists('Pet checkbox is checked after selecting');
+
     // Clear the type picker search
     await fillIn('[data-test-boxel-picker-search] input', '');
 
@@ -1422,12 +1411,17 @@ module('Integration | operator-mode | ui', function (hooks) {
       'all type options are restored after clearing search',
     );
 
-    // Pet should still be selected (checked)
+    // Pet should still be selected with checked checkbox
     assert
       .dom(
         '[data-test-type-picker] [data-test-boxel-picker-selected-item="Pet"]',
       )
       .exists('Pet selection is preserved after clearing search');
+    assert
+      .dom(
+        '[data-test-boxel-picker-option-label="Pet"] .picker-option-row__checkbox--selected',
+      )
+      .exists('Pet checkbox is still checked after clearing search');
   });
 
   test('selected types are preserved after clearing type search when selection is beyond first page', async function (assert) {
@@ -1466,6 +1460,11 @@ module('Integration | operator-mode | ui', function (hooks) {
           '[data-test-type-picker] [data-test-boxel-picker-selected-item="Pet"]',
         )
         .exists('Pet is selected');
+      assert
+        .dom(
+          '[data-test-boxel-picker-option-label="Pet"] .picker-option-row__checkbox--selected',
+        )
+        .exists('Pet checkbox is checked after selecting');
 
       // Clear the type picker search — this triggers a fresh fetch from page 0
       // With PAGE_SIZE=3, Pet (alphabetically late) wouldn't be in the first page
@@ -1479,6 +1478,13 @@ module('Integration | operator-mode | ui', function (hooks) {
         )
         .exists(
           'Pet selection is preserved even when it is beyond the first page of results',
+        );
+      assert
+        .dom(
+          '[data-test-boxel-picker-option-label="Pet"] .picker-option-row__checkbox--selected',
+        )
+        .exists(
+          'Pet checkbox is still checked after clearing search beyond first page',
         );
     } finally {
       TypeSummariesResource.PAGE_SIZE = originalPageSize;

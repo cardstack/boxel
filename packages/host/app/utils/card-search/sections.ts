@@ -1,10 +1,9 @@
 import type { CodeRef } from '@cardstack/runtime-common';
 
+import type { PrerenderedCard } from '@cardstack/host/components/prerendered-card-search';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-
-import type { PrerenderedCard } from '@cardstack/host/components/prerendered-card-search';
 
 // ── Section types ──
 
@@ -42,9 +41,11 @@ export type SearchSheetSection = RealmSection | RecentsSection | UrlSection;
 // ── Realm info resolution ──
 
 export interface RealmInfoLookup {
-  info(
-    realmURL: string,
-  ): { name: string; iconURL: string | null; publishable: boolean | null } | null;
+  info(realmURL: string): {
+    name: string;
+    iconURL: string | null;
+    publishable: boolean | null;
+  } | null;
 }
 
 function realmNameFromUrl(realmUrl: string): string {

@@ -11,14 +11,15 @@ import { isCardInstance } from '@cardstack/runtime-common';
 
 import type RealmService from '@cardstack/host/services/realm';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
-import CardRenderer from '../card-renderer';
-
 import {
   removeFileExtension,
   type NewCardArgs,
 } from '@cardstack/host/utils/card-search/types';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
+import CardRenderer from '../card-renderer';
+
 import type { ComponentLike } from '@glint/template';
 
 type ItemType = ComponentLike<{ Element: Element }> | CardDef | NewCardArgs;

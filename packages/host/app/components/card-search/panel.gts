@@ -4,7 +4,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { type Filter, type ResolvedCodeRef } from '@cardstack/runtime-common';
+import type { Filter, ResolvedCodeRef } from '@cardstack/runtime-common';
 
 import type { RealmFilter } from '@cardstack/host/components/realm-picker';
 import type { TypeFilter } from '@cardstack/host/components/type-picker';

@@ -5,6 +5,7 @@ import { BoxelInput, RealmIcon } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import type { RealmSectionInfo } from '@cardstack/host/utils/card-search/sections';
+
 import type { ComponentLike } from '@glint/template';
 
 interface Signature {

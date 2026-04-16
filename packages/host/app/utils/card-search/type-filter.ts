@@ -1,9 +1,4 @@
-import type {
-  CodeRef,
-  Filter,
-  ResolvedCodeRef,
-  TypeRefResult,
-} from '@cardstack/runtime-common';
+import type { CodeRef, Filter, TypeRefResult } from '@cardstack/runtime-common';
 import {
   baseCardRef,
   baseFieldRef,

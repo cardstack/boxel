@@ -148,7 +148,35 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
     this._selected = selected;
   }
 
-  // -- Private computed --
+  // -- Private helpers --
+
+  /**
+   * Guarded wrapper around realmServer.fetchCardTypeSummaries.
+   * Returns undefined if the realm server can't fetch yet (matrix client not set),
+   * or if the component is destroyed, or if the fetch fails.
+   */
+  private async fetchCardTypeSummaries(
+    realmURLs: string[],
+    options: {
+      searchKey?: string;
+      page: { number: number; size: number };
+    },
+  ) {
+    if (!this.realmServer.canFetch) {
+      return undefined;
+    }
+    try {
+      let result = await this.realmServer.fetchCardTypeSummaries(
+        realmURLs,
+        options,
+      );
+      if (isDestroyed(this) || isDestroying(this)) return undefined;
+      return result;
+    } catch (e) {
+      console.error('Failed to fetch card type summaries', e);
+      return undefined;
+    }
+  }
 
   // -- Private tasks --
 
@@ -160,75 +188,59 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
         await Promise.resolve(); // yield to avoid autotracking assertion
       }
       if (isDestroyed(this) || isDestroying(this)) return;
+
       this._isLoading = true;
       this._currentPage = 0;
 
-      try {
-        let result = await this.realmServer.fetchCardTypeSummaries(realmURLs, {
-          searchKey: searchKey || undefined,
-          page: {
-            number: 0,
-            size: TypeSummariesResource.PAGE_SIZE,
-          },
-        });
-        if (isDestroyed(this) || isDestroying(this)) return;
-
-        this._typeSummariesData = result.data;
-        this._totalCount = result.meta.page.total;
-        this._hasMore = result.data.length < result.meta.page.total;
-
-        // If there are selected types (or initialSelectedTypes) not yet in
-        // the fetched results, keep fetching more pages until they're found.
-        const selectedIds = new Set(this._previousSelectedKeys);
-        const initialTypes = this.#initialSelectedTypes;
-        if (initialTypes) {
-          for (const ref of initialTypes) {
-            selectedIds.add(internalKeyFor(ref, undefined));
-          }
-        }
-
-        if (selectedIds.size > 0 && this._hasMore) {
-          while (this._hasMore) {
-            const fetchedIds = new Set(
-              this._typeSummariesData.map((d) => d.id),
-            );
-            if ([...selectedIds].every((id) => fetchedIds.has(id))) break;
-
-            const nextPage = this._currentPage + 1;
-            let moreResult = await this.realmServer.fetchCardTypeSummaries(
-              realmURLs,
-              {
-                searchKey: searchKey || undefined,
-                page: {
-                  number: nextPage,
-                  size: TypeSummariesResource.PAGE_SIZE,
-                },
-              },
-            );
-            if (isDestroyed(this) || isDestroying(this)) return;
-
-            this._currentPage = nextPage;
-            this._typeSummariesData = [
-              ...this._typeSummariesData,
-              ...moreResult.data,
-            ];
-            this._hasMore =
-              this._typeSummariesData.length < moreResult.meta.page.total;
-          }
-        }
-
+      let result = await this.fetchCardTypeSummaries(realmURLs, {
+        searchKey: searchKey || undefined,
+        page: { number: 0, size: TypeSummariesResource.PAGE_SIZE },
+      });
+      if (isDestroyed(this) || isDestroying(this)) return;
+      if (!result) {
         this._isLoading = false;
-        this.recomputeTypeFilter();
-      } catch (e) {
-        console.error('Failed to fetch card type summaries', e);
-        if (!isDestroyed(this) && !isDestroying(this)) {
-          this._typeSummariesData = [];
-          this._totalCount = 0;
-          this._hasMore = false;
-          this._isLoading = false;
-          this.recomputeTypeFilter();
+        return;
+      }
+
+      this._typeSummariesData = result.data;
+      this._totalCount = result.meta.page.total;
+      this._hasMore = result.data.length < result.meta.page.total;
+
+      // If there are selected types (or initialSelectedTypes) not yet in
+      // the fetched results, keep fetching more pages until they're found.
+      const selectedIds = new Set(this._previousSelectedKeys);
+      const initialTypes = this.#initialSelectedTypes;
+      if (initialTypes) {
+        for (const ref of initialTypes) {
+          selectedIds.add(internalKeyFor(ref, undefined));
         }
       }
+
+      if (selectedIds.size > 0 && this._hasMore) {
+        while (this._hasMore) {
+          const fetchedIds = new Set(this._typeSummariesData.map((d) => d.id));
+          if ([...selectedIds].every((id) => fetchedIds.has(id))) break;
+
+          const nextPage = this._currentPage + 1;
+          let moreResult = await this.fetchCardTypeSummaries(realmURLs, {
+            searchKey: searchKey || undefined,
+            page: { number: nextPage, size: TypeSummariesResource.PAGE_SIZE },
+          });
+          if (isDestroyed(this) || isDestroying(this)) return;
+          if (!moreResult) break;
+
+          this._currentPage = nextPage;
+          this._typeSummariesData = [
+            ...this._typeSummariesData,
+            ...moreResult.data,
+          ];
+          this._hasMore =
+            this._typeSummariesData.length < moreResult.meta.page.total;
+        }
+      }
+
+      this._isLoading = false;
+      this.recomputeTypeFilter();
     },
   );
 
@@ -237,31 +249,25 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
     this._isLoadingMore = true;
     const nextPage = this._currentPage + 1;
 
-    try {
-      let result = await this.realmServer.fetchCardTypeSummaries(
-        this.#previousRealmURLs ?? [],
-        {
-          searchKey: this._typeSearchKey || undefined,
-          page: {
-            number: nextPage,
-            size: TypeSummariesResource.PAGE_SIZE,
-          },
-        },
-      );
-      if (isDestroyed(this) || isDestroying(this)) return;
-
-      this._currentPage = nextPage;
-      this._typeSummariesData = [...this._typeSummariesData, ...result.data];
-      const totalFetched = this._typeSummariesData.length;
-      this._hasMore = totalFetched < result.meta.page.total;
+    let result = await this.fetchCardTypeSummaries(
+      this.#previousRealmURLs ?? [],
+      {
+        searchKey: this._typeSearchKey || undefined,
+        page: { number: nextPage, size: TypeSummariesResource.PAGE_SIZE },
+      },
+    );
+    if (isDestroyed(this) || isDestroying(this)) return;
+    if (!result) {
       this._isLoadingMore = false;
-      this.recomputeTypeFilter();
-    } catch (e) {
-      console.error('Failed to load more card type summaries', e);
-      if (!isDestroyed(this) && !isDestroying(this)) {
-        this._isLoadingMore = false;
-      }
+      return;
     }
+
+    this._currentPage = nextPage;
+    this._typeSummariesData = [...this._typeSummariesData, ...result.data];
+    const totalFetched = this._typeSummariesData.length;
+    this._hasMore = totalFetched < result.meta.page.total;
+    this._isLoadingMore = false;
+    this.recomputeTypeFilter();
   });
 
   // -- Type filter computation --

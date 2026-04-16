@@ -102,6 +102,10 @@ export default class RealmServerService extends Service {
     return this._ready.promise;
   }
 
+  get canFetch(): boolean {
+    return this.client !== undefined || this.auth.type === 'logged-in';
+  }
+
   resetState() {
     let catalogRealms = this.availableRealms.filter(
       (realm) => realm.type === 'catalog',
@@ -367,8 +371,7 @@ export default class RealmServerService extends Service {
     [realmUrl: string]: string;
   }) {
     if (!this.client) {
-      console.warn(`Cannot check joined rooms without matrix client`);
-      return;
+      throw new Error(`Cannot check joined rooms without matrix client`);
     }
     let { joined_rooms } = await this.client.getJoinedRooms();
     let joinedRoomSet = new Set(joined_rooms ?? []);
@@ -687,8 +690,7 @@ export default class RealmServerService extends Service {
 
   private loginTask = task(async () => {
     if (!this.client) {
-      console.warn(`Cannot login to realm server without matrix client`);
-      return;
+      throw new Error(`Cannot login to realm server without matrix client`);
     }
     try {
       let realmAuthClient = new RealmAuthClient(

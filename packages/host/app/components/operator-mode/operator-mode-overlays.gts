@@ -40,6 +40,8 @@ import {
   getMenuItems,
 } from '@cardstack/runtime-common';
 
+import { removeFileExtension } from '@cardstack/host/utils/card-search/types';
+
 import type {
   CardCrudFunctions,
   CardDef,
@@ -48,7 +50,6 @@ import type {
 
 import { detectStackItemTypeForTarget } from '../../lib/stack-item';
 
-import { removeFileExtension } from '@cardstack/host/utils/card-search/types';
 import { knownFileMetaUrls } from '../prerendered-card-search';
 
 import Overlays from './overlays';

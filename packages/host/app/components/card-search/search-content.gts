@@ -23,19 +23,13 @@ import {
   internalKeyFor,
 } from '@cardstack/runtime-common';
 
+import type { RealmFilter } from '@cardstack/host/components/realm-picker';
+import type { TypeFilter } from '@cardstack/host/components/type-picker';
 import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
-
-import { SORT_OPTIONS, VIEW_OPTIONS, type SortOption } from './constants';
-import SearchResultHeader from './search-result-header';
-import SearchResultSection from './search-result-section';
-
-import type { RealmFilter } from '@cardstack/host/components/realm-picker';
-import type { TypeFilter } from '@cardstack/host/components/type-picker';
 import {
   buildSearchQuery,
   shouldSkipSearchQuery,
@@ -52,11 +46,18 @@ import {
   buildUrlSection,
   type SearchSheetSection,
 } from '@cardstack/host/utils/card-search/sections';
-import { type NewCardArgs } from '@cardstack/host/utils/card-search/types';
+import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
 import {
   isURLSearchKey,
   resolveSearchKeyAsURL,
 } from '@cardstack/host/utils/card-search/url';
+
+import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+
+import { SORT_OPTIONS, VIEW_OPTIONS, type SortOption } from './constants';
+import SearchResultHeader from './search-result-header';
+import SearchResultSection from './search-result-section';
+
 import type { NamedArgs } from 'ember-modifier';
 
 interface ScrollToFocusedSectionSignature {

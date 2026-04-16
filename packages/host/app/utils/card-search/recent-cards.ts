@@ -1,8 +1,8 @@
 import type { Filter, ResolvedCodeRef } from '@cardstack/runtime-common';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import type { SortOption } from '@cardstack/host/components/card-search/constants';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   cardMatchesTypeRef,

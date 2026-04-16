@@ -89,6 +89,21 @@ module('Integration | Component | picker', function (hooks) {
     // Check that selected items are displayed (they should be in pills)
     await click('[data-test-boxel-picker-trigger]');
     assert.dom('[data-test-boxel-picker-selected-item]').exists({ count: 2 });
+
+    // Selected options should have checked checkboxes in the dropdown
+    assert
+      .dom('[data-test-boxel-picker-option-row="1"] .picker-option-row__checkbox--selected')
+      .exists('Option 1 checkbox is checked');
+    assert
+      .dom('[data-test-boxel-picker-option-row="2"] .picker-option-row__checkbox--selected')
+      .exists('Option 2 checkbox is checked');
+    // Unselected options should have unchecked checkboxes
+    assert
+      .dom('[data-test-boxel-picker-option-row="3"] .picker-option-row__checkbox--selected')
+      .doesNotExist('Option 3 checkbox is unchecked');
+    assert
+      .dom('[data-test-boxel-picker-option-row="4"] .picker-option-row__checkbox--selected')
+      .doesNotExist('Option 4 checkbox is unchecked');
   });
 
   test('picker opens dropdown when clicked', async function (assert) {
@@ -207,7 +222,12 @@ module('Integration | Component | picker', function (hooks) {
       '1',
       'Should have selected first option',
     );
+    // Checkbox should be checked for selected option
+    assert
+      .dom('[data-test-boxel-picker-option-row="1"] .picker-option-row__checkbox--selected')
+      .exists('Option 1 checkbox is checked after selecting');
 
+    // Click again to deselect — should fall back to select-all
     await click(
       firstOption.closest('.ember-power-select-option') as HTMLElement,
     );
@@ -216,6 +236,10 @@ module('Integration | Component | picker', function (hooks) {
       1,
       'Select-all option cannot be deselected',
     );
+    // Checkbox should be unchecked after deselecting
+    assert
+      .dom('[data-test-boxel-picker-option-row="1"] .picker-option-row__checkbox--selected')
+      .doesNotExist('Option 1 checkbox is unchecked after deselecting');
   });
 
   test('picker shows search input when searchEnabled is true', async function (assert) {
@@ -321,6 +345,13 @@ module('Integration | Component | picker', function (hooks) {
       ['1'],
       'select-all is removed once another option is selected',
     );
+    // Option 1 checkbox should be checked, select-all unchecked
+    assert
+      .dom('[data-test-boxel-picker-option-row="1"] .picker-option-row__checkbox--selected')
+      .exists('Option 1 checkbox is checked');
+    assert
+      .dom('[data-test-boxel-picker-option-row="select-all"] .picker-option-row__checkbox--selected')
+      .doesNotExist('Select-all checkbox is unchecked');
   });
 
   test('picker selects select-all when it is chosen after other options', async function (assert) {
@@ -356,6 +387,13 @@ module('Integration | Component | picker', function (hooks) {
       ['select-all'],
       'select-all replaces existing selections when selected',
     );
+    // Select-all checkbox should be checked, Option 1 unchecked
+    assert
+      .dom('[data-test-boxel-picker-option-row="select-all"] .picker-option-row__checkbox--selected')
+      .exists('Select-all checkbox is checked');
+    assert
+      .dom('[data-test-boxel-picker-option-row="1"] .picker-option-row__checkbox--selected')
+      .doesNotExist('Option 1 checkbox is unchecked after select-all');
   });
 
   test('picker hides remove button for select-all pill', async function (assert) {
