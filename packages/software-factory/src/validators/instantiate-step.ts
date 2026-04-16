@@ -79,7 +79,7 @@ export interface SpecInfo {
   specId: string;
   moduleUrl: string;
   cardName: string;
-  exampleUrl?: string;
+  exampleUrls: string[];
 }
 
 /** Flattened POJO for instantiate validation details — not a card, just data. */
@@ -243,21 +243,21 @@ export class InstantiateValidationStep implements ValidationStepRunner {
     let failedCards: InstantiateValidationDetails['cards'] = [];
 
     for (let spec of specInfos) {
-      // Read example instance data if available
-      let instanceData: string | undefined;
-      if (spec.exampleUrl) {
+      // Collect instance data for all linked examples
+      let exampleInstances: { url: string; data: string }[] = [];
+      for (let exampleUrl of spec.exampleUrls) {
         try {
-          let exampleRead = await readFile(targetRealmUrl, spec.exampleUrl, {
+          let exampleRead = await readFile(targetRealmUrl, exampleUrl, {
             authorization: this.config.authorization,
             fetch: this.config.fetch,
           });
           if (exampleRead.ok && exampleRead.document) {
             // The card+source format uses relative adoptsFrom.module paths
             // and has no id field (the id IS the file path). Resolve the
-            // adoptsFrom.module to an absolute URL so the host command
-            // can instantiate without needing relativeTo context.
+            // adoptsFrom.module to an absolute URL using codeRefWithAbsoluteURL
+            // logic so the host command can instantiate without relativeTo context.
             let exampleCardUrl = new URL(
-              spec.exampleUrl,
+              exampleUrl,
               ensureTrailingSlash(targetRealmUrl),
             ).href;
             let adoptsFrom = exampleRead.document.data.meta?.adoptsFrom;
@@ -268,63 +268,78 @@ export class InstantiateValidationStep implements ValidationStepRunner {
               ).href;
             }
             exampleRead.document.data.id = exampleCardUrl;
-            instanceData = JSON.stringify(exampleRead.document);
+            exampleInstances.push({
+              url: exampleUrl,
+              data: JSON.stringify(exampleRead.document),
+            });
           } else {
             log.warn(
-              `Failed to read example for spec ${spec.specId}: ${exampleRead.error ?? 'unknown'}`,
+              `Failed to read example ${exampleUrl} for spec ${spec.specId}: ${exampleRead.error ?? 'unknown'}`,
             );
           }
         } catch (err) {
           log.warn(
-            `Error reading example for spec ${spec.specId}: ${err instanceof Error ? err.message : String(err)}`,
+            `Error reading example ${exampleUrl} for spec ${spec.specId}: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
       }
 
-      log.info(
-        `Instantiating ${spec.cardName}: moduleUrl=${spec.moduleUrl}, hasExample=${!!instanceData}, instanceDataId=${instanceData ? JSON.parse(instanceData)?.data?.id : 'N/A'}`,
+      // If no examples were found/read, try instantiating with no field data
+      if (exampleInstances.length === 0) {
+        exampleInstances.push({ url: '', data: '' });
+      }
+
+      // Instantiate all examples in parallel
+      let settled = await Promise.allSettled(
+        exampleInstances.map(async (example) => {
+          let instanceData = example.data || undefined;
+          return this.instantiateCardFn(
+            spec.moduleUrl,
+            spec.cardName,
+            targetRealmUrl,
+            instanceData,
+          );
+        }),
       );
 
-      try {
-        let result = await this.instantiateCardFn(
-          spec.moduleUrl,
-          spec.cardName,
-          targetRealmUrl,
-          instanceData,
-        );
+      for (let i = 0; i < settled.length; i++) {
+        let outcome = settled[i];
+        let hasExample = !!exampleInstances[i].data;
 
-        allCardResults.push({
-          specId: spec.specId,
-          moduleUrl: spec.moduleUrl,
-          cardName: spec.cardName,
-          hasExample: !!spec.exampleUrl,
-          error: result.error ?? '',
-          stackTrace: result.stackTrace,
-        });
-
-        if (!result.passed) {
+        if (outcome.status === 'fulfilled') {
+          let result = outcome.value;
+          allCardResults.push({
+            specId: spec.specId,
+            moduleUrl: spec.moduleUrl,
+            cardName: spec.cardName,
+            hasExample,
+            error: result.error ?? '',
+            stackTrace: result.stackTrace,
+          });
+          if (!result.passed) {
+            failedCards.push({
+              specId: spec.specId,
+              cardName: spec.cardName,
+              error: result.error ?? 'Card instantiation failed',
+              stackTrace: result.stackTrace,
+            });
+          }
+        } else {
+          let message = `Instantiate failed: ${outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason)}`;
+          log.warn(`Error instantiating ${spec.cardName}: ${message}`);
+          allCardResults.push({
+            specId: spec.specId,
+            moduleUrl: spec.moduleUrl,
+            cardName: spec.cardName,
+            hasExample,
+            error: message,
+          });
           failedCards.push({
             specId: spec.specId,
             cardName: spec.cardName,
-            error: result.error ?? 'Card instantiation failed',
-            stackTrace: result.stackTrace,
+            error: message,
           });
         }
-      } catch (err) {
-        let message = `Instantiate failed: ${err instanceof Error ? err.message : String(err)}`;
-        log.warn(`Error instantiating ${spec.cardName}: ${message}`);
-        allCardResults.push({
-          specId: spec.specId,
-          moduleUrl: spec.moduleUrl,
-          cardName: spec.cardName,
-          hasExample: !!spec.exampleUrl,
-          error: message,
-        });
-        failedCards.push({
-          specId: spec.specId,
-          cardName: spec.cardName,
-          error: message,
-        });
       }
     }
 
@@ -474,21 +489,19 @@ export class InstantiateValidationStep implements ValidationStepRunner {
       let specCardUrl = new URL(specId, ensureTrailingSlash(realmUrl)).href;
       let moduleUrl = new URL(ref.module, specCardUrl).href;
 
-      // Find first linked example — resolve relative URL against the spec card's URL
+      // Find all linked examples — resolve relative URLs against the spec card's URL
       let relationships = (card as Record<string, unknown>).relationships as
         | Record<string, unknown>
         | undefined;
-      let rawExampleUrl = extractFirstLinkedExample(relationships);
-      let exampleUrl: string | undefined;
-      if (rawExampleUrl) {
-        // Resolve the relative URL to an absolute URL, then extract
-        // the path relative to the realm for use with readFile()
-        let absoluteExampleUrl = new URL(rawExampleUrl, specCardUrl).href;
-        let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
-        if (absoluteExampleUrl.startsWith(normalizedRealmUrl)) {
-          exampleUrl = absoluteExampleUrl.slice(normalizedRealmUrl.length);
+      let rawExampleUrls = extractLinkedExamples(relationships);
+      let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
+      let exampleUrls: string[] = [];
+      for (let rawUrl of rawExampleUrls) {
+        let absoluteUrl = new URL(rawUrl, specCardUrl).href;
+        if (absoluteUrl.startsWith(normalizedRealmUrl)) {
+          exampleUrls.push(absoluteUrl.slice(normalizedRealmUrl.length));
         } else {
-          exampleUrl = rawExampleUrl;
+          exampleUrls.push(rawUrl);
         }
       }
 
@@ -496,7 +509,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         specId,
         moduleUrl,
         cardName: ref.name,
-        exampleUrl,
+        exampleUrls,
       });
     }
 
@@ -594,32 +607,39 @@ function ensureTrailingSlash(url: string): string {
 }
 
 /**
- * Extract the first `linkedExamples` relationship URL from a card's
+ * Extract all `linkedExamples` relationship URLs from a card's
  * relationships. Boxel encodes `linksToMany` with dotted keys:
  * `"linkedExamples.0": { "links": { "self": "..." } }`
  */
-function extractFirstLinkedExample(
+function extractLinkedExamples(
   relationships: Record<string, unknown> | undefined,
-): string | undefined {
+): string[] {
   if (!relationships) {
-    return undefined;
+    return [];
   }
 
-  // Try dotted key format: linkedExamples.0
-  let first = relationships['linkedExamples.0'] as
-    | { links?: { self?: string } }
-    | undefined;
-  if (first?.links?.self) {
-    return first.links.self;
+  let urls: string[] = [];
+
+  // Iterate dotted keys: linkedExamples.0, linkedExamples.1, ...
+  for (let i = 0; ; i++) {
+    let entry = relationships[`linkedExamples.${i}`] as
+      | { links?: { self?: string } }
+      | undefined;
+    if (!entry?.links?.self) {
+      break;
+    }
+    urls.push(entry.links.self);
   }
 
-  // Try JSON:API array format as fallback
-  let examples = relationships['linkedExamples'] as
-    | { links?: { self?: string } }
-    | undefined;
-  if (examples?.links?.self) {
-    return examples.links.self;
+  // Fallback: try JSON:API array format
+  if (urls.length === 0) {
+    let examples = relationships['linkedExamples'] as
+      | { links?: { self?: string } }
+      | undefined;
+    if (examples?.links?.self) {
+      urls.push(examples.links.self);
+    }
   }
 
-  return undefined;
+  return urls;
 }

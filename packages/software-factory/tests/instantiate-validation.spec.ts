@@ -26,36 +26,20 @@ export class ValidCard extends CardDef {
 }
 `;
 
-// A FieldDef — evaluates fine on its own.
-const PHONE_NUMBER_FIELD_GTS = `import {
-  FieldDef,
-  field,
-  contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-
-export class PhoneNumber extends FieldDef {
-  static displayName = 'Phone Number';
-  @field number = contains(StringField);
-}
-`;
-
-// A card that uses linksTo with a FieldDef. The module evaluates fine
-// (eval step passes) but instantiation fails when the example instance
-// provides a linked phone value — linksTo expects a CardDef, not a FieldDef.
-const BAD_LINKS_TO_MODULE_GTS = `import {
+// A card with a containsMany field — evaluates fine, but instantiation
+// fails when the example provides a non-array value (triggers Field.validate()).
+const TAGS_CARD_MODULE_GTS = `import {
   CardDef,
   field,
-  linksTo,
   contains,
+  containsMany,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-import { PhoneNumber } from './phone-number-field';
 
-export class ContactCard extends CardDef {
-  static displayName = 'Contact Card';
+export class TagsCard extends CardDef {
+  static displayName = 'Tags Card';
   @field name = contains(StringField);
-  @field phone = linksTo(PhoneNumber);
+  @field tags = containsMany(StringField);
 }
 `;
 
@@ -197,7 +181,7 @@ test.describe('instantiate-validation e2e', () => {
     expect(attrs?.completedAt).toBeTruthy();
   });
 
-  test('InstantiateValidationStep e2e: linksTo consuming a FieldDef fails instantiation', async ({
+  test('InstantiateValidationStep e2e: invalid containsMany data fails instantiation', async ({
     realm,
   }) => {
     let realmUrl = realm.realmURL.href;
@@ -206,105 +190,64 @@ test.describe('instantiate-validation e2e', () => {
     let serverToken = `Bearer ${realm.serverToken}`;
     let instantiateResultsModuleUrl = `${realmServerUrl}software-factory/instantiate-result`;
 
-    // Write the FieldDef module (evaluates fine on its own)
-    let fieldWrite = await writeFile(
-      realmUrl,
-      'phone-number-field.gts',
-      PHONE_NUMBER_FIELD_GTS,
-      { authorization },
-    );
-    expect(fieldWrite.ok).toBe(true);
-    await waitForRealmFile(realmUrl, 'phone-number-field.gts', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
-    });
-
-    // Write the card with linksTo(FieldDef) — evaluates fine
+    // Write a card with a containsMany field (evaluates fine)
     let cardWrite = await writeFile(
       realmUrl,
-      'bad-contact-card.gts',
-      BAD_LINKS_TO_MODULE_GTS,
+      'tags-card.gts',
+      TAGS_CARD_MODULE_GTS,
       { authorization },
     );
     expect(cardWrite.ok).toBe(true);
-    await waitForRealmFile(realmUrl, 'bad-contact-card.gts', {
+    await waitForRealmFile(realmUrl, 'tags-card.gts', {
       authorization,
       pollMs: 300,
       timeoutMs: 30_000,
     });
 
-    // Write a PhoneNumber instance to link to
-    let phoneDoc = {
-      data: {
-        type: 'card',
-        attributes: { number: '555-1234' },
-        meta: {
-          adoptsFrom: {
-            module: '../phone-number-field',
-            name: 'PhoneNumber',
-          },
-        },
-      },
-    };
-    let phoneWrite = await writeFile(
-      realmUrl,
-      'PhoneNumber/phone-1.json',
-      JSON.stringify(phoneDoc, null, 2),
-      { authorization },
-    );
-    expect(phoneWrite.ok).toBe(true);
-    await waitForRealmFile(realmUrl, 'PhoneNumber/phone-1.json', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
-    });
-
-    // Write an example instance that links to the PhoneNumber instance
+    // Write an example instance that provides a string instead of an array
+    // for the containsMany field — triggers Field.validate() error.
     let exampleDoc = {
       data: {
         type: 'card',
-        attributes: { name: 'Bad Contact' },
-        relationships: {
-          phone: {
-            links: { self: '../PhoneNumber/phone-1' },
-          },
+        attributes: {
+          name: 'Bad Tags Card',
+          tags: 'not-an-array',
         },
         meta: {
           adoptsFrom: {
-            module: '../bad-contact-card',
-            name: 'ContactCard',
+            module: '../tags-card',
+            name: 'TagsCard',
           },
         },
       },
     };
     let exampleWrite = await writeFile(
       realmUrl,
-      'ContactCard/example-1.json',
+      'TagsCard/bad-example.json',
       JSON.stringify(exampleDoc, null, 2),
       { authorization },
     );
     expect(exampleWrite.ok).toBe(true);
-    await waitForRealmFile(realmUrl, 'ContactCard/example-1.json', {
+    await waitForRealmFile(realmUrl, 'TagsCard/bad-example.json', {
       authorization,
       pollMs: 300,
       timeoutMs: 30_000,
     });
 
-    // Write a Spec card pointing to the bad card def
+    // Write a Spec card pointing to the valid module with the bad example
     let specDoc = {
       data: {
         type: 'card',
         attributes: {
           specType: 'card',
           ref: {
-            module: '../bad-contact-card',
-            name: 'ContactCard',
+            module: '../tags-card',
+            name: 'TagsCard',
           },
         },
         relationships: {
           'linkedExamples.0': {
-            links: { self: '../ContactCard/example-1' },
+            links: { self: '../TagsCard/bad-example' },
           },
         },
         meta: {
@@ -317,12 +260,12 @@ test.describe('instantiate-validation e2e', () => {
     };
     let specWrite = await writeFile(
       realmUrl,
-      'Spec/contact-card-spec.json',
+      'Spec/tags-card-spec.json',
       JSON.stringify(specDoc, null, 2),
       { authorization },
     );
     expect(specWrite.ok).toBe(true);
-    await waitForRealmFile(realmUrl, 'Spec/contact-card-spec.json', {
+    await waitForRealmFile(realmUrl, 'Spec/tags-card-spec.json', {
       authorization,
       pollMs: 300,
       timeoutMs: 30_000,
@@ -339,7 +282,7 @@ test.describe('instantiate-validation e2e', () => {
 
     let result = await step.run(realmUrl);
 
-    // Must fail — linksTo with FieldDef is a semantic error caught at instantiation
+    // Must fail — containsMany field received a string instead of an array
     expect(result.step).toBe('instantiate');
     expect(result.passed).toBe(false);
     expect(result.errors.length).toBeGreaterThan(0);

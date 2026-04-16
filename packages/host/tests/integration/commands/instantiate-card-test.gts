@@ -137,8 +137,8 @@ module('Integration | commands | instantiate-card', function (hooks) {
     assert.false(result.passed, 'non-array containsMany value should fail');
     assert.ok(result.error, 'should have an error message');
     assert.ok(
-      result.error?.includes('field validation error'),
-      `error should mention field validation, got: ${result.error}`,
+      result.error?.includes('Expected array for field value'),
+      `error should mention array field validation, got: ${result.error}`,
     );
   });
 });
