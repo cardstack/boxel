@@ -269,57 +269,6 @@ module('factory-tool-executor integration > realm-api requests', function () {
     }
   });
 
-  test('realm-create sends correct JSON:API POST to _create-realm with realm-server JWT', async function (assert) {
-    let captured: CapturedRequest | undefined;
-
-    let { server, origin } = await startTestServer((req, respond) => {
-      captured = req;
-      respond(201, {
-        data: { type: 'realm', id: `${origin}/user/new-realm/` },
-      });
-    });
-
-    try {
-      let registry = new ToolRegistry();
-      let executor = new ToolExecutor(registry, {
-        packageRoot: '/fake',
-        targetRealmUrl: `${origin}/user/target/`,
-        authorization: 'Bearer realm-server-jwt-minted',
-      });
-
-      let result = await executor.execute('realm-create', {
-        'realm-server-url': `${origin}/user/target/`,
-        name: 'New Realm',
-        endpoint: 'user/new-realm',
-      });
-
-      assert.strictEqual(result.exitCode, 0);
-      assert.strictEqual(captured!.method, 'POST');
-      assert.strictEqual(captured!.url, '/user/target/_create-realm');
-      assert.strictEqual(
-        captured!.headers.authorization,
-        'Bearer realm-server-jwt-minted',
-      );
-      assert.strictEqual(captured!.headers.accept, SupportedMimeType.JSONAPI);
-      assert.strictEqual(
-        captured!.headers['content-type'],
-        SupportedMimeType.JSONAPI,
-      );
-
-      let body = JSON.parse(captured!.body);
-      assert.strictEqual(body.data.type, 'realm');
-      assert.strictEqual(body.data.attributes.name, 'New Realm');
-      assert.strictEqual(body.data.attributes.endpoint, 'user/new-realm');
-      assert.ok(body.data.attributes.iconURL, 'body includes iconURL');
-      assert.ok(
-        body.data.attributes.backgroundURL,
-        'body includes backgroundURL',
-      );
-    } finally {
-      await stopServer(server);
-    }
-  });
-
   test('realm-server-session sends OpenID token and returns JWT from Authorization header', async function (assert) {
     let captured: CapturedRequest | undefined;
 
@@ -361,77 +310,6 @@ module('factory-tool-executor integration > realm-api requests', function () {
         result.output,
         { token: 'Bearer freshly-minted-jwt' },
         'captures JWT from Authorization response header',
-      );
-    } finally {
-      await stopServer(server);
-    }
-  });
-
-  test('end-to-end: realm-server-session → realm-create flow', async function (assert) {
-    let requests: CapturedRequest[] = [];
-
-    let { server, origin } = await startTestServer((req, respond) => {
-      requests.push(req);
-
-      if (req.url?.endsWith('_server-session')) {
-        respond(201, null, {
-          Authorization: 'Bearer e2e-realm-server-jwt',
-        });
-      } else if (req.url?.endsWith('_create-realm')) {
-        respond(201, {
-          data: { type: 'realm', id: `${origin}/user/e2e-scratch/` },
-        });
-      } else {
-        respond(404, { error: 'not found' });
-      }
-    });
-
-    try {
-      let registry = new ToolRegistry();
-      let serverUrl = `${origin}/user/target/`;
-
-      // Step 1: Obtain realm-server JWT
-      let sessionExecutor = new ToolExecutor(registry, {
-        packageRoot: '/fake',
-        targetRealmUrl: serverUrl,
-      });
-
-      let sessionResult = await sessionExecutor.execute(
-        'realm-server-session',
-        {
-          'realm-server-url': serverUrl,
-          'openid-token': 'e2e-openid-token',
-        },
-      );
-
-      assert.strictEqual(sessionResult.exitCode, 0);
-      let jwt = (sessionResult.output as { token: string }).token;
-      assert.strictEqual(jwt, 'Bearer e2e-realm-server-jwt');
-
-      // Step 2: Use JWT to create a realm
-      let createExecutor = new ToolExecutor(registry, {
-        packageRoot: '/fake',
-        targetRealmUrl: serverUrl,
-        authorization: jwt,
-      });
-
-      let createResult = await createExecutor.execute('realm-create', {
-        'realm-server-url': serverUrl,
-        name: 'E2E Scratch',
-        endpoint: 'user/e2e-scratch',
-      });
-
-      assert.strictEqual(createResult.exitCode, 0);
-      assert.strictEqual(requests.length, 2, 'two requests made');
-
-      // Verify the create request used the minted JWT
-      let createReq = requests[1];
-      assert.strictEqual(createReq.method, 'POST');
-      assert.strictEqual(createReq.url, '/user/target/_create-realm');
-      assert.strictEqual(
-        createReq.headers.authorization,
-        'Bearer e2e-realm-server-jwt',
-        'create request uses the JWT from session',
       );
     } finally {
       await stopServer(server);

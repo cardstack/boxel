@@ -3038,6 +3038,9 @@ importers:
 
   packages/software-factory:
     devDependencies:
+      '@cardstack/boxel-cli':
+        specifier: workspace:*
+        version: link:../boxel-cli
       '@cardstack/boxel-icons':
         specifier: workspace:*
         version: link:../boxel-icons

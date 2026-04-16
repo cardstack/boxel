@@ -26,18 +26,11 @@
 // This should be first
 import '../../src/setup-logger';
 
-import {
-  getActiveProfile,
-  getRealmServerToken,
-  matrixLogin,
-  parseArgs,
-} from '../../src/boxel';
+import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
+import { getRealmServerToken, matrixLogin, parseArgs } from '../../src/boxel';
 import { logger } from '../../src/logger';
-import {
-  createRealm,
-  getRealmScopedAuth,
-  writeFile,
-} from '../../src/realm-operations';
+import { getRealmScopedAuth, writeFile } from '../../src/realm-operations';
 import { createDefaultPipeline } from '../../src/validators/validation-pipeline';
 import type { TestValidationDetails } from '../../src/validators/test-step';
 
@@ -145,10 +138,9 @@ async function main() {
   let args = parseArgs(process.argv.slice(2));
   let targetRealmUrl = (args['target-realm-url'] as string) ?? '';
 
-  let profile;
-  try {
-    profile = getActiveProfile();
-  } catch {
+  let client = new BoxelCLIClient();
+  let active = client.getActiveProfile();
+  if (!active) {
     log.error(
       'No active Boxel profile found. Run `boxel profile add` to configure one.',
     );
@@ -156,7 +148,7 @@ async function main() {
   }
 
   if (!targetRealmUrl) {
-    let username = profile.username;
+    let username = active.matrixId.replace(/^@/, '').replace(/:.*$/, '');
     targetRealmUrl = `http://localhost:4201/${username}/smoke-test-realm/`;
     log.info(
       `No --target-realm-url specified, using default: ${targetRealmUrl}\n`,
@@ -201,23 +193,22 @@ async function main() {
 
   let realmDisplayName = realmEndpoint.replace(/-/g, ' ');
   log.info(`  Creating realm: ${realmEndpoint}...`);
-  let createResult = await createRealm(realmServerUrl, {
-    name: realmDisplayName,
-    endpoint: realmEndpoint,
-    authorization: authorization ?? '',
-    matrixAuth: {
-      userId: matrixAuth.userId,
-      accessToken: matrixAuth.accessToken,
-      matrixUrl: matrixAuth.credentials.matrixUrl,
-    },
-  });
-
-  if (createResult.created) {
-    log.info(`  Created: ${createResult.realmUrl}\n`);
-  } else if (createResult.error?.includes('already exists')) {
-    log.info(`  Realm already exists.\n`);
-  } else {
-    log.error(`  Failed to create realm: ${createResult.error}`);
+  await BoxelCLIClient.ensureProfile({ realmServerUrl });
+  try {
+    let client = new BoxelCLIClient();
+    let createResult = await client.createRealm({
+      realmName: realmEndpoint,
+      displayName: realmDisplayName,
+    });
+    if (createResult.created) {
+      log.info(`  Created: ${createResult.realmUrl}\n`);
+    } else {
+      log.info(`  Realm already exists: ${createResult.realmUrl}\n`);
+    }
+  } catch (err) {
+    log.error(
+      `  Failed to create realm: ${err instanceof Error ? err.message : String(err)}`,
+    );
     process.exit(1);
   }
 
@@ -318,14 +309,24 @@ async function main() {
     'software-factory/lint-result',
     realmServerUrl,
   ).href;
+  let evalResultsModuleUrl = new URL(
+    'software-factory/eval-result',
+    realmServerUrl,
+  ).href;
 
   let pipeline = createDefaultPipeline({
     authorization,
+    // In this smoke test `authorization` starts as the server token (line 198)
+    // and is later narrowed to a realm-scoped JWT for realm API calls. The
+    // pipeline's `serverToken` must remain the original server-scoped token so
+    // that _run-command (prerenderer) calls succeed.
+    serverToken,
     fetch: fetchImpl,
     realmServerUrl,
     hostAppUrl: realmServerUrl,
     testResultsModuleUrl,
     lintResultsModuleUrl,
+    evalResultsModuleUrl,
   });
 
   let validationResults = await pipeline.validate(targetRealmUrl);

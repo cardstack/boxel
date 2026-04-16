@@ -1,7 +1,8 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
+
+import { resetProfileManager } from '@cardstack/boxel-cli/api';
 
 export interface TestProfileOptions {
   username: string;
@@ -11,16 +12,24 @@ export interface TestProfileOptions {
 }
 
 /**
- * Creates a temporary HOME directory with a fake ~/.boxel-cli/profiles.json.
- * Sets process.env.HOME to the temp dir so getActiveProfile() reads from it.
- * Returns a cleanup function that restores the original HOME.
+ * Installs a fake Boxel CLI profile into the real ~/.boxel-cli/profiles.json.
+ * Backs up any existing file and resets the ProfileManager singleton so
+ * BoxelCLIClient picks up the test profile.
+ *
+ * Returns a cleanup function that restores the original file and resets again.
  */
 export function installTestProfile(options: TestProfileOptions): () => void {
-  let originalHome = process.env.HOME;
+  let configDir = join(homedir(), '.boxel-cli');
+  let profilesFile = join(configDir, 'profiles.json');
 
-  let tempHome = mkdtempSync(join(tmpdir(), 'boxel-test-'));
-  let boxelCliDir = join(tempHome, '.boxel-cli');
-  mkdirSync(boxelCliDir, { recursive: true });
+  let backup: string | undefined;
+  if (existsSync(profilesFile)) {
+    backup = readFileSync(profilesFile, 'utf8');
+  }
+
+  if (!existsSync(configDir)) {
+    mkdirSync(configDir, { recursive: true });
+  }
 
   let profileId = `@${options.username}:localhost`;
   let config = {
@@ -34,17 +43,18 @@ export function installTestProfile(options: TestProfileOptions): () => void {
     activeProfile: profileId,
   };
 
-  writeFileSync(
-    join(boxelCliDir, 'profiles.json'),
-    JSON.stringify(config, null, 2),
-  );
-  process.env.HOME = tempHome;
+  writeFileSync(profilesFile, JSON.stringify(config, null, 2));
+  resetProfileManager();
 
   return () => {
-    if (originalHome === undefined) {
-      delete process.env.HOME;
+    if (backup !== undefined) {
+      writeFileSync(profilesFile, backup);
     } else {
-      process.env.HOME = originalHome;
+      writeFileSync(
+        profilesFile,
+        JSON.stringify({ profiles: {}, activeProfile: null }),
+      );
     }
+    resetProfileManager();
   };
 }

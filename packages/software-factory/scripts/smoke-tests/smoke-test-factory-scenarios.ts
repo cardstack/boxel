@@ -28,15 +28,12 @@ import '../../src/setup-logger';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 
-import {
-  getActiveProfile,
-  getRealmServerToken,
-  matrixLogin,
-} from '../../src/boxel';
+import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
+import { getRealmServerToken, matrixLogin } from '../../src/boxel';
 import { inferDarkfactoryModuleUrl } from '../../src/factory-seed';
 import { logger } from '../../src/logger';
 import {
-  createRealm,
   getRealmScopedAuth,
   writeFile,
   waitForRealmFile,
@@ -676,24 +673,23 @@ async function scenario3(
 async function main(): Promise<void> {
   let { scenario, debug, briefUrl } = parseArgs();
 
-  let profile;
-  try {
-    profile = getActiveProfile();
-  } catch {
+  let client = new BoxelCLIClient();
+  let active = client.getActiveProfile();
+  if (!active) {
     log.error(
       'No active Boxel profile found. Run `boxel profile add` to configure one.',
     );
     process.exit(1);
   }
 
-  let username = profile.username;
+  let username = active.matrixId.replace(/^@/, '').replace(/:.*$/, '');
 
   if (!process.env.OPENROUTER_API_KEY) {
     log.error('OPENROUTER_API_KEY is required for the LLM agent.');
     process.exit(1);
   }
 
-  let realmServerUrl = profile.realmServerUrl;
+  let realmServerUrl = active.realmServerUrl;
   if (!realmServerUrl.endsWith('/')) {
     realmServerUrl += '/';
   }
@@ -720,24 +716,23 @@ async function main(): Promise<void> {
 
     log.info('');
     log.info(`--- Creating realm: ${realmEndpoint} ---`);
-    let createResult = await createRealm(realmServerUrl, {
-      name: realmDisplayName,
-      endpoint: realmEndpoint,
-      authorization: serverToken,
-      matrixAuth: {
-        userId: matrixAuth.userId,
-        accessToken: matrixAuth.accessToken,
-        matrixUrl: matrixAuth.credentials.matrixUrl,
-      },
-    });
-
-    if (createResult.created) {
-      log.info(`Created realm: ${createResult.realmUrl}`);
-    } else if (createResult.error?.includes('already exists')) {
-      log.info('Realm already exists — reusing.');
-      targetRealmUrl = createResult.realmUrl ?? targetRealmUrl;
-    } else {
-      log.error(`Failed to create realm: ${createResult.error}`);
+    await BoxelCLIClient.ensureProfile({ realmServerUrl });
+    try {
+      let client = new BoxelCLIClient();
+      let createResult = await client.createRealm({
+        realmName: realmEndpoint,
+        displayName: realmDisplayName,
+      });
+      if (createResult.created) {
+        log.info(`Created realm: ${createResult.realmUrl}`);
+      } else {
+        log.info(`Realm already exists: ${createResult.realmUrl}`);
+      }
+      targetRealmUrl = createResult.realmUrl;
+    } catch (err) {
+      log.error(
+        `Failed to create realm: ${err instanceof Error ? err.message : String(err)}`,
+      );
       results.push({ name: `Scenario ${s}`, ok: false });
       continue;
     }

@@ -166,6 +166,10 @@ export async function runFactoryIssueLoop(
     'software-factory/lint-result',
     realmServerUrl,
   ).href;
+  let evalResultsModuleUrl = new URL(
+    'software-factory/eval-result',
+    realmServerUrl,
+  ).href;
   let hostAppUrl = config.hostAppUrl ?? realmServerUrl;
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealmUrl,
@@ -201,10 +205,12 @@ export async function runFactoryIssueLoop(
     createDefaultPipeline({
       realmServerUrl,
       authorization: config.authorization,
+      serverToken,
       fetch: fetchImpl,
       hostAppUrl,
       testResultsModuleUrl,
       lintResultsModuleUrl,
+      evalResultsModuleUrl,
       issueId,
       fetchFilenames: (realmUrl: string) =>
         fetchRealmFilenames(realmUrl, fetchOptions),

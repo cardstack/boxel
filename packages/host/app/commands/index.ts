@@ -18,6 +18,7 @@ import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room'
 import * as CreateAndOpenSubmissionWorkflowCard from './create-and-open-submission-workflow-card';
 import * as CreateSpecCommandModule from './create-specs';
 import * as CreateSubmissionWorkflowCommandModule from './create-submission-workflow';
+import * as EvaluateModuleCommandModule from './evaluate-module';
 import * as FullReindexRealmCommandModule from './full-reindex-realm';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
@@ -127,6 +128,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/check-correctness',
     CheckCorrectnessCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/evaluate-module',
+    EvaluateModuleCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/cancel-indexing-job',
@@ -462,6 +467,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   UnregisterBotCommandModule.default,
   CancelIndexingJobCommandModule.default,
   CheckCorrectnessCommandModule.default,
+  EvaluateModuleCommandModule.default,
   UpdateCodePathWithSelectionCommandModule.default,
   UpdatePlaygroundSelectionCommandModule.default,
   UpdateRoomSkillsCommandModule.default,

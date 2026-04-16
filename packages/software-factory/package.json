@@ -33,6 +33,7 @@
     "test:realm": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/run-realm-tests.ts"
   },
   "devDependencies": {
+    "@cardstack/boxel-cli": "workspace:*",
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@cardstack/logger": "^0.2.1",
