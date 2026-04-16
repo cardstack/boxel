@@ -213,6 +213,9 @@ module('ValidationPipeline', function () {
       // Inject a fetchFilenames that returns no files so the test, lint,
       // and eval steps return "nothing to validate" without hitting a real realm
       fetchFilenames: async () => ({ filenames: [] }),
+      // Inject a searchSpecsFn that returns no specs so the instantiate
+      // step returns "nothing to validate" without hitting a real realm
+      searchSpecsFn: async () => ({ specs: [] }),
     });
 
     // Verify step count and order by running validate and inspecting results

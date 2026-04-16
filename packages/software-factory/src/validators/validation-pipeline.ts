@@ -159,6 +159,8 @@ export interface ValidationPipelineConfig {
   issueId?: string;
   /** Injected for testing — passed through to TestValidationStep, LintValidationStep, and EvalValidationStep. */
   fetchFilenames?: TestValidationStepConfig['fetchFilenames'];
+  /** Injected for testing — passed through to InstantiateValidationStep. */
+  searchSpecsFn?: InstantiateValidationStepConfig['searchSpecsFn'];
 }
 
 /**
@@ -204,6 +206,7 @@ export function createDefaultPipeline(
     realmServerUrl: config.realmServerUrl,
     instantiateResultsModuleUrl: config.instantiateResultsModuleUrl,
     issueId: config.issueId,
+    searchSpecsFn: config.searchSpecsFn,
   };
 
   return new ValidationPipeline([
