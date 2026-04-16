@@ -7,14 +7,14 @@ import {
   containsMany,
   linksTo,
   realmURL,
-  relativeTo,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import DateTimeField from 'https://cardstack.com/base/datetime';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
 import enumField from 'https://cardstack.com/base/enum';
-import { maybeRelativeURL, maybeURL } from '@cardstack/runtime-common/url';
+import { maybeURL } from '@cardstack/runtime-common/url';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { Project, Issue } from './darkfactory';
 
 export const InstantiateResultStatusField = enumField(StringField, {
@@ -46,12 +46,18 @@ export class InstantiateCardEntry extends FieldDef {
     if (!instanceURL) {
       return this.instanceId;
     }
-    let cardRealmURL = (this as any)[realmURL]
-      ? maybeURL((this as any)[realmURL])
-      : undefined;
-    let base =
-      cardRealmURL ?? maybeURL((this as any)[relativeTo]) ?? instanceURL;
-    return maybeRelativeURL(instanceURL, base, cardRealmURL);
+    let cardRealmURLString = (this as any)[realmURL];
+    if (cardRealmURLString) {
+      let realmBase = maybeURL(cardRealmURLString);
+      if (realmBase) {
+        try {
+          return new RealmPaths(realmBase).local(instanceURL);
+        } catch {
+          // instance is outside the realm — fall through to full URL
+        }
+      }
+    }
+    return instanceURL.href;
   }
 
   static embedded = class Embedded extends Component<
