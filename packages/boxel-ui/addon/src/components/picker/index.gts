@@ -88,6 +88,7 @@ let loadMoreSentinel = modifier(
 
     // Check immediately: if the list is short enough to fit without
     // scrolling, we're already at the "bottom" and should load more.
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- scroll measurement needs post-paint layout
     requestAnimationFrame(() => handleScroll());
 
     return () => optionsList!.removeEventListener('scroll', handleScroll);

@@ -4,9 +4,9 @@ import { resolve } from 'node:path';
 import type { ToolResult } from './factory-agent';
 import type { ToolRegistry } from './factory-tool-registry';
 import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import {
-  ensureTrailingSlash,
   readFile,
   writeFile,
   deleteFile,

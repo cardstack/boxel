@@ -111,6 +111,7 @@ Reference these guidelines when:
 - `testing-modern-patterns` - Use modern testing patterns
 - `testing-qunit-dom-assertions` - Use qunit-dom for better test assertions
 - `testing-test-waiters` - Use @ember/test-waiters for async testing
+- `testing-no-raf-for-state` - Use scheduleOnce('afterRender') instead of requestAnimationFrame for state changes
 - `testing-render-patterns` - Use correct render patterns for components
 - `testing-msw-setup` - Mock API requests with MSW
 - `testing-library-dom-abstraction` - Use Testing Library patterns

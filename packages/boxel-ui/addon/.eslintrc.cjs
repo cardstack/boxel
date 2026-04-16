@@ -94,6 +94,7 @@ module.exports = {
           'error',
           { invokables: MISSING_INVOKABLES_CONFIG.invokables },
         ],
+        '@cardstack/boxel/no-raf-for-state': 'error',
       },
     },
     // node files

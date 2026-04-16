@@ -17,6 +17,7 @@
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import { specRef } from '@cardstack/runtime-common/constants';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import type { ValidationStepResult } from '../factory-agent';
 import { deriveIssueSlug } from '../factory-agent-types';
@@ -645,14 +646,6 @@ export class InstantiateValidationStep implements ValidationStepRunner {
       error: 'run-command did not return a result — treating as failure',
     };
   }
-}
-
-// ---------------------------------------------------------------------------
-// Utility
-// ---------------------------------------------------------------------------
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
 }
 
 /**

@@ -54,11 +54,11 @@ import {
 import { RealmIssueStore, type IssueStore } from './issue-scheduler';
 import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader';
 import {
-  ensureTrailingSlash,
   fetchRealmFilenames,
   type RealmFetchOptions,
 } from './realm-operations';
 import { fetchCardTypeSchema } from './darkfactory-schemas';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 let log = logger('factory-issue-loop-wiring');
 

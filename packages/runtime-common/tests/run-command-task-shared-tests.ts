@@ -133,6 +133,7 @@ const tests = Object.freeze({
         dbRows: [
           {
             username: '@alice:localhost',
+            realm_url: 'http://localhost:4201/experiments/',
             read: true,
             write: true,
             realm_owner: false,
@@ -180,6 +181,7 @@ const tests = Object.freeze({
         dbRows: [
           {
             username: '@alice:localhost',
+            realm_url: 'http://localhost:4201/experiments/',
             read: true,
             write: true,
             realm_owner: false,
@@ -237,6 +239,7 @@ const tests = Object.freeze({
         dbRows: [
           {
             username: '@alice:localhost',
+            realm_url: 'http://localhost:4201/experiments/',
             read: true,
             write: true,
             realm_owner: false,
@@ -263,6 +266,7 @@ const tests = Object.freeze({
     );
     assert.deepEqual(prerenderCall?.commandInput, {
       listingId: 'http://localhost:4201/catalog/AppListing/1',
+      accessibleRealms: ['http://localhost:4201/experiments/'],
     });
   },
 } as SharedTests<{}>);
