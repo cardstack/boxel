@@ -282,6 +282,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         text-align: center;
       }
       .spec-preview-overlay {
+        pointer-events: none;
         border-radius: var(--boxel-border-radius);
         box-shadow: 0 0 0 1px var(--boxel-dark);
       }
