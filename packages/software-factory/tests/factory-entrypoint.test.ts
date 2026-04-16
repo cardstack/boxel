@@ -45,7 +45,7 @@ module('factory-entrypoint', function (hooks) {
     process.env.MATRIX_USERNAME = originalMatrixUsername;
   });
 
-  test('parseFactoryEntrypointArgs accepts required inputs and defaults mode', function (assert) {
+  test('parseFactoryEntrypointArgs accepts required inputs', function (assert) {
     let options = parseFactoryEntrypointArgs([
       '--brief-url',
       briefUrl,
@@ -59,29 +59,24 @@ module('factory-entrypoint', function (hooks) {
       briefUrl,
       targetRealmUrl,
       realmServerUrl: 'https://realms.example.test/',
-      mode: 'implement',
       model: undefined,
       debug: undefined,
+      retryBlocked: true,
     });
   });
 
-  test('parseFactoryEntrypointArgs rejects invalid mode', function (assert) {
-    assert.throws(
-      () =>
-        parseFactoryEntrypointArgs([
-          '--brief-url',
-          briefUrl,
-          '--target-realm-url',
-          targetRealmUrl,
-          '--mode',
-          'ship-it',
-        ]),
-      (error: unknown) =>
-        error instanceof FactoryEntrypointUsageError &&
-        error.message ===
-          'Invalid --mode "ship-it". Expected one of: bootstrap, implement, resume',
-    );
+  test('parseFactoryEntrypointArgs accepts --no-retry-blocked', function (assert) {
+    let options = parseFactoryEntrypointArgs([
+      '--brief-url',
+      briefUrl,
+      '--target-realm-url',
+      targetRealmUrl,
+      '--no-retry-blocked',
+    ]);
+
+    assert.false(options.retryBlocked);
   });
+
   test('parseFactoryEntrypointArgs rejects missing required inputs', function (assert) {
     assert.throws(
       () => parseFactoryEntrypointArgs(['--target-realm-url', targetRealmUrl]),
@@ -96,7 +91,6 @@ module('factory-entrypoint', function (hooks) {
       {
         briefUrl,
         targetRealmUrl,
-        mode: 'bootstrap',
         realmServerUrl: null,
       },
       normalizedBrief,
@@ -105,7 +99,6 @@ module('factory-entrypoint', function (hooks) {
     );
 
     assert.strictEqual(summary.command, 'factory:go');
-    assert.strictEqual(summary.mode, 'bootstrap');
     assert.strictEqual(summary.brief.url, briefUrl);
     assert.strictEqual(summary.brief.title, 'Sticky Note');
     assert.deepEqual(summary.brief.tags, [
@@ -131,7 +124,7 @@ module('factory-entrypoint', function (hooks) {
     assert.strictEqual(summary.seedIssue.seedIssueStatus, 'created');
     assert.deepEqual(summary.result, {
       status: 'ready',
-      nextStep: 'seed-issue-created',
+      nextStep: 'run-issue-loop',
     });
   });
 
@@ -147,7 +140,7 @@ module('factory-entrypoint', function (hooks) {
     assert.true(/--brief-url <url>/.test(usage));
     assert.true(/--target-realm-url <url>/.test(usage));
     assert.true(/--realm-server-url <url>/.test(usage));
-    assert.true(/--mode <mode>/.test(usage));
+    assert.true(/--no-retry-blocked/.test(usage));
     assert.true(/--help/.test(usage));
     assert.true(/MATRIX_USERNAME is required/.test(usage));
     assert.true(/For public briefs, no auth setup is needed./.test(usage));
@@ -163,7 +156,6 @@ module('factory-entrypoint', function (hooks) {
         briefUrl,
         targetRealmUrl,
         realmServerUrl: null,
-        mode: 'implement',
       },
       {
         bootstrapTargetRealm: async (resolution) => ({
@@ -236,7 +228,6 @@ module('factory-entrypoint', function (hooks) {
         briefUrl,
         targetRealmUrl,
         realmServerUrl: 'https://realms.example.test/app/',
-        mode: 'bootstrap',
       },
       {
         bootstrapTargetRealm: async (resolution) => ({
@@ -250,6 +241,11 @@ module('factory-entrypoint', function (hooks) {
           capturedDarkfactoryModuleUrl = options.darkfactoryModuleUrl;
           return mockSeedResult;
         },
+        runIssueLoop: async () => ({
+          outcome: 'all_issues_done' as const,
+          outerCycles: 0,
+          issueResults: [],
+        }),
         fetch: async () =>
           new Response(
             JSON.stringify({

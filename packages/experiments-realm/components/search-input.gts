@@ -51,6 +51,7 @@ export class SearchInput extends Component<Signature> {
         @onInput={{this.onInput}}
         {{on 'keydown' this.onSearchInputKeyDown}}
         autocomplete='off'
+        data-search-field
         data-test-search-field
       />
     </div>

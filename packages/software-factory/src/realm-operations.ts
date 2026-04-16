@@ -687,6 +687,124 @@ export async function waitForRealmFile(
 }
 
 // ---------------------------------------------------------------------------
+// Lint
+// ---------------------------------------------------------------------------
+
+/** A single lint diagnostic message (mirrors ESLint's Linter.LintMessage). */
+export interface LintMessage {
+  ruleId: string | null;
+  severity: 1 | 2; // 1 = warning, 2 = error
+  message: string;
+  line: number;
+  column: number;
+  endLine?: number;
+  endColumn?: number;
+}
+
+/** Response from the realm `_lint` endpoint (mirrors ESLint's Linter.FixReport). */
+export interface LintFileResponse {
+  fixed: boolean;
+  output: string;
+  messages: LintMessage[];
+}
+
+/**
+ * Lint a single file's source code via the realm's `_lint` endpoint.
+ * The endpoint runs ESLint with `@cardstack/boxel` rules and Prettier formatting.
+ */
+export async function lintFile(
+  realmUrl: string,
+  source: string,
+  filename: string,
+  options?: RealmFetchOptions,
+): Promise<LintFileResponse> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let normalizedUrl = ensureTrailingSlash(realmUrl);
+  let lintUrl = `${normalizedUrl}_lint`;
+
+  let headers: Record<string, string> = {
+    Accept: SupportedMimeType.JSON,
+    'Content-Type': SupportedMimeType.CardSource,
+    'X-Filename': filename,
+    'X-HTTP-Method-Override': 'QUERY',
+  };
+  if (options?.authorization) {
+    headers['Authorization'] = options.authorization;
+  }
+
+  let response = await fetchImpl(lintUrl, {
+    method: 'POST',
+    headers,
+    body: source,
+  });
+
+  if (!response.ok) {
+    let body = await response.text().catch(() => '(no body)');
+    throw new Error(
+      `_lint returned HTTP ${response.status}: ${body.slice(0, 300)}`,
+    );
+  }
+
+  return (await response.json()) as LintFileResponse;
+}
+
+// ---------------------------------------------------------------------------
+// Validation Artifact Sequence Numbers
+// ---------------------------------------------------------------------------
+
+/**
+ * Get the next sequence number for a validation artifact by searching
+ * existing cards of the given type in the realm. Each slug (issue) gets its
+ * own independent sequence starting from 1.
+ *
+ * Shared by TestValidationStep and LintValidationStep so that sequence
+ * numbering is derived from realm state (survives process restarts).
+ */
+export async function getNextValidationSequenceNumber(
+  slug: string,
+  prefix: string,
+  moduleUrl: string,
+  cardName: string,
+  options: RealmFetchOptions & { targetRealmUrl: string },
+): Promise<number> {
+  let result = await searchRealm(
+    options.targetRealmUrl,
+    {
+      filter: {
+        on: { module: moduleUrl, name: cardName },
+      },
+      sort: [{ by: 'sequenceNumber', direction: 'desc' }],
+    },
+    { authorization: options.authorization, fetch: options.fetch },
+  );
+
+  if (!result?.ok || !result.data) {
+    return 1;
+  }
+
+  let targetRealmUrl = ensureTrailingSlash(options.targetRealmUrl);
+  let fullPrefix = `${prefix}${slug}-`;
+  let maxSeq = 0;
+
+  for (let card of result.data) {
+    let cardId = (card as { id?: string }).id ?? '';
+    let relativePath = cardId.startsWith(targetRealmUrl)
+      ? cardId.slice(targetRealmUrl.length)
+      : cardId;
+    if (relativePath.startsWith(fullPrefix)) {
+      let attrs = (card as { attributes?: { sequenceNumber?: number } })
+        .attributes;
+      let seq = attrs?.sequenceNumber ?? 0;
+      if (seq > maxSeq) {
+        maxSeq = seq;
+      }
+    }
+  }
+
+  return maxSeq + 1;
+}
+
+// ---------------------------------------------------------------------------
 // Fetch Realm Filenames
 // ---------------------------------------------------------------------------
 

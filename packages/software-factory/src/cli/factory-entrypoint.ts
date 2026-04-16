@@ -28,11 +28,8 @@ async function main(): Promise<void> {
       realmServerUrl: options.realmServerUrl ?? undefined,
     });
 
-    log.info(`mode=${options.mode} brief=${options.briefUrl}`);
-
-    if (options.mode === 'implement') {
-      log.info('Starting seed issue + issue-driven loop...');
-    }
+    log.info(`brief=${options.briefUrl}`);
+    log.info('Starting seed issue + issue-driven loop...');
 
     let summary = await runFactoryEntrypoint(options);
 

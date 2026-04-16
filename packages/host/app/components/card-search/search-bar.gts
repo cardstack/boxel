@@ -115,6 +115,7 @@ export default class SearchBar extends Component<Signature> {
           id={{@id}}
           {{elementCallback @onInputInsertion}}
           {{autoFocus}}
+          data-search-field
           data-test-search-field
         />
       </div>

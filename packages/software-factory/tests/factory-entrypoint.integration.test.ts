@@ -15,7 +15,6 @@ const stickyNoteFixture = readFileSync(
 
 interface FactoryEntrypointIntegrationSummary {
   command: string;
-  mode: string;
   brief: {
     url: string;
     title: string;
@@ -127,6 +126,27 @@ module('factory-entrypoint integration', function () {
             [canonicalTargetRealmUrl]: 'Bearer target-realm-token',
           }),
         );
+      } else if (request.url === '/_run-command' && request.method === 'POST') {
+        // Schema loading — return error so wiring layer skips (non-fatal)
+        response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
+        response.end(
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                status: 'error',
+                error: 'Schema not available in test',
+              },
+            },
+          }),
+        );
+      } else if (
+        request.url === '/hassan/personal/_search' &&
+        request.method === 'QUERY'
+      ) {
+        // Issue store search — return empty results so the loop exits immediately
+        response.writeHead(200, { 'content-type': SupportedMimeType.CardJson });
+        response.end(JSON.stringify({ data: [] }));
       } else if (
         request.url === '/hassan/personal/_readiness-check' &&
         request.method === 'GET'
@@ -216,8 +236,6 @@ module('factory-entrypoint integration', function () {
           targetRealmUrl,
           '--realm-server-url',
           `${origin}/`,
-          '--mode',
-          'resume',
         ],
         {
           cwd: packageRoot,
@@ -239,7 +257,6 @@ module('factory-entrypoint integration', function () {
         result.stdout,
       ) as FactoryEntrypointIntegrationSummary;
       assert.strictEqual(summary.command, 'factory:go');
-      assert.strictEqual(summary.mode, 'resume');
       assert.strictEqual(summary.brief.url, briefUrl);
       assert.strictEqual(summary.brief.title, 'Sticky Note');
       assert.strictEqual(
@@ -258,9 +275,10 @@ module('factory-entrypoint integration', function () {
         'Issues/bootstrap-seed',
       );
       assert.strictEqual(summary.seedIssue.seedIssueStatus, 'created');
+      // Loop runs and completes immediately (no issues in realm)
       assert.deepEqual(summary.result, {
-        status: 'ready',
-        nextStep: 'run-issue-loop',
+        status: 'completed',
+        nextStep: 'all-issues-completed',
       });
     } finally {
       await new Promise<void>((resolvePromise, reject) =>
@@ -300,7 +318,7 @@ module('factory-entrypoint integration', function () {
     assert.strictEqual(result.status, 0, result.stderr);
     assert.true(/Usage:/.test(result.stdout));
     assert.true(/--brief-url <url>/.test(result.stdout));
-    assert.true(/--mode <mode>/.test(result.stdout));
+    assert.true(/--no-retry-blocked/.test(result.stdout));
   });
 
   test('factory:go fails clearly when MATRIX_USERNAME is missing', async function (assert) {

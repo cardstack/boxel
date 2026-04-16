@@ -18,17 +18,13 @@ import {
 import type { IssueLoopResult } from './issue-loop';
 import { createBoxelRealmFetch } from './realm-auth';
 
-const allowedModes = ['bootstrap', 'implement', 'resume'] as const;
-
-export type FactoryEntrypointMode = (typeof allowedModes)[number];
-
 export interface FactoryEntrypointOptions {
   briefUrl: string;
   targetRealmUrl: string | null;
   realmServerUrl: string | null;
-  mode: FactoryEntrypointMode;
   model?: string;
   debug?: boolean;
+  retryBlocked?: boolean;
 }
 
 export interface FactoryEntrypointAction {
@@ -59,7 +55,6 @@ export interface FactoryEntrypointIssueLoopSummary {
 
 export interface FactoryEntrypointSummary {
   command: 'factory:go';
-  mode: FactoryEntrypointMode;
   brief: FactoryEntrypointBriefSummary;
   targetRealm: {
     url: string;
@@ -94,7 +89,7 @@ export { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 export function getFactoryEntrypointUsage(): string {
   return [
     'Usage:',
-    '  pnpm factory:go -- --brief-url <url> --target-realm-url <url> [options]',
+    '  pnpm factory:go --brief-url <url> --target-realm-url <url> [options]',
     '',
     'Required:',
     '  --brief-url <url>           Absolute URL for the source brief card',
@@ -102,7 +97,7 @@ export function getFactoryEntrypointUsage(): string {
     '',
     'Options:',
     '  --realm-server-url <url>   Realm server URL (default: http://localhost:4201/)',
-    '  --mode <mode>               One of: bootstrap, implement, resume',
+    '  --no-retry-blocked          Skip retrying blocked issues (by default, blocked issues are reset to backlog)',
     '  --model <model>             OpenRouter model ID (e.g., anthropic/claude-sonnet-4)',
     '  --debug                     Log LLM prompts and responses to stderr',
     '  --help                      Show this usage information',
@@ -142,8 +137,8 @@ export function parseFactoryEntrypointArgs(
         help: {
           type: 'boolean',
         },
-        mode: {
-          type: 'string',
+        'no-retry-blocked': {
+          type: 'boolean',
         },
         model: {
           type: 'string',
@@ -173,7 +168,6 @@ export function parseFactoryEntrypointArgs(
     typeof parsed.values['realm-server-url'] === 'string'
       ? normalizeUrl(parsed.values['realm-server-url'], '--realm-server-url')
       : null;
-  let mode = parseMode(parsed.values.mode);
   let model =
     typeof parsed.values.model === 'string'
       ? parsed.values.model.trim() || undefined
@@ -183,9 +177,9 @@ export function parseFactoryEntrypointArgs(
     briefUrl: normalizeUrl(briefUrl, '--brief-url'),
     targetRealmUrl: normalizeUrl(targetRealmUrl, '--target-realm-url'),
     realmServerUrl,
-    mode,
     model,
     debug: parsed.values.debug === true ? true : undefined,
+    retryBlocked: parsed.values['no-retry-blocked'] === true ? false : true,
   };
 }
 
@@ -239,44 +233,41 @@ export async function runFactoryEntrypoint(
   );
 
   // Run the issue-driven loop
-  if (options.mode === 'implement') {
-    let loopFn = dependencies?.runIssueLoop ?? runFactoryIssueLoop;
-    let loopResult = await loopFn({
-      briefUrl: options.briefUrl,
-      targetRealmUrl: targetRealm.url,
-      realmServerUrl: targetRealm.serverUrl,
-      ownerUsername: targetRealm.ownerUsername,
-      authorization: targetRealm.authorization,
-      model: options.model,
-      debug: options.debug,
-      fetch: dependencies?.fetch,
-    });
+  let loopFn = dependencies?.runIssueLoop ?? runFactoryIssueLoop;
+  let loopResult = await loopFn({
+    briefUrl: options.briefUrl,
+    targetRealmUrl: targetRealm.url,
+    realmServerUrl: targetRealm.serverUrl,
+    ownerUsername: targetRealm.ownerUsername,
+    authorization: targetRealm.authorization,
+    model: options.model,
+    debug: options.debug,
+    retryBlocked: options.retryBlocked,
+    fetch: dependencies?.fetch,
+  });
 
-    summary.issueLoop = {
-      outcome: loopResult.outcome,
-      outerCycles: loopResult.outerCycles,
-      issueResults: loopResult.issueResults.map((ir) => ({
-        issueId: ir.issueId,
-        exitReason: ir.exitReason,
-        innerIterations: ir.innerIterations,
-        toolCallCount: ir.toolCallLog.length,
-      })),
-    };
+  summary.issueLoop = {
+    outcome: loopResult.outcome,
+    outerCycles: loopResult.outerCycles,
+    issueResults: loopResult.issueResults.map((ir) => ({
+      issueId: ir.issueId,
+      exitReason: ir.exitReason,
+      innerIterations: ir.innerIterations,
+      toolCallCount: ir.toolCallLog.length,
+    })),
+  };
 
-    let succeeded = loopResult.outcome === 'all_issues_done';
-    summary.result = {
-      status: succeeded ? 'completed' : 'failed',
-      nextStep: succeeded
-        ? 'all-issues-completed'
-        : `loop-${loopResult.outcome}`,
-    };
-  }
+  let succeeded = loopResult.outcome === 'all_issues_done';
+  summary.result = {
+    status: succeeded ? 'completed' : 'failed',
+    nextStep: succeeded ? 'all-issues-completed' : `loop-${loopResult.outcome}`,
+  };
 
   return summary;
 }
 
 export function buildFactoryEntrypointSummary(
-  options: FactoryEntrypointOptions,
+  _options: FactoryEntrypointOptions,
   brief: FactoryBrief,
   targetRealm: FactoryTargetRealmBootstrapResult,
   seedResult: SeedIssueResult,
@@ -323,7 +314,6 @@ export function buildFactoryEntrypointSummary(
 
   return {
     command: 'factory:go',
-    mode: options.mode,
     brief: {
       ...brief,
       url: brief.sourceUrl,
@@ -339,8 +329,7 @@ export function buildFactoryEntrypointSummary(
     actions,
     result: {
       status: 'ready',
-      nextStep:
-        options.mode === 'bootstrap' ? 'seed-issue-created' : 'run-issue-loop',
+      nextStep: 'run-issue-loop',
     },
   };
 }
@@ -354,32 +343,6 @@ function requireStringValue(
   }
 
   throw new FactoryEntrypointUsageError(`Missing required ${flagName}`);
-}
-
-function parseMode(value: string | boolean | undefined): FactoryEntrypointMode {
-  if (value === undefined) {
-    return 'implement';
-  }
-
-  if (typeof value !== 'string') {
-    throw new FactoryEntrypointUsageError(
-      'Expected --mode to be a string value',
-    );
-  }
-
-  if (isFactoryEntrypointMode(value)) {
-    return value;
-  }
-
-  throw new FactoryEntrypointUsageError(
-    `Invalid --mode "${value}". Expected one of: ${allowedModes.join(', ')}`,
-  );
-}
-
-function isFactoryEntrypointMode(
-  value: string,
-): value is FactoryEntrypointMode {
-  return (allowedModes as readonly string[]).includes(value);
 }
 
 function normalizeUrl(rawUrl: string, flagName: string): string {
