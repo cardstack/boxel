@@ -5,15 +5,15 @@ import { module, test } from 'qunit';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import type AddressFieldModule from 'https://cardstack.com/base/address';
-import type ColorFieldModule from 'https://cardstack.com/base/color';
-import type CoordinateFieldModule from 'https://cardstack.com/base/coordinate';
-import type CountryFieldModule from 'https://cardstack.com/base/country';
-import type DateRangeFieldModule from 'https://cardstack.com/base/date-range-field';
-import type LLMModelFieldModule from 'https://cardstack.com/base/llm-model';
-import type PercentageFieldModule from 'https://cardstack.com/base/percentage';
-import type UrlFieldModule from 'https://cardstack.com/base/url';
-import type WebsiteFieldModule from 'https://cardstack.com/base/website';
+import type * as AddressFieldModule from 'https://cardstack.com/base/address';
+import type * as ColorFieldModule from 'https://cardstack.com/base/color';
+import type * as CoordinateFieldModule from 'https://cardstack.com/base/coordinate';
+import type * as CountryFieldModule from 'https://cardstack.com/base/country';
+import type * as DateRangeFieldModule from 'https://cardstack.com/base/date-range-field';
+import type * as LLMModelFieldModule from 'https://cardstack.com/base/llm-model';
+import type * as PercentageFieldModule from 'https://cardstack.com/base/percentage';
+import type * as UrlFieldModule from 'https://cardstack.com/base/url';
+import type * as WebsiteFieldModule from 'https://cardstack.com/base/website';
 
 import {
   BigIntegerField,

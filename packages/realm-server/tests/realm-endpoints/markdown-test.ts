@@ -590,7 +590,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       .set('Accept', SupportedMimeType.Markdown);
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
-    let body = response.text.trimEnd();
+    let body = response.text.trim();
     // Frontmatter must lead (no auto-injection before it) and the closing
     // fence must precede the body.
     assert.true(

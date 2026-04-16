@@ -5,23 +5,24 @@ import { module, test } from 'qunit';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import type BrandFunctionalPaletteModule from 'https://cardstack.com/base/brand-functional-palette';
+import type * as BrandFunctionalPaletteModule from 'https://cardstack.com/base/brand-functional-palette';
 import type * as BrandLogoModule from 'https://cardstack.com/base/brand-logo';
-import type CSSValueFieldModule from 'https://cardstack.com/base/css-value';
+import type * as CSSValueFieldModule from 'https://cardstack.com/base/css-value';
 import type * as CsvFileDefModule from 'https://cardstack.com/base/csv-file-def';
 import type * as GtsFileDefModule from 'https://cardstack.com/base/gts-file-def';
 import type * as ImageFileDefModule from 'https://cardstack.com/base/image-file-def';
 import type * as JsonFileDefModule from 'https://cardstack.com/base/json-file-def';
 import type * as MarkdownFileDefModule from 'https://cardstack.com/base/markdown-file-def';
-import type ResponseFieldModule from 'https://cardstack.com/base/response-field';
-import type StructuredThemeModule from 'https://cardstack.com/base/structured-theme';
+import type * as ResponseFieldModule from 'https://cardstack.com/base/response-field';
+import type * as StructuredThemeModule from 'https://cardstack.com/base/structured-theme';
 import type * as StructuredThemeVarsModule from 'https://cardstack.com/base/structured-theme-variables';
 import type * as TextFileDefModule from 'https://cardstack.com/base/text-file-def';
 import type * as TsFileDefModule from 'https://cardstack.com/base/ts-file-def';
-import type TypographyFieldModule from 'https://cardstack.com/base/typography';
+import type * as TypographyFieldModule from 'https://cardstack.com/base/typography';
 
 import {
   CardDef,
+  CardInfoField,
   Component,
   RealmField,
   contains,
@@ -598,8 +599,10 @@ module('Integration | field markdown domain', function (hooks) {
 
   test('StructuredTheme markdown emits title, description, version, and variable sections', async function (this: RenderingTestContext, assert) {
     let card = new StructuredTheme({
-      cardTitle: 'Example Theme',
-      cardDescription: 'A sample theme for testing.',
+      cardInfo: new CardInfoField({
+        name: 'Example Theme',
+        summary: 'A sample theme for testing.',
+      }),
       version: '1.0.0',
       typography: new ThemeTypographyField({
         heading: new TypographyField({ fontFamily: 'Inter' }),

@@ -174,6 +174,7 @@ module(basename(__filename), function () {
               embeddedHTML: {},
               fittedHTML: {},
               iconHTML: null,
+              markdown: null,
             },
           },
         },
