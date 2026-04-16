@@ -300,7 +300,7 @@ module('NoOpStepRunner', function () {
 });
 
 module('InstantiateValidationStep', function () {
-  test('passes when no specs and no modules exist', async function (assert) {
+  test('passes with no artifact when no specs and no modules exist (bootstrap)', async function (assert) {
     let step = new InstantiateValidationStep({
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
@@ -314,9 +314,13 @@ module('InstantiateValidationStep', function () {
     assert.strictEqual(result.step, 'instantiate');
     assert.true(result.passed, 'passes when nothing to validate');
     assert.strictEqual(result.errors.length, 0);
+    assert.notOk(
+      result.details,
+      'no artifact details created for empty bootstrap case',
+    );
   });
 
-  test('fails when modules exist but no specs found', async function (assert) {
+  test('fails with no artifact when modules exist but no specs found', async function (assert) {
     let step = new InstantiateValidationStep({
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
@@ -335,6 +339,10 @@ module('InstantiateValidationStep', function () {
     assert.true(
       result.errors[0].message.includes('no Spec cards were found'),
       'error mentions missing specs',
+    );
+    assert.notOk(
+      result.details,
+      'no artifact details — specs must exist before creating artifacts',
     );
   });
 
@@ -355,7 +363,7 @@ module('InstantiateValidationStep', function () {
     assert.true(result.passed, 'passes when only test files exist');
   });
 
-  test('passes when spec with examples all instantiate successfully', async function (assert) {
+  test('passes with artifact when spec with examples all instantiate successfully', async function (assert) {
     let step = new InstantiateValidationStep({
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
@@ -378,6 +386,14 @@ module('InstantiateValidationStep', function () {
     assert.strictEqual(result.step, 'instantiate');
     assert.true(result.passed, 'passes when instantiation succeeds');
     assert.strictEqual(result.errors.length, 0);
+    assert.ok(result.details, 'artifact details present when specs exist');
+    let details = result.details as Record<string, unknown>;
+    assert.ok(
+      (details.instantiateResultId as string)?.includes('instantiate_'),
+      'artifact ID present',
+    );
+    assert.strictEqual(details.cardsChecked, 1, '1 card checked');
+    assert.strictEqual(details.cardsWithErrors, 0, '0 errors');
   });
 
   test('fails when an example fails instantiation', async function (assert) {
