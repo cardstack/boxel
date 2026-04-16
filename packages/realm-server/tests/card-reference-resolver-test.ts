@@ -661,4 +661,59 @@ module(basename(__filename), function () {
       assert.strictEqual(result, 'http://localhost:8000/realm/card-api');
     });
   });
+
+  module('VirtualNetwork.fetch with RRI', function (hooks) {
+    let vn: VirtualNetwork;
+    let prefix = '@test/fetch-realm/';
+    let target = 'http://localhost:9000/fetch-realm/';
+
+    hooks.beforeEach(function () {
+      vn = new VirtualNetwork();
+      vn.addRealmMapping(prefix, target);
+    });
+
+    hooks.afterEach(function () {
+      unregisterCardReferencePrefix(prefix);
+    });
+
+    test('resolves scoped RRI to real URL and fetches', async function (assert) {
+      let interceptedUrl: string | undefined;
+      vn.mount(async (req: Request) => {
+        interceptedUrl = req.url;
+        return new Response('ok', { status: 200 });
+      });
+
+      let response = await vn.fetch('@test/fetch-realm/card-api');
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(
+        interceptedUrl,
+        'http://localhost:9000/fetch-realm/card-api',
+      );
+    });
+
+    test('passes through normal URLs unchanged', async function (assert) {
+      let interceptedUrl: string | undefined;
+      vn.mount(async (req: Request) => {
+        interceptedUrl = req.url;
+        return new Response('ok', { status: 200 });
+      });
+
+      await vn.fetch('http://localhost:9000/fetch-realm/card-api');
+      assert.strictEqual(
+        interceptedUrl,
+        'http://localhost:9000/fetch-realm/card-api',
+      );
+    });
+
+    test('passes RequestInit through when fetching with RRI', async function (assert) {
+      let interceptedMethod: string | undefined;
+      vn.mount(async (req: Request) => {
+        interceptedMethod = req.method;
+        return new Response('ok', { status: 200 });
+      });
+
+      await vn.fetch('@test/fetch-realm/card-api', { method: 'POST' });
+      assert.strictEqual(interceptedMethod, 'POST');
+    });
+  });
 });

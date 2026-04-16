@@ -134,6 +134,15 @@ export class VirtualNetwork {
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ) => {
+    // Resolve RRI strings to real URLs before creating the Request,
+    // since new Request('@cardstack/base/...') would throw (not a valid URL).
+    if (typeof urlOrRequest === 'string') {
+      let resolved = this.resolveRRIToURL(urlOrRequest);
+      if (resolved) {
+        urlOrRequest = resolved;
+      }
+    }
+
     let request =
       urlOrRequest instanceof Request
         ? urlOrRequest
@@ -150,6 +159,15 @@ export class VirtualNetwork {
     }
     return response;
   };
+
+  private resolveRRIToURL(rri: string): string | undefined {
+    for (let [prefix, target] of this.realmMappings) {
+      if (rri.startsWith(prefix)) {
+        return new URL(rri.slice(prefix.length), target).href;
+      }
+    }
+    return undefined;
+  }
 
   private async runFetch(request: Request, init?: RequestInit) {
     let handlers: FetcherMiddlewareHandler[] = this.handlers.map((h) => {
