@@ -10,9 +10,9 @@ import { modifier } from 'ember-modifier';
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
-import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
-
 import CardRenderer from '@cardstack/host/components/card-renderer';
+
+import RenderedMarkdown from './rendered-markdown';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -57,11 +57,10 @@ export default class MarkdownPreview extends Component<Signature> {
     return () => observer.disconnect();
   });
 
-  private get renderedHtml() {
-    if (!this.capturedMarkdown) {
-      return '';
-    }
-    return markdownToHtml(this.capturedMarkdown);
+  private get cardReferenceBaseUrl(): string | undefined {
+    return 'id' in this.args.card
+      ? (this.args.card?.id as string | undefined) ?? undefined
+      : undefined;
   }
 
   private setViewMode = (mode: ViewMode) => {
@@ -108,8 +107,10 @@ export default class MarkdownPreview extends Component<Signature> {
           class='markdown-rendered'
           data-test-markdown-rendered
         >
-          {{! markdownToHtml sanitizes output }}
-          {{{this.renderedHtml}}}
+          <RenderedMarkdown
+            @content={{this.capturedMarkdown}}
+            @cardReferenceBaseUrl={{this.cardReferenceBaseUrl}}
+          />
         </div>
       {{/if}}
     </div>
