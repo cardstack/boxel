@@ -12,6 +12,7 @@
 
 import type { ValidationStepResult } from '../factory-agent';
 import { deriveIssueSlug } from '../factory-agent-types';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import {
   fetchRealmFilenames,
@@ -408,12 +409,4 @@ export class EvalValidationStep implements ValidationStepRunner {
       error: 'run-command did not return a result — treating as failure',
     };
   }
-}
-
-// ---------------------------------------------------------------------------
-// Utility
-// ---------------------------------------------------------------------------
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
 }
