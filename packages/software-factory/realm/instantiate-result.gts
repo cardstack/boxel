@@ -13,7 +13,6 @@ import NumberField from 'https://cardstack.com/base/number';
 import DateTimeField from 'https://cardstack.com/base/datetime';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
 import enumField from 'https://cardstack.com/base/enum';
-import { maybeURL } from '@cardstack/runtime-common/url';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { Project, Issue } from './darkfactory';
 
@@ -42,22 +41,17 @@ export class InstantiateCardEntry extends FieldDef {
     if (!this.instanceId) {
       return '(no instance)';
     }
-    let instanceURL = maybeURL(this.instanceId);
-    if (!instanceURL) {
-      return this.instanceId;
-    }
     let cardRealmURLString = (this as any)[realmURL];
     if (cardRealmURLString) {
-      let realmBase = maybeURL(cardRealmURLString);
-      if (realmBase) {
-        try {
-          return new RealmPaths(realmBase).local(instanceURL);
-        } catch {
-          // instance is outside the realm — fall through to full URL
-        }
+      try {
+        return new RealmPaths(new URL(cardRealmURLString)).local(
+          new URL(this.instanceId),
+        );
+      } catch {
+        // instance URL is invalid or outside the realm — fall through
       }
     }
-    return instanceURL.href;
+    return this.instanceId;
   }
 
   static embedded = class Embedded extends Component<
