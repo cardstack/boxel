@@ -1,4 +1,9 @@
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { module, test } from 'qunit';
+
+import { resetProfileManager } from '@cardstack/boxel-cli/api';
 
 import { FactoryEntrypointUsageError } from '../src/factory-entrypoint-errors';
 import {
@@ -95,11 +100,6 @@ module('factory-target-realm', function (hooks) {
   });
 
   test('resolveFactoryTargetRealm rejects when no active profile is configured', function (assert) {
-    let { existsSync, readFileSync, writeFileSync } = require('node:fs');
-    let { homedir } = require('node:os');
-    let { join } = require('node:path');
-    let { resetProfileManager } = require('@cardstack/boxel-cli/api');
-
     let profilesFile = join(homedir(), '.boxel-cli', 'profiles.json');
     let backup = existsSync(profilesFile)
       ? readFileSync(profilesFile, 'utf8')
