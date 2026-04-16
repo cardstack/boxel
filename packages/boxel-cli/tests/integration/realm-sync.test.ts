@@ -138,7 +138,13 @@ async function deleteRemoteFile(
   }
 }
 
-// Helper: establish a synced baseline by pushing local files
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Helper: establish a synced baseline by pushing local files.
+// Waits 1s after push so that subsequent remote writes get a different mtime
+// (realm server mtimes use second-precision).
 async function establishBaseline(
   localDir: string,
   realmUrl: string,
@@ -148,6 +154,7 @@ async function establishBaseline(
     writeLocalFile(localDir, relPath, content);
   }
   await pushCommand(localDir, realmUrl, { profileManager });
+  await sleep(1100);
 }
 
 beforeAll(async () => {
@@ -189,10 +196,8 @@ describe('realm sync (integration)', () => {
     expect(manifestExists(localDir)).toBe(true);
     let manifest = readManifest(localDir);
     expect(manifest.realmUrl).toBe(realmUrl);
-    expect(Object.keys(manifest.files).sort()).toEqual([
-      'card.gts',
-      'data.json',
-    ]);
+    expect(Object.keys(manifest.files).sort()).toContain('card.gts');
+    expect(Object.keys(manifest.files).sort()).toContain('data.json');
   });
 
   it('pulls remote-only files to local', async () => {
@@ -418,6 +423,9 @@ describe('realm sync (integration)', () => {
     await establishBaseline(localDir, realmUrl, {
       'stable.gts': 'export const s = 1;\n',
     });
+
+    // First sync to pull any realm-default files (e.g. index.json) and stabilize
+    await syncCommand(localDir, realmUrl, { profileManager });
 
     let cm = new CheckpointManager(localDir);
     let before = await cm.getCheckpoints();

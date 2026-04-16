@@ -295,10 +295,12 @@ class RealmSyncer extends RealmSyncBase {
         if (absPath) filesToUpload.set(rel, absPath);
       }
 
-      // Determine add vs update based on whether file exists in manifest
+      // Determine add vs update based on whether file exists in manifest or on remote
       const addPaths = new Set<string>();
       for (const rel of filesToUpload.keys()) {
-        if (!effectiveManifest || effectiveManifest.files[rel] === undefined) {
+        const inManifest = effectiveManifest?.files[rel] !== undefined;
+        const existsOnRemote = remoteMtimes.has(rel);
+        if (!inManifest && !existsOnRemote) {
           addPaths.add(rel);
         }
       }
