@@ -22,23 +22,13 @@ const VALID_MODULE = `
   }
 `;
 
-const PHONE_NUMBER_FIELD = `
-  import { FieldDef, field, contains } from "https://cardstack.com/base/card-api";
+const TAGS_MODULE = `
+  import { CardDef, field, contains, containsMany } from "https://cardstack.com/base/card-api";
   import StringField from "https://cardstack.com/base/string";
-  export class PhoneNumber extends FieldDef {
-    static displayName = 'Phone Number';
-    @field number = contains(StringField);
-  }
-`;
-
-const BAD_LINKS_TO_MODULE = `
-  import { CardDef, field, linksTo, contains } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
-  import { PhoneNumber } from "./phone-number-field";
-  export class ContactCard extends CardDef {
-    static displayName = 'Contact Card';
+  export class TagsCard extends CardDef {
+    static displayName = 'Tags Card';
     @field name = contains(StringField);
-    @field phone = linksTo(PhoneNumber);
+    @field tags = containsMany(StringField);
   }
 `;
 
@@ -60,8 +50,7 @@ module('Integration | commands | instantiate-card', function (hooks) {
         realmURL: testRealmURL,
         contents: {
           'valid-card.gts': VALID_MODULE,
-          'phone-number-field.gts': PHONE_NUMBER_FIELD,
-          'bad-links-to-card.gts': BAD_LINKS_TO_MODULE,
+          'tags-card.gts': TAGS_MODULE,
         },
       });
     });
@@ -114,38 +103,42 @@ module('Integration | commands | instantiate-card', function (hooks) {
     assert.notOk(result.error, 'no error for empty instantiation');
   });
 
-  test('card with linksTo consuming a FieldDef fails instantiation', async function (assert) {
+  test('containsMany field with non-array value fails instantiation', async function (assert) {
     let commandService = getService('command-service');
     let command = new InstantiateCardCommand(commandService.commandContext);
 
     let InputType = await command.getInputType();
+    // Provide a string instead of an array for the containsMany field.
+    // Field.validate() should reject this during deserialization.
     let instanceDoc = {
       data: {
         type: 'card',
-        attributes: { name: 'Test Contact' },
-        relationships: {
-          phone: {
-            links: { self: null },
-          },
+        attributes: {
+          name: 'Bad Tags Card',
+          tags: 'not-an-array',
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}bad-links-to-card`,
-            name: 'ContactCard',
+            module: `${testRealmURL}tags-card`,
+            name: 'TagsCard',
           },
         },
       },
     };
     let input = new InputType({
-      moduleUrl: `${testRealmURL}bad-links-to-card`,
-      cardName: 'ContactCard',
+      moduleUrl: `${testRealmURL}tags-card`,
+      cardName: 'TagsCard',
       realmUrl: testRealmURL,
       instanceData: JSON.stringify(instanceDoc),
     });
 
     let result = await command.execute(input);
 
-    assert.false(result.passed, 'linksTo with FieldDef should fail instantiation');
+    assert.false(result.passed, 'non-array containsMany value should fail');
     assert.ok(result.error, 'should have an error message');
+    assert.ok(
+      result.error?.includes('field validation error'),
+      `error should mention field validation, got: ${result.error}`,
+    );
   });
 });
