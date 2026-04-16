@@ -174,6 +174,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   #dbAdapter: DBAdapter;
   #prerenderer: Prerenderer;
   #fetch: typeof fetch;
+  #virtualNetwork: VirtualNetwork;
   #realms: LocalRealm[] = [];
   #createPrerenderAuth: (
     userId: string,
@@ -192,6 +193,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     this.#dbAdapter = dbAdapter;
     this.#prerenderer = prerenderer;
     this.#fetch = virtualNetwork.fetch;
+    this.#virtualNetwork = virtualNetwork;
     this.#createPrerenderAuth = createPrerenderAuth;
   }
 
@@ -506,8 +508,18 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheUserId: string;
     prerenderUserId: string;
   } | null> {
+    // When the module URL is a canonical/virtual URL (e.g.
+    // https://cardstack.com/base/spec) that has been mapped to a local URL
+    // (e.g. http://localhost:PORT/base/spec), resolve through the virtual
+    // network's URL mapping so we recognise it as belonging to a local realm.
+    let resolvedModuleURL =
+      this.#virtualNetwork.mapURL(moduleURL, 'virtual-to-real')?.href ??
+      moduleURL;
     let localRealm = this.#realms.find((realm) => {
-      return moduleURL.startsWith(realm.url);
+      return (
+        moduleURL.startsWith(realm.url) ||
+        resolvedModuleURL.startsWith(realm.url)
+      );
     });
 
     if (localRealm) {
@@ -523,12 +535,15 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         prerenderUserId,
       };
     } else {
-      if (!contextOpts?.requestingRealm) {
-        return null;
-      }
-      let requestingOwnerId =
-        (await contextOpts.requestingRealm.getRealmOwnerUserId()) ?? '';
-      let authHeaders = { 'X-Boxel-Assume-User': requestingOwnerId };
+      // For modules in public realms, we don't need a requestingRealm to
+      // probe — anyone can read them. Try the probe without auth first;
+      // only use requestingRealm credentials when available.
+      let requestingOwnerId = contextOpts?.requestingRealm
+        ? ((await contextOpts.requestingRealm.getRealmOwnerUserId()) ?? '')
+        : '';
+      let authHeaders = requestingOwnerId
+        ? { 'X-Boxel-Assume-User': requestingOwnerId }
+        : undefined;
       let probeResult = await this.probeRemoteRealm(moduleURL, authHeaders);
       let isPublic = probeResult?.isPublic ?? false;
       let resolvedRealmURL = probeResult?.resolvedRealmURL;

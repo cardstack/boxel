@@ -421,6 +421,7 @@ export async function startIsolatedRealmStack({
     MATRIX_REGISTRATION_SHARED_SECRET: context.matrixRegistrationSecret,
     REALM_SERVER_MATRIX_USERNAME: DEFAULT_MATRIX_SERVER_USERNAME,
     REALM_SERVER_FULL_INDEX_ON_STARTUP: String(fullIndexOnStartup),
+    SKIP_MODULE_CACHE_CLEAR: fullIndexOnStartup ? 'false' : 'true',
     LOW_CREDIT_THRESHOLD: '2000',
     LOG_LEVELS: DEFAULT_REALM_LOG_LEVELS,
     BOXEL_TRUST_FORWARDED_URL: 'true',
@@ -548,6 +549,12 @@ export async function startIsolatedRealmStack({
       `--toUrl=${actualSkillsRealmURL.href}`,
     );
   }
+  // Map the canonical base realm URL so the realm server's virtual network
+  // can resolve definitions referenced via https://cardstack.com/base/...
+  serverArgs.push(
+    '--fromUrl=https://cardstack.com/base/',
+    `--toUrl=${actualBaseRealmURL.href}`,
+  );
 
   let realmServer = spawn('ts-node', serverArgs, {
     cwd: realmServerDir,

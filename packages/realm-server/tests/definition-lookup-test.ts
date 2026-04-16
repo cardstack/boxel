@@ -13,6 +13,7 @@ import {
 } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmsCached,
+  setupDB,
   createVirtualNetwork,
   testCreatePrerenderAuth,
 } from './helpers';
@@ -1287,6 +1288,95 @@ module(basename(__filename), function () {
         calls,
         2,
         'prerenderModule not called again — healthy entry is cached',
+      );
+    });
+  });
+
+  module('canonical URL resolution', function (hooks) {
+    let dbAdapter: PgAdapter;
+    let virtualNetwork: VirtualNetwork;
+    let localRealmURL = 'http://localhost:4201/base/';
+    let testUserId = '@user1:localhost';
+
+    setupDB(hooks, {
+      before: async (pgAdapter) => {
+        dbAdapter = pgAdapter;
+      },
+    });
+
+    hooks.before(async () => {
+      virtualNetwork = createVirtualNetwork();
+    });
+
+    test('resolves canonical URL to local realm via virtual network URL mapping', async function (assert) {
+      // The virtual network maps https://cardstack.com/base/ →
+      // http://localhost:4201/base/ (set up in createVirtualNetwork).
+      // Register a realm under the resolved local URL — this simulates
+      // how the realm server registers realms: the realm URL is the
+      // resolved local URL, but card definitions reference the canonical
+      // URL (e.g. https://cardstack.com/base/spec).
+      let canonicalModuleURL = 'https://cardstack.com/base/spec.gts';
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        {
+          async prerenderCard() {
+            throw new Error('Not implemented');
+          },
+          async prerenderFileExtract() {
+            throw new Error('Not implemented');
+          },
+          async prerenderFileRender() {
+            throw new Error('Not implemented');
+          },
+          async runCommand() {
+            throw new Error('Not implemented');
+          },
+          async prerenderModule(args: ModulePrerenderArgs) {
+            return buildModuleResponse(args.url, 'Spec', []);
+          },
+        },
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: localRealmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'public';
+        },
+      });
+
+      // Without the URL mapping fix in buildLookupContext this throws
+      // FilterRefersToNonexistentTypeError because
+      // 'https://cardstack.com/base/spec.gts'.startsWith(
+      //   'http://localhost:4201/base/') is false — the canonical URL
+      // doesn't match the resolved local realm URL.
+      let definition = await lookup.lookupDefinition({
+        module: canonicalModuleURL,
+        name: 'Spec',
+      });
+
+      assert.ok(definition, 'definition resolved via canonical URL');
+      assert.strictEqual(definition?.displayName, 'Spec');
+
+      let rows = (await dbAdapter.execute(
+        `SELECT resolved_realm_url, cache_scope FROM modules WHERE url = $1`,
+        { bind: [canonicalModuleURL] },
+      )) as { resolved_realm_url: string; cache_scope: string }[];
+
+      assert.ok(rows.length > 0, 'module was persisted to cache');
+      assert.strictEqual(
+        rows[0]?.resolved_realm_url,
+        localRealmURL,
+        'cached against the local realm URL',
+      );
+      assert.strictEqual(
+        rows[0]?.cache_scope,
+        'public',
+        'public realm uses public cache scope',
       );
     });
   });
