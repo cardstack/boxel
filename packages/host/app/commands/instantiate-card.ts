@@ -76,8 +76,18 @@ export default class InstantiateCardCommand extends HostBaseCommand<
         };
       }
 
-      // Instantiate via the store without persisting
-      await this.store.add(doc, { doNotPersist: true });
+      // Instantiate via the store without persisting.
+      // Use the card's id (if present) as relativeTo so relative
+      // adoptsFrom.module paths resolve correctly. Fall back to realmUrl.
+      let cardId = doc?.data?.id;
+      let resolveFrom = cardId ?? realmUrl;
+      console.log(
+        `[instantiate-card] cardId=${cardId}, realmUrl=${realmUrl}, resolveFrom=${resolveFrom}, adoptsFrom=${JSON.stringify(doc?.data?.meta?.adoptsFrom)}`,
+      );
+      await this.store.add(doc, {
+        doNotPersist: true,
+        relativeTo: resolveFrom ? new URL(resolveFrom) : undefined,
+      });
 
       return new commandModule.InstantiateCardResult({ passed: true });
     } catch (error: any) {

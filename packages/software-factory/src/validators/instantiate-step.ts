@@ -252,6 +252,22 @@ export class InstantiateValidationStep implements ValidationStepRunner {
             fetch: this.config.fetch,
           });
           if (exampleRead.ok && exampleRead.document) {
+            // The card+source format uses relative adoptsFrom.module paths
+            // and has no id field (the id IS the file path). Resolve the
+            // adoptsFrom.module to an absolute URL so the host command
+            // can instantiate without needing relativeTo context.
+            let exampleCardUrl = new URL(
+              spec.exampleUrl,
+              ensureTrailingSlash(targetRealmUrl),
+            ).href;
+            let adoptsFrom = exampleRead.document.data.meta?.adoptsFrom;
+            if (adoptsFrom && typeof adoptsFrom.module === 'string') {
+              adoptsFrom.module = new URL(
+                adoptsFrom.module,
+                exampleCardUrl,
+              ).href;
+            }
+            exampleRead.document.data.id = exampleCardUrl;
             instanceData = JSON.stringify(exampleRead.document);
           } else {
             log.warn(
@@ -264,6 +280,10 @@ export class InstantiateValidationStep implements ValidationStepRunner {
           );
         }
       }
+
+      log.info(
+        `Instantiating ${spec.cardName}: moduleUrl=${spec.moduleUrl}, hasExample=${!!instanceData}, instanceDataId=${instanceData ? JSON.parse(instanceData)?.data?.id : 'N/A'}`,
+      );
 
       try {
         let result = await this.instantiateCardFn(
@@ -454,11 +474,23 @@ export class InstantiateValidationStep implements ValidationStepRunner {
       let specCardUrl = new URL(specId, ensureTrailingSlash(realmUrl)).href;
       let moduleUrl = new URL(ref.module, specCardUrl).href;
 
-      // Find first linked example
+      // Find first linked example — resolve relative URL against the spec card's URL
       let relationships = (card as Record<string, unknown>).relationships as
         | Record<string, unknown>
         | undefined;
-      let exampleUrl = extractFirstLinkedExample(relationships);
+      let rawExampleUrl = extractFirstLinkedExample(relationships);
+      let exampleUrl: string | undefined;
+      if (rawExampleUrl) {
+        // Resolve the relative URL to an absolute URL, then extract
+        // the path relative to the realm for use with readFile()
+        let absoluteExampleUrl = new URL(rawExampleUrl, specCardUrl).href;
+        let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
+        if (absoluteExampleUrl.startsWith(normalizedRealmUrl)) {
+          exampleUrl = absoluteExampleUrl.slice(normalizedRealmUrl.length);
+        } else {
+          exampleUrl = rawExampleUrl;
+        }
+      }
 
       specs.push({
         specId,

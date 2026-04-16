@@ -548,6 +548,12 @@ export async function startIsolatedRealmStack({
       `--toUrl=${actualSkillsRealmURL.href}`,
     );
   }
+  // Map the canonical base realm URL so the realm server's virtual network
+  // can resolve definitions referenced via https://cardstack.com/base/...
+  serverArgs.push(
+    '--fromUrl=https://cardstack.com/base/',
+    `--toUrl=${actualBaseRealmURL.href}`,
+  );
 
   let realmServer = spawn('ts-node', serverArgs, {
     cwd: realmServerDir,
