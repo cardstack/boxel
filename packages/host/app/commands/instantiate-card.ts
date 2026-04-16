@@ -76,18 +76,20 @@ export default class InstantiateCardCommand extends HostBaseCommand<
         };
       }
 
-      // Instantiate via the store without persisting.
-      // Use the card's id (if present) as relativeTo so relative
-      // adoptsFrom.module paths resolve correctly. Fall back to realmUrl.
+      // We use __dangerousCreateFromSerialized instead of store.add because
+      // we only want to exercise the deserialization machinery and verify
+      // that the card instance can be created from JSON — we have no
+      // intention of persisting the result anywhere in the app. store.add
+      // catches deserialization errors as warnings (appropriate for UI),
+      // but we need validation errors to propagate so the factory can
+      // detect invalid card instances and report them to the agent.
       let cardId = doc?.data?.id;
       let resolveFrom = cardId ?? realmUrl;
-      console.log(
-        `[instantiate-card] cardId=${cardId}, realmUrl=${realmUrl}, resolveFrom=${resolveFrom}, adoptsFrom=${JSON.stringify(doc?.data?.meta?.adoptsFrom)}`,
+      await this.store.__dangerousCreateFromSerialized(
+        doc.data,
+        doc,
+        resolveFrom ? new URL(resolveFrom) : undefined,
       );
-      await this.store.add(doc, {
-        doNotPersist: true,
-        relativeTo: resolveFrom ? new URL(resolveFrom) : undefined,
-      });
 
       return new commandModule.InstantiateCardResult({ passed: true });
     } catch (error: any) {

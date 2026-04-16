@@ -15,6 +15,7 @@
  * *load*, instantiate verifies cards can be *created from JSON*.
  */
 
+import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import { specRef } from '@cardstack/runtime-common/constants';
 
 import type { ValidationStepResult } from '../factory-agent';
@@ -260,7 +261,9 @@ export class InstantiateValidationStep implements ValidationStepRunner {
               exampleUrl,
               ensureTrailingSlash(targetRealmUrl),
             ).href;
-            let adoptsFrom = exampleRead.document.data.meta?.adoptsFrom;
+            let adoptsFrom = exampleRead.document.data.meta?.adoptsFrom as
+              | ResolvedCodeRef
+              | undefined;
             if (adoptsFrom && typeof adoptsFrom.module === 'string') {
               adoptsFrom.module = new URL(
                 adoptsFrom.module,

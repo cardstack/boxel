@@ -994,6 +994,31 @@ export default class StoreService extends Service implements StoreInterface {
     });
   }
 
+  /**
+   * Low-level deserialization that throws on validation errors.
+   *
+   * Most callers should use `add()` or `create()` instead — those methods
+   * handle persistence, identity mapping, and auto-saving. This method
+   * bypasses all of that and calls `card-api.createFromSerialized` directly.
+   *
+   * Use this only when you need validation errors to propagate (e.g., the
+   * software-factory's instantiate-card command which validates that a card
+   * instance can be deserialized without persisting it).
+   */
+  async __dangerousCreateFromSerialized<T extends CardDef>(
+    resource: LooseCardResource,
+    doc: LooseSingleCardDocument | CardDocument,
+    relativeTo?: URL | undefined,
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+  ): Promise<T> {
+    return this.createFromSerialized(
+      resource,
+      doc,
+      relativeTo,
+      dependencyTrackingContext,
+    );
+  }
+
   private async createFromSerialized<T extends CardDef>(
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,

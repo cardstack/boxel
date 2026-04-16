@@ -27,7 +27,7 @@ export class ValidCard extends CardDef {
 `;
 
 // A card with a containsMany field — evaluates fine, but instantiation
-// fails when the example provides a non-array value (triggers Field.validate()).
+// should fail when the example provides a non-array value.
 const TAGS_CARD_MODULE_GTS = `import {
   CardDef,
   field,
@@ -150,12 +150,6 @@ test.describe('instantiate-validation e2e', () => {
 
     // Must pass — valid card with valid example instance
     expect(result.step).toBe('instantiate');
-    if (!result.passed) {
-      console.log(
-        'DEBUG: valid card failed:',
-        JSON.stringify({ errors: result.errors, details: result.details }, null, 2),
-      );
-    }
     expect(result.passed).toBe(true);
     expect(result.files).toBeTruthy();
     expect(result.files!.length).toBeGreaterThan(0);
@@ -181,7 +175,7 @@ test.describe('instantiate-validation e2e', () => {
     expect(attrs?.completedAt).toBeTruthy();
   });
 
-  test('InstantiateValidationStep e2e: invalid containsMany data fails instantiation', async ({
+  test('InstantiateValidationStep e2e: containsMany with non-array value fails instantiation', async ({
     realm,
   }) => {
     let realmUrl = realm.realmURL.href;
@@ -204,37 +198,8 @@ test.describe('instantiate-validation e2e', () => {
       timeoutMs: 30_000,
     });
 
-    // Write an example instance that provides a string instead of an array
-    // for the containsMany field — triggers Field.validate() error.
-    let exampleDoc = {
-      data: {
-        type: 'card',
-        attributes: {
-          name: 'Bad Tags Card',
-          tags: 'not-an-array',
-        },
-        meta: {
-          adoptsFrom: {
-            module: '../tags-card',
-            name: 'TagsCard',
-          },
-        },
-      },
-    };
-    let exampleWrite = await writeFile(
-      realmUrl,
-      'TagsCard/bad-example.json',
-      JSON.stringify(exampleDoc, null, 2),
-      { authorization },
-    );
-    expect(exampleWrite.ok).toBe(true);
-    await waitForRealmFile(realmUrl, 'TagsCard/bad-example.json', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
-    });
-
-    // Write a Spec card pointing to the valid module with the bad example
+    // Write the Spec card FIRST (before the bad example) so it gets
+    // indexed before the bad example potentially stalls the indexer.
     let specDoc = {
       data: {
         type: 'card',
@@ -266,6 +231,35 @@ test.describe('instantiate-validation e2e', () => {
     );
     expect(specWrite.ok).toBe(true);
     await waitForRealmFile(realmUrl, 'Spec/tags-card-spec.json', {
+      authorization,
+      pollMs: 300,
+      timeoutMs: 30_000,
+    });
+
+    // Now write the bad example (after the Spec is indexed)
+    let exampleDoc = {
+      data: {
+        type: 'card',
+        attributes: {
+          name: 'Bad Tags Card',
+          tags: 'not-an-array',
+        },
+        meta: {
+          adoptsFrom: {
+            module: '../tags-card',
+            name: 'TagsCard',
+          },
+        },
+      },
+    };
+    let exampleWrite = await writeFile(
+      realmUrl,
+      'TagsCard/bad-example.json',
+      JSON.stringify(exampleDoc, null, 2),
+      { authorization },
+    );
+    expect(exampleWrite.ok).toBe(true);
+    await waitForRealmFile(realmUrl, 'TagsCard/bad-example.json', {
       authorization,
       pollMs: 300,
       timeoutMs: 30_000,
