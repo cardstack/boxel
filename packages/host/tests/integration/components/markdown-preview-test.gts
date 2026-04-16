@@ -171,6 +171,7 @@ module('Integration | markdown-preview', function (hooks) {
 
     class TestCard extends CardDef {
       @field title = contains(StringField);
+      // prettier-ignore
       static markdown = class extends Component<typeof this> {
         <template># {{@model.title}}
 
@@ -209,6 +210,7 @@ Some **bold** text.</template>
 
     class TestCard extends CardDef {
       @field title = contains(StringField);
+      // prettier-ignore
       static markdown = class extends Component<typeof this> {
         <template># {{@model.title}}
 
