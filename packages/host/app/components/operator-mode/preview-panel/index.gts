@@ -256,6 +256,12 @@ export default class PreviewPanel extends Component<Signature> {
           {{else if (eq this.format 'fitted')}}
             <FittedFormatGallery @card={{@card}} />
           {{else if (eq this.format 'markdown')}}
+            {{#if this.renderedCardsForOverlayActions}}
+              <Overlays
+                @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
+                @viewCard={{@viewCard}}
+              />
+            {{/if}}
             <MarkdownPreview @card={{@card}} />
           {{else}}
             {{#if this.renderedCardsForOverlayActions}}
