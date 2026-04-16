@@ -128,6 +128,40 @@ module('Integration | markdown-fallback', function (hooks) {
     );
   });
 
+  test('CardDef default fallback collapses whitespace in link text from nested elements', async function (assert) {
+    // Card HTML often wraps link text in icon spans + text nodes with newlines
+    // between them.  Turndown would preserve those newlines, producing broken
+    // multiline `[\n  Contact](url)` markdown.  The compactLinks rule collapses
+    // whitespace so links render correctly.
+    class ContactCard extends CardDef {
+      static isolated = class extends Component<typeof this> {
+        <template>
+          <a href='mailto:alice@example.com'>
+            <span class='icon'>📧</span>
+            Contact
+          </a>
+          <a href='https://x.com/alice'>
+            <span class='icon'>🐦</span>
+            Follow
+          </a>
+        </template>
+      };
+    }
+
+    let card = new ContactCard();
+    await renderAndConvert(loader, card);
+    let md = readMarkdownOutput();
+
+    assert.true(
+      md.includes('[📧 Contact](mailto:alice@example.com)'),
+      `expected collapsed link text in: ${md}`,
+    );
+    assert.true(
+      md.includes('[🐦 Follow](https://x.com/alice)'),
+      `expected collapsed follow link in: ${md}`,
+    );
+  });
+
   test('CardDef default fallback converts <pre><code> to fenced code blocks', async function (assert) {
     class Snippet extends CardDef {
       static isolated = class extends Component<typeof this> {

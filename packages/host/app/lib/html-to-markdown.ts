@@ -28,6 +28,26 @@ function getConverter(): TurndownService {
     });
     converter.use(gfm); // tables, strikethrough, task lists, autolinks
     converter.remove(['style', 'script']); // strip embedded CSS/JS from card HTML
+
+    // Card HTML often wraps link text in nested elements (icons, spans) with
+    // whitespace between them.  Turndown preserves that whitespace, producing
+    // multiline `[\n  Contact](url)` which is broken markdown.  Collapse it.
+    converter.addRule('compactLinks', {
+      filter: 'a',
+      replacement(_content, node, options) {
+        let href = (node as HTMLAnchorElement).getAttribute('href');
+        if (!href) {
+          return _content;
+        }
+        let text = _content.replace(/\s+/g, ' ').trim();
+        if (!text) {
+          return '';
+        }
+        let title = (node as HTMLAnchorElement).getAttribute('title');
+        let titlePart = title ? ` "${title}"` : '';
+        return `[${text}](${href}${titlePart})`;
+      },
+    });
   }
   return converter;
 }
