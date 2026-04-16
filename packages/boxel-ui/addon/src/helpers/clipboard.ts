@@ -19,3 +19,20 @@ export async function copyCardURLToClipboard(
   }
   await navigator.clipboard.writeText(copyableUrl);
 }
+
+export async function copyCardMarkdownToClipboard(
+  cardId: string,
+): Promise<void> {
+  if (!cardId) {
+    return;
+  }
+  if (isTesting()) {
+    return; // navigator.clipboard is not available in test environment
+  }
+  let response = await fetch(cardId, {
+    headers: { Accept: 'text/markdown' },
+  });
+  if (response.ok) {
+    await navigator.clipboard.writeText(await response.text());
+  }
+}

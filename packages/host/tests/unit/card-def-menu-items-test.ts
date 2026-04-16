@@ -61,6 +61,10 @@ module('Unit | CardDef menu items', function (hooks) {
     let texts = items.map((i: MenuItemOptions) => i.label);
     assert.ok(texts.includes('Copy Card URL'), 'contains Copy Card URL');
     assert.ok(
+      texts.includes('Copy as Markdown'),
+      'contains Copy as Markdown',
+    );
+    assert.ok(
       texts.includes('New Card of This Type'),
       'contains New Card of This Type',
     );
