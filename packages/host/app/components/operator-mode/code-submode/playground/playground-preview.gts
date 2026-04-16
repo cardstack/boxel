@@ -13,6 +13,7 @@ import {
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import FittedFormatGallery from '@cardstack/host/components/operator-mode/preview-panel/fitted-format-gallery';
+import MarkdownPreview from '@cardstack/host/components/operator-mode/preview-panel/markdown-preview';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
 import type {
@@ -84,6 +85,8 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
       tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
       veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
       commodo consequat.</div>
+  {{else if (eq @format 'markdown')}}
+    <MarkdownPreview @card={{@card}} />
   {{else if (eq @format 'fitted')}}
     <FittedFormatGallery
       @card={{@card}}

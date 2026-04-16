@@ -52,6 +52,7 @@ import type {
 import FormatChooser from '../code-submode/format-chooser';
 
 import FittedFormatGallery from './fitted-format-gallery';
+import MarkdownPreview from './markdown-preview';
 import MetadataPanel from './metadata-panel';
 
 interface Signature {
@@ -254,6 +255,8 @@ export default class PreviewPanel extends Component<Signature> {
             <MetadataPanel @card={{@card}} />
           {{else if (eq this.format 'fitted')}}
             <FittedFormatGallery @card={{@card}} />
+          {{else if (eq this.format 'markdown')}}
+            <MarkdownPreview @card={{@card}} />
           {{else}}
             {{#if this.renderedCardsForOverlayActions}}
               <Overlays

@@ -800,6 +800,14 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert
         .dom('[data-test-playground-panel] [data-test-card-format="fitted"]')
         .exists({ count: 16 });
+
+      await selectFormat('markdown');
+      assert.dom('[data-test-format-chooser="fitted"]').hasNoClass('active');
+      assert.dom('[data-test-format-chooser="markdown"]').hasClass('active');
+      assert
+        .dom('[data-test-markdown-preview]')
+        .exists('markdown preview container renders');
+      assertCardExists(assert, cardId, 'markdown');
     });
 
     test('can toggle edit format via button on card header', async function (assert) {
