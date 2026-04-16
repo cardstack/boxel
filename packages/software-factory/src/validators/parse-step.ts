@@ -1,12 +1,13 @@
 /**
  * Parse validation step — verifies that `.gts` and `.json` files in the
- * target realm are syntactically valid.
+ * target realm are syntactically valid using glint (ember-tsc) for
+ * template-aware TypeScript type checking.
  *
- * For `.gts` files: uses `content-tag` to preprocess the GTS source
- * (extracting TypeScript from `<template>` tags), then runs TypeScript's
- * parser to detect syntax errors. This catches both GTS template-level
- * errors (unclosed `<template>` tags, malformed expressions) and
- * TypeScript syntax errors (missing brackets, malformed type annotations).
+ * For `.gts` files: downloads them to a temp directory along with the
+ * tsconfig.json from the software-factory realm, then runs `ember-tsc
+ * --noEmit` which performs full glint type checking — catching both
+ * TypeScript type errors AND template errors (invalid component args,
+ * missing helpers, bad template expressions, etc.).
  *
  * For `.json` files: validates JSON syntax via `JSON.parse()` and checks
  * card document structure (presence of `data.type` and `data.meta.adoptsFrom`).
@@ -15,8 +16,17 @@
  * that the factory agent creates alongside card definitions.
  */
 
-import * as ts from 'typescript';
-import { Preprocessor } from 'content-tag';
+import { execFile } from 'node:child_process';
+import {
+  mkdtempSync,
+  writeFileSync,
+  mkdirSync,
+  rmSync,
+  symlinkSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve, dirname } from 'node:path';
+
 import { specRef } from '@cardstack/runtime-common/constants';
 
 import type { ValidationStepResult } from '../factory-agent';
@@ -76,6 +86,13 @@ export interface ParseValidationStepConfig {
     slug: string,
     targetRealmUrl: string,
   ) => Promise<number>;
+  /**
+   * Injected for testing — runs glint (ember-tsc) on .gts files.
+   * Defaults to downloading files to a temp dir and running ember-tsc.
+   */
+  runGlintCheckFn?: (
+    gtsFiles: { path: string; content: string }[],
+  ) => Promise<ParseErrorData[]>;
 }
 
 export interface SpecExampleInfo {
@@ -92,7 +109,22 @@ export interface ParseValidationDetails {
   errors: { file: string; line: number; message: string }[];
 }
 
-const GTS_EXTENSIONS = ['.gts', '.gjs'];
+/**
+ * Extensions checked by the parse step. `.js` files are excluded because
+ * lint (ESLint) already validates JavaScript syntax and the factory agent
+ * does not generate plain `.js` — it produces `.gts` for card definitions
+ * and `.ts` for utility modules.
+ */
+const PARSEABLE_EXTENSIONS = ['.gts', '.gjs', '.ts'];
+
+/** Absolute path to the monorepo's packages/base directory. */
+const BASE_PKG_PATH = resolve(__dirname, '..', '..', '..', 'base');
+
+/** Absolute path to the software-factory package's node_modules. */
+const NODE_MODULES_PATH = resolve(__dirname, '..', '..', 'node_modules');
+
+/** Cached tsconfig content — doesn't change between runs. */
+let cachedTsconfigContent: string | undefined;
 
 // ---------------------------------------------------------------------------
 // ParseValidationStep
@@ -103,7 +135,6 @@ export class ParseValidationStep implements ValidationStepRunner {
 
   private config: ParseValidationStepConfig;
   private lastSequenceNumber = 0;
-  private preprocessor: Preprocessor;
 
   private fetchFilenamesFn: (
     realmUrl: string,
@@ -126,10 +157,12 @@ export class ParseValidationStep implements ValidationStepRunner {
     slug: string,
     targetRealmUrl: string,
   ) => Promise<number>;
+  private runGlintCheckFn: (
+    gtsFiles: { path: string; content: string }[],
+  ) => Promise<ParseErrorData[]>;
 
   constructor(config: ParseValidationStepConfig) {
     this.config = config;
-    this.preprocessor = new Preprocessor();
     this.fetchFilenamesFn = config.fetchFilenames ?? fetchRealmFilenames;
     this.readFileFn = config.readFileFn ?? readFile;
     this.searchSpecsFn =
@@ -149,6 +182,8 @@ export class ParseValidationStep implements ValidationStepRunner {
             fetch: config.fetch,
           },
         ));
+    this.runGlintCheckFn =
+      config.runGlintCheckFn ?? ((files) => runGlintCheck(files));
   }
 
   async run(targetRealmUrl: string): Promise<ValidationStepResult> {
@@ -242,44 +277,90 @@ export class ParseValidationStep implements ValidationStepRunner {
       fetch: this.config.fetch,
     };
 
-    // 3a: Parse GTS files
-    for (let file of gtsFiles) {
-      try {
-        let readResult = await this.readFileFn(targetRealmUrl, file, fetchOpts);
-        if (!readResult.ok) {
-          let message = `Could not read ${file}: ${readResult.error ?? 'read failed'}`;
-          log.warn(message);
+    // 3a: Run glint (ember-tsc) on GTS files
+    if (gtsFiles.length > 0) {
+      let gtsContents: { path: string; content: string }[] = [];
+      for (let file of gtsFiles) {
+        try {
+          let readResult = await this.readFileFn(
+            targetRealmUrl,
+            file,
+            fetchOpts,
+          );
+          if (!readResult.ok) {
+            let message = `Could not read ${file}: ${readResult.error ?? 'read failed'}`;
+            log.warn(message);
+            allFileResults.push({
+              file,
+              errors: [{ file, line: 0, column: 0, message }],
+            });
+            allErrors.push({ file, line: 0, message });
+            continue;
+          }
+          if (readResult.content == null) {
+            let message = `Could not read ${file}: no content`;
+            log.warn(message);
+            allFileResults.push({
+              file,
+              errors: [{ file, line: 0, column: 0, message }],
+            });
+            allErrors.push({ file, line: 0, message });
+            continue;
+          }
+          gtsContents.push({ path: file, content: readResult.content });
+        } catch (err) {
+          let message = `Read failed: ${err instanceof Error ? err.message : String(err)}`;
+          log.warn(`Error reading ${file}: ${message}`);
           allFileResults.push({
             file,
             errors: [{ file, line: 0, column: 0, message }],
           });
           allErrors.push({ file, line: 0, message });
-          continue;
         }
-        if (readResult.content == null) {
-          let message = `Could not read ${file}: no content`;
-          log.warn(message);
-          allFileResults.push({
-            file,
-            errors: [{ file, line: 0, column: 0, message }],
-          });
-          allErrors.push({ file, line: 0, message });
-          continue;
-        }
+      }
 
-        let errors = this.parseGtsFile(file, readResult.content);
-        allFileResults.push({ file, errors });
-        for (let e of errors) {
-          allErrors.push({ file: e.file, line: e.line, message: e.message });
+      // Run glint on all files at once (one ember-tsc invocation)
+      if (gtsContents.length > 0) {
+        try {
+          let glintErrors = await this.runGlintCheckFn(gtsContents);
+
+          // Group errors by file for the file results
+          let errorsByFile = new Map<string, ParseErrorData[]>();
+          for (let err of glintErrors) {
+            let existing = errorsByFile.get(err.file) ?? [];
+            existing.push(err);
+            errorsByFile.set(err.file, existing);
+          }
+
+          // Build file results for each GTS file (including clean ones)
+          for (let { path: file } of gtsContents) {
+            let fileErrors = errorsByFile.get(file) ?? [];
+            allFileResults.push({ file, errors: fileErrors });
+            for (let e of fileErrors) {
+              allErrors.push({
+                file: e.file,
+                line: e.line,
+                message: e.message,
+              });
+            }
+          }
+        } catch (err) {
+          let message = `Glint check failed: ${err instanceof Error ? err.message : String(err)}`;
+          log.warn(message);
+          // Report as a single error against the first file
+          allFileResults.push({
+            file: gtsContents[0].path,
+            errors: [
+              {
+                file: gtsContents[0].path,
+                line: 0,
+                column: 0,
+                message,
+              },
+            ],
+          });
+          allErrors.push({ file: gtsContents[0].path, line: 0, message });
         }
-      } catch (err) {
-        let message = `Parse failed: ${err instanceof Error ? err.message : String(err)}`;
-        log.warn(`Error parsing ${file}: ${message}`);
-        allFileResults.push({
-          file,
-          errors: [{ file, line: 0, column: 0, message }],
-        });
-        allErrors.push({ file, line: 0, message });
       }
     }
 
@@ -310,13 +391,10 @@ export class ParseValidationStep implements ValidationStepRunner {
         let errors: ParseErrorData[];
         if (readResult.document) {
           // Realm returned a parsed document — JSON is valid, validate structure
-          errors = this.validateCardDocumentStructure(
-            jsonUrl,
-            readResult.document,
-          );
+          errors = validateCardDocumentStructure(jsonUrl, readResult.document);
         } else if (readResult.content != null) {
           // Raw content (from mocks or non-standard readFile) — full parse + validate
-          errors = this.parseJsonFile(jsonUrl, readResult.content);
+          errors = parseJsonFile(jsonUrl, readResult.content);
         } else {
           let message = `Could not read ${jsonUrl}: no content or document`;
           log.warn(message);
@@ -430,7 +508,10 @@ export class ParseValidationStep implements ValidationStepRunner {
   // -------------------------------------------------------------------------
 
   /**
-   * Discover .gts and .gjs files in the realm.
+   * Discover .gts, .gjs, and .ts files in the realm.
+   * Test files (*.test.gts, *.test.ts) are excluded — those are the
+   * test step's responsibility and require test-infra type declarations
+   * (QUnit, @universal-ember/test-support) that aren't available here.
    */
   private async discoverGtsFiles(targetRealmUrl: string): Promise<string[]> {
     let result = await this.fetchFilenamesFn(targetRealmUrl, {
@@ -443,7 +524,12 @@ export class ParseValidationStep implements ValidationStepRunner {
     }
 
     return result.filenames
-      .filter((f) => GTS_EXTENSIONS.some((ext) => f.endsWith(ext)))
+      .filter(
+        (f) =>
+          PARSEABLE_EXTENSIONS.some((ext) => f.endsWith(ext)) &&
+          !f.endsWith('.test.gts') &&
+          !f.endsWith('.test.ts'),
+      )
       .sort((a, b) => a.localeCompare(b));
   }
 
@@ -469,184 +555,6 @@ export class ParseValidationStep implements ValidationStepRunner {
       }
     }
     return urls.sort((a, b) => a.localeCompare(b));
-  }
-
-  /**
-   * Parse a .gts/.gjs file using content-tag + TypeScript.
-   *
-   * Phase 1: content-tag preprocesses GTS → TS (catches template-level errors)
-   * Phase 2: TypeScript parser checks the preprocessed output (catches TS syntax errors)
-   */
-  parseGtsFile(filename: string, source: string): ParseErrorData[] {
-    let errors: ParseErrorData[] = [];
-
-    // Phase 1: content-tag preprocessing
-    let preprocessed: { code: string };
-    try {
-      preprocessed = this.preprocessor.process(source, { filename });
-    } catch (err) {
-      let message = err instanceof Error ? err.message : String(err);
-      // content-tag errors include "Parse Error at file:line:col" — extract line info
-      let lineMatch = message.match(/Parse Error at [^:]+:(\d+):(\d+)/);
-      let line = lineMatch ? parseInt(lineMatch[1], 10) : 0;
-      let column = lineMatch ? parseInt(lineMatch[2], 10) : 0;
-      errors.push({
-        file: filename,
-        line,
-        column,
-        message: `GTS preprocessing error: ${message}`,
-      });
-      return errors;
-    }
-
-    // Phase 2: TypeScript syntax check on preprocessed output
-    let tsFilename = filename.replace(/\.gts$/, '.ts').replace(/\.gjs$/, '.js');
-    let sourceFile = ts.createSourceFile(
-      tsFilename,
-      preprocessed.code,
-      ts.ScriptTarget.Latest,
-      true,
-    );
-
-    // parseDiagnostics is populated by createSourceFile — these are syntax errors
-    let diagnostics =
-      (
-        sourceFile as unknown as {
-          parseDiagnostics?: ts.DiagnosticWithLocation[];
-        }
-      ).parseDiagnostics ?? [];
-
-    for (let diag of diagnostics) {
-      let pos = sourceFile.getLineAndCharacterOfPosition(diag.start);
-      errors.push({
-        file: filename,
-        line: pos.line + 1,
-        column: pos.character + 1,
-        message: ts.flattenDiagnosticMessageText(diag.messageText, '\n'),
-      });
-    }
-
-    return errors;
-  }
-
-  /**
-   * Parse a JSON file and validate card document structure.
-   *
-   * Checks:
-   * 1. Valid JSON syntax
-   * 2. Card document structure (data.type, data.meta.adoptsFrom)
-   */
-  parseJsonFile(filename: string, source: string): ParseErrorData[] {
-    // Phase 1: JSON syntax
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(source);
-    } catch (err) {
-      let message = err instanceof Error ? err.message : String(err);
-      return [
-        {
-          file: filename,
-          line: 0,
-          column: 0,
-          message: `Invalid JSON: ${message}`,
-        },
-      ];
-    }
-
-    // Phase 2: Card document structure
-    if (
-      typeof parsed !== 'object' ||
-      parsed === null ||
-      Array.isArray(parsed)
-    ) {
-      return [
-        {
-          file: filename,
-          line: 0,
-          column: 0,
-          message: 'Card document must be a JSON object',
-        },
-      ];
-    }
-
-    return this.validateCardDocumentStructure(
-      filename,
-      parsed as { data: Record<string, unknown> },
-    );
-  }
-
-  /**
-   * Validate card document structure from an already-parsed object.
-   * Used both by `parseJsonFile` (from raw content) and the run() method
-   * (when readFile returns a `document` directly).
-   */
-  validateCardDocumentStructure(
-    filename: string,
-    doc: { data: Record<string, unknown> },
-  ): ParseErrorData[] {
-    let errors: ParseErrorData[] = [];
-    let data = doc.data;
-
-    if (typeof data !== 'object' || data === null || Array.isArray(data)) {
-      errors.push({
-        file: filename,
-        line: 0,
-        column: 0,
-        message: 'Card document must have a "data" object',
-      });
-      return errors;
-    }
-
-    let dataObj = data as Record<string, unknown>;
-
-    if (typeof dataObj.type !== 'string') {
-      errors.push({
-        file: filename,
-        line: 0,
-        column: 0,
-        message: 'Card document "data.type" must be a string',
-      });
-    }
-
-    let meta = dataObj.meta as Record<string, unknown> | undefined;
-    if (typeof meta !== 'object' || meta === null) {
-      errors.push({
-        file: filename,
-        line: 0,
-        column: 0,
-        message: 'Card document must have a "data.meta" object',
-      });
-    } else {
-      let adoptsFrom = meta.adoptsFrom as Record<string, unknown> | undefined;
-      if (typeof adoptsFrom !== 'object' || adoptsFrom === null) {
-        errors.push({
-          file: filename,
-          line: 0,
-          column: 0,
-          message:
-            'Card document must have a "data.meta.adoptsFrom" object with "module" and "name"',
-        });
-      } else {
-        if (typeof adoptsFrom.module !== 'string') {
-          errors.push({
-            file: filename,
-            line: 0,
-            column: 0,
-            message: '"data.meta.adoptsFrom.module" must be a string',
-          });
-        }
-        if (typeof adoptsFrom.name !== 'string') {
-          errors.push({
-            file: filename,
-            line: 0,
-            column: 0,
-            message: '"data.meta.adoptsFrom.name" must be a string',
-          });
-        }
-      }
-    }
-
-    return errors;
   }
 
   /**
@@ -714,6 +622,269 @@ export class ParseValidationStep implements ValidationStepRunner {
 
     return { specs };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Glint (ember-tsc) type checking
+// ---------------------------------------------------------------------------
+
+/**
+ * Run `ember-tsc --noEmit` on .gts files to get glint type errors.
+ *
+ * 1. Creates a temp directory with the .gts files
+ * 2. Writes a tsconfig.json with paths mapping `https://cardstack.com/base/*`
+ *    to the monorepo's `packages/base` directory (same as `realm/tsconfig.json`)
+ * 3. Runs `ember-tsc --noEmit --project <tsconfig>`
+ * 4. Parses the output for errors originating from the temp directory
+ * 5. Maps errors back to original realm file paths
+ */
+async function runGlintCheck(
+  files: { path: string; content: string }[],
+): Promise<ParseErrorData[]> {
+  let tempDir = mkdtempSync(join(tmpdir(), 'sf-parse-'));
+
+  try {
+    // Write files to temp dir preserving directory structure
+    for (let file of files) {
+      let filePath = join(tempDir, file.path);
+      let dir = dirname(filePath);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(filePath, file.content, 'utf8');
+    }
+
+    // Write tsconfig.json — mirrors realm/tsconfig.json but with absolute
+    // paths to the base package. Relaxes unused-variable checks since the
+    // factory agent's generated code may have legitimate unused locals during
+    // incremental development. Cached because it never changes between runs.
+    if (!cachedTsconfigContent) {
+      let tsconfig = {
+        compilerOptions: {
+          target: 'es2020',
+          allowJs: true,
+          moduleResolution: 'node16',
+          allowSyntheticDefaultImports: true,
+          noEmit: true,
+          baseUrl: '.',
+          module: 'node16',
+          strict: true,
+          experimentalDecorators: true,
+          skipLibCheck: true,
+          noUnusedLocals: false,
+          noUnusedParameters: false,
+          paths: {
+            'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
+          },
+        },
+        include: ['**/*.ts', '**/*.gts'],
+        exclude: ['node_modules'],
+      };
+      cachedTsconfigContent = JSON.stringify(tsconfig, null, 2);
+    }
+    writeFileSync(
+      join(tempDir, 'tsconfig.json'),
+      cachedTsconfigContent,
+      'utf8',
+    );
+
+    // Symlink node_modules so ember-tsc can resolve @glint/ember-tsc/-private/dsl
+    // and other glint internals needed for template-aware type checking.
+    symlinkSync(NODE_MODULES_PATH, join(tempDir, 'node_modules'));
+
+    // Run ember-tsc
+    let emberTscBin = resolve(
+      __dirname,
+      '..',
+      '..',
+      'node_modules',
+      '.bin',
+      'ember-tsc',
+    );
+    let output = await new Promise<string>((resolvePromise, _reject) => {
+      execFile(
+        emberTscBin,
+        ['--noEmit', '--project', join(tempDir, 'tsconfig.json')],
+        {
+          cwd: tempDir,
+          timeout: 120_000,
+          maxBuffer: 10 * 1024 * 1024,
+        },
+        (_error, stdout, stderr) => {
+          // ember-tsc exits non-zero when there are type errors — that's expected
+          resolvePromise(stdout + stderr);
+        },
+      );
+    });
+
+    // Parse output: filter to errors from our temp dir files only
+    // Format: <path>(line,col): error TS<code>: <message>
+    let errors: ParseErrorData[] = [];
+    let lines = output.split('\n');
+
+    for (let line of lines) {
+      // Match lines referencing files in our temp dir
+      // The path may be relative (../../.../tmp/...) or absolute
+      let match = line.match(
+        /^(.+?)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.+)/,
+      );
+      if (!match) {
+        continue;
+      }
+
+      let [, filePath, lineStr, colStr, tsCode, message] = match;
+
+      // Resolve the path and check if it's in our temp dir
+      let absolutePath = resolve(tempDir, filePath);
+      if (!absolutePath.startsWith(tempDir)) {
+        // Error from base package or other dependency — skip
+        continue;
+      }
+
+      // Skip known false positives:
+      // TS2353 for 'scoped' on <style> — Ember's `<style scoped>` is valid
+      // but the HTML type definitions don't include it
+      if (tsCode === 'TS2353' && message.includes("'scoped'")) {
+        continue;
+      }
+
+      // Map back to the original realm file path
+      let realmPath = absolutePath.slice(tempDir.length + 1); // +1 for the '/'
+      let originalFile = files.find((f) => f.path === realmPath);
+      if (!originalFile) {
+        continue;
+      }
+
+      errors.push({
+        file: originalFile.path,
+        line: parseInt(lineStr, 10),
+        column: parseInt(colStr, 10),
+        message,
+      });
+    }
+
+    return errors;
+  } finally {
+    // Clean up temp dir
+    try {
+      rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      log.warn(`Failed to clean up temp dir: ${tempDir}`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// JSON validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse a JSON file and validate card document structure.
+ */
+export function parseJsonFile(
+  filename: string,
+  source: string,
+): ParseErrorData[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch (err) {
+    let message = err instanceof Error ? err.message : String(err);
+    return [
+      {
+        file: filename,
+        line: 0,
+        column: 0,
+        message: `Invalid JSON: ${message}`,
+      },
+    ];
+  }
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return [
+      {
+        file: filename,
+        line: 0,
+        column: 0,
+        message: 'Card document must be a JSON object',
+      },
+    ];
+  }
+
+  return validateCardDocumentStructure(
+    filename,
+    parsed as { data: Record<string, unknown> },
+  );
+}
+
+/**
+ * Validate card document structure from an already-parsed object.
+ */
+export function validateCardDocumentStructure(
+  filename: string,
+  doc: { data: Record<string, unknown> },
+): ParseErrorData[] {
+  let errors: ParseErrorData[] = [];
+  let data = doc.data;
+
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    errors.push({
+      file: filename,
+      line: 0,
+      column: 0,
+      message: 'Card document must have a "data" object',
+    });
+    return errors;
+  }
+
+  let dataObj = data as Record<string, unknown>;
+
+  if (typeof dataObj.type !== 'string') {
+    errors.push({
+      file: filename,
+      line: 0,
+      column: 0,
+      message: 'Card document "data.type" must be a string',
+    });
+  }
+
+  let meta = dataObj.meta as Record<string, unknown> | undefined;
+  if (typeof meta !== 'object' || meta === null) {
+    errors.push({
+      file: filename,
+      line: 0,
+      column: 0,
+      message: 'Card document must have a "data.meta" object',
+    });
+  } else {
+    let adoptsFrom = meta.adoptsFrom as Record<string, unknown> | undefined;
+    if (typeof adoptsFrom !== 'object' || adoptsFrom === null) {
+      errors.push({
+        file: filename,
+        line: 0,
+        column: 0,
+        message:
+          'Card document must have a "data.meta.adoptsFrom" object with "module" and "name"',
+      });
+    } else {
+      if (typeof adoptsFrom.module !== 'string') {
+        errors.push({
+          file: filename,
+          line: 0,
+          column: 0,
+          message: '"data.meta.adoptsFrom.module" must be a string',
+        });
+      }
+      if (typeof adoptsFrom.name !== 'string') {
+        errors.push({
+          file: filename,
+          line: 0,
+          column: 0,
+          message: '"data.meta.adoptsFrom.name" must be a string',
+        });
+      }
+    }
+  }
+
+  return errors;
 }
 
 // ---------------------------------------------------------------------------

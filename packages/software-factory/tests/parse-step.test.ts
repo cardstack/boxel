@@ -7,7 +7,10 @@ import {
   type ParseValidationStepConfig,
   type ParseValidationDetails,
   type SpecExampleInfo,
+  parseJsonFile,
+  validateCardDocumentStructure,
 } from '../src/validators/parse-step';
+import type { ParseErrorData } from '../src/parse-result-cards';
 import type { RealmFetchOptions } from '../src/realm-operations';
 
 // ---------------------------------------------------------------------------
@@ -21,6 +24,8 @@ function makeConfig(
     realmServerUrl: 'https://example.test/',
     parseResultsModuleUrl: 'https://example.test/parse-result',
     getNextSequenceNumber: async () => 1,
+    // Default glint check mock — returns no errors (clean files)
+    runGlintCheckFn: async () => [],
     ...overrides,
   };
 }
@@ -71,6 +76,20 @@ function makeSearchSpecsError(
   return async () => ({ specs: [], error });
 }
 
+function makeGlintCheck(
+  errors: ParseErrorData[],
+): (files: { path: string; content: string }[]) => Promise<ParseErrorData[]> {
+  return async () => errors;
+}
+
+function makeGlintCheckThrows(
+  message: string,
+): (files: { path: string; content: string }[]) => Promise<ParseErrorData[]> {
+  return async () => {
+    throw new Error(message);
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -102,7 +121,45 @@ module('ParseValidationStep', function () {
   });
 
   // -----------------------------------------------------------------------
-  // GTS parsing: valid files
+  // GTS/TS file discovery
+  // -----------------------------------------------------------------------
+
+  test('discovers .gts, .gjs, and .ts files but not .js, .json, or test files', async function (assert) {
+    let discoveredFiles: string[] = [];
+    let step = new ParseValidationStep(
+      makeConfig({
+        fetchFilenames: makeFetchFilenames([
+          'hello.gts',
+          'world.gjs',
+          'utils.ts',
+          'helper.js',
+          'Cards/my-card.json',
+          'hello.test.gts',
+          'utils.test.ts',
+        ]),
+        readFileFn: makeReadFile({
+          'hello.gts': 'export class Hello {}',
+          'world.gjs': 'export default class World {}',
+          'utils.ts': 'export function hello() {}',
+        }),
+        searchSpecsFn: makeSearchSpecs([]),
+        runGlintCheckFn: async (files) => {
+          discoveredFiles = files.map((f) => f.path);
+          return [];
+        },
+      }),
+    );
+
+    let result = await step.run('https://example.test/realm/');
+
+    assert.true(result.passed);
+    // .js, .json, .test.gts, .test.ts are all excluded
+    assert.deepEqual(result.files, ['hello.gts', 'utils.ts', 'world.gjs']);
+    assert.deepEqual(discoveredFiles, ['hello.gts', 'utils.ts', 'world.gjs']);
+  });
+
+  // -----------------------------------------------------------------------
+  // GTS parsing: valid files (glint returns no errors)
   // -----------------------------------------------------------------------
 
   test('valid GTS files return passed', async function (assert) {
@@ -110,18 +167,11 @@ module('ParseValidationStep', function () {
       makeConfig({
         fetchFilenames: makeFetchFilenames(['hello.gts', 'world.gts']),
         readFileFn: makeReadFile({
-          'hello.gts': `import { CardDef } from "https://cardstack.com/base/card-api";
-export class Hello extends CardDef {
-  static displayName = 'Hello';
-}`,
-          'world.gts': `import { CardDef, Component } from "https://cardstack.com/base/card-api";
-export class World extends CardDef {
-  static isolated = class Isolated extends Component<typeof World> {
-    <template><div>World</div></template>
-  };
-}`,
+          'hello.gts': 'export class Hello {}',
+          'world.gts': 'export class World {}',
         }),
         searchSpecsFn: makeSearchSpecs([]),
+        runGlintCheckFn: makeGlintCheck([]),
       }),
     );
 
@@ -139,21 +189,25 @@ export class World extends CardDef {
   });
 
   // -----------------------------------------------------------------------
-  // GTS parsing: syntax errors
+  // GTS parsing: glint returns errors
   // -----------------------------------------------------------------------
 
-  test('GTS file with unclosed template tag returns failed', async function (assert) {
+  test('GTS file with type error returns failed', async function (assert) {
     let step = new ParseValidationStep(
       makeConfig({
         fetchFilenames: makeFetchFilenames(['bad.gts']),
         readFileFn: makeReadFile({
-          'bad.gts': `export class Foo {
-  static t = class {
-    <template><div>hi</div>
-  };
-}`,
+          'bad.gts': 'export class Bad { x: number = "string"; }',
         }),
         searchSpecsFn: makeSearchSpecs([]),
+        runGlintCheckFn: makeGlintCheck([
+          {
+            file: 'bad.gts',
+            line: 1,
+            column: 32,
+            message: "Type 'string' is not assignable to type 'number'.",
+          },
+        ]),
       }),
     );
 
@@ -166,34 +220,32 @@ export class World extends CardDef {
     let details = result.details as unknown as ParseValidationDetails;
     assert.strictEqual(details.filesChecked, 1);
     assert.strictEqual(details.filesWithErrors, 1);
+    assert.strictEqual(details.totalErrors, 1);
     assert.ok(
-      details.errors[0].message.includes('GTS preprocessing error'),
-      'error mentions GTS preprocessing',
+      details.errors[0].message.includes('not assignable'),
+      'error mentions type mismatch',
     );
   });
 
-  test('GTS file with TypeScript syntax error after preprocessing returns failed', async function (assert) {
-    // content-tag may allow certain TS syntax errors through;
-    // TypeScript's parser catches them in the preprocessed output.
-    // We test the parseGtsFile method directly for this case.
+  test('glint check throwing returns failed', async function (assert) {
     let step = new ParseValidationStep(
       makeConfig({
-        fetchFilenames: makeFetchFilenames([]),
-        readFileFn: makeReadFile({}),
+        fetchFilenames: makeFetchFilenames(['hello.gts']),
+        readFileFn: makeReadFile({
+          'hello.gts': 'export class Hello {}',
+        }),
         searchSpecsFn: makeSearchSpecs([]),
+        runGlintCheckFn: makeGlintCheckThrows('ember-tsc crashed'),
       }),
     );
 
-    // Directly test the parser with code that content-tag will preprocess
-    // but TS will reject
-    let errors = step.parseGtsFile(
-      'test.gts',
-      'export class Foo { @field name: = 5; }',
-    );
+    let result = await step.run('https://example.test/realm/');
 
-    // content-tag should catch this as a parse error
-    assert.ok(errors.length > 0, 'has errors');
-    assert.strictEqual(errors[0].file, 'test.gts');
+    assert.false(result.passed);
+    assert.ok(
+      result.errors[0].message.includes('Glint check failed'),
+      'error mentions glint failure',
+    );
   });
 
   // -----------------------------------------------------------------------
@@ -240,7 +292,7 @@ export class World extends CardDef {
   });
 
   // -----------------------------------------------------------------------
-  // JSON parsing: syntax errors
+  // JSON parsing: errors
   // -----------------------------------------------------------------------
 
   test('invalid JSON syntax returns failed', async function (assert) {
@@ -271,10 +323,6 @@ export class World extends CardDef {
       'error mentions invalid JSON',
     );
   });
-
-  // -----------------------------------------------------------------------
-  // JSON parsing: card document structure errors
-  // -----------------------------------------------------------------------
 
   test('JSON missing data object returns failed', async function (assert) {
     let step = new ParseValidationStep(
@@ -341,9 +389,6 @@ export class World extends CardDef {
   // -----------------------------------------------------------------------
 
   test('mixed GTS and JSON files — pass and fail independently', async function (assert) {
-    let validGts = `import { CardDef } from "https://cardstack.com/base/card-api";
-export class Hello extends CardDef {}`;
-
     let validJson = JSON.stringify({
       data: {
         type: 'card',
@@ -360,7 +405,7 @@ export class Hello extends CardDef {}`;
       makeConfig({
         fetchFilenames: makeFetchFilenames(['hello.gts']),
         readFileFn: makeReadFile({
-          'hello.gts': validGts,
+          'hello.gts': 'export class Hello {}',
           'Hello/good.json': validJson,
           'Hello/bad.json': invalidJson,
         }),
@@ -370,6 +415,7 @@ export class Hello extends CardDef {}`;
             exampleUrls: ['Hello/good.json', 'Hello/bad.json'],
           },
         ]),
+        runGlintCheckFn: makeGlintCheck([]),
       }),
     );
 
@@ -409,15 +455,15 @@ export class Hello extends CardDef {}`;
       makeConfig({
         fetchFilenames: makeFetchFilenames(['hello.gts']),
         readFileFn: makeReadFile({
-          'hello.gts': `export class Hello {}`,
+          'hello.gts': 'export class Hello {}',
         }),
         searchSpecsFn: makeSearchSpecsError('spec search failed'),
+        runGlintCheckFn: makeGlintCheck([]),
       }),
     );
 
     let result = await step.run('https://example.test/realm/');
 
-    // GTS validation should still pass even though spec search failed
     assert.true(result.passed);
     assert.strictEqual(result.step, 'parse');
 
@@ -494,7 +540,11 @@ export class Hello extends CardDef {}`;
       passed: false,
       files: ['bad.gts'],
       errors: [
-        { file: 'bad.gts', message: 'bad.gts:3 GTS preprocessing error' },
+        {
+          file: 'bad.gts',
+          message:
+            "bad.gts:3 Type 'string' is not assignable to type 'number'.",
+        },
       ],
       details: {
         parseResultId: 'Validations/parse_test-1',
@@ -502,7 +552,11 @@ export class Hello extends CardDef {}`;
         filesWithErrors: 1,
         totalErrors: 1,
         errors: [
-          { file: 'bad.gts', line: 3, message: 'GTS preprocessing error' },
+          {
+            file: 'bad.gts',
+            line: 3,
+            message: "Type 'string' is not assignable to type 'number'.",
+          },
         ],
       } as unknown as Record<string, unknown>,
     };
@@ -533,68 +587,11 @@ export class Hello extends CardDef {}`;
   });
 
   // -----------------------------------------------------------------------
-  // parseGtsFile direct tests
-  // -----------------------------------------------------------------------
-
-  test('parseGtsFile returns empty for valid GTS', function (assert) {
-    let step = new ParseValidationStep(
-      makeConfig({
-        fetchFilenames: makeFetchFilenames([]),
-        readFileFn: makeReadFile({}),
-        searchSpecsFn: makeSearchSpecs([]),
-      }),
-    );
-
-    let errors = step.parseGtsFile(
-      'valid.gts',
-      `import { CardDef, Component } from "https://cardstack.com/base/card-api";
-export class MyCard extends CardDef {
-  static isolated = class Isolated extends Component<typeof MyCard> {
-    <template><div>Hello</div></template>
-  };
-}`,
-    );
-
-    assert.strictEqual(errors.length, 0);
-  });
-
-  test('parseGtsFile catches unclosed template', function (assert) {
-    let step = new ParseValidationStep(
-      makeConfig({
-        fetchFilenames: makeFetchFilenames([]),
-        readFileFn: makeReadFile({}),
-        searchSpecsFn: makeSearchSpecs([]),
-      }),
-    );
-
-    let errors = step.parseGtsFile(
-      'bad.gts',
-      `export class Foo {
-  static t = class {
-    <template><div>hi</div>
-  };
-}`,
-    );
-
-    assert.ok(errors.length > 0, 'has errors');
-    assert.strictEqual(errors[0].file, 'bad.gts');
-    assert.ok(errors[0].message.includes('GTS preprocessing error'));
-  });
-
-  // -----------------------------------------------------------------------
-  // parseJsonFile direct tests
+  // parseJsonFile / validateCardDocumentStructure direct tests
   // -----------------------------------------------------------------------
 
   test('parseJsonFile returns empty for valid card document', function (assert) {
-    let step = new ParseValidationStep(
-      makeConfig({
-        fetchFilenames: makeFetchFilenames([]),
-        readFileFn: makeReadFile({}),
-        searchSpecsFn: makeSearchSpecs([]),
-      }),
-    );
-
-    let errors = step.parseJsonFile(
+    let errors = parseJsonFile(
       'test.json',
       JSON.stringify({
         data: {
@@ -609,30 +606,14 @@ export class MyCard extends CardDef {
   });
 
   test('parseJsonFile catches invalid JSON', function (assert) {
-    let step = new ParseValidationStep(
-      makeConfig({
-        fetchFilenames: makeFetchFilenames([]),
-        readFileFn: makeReadFile({}),
-        searchSpecsFn: makeSearchSpecs([]),
-      }),
-    );
-
-    let errors = step.parseJsonFile('test.json', '{broken}');
+    let errors = parseJsonFile('test.json', '{broken}');
 
     assert.ok(errors.length > 0);
     assert.ok(errors[0].message.includes('Invalid JSON'));
   });
 
   test('parseJsonFile catches missing adoptsFrom.module', function (assert) {
-    let step = new ParseValidationStep(
-      makeConfig({
-        fetchFilenames: makeFetchFilenames([]),
-        readFileFn: makeReadFile({}),
-        searchSpecsFn: makeSearchSpecs([]),
-      }),
-    );
-
-    let errors = step.parseJsonFile(
+    let errors = parseJsonFile(
       'test.json',
       JSON.stringify({
         data: {
@@ -647,17 +628,18 @@ export class MyCard extends CardDef {
   });
 
   test('parseJsonFile catches non-object document', function (assert) {
-    let step = new ParseValidationStep(
-      makeConfig({
-        fetchFilenames: makeFetchFilenames([]),
-        readFileFn: makeReadFile({}),
-        searchSpecsFn: makeSearchSpecs([]),
-      }),
-    );
-
-    let errors = step.parseJsonFile('test.json', '"just a string"');
+    let errors = parseJsonFile('test.json', '"just a string"');
 
     assert.ok(errors.length > 0);
     assert.ok(errors[0].message.includes('JSON object'));
+  });
+
+  test('validateCardDocumentStructure catches missing meta', function (assert) {
+    let errors = validateCardDocumentStructure('test.json', {
+      data: { type: 'card' } as Record<string, unknown>,
+    });
+
+    assert.ok(errors.length > 0);
+    assert.ok(errors[0].message.includes('"data.meta" object'));
   });
 });

@@ -113,23 +113,30 @@ The Phase 1 `testResults` field on `AgentContext` is deprecated. All validation 
 
 ### Parse Step Details (CS-10713)
 
-The parse validation step (`src/validators/parse-step.ts`) verifies that `.gts` and `.json` files are syntactically valid. It replaces the `NoOpStepRunner('parse')` placeholder in the default pipeline. Unlike lint (which uses the realm's `_lint` endpoint) or eval/instantiate (which use `_run-command` through the prerenderer), the parse step runs entirely in the factory's Node process using `content-tag` and TypeScript's parser — no realm server calls beyond file reads.
+The parse validation step (`src/validators/parse-step.ts`) verifies that `.gts`, `.ts`, and `.json` files are valid. It replaces the `NoOpStepRunner('parse')` placeholder in the default pipeline. For `.gts`/`.ts` files it uses glint (`ember-tsc`) for full template-aware TypeScript type checking. For `.json` files it validates card document structure.
 
-**GTS validation is two-phase:**
+**GTS/TS validation uses glint (ember-tsc):**
 
-1. **content-tag preprocessing** — `Preprocessor.process(source, { filename })` transforms GTS → TS by replacing `<template>` tags with their compiled equivalent. This catches GTS-specific errors: unclosed `<template>` tags, malformed template expressions, and template placement errors. content-tag throws `Parse Error at file:line:col` with extractable line/column info.
-2. **TypeScript syntax checking** — `ts.createSourceFile(filename, preprocessedCode, ScriptTarget.Latest, true)` parses the preprocessed output. The `parseDiagnostics` array on the returned `SourceFile` contains any TypeScript syntax errors (missing brackets, malformed type annotations, etc.) that content-tag didn't catch.
+The step downloads realm `.gts` and `.ts` files to a temp directory, writes a tsconfig.json (mirroring `realm/tsconfig.json` with absolute paths to `packages/base`), symlinks the software-factory `node_modules` (so glint's internal `@glint/ember-tsc/-private/dsl` module resolves), and runs `ember-tsc --noEmit`. This catches:
 
-**Important:** This is syntax-level checking only. Full type checking (unresolved imports, type mismatches) would require module resolution for URL-style imports (`https://cardstack.com/base/card-api`) which is not feasible in the factory's Node process. The eval step handles runtime module-loading errors via the prerenderer sandbox.
+- TypeScript type errors (type mismatches, missing properties, bad assignments)
+- Template errors (invalid component args, missing helpers, malformed template expressions)
+- Syntax errors (missing brackets, unterminated strings, malformed type annotations)
+
+**Filtering:** The base package has pre-existing type errors (e.g., `<style scoped>` not in HTML type definitions, missing `@ember/*` module declarations). The step filters output to only errors from the temp directory and suppresses known false positives: TS2353 for `'scoped'` on `<style>` elements (Ember's `<style scoped>` is valid but not in the HTML type definitions).
+
+**Test files excluded:** Files matching `*.test.gts` or `*.test.ts` are excluded — test files require QUnit and `@universal-ember/test-support` type declarations that aren't available in the parse step's isolated temp directory. Test file correctness is the test validation step's responsibility. `.js` files are also excluded because lint (ESLint) already validates JavaScript syntax and the factory agent does not generate `.js` files.
 
 **JSON validation uses spec-based discovery** — the same mechanism as the instantiate step. The step searches the realm for Spec cards and extracts their `linkedExamples` URLs, then reads each example instance and validates:
 
 1. JSON syntax via `JSON.parse()` (when reading raw content from mocks or non-realm sources)
 2. Card document structure: presence of `data` object, `data.type` string, `data.meta.adoptsFrom` with `module` and `name`
 
-When `readFile` returns a parsed `document` (as the realm API does for `.json` files), JSON syntax is already validated — only the structural check runs. When the realm enriches the document during indexing (adding computed fields or normalizing `adoptsFrom`), the structural check validates the enriched version, which may pass even if the raw source was incomplete. This is intentional: if the realm accepted and indexed the card, it is valid from the realm's perspective.
+When `readFile` returns a parsed `document` (as the realm API does for `.json` files), JSON syntax is already validated — only the structural check runs. When the realm enriches the document during indexing, the structural check validates the enriched version, which may pass even if the raw source was incomplete. This is intentional: if the realm accepted and indexed the card, it is valid from the realm's perspective.
 
-**Bootstrap behavior:** When no `.gts` files exist and no Spec cards are found (bootstrap scenario), the step returns `passed: true` with no files checked and no artifact created. This matches the design principle: "nothing to validate is a pass."
+**Bootstrap behavior:** When no `.gts`/`.ts` files exist and no Spec cards are found (bootstrap scenario), the step returns `passed: true` with no files checked and no artifact created. This matches the design principle: "nothing to validate is a pass."
+
+**Performance:** The tsconfig content is cached in memory (it never changes between runs). The `node_modules` symlink avoids copying hundreds of megabytes of dependencies.
 
 The `ParseResult` card definition (`realm/parse-result.gts`) and CRUD (`src/parse-result-cards.ts`) follow the same patterns as `LintResult` and `EvalResult` — fitted/embedded/isolated templates, a running state, `ParseFileResult` field def with nested `ParseError` entries, and links to Issue/Project.
 
