@@ -204,7 +204,6 @@ export default class AiAssistantToast extends Component<Signature> {
 
     let fifteenMinutesAgo = subMinutes(new Date(), 15);
     if (candidate && isAfter(candidate.message.created, fifteenMinutesAgo)) {
-      // eslint-disable-next-line ember/no-side-effects
       this.onMessageSeen(candidate.message.eventId ?? null);
       return candidate;
     }

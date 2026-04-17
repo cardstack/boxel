@@ -9,10 +9,8 @@
  *          [--min-size=N] [--type=<native|object|closure|string>] [--strong]
  */
 const fs = require('fs');
-const SJ =
-  '/Users/lmelia/p/cardstack/boxel/node_modules/.pnpm/stream-json@1.9.1/node_modules/stream-json';
-const { parser } = require(SJ + '/Parser.js');
-const Asm = require(SJ + '/Assembler.js');
+const { parser } = require('stream-json/Parser');
+const Asm = require('stream-json/Assembler');
 
 // Growable Float64Array wrapper. Regular JS arrays work for small snapshots
 // but push throws "Invalid array length" when the array's backing store is

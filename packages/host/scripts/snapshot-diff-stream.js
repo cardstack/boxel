@@ -10,16 +10,36 @@
  * Usage: node --max-old-space-size=16384 scripts/snapshot-diff-stream.js a b
  */
 const fs = require('fs');
-const SJ =
-  '/Users/lmelia/p/cardstack/boxel/node_modules/.pnpm/stream-json@1.9.1/node_modules/stream-json';
-const { parser } = require(SJ + '/Parser.js');
-const Asm = require(SJ + '/Assembler.js');
+const { parser } = require('stream-json/Parser');
+const Asm = require('stream-json/Assembler');
+
+// Growable Float64Array wrapper. Regular JS arrays hit "Invalid array length"
+// on push around ~100M elements when V8 transitions the backing store out of
+// packed mode. Typed arrays stay flat so they scale to the full node count of
+// any heap snapshot the test runner produces.
+class F64List {
+  constructor(initial = 1 << 20) {
+    this.buf = new Float64Array(initial);
+    this.length = 0;
+  }
+  push(v) {
+    if (this.length === this.buf.length) {
+      let next = new Float64Array(this.buf.length * 2);
+      next.set(this.buf);
+      this.buf = next;
+    }
+    this.buf[this.length++] = v;
+  }
+  toTyped() {
+    return this.buf.subarray(0, this.length);
+  }
+}
 
 async function load(snapPath) {
   console.log(`streaming ${snapPath} (${fs.statSync(snapPath).size} bytes)...`);
   return new Promise((resolve, reject) => {
     let meta = null;
-    let nodes = [];
+    let nodes = new F64List();
     let strings = [];
 
     let depth = 0;
@@ -82,10 +102,20 @@ async function load(snapPath) {
             collecting = null;
             asm = null;
           }
-        } else if ((collecting === 'nodes' || collecting === 'strings') && depth === 1) {
+        } else if (
+          (collecting === 'nodes' || collecting === 'strings') &&
+          depth === 1
+        ) {
           collecting = null;
         }
-        if (!finished && meta && nodes.length && strings.length && depth <= 1 && collecting === null) {
+        if (
+          !finished &&
+          meta &&
+          nodes.length &&
+          strings.length &&
+          depth <= 1 &&
+          collecting === null
+        ) {
           p.removeAllListeners('data');
           stream.destroy();
           finish();
@@ -110,9 +140,14 @@ async function load(snapPath) {
       if (finished) return;
       finished = true;
       if (!meta || !nodes.length || !strings.length) {
-        reject(new Error(`did not find all sections: meta=${!!meta}, nodes=${nodes.length}, strings=${strings.length}`));
+        reject(
+          new Error(
+            `did not find all sections: meta=${!!meta}, nodes=${nodes.length}, strings=${strings.length}`,
+          ),
+        );
         return;
       }
+      let nodesTyped = nodes.toTyped();
       let nodeFields = meta.node_fields;
       let nodeTypes = meta.node_types[nodeFields.indexOf('type')];
       let nodeFieldCount = nodeFields.length;
@@ -120,9 +155,9 @@ async function load(snapPath) {
       let typeIdx = nodeFields.indexOf('type');
       let sizeIdx = nodeFields.indexOf('self_size');
       let counts = new Map();
-      for (let i = 0; i < nodes.length; i += nodeFieldCount) {
-        let type = nodeTypes[nodes[i + typeIdx]];
-        let name = strings[nodes[i + nameIdx]];
+      for (let i = 0; i < nodesTyped.length; i += nodeFieldCount) {
+        let type = nodeTypes[nodesTyped[i + typeIdx]];
+        let name = strings[nodesTyped[i + nameIdx]];
         let key = `${type}::${name}`;
         let c = counts.get(key);
         if (!c) {
@@ -130,10 +165,10 @@ async function load(snapPath) {
           counts.set(key, c);
         }
         c.count++;
-        c.size += nodes[i + sizeIdx];
+        c.size += nodesTyped[i + sizeIdx];
       }
       console.log(
-        `  ${(nodes.length / nodeFieldCount).toLocaleString()} nodes, ${counts.size.toLocaleString()} distinct constructors`,
+        `  ${(nodesTyped.length / nodeFieldCount).toLocaleString()} nodes, ${counts.size.toLocaleString()} distinct constructors`,
       );
       resolve(counts);
     }
@@ -143,7 +178,9 @@ async function load(snapPath) {
 (async () => {
   let [a, b] = process.argv.slice(2);
   if (!a || !b) {
-    console.error('usage: snapshot-diff-stream <a.heapsnapshot> <b.heapsnapshot>');
+    console.error(
+      'usage: snapshot-diff-stream <a.heapsnapshot> <b.heapsnapshot>',
+    );
     process.exit(2);
   }
   let ca = await load(a);
@@ -167,7 +204,8 @@ async function load(snapPath) {
     .slice(0, 40)
     .forEach((d) => {
       console.log(
-        `  +${(d.dSize / 1048576).toFixed(1)}MB count ${d.aCount}→${d.bCount} (+${d.dCount}) ` + d.key,
+        `  +${(d.dSize / 1048576).toFixed(1)}MB count ${d.aCount}→${d.bCount} (+${d.dCount}) ` +
+          d.key,
       );
     });
   console.log('\n=== top 20 by count delta ===');
@@ -176,7 +214,8 @@ async function load(snapPath) {
     .slice(0, 20)
     .forEach((d) => {
       console.log(
-        `  +${d.dCount} count ${d.aCount}→${d.bCount} (+${(d.dSize / 1048576).toFixed(1)}MB) ` + d.key,
+        `  +${d.dCount} count ${d.aCount}→${d.bCount} (+${(d.dSize / 1048576).toFixed(1)}MB) ` +
+          d.key,
       );
     });
 })().catch((e) => {
