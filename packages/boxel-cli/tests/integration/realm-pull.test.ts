@@ -3,8 +3,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { pullCommand } from '../../src/commands/realm/pull';
+import { pull } from '../../src/commands/realm/pull';
 import { CheckpointManager } from '../../src/lib/checkpoint-manager';
+import { ProfileManager } from '../../src/lib/profile-manager';
 import {
   startTestRealmServer,
   stopTestRealmServer,
@@ -12,7 +13,6 @@ import {
   setupTestProfile,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration';
-import type { ProfileManager } from '../../src/lib/profile-manager';
 
 let profileManager: ProfileManager;
 let cleanupProfile: () => void;
@@ -56,7 +56,11 @@ describe('realm pull (integration)', () => {
   it('pulls seeded files into an empty local directory', async () => {
     let localDir = makeLocalDir();
 
-    await pullCommand(realmUrl, localDir, { profileManager });
+    let result = await pull(realmUrl, localDir, { profileManager });
+
+    expect(result.error).toBeUndefined();
+    expect(result.files).toContain('hello.gts');
+    expect(result.files).toContain('nested/card.gts');
 
     let helloPath = path.join(localDir, 'hello.gts');
     let nestedPath = path.join(localDir, 'nested', 'card.gts');
@@ -81,7 +85,12 @@ describe('realm pull (integration)', () => {
   it('writes nothing when invoked with --dry-run', async () => {
     let localDir = makeLocalDir();
 
-    await pullCommand(realmUrl, localDir, { dryRun: true, profileManager });
+    let result = await pull(realmUrl, localDir, {
+      dryRun: true,
+      profileManager,
+    });
+
+    expect(result.error).toBeUndefined();
 
     let entries = fs
       .readdirSync(localDir)
@@ -102,8 +111,9 @@ describe('realm pull (integration)', () => {
       '{"local":"only"}',
     );
 
-    await pullCommand(realmUrl, localDir, { profileManager });
+    let result = await pull(realmUrl, localDir, { profileManager });
 
+    expect(result.error).toBeUndefined();
     expect(fs.existsSync(path.join(localDir, 'hello.gts'))).toBe(true);
     expect(fs.existsSync(path.join(localOnlyDir, 'local-only.json'))).toBe(
       true,
@@ -116,11 +126,12 @@ describe('realm pull (integration)', () => {
     let stalePath = path.join(localDir, staleRel);
     fs.writeFileSync(stalePath, 'export const stale = true;\n', 'utf8');
 
-    await pullCommand(realmUrl, localDir, {
+    let result = await pull(realmUrl, localDir, {
       delete: true,
       profileManager,
     });
 
+    expect(result.error).toBeUndefined();
     expect(fs.existsSync(stalePath)).toBe(false);
     expect(fs.existsSync(path.join(localDir, 'hello.gts'))).toBe(true);
 
@@ -140,8 +151,9 @@ describe('realm pull (integration)', () => {
   it('pulls subdirectories recursively', async () => {
     let localDir = makeLocalDir();
 
-    await pullCommand(realmUrl, localDir, { profileManager });
+    let result = await pull(realmUrl, localDir, { profileManager });
 
+    expect(result.error).toBeUndefined();
     expect(fs.existsSync(path.join(localDir, 'hello.gts'))).toBe(true);
     expect(fs.existsSync(path.join(localDir, 'nested', 'card.gts'))).toBe(true);
     expect(
@@ -160,7 +172,7 @@ describe('realm pull (integration)', () => {
     let stalePath = path.join(localDir, 'stale.gts');
     fs.writeFileSync(stalePath, 'export const stale = true;\n', 'utf8');
 
-    await pullCommand(realmUrl, localDir, {
+    await pull(realmUrl, localDir, {
       delete: true,
       dryRun: true,
       profileManager,
@@ -173,7 +185,7 @@ describe('realm pull (integration)', () => {
   it('creates only a post-pull checkpoint when --delete has nothing to delete', async () => {
     let localDir = makeLocalDir();
 
-    await pullCommand(realmUrl, localDir, {
+    await pull(realmUrl, localDir, {
       delete: true,
       profileManager,
     });
@@ -188,11 +200,11 @@ describe('realm pull (integration)', () => {
   it('re-pulling an up-to-date directory adds no new checkpoint', async () => {
     let localDir = makeLocalDir();
 
-    await pullCommand(realmUrl, localDir, { profileManager });
+    await pull(realmUrl, localDir, { profileManager });
     let cm = new CheckpointManager(localDir);
     let afterFirst = (await cm.getCheckpoints()).length;
 
-    await pullCommand(realmUrl, localDir, { profileManager });
+    await pull(realmUrl, localDir, { profileManager });
     let afterSecond = (await cm.getCheckpoints()).length;
 
     expect(afterSecond).toBe(afterFirst);
@@ -204,7 +216,7 @@ describe('realm pull (integration)', () => {
     // sanity: directory does not exist before the pull
     expect(fs.existsSync(localDir)).toBe(false);
 
-    await pullCommand(realmUrl, localDir, { profileManager });
+    await pull(realmUrl, localDir, { profileManager });
 
     expect(fs.existsSync(localDir)).toBe(true);
     expect(fs.existsSync(path.join(localDir, 'hello.gts'))).toBe(true);
@@ -219,7 +231,7 @@ describe('realm pull (integration)', () => {
     let helloPath = path.join(localDir, 'hello.gts');
     fs.writeFileSync(helloPath, 'export const hello = "local-edit";\n');
 
-    await pullCommand(realmUrl, localDir, { profileManager });
+    await pull(realmUrl, localDir, { profileManager });
 
     expect(fs.readFileSync(helloPath, 'utf8')).toContain('hello = "world"');
 
@@ -227,5 +239,28 @@ describe('realm pull (integration)', () => {
     let checkpoints = await cm.getCheckpoints();
     expect(checkpoints.length).toBe(1);
     expect(checkpoints[0].source).toBe('remote');
+  });
+
+  it('returns an error (not process.exit) when no active profile is configured', async () => {
+    let emptyProfile = createTestProfileDir();
+    try {
+      let result = await pull(realmUrl, makeLocalDir(), {
+        profileManager: emptyProfile.profileManager,
+      });
+      expect(result.files).toEqual([]);
+      expect(result.error).toContain('No active profile');
+    } finally {
+      emptyProfile.cleanup();
+    }
+  });
+
+  it('returns an error when the realm URL is unreachable', async () => {
+    let localDir = makeLocalDir();
+    let result = await pull('http://127.0.0.1:1/nonexistent/', localDir, {
+      profileManager,
+    });
+
+    expect(result.error).toBeDefined();
+    expect(result.files).toEqual([]);
   });
 });

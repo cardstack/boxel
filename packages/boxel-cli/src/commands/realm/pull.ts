@@ -190,48 +190,14 @@ export function registerPullCommand(realm: Command): void {
         localDir: string,
         options: { delete?: boolean; dryRun?: boolean },
       ) => {
-        await pullCommand(realmUrl, localDir, options);
+        let result = await pull(realmUrl, localDir, options);
+        if (result.error) {
+          console.error(`Error: ${result.error}`);
+          process.exit(result.files.length > 0 ? 2 : 1);
+        }
+        console.log('Pull completed successfully');
       },
     );
-}
-
-export async function pullCommand(
-  realmUrl: string,
-  localDir: string,
-  options: PullCommandOptions,
-): Promise<void> {
-  let pm = options.profileManager ?? getProfileManager();
-  let active = pm.getActiveProfile();
-  if (!active) {
-    console.error(
-      'Error: no active profile. Run `boxel profile add` to create one.',
-    );
-    process.exit(1);
-  }
-
-  try {
-    const puller = new RealmPuller(
-      {
-        realmUrl,
-        localDir,
-        deleteLocal: options.delete,
-        dryRun: options.dryRun,
-      },
-      pm,
-    );
-
-    await puller.sync();
-
-    if (puller.hasError) {
-      console.log('Pull did not complete successfully. View logs for details');
-      process.exit(2);
-    } else {
-      console.log('Pull completed successfully');
-    }
-  } catch (error) {
-    console.error('Pull failed:', error);
-    process.exit(1);
-  }
 }
 
 export async function pull(
@@ -254,6 +220,7 @@ export async function pull(
         realmUrl,
         localDir,
         deleteLocal: options.delete,
+        dryRun: options.dryRun,
       },
       pm,
     );

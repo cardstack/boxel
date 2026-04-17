@@ -836,9 +836,6 @@ module('factory-test-realm > resolveTestRun', function () {
   });
 });
 
-// pullRealmFiles tests removed — pullRealmFiles now delegates to
-// BoxelCLIClient.pull() which is tested in the boxel-cli package.
-
 // ---------------------------------------------------------------------------
 // formatTestResultSummary
 // ---------------------------------------------------------------------------

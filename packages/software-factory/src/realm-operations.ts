@@ -881,7 +881,6 @@ export async function fetchRealmFilenames(
 export async function pullRealmFiles(
   realmUrl: string,
   localDir: string,
-  _options?: RealmFetchOptions,
 ): Promise<{ files: string[]; error?: string }> {
   let client = new BoxelCLIClient();
   return client.pull(realmUrl, localDir);
