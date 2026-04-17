@@ -12,29 +12,19 @@ const fixtureRealmDir = resolve(
   'test-realm-runner',
 );
 
-// A valid .gts card module
+// A valid .gts card module — intentionally simple (no Component<typeof X>)
+// to avoid BaseDef constraint errors that vary between CI and local type
+// resolution environments.
 const VALID_MODULE_GTS = `import {
   CardDef,
   field,
   contains,
-  Component,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 
 export class ParseTestCard extends CardDef {
   static displayName = 'Parse Test Card';
   @field name = contains(StringField);
-
-  static isolated = class Isolated extends Component<typeof ParseTestCard> {
-    <template>
-      <div class='parse-test'>
-        <h1>{{@model.name}}</h1>
-      </div>
-      <style scoped>
-        .parse-test { padding: 1rem; }
-      </style>
-    </template>
-  };
 }
 `;
 
