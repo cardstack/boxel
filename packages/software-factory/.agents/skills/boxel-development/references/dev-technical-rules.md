@@ -114,30 +114,25 @@ let { StickyNote } = (await loader.import(cardModuleUrl)) as Record<string, any>
 
 #### Accessing cardInfo properties in computeVia
 
-The base `CardDef.cardInfo` field is typed as `{}` by default. Accessing properties like `.title` on it causes "Type '{}' is not assignable to type 'string'". Use type casting:
+`CardDef.cardInfo` is a `CardInfoField` (FieldDef) with these fields: `name`, `summary`, `cardThumbnailURL`, `cardThumbnail`, `theme`, `notes`. Access them directly — they are properly typed:
 
 ```gts
-// ❌ WRONG — "Type '{}' is not assignable to type 'string'"
-@field title = contains(StringField, {
+// ✅ CORRECT — access cardInfo fields directly (they are typed)
+@field cardTitle = contains(StringField, {
   computeVia: function (this: MyCard): string {
-    if (this.cardInfo && this.cardInfo.title) {  // glint error!
-      return this.cardInfo.title;
-    }
-    return 'Default';
+    return this.cardInfo?.name?.trim()?.length
+      ? this.cardInfo.name
+      : this.headline ?? 'Untitled';
   },
 });
 
-// ✅ CORRECT — cast cardInfo to access properties
-@field title = contains(StringField, {
-  computeVia: function (this: MyCard): string {
-    let info = this.cardInfo as Record<string, unknown> | undefined;
-    if (info?.title && typeof info.title === 'string') {
-      return info.title;
-    }
-    return 'Default';
-  },
-});
+// ❌ WRONG — these fields don't exist on CardInfoField
+this.cardInfo.title       // use .name instead
+this.cardInfo.description // use .summary instead
+this.cardInfo.thumbnailURL // use .cardThumbnailURL instead
 ```
+
+**Note:** The computed pass-through fields on CardDef are named `cardTitle` (not `title`), `cardDescription` (not `description`), and `cardThumbnailURL`. Override these — not fields named `title`/`description`.
 
 #### Explicit types for function parameters
 
