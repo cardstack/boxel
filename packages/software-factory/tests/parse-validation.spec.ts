@@ -153,12 +153,6 @@ test.describe('parse-validation e2e', () => {
 
     // Must pass — valid GTS + valid JSON example
     expect(result.step).toBe('parse');
-    if (!result.passed) {
-      console.log(
-        'PARSE TEST 1 ERRORS:',
-        JSON.stringify(result.errors.slice(0, 5), null, 2),
-      );
-    }
     expect(result.passed).toBe(true);
     expect(result.files).toBeTruthy();
     expect(result.files!.length).toBeGreaterThan(0);
