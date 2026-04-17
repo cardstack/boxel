@@ -793,6 +793,7 @@ async function runGlintCheck(
     // Parse output: filter to errors from our temp dir files only
     // Format: <path>(line,col): error TS<code>: <message>
     let errors: ParseErrorData[] = [];
+    let totalDiagnosticLines = 0;
     let lines = output.split('\n');
 
     for (let line of lines) {
@@ -804,6 +805,8 @@ async function runGlintCheck(
       if (!match) {
         continue;
       }
+
+      totalDiagnosticLines++;
 
       let [, filePath, lineStr, colStr, tsCode, message] = match;
 
@@ -836,17 +839,22 @@ async function runGlintCheck(
       });
     }
 
-    // Safety check: if ember-tsc exited non-zero but we parsed zero
-    // diagnostics from our files, something went wrong (e.g., a runtime
+    // Safety check: if ember-tsc exited non-zero but the output contains
+    // NO TS diagnostic lines at all, something went wrong (e.g., a runtime
     // crash, module loader failure). Report this as a failure so we don't
     // silently bypass parse validation.
-    if (exitedWithError && errors.length === 0) {
+    //
+    // Note: if there ARE diagnostic lines but none from our target files
+    // (totalDiagnosticLines > 0 && errors.length === 0), that's the normal
+    // case where base package files have pre-existing type errors that we
+    // correctly filter out. That's NOT a failure.
+    if (exitedWithError && errors.length === 0 && totalDiagnosticLines === 0) {
       let truncatedOutput = output.slice(0, 500).trim();
       errors.push({
         file: files[0]?.path ?? 'unknown',
         line: 0,
         column: 0,
-        message: `ember-tsc exited with errors but no diagnostics matched target files. This may indicate a runtime failure in the type checker. Output: ${truncatedOutput}`,
+        message: `ember-tsc exited with errors but produced no TS diagnostics. This is likely a bug in the parse validation setup (not in the card code) — check that the tsconfig paths and node_modules symlink are correct. Output: ${truncatedOutput}`,
       });
     }
 
