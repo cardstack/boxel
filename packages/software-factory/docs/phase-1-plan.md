@@ -127,8 +127,8 @@ Required behavior:
 
 Required behavior:
 
-- require an active Boxel profile so the target realm owner is explicit before bootstrap starts
-- use `--realm-server-url` when explicitly provided; otherwise take the realm server URL from the active Boxel profile rather than inferring it from the target realm URL
+- require `MATRIX_USERNAME` so the target realm owner is explicit before bootstrap starts
+- infer the target realm server URL from the target realm URL by default, but allow an explicit override when the realm server lives under a subdirectory and the URL shape is ambiguous
 - create missing target realms through the realm server `/_create-realm` API rather than by creating local directories directly
 - treat the successful `/_create-realm` response as the readiness boundary
 
