@@ -32,7 +32,6 @@ const bootstrappedTargetRealm: FactoryTargetRealmBootstrapResult = {
   serverUrl: 'https://realms.example.test/',
   ownerUsername: 'hassan',
   createdRealm: true,
-  authorization: 'Bearer token',
 };
 const mockSeedResult: SeedIssueResult = {
   issueId: 'Issues/bootstrap-seed',
@@ -247,7 +246,6 @@ module('factory-entrypoint', function (hooks) {
           url: resolution.url,
           serverUrl: resolution.serverUrl,
           createdRealm: false,
-          authorization: 'Bearer target-realm-token',
         }),
         createSeed: async (_brief, _url, options) => {
           capturedDarkfactoryModuleUrl = options.darkfactoryModuleUrl;

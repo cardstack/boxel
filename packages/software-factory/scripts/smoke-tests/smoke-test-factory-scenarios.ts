@@ -30,14 +30,8 @@ import { resolve } from 'node:path';
 
 import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { getRealmServerToken, matrixLogin } from '../../src/boxel';
 import { inferDarkfactoryModuleUrl } from '../../src/factory-seed';
 import { logger } from '../../src/logger';
-import {
-  getRealmScopedAuth,
-  writeFile,
-  waitForRealmFile,
-} from '../../src/realm-operations';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -296,9 +290,9 @@ async function writeFixture(
   realmUrl: string,
   path: string,
   content: string,
-  options: { authorization?: string; fetch?: typeof globalThis.fetch },
+  client: BoxelCLIClient,
 ): Promise<void> {
-  let result = await writeFile(realmUrl, path, content, options);
+  let result = await client.write(realmUrl, path, content);
   if (!result.ok) {
     throw new Error(`Failed to write ${path}: ${result.error}`);
   }
@@ -309,18 +303,12 @@ async function writeJsonFixture(
   realmUrl: string,
   path: string,
   document: unknown,
-  options: { authorization?: string; fetch?: typeof globalThis.fetch },
+  client: BoxelCLIClient,
 ): Promise<void> {
-  await writeFixture(
-    realmUrl,
-    path,
-    JSON.stringify(document, null, 2),
-    options,
-  );
+  await writeFixture(realmUrl, path, JSON.stringify(document, null, 2), client);
   // Wait for the card to be indexed
   let cardPath = path.replace(/\.json$/, '');
-  let readable = await waitForRealmFile(realmUrl, cardPath, {
-    ...options,
+  let readable = await client.waitForFile(realmUrl, cardPath, {
     timeoutMs: 15_000,
     pollMs: 500,
   });
@@ -380,7 +368,7 @@ async function scenario1(
   darkfactoryModuleUrl: string,
   briefUrl: string,
   debug: boolean,
-  fetchOptions: { authorization?: string; fetch?: typeof globalThis.fetch },
+  client: BoxelCLIClient,
 ): Promise<boolean> {
   log.info('');
   log.info('=== Scenario 1: Bootstrap Complete, No Code Yet ===');
@@ -397,19 +385,19 @@ async function scenario1(
     realmUrl,
     'Issues/bootstrap-seed.json',
     buildSeedIssueDocument(darkfactoryModuleUrl),
-    fetchOptions,
+    client,
   );
   await writeJsonFixture(
     realmUrl,
     'Projects/hello-card.json',
     buildProjectDocument(darkfactoryModuleUrl),
-    fetchOptions,
+    client,
   );
   await writeJsonFixture(
     realmUrl,
     'Knowledge Articles/hello-card-brief-context.json',
     buildKnowledgeArticleDocument(darkfactoryModuleUrl),
-    fetchOptions,
+    client,
   );
   await writeJsonFixture(
     realmUrl,
@@ -431,7 +419,7 @@ async function scenario1(
         '- [ ] hello.test.gts with passing QUnit tests\n' +
         '- [ ] Spec/hello-card.json catalog spec',
     }),
-    fetchOptions,
+    client,
   );
 
   log.info('');
@@ -462,7 +450,7 @@ async function scenario2(
   darkfactoryModuleUrl: string,
   briefUrl: string,
   debug: boolean,
-  fetchOptions: { authorization?: string; fetch?: typeof globalThis.fetch },
+  client: BoxelCLIClient,
 ): Promise<boolean> {
   log.info('');
   log.info('=== Scenario 2: Blocked Issue with Validation Failures ===');
@@ -481,19 +469,19 @@ async function scenario2(
     realmUrl,
     'Issues/bootstrap-seed.json',
     buildSeedIssueDocument(darkfactoryModuleUrl),
-    fetchOptions,
+    client,
   );
   await writeJsonFixture(
     realmUrl,
     'Projects/hello-card.json',
     buildProjectDocument(darkfactoryModuleUrl),
-    fetchOptions,
+    client,
   );
   await writeJsonFixture(
     realmUrl,
     'Knowledge Articles/hello-card-brief-context.json',
     buildKnowledgeArticleDocument(darkfactoryModuleUrl),
-    fetchOptions,
+    client,
   );
   await writeJsonFixture(
     realmUrl,
@@ -523,13 +511,13 @@ async function scenario2(
         },
       ],
     }),
-    fetchOptions,
+    client,
   );
 
   // Write buggy code + test
   log.info('Writing buggy card definition and test...');
-  await writeFixture(realmUrl, 'hello.gts', BUGGY_HELLO_GTS, fetchOptions);
-  await writeFixture(realmUrl, 'hello.test.gts', HELLO_TEST_GTS, fetchOptions);
+  await writeFixture(realmUrl, 'hello.gts', BUGGY_HELLO_GTS, client);
+  await writeFixture(realmUrl, 'hello.test.gts', HELLO_TEST_GTS, client);
 
   log.info('');
   log.info('Running factory (blocked issues are auto-retried by default)...');
@@ -560,7 +548,7 @@ async function scenario3(
   darkfactoryModuleUrl: string,
   briefUrl: string,
   debug: boolean,
-  fetchOptions: { authorization?: string; fetch?: typeof globalThis.fetch },
+  client: BoxelCLIClient,
 ): Promise<boolean> {
   log.info('');
   log.info('=== Scenario 3: Completed Project, New Enhancement ===');
@@ -579,19 +567,19 @@ async function scenario3(
     realmUrl,
     'Issues/bootstrap-seed.json',
     buildSeedIssueDocument(darkfactoryModuleUrl),
-    fetchOptions,
+    client,
   );
   await writeJsonFixture(
     realmUrl,
     'Projects/hello-card.json',
     buildProjectDocument(darkfactoryModuleUrl),
-    fetchOptions,
+    client,
   );
   await writeJsonFixture(
     realmUrl,
     'Knowledge Articles/hello-card-brief-context.json',
     buildKnowledgeArticleDocument(darkfactoryModuleUrl),
-    fetchOptions,
+    client,
   );
   await writeJsonFixture(
     realmUrl,
@@ -604,18 +592,18 @@ async function scenario3(
       priority: 'high',
       order: 1,
     }),
-    fetchOptions,
+    client,
   );
 
   // Write working code + test + spec
   log.info('Writing working card definition, test, and spec...');
-  await writeFixture(realmUrl, 'hello.gts', WORKING_HELLO_GTS, fetchOptions);
-  await writeFixture(realmUrl, 'hello.test.gts', HELLO_TEST_GTS, fetchOptions);
+  await writeFixture(realmUrl, 'hello.gts', WORKING_HELLO_GTS, client);
+  await writeFixture(realmUrl, 'hello.test.gts', HELLO_TEST_GTS, client);
   await writeJsonFixture(
     realmUrl,
     'Spec/hello-card.json',
     buildSpecDocument(),
-    fetchOptions,
+    client,
   );
 
   // Write new enhancement issue
@@ -640,7 +628,7 @@ async function scenario3(
         '- [ ] QUnit tests verify color rendering\n' +
         '- [ ] Existing greeting tests still pass',
     }),
-    fetchOptions,
+    client,
   );
 
   log.info('');
@@ -701,11 +689,6 @@ async function main(): Promise<void> {
   log.info(`Scenario: ${scenario}`);
   log.info(`Debug: ${debug}`);
 
-  // Authenticate
-  let matrixAuth = await matrixLogin();
-  let serverToken = await getRealmServerToken(matrixAuth);
-  log.info('Auth: server token obtained');
-
   let scenarios = scenario === 'all' ? ['1', '2', '3'] : [scenario];
   let results: { name: string; ok: boolean }[] = [];
 
@@ -718,7 +701,6 @@ async function main(): Promise<void> {
     log.info(`--- Creating realm: ${realmEndpoint} ---`);
     await BoxelCLIClient.ensureProfile({ realmServerUrl });
     try {
-      let client = new BoxelCLIClient();
       let createResult = await client.createRealm({
         realmName: realmEndpoint,
         displayName: realmDisplayName,
@@ -737,10 +719,6 @@ async function main(): Promise<void> {
       continue;
     }
 
-    // Get realm-scoped auth
-    let realmAuth = await getRealmScopedAuth(realmServerUrl, serverToken);
-    let authorization = realmAuth.tokens[targetRealmUrl] ?? serverToken;
-    let fetchOptions = { authorization, fetch: globalThis.fetch };
     let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealmUrl);
 
     let ok: boolean;
@@ -750,7 +728,7 @@ async function main(): Promise<void> {
         darkfactoryModuleUrl,
         briefUrl,
         debug,
-        fetchOptions,
+        client,
       );
     } else if (s === '2') {
       ok = await scenario2(
@@ -758,7 +736,7 @@ async function main(): Promise<void> {
         darkfactoryModuleUrl,
         briefUrl,
         debug,
-        fetchOptions,
+        client,
       );
     } else if (s === '3') {
       ok = await scenario3(
@@ -766,7 +744,7 @@ async function main(): Promise<void> {
         darkfactoryModuleUrl,
         briefUrl,
         debug,
-        fetchOptions,
+        client,
       );
     } else {
       log.error(`Unknown scenario: ${s}. Use 1, 2, 3, or all.`);

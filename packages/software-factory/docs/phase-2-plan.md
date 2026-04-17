@@ -181,7 +181,7 @@ The host command uses `store.__dangerousCreateFromSerialized(...)` — a public 
 
 Eval and instantiate validation errors carry line/column references that point to **transpiled** module output, not the `.gts` source the agent wrote. The realm server compiles `.gts` to JS before executing modules in the prerenderer sandbox, and the runtime error frames reference the compiled output. For example, a CSS-comment bug in the source often surfaces as `" is not a valid character within attribute names: (error occurred in '/.../sticky-note.gts' @ line 66 : column 32)` — line 66 points inside a `precompileTemplate(...)` block in the transpiled module, not line 66 of the source.
 
-The agent has a `fetch_transpiled_module` factory tool that GETs the module URL with `Accept: */*` (compared to `read_file` which uses `application/vnd.card+source` for the raw `.gts`). The underlying function is `readTranspiledModule()` in `src/realm-operations.ts` — it returns the compiled JS as text, and the realm accepts the path with or without the `.gts` extension. The `software-factory-operations` skill teaches the agent to recognize line/column references in eval/instantiate failures and reach for this tool when debugging. The agent still edits the `.gts` source — the transpiled output is regenerated on every write.
+The agent has a `fetch_transpiled_module` factory tool that GETs the module URL with `Accept: */*` (compared to `read_file` which uses `application/vnd.card+source` for the raw `.gts`). The underlying call is `BoxelCLIClient.readTranspiled(realmUrl, path)` in `packages/boxel-cli` — it returns the compiled JS as text, and the realm accepts the path with or without the `.gts` extension. The `software-factory-operations` skill teaches the agent to recognize line/column references in eval/instantiate failures and reach for this tool when debugging. The agent still edits the `.gts` source — the transpiled output is regenerated on every write.
 
 **Rationale:** This path was chosen over source-map correlation or rewriting prerenderer error messages in the validation pipeline. Keeping the validation steps untouched and pushing the debugging affordance to the agent's toolbelt + skill is simpler, scoped to the agent's workflow, and avoids coupling the validator to transpiler internals.
 
@@ -784,6 +784,69 @@ let allManifests = [...SCRIPT_TOOLS, ...BOXEL_CLI_TOOLS, ...REALM_API_TOOLS];
 ```
 
 `BOXEL_CLI_TOOLS` (`boxel-sync`, `boxel-push`, `boxel-pull`, `boxel-status`, `boxel-create`, `boxel-history`) become available to the agent. The factory-level wrapper tools (`write_file`, `read_file`, `search_realm`) can be retired or kept as convenience aliases that delegate to the filesystem + sync.
+
+### Target-Realm I/O Migrates to Local Filesystem
+
+CS-10642 landed the auth-lifecycle migration: the factory no longer manages JWTs and calls the realm through `BoxelCLIClient` instead of raw fetch. It did **not** change _where_ target-realm reads and writes go — they still round-trip over HTTP via `client.read` / `client.write` / `client.delete`. That is the next step.
+
+**Principle:** the target realm is a synced local workspace. Any code that currently does `client.read(targetRealmUrl, …)` or `client.write(targetRealmUrl, …)` against the _target realm_ is replaced by local filesystem operations. Push/pull synchronization (`client.pull`, `client.sync`) is the only path data takes between the local workspace and the target realm.
+
+Operations that do **not** change:
+
+- **Structured search** (`client.search`) is a realm-index query, not a file op. The issue scheduler and instantiate step still need it — an alternative local index would be out of scope. For the target realm, search reads stay as `client.search`.
+- **Server-scoped operations** (`client.runCommand`, `client.lint`, `client.waitForReady`, `client.waitForFile`, `client.atomicOperation`, `client.cancelAllIndexingJobs`) target the realm server or host commands, not target-realm files. They stay.
+- **Source realm / factory realm I/O** (brief loading, darkfactory schema fetches via `_run-command`) is not the target realm. It stays as `client.*`.
+
+**Workspace lifecycle:**
+
+1. At factory start (after `bootstrapFactoryTargetRealm`), pull the target realm into a workspace directory: `await client.pull(targetRealmUrl, workspaceDir, { delete: true })`. This gives the agent a mirror of the realm on disk.
+2. The agent and all factory modules read/write files under `workspaceDir` using `fs` / `fs.promises` — no `client.read` / `client.write` for target-realm paths.
+3. After each inner-loop iteration (agent turn) and at the end of each outer-loop cycle, push: `await client.sync(workspaceDir, { preferLocal: true })`. This uploads agent-authored files and validation artifacts in one batch, and propagates deletions in both directions.
+4. On factory exit, optionally leave the workspace in place so humans can inspect it, or clean it up per the workspace lifecycle policy (see open question below).
+
+**Call sites to convert (target realm only):**
+
+| File                                                                                                    | Current call                                                           | After                                                                                                            |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `factory-tool-builder.ts` — `write_file`                                                                | `client.write(targetRealmUrl, path, content)`                          | `fs.writeFile(join(workspaceDir, path), content)`                                                                |
+| `factory-tool-builder.ts` — `read_file`                                                                 | `client.read(targetRealmUrl, path)`                                    | `fs.readFile(join(workspaceDir, path))`                                                                          |
+| `factory-tool-builder.ts` — `update_project`, `update_issue`, `create_knowledge`, `create_catalog_spec` | read-patch-write via `client.read` + `client.write`                    | same pattern but on local files                                                                                  |
+| `factory-tool-builder.ts` — `add_comment`                                                               | `addCommentToIssue(client, …)` → `client.read` + `client.write`        | `addCommentToIssue(workspaceDir, …)` that operates on local files                                                |
+| `factory-tool-executor.ts` — `realm-read` / `realm-write` / `realm-delete` tools                        | `client.read` / `client.write` / `client.delete`                       | local fs or retire the tool (LLM uses native file I/O)                                                           |
+| `factory-seed.ts` — `createSeedIssue`                                                                   | `client.read` + `client.write` + `client.waitForFile`                  | `fs.access` + `fs.writeFile`; post-sync `waitForFile` is unnecessary because the file exists locally immediately |
+| `issue-scheduler.ts` — `updateIssue`, `updateProjectStatus`, `addComment`                               | `client.read` + `client.write`                                         | local file read-patch-write; sync pushes updated status back to the realm                                        |
+| `issue-scheduler.ts` — `listIssues`, `refreshIssue` (search queries)                                    | `client.search`                                                        | **unchanged** (index query, see principle above)                                                                 |
+| `realm-issue-relationship-loader.ts` — `loadProject`, `loadKnowledge`                                   | `client.read`                                                          | `fs.readFile` from workspace                                                                                     |
+| `realm-operations.ts` — `addCommentToIssue`, `getNextValidationSequenceNumber`                          | `client.read` + `client.write`; `client.search`                        | comments move to local fs; sequence-number search stays                                                          |
+| `test-run-cards.ts`, `lint-result-cards.ts`, `eval-result-cards.ts`, `instantiate-result-cards.ts`      | `client.read` + `client.write` for TestRun/Lint/Eval/Instantiate cards | write/read validation artifacts locally; the next sync push propagates them to the realm                         |
+| `validators/test-step.ts` — reads TestRun card back                                                     | `client.read`                                                          | local `fs.readFile` from workspace                                                                               |
+| `validators/lint-step.ts` — reads source file content                                                   | `client.read`                                                          | local `fs.readFile`                                                                                              |
+| `validators/instantiate-step.ts` — reads Spec example cards                                             | `client.read`                                                          | local `fs.readFile`                                                                                              |
+
+**Sync interleaving with validation:**
+
+The validation pipeline runs after each agent turn. The sync has to interleave carefully with validation because some checks (the prerenderer-backed `eval` and `instantiate` steps) need the realm to reflect the agent's latest writes before they run:
+
+1. Agent turn ends.
+2. `client.sync(workspaceDir, { preferLocal: true })` — push the agent's local writes to the realm so the prerenderer sees them.
+3. Validation pipeline runs. Test artifact cards (TestRun, LintResult, EvalResult, InstantiateResult) are written locally as validation proceeds.
+4. Second `client.sync(workspaceDir, { preferLocal: true })` — push the artifact cards back to the realm so humans/agents can browse them in the Boxel UI.
+
+Steps 2 and 4 can collapse to a single sync if validation artifacts are written before the prerenderer runs, but the two-phase version keeps the contract explicit: the realm is always consistent at validation boundaries.
+
+**What this means for `realm-operations.ts`:**
+
+After target-realm I/O moves to the filesystem, `realm-operations.ts` shrinks further:
+
+- `addCommentToIssue(client, …)` → becomes `addCommentToIssue(workspaceDir, …)` operating on local files
+- `getNextValidationSequenceNumber(client, …)` → stays (it's a search query)
+- `ensureJsonExtension` → unchanged
+- `pullRealmFiles` → deleted; callers use `client.pull` directly
+
+**Out of scope for this migration:**
+
+- Replacing `client.search` with a local FS index walk. The realm's indexed search (filter by type, sort by sequenceNumber, etc.) has no equivalent in pure file operations. A local query engine is future work.
+- Replacing `client.runCommand` / `client.lint`. These are server-side host command invocations, not file I/O.
 
 #### Skill Re-enablement and Alignment (CS-10613)
 

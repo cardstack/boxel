@@ -2,9 +2,9 @@ import { resolve } from 'node:path';
 
 import { expect, test } from './fixtures';
 
-import { readFile, writeFile, waitForRealmFile } from '../src/realm-operations';
 import { EvalValidationStep } from '../src/validators/eval-step';
 import type { EvalValidationDetails } from '../src/validators/eval-step';
+import { buildTestClient } from './helpers/test-client';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -54,57 +54,66 @@ test.describe('eval-validation e2e', () => {
     let serverToken = `Bearer ${realm.serverToken}`;
     let evalResultsModuleUrl = `${realmServerUrl}software-factory/eval-result`;
 
-    // Write a valid module
-    let writeResult = await writeFile(
+    let { client, cleanup } = buildTestClient({
       realmUrl,
-      'valid-card.gts',
-      VALID_MODULE_GTS,
-      { authorization },
-    );
-    expect(writeResult.ok).toBe(true);
-
-    let indexed = await waitForRealmFile(realmUrl, 'valid-card.gts', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
-    });
-    expect(indexed).toBe(true);
-
-    let step = new EvalValidationStep({
-      authorization,
-      serverToken,
-      fetch: globalThis.fetch,
+      realmToken: authorization,
       realmServerUrl,
-      evalResultsModuleUrl,
-      issueId: 'Issues/eval-e2e',
+      realmServerToken: serverToken,
     });
 
-    let result = await step.run(realmUrl);
+    try {
+      // Write a valid module
+      let writeResult = await client.write(
+        realmUrl,
+        'valid-card.gts',
+        VALID_MODULE_GTS,
+      );
+      expect(writeResult.ok).toBe(true);
 
-    // Must pass — valid modules with correct imports
-    expect(result.step).toBe('evaluate');
-    expect(result.passed).toBe(true);
-    expect(result.files).toBeTruthy();
-    expect(result.files!.length).toBeGreaterThan(0);
-    expect(result.files).not.toContain('hello.test.gts');
+      let indexed = await client.waitForFile(realmUrl, 'valid-card.gts', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
+      expect(indexed).toBe(true);
 
-    let details = result.details as unknown as EvalValidationDetails;
-    expect(details).toBeTruthy();
-    expect(details.evalResultId).toContain('Validations/eval_eval-e2e');
-    expect(details.modulesChecked).toBeGreaterThan(0);
-    expect(details.modulesWithErrors).toBe(0);
+      let step = new EvalValidationStep({
+        client,
+        realmServerUrl,
+        evalResultsModuleUrl,
+        issueId: 'Issues/eval-e2e',
+      });
 
-    // Read back the EvalResult card to verify persistence
-    let cardRead = await readFile(realmUrl, details.evalResultId, {
-      authorization,
-    });
-    expect(cardRead.ok).toBe(true);
+      let result = await step.run(realmUrl);
 
-    let attrs = cardRead.document?.data.attributes;
-    expect(attrs).toBeTruthy();
-    expect(attrs?.status).toBe('passed');
-    expect(attrs?.sequenceNumber).toBe(1);
-    expect(attrs?.completedAt).toBeTruthy();
+      // Must pass — valid modules with correct imports
+      expect(result.step).toBe('evaluate');
+      expect(result.passed).toBe(true);
+      expect(result.files).toBeTruthy();
+      expect(result.files!.length).toBeGreaterThan(0);
+      expect(result.files).not.toContain('hello.test.gts');
+
+      let details = result.details as unknown as EvalValidationDetails;
+      expect(details).toBeTruthy();
+      expect(details.evalResultId).toContain('Validations/eval_eval-e2e');
+      expect(details.modulesChecked).toBeGreaterThan(0);
+      expect(details.modulesWithErrors).toBe(0);
+
+      // Read back the EvalResult card to verify persistence
+      let cardRead = await client.read(realmUrl, details.evalResultId);
+      expect(cardRead.ok).toBe(true);
+
+      let attrs = (
+        cardRead.document as unknown as {
+          data?: { attributes?: Record<string, unknown> };
+        }
+      )?.data?.attributes;
+      expect(attrs).toBeTruthy();
+      expect(attrs?.status).toBe('passed');
+      expect(attrs?.sequenceNumber).toBe(1);
+      expect(attrs?.completedAt).toBeTruthy();
+    } finally {
+      cleanup();
+    }
   });
 
   test('EvalValidationStep e2e: module with broken import fails evaluation', async ({
@@ -116,63 +125,72 @@ test.describe('eval-validation e2e', () => {
     let serverToken = `Bearer ${realm.serverToken}`;
     let evalResultsModuleUrl = `${realmServerUrl}software-factory/eval-result`;
 
-    // Write a module with a broken relative import that is consumed as a field
-    // type. The import must be consumed — unused imports get tree-shaken by the
-    // compiler and the Loader never sees them (lint catches unused imports).
-    let writeResult = await writeFile(
+    let { client, cleanup } = buildTestClient({
       realmUrl,
-      'broken-module.gts',
-      BROKEN_MODULE_GTS,
-      { authorization },
-    );
-    expect(writeResult.ok).toBe(true);
-
-    let indexed = await waitForRealmFile(realmUrl, 'broken-module.gts', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
-    });
-    expect(indexed).toBe(true);
-
-    let step = new EvalValidationStep({
-      authorization,
-      serverToken,
-      fetch: globalThis.fetch,
+      realmToken: authorization,
       realmServerUrl,
-      evalResultsModuleUrl,
-      issueId: 'Issues/eval-fail-e2e',
+      realmServerToken: serverToken,
     });
 
-    let result = await step.run(realmUrl);
+    try {
+      // Write a module with a broken relative import that is consumed as a field
+      // type. The import must be consumed — unused imports get tree-shaken by the
+      // compiler and the Loader never sees them (lint catches unused imports).
+      let writeResult = await client.write(
+        realmUrl,
+        'broken-module.gts',
+        BROKEN_MODULE_GTS,
+      );
+      expect(writeResult.ok).toBe(true);
 
-    // Must fail — broken-module.gts imports from a non-existent module
-    expect(result.step).toBe('evaluate');
-    expect(result.passed).toBe(false);
-    expect(result.errors.length).toBeGreaterThan(0);
+      let indexed = await client.waitForFile(realmUrl, 'broken-module.gts', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
+      expect(indexed).toBe(true);
 
-    let details = result.details as unknown as EvalValidationDetails;
-    expect(details).toBeTruthy();
-    expect(details.modulesWithErrors).toBeGreaterThan(0);
+      let step = new EvalValidationStep({
+        client,
+        realmServerUrl,
+        evalResultsModuleUrl,
+        issueId: 'Issues/eval-fail-e2e',
+      });
 
-    let brokenModule = details.modules.find((m) =>
-      m.path.includes('broken-module'),
-    );
-    expect(brokenModule).toBeTruthy();
-    expect(brokenModule!.error).toBeTruthy();
-    // The error should be a real eval failure from the sandbox, not infrastructure
-    expect(brokenModule!.error).not.toContain('unable to fetch');
-    expect(brokenModule!.error).not.toContain('Command runner failed');
-    expect(brokenModule!.error).not.toContain('Missing Authorization');
+      let result = await step.run(realmUrl);
 
-    // Read back the EvalResult card to verify it was persisted as failed
-    let cardRead = await readFile(realmUrl, details.evalResultId, {
-      authorization,
-    });
-    expect(cardRead.ok).toBe(true);
+      // Must fail — broken-module.gts imports from a non-existent module
+      expect(result.step).toBe('evaluate');
+      expect(result.passed).toBe(false);
+      expect(result.errors.length).toBeGreaterThan(0);
 
-    let attrs = cardRead.document?.data.attributes;
-    expect(attrs).toBeTruthy();
-    expect(attrs?.status).toBe('failed');
+      let details = result.details as unknown as EvalValidationDetails;
+      expect(details).toBeTruthy();
+      expect(details.modulesWithErrors).toBeGreaterThan(0);
+
+      let brokenModule = details.modules.find((m) =>
+        m.path.includes('broken-module'),
+      );
+      expect(brokenModule).toBeTruthy();
+      expect(brokenModule!.error).toBeTruthy();
+      // The error should be a real eval failure from the sandbox, not infrastructure
+      expect(brokenModule!.error).not.toContain('unable to fetch');
+      expect(brokenModule!.error).not.toContain('Command runner failed');
+      expect(brokenModule!.error).not.toContain('Missing Authorization');
+
+      // Read back the EvalResult card to verify it was persisted as failed
+      let cardRead = await client.read(realmUrl, details.evalResultId);
+      expect(cardRead.ok).toBe(true);
+
+      let attrs = (
+        cardRead.document as unknown as {
+          data?: { attributes?: Record<string, unknown> };
+        }
+      )?.data?.attributes;
+      expect(attrs).toBeTruthy();
+      expect(attrs?.status).toBe('failed');
+    } finally {
+      cleanup();
+    }
   });
 
   test('EvalValidationStep e2e: test files are excluded', async ({ realm }) => {
@@ -182,23 +200,32 @@ test.describe('eval-validation e2e', () => {
     let serverToken = `Bearer ${realm.serverToken}`;
     let evalResultsModuleUrl = `${realmServerUrl}software-factory/eval-result`;
 
-    let step = new EvalValidationStep({
-      authorization,
-      serverToken,
-      fetch: globalThis.fetch,
+    let { client, cleanup } = buildTestClient({
+      realmUrl,
+      realmToken: authorization,
       realmServerUrl,
-      evalResultsModuleUrl,
-      issueId: 'Issues/eval-exclude-e2e',
+      realmServerToken: serverToken,
     });
 
-    let result = await step.run(realmUrl);
+    try {
+      let step = new EvalValidationStep({
+        client,
+        realmServerUrl,
+        evalResultsModuleUrl,
+        issueId: 'Issues/eval-exclude-e2e',
+      });
 
-    // The fixture realm has hello.gts and hello.test.gts
-    // Only hello.gts (and home.gts) should be evaluated, not hello.test.gts
-    expect(result.step).toBe('evaluate');
-    expect(result.passed).toBe(true);
-    expect(result.files).toBeTruthy();
-    expect(result.files).toContain('hello.gts');
-    expect(result.files).not.toContain('hello.test.gts');
+      let result = await step.run(realmUrl);
+
+      // The fixture realm has hello.gts and hello.test.gts
+      // Only hello.gts (and home.gts) should be evaluated, not hello.test.gts
+      expect(result.step).toBe('evaluate');
+      expect(result.passed).toBe(true);
+      expect(result.files).toBeTruthy();
+      expect(result.files).toContain('hello.gts');
+      expect(result.files).not.toContain('hello.test.gts');
+    } finally {
+      cleanup();
+    }
   });
 });

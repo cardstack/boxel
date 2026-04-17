@@ -7,13 +7,9 @@
  *    - A passing QUnit test (hello.test.gts)
  *    - A deliberately failing QUnit test (hello-fail.test.gts)
  *
- * 2. Runs the full ValidationPipeline via createDefaultPipeline(), which
- *    executes all validation steps (parse, lint, evaluate, instantiate
- *    are NoOp placeholders; test step runs real QUnit tests via Playwright).
+ * 2. Runs the full ValidationPipeline via createDefaultPipeline().
  *
- * 3. Verifies pipeline results: test step fails (deliberately), NoOp steps
- *    pass, detailed failure data is read back from the TestRun card, and
- *    formatForContext() produces LLM-friendly markdown.
+ * 3. Verifies pipeline results.
  *
  * Prerequisites:
  *
@@ -28,9 +24,7 @@ import '../../src/setup-logger';
 
 import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { getRealmServerToken, matrixLogin, parseArgs } from '../../src/boxel';
 import { logger } from '../../src/logger';
-import { getRealmScopedAuth, writeFile } from '../../src/realm-operations';
 import { createDefaultPipeline } from '../../src/validators/validation-pipeline';
 import type { TestValidationDetails } from '../../src/validators/test-step';
 
@@ -80,9 +74,6 @@ const HELLO_SPEC_CARD = {
   },
 };
 
-// The .test.gts files use import.meta.url to resolve the co-located card
-// definition, making them portable across realms.
-
 const HELLO_TEST_GTS = `import { module, test } from 'qunit';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { renderCard } from '@cardstack/host/tests/helpers/render-component';
@@ -121,7 +112,6 @@ export function runTests() {
       let { HelloCard } = await loader.import(cardModuleUrl);
       let card = new HelloCard({ greeting: 'Hello from smoke test' });
       await renderCard(loader, card, 'isolated');
-      // This assertion deliberately fails - the rendered text doesn't match
       assert.dom('[data-test-greeting]').hasText('THIS TEXT DOES NOT EXIST');
     });
   });
@@ -134,9 +124,22 @@ export function runTests() {
 
 let log = logger('smoke-test-realm');
 
+function parseArg(name: string): string | undefined {
+  let argv = process.argv.slice(2);
+  let prefix = `--${name}`;
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === prefix) {
+      return argv[i + 1];
+    }
+    if (argv[i].startsWith(`${prefix}=`)) {
+      return argv[i].slice(prefix.length + 1);
+    }
+  }
+  return undefined;
+}
+
 async function main() {
-  let args = parseArgs(process.argv.slice(2));
-  let targetRealmUrl = (args['target-realm-url'] as string) ?? '';
+  let targetRealmUrl = parseArg('target-realm-url') ?? '';
 
   let client = new BoxelCLIClient();
   let active = client.getActiveProfile();
@@ -168,22 +171,12 @@ async function main() {
   let realmPath = new URL(targetRealmUrl).pathname
     .replace(/^\//, '')
     .replace(/\/$/, '');
-  // The endpoint for _create-realm is just the realm name (not username/realm).
-  // The username is determined from the JWT. Extract just the last segment.
   let realmEndpoint = realmPath.split('/').pop() ?? realmPath;
 
   log.info('=== Factory Test Realm Smoke Test (QUnit) ===\n');
   log.info(`Target realm: ${targetRealmUrl}`);
   log.info(`Realm server: ${realmServerUrl}`);
   log.info(`Test results module: ${testResultsModuleUrl}`);
-
-  // Authenticate via Matrix to get a realm server JWT for realm creation
-  let matrixAuth = await matrixLogin();
-  let serverToken = await getRealmServerToken(matrixAuth);
-  log.info(`Auth: server token obtained\n`);
-
-  let fetchImpl = globalThis.fetch;
-  let authorization: string | undefined = serverToken;
 
   // -------------------------------------------------------------------------
   // Phase 0: Ensure the target realm exists
@@ -195,7 +188,6 @@ async function main() {
   log.info(`  Creating realm: ${realmEndpoint}...`);
   await BoxelCLIClient.ensureProfile({ realmServerUrl });
   try {
-    let client = new BoxelCLIClient();
     let createResult = await client.createRealm({
       realmName: realmEndpoint,
       displayName: realmDisplayName,
@@ -212,29 +204,6 @@ async function main() {
     process.exit(1);
   }
 
-  // Get realm-scoped JWT now that the realm exists
-  log.info('  Authenticating with new realm...');
-  let realmAuth = await getRealmScopedAuth(realmServerUrl, serverToken);
-  if (realmAuth.error) {
-    log.warn(`  Warning: could not get realm-scoped auth: ${realmAuth.error}`);
-  } else {
-    // Find the token for our target realm
-    let realmToken = realmAuth.tokens[targetRealmUrl];
-    if (realmToken) {
-      authorization = realmToken;
-      log.info('  Realm-scoped JWT obtained.\n');
-    } else {
-      log.warn(
-        `  Warning: no token for ${targetRealmUrl} in realm-auth response\n`,
-      );
-    }
-  }
-
-  let fetchOptions = {
-    authorization,
-    fetch: fetchImpl,
-  };
-
   // -------------------------------------------------------------------------
   // Phase 1: Simulate LLM implementation output
   // -------------------------------------------------------------------------
@@ -243,25 +212,21 @@ async function main() {
     '--- Phase 1: Writing LLM implementation output to target realm ---\n',
   );
 
-  // 1. Card definition
   log.info('  Writing hello.gts (HelloCard definition)...');
-  let defResult = await writeFile(
+  let defResult = await client.write(
     targetRealmUrl,
     'hello.gts',
     HELLO_CARD_GTS,
-    fetchOptions,
   );
   log.info(
     defResult.ok ? '  ✓ hello.gts' : `  ✗ hello.gts: ${defResult.error}`,
   );
 
-  // 2. Spec card instance pointing to the card definition
   log.info('  Writing Spec/hello-card.json (Spec card for HelloCard)...');
-  let specCardResult = await writeFile(
+  let specCardResult = await client.write(
     targetRealmUrl,
     'Spec/hello-card.json',
     JSON.stringify(HELLO_SPEC_CARD, null, 2),
-    fetchOptions,
   );
   log.info(
     specCardResult.ok
@@ -269,13 +234,11 @@ async function main() {
       : `  ✗ Spec/hello-card.json: ${specCardResult.error}`,
   );
 
-  // 3. QUnit passing test (imports HelloCard from the realm)
   log.info('  Writing hello.test.gts (QUnit passing test)...');
-  let testResult = await writeFile(
+  let testResult = await client.write(
     targetRealmUrl,
     'hello.test.gts',
     HELLO_TEST_GTS,
-    fetchOptions,
   );
   log.info(
     testResult.ok
@@ -283,15 +246,13 @@ async function main() {
       : `  ✗ hello.test.gts: ${testResult.error}`,
   );
 
-  // 4. QUnit deliberately failing test (imports HelloCard from the realm)
   log.info(
     '  Writing hello-fail.test.gts (QUnit deliberately failing test)...',
   );
-  let failTestResult = await writeFile(
+  let failTestResult = await client.write(
     targetRealmUrl,
     'hello-fail.test.gts',
     HELLO_FAILING_TEST_GTS,
-    fetchOptions,
   );
   log.info(
     failTestResult.ok
@@ -323,13 +284,7 @@ async function main() {
   ).href;
 
   let pipeline = createDefaultPipeline({
-    authorization,
-    // In this smoke test `authorization` starts as the server token (line 198)
-    // and is later narrowed to a realm-scoped JWT for realm API calls. The
-    // pipeline's `serverToken` must remain the original server-scoped token so
-    // that _run-command (prerenderer) calls succeed.
-    serverToken,
-    fetch: fetchImpl,
+    client,
     realmServerUrl,
     hostAppUrl: realmServerUrl,
     testResultsModuleUrl,
@@ -358,7 +313,6 @@ async function main() {
     );
   }
 
-  // Verify pipeline results
   let pipelinePassed = true;
 
   if (validationResults.passed) {
@@ -405,7 +359,6 @@ async function main() {
     pipelinePassed = false;
   }
 
-  // Show formatted context for LLM
   let formatted = pipeline.formatForContext(validationResults);
   log.info('\n  Formatted context for LLM:');
   log.info('  ─────────────────────────');

@@ -6,7 +6,7 @@ import {
   type InstantiateValidationDetails,
   type SpecInfo,
 } from '../src/validators/instantiate-step';
-import type { RealmFetchOptions } from '../src/realm-operations';
+import { createMockClient } from './helpers/mock-client';
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -16,6 +16,7 @@ function makeConfig(
   overrides: Partial<InstantiateValidationStepConfig> = {},
 ): InstantiateValidationStepConfig {
   return {
+    client: createMockClient(),
     realmServerUrl: 'https://example.test/',
     instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
     getNextSequenceNumber: async () => 1,
@@ -25,10 +26,7 @@ function makeConfig(
 
 function makeFetchFilenames(
   filenames: string[],
-): (
-  realmUrl: string,
-  options?: RealmFetchOptions,
-) => Promise<{ filenames: string[]; error?: string }> {
+): (realmUrl: string) => Promise<{ filenames: string[]; error?: string }> {
   return async () => ({ filenames });
 }
 
@@ -49,8 +47,13 @@ module('InstantiateValidationStep', function () {
     // empty-data instantiation.
     let instantiateCardCalled = false;
 
+    // Mock client whose reads always fail — simulates missing linkedExamples.
+    let failingFetch = (async () =>
+      new Response('not found', { status: 404 })) as typeof globalThis.fetch;
+
     let step = new InstantiateValidationStep(
       makeConfig({
+        client: createMockClient({ fetch: failingFetch }),
         fetchFilenames: makeFetchFilenames(['my-card.gts']),
         searchSpecsFn: makeSearchSpecs([
           {

@@ -11,7 +11,7 @@ import {
   validateCardDocumentStructure,
 } from '../src/validators/parse-step';
 import type { ParseErrorData } from '../src/parse-result-cards';
-import type { RealmFetchOptions } from '../src/realm-operations';
+import { createMockClient } from './helpers/mock-client';
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -21,6 +21,7 @@ function makeConfig(
   overrides: Partial<ParseValidationStepConfig> = {},
 ): ParseValidationStepConfig {
   return {
+    client: createMockClient(),
     realmServerUrl: 'https://example.test/',
     parseResultsModuleUrl: 'https://example.test/parse-result',
     getNextSequenceNumber: async () => 1,
@@ -32,19 +33,13 @@ function makeConfig(
 
 function makeFetchFilenames(
   filenames: string[],
-): (
-  realmUrl: string,
-  options?: RealmFetchOptions,
-) => Promise<{ filenames: string[]; error?: string }> {
+): (realmUrl: string) => Promise<{ filenames: string[]; error?: string }> {
   return async () => ({ filenames });
 }
 
 function makeFetchFilenamesError(
   error: string,
-): (
-  realmUrl: string,
-  options?: RealmFetchOptions,
-) => Promise<{ filenames: string[]; error?: string }> {
+): (realmUrl: string) => Promise<{ filenames: string[]; error?: string }> {
   return async () => ({ filenames: [], error });
 }
 
@@ -53,7 +48,6 @@ function makeReadFile(
 ): (
   realmUrl: string,
   path: string,
-  options?: RealmFetchOptions,
 ) => Promise<{ ok: boolean; content?: string; error?: string }> {
   return async (_realmUrl, path) => {
     let content = contents[path];

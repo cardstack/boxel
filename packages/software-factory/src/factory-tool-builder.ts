@@ -7,26 +7,17 @@
  * (realm protection, per-realm JWT auth, logging).
  */
 
-import { logger } from './logger';
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type {
   LooseSingleCardDocument,
   Relationship,
 } from '@cardstack/runtime-common';
 
-import type { ToolResult } from './factory-agent';
 import { buildCardDocument } from './darkfactory-schemas';
 import type { ToolExecutor } from './factory-tool-executor';
 import type { ToolRegistry } from './factory-tool-registry';
-import {
-  writeFile,
-  readFile,
-  readTranspiledModule,
-  searchRealm,
-  runRealmCommand,
-  ensureJsonExtension,
-  addCommentToIssue,
-  type RealmFetchOptions,
-} from './realm-operations';
+import { logger } from './logger';
+import { ensureJsonExtension, addCommentToIssue } from './realm-operations';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -49,14 +40,10 @@ export interface ToolBuilderConfig {
   targetRealmUrl: string;
   /** The darkfactory module URL (lives in the software-factory realm, NOT the target realm). */
   darkfactoryModuleUrl: string;
-  /** Per-realm JWTs obtained via getRealmScopedAuth(). */
-  realmTokens: Record<string, string>;
-  /** Realm server JWT for server-level operations (_create-realm, _realm-auth, _server-session). */
-  serverToken?: string;
+  /** Boxel CLI client — owns all realm auth and API calls. */
+  client: BoxelCLIClient;
   /** Module URL for the TestRun card definition (e.g., `<realmUrl>test-results`). */
   testResultsModuleUrl?: string;
-  /** Fetch implementation (injectable for testing). */
-  fetch?: typeof globalThis.fetch;
   /** Realm server URL. Required — never inferred from realm URLs. */
   realmServerUrl: string;
   /** Host app URL for QUnit test runner. Defaults to realmServerUrl (compat proxy). */
@@ -183,8 +170,7 @@ function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
       let path = args.path as string;
       let content = args.content as string;
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
-      let fetchOptions = buildFetchOptions(config, realmUrl);
-      return writeFile(realmUrl, path, content, fetchOptions);
+      return config.client.write(realmUrl, path, content);
     },
   };
 }
@@ -212,8 +198,7 @@ function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
     execute: async (args) => {
       let path = args.path as string;
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
-      let fetchOptions = buildFetchOptions(config, realmUrl);
-      return readFile(realmUrl, path, fetchOptions);
+      return config.client.read(realmUrl, path);
     },
   };
 }
@@ -231,7 +216,7 @@ function buildFetchTranspiledModuleTool(
         path: {
           type: 'string',
           description:
-            'Realm-relative module path. .gts extension is optional — e.g., "sticky-note.gts" or "sticky-note".',
+            'Realm-relative module path. The .gts extension is optional — the realm accepts either form.',
         },
         realm: {
           type: 'string',
@@ -244,8 +229,7 @@ function buildFetchTranspiledModuleTool(
     execute: async (args) => {
       let path = args.path as string;
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
-      let fetchOptions = buildFetchOptions(config, realmUrl);
-      return readTranspiledModule(realmUrl, path, fetchOptions);
+      return config.client.readTranspiled(realmUrl, path);
     },
   };
 }
@@ -273,8 +257,7 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
     execute: async (args) => {
       let query = args.query as Record<string, unknown>;
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
-      let fetchOptions = buildFetchOptions(config, realmUrl);
-      let result = await searchRealm(realmUrl, query, fetchOptions);
+      let result = await config.client.search(realmUrl, query);
       return result.ok ? { data: result.data } : { error: result.error };
     },
   };
@@ -290,18 +273,18 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
  * avoid clobbering existing cards on transient failures.
  */
 async function readPatchDocument(
+  client: BoxelCLIClient,
   realmUrl: string,
   path: string,
   cardName: string,
   darkfactoryModuleUrl: string,
   attributes: Record<string, unknown>,
   relationships: Record<string, unknown> | undefined,
-  fetchOptions: RealmFetchOptions,
 ): Promise<LooseSingleCardDocument> {
-  let existing = await readFile(realmUrl, path, fetchOptions);
+  let existing = await client.read(realmUrl, path);
 
   if (existing.ok && existing.document) {
-    let doc = existing.document;
+    let doc = existing.document as unknown as LooseSingleCardDocument;
     let existingAttrs = (doc.data.attributes ?? {}) as Record<string, unknown>;
     doc.data.attributes = { ...existingAttrs, ...attributes };
     if (relationships && Object.keys(relationships).length > 0) {
@@ -377,24 +360,18 @@ function buildUpdateProjectTool(config: ToolBuilderConfig): FactoryTool {
         | Record<string, unknown>
         | undefined;
       let realmUrl = config.targetRealmUrl;
-      let fetchOptions = buildFetchOptions(config, realmUrl);
 
       // Read-patch-write: preserve attributes the agent didn't include.
       let doc = await readPatchDocument(
+        config.client,
         realmUrl,
         path,
         'Project',
         config.darkfactoryModuleUrl,
         attributes,
         relationships,
-        fetchOptions,
       );
-      return writeFile(
-        realmUrl,
-        path,
-        JSON.stringify(doc, null, 2),
-        fetchOptions,
-      );
+      return config.client.write(realmUrl, path, JSON.stringify(doc, null, 2));
     },
   };
 }
@@ -431,23 +408,17 @@ function buildUpdateIssueTool(config: ToolBuilderConfig): FactoryTool {
         | Record<string, unknown>
         | undefined;
       let realmUrl = config.targetRealmUrl;
-      let fetchOptions = buildFetchOptions(config, realmUrl);
 
       let doc = await readPatchDocument(
+        config.client,
         realmUrl,
         path,
         'Issue',
         config.darkfactoryModuleUrl,
         attributes,
         relationships,
-        fetchOptions,
       );
-      return writeFile(
-        realmUrl,
-        path,
-        JSON.stringify(doc, null, 2),
-        fetchOptions,
-      );
+      return config.client.write(realmUrl, path, JSON.stringify(doc, null, 2));
     },
   };
 }
@@ -483,9 +454,11 @@ function buildAddCommentTool(config: ToolBuilderConfig): FactoryTool {
       let author = args.author as string;
 
       let realmUrl = config.targetRealmUrl;
-      let fetchOptions = buildFetchOptions(config, realmUrl);
 
-      return addCommentToIssue(realmUrl, path, { body, author }, fetchOptions);
+      return addCommentToIssue(config.client, realmUrl, path, {
+        body,
+        author,
+      });
     },
   };
 }
@@ -507,23 +480,17 @@ function buildCreateKnowledgeTool(config: ToolBuilderConfig): FactoryTool {
         | Record<string, unknown>
         | undefined;
       let realmUrl = config.targetRealmUrl;
-      let fetchOptions = buildFetchOptions(config, realmUrl);
 
       let doc = await readPatchDocument(
+        config.client,
         realmUrl,
         path,
         'KnowledgeArticle',
         config.darkfactoryModuleUrl,
         attributes,
         relationships,
-        fetchOptions,
       );
-      return writeFile(
-        realmUrl,
-        path,
-        JSON.stringify(doc, null, 2),
-        fetchOptions,
-      );
+      return config.client.write(realmUrl, path, JSON.stringify(doc, null, 2));
     },
   };
 }
@@ -547,7 +514,6 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
         | Record<string, unknown>
         | undefined;
       let realmUrl = config.targetRealmUrl;
-      let fetchOptions = buildFetchOptions(config, realmUrl);
       // Spec cards adopt from https://cardstack.com/base/spec, not darkfactory
       let doc: LooseSingleCardDocument = {
         data: {
@@ -566,12 +532,7 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
           [fieldName: string]: Relationship | Relationship[];
         };
       }
-      return writeFile(
-        realmUrl,
-        path,
-        JSON.stringify(doc, null, 2),
-        fetchOptions,
-      );
+      return config.client.write(realmUrl, path, JSON.stringify(doc, null, 2));
     },
   };
 }
@@ -640,21 +601,11 @@ function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
       required: ['command'],
     },
     execute: async (args) => {
-      if (!config.serverToken) {
-        return {
-          status: 'error',
-          error: 'run_command requires serverToken in config',
-        };
-      }
-      return runRealmCommand(
+      return config.client.runCommand(
         config.realmServerUrl,
         config.targetRealmUrl,
         args.command as string,
         args.commandInput as Record<string, unknown> | undefined,
-        {
-          authorization: config.serverToken,
-          fetch: config.fetch,
-        },
       );
     },
   };
@@ -677,7 +628,7 @@ function buildRegisteredTool(
     }[];
   },
   toolExecutor: ToolExecutor,
-  config: ToolBuilderConfig,
+  _config: ToolBuilderConfig,
 ): FactoryTool {
   let properties: Record<string, unknown> = {};
   let required: string[] = [];
@@ -701,27 +652,7 @@ function buildRegisteredTool(
       ...(required.length > 0 ? { required } : {}),
     },
     execute: async (args) => {
-      // For realm-api tools, resolve the correct JWT:
-      // - Tools with realm-server-url (realm-create, realm-server-session,
-      //   realm-auth) use the server JWT
-      // - Tools with realm-url use the per-realm JWT
-      let authorization: string | undefined;
-      if (manifest.category === 'realm-api') {
-        let serverUrl = args['realm-server-url'] as string | undefined;
-        let realmUrl = args['realm-url'] as string | undefined;
-        if (serverUrl) {
-          authorization = config.serverToken;
-        } else if (realmUrl) {
-          authorization = resolveAuthForUrl(config, realmUrl);
-        }
-      }
-
-      let result: ToolResult = await toolExecutor.execute(
-        manifest.name,
-        args,
-        authorization ? { authorization } : undefined,
-      );
-      return result;
+      return toolExecutor.execute(manifest.name, args);
     },
   };
 }
@@ -735,38 +666,4 @@ function resolveRealmUrl(
   _realm: string | undefined,
 ): string {
   return config.targetRealmUrl;
-}
-
-function buildFetchOptions(
-  config: ToolBuilderConfig,
-  realmUrl: string,
-): RealmFetchOptions {
-  return {
-    authorization: resolveAuthForUrl(config, realmUrl),
-    fetch: config.fetch,
-  };
-}
-
-/**
- * Resolve the correct JWT for a realm URL. Tries an exact match in
- * realmTokens first, then tries with trailing slash normalization.
- */
-function resolveAuthForUrl(
-  config: ToolBuilderConfig,
-  url: string,
-): string | undefined {
-  // Exact match
-  if (config.realmTokens[url]) {
-    return config.realmTokens[url];
-  }
-  // Try with/without trailing slash
-  let normalized = url.endsWith('/') ? url : `${url}/`;
-  if (config.realmTokens[normalized]) {
-    return config.realmTokens[normalized];
-  }
-  let withoutSlash = url.endsWith('/') ? url.slice(0, -1) : url;
-  if (config.realmTokens[withoutSlash]) {
-    return config.realmTokens[withoutSlash];
-  }
-  return undefined;
 }

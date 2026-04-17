@@ -2,11 +2,7 @@ import { resolve } from 'node:path';
 
 import { expect, test } from './fixtures';
 
-import {
-  readTranspiledModule,
-  waitForRealmFile,
-  writeFile,
-} from '../src/realm-operations';
+import { buildTestClient } from './helpers/test-client';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -42,52 +38,64 @@ test.use({ realmServerMode: 'isolated' });
 test.describe('transpiled module fetch', () => {
   test('reads transpiled module output via Accept */*', async ({ realm }) => {
     let realmUrl = realm.realmURL.href;
-    let authorization = realm.authorizationHeaders()['Authorization'];
+    let authHeaders = realm.authorizationHeaders();
+    let authorization = authHeaders['Authorization'];
 
-    // Write the source .gts to the realm.
-    let writeResult = await writeFile(
+    let { client, cleanup } = buildTestClient({
       realmUrl,
-      'transpiled-check.gts',
-      SOURCE_GTS,
-      { authorization },
-    );
-    expect(writeResult.ok).toBe(true);
-
-    // Wait for the realm to finish indexing the module.
-    let indexed = await waitForRealmFile(realmUrl, 'transpiled-check.gts', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
+      realmToken: authorization,
+      realmServerUrl: realm.realmServerURL.href,
+      realmServerToken: `Bearer ${realm.serverToken}`,
     });
-    expect(indexed).toBe(true);
 
-    // Fetch the transpiled output using the path WITH the .gts extension.
-    // The realm accepts either form (with or without extension).
-    let withExt = await readTranspiledModule(realmUrl, 'transpiled-check.gts', {
-      authorization,
-    });
-    expect(withExt.ok).toBe(true);
-    expect(withExt.status).toBe(200);
-    expect(withExt.content).toBeTruthy();
-    expect(withExt.content!.length).toBeGreaterThan(0);
+    try {
+      // Write the source .gts to the realm.
+      let writeResult = await client.write(
+        realmUrl,
+        'transpiled-check.gts',
+        SOURCE_GTS,
+      );
+      expect(writeResult.ok).toBe(true);
 
-    // The transpiled output must differ from the literal source — the realm
-    // really compiled the .gts template. We don't pin the exact bytes,
-    // just assert it's been rewritten.
-    expect(withExt.content).not.toBe(SOURCE_GTS);
+      // Wait for the realm to finish indexing the module.
+      let indexed = await client.waitForFile(realmUrl, 'transpiled-check.gts', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
+      expect(indexed).toBe(true);
 
-    // Pin ONE stable transpilation marker that raw .gts never contains.
-    // `setComponentTemplate(` is emitted by the Ember template compiler for
-    // every component that uses <template>, so it's a reliable signal.
-    expect(withExt.content).toContain('setComponentTemplate(');
+      // Fetch the transpiled output using the path WITH the .gts extension.
+      // The realm accepts either form (with or without extension).
+      let withExt = await client.readTranspiled(
+        realmUrl,
+        'transpiled-check.gts',
+      );
+      expect(withExt.ok).toBe(true);
+      expect(withExt.status).toBe(200);
+      expect(withExt.content).toBeTruthy();
+      expect(withExt.content!.length).toBeGreaterThan(0);
 
-    // Also call with the path-WITHOUT-extension variant — the realm
-    // accepts both forms and returns the same transpiled output.
-    let withoutExt = await readTranspiledModule(realmUrl, 'transpiled-check', {
-      authorization,
-    });
-    expect(withoutExt.ok).toBe(true);
-    expect(withoutExt.status).toBe(200);
-    expect(withoutExt.content).toBe(withExt.content);
+      // The transpiled output must differ from the literal source — the realm
+      // really compiled the .gts template. We don't pin the exact bytes,
+      // just assert it's been rewritten.
+      expect(withExt.content).not.toBe(SOURCE_GTS);
+
+      // Pin ONE stable transpilation marker that raw .gts never contains.
+      // `setComponentTemplate(` is emitted by the Ember template compiler for
+      // every component that uses <template>, so it's a reliable signal.
+      expect(withExt.content).toContain('setComponentTemplate(');
+
+      // Also call with the path-WITHOUT-extension variant — the realm
+      // accepts both forms and returns the same transpiled output.
+      let withoutExt = await client.readTranspiled(
+        realmUrl,
+        'transpiled-check',
+      );
+      expect(withoutExt.ok).toBe(true);
+      expect(withoutExt.status).toBe(200);
+      expect(withoutExt.content).toBe(withExt.content);
+    } finally {
+      cleanup();
+    }
   });
 });

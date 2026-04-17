@@ -12,6 +12,7 @@ import {
   resolveTestRun,
   type TestRunAttributes,
 } from '../src/factory-test-realm';
+import { createMockClient } from './helpers/mock-client';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -407,8 +408,7 @@ module('factory-test-realm > createTestRun', function () {
       ['test A', 'test B'],
       {
         ...testRealmOptions,
-        authorization: 'Bearer test-token',
-        fetch: mockFetch,
+        client: createMockClient({ fetch: mockFetch }),
         sequenceNumber: 1,
       },
     );
@@ -426,7 +426,6 @@ module('factory-test-realm > createTestRun', function () {
 
     let headers = capturedInit?.headers as Record<string, string>;
     assert.strictEqual(headers['Content-Type'], SupportedMimeType.CardSource);
-    assert.strictEqual(headers['Authorization'], 'Bearer test-token');
 
     let body = JSON.parse(capturedInit?.body as string);
     assert.strictEqual(body.data.meta.adoptsFrom.name, 'TestRun');
@@ -440,7 +439,7 @@ module('factory-test-realm > createTestRun', function () {
 
     let result = await createTestRun('my-test', ['test A'], {
       ...testRealmOptions,
-      fetch: mockFetch,
+      client: createMockClient({ fetch: mockFetch }),
     });
 
     assert.false(result.created);
@@ -454,7 +453,7 @@ module('factory-test-realm > createTestRun', function () {
 
     let result = await createTestRun('my-test', ['test A'], {
       ...testRealmOptions,
-      fetch: mockFetch,
+      client: createMockClient({ fetch: mockFetch }),
     });
 
     assert.false(result.created);
@@ -517,7 +516,7 @@ module('factory-test-realm > completeTestRun', function () {
     let result = await completeTestRun(
       'Validations/test_define-sticky-note-1',
       attrs,
-      { ...testRealmOptions, fetch: mockFetch },
+      { ...testRealmOptions, client: createMockClient({ fetch: mockFetch }) },
     );
 
     assert.true(result.updated);
@@ -544,7 +543,7 @@ module('factory-test-realm > completeTestRun', function () {
 
     let result = await completeTestRun('Validations/test_missing-1', attrs, {
       ...testRealmOptions,
-      fetch: mockFetch,
+      client: createMockClient({ fetch: mockFetch }),
     });
 
     assert.false(result.updated);
@@ -609,7 +608,7 @@ module('factory-test-realm > resolveTestRun', function () {
       testNames: ['test A'],
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
-      fetch: buildMockSearchFetch([]),
+      client: createMockClient({ fetch: buildMockSearchFetch([]) }),
     });
 
     assert.strictEqual(handle.status, 'running');
@@ -624,13 +623,15 @@ module('factory-test-realm > resolveTestRun', function () {
       testNames: ['test A'],
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
-      fetch: buildMockSearchFetch([
-        {
-          id: 'Validations/test_my-issue-2',
-          status: 'passed',
-          sequenceNumber: 2,
-        },
-      ]),
+      client: createMockClient({
+        fetch: buildMockSearchFetch([
+          {
+            id: 'Validations/test_my-issue-2',
+            status: 'passed',
+            sequenceNumber: 2,
+          },
+        ]),
+      }),
     });
 
     assert.strictEqual(handle.status, 'running');
@@ -645,21 +646,23 @@ module('factory-test-realm > resolveTestRun', function () {
       testNames: ['test A', 'test B'],
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
-      fetch: buildMockSearchFetch([
-        {
-          id: 'Validations/test_my-issue-2',
-          status: 'running',
-          sequenceNumber: 2,
-          moduleResults: [
-            {
-              results: [
-                { testName: 'test A', status: 'passed' },
-                { testName: 'test B', status: 'pending' },
-              ],
-            },
-          ],
-        },
-      ]),
+      client: createMockClient({
+        fetch: buildMockSearchFetch([
+          {
+            id: 'Validations/test_my-issue-2',
+            status: 'running',
+            sequenceNumber: 2,
+            moduleResults: [
+              {
+                results: [
+                  { testName: 'test A', status: 'passed' },
+                  { testName: 'test B', status: 'pending' },
+                ],
+              },
+            ],
+          },
+        ]),
+      }),
     });
 
     assert.strictEqual(handle.status, 'running');
@@ -675,13 +678,15 @@ module('factory-test-realm > resolveTestRun', function () {
       forceNew: true,
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
-      fetch: buildMockSearchFetch([
-        {
-          id: 'Validations/test_my-issue-2',
-          status: 'running',
-          sequenceNumber: 2,
-        },
-      ]),
+      client: createMockClient({
+        fetch: buildMockSearchFetch([
+          {
+            id: 'Validations/test_my-issue-2',
+            status: 'running',
+            sequenceNumber: 2,
+          },
+        ]),
+      }),
     });
 
     assert.strictEqual(handle.status, 'running');
@@ -699,13 +704,15 @@ module('factory-test-realm > resolveTestRun', function () {
       testNames: ['test A'],
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
-      fetch: buildMockSearchFetch([
-        {
-          id: 'Validations/test_my-issue-3',
-          status: 'passed',
-          sequenceNumber: 3,
-        },
-      ]),
+      client: createMockClient({
+        fetch: buildMockSearchFetch([
+          {
+            id: 'Validations/test_my-issue-3',
+            status: 'passed',
+            sequenceNumber: 3,
+          },
+        ]),
+      }),
     });
 
     assert.strictEqual(handle.status, 'running');
@@ -720,13 +727,15 @@ module('factory-test-realm > resolveTestRun', function () {
       testNames: ['test A'],
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
-      fetch: buildMockSearchFetch([
-        {
-          id: 'Validations/test_my-issue-7',
-          status: 'failed',
-          sequenceNumber: 7,
-        },
-      ]),
+      client: createMockClient({
+        fetch: buildMockSearchFetch([
+          {
+            id: 'Validations/test_my-issue-7',
+            status: 'failed',
+            sequenceNumber: 7,
+          },
+        ]),
+      }),
     });
 
     assert.strictEqual(handle.testRunId, 'Validations/test_my-issue-8');
@@ -744,7 +753,7 @@ module('factory-test-realm > resolveTestRun', function () {
       forceNew: true,
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
-      fetch: buildMockSearchFetch([]),
+      client: createMockClient({ fetch: buildMockSearchFetch([]) }),
     });
 
     assert.strictEqual(handle1.testRunId, 'Validations/test_my-issue-1');
@@ -759,13 +768,15 @@ module('factory-test-realm > resolveTestRun', function () {
       forceNew: true,
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
-      fetch: buildMockSearchFetch([
-        {
-          id: 'Validations/test_my-issue-1',
-          status: 'running',
-          sequenceNumber: 1,
-        },
-      ]),
+      client: createMockClient({
+        fetch: buildMockSearchFetch([
+          {
+            id: 'Validations/test_my-issue-1',
+            status: 'running',
+            sequenceNumber: 1,
+          },
+        ]),
+      }),
     });
 
     assert.strictEqual(handle2.testRunId, 'Validations/test_my-issue-2');
@@ -790,7 +801,7 @@ module('factory-test-realm > resolveTestRun', function () {
       forceNew: true,
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
-      fetch: buildMockSearchFetch([]),
+      client: createMockClient({ fetch: buildMockSearchFetch([]) }),
     });
 
     assert.strictEqual(handle1.testRunId, 'Validations/test_my-ticket-1');
@@ -806,7 +817,7 @@ module('factory-test-realm > resolveTestRun', function () {
       lastSequenceNumber: 1,
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
-      fetch: buildMockSearchFetch([]),
+      client: createMockClient({ fetch: buildMockSearchFetch([]) }),
     });
 
     assert.strictEqual(
@@ -825,7 +836,7 @@ module('factory-test-realm > resolveTestRun', function () {
       lastSequenceNumber: 2,
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
-      fetch: buildMockSearchFetch([]),
+      client: createMockClient({ fetch: buildMockSearchFetch([]) }),
     });
 
     assert.strictEqual(

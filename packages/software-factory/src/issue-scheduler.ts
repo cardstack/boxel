@@ -6,20 +6,16 @@
  * is testable with mocks.
  */
 
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+
 import type {
   IssueStatus,
   IssuePriority,
   SchedulableIssue,
 } from './factory-agent-types';
 
-import {
-  searchRealm,
-  readFile,
-  writeFile,
-  ensureJsonExtension,
-  addCommentToIssue,
-  type RealmFetchOptions,
-} from './realm-operations';
+import { ensureJsonExtension, addCommentToIssue } from './realm-operations';
 import { logger } from './logger';
 
 let log = logger('issue-scheduler');
@@ -177,41 +173,36 @@ export class IssueScheduler {
 }
 
 // ---------------------------------------------------------------------------
-// RealmIssueStore — concrete implementation using searchRealm()
+// RealmIssueStore — concrete implementation using BoxelCLIClient
 // ---------------------------------------------------------------------------
 
 /**
- * Loads issues from a Boxel realm using the searchRealm() function
- * from realm-operations.ts.
+ * Loads issues from a Boxel realm via the injected BoxelCLIClient.
  */
 export interface RealmIssueStoreConfig {
   realmUrl: string;
   /** Absolute module URL for the darkfactory module (e.g. from inferDarkfactoryModuleUrl()). */
   darkfactoryModuleUrl: string;
-  options?: RealmFetchOptions;
+  client: BoxelCLIClient;
 }
 
 export class RealmIssueStore implements IssueStore {
   private realmUrl: string;
   private darkfactoryModuleUrl: string;
-  private options: RealmFetchOptions | undefined;
+  private client: BoxelCLIClient;
 
   constructor(config: RealmIssueStoreConfig) {
     this.realmUrl = config.realmUrl;
     this.darkfactoryModuleUrl = config.darkfactoryModuleUrl;
-    this.options = config.options;
+    this.client = config.client;
   }
 
   async listIssues(): Promise<SchedulableIssue[]> {
-    let result = await searchRealm(
-      this.realmUrl,
-      {
-        filter: {
-          type: { module: this.darkfactoryModuleUrl, name: 'Issue' },
-        },
+    let result = await this.client.search(this.realmUrl, {
+      filter: {
+        type: { module: this.darkfactoryModuleUrl, name: 'Issue' },
       },
-      this.options,
-    );
+    });
 
     if (!result.ok) {
       log.warn(
@@ -224,16 +215,12 @@ export class RealmIssueStore implements IssueStore {
   }
 
   async refreshIssue(issueId: string): Promise<SchedulableIssue> {
-    let result = await searchRealm(
-      this.realmUrl,
-      {
-        filter: {
-          type: { module: this.darkfactoryModuleUrl, name: 'Issue' },
-          eq: { id: issueId },
-        },
+    let result = await this.client.search(this.realmUrl, {
+      filter: {
+        type: { module: this.darkfactoryModuleUrl, name: 'Issue' },
+        eq: { id: issueId },
       },
-      this.options,
-    );
+    });
 
     if (!result.ok || !result.data?.length) {
       throw new Error(
@@ -250,10 +237,9 @@ export class RealmIssueStore implements IssueStore {
   ): Promise<void> {
     // Read the source JSON file (not the indexed card, which can have
     // stripped relationships during indexing).
-    let readResult = await readFile(
+    let readResult = await this.client.read(
       this.realmUrl,
       ensureJsonExtension(issueId),
-      this.options,
     );
     if (!readResult.ok || !readResult.document) {
       let reason =
@@ -265,7 +251,7 @@ export class RealmIssueStore implements IssueStore {
       );
     }
 
-    let doc = readResult.document;
+    let doc = readResult.document as unknown as LooseSingleCardDocument;
     let attrs = (doc.data.attributes ?? {}) as Record<string, unknown>;
 
     if (updates.status != null) {
@@ -278,11 +264,10 @@ export class RealmIssueStore implements IssueStore {
 
     doc.data.attributes = attrs;
 
-    let writeResult = await writeFile(
+    let writeResult = await this.client.write(
       this.realmUrl,
       ensureJsonExtension(issueId),
       JSON.stringify(doc, null, 2),
-      this.options,
     );
 
     if (!writeResult.ok) {
@@ -299,10 +284,10 @@ export class RealmIssueStore implements IssueStore {
     comment: { body: string; author: string },
   ): Promise<void> {
     let result = await addCommentToIssue(
+      this.client,
       this.realmUrl,
       issueId,
       comment,
-      this.options,
     );
     if (!result.ok) {
       throw new Error(
@@ -314,16 +299,12 @@ export class RealmIssueStore implements IssueStore {
 
   async updateProjectStatus(projectStatus: string): Promise<void> {
     // We expect exactly one Project card per target realm.
-    let result = await searchRealm(
-      this.realmUrl,
-      {
-        filter: {
-          type: { module: this.darkfactoryModuleUrl, name: 'Project' },
-        },
-        sort: [{ by: 'lastModified', direction: 'desc' as const }],
+    let result = await this.client.search(this.realmUrl, {
+      filter: {
+        type: { module: this.darkfactoryModuleUrl, name: 'Project' },
       },
-      this.options,
-    );
+      sort: [{ by: 'lastModified', direction: 'desc' as const }],
+    });
 
     if (!result.ok || !result.data?.length) {
       log.warn(
@@ -336,10 +317,9 @@ export class RealmIssueStore implements IssueStore {
     // Strip the realm URL prefix to get the relative path
     let relativePath = projectId.replace(this.realmUrl, '');
 
-    let readResult = await readFile(
+    let readResult = await this.client.read(
       this.realmUrl,
       ensureJsonExtension(relativePath),
-      this.options,
     );
     if (!readResult.ok || !readResult.document) {
       log.warn(
@@ -348,17 +328,16 @@ export class RealmIssueStore implements IssueStore {
       return;
     }
 
-    let doc = readResult.document;
+    let doc = readResult.document as unknown as LooseSingleCardDocument;
     let attrs = (doc.data.attributes ?? {}) as Record<string, unknown>;
     attrs.projectStatus = projectStatus;
     attrs.updatedAt = new Date().toISOString();
     doc.data.attributes = attrs;
 
-    let writeResult = await writeFile(
+    let writeResult = await this.client.write(
       this.realmUrl,
       ensureJsonExtension(relativePath),
       JSON.stringify(doc, null, 2),
-      this.options,
     );
 
     if (!writeResult.ok) {

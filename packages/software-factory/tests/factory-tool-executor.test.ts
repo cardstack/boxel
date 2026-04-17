@@ -7,23 +7,27 @@ import {
   ToolExecutor,
   ToolNotFoundError,
   ToolSafetyError,
-  ToolTimeoutError,
   type ToolExecutionLogEntry,
   type ToolExecutorConfig,
 } from '../src/factory-tool-executor';
 import { ToolRegistry } from '../src/factory-tool-registry';
+import { createMockClient } from './helpers/mock-client';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function makeConfig(
-  overrides?: Partial<ToolExecutorConfig>,
+  overrides?: Partial<ToolExecutorConfig> & { fetch?: typeof globalThis.fetch },
 ): ToolExecutorConfig {
+  let { fetch: fetchOverride, client, ...rest } = overrides ?? {};
   return {
     packageRoot: '/fake/software-factory',
     targetRealmUrl: 'https://realms.example.test/user/target/',
-    ...overrides,
+    client:
+      client ??
+      createMockClient(fetchOverride ? { fetch: fetchOverride } : undefined),
+    ...rest,
   };
 }
 
@@ -196,24 +200,6 @@ module('factory-tool-executor > source realm protection', function () {
     }
   });
 
-  test('rejects realm-server-url targeting unknown origin', async function (assert) {
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(registry, makeConfig());
-
-    try {
-      await executor.execute('realm-server-session', {
-        'realm-server-url': 'https://evil.example.test/',
-        'openid-token': 'token',
-      });
-      assert.ok(false, 'should have thrown');
-    } catch (err) {
-      assert.true(err instanceof ToolSafetyError);
-      assert.true(
-        (err as Error).message.includes('not in the allowed origins'),
-      );
-    }
-  });
-
   test('rejects script tool targeting unknown realm URL', async function (assert) {
     let registry = new ToolRegistry();
     let executor = new ToolExecutor(registry, makeConfig());
@@ -369,237 +355,6 @@ module('factory-tool-executor > realm-api execution', function () {
     let error = (result.output as Record<string, unknown>).error as string;
     assert.true(error.startsWith('HTTP 404'));
   });
-
-  test('includes authorization header when configured', async function (assert) {
-    let capturedHeaders: Headers | undefined;
-
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      authorization: 'Bearer test-token-123',
-      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
-        capturedHeaders = new Headers(init?.headers as HeadersInit);
-        return new Response(JSON.stringify({}), {
-          status: 200,
-          headers: { 'Content-Type': SupportedMimeType.JSON },
-        });
-      }) as typeof globalThis.fetch,
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    await executor.execute('realm-read', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      path: 'foo.json',
-    });
-
-    assert.strictEqual(
-      capturedHeaders!.get('Authorization'),
-      'Bearer test-token-123',
-    );
-  });
-
-  test('realm-auth makes POST to _realm-auth', async function (assert) {
-    let capturedUrl: string | undefined;
-    let capturedMethod: string | undefined;
-
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-        capturedUrl = String(input);
-        capturedMethod = init?.method;
-        return new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { 'Content-Type': SupportedMimeType.JSON },
-        });
-      }) as typeof globalThis.fetch,
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    let result = await executor.execute('realm-auth', {
-      'realm-server-url': 'https://realms.example.test/user/target/',
-    });
-
-    assert.strictEqual(capturedMethod, 'POST');
-    assert.true(capturedUrl!.endsWith('_realm-auth'));
-    assert.strictEqual(result.exitCode, 0);
-  });
-
-  test('realm-server-session sends OpenID token and captures Authorization header', async function (assert) {
-    let capturedUrl: string | undefined;
-    let capturedBody: string | undefined;
-
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-        capturedUrl = String(input);
-        capturedBody = typeof init?.body === 'string' ? init.body : undefined;
-        return new Response(null, {
-          status: 201,
-          headers: {
-            'Content-Type': SupportedMimeType.JSON,
-            Authorization: 'Bearer realm-server-jwt-123',
-          },
-        });
-      }) as typeof globalThis.fetch,
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    let result = await executor.execute('realm-server-session', {
-      'realm-server-url': 'https://realms.example.test/user/target/',
-      'openid-token': 'openid-access-token-xyz',
-    });
-
-    assert.true(capturedUrl!.endsWith('_server-session'));
-    let body = JSON.parse(capturedBody!);
-    assert.strictEqual(
-      body.access_token,
-      'openid-access-token-xyz',
-      'sends OpenID token in request body',
-    );
-    assert.strictEqual(result.exitCode, 0);
-    assert.deepEqual(
-      result.output,
-      { token: 'Bearer realm-server-jwt-123' },
-      'captures Authorization header in output',
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Auth header propagation
-// ---------------------------------------------------------------------------
-
-module('factory-tool-executor > auth header propagation', function () {
-  function createHeaderCapturingFetch(): {
-    fetch: typeof globalThis.fetch;
-    getCapturedHeaders: () => Headers | undefined;
-  } {
-    let capturedHeaders: Headers | undefined;
-    return {
-      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
-        capturedHeaders = new Headers(init?.headers as HeadersInit);
-        return new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { 'Content-Type': SupportedMimeType.JSON },
-        });
-      }) as typeof globalThis.fetch,
-      getCapturedHeaders: () => capturedHeaders,
-    };
-  }
-
-  test('realm-read sends realm JWT in Authorization header', async function (assert) {
-    let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(
-      registry,
-      makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
-    );
-
-    await executor.execute('realm-read', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      path: 'Card/foo.json',
-    });
-
-    assert.strictEqual(
-      getCapturedHeaders()!.get('Authorization'),
-      'Bearer realm-jwt-abc',
-    );
-  });
-
-  test('realm-write sends realm JWT in Authorization header', async function (assert) {
-    let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(
-      registry,
-      makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
-    );
-
-    await executor.execute('realm-write', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      path: 'Card/new.gts',
-      content: 'export class NewCard {}',
-    });
-
-    assert.strictEqual(
-      getCapturedHeaders()!.get('Authorization'),
-      'Bearer realm-jwt-abc',
-    );
-  });
-
-  test('realm-delete sends realm JWT in Authorization header', async function (assert) {
-    let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(
-      registry,
-      makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
-    );
-
-    await executor.execute('realm-delete', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      path: 'Card/old.json',
-    });
-
-    assert.strictEqual(
-      getCapturedHeaders()!.get('Authorization'),
-      'Bearer realm-jwt-abc',
-    );
-  });
-
-  test('realm-search sends realm JWT in Authorization header', async function (assert) {
-    let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(
-      registry,
-      makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
-    );
-
-    await executor.execute('realm-search', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      query: '{}',
-    });
-
-    assert.strictEqual(
-      getCapturedHeaders()!.get('Authorization'),
-      'Bearer realm-jwt-abc',
-    );
-  });
-
-  test('realm-auth sends server JWT in Authorization header', async function (assert) {
-    let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(
-      registry,
-      makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
-    );
-
-    await executor.execute('realm-auth', {
-      'realm-server-url': 'https://realms.example.test/user/target/',
-    });
-
-    assert.strictEqual(
-      getCapturedHeaders()!.get('Authorization'),
-      'Bearer realm-jwt-abc',
-    );
-  });
-
-  test('no Authorization header when authorization is not configured', async function (assert) {
-    let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(
-      registry,
-      makeConfig({ fetch }), // no authorization
-    );
-
-    await executor.execute('realm-read', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      path: 'Card/foo.json',
-    });
-
-    assert.strictEqual(
-      getCapturedHeaders()!.get('Authorization'),
-      null,
-      'no Authorization header sent',
-    );
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -694,54 +449,10 @@ module('factory-tool-executor > ToolResult shape', function () {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Timeout behavior
-// ---------------------------------------------------------------------------
-
-module('factory-tool-executor > timeout', function () {
-  test('realm-api call times out with ToolTimeoutError', async function (assert) {
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      timeoutMs: 50,
-      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
-        // Respect the AbortSignal so the timeout mechanism works
-        return new Promise<Response>((resolve, reject) => {
-          let signal = init?.signal;
-          if (signal) {
-            signal.addEventListener('abort', () => {
-              reject(
-                new DOMException('The operation was aborted.', 'AbortError'),
-              );
-            });
-          }
-          // Never resolves on its own within timeout
-          setTimeout(
-            () =>
-              resolve(
-                new Response('{}', {
-                  status: 200,
-                  headers: { 'Content-Type': SupportedMimeType.JSON },
-                }),
-              ),
-            5000,
-          );
-        });
-      }) as typeof globalThis.fetch,
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    try {
-      await executor.execute('realm-read', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'slow.json',
-      });
-      assert.ok(false, 'should have thrown');
-    } catch (err) {
-      assert.true(err instanceof ToolTimeoutError);
-      assert.true((err as Error).message.includes('50ms'));
-    }
-  });
-});
+// Timeout enforcement for realm-api calls is now the client's responsibility
+// (BoxelCLIClient/ProfileManager own the fetch pipeline), so the executor no
+// longer wraps calls in an AbortController. The spawn-based timeout for
+// script and boxel-cli tools is covered elsewhere.
 
 // ---------------------------------------------------------------------------
 // Helpers

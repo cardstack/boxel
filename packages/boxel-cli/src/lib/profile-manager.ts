@@ -380,7 +380,7 @@ export class ProfileManager {
     }
   }
 
-  private async getRealmTokenForUrl(url: string): Promise<string | undefined> {
+  async getRealmTokenForUrl(url: string): Promise<string | undefined> {
     let realmToken = this.findRealmTokenForUrl(url);
     if (realmToken) {
       return realmToken;

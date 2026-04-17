@@ -1,6 +1,5 @@
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-
-import { readFile, writeFile } from './realm-operations';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,8 +26,7 @@ export interface ParseResultAttributes {
 
 export interface ParseResultRealmOptions {
   targetRealmUrl: string;
-  authorization?: string;
-  fetch?: typeof globalThis.fetch;
+  client: BoxelCLIClient;
 }
 
 export interface CreateParseResultOptions {
@@ -59,11 +57,10 @@ export async function createParseResult(
     projectCardUrl: options.projectCardUrl,
   });
 
-  let result = await writeFile(
+  let result = await options.client.write(
     options.targetRealmUrl,
     `${parseResultId}.json`,
     JSON.stringify(document, null, 2),
-    { authorization: options.authorization, fetch: options.fetch },
   );
 
   if (!result.ok) {
@@ -81,15 +78,9 @@ export async function completeParseResult(
   attrs: ParseResultAttributes,
   options: ParseResultRealmOptions & { projectCardUrl?: string },
 ): Promise<{ updated: boolean; error?: string }> {
-  let fetchOptions = {
-    authorization: options.authorization,
-    fetch: options.fetch,
-  };
-
-  let readResult = await readFile(
+  let readResult = await options.client.read(
     options.targetRealmUrl,
     parseResultId,
-    fetchOptions,
   );
 
   if (!readResult.ok || !readResult.document) {
@@ -99,6 +90,7 @@ export async function completeParseResult(
     };
   }
 
+  let document = readResult.document as unknown as LooseSingleCardDocument;
   let completionAttrs: Record<string, unknown> = {
     status: attrs.status,
     completedAt: new Date().toISOString(),
@@ -109,25 +101,24 @@ export async function completeParseResult(
     completionAttrs.errorMessage = attrs.errorMessage;
   }
 
-  readResult.document.data.attributes = {
-    ...readResult.document.data.attributes,
+  document.data.attributes = {
+    ...document.data.attributes,
     ...completionAttrs,
   };
 
   if (options.projectCardUrl) {
     let existingRelationships =
-      (readResult.document.data as Record<string, unknown>).relationships ?? {};
-    (readResult.document.data as Record<string, unknown>).relationships = {
+      (document.data as Record<string, unknown>).relationships ?? {};
+    (document.data as Record<string, unknown>).relationships = {
       ...(existingRelationships as Record<string, unknown>),
       project: { links: { self: options.projectCardUrl } },
     };
   }
 
-  let writeResult = await writeFile(
+  let writeResult = await options.client.write(
     options.targetRealmUrl,
     `${parseResultId}.json`,
-    JSON.stringify(readResult.document, null, 2),
-    fetchOptions,
+    JSON.stringify(document, null, 2),
   );
 
   if (!writeResult.ok) {
