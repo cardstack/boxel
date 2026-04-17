@@ -24,8 +24,8 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import AuthedFetchCommand from './authed-fetch';
 import CreateSpecCommand from './create-specs';
-import GetCatalogRealmUrlsCommand from './get-catalog-realm-urls';
 import GetCardCommand from './get-card';
+import GetCatalogRealmUrlsCommand from './get-catalog-realm-urls';
 import GetRealmOfUrlCommand from './get-realm-of-url';
 import OneShotLlmRequestCommand from './one-shot-llm-request';
 import SanitizeModuleListCommand from './sanitize-module-list';

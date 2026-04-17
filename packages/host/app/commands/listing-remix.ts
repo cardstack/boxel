@@ -12,18 +12,17 @@ import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
 
 import UseAiAssistantCommand from './ai-assistant';
 import ListingInstallCommand from './listing-install';
-import ValidateRealmCommand from './validate-realm';
 import PersistModuleInspectorViewCommand from './persist-module-inspector-view';
 import SwitchSubmodeCommand from './switch-submode';
 import UpdateCodePathWithSelectionCommand from './update-code-path-with-selection';
 import UpdatePlaygroundSelectionCommand from './update-playground-selection';
+import ValidateRealmCommand from './validate-realm';
 
 import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class RemixCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput
 > {
-
   static actionVerb = 'Remix';
 
   description =
@@ -75,12 +74,12 @@ export default class RemixCommand extends HostBaseCommand<
           },
         );
 
-        await new PersistModuleInspectorViewCommand(this.commandContext).execute(
-          {
-            codePath: codePath + '.gts',
-            moduleInspectorView: 'preview',
-          },
-        );
+        await new PersistModuleInspectorViewCommand(
+          this.commandContext,
+        ).execute({
+          codePath: codePath + '.gts',
+          moduleInspectorView: 'preview',
+        });
       }
 
       await new UpdateCodePathWithSelectionCommand(this.commandContext).execute(

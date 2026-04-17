@@ -69,9 +69,7 @@ export default class SanitizeModuleListCommand extends HostBaseCommand<
       }),
     );
 
-    const moduleUrls = results.filter(
-      (dep): dep is string => dep !== null,
-    );
+    const moduleUrls = results.filter((dep): dep is string => dep !== null);
 
     let commandModule = await this.loadCommandModule();
     const { SanitizeModuleListResult } = commandModule;
