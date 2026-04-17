@@ -112,6 +112,33 @@ let { StickyNote } = await loader.import(cardModuleUrl);
 let { StickyNote } = (await loader.import(cardModuleUrl)) as Record<string, any>;
 ```
 
+#### Accessing cardInfo properties in computeVia
+
+The base `CardDef.cardInfo` field is typed as `{}` by default. Accessing properties like `.title` on it causes "Type '{}' is not assignable to type 'string'". Use type casting:
+
+```gts
+// ❌ WRONG — "Type '{}' is not assignable to type 'string'"
+@field title = contains(StringField, {
+  computeVia: function (this: MyCard): string {
+    if (this.cardInfo && this.cardInfo.title) {  // glint error!
+      return this.cardInfo.title;
+    }
+    return 'Default';
+  },
+});
+
+// ✅ CORRECT — cast cardInfo to access properties
+@field title = contains(StringField, {
+  computeVia: function (this: MyCard): string {
+    let info = this.cardInfo as Record<string, unknown> | undefined;
+    if (info?.title && typeof info.title === 'string') {
+      return info.title;
+    }
+    return 'Default';
+  },
+});
+```
+
 #### Explicit types for function parameters
 
 Glint enforces strict mode. Always type function parameters and return values:
@@ -123,6 +150,10 @@ greet = (name) => `Hello, ${name}!`;
 // ✅ CORRECT
 greet = (name: string): string => `Hello, ${name}!`;
 ```
+
+#### Unused imports from Ember shims
+
+If you import from `@ember/helper`, `@ember/modifier`, or `@glimmer/tracking`, only import what you actually use. Glint enforces `noUnusedLocals` in the factory's type checking configuration. Remove unused imports rather than suppressing the error.
 
 ### Common Mistakes
 
