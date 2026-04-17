@@ -1237,7 +1237,7 @@ export default class OperatorModeStateService extends Service {
     this.addItemToStack(stackItem);
 
     let lastOpenedFile = this.recentFilesService.recentFiles.find(
-      (file: RecentFile) => file.realmURL.href === realmUrl,
+      (file: RecentFile) => file.realmURL.href === cardIdToURL(realmUrl).href,
     );
     await this.updateCodePath(
       lastOpenedFile

@@ -1019,18 +1019,21 @@ export class RealmIndexQueryEngine {
             recursiveOpts,
           )) {
             foundLinks = true;
+            if (!includedResource.id) {
+              continue;
+            }
+            const id = includedResource.id;
             let isAlreadyOmitted = omit.some((item) =>
               item
-                ? canonicalURL(item) === canonicalURL(includedResource.id!)
+                ? canonicalURL(item) === canonicalURL(id)
                 : false,
             );
             let isAlreadyIncluded = included.some((r) =>
               r.id
-                ? canonicalURL(r.id) === canonicalURL(includedResource.id!)
+                ? canonicalURL(r.id) === canonicalURL(id)
                 : false,
             );
             if (
-              includedResource.id &&
               !isAlreadyOmitted &&
               !isAlreadyIncluded
             ) {
