@@ -142,12 +142,6 @@ export async function visitFileForIndexingFused({
     ...(clearCache ? { clearCache } : {}),
   };
 
-  // [CS-10759-DEBUG] Temporary diagnostic logs — remove once the fused
-  // visit path is stable. Search for "[CS-10759-DEBUG]" to find and delete.
-  logDebug(
-    `${jobIdentity(jobInfo)} [CS-10759-DEBUG] fused visit requesting url=${url.href} passes={card:${needCardRender},extract:${needFileExtract},render:${needFileRender}} clearCache=${clearCache}`,
-  );
-
   let visitResponse: RenderVisitResponse;
   try {
     visitResponse = await prerenderer.prerenderVisit({
@@ -164,11 +158,6 @@ export async function visitFileForIndexingFused({
     );
     throw err;
   }
-
-  // [CS-10759-DEBUG] remove after stabilization
-  logDebug(
-    `${jobIdentity(jobInfo)} [CS-10759-DEBUG] fused visit response url=${url.href} hasCard=${Boolean(visitResponse.card)} cardHasError=${Boolean(visitResponse.card?.error)} hasExtract=${Boolean(visitResponse.fileExtract)} extractStatus=${visitResponse.fileExtract?.status} hasRender=${Boolean(visitResponse.fileRender)} renderHasError=${Boolean(visitResponse.fileRender?.error)} pageUnusable=${Boolean(visitResponse.pageUnusableError)}`,
-  );
 
   // Route card result when we parsed a card resource. If the composite
   // short-circuited (page-unusable/auth), visitResponse.card may be missing.
@@ -200,10 +189,6 @@ export async function visitFileForIndexingFused({
           },
         },
       };
-    // [CS-10759-DEBUG] remove after stabilization
-    logDebug(
-      `${jobIdentity(jobInfo)} [CS-10759-DEBUG] routing to indexCardWithResult url=${url.href}`,
-    );
     await indexCardWithResult({
       path: localPath,
       lastModified,
@@ -213,10 +198,6 @@ export async function visitFileForIndexingFused({
     });
   }
 
-  // [CS-10759-DEBUG] remove after stabilization
-  logDebug(
-    `${jobIdentity(jobInfo)} [CS-10759-DEBUG] routing to indexFileWithResults url=${url.href}`,
-  );
   // Route file extract + file render to the file indexer. The file indexer's
   // existing error-path handling runs even if extractResult is missing; that
   // behavior is preserved by passing undefined through.

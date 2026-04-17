@@ -590,15 +590,6 @@ export default class CardPrerender extends Component {
         cardRender: Boolean(baseOptions.cardRender),
         fileRender: Boolean(baseOptions.fileRender),
       };
-      // Diagnostic logging while stabilizing fused visit behavior in host
-      // tests (see CS-10759). Intentionally at info level so it surfaces in
-      // browser logs captured by testem.
-      // [CS-10759-DEBUG] Temporary diagnostic logs — remove once the fused
-      // visit path is stable in host/acceptance tests. Search for
-      // "[CS-10759-DEBUG]" to find and delete all instances.
-      console.info(
-        `[CS-10759-DEBUG][prerenderVisit] start url=${url} nonce=${this.#nonce} passes=${JSON.stringify(requested)} shouldClearCache=${shouldClearCache}`,
-      );
       if (shouldClearCache) {
         this.loaderService.resetLoader({
           clearFetchCache: true,
@@ -639,10 +630,6 @@ export default class CardPrerender extends Component {
 
       // ── fileExtract pass ───────────────────────────────────────────────
       if (requested.fileExtract) {
-        // [CS-10759-DEBUG] remove after host-test stabilization
-        console.info(
-          `[CS-10759-DEBUG][prerenderVisit] fileExtract pass start url=${url}`,
-        );
         let passOptions = optionsForPass('fileExtract');
         try {
           let routeInfo = await this.router.recognizeAndLoad(
@@ -653,15 +640,7 @@ export default class CardPrerender extends Component {
           }
           await this.#ensureRenderReady(routeInfo);
           response.fileExtract = routeInfo.attributes as FileExtractResponse;
-          // [CS-10759-DEBUG] remove after host-test stabilization
-          console.info(
-            `[CS-10759-DEBUG][prerenderVisit] fileExtract done url=${url} status=${response.fileExtract?.status}`,
-          );
         } catch (e: any) {
-          // [CS-10759-DEBUG] remove after host-test stabilization
-          console.warn(
-            `[CS-10759-DEBUG][prerenderVisit] fileExtract error url=${url} msg=${e?.message}`,
-          );
           let renderError: RenderError;
           try {
             renderError = {
@@ -704,10 +683,6 @@ export default class CardPrerender extends Component {
         // paths and avoids subtle model/store lifecycle issues from reusing
         // the same nonce across passes with different options.
         this.#nonce++;
-        // [CS-10759-DEBUG] remove after host-test stabilization
-        console.info(
-          `[CS-10759-DEBUG][prerenderVisit] cardRender pass start url=${url} nonce=${this.#nonce}`,
-        );
         let context: CardRenderContext = {
           cardId: url.replace(/\.json$/, ''),
           nonce: String(this.#nonce),
@@ -806,20 +781,12 @@ export default class CardPrerender extends Component {
           iconHTML,
           ...(cardError ? { error: cardError } : {}),
         };
-        // [CS-10759-DEBUG] remove after host-test stabilization
-        console.info(
-          `[CS-10759-DEBUG][prerenderVisit] cardRender done url=${url} hasError=${Boolean(cardError)} hasSerialized=${Boolean(response.card?.serialized)}`,
-        );
       }
 
       // ── fileRender pass ────────────────────────────────────────────────
       if (requested.fileRender) {
-        // [CS-10759-DEBUG] remove after host-test stabilization
         // Bump nonce between passes (see cardRender pass for rationale).
         this.#nonce++;
-        console.info(
-          `[CS-10759-DEBUG][prerenderVisit] fileRender pass start url=${url} nonce=${this.#nonce}`,
-        );
         let effectiveFileData =
           fileData ??
           (response.fileExtract?.resource && baseOptions.fileDefCodeRef
@@ -853,12 +820,6 @@ export default class CardPrerender extends Component {
             fileDefCodeRef: effectiveFileData.fileDefCodeRef,
           };
           (globalThis as any).__boxelFileRenderData = effectiveFileData;
-          // [CS-10759-DEBUG] remove after stabilization — log file-render
-          // inputs so we can correlate with the ref-count error that fires
-          // on entry to this pass.
-          console.info(
-            `[CS-10759-DEBUG][prerenderVisit] fileRender stashed data url=${url} resourceId=${effectiveFileData.resource?.id} fileDefCodeRef=${effectiveFileData.fileDefCodeRef?.module}::${effectiveFileData.fileDefCodeRef?.name} types=${JSON.stringify(effectiveTypes)}`,
-          );
 
           let fileError: RenderError | undefined;
           let isolatedHTML: string | null = null;
@@ -871,19 +832,11 @@ export default class CardPrerender extends Component {
           try {
             let subsequentRenderOptions =
               omitOneTimeOptions(initialRenderOptions);
-            // [CS-10759-DEBUG] remove after stabilization
-            console.info(
-              `[CS-10759-DEBUG][prerenderVisit] fileRender isolated perform starting url=${url}`,
-            );
             isolatedHTML = await this.renderHTML.perform(
               url,
               'isolated',
               0,
               initialRenderOptions,
-            );
-            // [CS-10759-DEBUG] remove after stabilization
-            console.info(
-              `[CS-10759-DEBUG][prerenderVisit] fileRender isolated perform done url=${url} hasHTML=${Boolean(isolatedHTML)}`,
             );
             headHTML = await this.renderHTML.perform(
               url,
