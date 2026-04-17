@@ -112,7 +112,10 @@ export class TestValidationStep implements ValidationStepRunner {
       });
   }
 
-  async run(targetRealmUrl: string): Promise<ValidationStepResult> {
+  async run(
+    targetRealmUrl: string,
+    iteration?: number,
+  ): Promise<ValidationStepResult> {
     // Step 1: Discover .test.gts files in the realm
     let testFiles: string[];
     try {
@@ -160,6 +163,7 @@ export class TestValidationStep implements ValidationStepRunner {
         forceNew: true,
         lastSequenceNumber: this.lastSequenceNumber,
         issueURL,
+        iteration,
       });
 
       if (handle.sequenceNumber != null) {

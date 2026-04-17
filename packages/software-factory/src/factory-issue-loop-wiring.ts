@@ -148,6 +148,10 @@ export async function runFactoryIssueLoop(
     'software-factory/instantiate-result',
     realmServerUrl,
   ).href;
+  let parseResultsModuleUrl = new URL(
+    'software-factory/parse-result',
+    realmServerUrl,
+  ).href;
   let hostAppUrl = config.hostAppUrl ?? realmServerUrl;
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealmUrl,
@@ -186,6 +190,7 @@ export async function runFactoryIssueLoop(
       lintResultsModuleUrl,
       evalResultsModuleUrl,
       instantiateResultsModuleUrl,
+      parseResultsModuleUrl,
       issueId,
       fetchFilenames: (realmUrl: string) => client.listFiles(realmUrl),
     });

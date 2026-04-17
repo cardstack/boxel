@@ -149,4 +149,10 @@ export interface ExecuteTestRunOptions {
    * number here guarantees the new TestRun gets at least lastSequenceNumber + 1.
    */
   lastSequenceNumber?: number;
+  /**
+   * When provided, use this value directly as the sequence number instead of
+   * computing one via getNextValidationSequenceNumber. Used by the validation
+   * pipeline to ensure all steps in an iteration share the same sequence number.
+   */
+  iteration?: number;
 }
