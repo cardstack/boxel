@@ -144,10 +144,6 @@ export function registerServiceWithTraefik(
   );
 }
 
-export function registerSynapseWithTraefik(hostPort: number): void {
-  registerServiceWithTraefik('matrix', hostPort);
-}
-
 export function deregisterServiceFromTraefik(serviceName: string): void {
   if (!isEnvironmentMode()) {
     return;
