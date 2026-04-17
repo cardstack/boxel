@@ -267,8 +267,7 @@ export async function startServer({
     : parseInt(process.env.MATRIX_TEST_REALM_PORT || '4205', 10);
   let realmPort = await findAvailablePort(preferredRealmPort);
 
-  let publishedDomain =
-    process.env.MATRIX_TEST_PUBLISHED_DOMAIN || realmDomain;
+  let publishedDomain = realmDomain;
 
   // Register with Traefik BEFORE spawning processes so the worker can
   // reach the realm server via the Traefik hostname from the start.

@@ -77,7 +77,7 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   export MATRIX_TEST_REALM_URL="http://realm-matrix-test.${ENV_SLUG}.localhost"
   export MATRIX_TEST_REALM_PORT=0
   export MATRIX_TEST_WORKER_PORT=0
-  export MATRIX_TEST_PUBLISHED_DOMAIN="realm-matrix-test.${ENV_SLUG}.localhost"
+
   export SMTP_URL="http://smtp.${ENV_SLUG}.localhost"
   export SMTP_PORT=0
 else
@@ -121,7 +121,6 @@ else
     export MATRIX_TEST_REALM_URL="http://localhost:4205"
     export MATRIX_TEST_REALM_PORT=4205
     export MATRIX_TEST_WORKER_PORT=4232
-    export MATRIX_TEST_PUBLISHED_DOMAIN="localhost:4205"
     export SMTP_URL="http://localhost:5001"
     export SMTP_PORT=5001
   else
@@ -159,7 +158,6 @@ else
     export MATRIX_TEST_REALM_URL="${MATRIX_TEST_REALM_URL:-http://localhost:4205}"
     export MATRIX_TEST_REALM_PORT="${MATRIX_TEST_REALM_PORT:-4205}"
     export MATRIX_TEST_WORKER_PORT="${MATRIX_TEST_WORKER_PORT:-4232}"
-    export MATRIX_TEST_PUBLISHED_DOMAIN="${MATRIX_TEST_PUBLISHED_DOMAIN:-localhost:4205}"
     export SMTP_URL="${SMTP_URL:-http://localhost:5001}"
     export SMTP_PORT="${SMTP_PORT:-5001}"
   fi
