@@ -1,5 +1,36 @@
 ### Template Essentials
 
+#### ⚠️ CRITICAL: Strict Mode — Import Every Helper and Modifier
+
+Boxel `.gts` templates run in **strict mode**. Every helper, modifier, and component used in a `<template>` tag must be explicitly imported at the top of the file. Unlike loose-mode Ember templates, there are no globals — if it's not imported, you get "Attempted to resolve a helper in a strict mode template, but that value was not in scope."
+
+```gts
+// ❌ WRONG — "eq" is not in scope
+<template>
+  {{#if (eq @model.status 'active')}}Active{{/if}}
+</template>
+
+// ✅ CORRECT — import every helper you use
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+
+// Now these are in scope for the template:
+<template>
+  {{#if (eq @model.status 'active')}}Active{{/if}}
+  <button {{on 'click' (fn this.handleClick @model.id)}}>Click</button>
+</template>
+```
+
+**Common helper imports:**
+
+| Helper/Modifier | Import from |
+|---|---|
+| `eq`, `not`, `or`, `and`, `gt`, `lt`, `subtract`, `add` | `@cardstack/boxel-ui/helpers` |
+| `fn`, `get`, `concat`, `array`, `hash` | `@ember/helper` |
+| `on` | `@ember/modifier` |
+| `tracked` | `@glimmer/tracking` |
+
 **Field access patterns:**
 
 ```hbs
