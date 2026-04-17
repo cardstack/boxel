@@ -58,7 +58,7 @@ export function createBoxelRealmFetch(
   let profile =
     options && 'profile' in options
       ? (options.profile ?? undefined)
-      : getOptionalActiveProfile(resourceUrl);
+      : getOptionalActiveProfile();
 
   if (!profile || !sharesOrigin(resourceUrl, profile.realmServerUrl)) {
     return fetchImpl;
@@ -96,15 +96,7 @@ export function createBoxelRealmFetch(
   };
 }
 
-function getOptionalActiveProfile(
-  resourceUrl: string,
-): ActiveBoxelProfile | undefined {
-  let envProfile = buildEnvProfile(resourceUrl);
-
-  if (envProfile) {
-    return envProfile;
-  }
-
+function getOptionalActiveProfile(): ActiveBoxelProfile | undefined {
   let config = parseProfilesConfig();
 
   if (config.activeProfile && config.profiles[config.activeProfile]) {
@@ -140,7 +132,7 @@ function parseProfilesConfig(): BoxelProfilesConfig {
     throw new Error(
       `Failed to parse Boxel profiles config at ${profilesFile}: ${
         error instanceof Error ? error.message : String(error)
-      }. Fix or remove the file, or provide auth via environment variables.`,
+      }. Fix or remove the file.`,
     );
   }
 }
@@ -185,34 +177,6 @@ function normalizeProfileUrl(value: string, label: string): string {
       `Invalid ${label} in Boxel auth configuration: "${value}". Expected an absolute URL.`,
     );
   }
-}
-
-function buildEnvProfile(resourceUrl: string): ActiveBoxelProfile | undefined {
-  let matrixUrl = normalizeOptionalString(process.env.MATRIX_URL);
-  let username = normalizeOptionalString(process.env.MATRIX_USERNAME);
-  let password = normalizeOptionalString(process.env.MATRIX_PASSWORD);
-  let realmServerUrl = normalizeOptionalString(process.env.REALM_SERVER_URL);
-
-  if (!matrixUrl) {
-    return undefined;
-  }
-
-  let normalizedMatrixUrl = normalizeProfileUrl(matrixUrl, 'MATRIX_URL');
-  let normalizedRealmServerUrl = realmServerUrl
-    ? normalizeProfileUrl(realmServerUrl, 'REALM_SERVER_URL')
-    : normalizeProfileUrl(new URL('/', resourceUrl).href, 'resourceUrl origin');
-
-  if (!username || !password) {
-    return undefined;
-  }
-
-  return {
-    profileId: null,
-    username: getMatrixUsername(username),
-    matrixUrl: normalizedMatrixUrl,
-    realmServerUrl: normalizedRealmServerUrl,
-    password,
-  };
 }
 
 function normalizeOptionalString(

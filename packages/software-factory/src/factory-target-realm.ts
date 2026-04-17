@@ -39,6 +39,21 @@ export function resolveFactoryTargetRealm(
   let serverUrl = resolveRealmServerUrl(options.realmServerUrl, url);
   let ownerUsername = resolveTargetRealmOwner();
 
+  let targetOrigin = new URL(url).origin;
+  let serverOrigin = new URL(serverUrl).origin;
+  if (targetOrigin !== serverOrigin) {
+    let client = new BoxelCLIClient();
+    let active = client.getActiveProfile();
+    let profileLabel = active
+      ? `Your active Boxel profile "${active.matrixId}" points to ${ensureTrailingSlash(active.realmServerUrl)}.`
+      : 'No active Boxel profile is configured.';
+    throw new FactoryEntrypointUsageError(
+      `Target realm URL "${url}" (origin: ${targetOrigin}) does not match the realm server "${serverUrl}" (origin: ${serverOrigin}).\n` +
+        `${profileLabel}\n` +
+        `Either switch to a profile that matches the target realm (boxel profile switch), or pass --realm-server-url explicitly.`,
+    );
+  }
+
   return {
     url,
     serverUrl,
@@ -73,13 +88,13 @@ async function createRealm(
     let activeServerUrl = ensureTrailingSlash(active.realmServerUrl);
     if (activeServerUrl !== resolution.serverUrl) {
       throw new FactoryEntrypointUsageError(
-        `Active Boxel profile realm server "${activeServerUrl}" does not match --realm-server-url "${resolution.serverUrl}"`,
+        `Active Boxel profile realm server "${activeServerUrl}" does not match target realm server "${resolution.serverUrl}"`,
       );
     }
     let activeUsername = getMatrixUsername(active.matrixId);
     if (activeUsername !== resolution.ownerUsername) {
       throw new FactoryEntrypointUsageError(
-        `Active Boxel profile user "${activeUsername}" does not match MATRIX_USERNAME "${resolution.ownerUsername}"`,
+        `Active Boxel profile user "${activeUsername}" does not match target realm owner "${resolution.ownerUsername}"`,
       );
     }
   }
@@ -94,15 +109,15 @@ async function createRealm(
 }
 
 function resolveTargetRealmOwner(): string {
-  let envUsername = normalizeOptionalString(process.env.MATRIX_USERNAME);
-
-  if (!envUsername) {
-    throw new FactoryEntrypointUsageError(
-      'Cannot determine the target realm owner. Set MATRIX_USERNAME before running factory:go.',
-    );
+  let client = new BoxelCLIClient();
+  let active = client.getActiveProfile();
+  if (active) {
+    return getMatrixUsername(active.matrixId);
   }
 
-  return getMatrixUsername(envUsername);
+  throw new FactoryEntrypointUsageError(
+    'Cannot determine the target realm owner. Run `boxel profile add` to configure a profile.',
+  );
 }
 
 function resolveTargetRealmUrl(explicitTargetRealmUrl: string | null): string {
@@ -115,8 +130,6 @@ function resolveTargetRealmUrl(explicitTargetRealmUrl: string | null): string {
   return normalizeUrl(explicitTargetRealmUrl, '--target-realm-url');
 }
 
-const DEFAULT_REALM_SERVER_URL = 'http://localhost:4201/';
-
 function resolveRealmServerUrl(
   explicitRealmServerUrl: string | null,
   _targetRealmUrl: string,
@@ -125,7 +138,15 @@ function resolveRealmServerUrl(
     return normalizeUrl(explicitRealmServerUrl, '--realm-server-url');
   }
 
-  return DEFAULT_REALM_SERVER_URL;
+  let client = new BoxelCLIClient();
+  let active = client.getActiveProfile();
+  if (active) {
+    return ensureTrailingSlash(active.realmServerUrl);
+  }
+
+  throw new FactoryEntrypointUsageError(
+    'No active Boxel profile found. Run `boxel profile add` to configure one, or pass --realm-server-url explicitly.',
+  );
 }
 
 function extractEndpointFromRealmUrl(targetRealmUrl: string): string {
@@ -151,15 +172,4 @@ function normalizeUrl(url: string, label: string): string {
       }`,
     );
   }
-}
-
-function normalizeOptionalString(
-  value: string | undefined,
-): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-
-  let trimmed = value.trim();
-  return trimmed === '' ? undefined : trimmed;
 }

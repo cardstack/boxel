@@ -12,7 +12,7 @@
  *
  * Prerequisites:
  *   - Docker running, `mise run dev-all` (realm server, host app, Synapse, etc.)
- *   - MATRIX_URL, MATRIX_USERNAME, MATRIX_PASSWORD environment variables
+ *   - Active Boxel profile (`boxel profile add`)
  *   - OPENROUTER_API_KEY for the LLM agent
  *
  * Usage:
@@ -672,25 +672,24 @@ async function scenario3(
 
 async function main(): Promise<void> {
   let { scenario, debug, briefUrl } = parseArgs();
-  let username = process.env.MATRIX_USERNAME;
 
-  if (!username) {
+  let client = new BoxelCLIClient();
+  let active = client.getActiveProfile();
+  if (!active) {
     log.error(
-      'MATRIX_USERNAME is required. Set MATRIX_URL, MATRIX_USERNAME, and MATRIX_PASSWORD.',
+      'No active Boxel profile found. Run `boxel profile add` to configure one.',
     );
     process.exit(1);
   }
+
+  let username = active.matrixId.replace(/^@/, '').replace(/:.*$/, '');
 
   if (!process.env.OPENROUTER_API_KEY) {
     log.error('OPENROUTER_API_KEY is required for the LLM agent.');
     process.exit(1);
   }
 
-  if (!process.env.MATRIX_URL) {
-    process.env.MATRIX_URL = 'http://localhost:8008';
-  }
-
-  let realmServerUrl = process.env.REALM_SERVER_URL ?? 'http://localhost:4201/';
+  let realmServerUrl = active.realmServerUrl;
   if (!realmServerUrl.endsWith('/')) {
     realmServerUrl += '/';
   }

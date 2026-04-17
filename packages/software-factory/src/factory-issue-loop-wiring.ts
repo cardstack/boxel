@@ -330,10 +330,9 @@ async function resolveAuth(config: IssueLoopWiringConfig): Promise<{
     }
   } catch (error) {
     throw new Error(
-      `Matrix login failed. Ensure MATRIX_URL, MATRIX_USERNAME, and MATRIX_PASSWORD are set, ` +
-        `and pass --realm-server-url on the CLI.\n${
-          error instanceof Error ? error.message : String(error)
-        }`,
+      `Matrix login failed. Ensure an active Boxel profile is configured (run \`boxel profile add\`).\n${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 
@@ -365,30 +364,8 @@ async function resolveAuth(config: IssueLoopWiringConfig): Promise<{
 function buildProfileWithCliRealmServer(
   realmServerUrl: string,
 ): ActiveBoxelProfile {
-  try {
-    let profile = getActiveProfile();
-    return { ...profile, realmServerUrl };
-  } catch {
-    // No active profile — fall back to env vars
-  }
-
-  let matrixUrl = process.env.MATRIX_URL?.trim();
-  let username = process.env.MATRIX_USERNAME?.trim();
-  let password = process.env.MATRIX_PASSWORD?.trim();
-
-  if (!matrixUrl || !username || !password) {
-    throw new Error(
-      'No active Boxel profile found and MATRIX_URL/MATRIX_USERNAME/MATRIX_PASSWORD are not fully set.',
-    );
-  }
-
-  return {
-    profileId: null,
-    username,
-    matrixUrl,
-    realmServerUrl,
-    password,
-  };
+  let profile = getActiveProfile();
+  return { ...profile, realmServerUrl };
 }
 
 // ---------------------------------------------------------------------------

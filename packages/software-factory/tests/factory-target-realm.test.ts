@@ -1,22 +1,41 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { module, test } from 'qunit';
+
+import {
+  setProfileManager,
+  resetProfileManager,
+} from '@cardstack/boxel-cli/api';
 
 import { FactoryEntrypointUsageError } from '../src/factory-entrypoint-errors';
 import {
   bootstrapFactoryTargetRealm,
   resolveFactoryTargetRealm,
 } from '../src/factory-target-realm';
+import { installTestProfile } from './helpers/test-profile';
 
 const targetRealmUrl = 'https://realms.example.test/hassan/personal/';
 
 module('factory-target-realm', function (hooks) {
-  let originalMatrixUsername = process.env.MATRIX_USERNAME;
+  let cleanupProfile: (() => void) | undefined;
 
   hooks.afterEach(function () {
-    restoreEnv('MATRIX_USERNAME', originalMatrixUsername);
+    cleanupProfile?.();
+    cleanupProfile = undefined;
   });
 
-  test('resolveFactoryTargetRealm uses MATRIX_USERNAME and explicit target URL', function (assert) {
-    process.env.MATRIX_USERNAME = 'hassan';
+  function useTestProfile() {
+    cleanupProfile = installTestProfile({
+      username: 'hassan',
+      matrixUrl: 'https://matrix.example.test/',
+      realmServerUrl: 'https://realms.example.test/',
+      password: 'secret',
+    });
+  }
+
+  test('resolveFactoryTargetRealm resolves owner from active profile', function (assert) {
+    useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl,
@@ -26,14 +45,14 @@ module('factory-target-realm', function (hooks) {
     assert.strictEqual(resolution.url, targetRealmUrl);
     assert.strictEqual(
       resolution.serverUrl,
-      'http://localhost:4201/',
-      'defaults to localhost when --realm-server-url is not provided',
+      'https://realms.example.test/',
+      'defaults to active profile realmServerUrl when --realm-server-url is not provided',
     );
     assert.strictEqual(resolution.ownerUsername, 'hassan');
   });
 
   test('resolveFactoryTargetRealm accepts an explicit realm server URL override', function (assert) {
-    process.env.MATRIX_USERNAME = 'hassan';
+    useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl: 'https://realms.example.test/boxel/hassan/personal/',
@@ -47,7 +66,7 @@ module('factory-target-realm', function (hooks) {
   });
 
   test('resolveFactoryTargetRealm rejects when target realm URL is missing', function (assert) {
-    process.env.MATRIX_USERNAME = 'hassan';
+    useTestProfile();
 
     assert.throws(
       () =>
@@ -61,8 +80,40 @@ module('factory-target-realm', function (hooks) {
     );
   });
 
-  test('resolveFactoryTargetRealm rejects when MATRIX_USERNAME is missing', function (assert) {
-    delete process.env.MATRIX_USERNAME;
+  test('resolveFactoryTargetRealm rejects when target realm origin does not match profile', function (assert) {
+    // Profile points to staging, but target realm is localhost
+    cleanupProfile = installTestProfile({
+      username: 'hassan',
+      matrixUrl: 'https://matrix-staging.stack.cards/',
+      realmServerUrl: 'https://realms-staging.stack.cards/',
+      password: 'secret',
+    });
+
+    assert.throws(
+      () =>
+        resolveFactoryTargetRealm({
+          targetRealmUrl: 'http://localhost:4201/hassan/my-realm/',
+          realmServerUrl: null,
+        }),
+      (error: unknown) =>
+        error instanceof FactoryEntrypointUsageError &&
+        error.message.includes('does not match the realm server') &&
+        error.message.includes('boxel profile switch'),
+    );
+  });
+
+  test('resolveFactoryTargetRealm rejects when no active profile is configured', function (assert) {
+    // Point the singleton at a temp dir with an empty profiles file
+    let tempConfigDir = mkdtempSync(join(tmpdir(), 'boxel-test-empty-'));
+    writeFileSync(
+      join(tempConfigDir, 'profiles.json'),
+      JSON.stringify({ profiles: {}, activeProfile: null }),
+    );
+    setProfileManager(tempConfigDir);
+    cleanupProfile = () => {
+      resetProfileManager();
+      rmSync(tempConfigDir, { recursive: true, force: true });
+    };
 
     assert.throws(
       () =>
@@ -72,12 +123,14 @@ module('factory-target-realm', function (hooks) {
         }),
       (error: unknown) =>
         error instanceof FactoryEntrypointUsageError &&
-        error.message.includes('Set MATRIX_USERNAME'),
+        (error.message.includes('boxel profile add') ||
+          error.message.includes('active Boxel profile')),
     );
   });
 
   test('bootstrapFactoryTargetRealm creates the realm through the API', async function (assert) {
-    process.env.MATRIX_USERNAME = 'hassan';
+    useTestProfile();
+
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl,
       realmServerUrl: null,
@@ -101,7 +154,8 @@ module('factory-target-realm', function (hooks) {
   });
 
   test('bootstrapFactoryTargetRealm reports when the realm already exists', async function (assert) {
-    process.env.MATRIX_USERNAME = 'hassan';
+    useTestProfile();
+
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl,
       realmServerUrl: null,
@@ -120,7 +174,8 @@ module('factory-target-realm', function (hooks) {
   });
 
   test('bootstrapFactoryTargetRealm uses the canonical realm URL returned by create-realm', async function (assert) {
-    process.env.MATRIX_USERNAME = 'hassan';
+    useTestProfile();
+
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl: 'https://realms.example.test/typed-by-user/personal/',
       realmServerUrl: null,
@@ -141,11 +196,3 @@ module('factory-target-realm', function (hooks) {
     assert.strictEqual(result.authorization, 'Bearer target-realm-token');
   });
 });
-
-function restoreEnv(name: string, value: string | undefined): void {
-  if (value === undefined) {
-    delete process.env[name];
-  } else {
-    process.env[name] = value;
-  }
-}

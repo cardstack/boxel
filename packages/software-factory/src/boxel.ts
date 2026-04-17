@@ -6,7 +6,9 @@ import { formatErrorResponse } from './error-format';
 import { SupportedMimeType } from './realm-operations';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-const PROFILES_FILE = join(homedir(), '.boxel-cli', 'profiles.json');
+function getProfilesFile(): string {
+  return join(homedir(), '.boxel-cli', 'profiles.json');
+}
 
 type BoxelStoredProfile = {
   matrixUrl: string;
@@ -86,11 +88,12 @@ export type ParsedArgs = Record<string, ParsedArgValue | undefined> & {
 };
 
 function parseProfilesConfig(): BoxelProfilesConfig {
-  if (!existsSync(PROFILES_FILE)) {
+  let profilesFile = getProfilesFile();
+  if (!existsSync(profilesFile)) {
     return { profiles: {}, activeProfile: null };
   }
 
-  return JSON.parse(readFileSync(PROFILES_FILE, 'utf8')) as BoxelProfilesConfig;
+  return JSON.parse(readFileSync(profilesFile, 'utf8')) as BoxelProfilesConfig;
 }
 
 export function getActiveProfile(): ActiveBoxelProfile {
@@ -107,23 +110,9 @@ export function getActiveProfile(): ActiveBoxelProfile {
     };
   }
 
-  let matrixUrl = process.env.MATRIX_URL;
-  let username = process.env.MATRIX_USERNAME;
-  let password = process.env.MATRIX_PASSWORD;
-  let realmServerUrl = process.env.REALM_SERVER_URL;
-  if (!matrixUrl || !username || !password || !realmServerUrl) {
-    throw new Error(
-      'No active Boxel profile found and MATRIX_URL/MATRIX_USERNAME/MATRIX_PASSWORD/REALM_SERVER_URL are not fully set',
-    );
-  }
-
-  return {
-    profileId: null,
-    username,
-    matrixUrl,
-    realmServerUrl: ensureTrailingSlash(realmServerUrl),
-    password,
-  };
+  throw new Error(
+    'No active Boxel profile found. Run `boxel profile add` to configure one.',
+  );
 }
 
 export async function matrixLogin(

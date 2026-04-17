@@ -230,79 +230,32 @@ module('realm-auth', function () {
     }
   });
 
-  test('createBoxelRealmFetch uses MATRIX_USERNAME and MATRIX_PASSWORD env auth for a private brief', async function (assert) {
+  test('createBoxelRealmFetch uses active Boxel profile auth for a private brief', async function (assert) {
     let tempHome = mkdtempSync(join(tmpdir(), 'software-factory-realm-auth-'));
     let originalHome = process.env.HOME;
-    let originalMatrixUrl = process.env.MATRIX_URL;
-    let originalMatrixUsername = process.env.MATRIX_USERNAME;
-    let originalMatrixPassword = process.env.MATRIX_PASSWORD;
-    let originalRealmServerUrl = process.env.REALM_SERVER_URL;
     let username = 'software-factory-browser';
     let password = browserPassword(username);
     let servers = await startServers({ username, password });
     let briefUrl = `${servers.realmServer.realmUrl}Wiki/brief-card`;
 
-    try {
-      process.env.HOME = tempHome;
-      process.env.MATRIX_URL = servers.matrixServer.url;
-      process.env.MATRIX_USERNAME = username;
-      process.env.MATRIX_PASSWORD = password;
-      delete process.env.REALM_SERVER_URL;
-
-      let brief = await loadFactoryBrief(briefUrl, {
-        fetch: createBoxelRealmFetch(briefUrl),
-      });
-
-      assert.strictEqual(brief.title, 'Private Brief');
-      assert.strictEqual(
-        brief.contentSummary,
-        'Private brief content for testing realm auth.',
-      );
-    } finally {
-      restoreEnv('HOME', originalHome);
-      restoreEnv('MATRIX_URL', originalMatrixUrl);
-      restoreEnv('MATRIX_USERNAME', originalMatrixUsername);
-      restoreEnv('MATRIX_PASSWORD', originalMatrixPassword);
-      restoreEnv('REALM_SERVER_URL', originalRealmServerUrl);
-      await servers.stop();
-      rmSync(tempHome, { recursive: true, force: true });
-    }
-  });
-
-  test('createBoxelRealmFetch prefers env auth over an unrelated active profile', async function (assert) {
-    let tempHome = mkdtempSync(join(tmpdir(), 'software-factory-realm-auth-'));
-    let originalHome = process.env.HOME;
-    let originalMatrixUrl = process.env.MATRIX_URL;
-    let originalMatrixUsername = process.env.MATRIX_USERNAME;
-    let originalMatrixPassword = process.env.MATRIX_PASSWORD;
-    let originalRealmServerUrl = process.env.REALM_SERVER_URL;
     let profilesDir = join(tempHome, '.boxel-cli');
     mkdirSync(profilesDir, { recursive: true });
     writeFileSync(
       join(profilesDir, 'profiles.json'),
       JSON.stringify({
-        activeProfile: '@someone-else:localhost',
+        activeProfile: `@${username}:localhost`,
         profiles: {
-          '@someone-else:localhost': {
-            matrixUrl: 'https://unrelated-matrix.example.test/',
-            realmServerUrl: 'https://unrelated-realm-server.example.test/',
-            password: 'wrong-password',
+          [`@${username}:localhost`]: {
+            matrixUrl: servers.matrixServer.url,
+            realmServerUrl: servers.realmServer.origin,
+            password,
           },
         },
       }),
     );
 
-    let username = 'software-factory-browser';
-    let password = browserPassword(username);
-    let servers = await startServers({ username, password });
-    let briefUrl = `${servers.realmServer.realmUrl}Wiki/brief-card`;
-
     try {
       process.env.HOME = tempHome;
-      process.env.MATRIX_URL = servers.matrixServer.url;
-      process.env.MATRIX_USERNAME = username;
-      process.env.MATRIX_PASSWORD = password;
-      delete process.env.REALM_SERVER_URL;
 
       let brief = await loadFactoryBrief(briefUrl, {
         fetch: createBoxelRealmFetch(briefUrl),
@@ -315,16 +268,12 @@ module('realm-auth', function () {
       );
     } finally {
       restoreEnv('HOME', originalHome);
-      restoreEnv('MATRIX_URL', originalMatrixUrl);
-      restoreEnv('MATRIX_USERNAME', originalMatrixUsername);
-      restoreEnv('MATRIX_PASSWORD', originalMatrixPassword);
-      restoreEnv('REALM_SERVER_URL', originalRealmServerUrl);
       await servers.stop();
       rmSync(tempHome, { recursive: true, force: true });
     }
   });
 
-  test('matrixLogin rejects when MATRIX_USERNAME and MATRIX_PASSWORD are invalid', async function (assert) {
+  test('matrixLogin rejects when credentials are invalid', async function (assert) {
     let username = 'software-factory-browser';
     let servers = await startServers({ username });
 

@@ -698,23 +698,25 @@ Boxel-cli already has profile-based auth — users log in via `boxel profile add
 
 The principle that boxel-cli owns the entire Boxel API surface extends to auth. The factory should never touch a JWT directly — boxel-cli manages the full token lifecycle internally:
 
-1. **Two-tier token model** — boxel-cli understands both realm server tokens (obtained via Matrix OpenID → `POST /_server-session`, grants server-level access) and per-realm tokens (obtained via `POST /_realm-auth`, grants access to specific realms). Both are cached and refreshed automatically.
+1. **Profile-only auth, no environment variables** — phase 1 had a dual-auth path: the factory accepted either `MATRIX_URL`, `MATRIX_USERNAME`, `MATRIX_PASSWORD`, and `REALM_SERVER_URL` env vars **or** an active Boxel profile. That duality is removed. Phase 2 requires an active Boxel profile (`boxel profile add`) for every run — the factory does not read Matrix auth from environment variables. `--realm-server-url` also falls back to the active profile's `realmServerUrl` instead of defaulting to a hardcoded localhost URL, so staging and production Just Work without extra flags. Matrix login, OpenID exchange, server-session minting, and per-realm token acquisition all happen inside boxel-cli's `ProfileManager`, seeded from the profiles file (`~/.boxel-cli/profiles.json`) — never from the process environment. (Exception: the `BOXEL_PASSWORD` env var remains as a non-interactive input to `boxel profile add` itself; the factory runtime never reads it.)
 
-2. **Automatic token acquisition on realm creation** — When `boxel create-realm` creates a new realm, boxel-cli automatically waits for readiness, obtains the per-realm JWT, and stores it in its auth state. Subsequent `boxel pull`/`boxel sync` on that realm Just Work — tokens are managed internally by boxel-cli.
+2. **Two-tier token model** — boxel-cli understands both realm server tokens (obtained via Matrix OpenID → `POST /_server-session`, grants server-level access) and per-realm tokens (obtained via `POST /_realm-auth`, grants access to specific realms). Both are cached and refreshed automatically.
 
-3. **Programmatic auth API** — Export a `BoxelAuth` class (or similar) so the factory imports it and never constructs HTTP requests or manages tokens:
+3. **Automatic token acquisition on realm creation** — When `boxel create-realm` creates a new realm, boxel-cli automatically waits for readiness, obtains the per-realm JWT, and stores it in its auth state. Subsequent `boxel pull`/`boxel sync` on that realm Just Work — tokens are managed internally by boxel-cli.
+
+4. **Programmatic API with implicit auth** — Export a `BoxelCLIClient` that the factory imports. Callers do not pass credentials or tokens; the client reads the active profile on construction and handles auth for every request:
 
    ```typescript
-   import { BoxelAuth } from '@cardstack/boxel-cli';
-   const auth = new BoxelAuth(credentials);
-   await auth.createRealm({ name, owner }); // token auto-acquired
-   await auth.pull(realmUrl, workspaceDir); // uses stored token
-   await auth.sync(workspaceDir, { preferLocal: true });
+   import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+   const client = new BoxelCLIClient();
+   await client.createRealm({ realmName, displayName }); // token auto-acquired
+   await client.pull(realmUrl, workspaceDir); // uses stored token
+   // (sync is a future addition; see CS-10520)
    ```
 
-4. **Token refresh for long-running operations** — The factory loop runs for hours. boxel-cli's `RealmAuthClient` already has token refresh with 60s lead time — this extends to cover all realm operations so long-running sessions don't fail mid-stream.
+5. **Token refresh for long-running operations** — The factory loop runs for hours. boxel-cli's `RealmAuthClient` already has token refresh with 60s lead time — this extends to cover all realm operations so long-running sessions don't fail mid-stream.
 
-After this, the factory deletes `realm-auth.ts`, auth portions of `boxel.ts`, and all `authorization`/`serverToken`/`realmTokens` fields threaded through its config types.
+After this, the factory deletes `realm-auth.ts`, auth portions of `boxel.ts`, and all `authorization`/`serverToken`/`realmTokens` fields threaded through its config types. It also stops reading `MATRIX_URL`/`MATRIX_USERNAME`/`MATRIX_PASSWORD`/`REALM_SERVER_URL` from the environment entirely.
 
 ### Realm Creation via Boxel-CLI
 
