@@ -713,11 +713,7 @@ export function buildPrerenderApp(options: {
       // the composite can chain the extract's resource into render. When
       // fileExtract isn't requested AND fileData isn't supplied, reject —
       // the host route model hook requires fileData to populate its model.
-      if (
-        renderOptions.fileRender &&
-        !fileData &&
-        !renderOptions.fileExtract
-      ) {
+      if (renderOptions.fileRender && !fileData && !renderOptions.fileExtract) {
         missing.push(
           'fileData (required when fileRender pass is requested without fileExtract)',
         );

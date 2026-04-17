@@ -33,7 +33,13 @@ module(basename(__filename), function () {
 
     function makePrerenderer() {
       let renderCalls: Array<{
-        kind: 'card' | 'module' | 'file-extract' | 'file-render' | 'command';
+        kind:
+          | 'card'
+          | 'module'
+          | 'file-extract'
+          | 'file-render'
+          | 'visit'
+          | 'command';
         args: {
           affinityType?: 'realm' | 'user';
           affinityValue?: string;
