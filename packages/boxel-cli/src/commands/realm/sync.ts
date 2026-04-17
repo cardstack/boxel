@@ -252,7 +252,7 @@ class RealmSyncer extends RealmSyncBase {
 
     if (totalOps === 0) {
       console.log('\nEverything is up to date');
-      if (!this.options.dryRun && !effectiveManifest) {
+      if (!this.options.dryRun && !effectiveManifest && skippedConflicts.length === 0) {
         // First sync with no changes needed - still write manifest
         await this.writeManifest(localHashes, remoteMtimes);
       }
@@ -492,6 +492,14 @@ class RealmSyncer extends RealmSyncBase {
     if (
       (local === 'changed' && remote === 'changed') ||
       (local === 'added' && remote === 'added')
+    ) {
+      return 'conflict';
+    }
+
+    // Cross-state conflicts (e.g., manifest missing remoteMtimes)
+    if (
+      (local === 'changed' && remote === 'added') ||
+      (local === 'added' && remote === 'changed')
     ) {
       return 'conflict';
     }
