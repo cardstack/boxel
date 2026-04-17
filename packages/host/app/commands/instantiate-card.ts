@@ -68,7 +68,8 @@ export default class InstantiateCardCommand extends HostBaseCommand<
       // validation turns are invisible to instantiation.
       this.loaderService.resetLoader({
         clearFetchCache: true,
-        reason: 'instantiate-card: fresh instantiation requires uncached loader',
+        reason:
+          'instantiate-card: fresh instantiation requires uncached loader',
       });
 
       // Build or parse the card document
