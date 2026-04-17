@@ -276,10 +276,8 @@ export async function readFile(
  * Runtime evaluation errors (from eval/instantiate validation) carry
  * line/column references that point to the transpiled output, not the
  * raw .gts source. Use this to inspect what the realm server actually
- * compiled.
- *
- * The realm resolves the module URL without the .gts extension, so we
- * strip it before fetching (the caller may pass with or without .gts).
+ * compiled. The realm accepts the module path either with or without
+ * the .gts extension.
  */
 export async function readTranspiledModule(
   realmUrl: string,
@@ -292,8 +290,7 @@ export async function readTranspiledModule(
   error?: string;
 }> {
   let fetchImpl = options?.fetch ?? globalThis.fetch;
-  let modulePath = path.endsWith('.gts') ? path.slice(0, -'.gts'.length) : path;
-  let url = new URL(modulePath, ensureTrailingSlash(realmUrl)).href;
+  let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
 
   try {
     let response = await fetchImpl(url, {

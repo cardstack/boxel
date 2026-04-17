@@ -61,8 +61,8 @@ test.describe('transpiled module fetch', () => {
     });
     expect(indexed).toBe(true);
 
-    // Fetch the transpiled output using the path WITH the .gts extension —
-    // readTranspiledModule() strips it before resolving the URL.
+    // Fetch the transpiled output using the path WITH the .gts extension.
+    // The realm accepts either form (with or without extension).
     let withExt = await readTranspiledModule(realmUrl, 'transpiled-check.gts', {
       authorization,
     });
@@ -81,8 +81,8 @@ test.describe('transpiled module fetch', () => {
     // every component that uses <template>, so it's a reliable signal.
     expect(withExt.content).toContain('setComponentTemplate(');
 
-    // Also call with the path-WITHOUT-extension variant — exercises the
-    // .gts-stripping branch of readTranspiledModule().
+    // Also call with the path-WITHOUT-extension variant — the realm
+    // accepts both forms and returns the same transpiled output.
     let withoutExt = await readTranspiledModule(realmUrl, 'transpiled-check', {
       authorization,
     });
