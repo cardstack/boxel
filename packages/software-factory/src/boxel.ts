@@ -3,7 +3,8 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { formatErrorResponse } from './error-format';
-import { ensureTrailingSlash, SupportedMimeType } from './realm-operations';
+import { SupportedMimeType } from './realm-operations';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 function getProfilesFile(): string {
   return join(homedir(), '.boxel-cli', 'profiles.json');

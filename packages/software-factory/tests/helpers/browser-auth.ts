@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { BrowserContext, Page } from '@playwright/test';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { readSupportContext } from '../../src/runtime-metadata';
 
 type BrowserAuth = {
@@ -48,10 +49,6 @@ const defaultUsername =
   'software-factory-browser';
 const defaultSeed =
   process.env.SOFTWARE_FACTORY_BROWSER_SECRET_SEED ?? "shhh! it's a secret";
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
 
 function getBrowserProfile(): BoxelProfile {
   let username = (

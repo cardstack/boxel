@@ -12,7 +12,6 @@ import {
   resolveTestRun,
   type TestRunAttributes,
 } from '../src/factory-test-realm';
-import { pullRealmFiles } from '../src/realm-operations';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -834,129 +833,6 @@ module('factory-test-realm > resolveTestRun', function () {
       'Validations/test_my-ticket-3',
       'continues incrementing from lastSequenceNumber floor',
     );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// pullRealmFiles
-// ---------------------------------------------------------------------------
-
-module('factory-test-realm > pullRealmFiles', function () {
-  test('downloads files listed by _mtimes', async function (assert) {
-    let realmUrl = 'https://realms.example.test/user/personal/';
-    let capturedUrls: string[] = [];
-
-    let mockFetch = (async (url: string | URL | Request) => {
-      let urlStr = String(url);
-      capturedUrls.push(urlStr);
-
-      if (urlStr.includes('_mtimes')) {
-        return new Response(
-          JSON.stringify({
-            [`${realmUrl}hello.gts`]: 1000,
-            [`${realmUrl}HelloCard/sample.json`]: 2000,
-          }),
-          { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
-        );
-      }
-
-      // File downloads
-      return new Response('file-content', { status: 200 });
-    }) as typeof globalThis.fetch;
-
-    let tmpDir = `/tmp/sf-test-pull-${Date.now()}`;
-    let result = await pullRealmFiles(realmUrl, tmpDir, { fetch: mockFetch });
-
-    assert.strictEqual(result.error, undefined);
-    assert.strictEqual(result.files.length, 2);
-    assert.true(result.files.includes('hello.gts'));
-    assert.true(result.files.includes('HelloCard/sample.json'));
-
-    // Should have fetched _mtimes + 2 files = 3 requests
-    assert.strictEqual(capturedUrls.length, 3);
-    assert.true(capturedUrls[0].includes('_mtimes'));
-  });
-
-  test('passes authorization header', async function (assert) {
-    let capturedHeaders: Record<string, string>[] = [];
-
-    let mockFetch = (async (
-      _url: string | URL | Request,
-      init?: RequestInit,
-    ) => {
-      capturedHeaders.push((init?.headers as Record<string, string>) ?? {});
-      // Return empty mtimes so no file downloads happen
-      return new Response(JSON.stringify({}), {
-        status: 200,
-        headers: { 'Content-Type': SupportedMimeType.JSON },
-      });
-    }) as typeof globalThis.fetch;
-
-    await pullRealmFiles('https://example.test/realm/', '/tmp/unused', {
-      fetch: mockFetch,
-      authorization: 'Bearer my-token',
-    });
-
-    assert.strictEqual(capturedHeaders[0]['Authorization'], 'Bearer my-token');
-  });
-
-  test('returns error on _mtimes HTTP failure', async function (assert) {
-    let mockFetch = (async () => {
-      return new Response('Forbidden', { status: 403 });
-    }) as typeof globalThis.fetch;
-
-    let result = await pullRealmFiles(
-      'https://example.test/realm/',
-      '/tmp/unused',
-      { fetch: mockFetch },
-    );
-
-    assert.strictEqual(result.files.length, 0);
-    assert.true(result.error?.includes('403'));
-  });
-
-  test('returns error on network failure', async function (assert) {
-    let mockFetch = (async () => {
-      throw new Error('ECONNREFUSED');
-    }) as typeof globalThis.fetch;
-
-    let result = await pullRealmFiles(
-      'https://example.test/realm/',
-      '/tmp/unused',
-      { fetch: mockFetch },
-    );
-
-    assert.strictEqual(result.files.length, 0);
-    assert.true(result.error?.includes('ECONNREFUSED'));
-  });
-
-  test('skips files outside the realm URL', async function (assert) {
-    let realmUrl = 'https://realms.example.test/user/personal/';
-
-    let mockFetch = (async (url: string | URL | Request) => {
-      let urlStr = String(url);
-      if (urlStr.includes('_mtimes')) {
-        return new Response(
-          JSON.stringify({
-            [`${realmUrl}hello.gts`]: 1000,
-            ['https://other.test/evil.gts']: 2000, // outside realm
-          }),
-          { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
-        );
-      }
-      return new Response('content', { status: 200 });
-    }) as typeof globalThis.fetch;
-
-    let result = await pullRealmFiles(
-      realmUrl,
-      `/tmp/sf-test-pull-${Date.now()}`,
-      {
-        fetch: mockFetch,
-      },
-    );
-
-    assert.strictEqual(result.files.length, 1);
-    assert.strictEqual(result.files[0], 'hello.gts');
   });
 });
 

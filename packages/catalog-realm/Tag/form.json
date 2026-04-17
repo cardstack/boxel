@@ -2,12 +2,12 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Ai",
-      "color": "#6638ff",
+      "name": "Form",
+      "color": "#10B981",
       "cardInfo": {
         "notes": null,
-        "name": null,
-        "summary": "Cards and apps that use artificial intelligence or machine learning, including LLM-powered features, smart automation, and AI-assisted workflows.",
+        "name": "Form",
+        "summary": "Data entry forms, surveys, intake forms, and structured input collection cards.",
         "cardThumbnailURL": null
       }
     },

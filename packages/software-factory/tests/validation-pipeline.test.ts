@@ -13,6 +13,7 @@ import {
 } from '../src/issue-loop';
 
 import { NoOpStepRunner } from '../src/validators/noop-step';
+import { InstantiateValidationStep } from '../src/validators/instantiate-step';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -209,9 +210,13 @@ module('ValidationPipeline', function () {
       testResultsModuleUrl: 'https://example.test/test-results',
       lintResultsModuleUrl: 'https://example.test/lint-result',
       evalResultsModuleUrl: 'https://example.test/eval-result',
+      instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
       // Inject a fetchFilenames that returns no files so the test, lint,
       // and eval steps return "nothing to validate" without hitting a real realm
       fetchFilenames: async () => ({ filenames: [] }),
+      // Inject a searchSpecsFn that returns no specs so the instantiate
+      // step returns "nothing to validate" without hitting a real realm
+      searchSpecsFn: async () => ({ specs: [] }),
     });
 
     // Verify step count and order by running validate and inspecting results
@@ -291,5 +296,135 @@ module('NoOpStepRunner', function () {
     };
 
     assert.strictEqual(runner.formatForContext(result), '');
+  });
+});
+
+module('InstantiateValidationStep', function () {
+  test('passes with no artifact when no specs and no modules exist (bootstrap)', async function (assert) {
+    let step = new InstantiateValidationStep({
+      realmServerUrl: 'https://example.test/',
+      instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
+      searchSpecsFn: async () => ({ specs: [] }),
+      fetchFilenames: async () => ({ filenames: [] }),
+      getNextSequenceNumber: async () => 1,
+    });
+
+    let result = await step.run('https://example.test/realm/');
+
+    assert.strictEqual(result.step, 'instantiate');
+    assert.true(result.passed, 'passes when nothing to validate');
+    assert.strictEqual(result.errors.length, 0);
+    assert.notOk(
+      result.details,
+      'no artifact details created for empty bootstrap case',
+    );
+  });
+
+  test('fails with no artifact when modules exist but no specs found', async function (assert) {
+    let step = new InstantiateValidationStep({
+      realmServerUrl: 'https://example.test/',
+      instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
+      searchSpecsFn: async () => ({ specs: [] }),
+      fetchFilenames: async () => ({
+        filenames: ['my-card.gts', 'my-card.test.gts'],
+      }),
+      getNextSequenceNumber: async () => 1,
+    });
+
+    let result = await step.run('https://example.test/realm/');
+
+    assert.strictEqual(result.step, 'instantiate');
+    assert.false(result.passed, 'fails when modules exist but no specs');
+    assert.true(result.errors.length > 0, 'has error message');
+    assert.true(
+      result.errors[0].message.includes('no Spec cards were found'),
+      'error mentions missing specs',
+    );
+    assert.notOk(
+      result.details,
+      'no artifact details — specs must exist before creating artifacts',
+    );
+  });
+
+  test('test files alone do not trigger missing-spec failure', async function (assert) {
+    let step = new InstantiateValidationStep({
+      realmServerUrl: 'https://example.test/',
+      instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
+      searchSpecsFn: async () => ({ specs: [] }),
+      fetchFilenames: async () => ({
+        filenames: ['my-card.test.gts'],
+      }),
+      getNextSequenceNumber: async () => 1,
+    });
+
+    let result = await step.run('https://example.test/realm/');
+
+    assert.strictEqual(result.step, 'instantiate');
+    assert.true(result.passed, 'passes when only test files exist');
+  });
+
+  test('passes with artifact when spec with examples all instantiate successfully', async function (assert) {
+    let step = new InstantiateValidationStep({
+      realmServerUrl: 'https://example.test/',
+      instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
+      searchSpecsFn: async () => ({
+        specs: [
+          {
+            specId: 'Spec/my-card',
+            moduleUrl: 'https://example.test/realm/my-card',
+            cardName: 'MyCard',
+            exampleUrls: ['MyCard/example-1'],
+          },
+        ],
+      }),
+      instantiateCardFn: async () => ({ passed: true }),
+      getNextSequenceNumber: async () => 1,
+    });
+
+    let result = await step.run('https://example.test/realm/');
+
+    assert.strictEqual(result.step, 'instantiate');
+    assert.true(result.passed, 'passes when instantiation succeeds');
+    assert.strictEqual(result.errors.length, 0);
+    assert.ok(result.details, 'artifact details present when specs exist');
+    let details = result.details as Record<string, unknown>;
+    assert.ok(
+      (details.instantiateResultId as string)?.includes('instantiate_'),
+      'artifact ID present',
+    );
+    assert.strictEqual(details.cardsChecked, 1, '1 card checked');
+    assert.strictEqual(details.cardsWithErrors, 0, '0 errors');
+  });
+
+  test('fails when an example fails instantiation', async function (assert) {
+    let step = new InstantiateValidationStep({
+      realmServerUrl: 'https://example.test/',
+      instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
+      searchSpecsFn: async () => ({
+        specs: [
+          {
+            specId: 'Spec/my-card',
+            moduleUrl: 'https://example.test/realm/my-card',
+            cardName: 'MyCard',
+            exampleUrls: ['MyCard/example-1'],
+          },
+        ],
+      }),
+      instantiateCardFn: async () => ({
+        passed: false,
+        error: 'Expected array for field value tags',
+      }),
+      getNextSequenceNumber: async () => 1,
+    });
+
+    let result = await step.run('https://example.test/realm/');
+
+    assert.strictEqual(result.step, 'instantiate');
+    assert.false(result.passed, 'fails when instantiation fails');
+    assert.true(result.errors.length > 0, 'has errors');
+    assert.true(
+      result.errors[0].message.includes('Expected array for field value'),
+      'error message propagated',
+    );
   });
 });

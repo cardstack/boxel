@@ -28,6 +28,7 @@ import * as GetCardCommandModule from './get-card';
 import * as GetCardTypeSchemaCommandModule from './get-card-type-schema';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
 import * as GetUserSystemCardCommandModule from './get-user-system-card';
+import * as InstantiateCardCommandModule from './instantiate-card';
 import * as InvalidateRealmUrlsCommandModule from './invalidate-realm-urls';
 import * as InviteUserToRoomCommandModule from './invite-user-to-room';
 import * as LintAndFixCommandModule from './lint-and-fix';
@@ -132,6 +133,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/evaluate-module',
     EvaluateModuleCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/instantiate-card',
+    InstantiateCardCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/cancel-indexing-job',
@@ -468,6 +473,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   CancelIndexingJobCommandModule.default,
   CheckCorrectnessCommandModule.default,
   EvaluateModuleCommandModule.default,
+  InstantiateCardCommandModule.default,
   UpdateCodePathWithSelectionCommandModule.default,
   UpdatePlaygroundSelectionCommandModule.default,
   UpdateRoomSkillsCommandModule.default,

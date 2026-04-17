@@ -19,7 +19,7 @@
     "relationships": {
       "sphere": {
         "links": {
-          "self": "../Sphere/637767ff-c7a9-40d6-9cd3-93f0b32a8fbb"
+          "self": "../Sphere/build"
         }
       },
       "cardInfo.theme": {

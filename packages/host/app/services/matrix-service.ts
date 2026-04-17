@@ -1789,74 +1789,78 @@ export default class MatrixService extends Service {
     let eventsDrained: () => void;
     this.flushMembership = new Promise((res) => (eventsDrained = res));
 
-    let events = [...this.roomMembershipQueue];
-    this.roomMembershipQueue = [];
+    try {
+      let events = [...this.roomMembershipQueue];
+      this.roomMembershipQueue = [];
 
-    await Promise.all(
-      events.map(({ event: { event, status } }) =>
-        this.addRoomEvent({ ...event, status }),
-      ),
-    );
+      await Promise.all(
+        events.map(({ event: { event, status } }) =>
+          this.addRoomEvent({ ...event, status }),
+        ),
+      );
 
-    // For rooms that we have been invited to we are unable to get the full
-    // timeline event yet (it's not available until we join the room), but we
-    // still need to get enough room state events to reasonably render the
-    // room card.
-    for (let {
-      event: { event: rawEvent },
-      member,
-    } of events) {
-      let event = rawEvent as DiscreteMatrixEvent;
-      let { room_id: roomId } = rawEvent as DiscreteMatrixEvent;
-      if (!roomId) {
-        throw new Error(
-          `bug: roomId is undefined for event ${JSON.stringify(
-            event,
-            null,
-            2,
-          )}`,
-        );
-      }
-      let room = this.client.getRoom(roomId);
-      if (!room) {
-        throw new Error(
-          `bug: should never get here--matrix sdk returned a null room for ${roomId}`,
-        );
-      }
+      // For rooms that we have been invited to we are unable to get the full
+      // timeline event yet (it's not available until we join the room), but we
+      // still need to get enough room state events to reasonably render the
+      // room card.
+      for (let {
+        event: { event: rawEvent },
+        member,
+      } of events) {
+        let event = rawEvent as DiscreteMatrixEvent;
+        let { room_id: roomId } = rawEvent as DiscreteMatrixEvent;
+        if (!roomId) {
+          throw new Error(
+            `bug: roomId is undefined for event ${JSON.stringify(
+              event,
+              null,
+              2,
+            )}`,
+          );
+        }
+        let room = this.client.getRoom(roomId);
+        if (!room) {
+          throw new Error(
+            `bug: should never get here--matrix sdk returned a null room for ${roomId}`,
+          );
+        }
 
-      if (
-        member.userId === this.client.getUserId() &&
-        event.type === 'm.room.member' &&
-        room.getMyMembership() === 'invite'
-      ) {
-        if (event.content.membership === 'invite') {
-          let stateEvents = room
-            .getLiveTimeline()
-            .getState('f' as MatrixSDK.Direction)?.events;
-          if (!stateEvents) {
-            throw new Error(`bug: cannot get state events for room ${roomId}`);
-          }
-          for (let eventType of STATE_EVENTS_OF_INTEREST) {
-            let events = stateEvents.get(eventType);
-            if (!events) {
-              continue;
+        if (
+          member.userId === this.client.getUserId() &&
+          event.type === 'm.room.member' &&
+          room.getMyMembership() === 'invite'
+        ) {
+          if (event.content.membership === 'invite') {
+            let stateEvents = room
+              .getLiveTimeline()
+              .getState('f' as MatrixSDK.Direction)?.events;
+            if (!stateEvents) {
+              throw new Error(
+                `bug: cannot get state events for room ${roomId}`,
+              );
             }
-            await Promise.all(
-              [...events.values()]
-                .map((e) => ({
-                  ...e.event,
-                  // annoyingly these events have been stripped of their id's
-                  event_id: `${roomId}_${eventType}_${e.localTimestamp}`,
-                  status: e.status,
-                }))
-                .map((event) => this.addRoomEvent(event)),
-            );
+            for (let eventType of STATE_EVENTS_OF_INTEREST) {
+              let events = stateEvents.get(eventType);
+              if (!events) {
+                continue;
+              }
+              await Promise.all(
+                [...events.values()]
+                  .map((e) => ({
+                    ...e.event,
+                    // annoyingly these events have been stripped of their id's
+                    event_id: `${roomId}_${eventType}_${e.localTimestamp}`,
+                    status: e.status,
+                  }))
+                  .map((event) => this.addRoomEvent(event)),
+              );
+            }
           }
         }
       }
+    } finally {
+      eventsDrained!();
     }
-
-    eventsDrained!();
   }
 
   private onReceipt = async (e: MatrixEvent) => {
@@ -1936,16 +1940,19 @@ export default class MatrixService extends Service {
 
     let eventsDrained: () => void;
     this.flushTimeline = new Promise((res) => (eventsDrained = res));
-    let events = [...this.timelineQueue];
-    this.timelineQueue = [];
-    for (let { event, oldEventId } of events) {
-      await this.client?.decryptEventIfNeeded(event);
-      await this.processDecryptedEvent(
-        this.buildEventForProcessing(event),
-        oldEventId,
-      );
+    try {
+      let events = [...this.timelineQueue];
+      this.timelineQueue = [];
+      for (let { event, oldEventId } of events) {
+        await this.client?.decryptEventIfNeeded(event);
+        await this.processDecryptedEvent(
+          this.buildEventForProcessing(event),
+          oldEventId,
+        );
+      }
+    } finally {
+      eventsDrained!();
     }
-    eventsDrained!();
   }
 
   private async processDecryptedEvent(event: TempEvent, oldEventId?: string) {

@@ -82,6 +82,7 @@ class ScrollToFocusedSection extends Modifier<ScrollToFocusedSectionSignature> {
       // Checking "show only" — section moved to top, scroll to top.
       // Defer to next frame so the DOM has re-rendered with the reordered sections;
       // otherwise the browser's scroll anchoring can shift position back.
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- scroll adjustment needs post-paint layout
       this.#rafId = requestAnimationFrame(() => {
         this.#rafId = null;
         element.scrollTop = 0;
@@ -90,6 +91,7 @@ class ScrollToFocusedSection extends Modifier<ScrollToFocusedSectionSignature> {
       // Unchecking "show only" — scroll to the previously focused section.
       // Defer so the DOM has re-rendered with all sections restored.
       const targetSid = prevSid;
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- scroll adjustment needs post-paint layout
       this.#rafId = requestAnimationFrame(() => {
         this.#rafId = null;
         const sectionEl = element.querySelector(
