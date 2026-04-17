@@ -137,7 +137,7 @@ export class BlogPost extends CardDef {
     computeVia: function (this: BlogPost): string {
       return this.cardInfo?.name?.trim()?.length
         ? this.cardInfo.name
-        : this.headline ?? 'Untitled';
+        : (this.headline ?? 'Untitled');
     },
   });
 }
