@@ -206,11 +206,37 @@ export default class InteractSubmode extends Component {
       stackIndex?: number;
       fieldType?: 'linksTo' | 'linksToMany' | 'contains' | 'containsMany';
       fieldName?: string;
+      useBaseTemplate?: boolean;
     },
   ): void => {
     if (format instanceof Event) {
       // common when invoked from template {{on}} modifier
       format = 'isolated';
+    }
+    // When toggling the isolated template for a card already on the stack,
+    // replace the existing item in-place rather than pushing a new one.
+    // Two separate checks are needed:
+    //   1. CardDef instances (including local-id-only cards with no .id yet) —
+    //      findCardInStackSafe matches by instance identity or local id.
+    //   2. String/URL inputs — matched below by resolved cardId after the
+    //      CardDef branch is skipped.
+    if (
+      format === 'isolated' &&
+      !(typeof cardOrURL === 'string' || cardOrURL instanceof URL) &&
+      this.stacks[stackIndex]
+    ) {
+      let item = this.operatorModeStateService.findCardInStackSafe(
+        cardOrURL,
+        stackIndex,
+      );
+      if (item) {
+        this.operatorModeStateService.viewCardOnStack(
+          stackIndex,
+          cardOrURL,
+          opts,
+        );
+        return;
+      }
     }
     let cardId =
       typeof cardOrURL === 'string'
@@ -220,6 +246,18 @@ export default class InteractSubmode extends Component {
           : cardOrURL.id;
     if (!cardId) {
       return;
+    }
+    if (format === 'isolated') {
+      let stack = this.stacks[stackIndex];
+      let isOnStack = stack?.some((item) => item.id === cardId);
+      if (isOnStack) {
+        this.operatorModeStateService.viewCardOnStack(
+          stackIndex,
+          cardOrURL as CardDef,
+          opts,
+        );
+        return;
+      }
     }
     if (opts?.openCardInRightMostStack) {
       stackIndex = this.stacks.length;
@@ -244,6 +282,7 @@ export default class InteractSubmode extends Component {
       format,
       stackIndex,
       type: stackItemType,
+      useBaseTemplate: opts?.useBaseTemplate,
       relationshipContext: opts?.fieldName
         ? {
             fieldName: opts.fieldName,
@@ -258,8 +297,19 @@ export default class InteractSubmode extends Component {
     this.operatorModeStateService.closeWorkspaceChooser();
   };
 
-  private editCard = (stackIndex: number, card: CardDef): void => {
-    this.operatorModeStateService.editCardOnStack(stackIndex, card);
+  private editCard = (
+    stackIndex: number,
+    card: CardDef,
+    opts?: { useBaseTemplate?: boolean },
+  ): void => {
+    let item =
+      this.stacks[stackIndex] &&
+      this.operatorModeStateService.findCardInStackSafe(card, stackIndex);
+    if (item) {
+      this.operatorModeStateService.editCardOnStack(stackIndex, card, opts);
+    } else {
+      this.viewCard(stackIndex, card, 'edit', opts);
+    }
   };
 
   private getStackItemType(
