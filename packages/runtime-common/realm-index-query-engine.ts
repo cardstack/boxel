@@ -28,7 +28,9 @@ import {
   visitInstanceURLs,
   maybeRelativeURL,
   codeRefFromInternalKey,
+  unresolveResourceInstanceURLs,
 } from '.';
+import { canonicalURL } from './index-runner/dependency-url';
 import type { Realm } from './realm';
 import { FILE_META_RESERVED_KEYS } from './realm';
 import { RealmPaths } from './paths';
@@ -887,10 +889,11 @@ export class RealmIndexQueryEngine {
     opts?: Options,
   ): Promise<(CardResource<Saved> | FileMetaResource)[]> {
     if (resource.id != null) {
-      if (visited.includes(resource.id)) {
+      let canonicalId = canonicalURL(resource.id);
+      if (visited.includes(canonicalId)) {
         return [];
       }
-      visited.push(resource.id);
+      visited.push(canonicalId);
     }
     let realmPath = new RealmPaths(realmURL);
     let processedRelationships = new Set<string>();
@@ -1012,10 +1015,20 @@ export class RealmIndexQueryEngine {
             recursiveOpts,
           )) {
             foundLinks = true;
+            let isAlreadyOmitted = omit.some((item) =>
+              item
+                ? canonicalURL(item) === canonicalURL(includedResource.id!)
+                : false,
+            );
+            let isAlreadyIncluded = included.some((r) =>
+              r.id
+                ? canonicalURL(r.id) === canonicalURL(includedResource.id!)
+                : false,
+            );
             if (
               includedResource.id &&
-              !omit.includes(includedResource.id) &&
-              !included.find((r) => r.id === includedResource.id)
+              !isAlreadyOmitted &&
+              !isAlreadyIncluded
             ) {
               let rewrittenResource = cloneDeep({
                 ...includedResource,
@@ -1027,6 +1040,7 @@ export class RealmIndexQueryEngine {
               visitModuleDeps(rewrittenResource, (url, setURL) =>
                 absolutizeInstanceURL(url, rewrittenResource.id, setURL),
               );
+              unresolveResourceInstanceURLs(rewrittenResource);
               included.push(rewrittenResource);
             }
           }
@@ -1051,11 +1065,13 @@ export class RealmIndexQueryEngine {
         // Use prefix form (e.g. @cardstack/catalog/...) when available,
         // so relationship data.id stays portable across environments.
         let relationshipIdStr = unresolveCardReference(relationshipId.href);
-        if (
-          foundLinks ||
-          omit.includes(relationshipIdStr) ||
-          included.find((i) => i.id === relationshipIdStr)
-        ) {
+        let isOmitted = omit.some((item) =>
+          item ? canonicalURL(item) === canonicalURL(relationshipIdStr) : false,
+        );
+        let isIncluded = included.some((i) =>
+          i.id ? canonicalURL(i.id) === canonicalURL(relationshipIdStr) : false,
+        );
+        if (foundLinks || isOmitted || isIncluded) {
           relationship.data = {
             type: linkResource?.type ?? CardResourceType,
             id: relationshipIdStr,
