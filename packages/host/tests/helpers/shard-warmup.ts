@@ -10,11 +10,14 @@
 // test files.
 
 import { visit } from '@ember/test-helpers';
+
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
-import { getService } from '@universal-ember/test-support';
+import { setupMockMatrix } from './mock-matrix';
+import { setupApplicationTest } from './setup';
 
 import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -24,8 +27,6 @@ import {
   setupUserSubscription,
   testRealmURL,
 } from './index';
-import { setupMockMatrix } from './mock-matrix';
-import { setupApplicationTest } from './setup';
 
 module('__shard_warmup__', function (hooks) {
   setupApplicationTest(hooks);
