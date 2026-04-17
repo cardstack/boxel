@@ -39,6 +39,7 @@ export interface MonacoEditorSignature {
 export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature> {
   private monacoState: {
     editor: _MonacoSDK.editor.IStandaloneCodeEditor;
+    disposables: _MonacoSDK.IDisposable[];
   } | null = null;
   private hasDestructor = false;
   private waiterManager = createMonacoWaiterManager();
@@ -137,15 +138,19 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
         element.style.height = `${contentHeight}px`;
       }
 
-      editor.onDidContentSizeChange(() => {
-        const newHeight = editor.getContentHeight();
-        if (newHeight > 0) {
-          element.style.height = `${newHeight}px`;
-        }
-      });
+      let disposables: _MonacoSDK.IDisposable[] = [];
+      disposables.push(
+        editor.onDidContentSizeChange(() => {
+          const newHeight = editor.getContentHeight();
+          if (newHeight > 0) {
+            element.style.height = `${newHeight}px`;
+          }
+        }),
+      );
 
       this.monacoState = {
         editor,
+        disposables,
       };
 
       // Track editor initialization for test waiters after models and language are ready
@@ -160,6 +165,18 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
       registerDestructor(this, () => {
         let editor = this.monacoState?.editor;
         let model = editor?.getModel();
+        let disposables = this.monacoState?.disposables;
+        if (disposables) {
+          for (let d of disposables) {
+            try {
+              d.dispose();
+            } catch {
+              // listener disposal during teardown races with Monaco's own
+              // dispose; ignore so one bad listener doesn't block the rest
+            }
+          }
+          disposables.length = 0;
+        }
         if (editor) {
           this.disposeEditorAfterInitialLayout(editor, model);
         }

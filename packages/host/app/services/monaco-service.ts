@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -40,10 +41,27 @@ export default class MonacoService extends Service {
   serverEchoDebounceMs = serverEchoDebounceMs;
 
   private waiterManager = createMonacoWaiterManager();
+  // Disposables returned from monaco event subscriptions. Monaco is a
+  // module-level singleton, so every `onDidCreateEditor` or per-editor
+  // `onDid*` listener we register stays on the global emitter until
+  // explicitly disposed — otherwise the listener closure pins this service
+  // (and its owner's ApplicationInstance) across test teardown.
+  private disposables: Array<{ dispose(): void }> = [];
 
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
+    registerDestructor(this, () => {
+      for (let d of this.disposables) {
+        try {
+          d.dispose();
+        } catch (_) {
+          // Monaco's dispose throws if the editor was already disposed; safe
+          // to ignore since we're tearing down anyway.
+        }
+      }
+      this.disposables.length = 0;
+    });
     this.#ready = this.loadMonacoSDK.perform();
   }
 
@@ -70,42 +88,54 @@ export default class MonacoService extends Service {
       this.extendMonacoLanguage(lang, monaco),
     );
     monaco.editor.setTheme('vs-dark');
-    monaco.editor.onDidCreateEditor((editor: _MonacoSDK.editor.ICodeEditor) => {
-      let isMainEditor = ((editor as any)._domElement as HTMLElement)
-        .getAttributeNames()
-        .includes('data-monaco-container-operator-mode');
+    this.disposables.push(
+      monaco.editor.onDidCreateEditor(
+        (editor: _MonacoSDK.editor.ICodeEditor) => {
+          let isMainEditor = ((editor as any)._domElement as HTMLElement)
+            .getAttributeNames()
+            .includes('data-monaco-container-operator-mode');
 
-      if (!isMainEditor) {
-        // Other editors (code blocks) are read only, so we don't need to track focus
-        return;
-      }
+          if (!isMainEditor) {
+            // Other editors (code blocks) are read only, so we don't need to track focus
+            return;
+          }
 
-      // Track editor initialization with shared waiter manager
-      const initOperation = `editor-init-${editor.getId()}`;
+          // Track editor initialization with shared waiter manager
+          const initOperation = `editor-init-${editor.getId()}`;
 
-      this.editor = editor;
-      this.editor.onDidFocusEditorText(() => {
-        this.hasFocus = true;
-      });
-      this.editor.onDidBlurEditorText(() => {
-        this.hasFocus = false;
-      });
-      this.editor.onDidChangeCursorSelection(() => {
-        debounce(this, this.updateSelection, isTesting() ? 10 : 200);
-      });
-      this.editor.onDidDispose(() => {
-        if (this.editor === editor) {
-          this.editor = null;
-          this.hasFocus = false;
-          this.trackedSelection = undefined;
-        }
-      });
+          this.editor = editor;
+          this.disposables.push(
+            this.editor.onDidFocusEditorText(() => {
+              this.hasFocus = true;
+            }),
+          );
+          this.disposables.push(
+            this.editor.onDidBlurEditorText(() => {
+              this.hasFocus = false;
+            }),
+          );
+          this.disposables.push(
+            this.editor.onDidChangeCursorSelection(() => {
+              debounce(this, this.updateSelection, isTesting() ? 10 : 200);
+            }),
+          );
+          this.disposables.push(
+            this.editor.onDidDispose(() => {
+              if (this.editor === editor) {
+                this.editor = null;
+                this.hasFocus = false;
+                this.trackedSelection = undefined;
+              }
+            }),
+          );
 
-      // Use shared waiter manager to track editor initialization
-      if (this.waiterManager) {
-        this.waiterManager.trackEditorInit(this.editor, initOperation);
-      }
-    });
+          // Use shared waiter manager to track editor initialization
+          if (this.waiterManager) {
+            this.waiterManager.trackEditorInit(this.editor, initOperation);
+          }
+        },
+      ),
+    );
     await Promise.all(promises);
     this.#monacoSDK = monaco;
     return monaco;
