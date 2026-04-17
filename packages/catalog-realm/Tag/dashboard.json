@@ -2,12 +2,12 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Game",
-      "color": "#37eb77",
+      "name": "Dashboard",
+      "color": "#10B981",
       "cardInfo": {
         "notes": null,
-        "name": null,
-        "summary": "Cards and apps for gaming, game tracking, scoreboards, turn management, or any interactive game-related experience.",
+        "name": "Dashboard",
+        "summary": "Data overview and analytics views that summarise key metrics at a glance.",
         "cardThumbnailURL": null
       }
     },

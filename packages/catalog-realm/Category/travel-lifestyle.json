@@ -1,0 +1,32 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Category",
+        "module": "../catalog-app/listing/category"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Travel and Lifestyle",
+      "cardInfo": {
+        "name": "Travel and Lifestyle",
+        "notes": null,
+        "summary": "Travel planning, destination guides, cultural experiences, accommodation booking, travel itineraries, and vacation activities.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/life"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

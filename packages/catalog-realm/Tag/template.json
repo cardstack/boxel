@@ -2,12 +2,12 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Official",
-      "color": "#00ebac",
+      "name": "Template",
+      "color": "#10B981",
       "cardInfo": {
         "notes": null,
-        "name": null,
-        "summary": "Cards and apps officially created and maintained by the Cardstack team. Guaranteed quality, ongoing support, and compatibility with the latest platform updates.",
+        "name": "Template",
+        "summary": "Reusable starting points and boilerplates ready to be customised for your own use.",
         "cardThumbnailURL": null
       }
     },

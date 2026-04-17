@@ -35,12 +35,12 @@
       },
       "tags.0": {
         "links": {
-          "self": "../Tag/ed5a1a3f-0dbf-47b5-b2a6-d88b0d2a7642"
+          "self": "../Tag/official"
         }
       },
       "tags.1": {
         "links": {
-          "self": "../Tag/b793225c-32f9-404c-b2a9-b4041b93090c"
+          "self": "../Tag/theme"
         }
       },
       "license": {

@@ -1,20 +1,20 @@
 {
   "data": {
-    "meta": {
-      "adoptsFrom": {
-        "name": "Tag",
-        "module": "../catalog-app/listing/tag"
-      }
-    },
     "type": "card",
     "attributes": {
       "name": "Theme",
-      "color": "#ff009d",
+      "color": "#10B981",
       "cardInfo": {
         "notes": null,
-        "name": null,
+        "name": "Theme",
         "summary": "Visual themes and styling cards that customize the appearance and color scheme of the Boxel workspace or other cards.",
         "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/tag",
+        "name": "Tag"
       }
     },
     "relationships": {

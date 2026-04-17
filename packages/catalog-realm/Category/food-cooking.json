@@ -8,18 +8,18 @@
     },
     "type": "card",
     "attributes": {
-      "name": "Travel and Lifestyle",
+      "name": "Food & Cooking",
       "cardInfo": {
-        "name": null,
+        "name": "Food & Cooking",
         "notes": null,
-        "summary": null,
+        "summary": "Recipes, meal planning, grocery lists, restaurant tracking, cooking guides, nutrition tracking, and food discovery.",
         "cardThumbnailURL": null
       }
     },
     "relationships": {
       "sphere": {
         "links": {
-          "self": "../Sphere/5d7420dc-c8f6-491d-9570-60c01e07b14c"
+          "self": "../Sphere/life"
         }
       },
       "cardInfo.theme": {
