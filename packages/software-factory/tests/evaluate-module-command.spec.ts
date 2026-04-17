@@ -6,12 +6,8 @@ import { resolve } from 'node:path';
 
 import { expect, test } from './fixtures';
 
-import {
-  runRealmCommand,
-  writeFile,
-  waitForRealmFile,
-} from '../src/realm-operations';
 import { buildServerToken } from '../src/harness/shared';
+import { buildTestClient } from './helpers/test-client';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -70,39 +66,47 @@ test.describe('evaluate-module command', () => {
     let authorization = realm.authorizationHeaders()['Authorization'];
     let serverToken = `Bearer ${buildServerToken()}`;
 
-    await writeFile(realmUrl, 'valid-test.gts', VALID_MODULE, {
-      authorization,
-    });
-    await waitForRealmFile(realmUrl, 'valid-test.gts', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
+    let { client, cleanup } = buildTestClient({
+      realmUrl,
+      realmToken: authorization,
+      realmServerUrl,
+      realmServerToken: serverToken,
     });
 
-    let moduleUrl = new URL('valid-test', realmUrl).href;
-    let response = await fetch(
-      new URL('/_prerender-module', realmServerUrl).href,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.api+json',
-          'Content-Type': 'application/vnd.api+json',
-          Authorization: serverToken,
-        },
-        body: JSON.stringify({
-          data: {
-            type: 'prerender-module-request',
-            attributes: { realm: realmUrl, url: moduleUrl },
+    try {
+      await client.write(realmUrl, 'valid-test.gts', VALID_MODULE);
+      await client.waitForFile(realmUrl, 'valid-test.gts', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
+
+      let moduleUrl = new URL('valid-test', realmUrl).href;
+      let response = await fetch(
+        new URL('/_prerender-module', realmServerUrl).href,
+        {
+          method: 'POST',
+          headers: {
+            Accept: 'application/vnd.api+json',
+            'Content-Type': 'application/vnd.api+json',
+            Authorization: serverToken,
           },
-        }),
-      },
-    );
+          body: JSON.stringify({
+            data: {
+              type: 'prerender-module-request',
+              attributes: { realm: realmUrl, url: moduleUrl },
+            },
+          }),
+        },
+      );
 
-    expect(response.status).toBe(201);
-    let body = await response.json();
-    let attrs = body?.data?.attributes;
-    expect(attrs?.status).toBe('ready');
-    expect(attrs?.error).toBeFalsy();
+      expect(response.status).toBe(201);
+      let body = await response.json();
+      let attrs = body?.data?.attributes;
+      expect(attrs?.status).toBe('ready');
+      expect(attrs?.error).toBeFalsy();
+    } finally {
+      cleanup();
+    }
   });
 
   test('/_prerender-module: broken import detection', async ({ realm }) => {
@@ -111,42 +115,54 @@ test.describe('evaluate-module command', () => {
     let authorization = realm.authorizationHeaders()['Authorization'];
     let serverToken = `Bearer ${buildServerToken()}`;
 
-    await writeFile(realmUrl, 'broken-import-test.gts', BROKEN_IMPORT_MODULE, {
-      authorization,
-    });
-    await waitForRealmFile(realmUrl, 'broken-import-test.gts', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
+    let { client, cleanup } = buildTestClient({
+      realmUrl,
+      realmToken: authorization,
+      realmServerUrl,
+      realmServerToken: serverToken,
     });
 
-    let moduleUrl = new URL('broken-import-test', realmUrl).href;
-    let response = await fetch(
-      new URL('/_prerender-module', realmServerUrl).href,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.api+json',
-          'Content-Type': 'application/vnd.api+json',
-          Authorization: serverToken,
-        },
-        body: JSON.stringify({
-          data: {
-            type: 'prerender-module-request',
-            attributes: { realm: realmUrl, url: moduleUrl },
+    try {
+      await client.write(
+        realmUrl,
+        'broken-import-test.gts',
+        BROKEN_IMPORT_MODULE,
+      );
+      await client.waitForFile(realmUrl, 'broken-import-test.gts', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
+
+      let moduleUrl = new URL('broken-import-test', realmUrl).href;
+      let response = await fetch(
+        new URL('/_prerender-module', realmServerUrl).href,
+        {
+          method: 'POST',
+          headers: {
+            Accept: 'application/vnd.api+json',
+            'Content-Type': 'application/vnd.api+json',
+            Authorization: serverToken,
           },
-        }),
-      },
-    );
+          body: JSON.stringify({
+            data: {
+              type: 'prerender-module-request',
+              attributes: { realm: realmUrl, url: moduleUrl },
+            },
+          }),
+        },
+      );
 
-    expect(response.status).toBe(201);
-    let body = await response.json();
-    let attrs = body?.data?.attributes;
+      expect(response.status).toBe(201);
+      let body = await response.json();
+      let attrs = body?.data?.attributes;
 
-    // This is what we WANT: the prerender should detect the broken import
-    // If this assertion fails, it means the prerender/Loader silently
-    // swallows missing relative imports
-    expect(attrs?.status).toBe('error');
+      // This is what we WANT: the prerender should detect the broken import
+      // If this assertion fails, it means the prerender/Loader silently
+      // swallows missing relative imports
+      expect(attrs?.status).toBe('error');
+    } finally {
+      cleanup();
+    }
   });
 
   test('/_prerender-module: strict-mode eval error detected', async ({
@@ -157,39 +173,47 @@ test.describe('evaluate-module command', () => {
     let authorization = realm.authorizationHeaders()['Authorization'];
     let serverToken = `Bearer ${buildServerToken()}`;
 
-    await writeFile(realmUrl, 'broken-eval-test.gts', BROKEN_EVAL_MODULE, {
-      authorization,
-    });
-    await waitForRealmFile(realmUrl, 'broken-eval-test.gts', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
+    let { client, cleanup } = buildTestClient({
+      realmUrl,
+      realmToken: authorization,
+      realmServerUrl,
+      realmServerToken: serverToken,
     });
 
-    let moduleUrl = new URL('broken-eval-test', realmUrl).href;
-    let response = await fetch(
-      new URL('/_prerender-module', realmServerUrl).href,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.api+json',
-          'Content-Type': 'application/vnd.api+json',
-          Authorization: serverToken,
-        },
-        body: JSON.stringify({
-          data: {
-            type: 'prerender-module-request',
-            attributes: { realm: realmUrl, url: moduleUrl },
+    try {
+      await client.write(realmUrl, 'broken-eval-test.gts', BROKEN_EVAL_MODULE);
+      await client.waitForFile(realmUrl, 'broken-eval-test.gts', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
+
+      let moduleUrl = new URL('broken-eval-test', realmUrl).href;
+      let response = await fetch(
+        new URL('/_prerender-module', realmServerUrl).href,
+        {
+          method: 'POST',
+          headers: {
+            Accept: 'application/vnd.api+json',
+            'Content-Type': 'application/vnd.api+json',
+            Authorization: serverToken,
           },
-        }),
-      },
-    );
+          body: JSON.stringify({
+            data: {
+              type: 'prerender-module-request',
+              attributes: { realm: realmUrl, url: moduleUrl },
+            },
+          }),
+        },
+      );
 
-    expect(response.status).toBe(201);
-    let body = await response.json();
-    let attrs = body?.data?.attributes;
-    expect(attrs?.status).toBe('error');
-    expect(attrs?.error?.error?.message).toBeTruthy();
+      expect(response.status).toBe(201);
+      let body = await response.json();
+      let attrs = body?.data?.attributes;
+      expect(attrs?.status).toBe('error');
+      expect(attrs?.error?.error?.message).toBeTruthy();
+    } finally {
+      cleanup();
+    }
   });
 
   test('evaluate-module via _run-command: valid module passes', async ({
@@ -197,22 +221,33 @@ test.describe('evaluate-module command', () => {
   }) => {
     let realmUrl = realm.realmURL.href;
     let realmServerUrl = realm.realmServerURL.href;
+    let authorization = realm.authorizationHeaders()['Authorization'];
     let serverToken = `Bearer ${buildServerToken()}`;
 
-    let moduleUrl = new URL('hello', realmUrl).href; // fixture realm's hello.gts
-
-    let response = await runRealmCommand(
-      realmServerUrl,
+    let { client, cleanup } = buildTestClient({
       realmUrl,
-      '@cardstack/boxel-host/commands/evaluate-module/default',
-      { moduleUrl, realmUrl },
-      { authorization: serverToken },
-    );
+      realmToken: authorization,
+      realmServerUrl,
+      realmServerToken: serverToken,
+    });
 
-    expect(response.status).toBe('ready');
-    let result = JSON.parse(response.result!);
-    let attrs = result?.data?.attributes ?? result;
-    expect(attrs.passed).toBe(true);
+    try {
+      let moduleUrl = new URL('hello', realmUrl).href; // fixture realm's hello.gts
+
+      let response = await client.runCommand(
+        realmServerUrl,
+        realmUrl,
+        '@cardstack/boxel-host/commands/evaluate-module/default',
+        { moduleUrl, realmUrl },
+      );
+
+      expect(response.status).toBe('ready');
+      let result = JSON.parse(response.result!);
+      let attrs = result?.data?.attributes ?? result;
+      expect(attrs.passed).toBe(true);
+    } finally {
+      cleanup();
+    }
   });
 
   test('evaluate-module via _run-command: broken import', async ({ realm }) => {
@@ -221,32 +256,39 @@ test.describe('evaluate-module command', () => {
     let authorization = realm.authorizationHeaders()['Authorization'];
     let serverToken = `Bearer ${buildServerToken()}`;
 
-    await writeFile(realmUrl, 'broken-cmd-test.gts', BROKEN_IMPORT_MODULE, {
-      authorization,
-    });
-    await waitForRealmFile(realmUrl, 'broken-cmd-test.gts', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
-    });
-
-    let moduleUrl = new URL('broken-cmd-test', realmUrl).href;
-    let response = await runRealmCommand(
-      realmServerUrl,
+    let { client, cleanup } = buildTestClient({
       realmUrl,
-      '@cardstack/boxel-host/commands/evaluate-module/default',
-      { moduleUrl, realmUrl },
-      { authorization: serverToken },
-    );
+      realmToken: authorization,
+      realmServerUrl,
+      realmServerToken: serverToken,
+    });
 
-    // If the prerender catches the broken import, the command should return passed=false
-    if (response.status === 'ready' && response.result) {
-      let result = JSON.parse(response.result);
-      let attrs = result?.data?.attributes ?? result;
-      expect(attrs.passed).toBe(false);
-    } else {
-      // Command itself errored
-      expect(response.status).toBe('error');
+    try {
+      await client.write(realmUrl, 'broken-cmd-test.gts', BROKEN_IMPORT_MODULE);
+      await client.waitForFile(realmUrl, 'broken-cmd-test.gts', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
+
+      let moduleUrl = new URL('broken-cmd-test', realmUrl).href;
+      let response = await client.runCommand(
+        realmServerUrl,
+        realmUrl,
+        '@cardstack/boxel-host/commands/evaluate-module/default',
+        { moduleUrl, realmUrl },
+      );
+
+      // If the prerender catches the broken import, the command should return passed=false
+      if (response.status === 'ready' && response.result) {
+        let result = JSON.parse(response.result);
+        let attrs = result?.data?.attributes ?? result;
+        expect(attrs.passed).toBe(false);
+      } else {
+        // Command itself errored
+        expect(response.status).toBe('error');
+      }
+    } finally {
+      cleanup();
     }
   });
 });

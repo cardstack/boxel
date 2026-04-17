@@ -8,7 +8,7 @@ import {
   type EvalValidationDetails,
   type EvalModuleResult,
 } from '../src/validators/eval-step';
-import type { RealmFetchOptions } from '../src/realm-operations';
+import { createMockClient } from './helpers/mock-client';
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -18,6 +18,7 @@ function makeConfig(
   overrides: Partial<EvalValidationStepConfig> = {},
 ): EvalValidationStepConfig {
   return {
+    client: createMockClient(),
     realmServerUrl: 'https://example.test/',
     evalResultsModuleUrl: 'https://example.test/eval-result',
     // Default to a no-op sequence resolver for unit tests
@@ -28,19 +29,13 @@ function makeConfig(
 
 function makeFetchFilenames(
   filenames: string[],
-): (
-  realmUrl: string,
-  options?: RealmFetchOptions,
-) => Promise<{ filenames: string[]; error?: string }> {
+): (realmUrl: string) => Promise<{ filenames: string[]; error?: string }> {
   return async () => ({ filenames });
 }
 
 function makeFetchFilenamesError(
   error: string,
-): (
-  realmUrl: string,
-  options?: RealmFetchOptions,
-) => Promise<{ filenames: string[]; error?: string }> {
+): (realmUrl: string) => Promise<{ filenames: string[]; error?: string }> {
   return async () => ({ filenames: [], error });
 }
 

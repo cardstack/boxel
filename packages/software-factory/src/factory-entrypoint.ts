@@ -1,5 +1,7 @@
 import { parseArgs as parseNodeArgs } from 'node:util';
 
+import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
 import { inferDarkfactoryModuleUrl } from './factory-seed';
 import { loadFactoryBrief, type FactoryBrief } from './factory-brief';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
@@ -16,7 +18,6 @@ import {
   type ResolveFactoryTargetRealmOptions,
 } from './factory-target-realm';
 import type { IssueLoopResult } from './issue-loop';
-import { createBoxelRealmFetch } from './realm-auth';
 
 export interface FactoryEntrypointOptions {
   briefUrl: string;
@@ -80,7 +81,10 @@ export interface RunFactoryEntrypointDependencies {
   createSeed?: (
     brief: FactoryBrief,
     targetRealmUrl: string,
-    options: { fetch?: typeof globalThis.fetch; darkfactoryModuleUrl: string },
+    options: {
+      client: BoxelCLIClient;
+      darkfactoryModuleUrl: string;
+    },
   ) => Promise<SeedIssueResult>;
   runIssueLoop?: (config: IssueLoopWiringConfig) => Promise<IssueLoopResult>;
 }
@@ -197,23 +201,17 @@ export async function runFactoryEntrypoint(
     targetRealmUrl: options.targetRealmUrl,
     realmServerUrl: options.realmServerUrl,
   });
-  let fetchImpl = createBoxelRealmFetch(options.briefUrl, {
-    fetch: dependencies?.fetch,
-  });
+
+  let client = new BoxelCLIClient();
 
   let brief = await loadFactoryBrief(options.briefUrl, {
-    fetch: fetchImpl,
+    client,
+    fetch: dependencies?.fetch,
   });
 
   let targetRealm = await (
     dependencies?.bootstrapTargetRealm ?? bootstrapFactoryTargetRealm
   )(targetRealmResolution);
-
-  let realmFetch = createBoxelRealmFetch(targetRealm.url, {
-    authorization: targetRealm.authorization,
-    fetch: dependencies?.fetch,
-    primeRealmURL: targetRealm.url,
-  });
 
   let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealm.url);
 
@@ -221,7 +219,7 @@ export async function runFactoryEntrypoint(
   let seedResult = await (dependencies?.createSeed ?? createSeedIssue)(
     brief,
     targetRealm.url,
-    { fetch: realmFetch, darkfactoryModuleUrl },
+    { client, darkfactoryModuleUrl },
   );
 
   let summary = buildFactoryEntrypointSummary(
@@ -238,11 +236,10 @@ export async function runFactoryEntrypoint(
     targetRealmUrl: targetRealm.url,
     realmServerUrl: targetRealm.serverUrl,
     ownerUsername: targetRealm.ownerUsername,
-    authorization: targetRealm.authorization,
+    client,
     model: options.model,
     debug: options.debug,
     retryBlocked: options.retryBlocked,
-    fetch: dependencies?.fetch,
   });
 
   summary.issueLoop = {

@@ -7,6 +7,8 @@
  * in `createDefaultPipeline()`.
  */
 
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
 import type {
   ValidationStep,
   ValidationStepResult,
@@ -152,11 +154,7 @@ export class ValidationPipeline implements Validator {
 // ---------------------------------------------------------------------------
 
 export interface ValidationPipelineConfig {
-  /** Realm-scoped authorization token for realm API calls (readFile, writeFile, _lint, _search). */
-  authorization?: string;
-  /** Realm server token for _run-command calls (prerenderer). Distinct from realm-scoped authorization. */
-  serverToken?: string;
-  fetch?: typeof globalThis.fetch;
+  client: BoxelCLIClient;
   realmServerUrl: string;
   hostAppUrl: string;
   testResultsModuleUrl: string;
@@ -180,8 +178,7 @@ export function createDefaultPipeline(
   config: ValidationPipelineConfig,
 ): ValidationPipeline {
   let parseConfig: ParseValidationStepConfig = {
-    authorization: config.authorization,
-    fetch: config.fetch,
+    client: config.client,
     realmServerUrl: config.realmServerUrl,
     parseResultsModuleUrl: config.parseResultsModuleUrl,
     issueId: config.issueId,
@@ -190,8 +187,7 @@ export function createDefaultPipeline(
   };
 
   let testConfig: TestValidationStepConfig = {
-    authorization: config.authorization,
-    fetch: config.fetch,
+    client: config.client,
     realmServerUrl: config.realmServerUrl,
     hostAppUrl: config.hostAppUrl,
     testResultsModuleUrl: config.testResultsModuleUrl,
@@ -200,8 +196,7 @@ export function createDefaultPipeline(
   };
 
   let lintConfig: LintValidationStepConfig = {
-    authorization: config.authorization,
-    fetch: config.fetch,
+    client: config.client,
     realmServerUrl: config.realmServerUrl,
     lintResultsModuleUrl: config.lintResultsModuleUrl,
     issueId: config.issueId,
@@ -209,9 +204,7 @@ export function createDefaultPipeline(
   };
 
   let evalConfig: EvalValidationStepConfig = {
-    authorization: config.authorization,
-    serverToken: config.serverToken,
-    fetch: config.fetch,
+    client: config.client,
     realmServerUrl: config.realmServerUrl,
     evalResultsModuleUrl: config.evalResultsModuleUrl,
     issueId: config.issueId,
@@ -219,9 +212,7 @@ export function createDefaultPipeline(
   };
 
   let instantiateConfig: InstantiateValidationStepConfig = {
-    authorization: config.authorization,
-    serverToken: config.serverToken,
-    fetch: config.fetch,
+    client: config.client,
     realmServerUrl: config.realmServerUrl,
     instantiateResultsModuleUrl: config.instantiateResultsModuleUrl,
     issueId: config.issueId,

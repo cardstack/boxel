@@ -10,16 +10,12 @@
  * responsibility of the test validation step.
  */
 
-import type { ValidationStepResult } from '../factory-agent';
-import { deriveIssueSlug } from '../factory-agent-types';
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-import {
-  fetchRealmFilenames,
-  getNextValidationSequenceNumber,
-  runRealmCommand,
-  type RealmFetchOptions,
-} from '../realm-operations';
+import type { ValidationStepResult } from '../factory-agent';
+import { deriveIssueSlug } from '../factory-agent-types';
+import { getNextValidationSequenceNumber } from '../realm-operations';
 import {
   createEvalResult,
   completeEvalResult,
@@ -42,20 +38,15 @@ export interface EvalModuleResult {
 }
 
 export interface EvalValidationStepConfig {
-  /** Realm-scoped authorization token for realm API calls (readFile, writeFile, _search). */
-  authorization?: string;
-  /** Realm server token for _run-command calls (prerenderer). Distinct from realm-scoped authorization. */
-  serverToken?: string;
-  fetch?: typeof globalThis.fetch;
+  client: BoxelCLIClient;
   realmServerUrl: string;
   evalResultsModuleUrl: string;
   issueId?: string;
-  /** Injected for testing — defaults to fetchRealmFilenames. */
+  /** Injected for testing — defaults to client.listFiles. */
   fetchFilenames?: (
     realmUrl: string,
-    options?: RealmFetchOptions,
   ) => Promise<{ filenames: string[]; error?: string }>;
-  /** Injected for testing — defaults to runRealmCommand calling the evaluate-module host command. */
+  /** Injected for testing — defaults to client.runCommand calling the evaluate-module host command. */
   evaluateModuleFn?: (
     moduleUrl: string,
     realmUrl: string,
@@ -90,7 +81,6 @@ export class EvalValidationStep implements ValidationStepRunner {
 
   private fetchFilenamesFn: (
     realmUrl: string,
-    options?: RealmFetchOptions,
   ) => Promise<{ filenames: string[]; error?: string }>;
   private evaluateModuleFn: (
     moduleUrl: string,
@@ -103,7 +93,9 @@ export class EvalValidationStep implements ValidationStepRunner {
 
   constructor(config: EvalValidationStepConfig) {
     this.config = config;
-    this.fetchFilenamesFn = config.fetchFilenames ?? fetchRealmFilenames;
+    this.fetchFilenamesFn =
+      config.fetchFilenames ??
+      ((realmUrl: string) => config.client.listFiles(realmUrl));
     this.evaluateModuleFn =
       config.evaluateModuleFn ??
       ((moduleUrl: string, realmUrl: string) =>
@@ -112,15 +104,12 @@ export class EvalValidationStep implements ValidationStepRunner {
       config.getNextSequenceNumber ??
       ((slug: string, targetRealmUrl: string) =>
         getNextValidationSequenceNumber(
+          config.client,
           slug,
           'Validations/eval_',
           config.evalResultsModuleUrl,
           'EvalResult',
-          {
-            targetRealmUrl,
-            authorization: config.authorization,
-            fetch: config.fetch,
-          },
+          targetRealmUrl,
         ));
   }
 
@@ -185,8 +174,7 @@ export class EvalValidationStep implements ValidationStepRunner {
         this.config.evalResultsModuleUrl,
         {
           targetRealmUrl,
-          authorization: this.config.authorization,
-          fetch: this.config.fetch,
+          client: this.config.client,
           sequenceNumber: seq,
           issueURL,
         },
@@ -262,8 +250,7 @@ export class EvalValidationStep implements ValidationStepRunner {
         },
         {
           targetRealmUrl,
-          authorization: this.config.authorization,
-          fetch: this.config.fetch,
+          client: this.config.client,
         },
       );
       if (!completeResult.updated) {
@@ -333,10 +320,7 @@ export class EvalValidationStep implements ValidationStepRunner {
   private async discoverEvaluableFiles(
     targetRealmUrl: string,
   ): Promise<string[]> {
-    let result = await this.fetchFilenamesFn(targetRealmUrl, {
-      authorization: this.config.authorization,
-      fetch: this.config.fetch,
-    });
+    let result = await this.fetchFilenamesFn(targetRealmUrl);
 
     if (result.error) {
       log.warn(`Failed to fetch realm filenames: ${result.error}`);
@@ -356,22 +340,11 @@ export class EvalValidationStep implements ValidationStepRunner {
     moduleUrl: string,
     realmUrl: string,
   ): Promise<EvalModuleResult> {
-    if (!this.config.serverToken) {
-      return {
-        passed: false,
-        error: 'serverToken is required for eval validation via _run-command',
-      };
-    }
-
-    let response = await runRealmCommand(
+    let response = await this.config.client.runCommand(
       this.config.realmServerUrl,
       realmUrl,
       EVALUATE_MODULE_COMMAND,
       { moduleUrl, realmUrl },
-      {
-        authorization: this.config.serverToken,
-        fetch: this.config.fetch,
-      },
     );
 
     log.info(

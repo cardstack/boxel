@@ -14,7 +14,7 @@ import type {
   TestRunHandle,
   ExecuteTestRunOptions,
 } from '../src/test-run-types';
-import type { RealmFetchOptions } from '../src/realm-operations';
+import { createMockClient } from './helpers/mock-client';
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -24,6 +24,7 @@ function makeConfig(
   overrides: Partial<TestValidationStepConfig> = {},
 ): TestValidationStepConfig {
   return {
+    client: createMockClient(),
     realmServerUrl: 'https://example.test/',
     hostAppUrl: 'https://example.test/',
     testResultsModuleUrl: 'https://example.test/test-results',
@@ -33,19 +34,13 @@ function makeConfig(
 
 function makeFetchFilenames(
   filenames: string[],
-): (
-  realmUrl: string,
-  options?: RealmFetchOptions,
-) => Promise<{ filenames: string[]; error?: string }> {
+): (realmUrl: string) => Promise<{ filenames: string[]; error?: string }> {
   return async () => ({ filenames });
 }
 
 function makeFetchFilenamesError(
   error: string,
-): (
-  realmUrl: string,
-  options?: RealmFetchOptions,
-) => Promise<{ filenames: string[]; error?: string }> {
+): (realmUrl: string) => Promise<{ filenames: string[]; error?: string }> {
   return async () => ({ filenames: [], error });
 }
 
@@ -80,7 +75,6 @@ function makeTestRunCardDocument(
 function makeReadCard(document: LooseSingleCardDocument): (
   realmUrl: string,
   path: string,
-  options?: RealmFetchOptions,
 ) => Promise<{
   ok: boolean;
   document?: LooseSingleCardDocument;
@@ -92,7 +86,6 @@ function makeReadCard(document: LooseSingleCardDocument): (
 function makeReadCardError(error: string): (
   realmUrl: string,
   path: string,
-  options?: RealmFetchOptions,
 ) => Promise<{
   ok: boolean;
   document?: LooseSingleCardDocument;

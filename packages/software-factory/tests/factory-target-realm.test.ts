@@ -143,14 +143,12 @@ module('factory-target-realm', function (hooks) {
         return {
           createdRealm: true,
           url: resolution.url,
-          authorization: 'Bearer target-realm-token',
         };
       },
     });
 
     assert.strictEqual(createCalls, 1);
     assert.true(result.createdRealm);
-    assert.strictEqual(result.authorization, 'Bearer target-realm-token');
   });
 
   test('bootstrapFactoryTargetRealm reports when the realm already exists', async function (assert) {
@@ -165,12 +163,10 @@ module('factory-target-realm', function (hooks) {
       createRealm: async () => ({
         createdRealm: false,
         url: resolution.url,
-        authorization: 'Bearer target-realm-token',
       }),
     });
 
     assert.false(result.createdRealm);
-    assert.strictEqual(result.authorization, 'Bearer target-realm-token');
   });
 
   test('bootstrapFactoryTargetRealm uses the canonical realm URL returned by create-realm', async function (assert) {
@@ -185,7 +181,6 @@ module('factory-target-realm', function (hooks) {
       createRealm: async () => ({
         createdRealm: true,
         url: 'https://realms.example.test/hassan/personal/',
-        authorization: 'Bearer target-realm-token',
       }),
     });
 
@@ -193,6 +188,5 @@ module('factory-target-realm', function (hooks) {
       result.url,
       'https://realms.example.test/hassan/personal/',
     );
-    assert.strictEqual(result.authorization, 'Bearer target-realm-token');
   });
 });

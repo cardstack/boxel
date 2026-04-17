@@ -27,18 +27,13 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { specRef } from '@cardstack/runtime-common/constants';
 
 import type { ValidationStepResult } from '../factory-agent';
 import { deriveIssueSlug } from '../factory-agent-types';
 
-import {
-  fetchRealmFilenames,
-  getNextValidationSequenceNumber,
-  readFile,
-  searchRealm,
-  type RealmFetchOptions,
-} from '../realm-operations';
+import { getNextValidationSequenceNumber } from '../realm-operations';
 import {
   createParseResult,
   completeParseResult,
@@ -56,28 +51,25 @@ let log = logger('parse-validation-step');
 // ---------------------------------------------------------------------------
 
 export interface ParseValidationStepConfig {
-  authorization?: string;
-  fetch?: typeof globalThis.fetch;
+  client: BoxelCLIClient;
   realmServerUrl: string;
   parseResultsModuleUrl: string;
   issueId?: string;
-  /** Injected for testing — defaults to fetchRealmFilenames. */
+  /** Injected for testing — defaults to client.listFiles. */
   fetchFilenames?: (
     realmUrl: string,
-    options?: RealmFetchOptions,
   ) => Promise<{ filenames: string[]; error?: string }>;
-  /** Injected for testing — defaults to readFile from realm-operations. */
+  /** Injected for testing — defaults to client.read. */
   readFileFn?: (
     realmUrl: string,
     path: string,
-    options?: RealmFetchOptions,
   ) => Promise<{
     ok: boolean;
     content?: string;
     document?: { data: Record<string, unknown> };
     error?: string;
   }>;
-  /** Injected for testing — defaults to searchRealm-based spec discovery. */
+  /** Injected for testing — defaults to client.search-based spec discovery. */
   searchSpecsFn?: (
     realmUrl: string,
   ) => Promise<{ specs: SpecExampleInfo[]; error?: string }>;
@@ -159,12 +151,10 @@ export class ParseValidationStep implements ValidationStepRunner {
 
   private fetchFilenamesFn: (
     realmUrl: string,
-    options?: RealmFetchOptions,
   ) => Promise<{ filenames: string[]; error?: string }>;
   private readFileFn: (
     realmUrl: string,
     path: string,
-    options?: RealmFetchOptions,
   ) => Promise<{
     ok: boolean;
     content?: string;
@@ -184,8 +174,22 @@ export class ParseValidationStep implements ValidationStepRunner {
 
   constructor(config: ParseValidationStepConfig) {
     this.config = config;
-    this.fetchFilenamesFn = config.fetchFilenames ?? fetchRealmFilenames;
-    this.readFileFn = config.readFileFn ?? readFile;
+    this.fetchFilenamesFn =
+      config.fetchFilenames ??
+      ((realmUrl: string) => config.client.listFiles(realmUrl));
+    this.readFileFn =
+      config.readFileFn ??
+      (async (realmUrl: string, path: string) => {
+        let result = await config.client.read(realmUrl, path);
+        return {
+          ok: result.ok,
+          content: result.content,
+          document: result.document as
+            | { data: Record<string, unknown> }
+            | undefined,
+          error: result.error,
+        };
+      });
     this.searchSpecsFn =
       config.searchSpecsFn ??
       ((realmUrl: string) => this.defaultSearchSpecs(realmUrl));
@@ -193,15 +197,12 @@ export class ParseValidationStep implements ValidationStepRunner {
       config.getNextSequenceNumber ??
       ((slug: string, targetRealmUrl: string) =>
         getNextValidationSequenceNumber(
+          config.client,
           slug,
           'Validations/parse_',
           config.parseResultsModuleUrl,
           'ParseResult',
-          {
-            targetRealmUrl,
-            authorization: config.authorization,
-            fetch: config.fetch,
-          },
+          targetRealmUrl,
         ));
     this.runGlintCheckFn =
       config.runGlintCheckFn ?? ((files) => runGlintCheck(files));
@@ -274,8 +275,7 @@ export class ParseValidationStep implements ValidationStepRunner {
         this.config.parseResultsModuleUrl,
         {
           targetRealmUrl,
-          authorization: this.config.authorization,
-          fetch: this.config.fetch,
+          client: this.config.client,
           sequenceNumber: seq,
           issueURL,
         },
@@ -300,21 +300,13 @@ export class ParseValidationStep implements ValidationStepRunner {
     let startedAt = Date.now();
     let allFileResults: ParseFileResultData[] = [];
     let allErrors: ParseValidationDetails['errors'] = [];
-    let fetchOpts: RealmFetchOptions = {
-      authorization: this.config.authorization,
-      fetch: this.config.fetch,
-    };
 
     // 3a: Run glint (ember-tsc) on GTS files
     if (gtsFiles.length > 0) {
       let gtsContents: { path: string; content: string }[] = [];
       for (let file of gtsFiles) {
         try {
-          let readResult = await this.readFileFn(
-            targetRealmUrl,
-            file,
-            fetchOpts,
-          );
+          let readResult = await this.readFileFn(targetRealmUrl, file);
           if (!readResult.ok) {
             let message = `Could not read ${file}: ${readResult.error ?? 'read failed'}`;
             log.warn(message);
@@ -401,11 +393,7 @@ export class ParseValidationStep implements ValidationStepRunner {
     if (jsonExampleUrls.length > 0) {
       let jsonSettled = await Promise.allSettled(
         jsonExampleUrls.map(async (jsonUrl) => {
-          let readResult = await this.readFileFn(
-            targetRealmUrl,
-            jsonUrl,
-            fetchOpts,
-          );
+          let readResult = await this.readFileFn(targetRealmUrl, jsonUrl);
           if (!readResult.ok) {
             return {
               file: jsonUrl,
@@ -476,8 +464,7 @@ export class ParseValidationStep implements ValidationStepRunner {
         },
         {
           targetRealmUrl,
-          authorization: this.config.authorization,
-          fetch: this.config.fetch,
+          client: this.config.client,
         },
       );
       if (!completeResult.updated) {
@@ -552,10 +539,7 @@ export class ParseValidationStep implements ValidationStepRunner {
    * Discover .gts, .gjs, and .ts files in the realm (including test files).
    */
   private async discoverGtsFiles(targetRealmUrl: string): Promise<string[]> {
-    let result = await this.fetchFilenamesFn(targetRealmUrl, {
-      authorization: this.config.authorization,
-      fetch: this.config.fetch,
-    });
+    let result = await this.fetchFilenamesFn(targetRealmUrl);
 
     if (result.error) {
       throw new Error(result.error);
@@ -597,20 +581,11 @@ export class ParseValidationStep implements ValidationStepRunner {
   private async defaultSearchSpecs(
     realmUrl: string,
   ): Promise<{ specs: SpecExampleInfo[]; error?: string }> {
-    let fetchOptions: RealmFetchOptions = {
-      authorization: this.config.authorization,
-      fetch: this.config.fetch,
-    };
-
-    let searchResult = await searchRealm(
-      realmUrl,
-      {
-        filter: {
-          type: specRef,
-        },
+    let searchResult = await this.config.client.search(realmUrl, {
+      filter: {
+        type: specRef,
       },
-      fetchOptions,
-    );
+    });
 
     if (!searchResult.ok) {
       return { specs: [], error: searchResult.error };

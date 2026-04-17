@@ -17,13 +17,11 @@ export interface FactoryTargetRealmResolution {
 
 export interface FactoryTargetRealmBootstrapResult extends FactoryTargetRealmResolution {
   createdRealm: boolean;
-  authorization: string;
 }
 
 interface CreateRealmResult {
   createdRealm: boolean;
   url: string;
-  authorization: string;
 }
 
 export interface FactoryTargetRealmBootstrapActions {
@@ -73,7 +71,6 @@ export async function bootstrapFactoryTargetRealm(
     ...resolution,
     url: createRealmResult.url,
     createdRealm: createRealmResult.createdRealm,
-    authorization: createRealmResult.authorization,
   };
 }
 
@@ -104,7 +101,6 @@ async function createRealm(
   return {
     createdRealm: result.created,
     url: result.realmUrl,
-    authorization: result.authorization,
   };
 }
 

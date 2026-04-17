@@ -2,9 +2,9 @@ import { resolve } from 'node:path';
 
 import { expect, test } from './fixtures';
 
-import { readFile, writeFile, waitForRealmFile } from '../src/realm-operations';
 import { InstantiateValidationStep } from '../src/validators/instantiate-step';
 import type { InstantiateValidationDetails } from '../src/validators/instantiate-step';
+import { buildTestClient } from './helpers/test-client';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -56,123 +56,128 @@ test.describe('instantiate-validation e2e', () => {
     let serverToken = `Bearer ${realm.serverToken}`;
     let instantiateResultsModuleUrl = `${realmServerUrl}software-factory/instantiate-result`;
 
-    // Write a valid card module
-    let writeResult = await writeFile(
+    let { client, cleanup } = buildTestClient({
       realmUrl,
-      'instantiate-test-card.gts',
-      VALID_MODULE_GTS,
-      { authorization },
-    );
-    expect(writeResult.ok).toBe(true);
-
-    await waitForRealmFile(realmUrl, 'instantiate-test-card.gts', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
-    });
-
-    // Write an example instance card with relative adoptsFrom
-    // (the step runner resolves to absolute before sending to host command)
-    let exampleDoc = {
-      data: {
-        type: 'card',
-        attributes: { name: 'Example Instance' },
-        meta: {
-          adoptsFrom: {
-            module: '../instantiate-test-card',
-            name: 'ValidCard',
-          },
-        },
-      },
-    };
-    let exampleWrite = await writeFile(
-      realmUrl,
-      'ValidCard/example-1.json',
-      JSON.stringify(exampleDoc, null, 2),
-      { authorization },
-    );
-    expect(exampleWrite.ok).toBe(true);
-
-    await waitForRealmFile(realmUrl, 'ValidCard/example-1.json', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
-    });
-
-    // Write a Spec card that points to the card module and links to the example
-    let specDoc = {
-      data: {
-        type: 'card',
-        attributes: {
-          specType: 'card',
-          ref: {
-            module: '../instantiate-test-card',
-            name: 'ValidCard',
-          },
-        },
-        relationships: {
-          'linkedExamples.0': {
-            links: { self: '../ValidCard/example-1' },
-          },
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/spec',
-            name: 'Spec',
-          },
-        },
-      },
-    };
-    let specWrite = await writeFile(
-      realmUrl,
-      'Spec/valid-card-spec.json',
-      JSON.stringify(specDoc, null, 2),
-      { authorization },
-    );
-    expect(specWrite.ok).toBe(true);
-
-    await waitForRealmFile(realmUrl, 'Spec/valid-card-spec.json', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
-    });
-
-    let step = new InstantiateValidationStep({
-      authorization,
-      serverToken,
-      fetch: globalThis.fetch,
+      realmToken: authorization,
       realmServerUrl,
-      instantiateResultsModuleUrl,
-      issueId: 'Issues/instantiate-e2e',
+      realmServerToken: serverToken,
     });
 
-    let result = await step.run(realmUrl);
+    try {
+      // Write a valid card module
+      let writeResult = await client.write(
+        realmUrl,
+        'instantiate-test-card.gts',
+        VALID_MODULE_GTS,
+      );
+      expect(writeResult.ok).toBe(true);
 
-    // Must pass — valid card with valid example instance
-    expect(result.step).toBe('instantiate');
-    expect(result.passed).toBe(true);
-    expect(result.files).toBeTruthy();
-    expect(result.files!.length).toBeGreaterThan(0);
+      await client.waitForFile(realmUrl, 'instantiate-test-card.gts', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
 
-    let details = result.details as unknown as InstantiateValidationDetails;
-    expect(details).toBeTruthy();
-    expect(details.instantiateResultId).toContain(
-      'Validations/instantiate_instantiate-e2e',
-    );
-    expect(details.cardsChecked).toBeGreaterThan(0);
-    expect(details.cardsWithErrors).toBe(0);
+      // Write an example instance card with relative adoptsFrom
+      // (the step runner resolves to absolute before sending to host command)
+      let exampleDoc = {
+        data: {
+          type: 'card',
+          attributes: { name: 'Example Instance' },
+          meta: {
+            adoptsFrom: {
+              module: '../instantiate-test-card',
+              name: 'ValidCard',
+            },
+          },
+        },
+      };
+      let exampleWrite = await client.write(
+        realmUrl,
+        'ValidCard/example-1.json',
+        JSON.stringify(exampleDoc, null, 2),
+      );
+      expect(exampleWrite.ok).toBe(true);
 
-    // Read back the InstantiateResult card to verify persistence
-    let cardRead = await readFile(realmUrl, details.instantiateResultId, {
-      authorization,
-    });
-    expect(cardRead.ok).toBe(true);
+      await client.waitForFile(realmUrl, 'ValidCard/example-1.json', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
 
-    let attrs = cardRead.document?.data.attributes;
-    expect(attrs).toBeTruthy();
-    expect(attrs?.status).toBe('passed');
-    expect(attrs?.sequenceNumber).toBe(1);
-    expect(attrs?.completedAt).toBeTruthy();
+      // Write a Spec card that points to the card module and links to the example
+      let specDoc = {
+        data: {
+          type: 'card',
+          attributes: {
+            specType: 'card',
+            ref: {
+              module: '../instantiate-test-card',
+              name: 'ValidCard',
+            },
+          },
+          relationships: {
+            'linkedExamples.0': {
+              links: { self: '../ValidCard/example-1' },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/spec',
+              name: 'Spec',
+            },
+          },
+        },
+      };
+      let specWrite = await client.write(
+        realmUrl,
+        'Spec/valid-card-spec.json',
+        JSON.stringify(specDoc, null, 2),
+      );
+      expect(specWrite.ok).toBe(true);
+
+      await client.waitForFile(realmUrl, 'Spec/valid-card-spec.json', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
+
+      let step = new InstantiateValidationStep({
+        client,
+        realmServerUrl,
+        instantiateResultsModuleUrl,
+        issueId: 'Issues/instantiate-e2e',
+      });
+
+      let result = await step.run(realmUrl);
+
+      // Must pass — valid card with valid example instance
+      expect(result.step).toBe('instantiate');
+      expect(result.passed).toBe(true);
+      expect(result.files).toBeTruthy();
+      expect(result.files!.length).toBeGreaterThan(0);
+
+      let details = result.details as unknown as InstantiateValidationDetails;
+      expect(details).toBeTruthy();
+      expect(details.instantiateResultId).toContain(
+        'Validations/instantiate_instantiate-e2e',
+      );
+      expect(details.cardsChecked).toBeGreaterThan(0);
+      expect(details.cardsWithErrors).toBe(0);
+
+      // Read back the InstantiateResult card to verify persistence
+      let cardRead = await client.read(realmUrl, details.instantiateResultId);
+      expect(cardRead.ok).toBe(true);
+
+      let attrs = (
+        cardRead.document as unknown as {
+          data?: { attributes?: Record<string, unknown> };
+        }
+      )?.data?.attributes;
+      expect(attrs).toBeTruthy();
+      expect(attrs?.status).toBe('passed');
+      expect(attrs?.sequenceNumber).toBe(1);
+      expect(attrs?.completedAt).toBeTruthy();
+    } finally {
+      cleanup();
+    }
   });
 
   test('InstantiateValidationStep e2e: containsMany with non-array value fails instantiation', async ({
@@ -184,115 +189,120 @@ test.describe('instantiate-validation e2e', () => {
     let serverToken = `Bearer ${realm.serverToken}`;
     let instantiateResultsModuleUrl = `${realmServerUrl}software-factory/instantiate-result`;
 
-    // Write a card with a containsMany field (evaluates fine)
-    let cardWrite = await writeFile(
+    let { client, cleanup } = buildTestClient({
       realmUrl,
-      'tags-card.gts',
-      TAGS_CARD_MODULE_GTS,
-      { authorization },
-    );
-    expect(cardWrite.ok).toBe(true);
-    await waitForRealmFile(realmUrl, 'tags-card.gts', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
-    });
-
-    // Write the Spec card FIRST (before the bad example) so it gets
-    // indexed before the bad example potentially stalls the indexer.
-    let specDoc = {
-      data: {
-        type: 'card',
-        attributes: {
-          specType: 'card',
-          ref: {
-            module: '../tags-card',
-            name: 'TagsCard',
-          },
-        },
-        relationships: {
-          'linkedExamples.0': {
-            links: { self: '../TagsCard/bad-example' },
-          },
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/spec',
-            name: 'Spec',
-          },
-        },
-      },
-    };
-    let specWrite = await writeFile(
-      realmUrl,
-      'Spec/tags-card-spec.json',
-      JSON.stringify(specDoc, null, 2),
-      { authorization },
-    );
-    expect(specWrite.ok).toBe(true);
-    await waitForRealmFile(realmUrl, 'Spec/tags-card-spec.json', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
-    });
-
-    // Now write the bad example (after the Spec is indexed)
-    let exampleDoc = {
-      data: {
-        type: 'card',
-        attributes: {
-          name: 'Bad Tags Card',
-          tags: 'not-an-array',
-        },
-        meta: {
-          adoptsFrom: {
-            module: '../tags-card',
-            name: 'TagsCard',
-          },
-        },
-      },
-    };
-    let exampleWrite = await writeFile(
-      realmUrl,
-      'TagsCard/bad-example.json',
-      JSON.stringify(exampleDoc, null, 2),
-      { authorization },
-    );
-    expect(exampleWrite.ok).toBe(true);
-    await waitForRealmFile(realmUrl, 'TagsCard/bad-example.json', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
-    });
-
-    let step = new InstantiateValidationStep({
-      authorization,
-      serverToken,
-      fetch: globalThis.fetch,
+      realmToken: authorization,
       realmServerUrl,
-      instantiateResultsModuleUrl,
-      issueId: 'Issues/instantiate-fail-e2e',
+      realmServerToken: serverToken,
     });
 
-    let result = await step.run(realmUrl);
+    try {
+      // Write a card with a containsMany field (evaluates fine)
+      let cardWrite = await client.write(
+        realmUrl,
+        'tags-card.gts',
+        TAGS_CARD_MODULE_GTS,
+      );
+      expect(cardWrite.ok).toBe(true);
+      await client.waitForFile(realmUrl, 'tags-card.gts', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
 
-    // Must fail — containsMany field received a string instead of an array
-    expect(result.step).toBe('instantiate');
-    expect(result.passed).toBe(false);
-    expect(result.errors.length).toBeGreaterThan(0);
+      // Write the Spec card FIRST (before the bad example) so it gets
+      // indexed before the bad example potentially stalls the indexer.
+      let specDoc = {
+        data: {
+          type: 'card',
+          attributes: {
+            specType: 'card',
+            ref: {
+              module: '../tags-card',
+              name: 'TagsCard',
+            },
+          },
+          relationships: {
+            'linkedExamples.0': {
+              links: { self: '../TagsCard/bad-example' },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/spec',
+              name: 'Spec',
+            },
+          },
+        },
+      };
+      let specWrite = await client.write(
+        realmUrl,
+        'Spec/tags-card-spec.json',
+        JSON.stringify(specDoc, null, 2),
+      );
+      expect(specWrite.ok).toBe(true);
+      await client.waitForFile(realmUrl, 'Spec/tags-card-spec.json', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
 
-    let details = result.details as unknown as InstantiateValidationDetails;
-    expect(details).toBeTruthy();
-    expect(details.cardsWithErrors).toBeGreaterThan(0);
+      // Now write the bad example (after the Spec is indexed)
+      let exampleDoc = {
+        data: {
+          type: 'card',
+          attributes: {
+            name: 'Bad Tags Card',
+            tags: 'not-an-array',
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../tags-card',
+              name: 'TagsCard',
+            },
+          },
+        },
+      };
+      let exampleWrite = await client.write(
+        realmUrl,
+        'TagsCard/bad-example.json',
+        JSON.stringify(exampleDoc, null, 2),
+      );
+      expect(exampleWrite.ok).toBe(true);
+      await client.waitForFile(realmUrl, 'TagsCard/bad-example.json', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
 
-    // Read back the InstantiateResult card to verify it was persisted as failed
-    let cardRead = await readFile(realmUrl, details.instantiateResultId, {
-      authorization,
-    });
-    expect(cardRead.ok).toBe(true);
+      let step = new InstantiateValidationStep({
+        client,
+        realmServerUrl,
+        instantiateResultsModuleUrl,
+        issueId: 'Issues/instantiate-fail-e2e',
+      });
 
-    let attrs = cardRead.document?.data.attributes;
-    expect(attrs).toBeTruthy();
-    expect(attrs?.status).toBe('failed');
+      let result = await step.run(realmUrl);
+
+      // Must fail — containsMany field received a string instead of an array
+      expect(result.step).toBe('instantiate');
+      expect(result.passed).toBe(false);
+      expect(result.errors.length).toBeGreaterThan(0);
+
+      let details = result.details as unknown as InstantiateValidationDetails;
+      expect(details).toBeTruthy();
+      expect(details.cardsWithErrors).toBeGreaterThan(0);
+
+      // Read back the InstantiateResult card to verify it was persisted as failed
+      let cardRead = await client.read(realmUrl, details.instantiateResultId);
+      expect(cardRead.ok).toBe(true);
+
+      let attrs = (
+        cardRead.document as unknown as {
+          data?: { attributes?: Record<string, unknown> };
+        }
+      )?.data?.attributes;
+      expect(attrs).toBeTruthy();
+      expect(attrs?.status).toBe('failed');
+    } finally {
+      cleanup();
+    }
   });
 });
