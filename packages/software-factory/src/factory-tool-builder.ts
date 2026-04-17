@@ -20,6 +20,7 @@ import type { ToolRegistry } from './factory-tool-registry';
 import {
   writeFile,
   readFile,
+  readTranspiledModule,
   searchRealm,
   runRealmCommand,
   ensureJsonExtension,
@@ -109,6 +110,7 @@ export function buildFactoryTools(
   let tools: FactoryTool[] = [
     buildWriteFileTool(config),
     buildReadFileTool(config),
+    buildFetchTranspiledModuleTool(config),
     buildSearchRealmTool(config),
     buildRunCommandTool(config),
     buildSignalDoneTool(),
@@ -212,6 +214,38 @@ function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
       let fetchOptions = buildFetchOptions(config, realmUrl);
       return readFile(realmUrl, path, fetchOptions);
+    },
+  };
+}
+
+function buildFetchTranspiledModuleTool(
+  config: ToolBuilderConfig,
+): FactoryTool {
+  return {
+    name: 'fetch_transpiled_module',
+    description:
+      'Fetch the transpiled (compiled JavaScript) output of a .gts module from the realm. Use this when an eval or instantiate validation error reports a line/column number — those line numbers refer to the transpiled output, not your .gts source. Editing: only edit the .gts source file (the transpiled output is regenerated on the next write). Auth: per-realm JWT.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Realm-relative module path. .gts extension is optional — e.g., "sticky-note.gts" or "sticky-note".',
+        },
+        realm: {
+          type: 'string',
+          enum: ['target'],
+          description: 'Which realm to read from (default: target)',
+        },
+      },
+      required: ['path'],
+    },
+    execute: async (args) => {
+      let path = args.path as string;
+      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
+      let fetchOptions = buildFetchOptions(config, realmUrl);
+      return readTranspiledModule(realmUrl, path, fetchOptions);
     },
   };
 }

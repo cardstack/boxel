@@ -21,6 +21,7 @@ The agent has these tools during the execution loop. Use them by name — they a
 ### Reading and Searching
 
 - `read_file({ path, realm? })` — Read a file from the target realm. Use before modifying anything.
+- `fetch_transpiled_module({ path, realm? })` — Fetch the compiled JavaScript output of a `.gts` module. Use when an eval/instantiate error reports a line/column — those numbers reference the transpiled output, not your source.
 - `search_realm({ query, realm? })` — Search for cards using a structured query object (filter, sort, page). Use to check for existing cards, find duplicates, inspect project state.
 
 ### Writing Files
@@ -95,6 +96,31 @@ target-realm/
 └── Knowledge Articles/
     └── article-name.json            # KnowledgeArticle card
 ```
+
+## Debugging Runtime Evaluation Errors
+
+Eval-step and instantiate-step validation failures surface line/column
+references that point to the **transpiled** JavaScript output, not the
+`.gts` source you wrote. The realm compiles `.gts` to JS before execution
+and runtime errors reference the compiled output.
+
+When a validation error contains text like
+`(error occurred in '/.../sticky-note.gts' @ line 66 : column 32)`, the
+line number is for the transpiled module. Call
+`fetch_transpiled_module({ path: 'sticky-note.gts' })` and read the
+reported line to see what compiled construct raised the error — then
+reason back to the `.gts` source construct that produced it.
+
+For example, `" is not a valid character within attribute names: (error occurred in '/.../sticky-note.gts' @ line 66 : column 32)`
+typically points inside a `precompileTemplate(...)` block in the
+transpiled output. The actual fault in the source is often in a CSS
+comment or a template expression — line 66 in your `.gts` source is
+unrelated. Reading the transpiled line is what connects the error back
+to the source.
+
+**Always edit the `.gts` source, never the transpiled output.** The
+realm regenerates the transpiled JS on every write, so any edit to it
+would be discarded.
 
 ## Writing QUnit Card Tests
 

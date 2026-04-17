@@ -271,6 +271,56 @@ export async function readFile(
 }
 
 /**
+ * Fetch the TRANSPILED JavaScript output for a realm module.
+ *
+ * Runtime evaluation errors (from eval/instantiate validation) carry
+ * line/column references that point to the transpiled output, not the
+ * raw .gts source. Use this to inspect what the realm server actually
+ * compiled.
+ *
+ * The realm resolves the module URL without the .gts extension, so we
+ * strip it before fetching (the caller may pass with or without .gts).
+ */
+export async function readTranspiledModule(
+  realmUrl: string,
+  path: string,
+  options?: RealmFetchOptions,
+): Promise<{
+  ok: boolean;
+  status?: number;
+  content?: string;
+  error?: string;
+}> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let modulePath = path.endsWith('.gts') ? path.slice(0, -'.gts'.length) : path;
+  let url = new URL(modulePath, ensureTrailingSlash(realmUrl)).href;
+
+  try {
+    let response = await fetchImpl(url, {
+      method: 'GET',
+      headers: buildAuthHeaders(options?.authorization, SupportedMimeType.All),
+    });
+
+    if (!response.ok) {
+      let body = await response.text();
+      return {
+        ok: false,
+        status: response.status,
+        error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
+      };
+    }
+
+    let text = await response.text();
+    return { ok: true, status: response.status, content: text };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/**
  * Write a file to a realm using the card+source MIME type.
  * Path should include the file extension. Content is sent as-is.
  */
