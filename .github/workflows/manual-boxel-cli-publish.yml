@@ -1,0 +1,96 @@
+name: Manual Publish [boxel-cli]
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Semver bump level"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      environment:
+        description: "Publish environment (staging = beta tag, production = latest tag)"
+        required: false
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Build and publish @cardstack/boxel-cli
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: ./.github/actions/init
+
+      - name: Configure git
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Configure npm authentication
+        run: echo '//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}' > $HOME/.npmrc
+
+      - name: Bump version
+        id: version
+        working-directory: packages/boxel-cli
+        run: |
+          npm version ${{ inputs.bump }} --no-git-tag-version
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Bumped to version $VERSION"
+
+      - name: Build boxel-cli
+        run: pnpm build
+        working-directory: packages/boxel-cli
+
+      - name: Publish to npm
+        working-directory: packages/boxel-cli
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            npm publish --access public
+          else
+            npm publish --access public --tag beta
+          fi
+
+      - name: Commit version bump and tag
+        run: |
+          TAG="boxel-cli-v${{ steps.version.outputs.version }}"
+          git add packages/boxel-cli/package.json
+          git commit -m "Release @cardstack/boxel-cli v${{ steps.version.outputs.version }}"
+          git tag "$TAG"
+          git push origin main --tags
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="boxel-cli-v${{ steps.version.outputs.version }}"
+
+          # Find previous boxel-cli tag for changelog scope
+          PREV_TAG=$(git tag --list 'boxel-cli-v*' --sort=-version:refname | grep -v "$TAG" | head -n 1)
+
+          RELEASE_ARGS="--title \"@cardstack/boxel-cli v${{ steps.version.outputs.version }}\" --generate-notes"
+
+          if [ -n "$PREV_TAG" ]; then
+            RELEASE_ARGS="$RELEASE_ARGS --notes-start-tag $PREV_TAG"
+          fi
+
+          if [ "${{ inputs.environment }}" = "staging" ]; then
+            RELEASE_ARGS="$RELEASE_ARGS --prerelease"
+          fi
+
+          eval gh release create "$TAG" $RELEASE_ARGS
