@@ -244,18 +244,14 @@ export function identifyCard(
   }
   visited.add(card);
 
-  let identified = Loader.identify(card);
-  if (identified) {
-    let ref = {
-      ...identified,
-      module: identified.module as RealmResourceIdentifier,
-    };
+  let ref = Loader.identify(card);
+  if (ref) {
     return maybeRelativeURL
       ? {
           ...ref,
           module: maybeRelativeURL(ref.module) as RealmResourceIdentifier,
         }
-      : ref;
+      : (ref as ResolvedCodeRef);
   }
 
   let local = localIdentities.get(card);
