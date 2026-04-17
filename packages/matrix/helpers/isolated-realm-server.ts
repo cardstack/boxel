@@ -331,6 +331,39 @@ export async function startServer({
     );
   }
 
+  // Wait for worker manager to be ready (migration complete) before proceeding
+  await waitForHttpReady(`http://localhost:${workerManagerPort}`, 120_000);
+
+  // Seed realm_user_permissions for the test realm URLs. The DB migration
+  // only seeds permissions for localhost:4201 URLs, and fixupEnvironmentMode
+  // rewrites those to realm-server.*.localhost — but the isolated test realm
+  // uses realm-matrix-test.*.localhost which never gets permissions.
+  if (envMode) {
+    let pool = new Pool({
+      host: 'localhost',
+      port: parseInt(process.env.PGPORT || '5435', 10),
+      user: 'postgres',
+      database: testDBName,
+    });
+    try {
+      // Grant public read + the test realm owner write access
+      for (let realmPath of ['test', 'skills']) {
+        let realmUrl = `${serverIndexUrl}/${realmPath}/`;
+        await pool.query(
+          `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+           VALUES ($1, '*', true, false, false)
+           ON CONFLICT DO NOTHING`,
+          [realmUrl],
+        );
+      }
+      console.log(
+        `Seeded realm permissions for ${serverIndexUrl}/test/ and /skills/`,
+      );
+    } finally {
+      await pool.end();
+    }
+  }
+
   let serverArgs = [
     `--transpileOnly`,
     'main',

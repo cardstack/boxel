@@ -98,10 +98,22 @@ export default class HostModeService extends Service {
   }
 
   get originIsNotMatrixTests() {
-    return (
-      this.hostModeOrigin !== 'http://localhost:4202' &&
-      this.hostModeOrigin !== 'http://localhost:4205'
-    );
+    let origin = this.hostModeOrigin;
+    if (
+      origin === 'http://localhost:4202' ||
+      origin === 'http://localhost:4205'
+    ) {
+      return false;
+    }
+    // In environment mode, the test realm server origin matches
+    // realmServerURL — treat it as a non-host-mode (operator mode) origin.
+    if (config.realmServerURL) {
+      let realmServerOrigin = new URL(config.realmServerURL).origin;
+      if (origin === realmServerOrigin) {
+        return false;
+      }
+    }
+    return true;
   }
 
   get realmURL() {
