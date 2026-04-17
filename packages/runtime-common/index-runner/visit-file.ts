@@ -236,8 +236,9 @@ export async function visitFileForIndexingFused({
 
   let needCardRender = Boolean(parsedCardResource);
   let needFileExtract = true; // every file gets a file entry
-  // fileRender is only run for non-module files that will have a resource
-  // (matches the existing file-indexer gating: `extractResult.resource && !hasModulePrerender`).
+  // fileRender is requested for all non-module files. This is broader than
+  // the legacy file-indexer gating (`extractResult.resource && !hasModulePrerender`);
+  // missing-resource cases are handled downstream by the file indexer.
   let needFileRender = !isModule;
 
   if (lastModified == null) {
@@ -259,6 +260,12 @@ export async function visitFileForIndexingFused({
     ...(clearCache ? { clearCache } : {}),
   };
 
+  // [CS-10759-DEBUG] Temporary diagnostic logs — remove once the fused
+  // visit path is stable. Search for "[CS-10759-DEBUG]" to find and delete.
+  logDebug(
+    `${jobIdentity(jobInfo)} [CS-10759-DEBUG] fused visit requesting url=${url.href} passes={card:${needCardRender},extract:${needFileExtract},render:${needFileRender}} clearCache=${clearCache}`,
+  );
+
   let visitResponse: RenderVisitResponse;
   try {
     visitResponse = await prerenderer.prerenderVisit({
@@ -276,17 +283,58 @@ export async function visitFileForIndexingFused({
     throw err;
   }
 
-  // Route card result (if we parsed a card resource and got a card response).
-  if (parsedCardResource && visitResponse.card) {
+  // [CS-10759-DEBUG] remove after stabilization
+  logDebug(
+    `${jobIdentity(jobInfo)} [CS-10759-DEBUG] fused visit response url=${url.href} hasCard=${Boolean(visitResponse.card)} cardHasError=${Boolean(visitResponse.card?.error)} hasExtract=${Boolean(visitResponse.fileExtract)} extractStatus=${visitResponse.fileExtract?.status} hasRender=${Boolean(visitResponse.fileRender)} renderHasError=${Boolean(visitResponse.fileRender?.error)} pageUnusable=${Boolean(visitResponse.pageUnusableError)}`,
+  );
+
+  // Route card result when we parsed a card resource. If the composite
+  // short-circuited (page-unusable/auth), visitResponse.card may be missing.
+  // In that case, synthesize an error RenderResponse from pageUnusableError
+  // so the card entry still gets a proper error row rather than being left
+  // stale. This matches the legacy flow, which always attempts card indexing
+  // independently of file-level outcomes.
+  if (parsedCardResource) {
+    let cardResult: NonNullable<RenderVisitResponse['card']> =
+      visitResponse.card ?? {
+        serialized: null,
+        searchDoc: null,
+        displayNames: null,
+        deps: null,
+        types: null,
+        isolatedHTML: null,
+        headHTML: null,
+        atomHTML: null,
+        embeddedHTML: null,
+        fittedHTML: null,
+        iconHTML: null,
+        error: visitResponse.pageUnusableError ?? {
+          type: 'instance-error',
+          error: {
+            message:
+              'prerenderVisit returned no card result for a card resource',
+            status: 500,
+            additionalErrors: null,
+          },
+        },
+      };
+    // [CS-10759-DEBUG] remove after stabilization
+    logDebug(
+      `${jobIdentity(jobInfo)} [CS-10759-DEBUG] routing to indexCardWithResult url=${url.href}`,
+    );
     await indexCardWithResult({
       path: localPath,
       lastModified,
       resourceCreatedAt,
       resource: parsedCardResource,
-      renderResult: visitResponse.card,
+      renderResult: cardResult,
     });
   }
 
+  // [CS-10759-DEBUG] remove after stabilization
+  logDebug(
+    `${jobIdentity(jobInfo)} [CS-10759-DEBUG] routing to indexFileWithResults url=${url.href}`,
+  );
   // Route file extract + file render to the file indexer. The file indexer's
   // existing error-path handling runs even if extractResult is missing; that
   // behavior is preserved by passing undefined through.

@@ -20,7 +20,7 @@ import type { IndexRunnerDependencyManager } from './dependency-resolver';
 import { uniqueDeps } from './dependency-collections';
 import { canonicalURL } from './dependency-url';
 
-interface CardIndexerOptions {
+interface CardIndexerBaseOptions {
   path: LocalPath;
   lastModified: number;
   resourceCreatedAt: number;
@@ -30,12 +30,6 @@ interface CardIndexerOptions {
   realmURL: URL;
   auth: string;
   jobInfo: JobInfo;
-  // Either supply `prerenderer` + `consumeClearCacheForRender` so this function
-  // can make its own prerenderCard call, OR supply `precomputedRenderResult`
-  // from a fused visit and we'll skip the prerender call entirely.
-  prerenderer?: Prerenderer;
-  consumeClearCacheForRender?: () => boolean;
-  precomputedRenderResult?: RenderResponse;
   dependencyResolver: IndexRunnerDependencyManager;
   updateEntry(
     instanceURL: URL,
@@ -43,6 +37,25 @@ interface CardIndexerOptions {
   ): Promise<void>;
   logWarn(message: string): void;
 }
+
+// Discriminated union: either a precomputed render result (fused-visit path)
+// or a prerenderer + clearCache consumer (legacy path). Mixing is disallowed
+// so callers can't accidentally omit one half of the legacy pair.
+type CardIndexerPrerenderedOptions = CardIndexerBaseOptions & {
+  prerenderer: Prerenderer;
+  consumeClearCacheForRender: () => boolean;
+  precomputedRenderResult?: never;
+};
+
+type CardIndexerPrecomputedOptions = CardIndexerBaseOptions & {
+  precomputedRenderResult: RenderResponse;
+  prerenderer?: never;
+  consumeClearCacheForRender?: never;
+};
+
+export type CardIndexerOptions =
+  | CardIndexerPrerenderedOptions
+  | CardIndexerPrecomputedOptions;
 
 export async function performCardIndexing({
   path,

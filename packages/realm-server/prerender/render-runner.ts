@@ -1439,10 +1439,7 @@ export class RenderRunner {
                 status: 'error',
                 searchDoc: null,
                 deps: renderError.error.deps ?? [],
-                error: {
-                  type: 'file-error',
-                  error: renderError.error,
-                },
+                error: renderError,
               };
             }
           } catch (_e) {

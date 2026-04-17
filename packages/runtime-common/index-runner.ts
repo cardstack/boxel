@@ -450,7 +450,11 @@ export class IndexRunner {
   private async visitFile(url: URL): Promise<void> {
     // Fused composite prerender is the default. Set SKIP_FUSED_PRERENDER_VISIT=true
     // to fall back to the legacy 3-call path (kept for safety during rollout).
-    if (process.env.SKIP_FUSED_PRERENDER_VISIT !== 'true') {
+    // Guard the env access so this path works in browser/web-worker runtimes
+    // (host-side indexer) where `process` may be undefined.
+    let skipFused =
+      (globalThis as any).process?.env?.SKIP_FUSED_PRERENDER_VISIT === 'true';
+    if (!skipFused) {
       await visitFileForIndexingFused({
         url,
         realmURL: this.#realmURL,

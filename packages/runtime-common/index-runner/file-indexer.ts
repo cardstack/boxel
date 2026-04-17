@@ -21,7 +21,7 @@ import {
   resolveFileDefCodeRef,
 } from '../file-def-code-ref';
 
-interface FileIndexerOptions {
+interface FileIndexerBaseOptions {
   path: LocalPath;
   fileURL: string;
   lastModified: number;
@@ -30,13 +30,6 @@ interface FileIndexerOptions {
   realmURL: URL;
   auth: string;
   jobInfo: JobInfo;
-  // Either supply `prerenderer` + `consumeClearCacheForRender` so this function
-  // makes its own prerenderFileExtract/prerenderFileRender calls, OR supply
-  // precomputed results from a fused visit to skip those calls.
-  prerenderer?: Prerenderer;
-  consumeClearCacheForRender?: () => boolean;
-  precomputedExtractResult?: FileExtractResponse;
-  precomputedRenderResult?: FileRenderResponse;
   dependencyResolver: IndexRunnerDependencyManager;
   updateEntry(
     entryURL: URL,
@@ -44,6 +37,27 @@ interface FileIndexerOptions {
   ): Promise<void>;
   logWarn(message: string): void;
 }
+
+// Discriminated union: either supply precomputed results (fused-visit path)
+// or a prerenderer + clearCache consumer (legacy path). TypeScript rejects
+// call sites that mix halves across the two variants.
+type FileIndexerPrerenderedOptions = FileIndexerBaseOptions & {
+  prerenderer: Prerenderer;
+  consumeClearCacheForRender: () => boolean;
+  precomputedExtractResult?: never;
+  precomputedRenderResult?: never;
+};
+
+type FileIndexerPrecomputedOptions = FileIndexerBaseOptions & {
+  precomputedExtractResult: FileExtractResponse | undefined;
+  precomputedRenderResult?: FileRenderResponse;
+  prerenderer?: never;
+  consumeClearCacheForRender?: never;
+};
+
+export type FileIndexerOptions =
+  | FileIndexerPrerenderedOptions
+  | FileIndexerPrecomputedOptions;
 
 export async function performFileIndexing({
   path,

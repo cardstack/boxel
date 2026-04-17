@@ -590,6 +590,15 @@ export default class CardPrerender extends Component {
         cardRender: Boolean(baseOptions.cardRender),
         fileRender: Boolean(baseOptions.fileRender),
       };
+      // Diagnostic logging while stabilizing fused visit behavior in host
+      // tests (see CS-10759). Intentionally at info level so it surfaces in
+      // browser logs captured by testem.
+      // [CS-10759-DEBUG] Temporary diagnostic logs — remove once the fused
+      // visit path is stable in host/acceptance tests. Search for
+      // "[CS-10759-DEBUG]" to find and delete all instances.
+      console.info(
+        `[CS-10759-DEBUG][prerenderVisit] start url=${url} nonce=${this.#nonce} passes=${JSON.stringify(requested)} shouldClearCache=${shouldClearCache}`,
+      );
       if (shouldClearCache) {
         this.loaderService.resetLoader({
           clearFetchCache: true,
@@ -630,6 +639,10 @@ export default class CardPrerender extends Component {
 
       // ── fileExtract pass ───────────────────────────────────────────────
       if (requested.fileExtract) {
+        // [CS-10759-DEBUG] remove after host-test stabilization
+        console.info(
+          `[CS-10759-DEBUG][prerenderVisit] fileExtract pass start url=${url}`,
+        );
         let passOptions = optionsForPass('fileExtract');
         try {
           let routeInfo = await this.router.recognizeAndLoad(
@@ -640,7 +653,15 @@ export default class CardPrerender extends Component {
           }
           await this.#ensureRenderReady(routeInfo);
           response.fileExtract = routeInfo.attributes as FileExtractResponse;
+          // [CS-10759-DEBUG] remove after host-test stabilization
+          console.info(
+            `[CS-10759-DEBUG][prerenderVisit] fileExtract done url=${url} status=${response.fileExtract?.status}`,
+          );
         } catch (e: any) {
+          // [CS-10759-DEBUG] remove after host-test stabilization
+          console.warn(
+            `[CS-10759-DEBUG][prerenderVisit] fileExtract error url=${url} msg=${e?.message}`,
+          );
           let renderError: RenderError;
           try {
             renderError = {
@@ -667,14 +688,21 @@ export default class CardPrerender extends Component {
             deps: renderError.error.deps ?? [],
             error: renderError,
           };
-          response.pageUnusableError =
-            response.pageUnusableError ?? renderError;
-          return response;
+          // fileExtract errors are route-level errors, not page-unusable
+          // errors. Populate the sub-response but continue on to any
+          // requested cardRender/fileRender passes so they can still
+          // capture their own results. The server-side orchestrator
+          // behaves the same way — only genuine page-unusable conditions
+          // (eviction, auth failure) short-circuit the visit.
         }
       }
 
       // ── cardRender pass ────────────────────────────────────────────────
       if (requested.cardRender) {
+        // [CS-10759-DEBUG] remove after host-test stabilization
+        console.info(
+          `[CS-10759-DEBUG][prerenderVisit] cardRender pass start url=${url}`,
+        );
         let context: CardRenderContext = {
           cardId: url.replace(/\.json$/, ''),
           nonce: String(this.#nonce),
@@ -773,10 +801,18 @@ export default class CardPrerender extends Component {
           iconHTML,
           ...(cardError ? { error: cardError } : {}),
         };
+        // [CS-10759-DEBUG] remove after host-test stabilization
+        console.info(
+          `[CS-10759-DEBUG][prerenderVisit] cardRender done url=${url} hasError=${Boolean(cardError)} hasSerialized=${Boolean(response.card?.serialized)}`,
+        );
       }
 
       // ── fileRender pass ────────────────────────────────────────────────
       if (requested.fileRender) {
+        // [CS-10759-DEBUG] remove after host-test stabilization
+        console.info(
+          `[CS-10759-DEBUG][prerenderVisit] fileRender pass start url=${url}`,
+        );
         let effectiveFileData =
           fileData ??
           (response.fileExtract?.resource && baseOptions.fileDefCodeRef
