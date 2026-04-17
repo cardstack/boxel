@@ -91,7 +91,7 @@ module('factory-brief', function () {
     );
   });
 
-  test('loadFactoryBrief passes an explicit authorization header when fetching and normalizing a brief', async function (assert) {
+  test('loadFactoryBrief fetches and normalizes a brief via the supplied fetch override', async function (assert) {
     assert.expect(4);
 
     let server = createServer((request, response) => {
@@ -112,10 +112,15 @@ module('factory-brief', function () {
     }
 
     try {
+      let authedFetch: typeof globalThis.fetch = (input, init) => {
+        let headers = new Headers(init?.headers);
+        headers.set('Authorization', 'Bearer brief-token');
+        return globalThis.fetch(input, { ...init, headers });
+      };
       let brief = await loadFactoryBrief(
         `http://127.0.0.1:${address.port}/software-factory/Wiki/sticky-note`,
         {
-          authorization: 'Bearer brief-token',
+          fetch: authedFetch,
         },
       );
 

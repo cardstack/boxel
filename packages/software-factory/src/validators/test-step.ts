@@ -10,16 +10,12 @@
  * reads after boxel-cli integration — cheap rather than HTTP round-trips.
  */
 
-import type { ValidationStepResult } from '../factory-agent';
-import { deriveIssueSlug } from '../factory-agent-types';
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
+import type { ValidationStepResult } from '../factory-agent';
+import { deriveIssueSlug } from '../factory-agent-types';
 import { executeTestRunFromRealm } from '../test-run-execution';
-import {
-  fetchRealmFilenames,
-  readFile,
-  type RealmFetchOptions,
-} from '../realm-operations';
 import type { ExecuteTestRunOptions, TestRunHandle } from '../test-run-types';
 import { logger } from '../logger';
 
@@ -32,24 +28,21 @@ let log = logger('test-validation-step');
 // ---------------------------------------------------------------------------
 
 export interface TestValidationStepConfig {
-  authorization?: string;
-  fetch?: typeof globalThis.fetch;
+  client: BoxelCLIClient;
   realmServerUrl: string;
   hostAppUrl: string;
   testResultsModuleUrl: string;
   issueId?: string;
   /** Injected for testing — defaults to executeTestRunFromRealm. */
   executeTestRun?: (options: ExecuteTestRunOptions) => Promise<TestRunHandle>;
-  /** Injected for testing — defaults to fetchRealmFilenames. */
+  /** Injected for testing — defaults to client.listFiles. */
   fetchFilenames?: (
     realmUrl: string,
-    options?: RealmFetchOptions,
   ) => Promise<{ filenames: string[]; error?: string }>;
-  /** Injected for testing — defaults to readFile from realm-operations. */
+  /** Injected for testing — defaults to client.read. */
   readCard?: (
     realmUrl: string,
     path: string,
-    options?: RealmFetchOptions,
   ) => Promise<{
     ok: boolean;
     document?: LooseSingleCardDocument;
@@ -89,12 +82,10 @@ export class TestValidationStep implements ValidationStepRunner {
   ) => Promise<TestRunHandle>;
   private fetchFilenamesFn: (
     realmUrl: string,
-    options?: RealmFetchOptions,
   ) => Promise<{ filenames: string[]; error?: string }>;
   private readCardFn: (
     realmUrl: string,
     path: string,
-    options?: RealmFetchOptions,
   ) => Promise<{
     ok: boolean;
     document?: LooseSingleCardDocument;
@@ -104,8 +95,21 @@ export class TestValidationStep implements ValidationStepRunner {
   constructor(config: TestValidationStepConfig) {
     this.config = config;
     this.executeTestRunFn = config.executeTestRun ?? executeTestRunFromRealm;
-    this.fetchFilenamesFn = config.fetchFilenames ?? fetchRealmFilenames;
-    this.readCardFn = config.readCard ?? readFile;
+    this.fetchFilenamesFn =
+      config.fetchFilenames ??
+      ((realmUrl: string) => config.client.listFiles(realmUrl));
+    this.readCardFn =
+      config.readCard ??
+      (async (realmUrl: string, path: string) => {
+        let result = await config.client.read(realmUrl, path);
+        return {
+          ok: result.ok,
+          document: result.document as unknown as
+            | LooseSingleCardDocument
+            | undefined,
+          error: result.error,
+        };
+      });
   }
 
   async run(targetRealmUrl: string): Promise<ValidationStepResult> {
@@ -150,8 +154,7 @@ export class TestValidationStep implements ValidationStepRunner {
         testResultsModuleUrl: this.config.testResultsModuleUrl,
         slug,
         testNames: [],
-        authorization: this.config.authorization,
-        fetch: this.config.fetch,
+        client: this.config.client,
         realmServerUrl: this.config.realmServerUrl,
         hostAppUrl: this.config.hostAppUrl,
         forceNew: true,
@@ -258,10 +261,7 @@ export class TestValidationStep implements ValidationStepRunner {
   // -------------------------------------------------------------------------
 
   private async discoverTestFiles(targetRealmUrl: string): Promise<string[]> {
-    let result = await this.fetchFilenamesFn(targetRealmUrl, {
-      authorization: this.config.authorization,
-      fetch: this.config.fetch,
-    });
+    let result = await this.fetchFilenamesFn(targetRealmUrl);
 
     if (result.error) {
       log.warn(`Failed to fetch realm filenames: ${result.error}`);
@@ -276,10 +276,7 @@ export class TestValidationStep implements ValidationStepRunner {
     testRunId: string,
   ): Promise<TestValidationDetails | undefined> {
     try {
-      let result = await this.readCardFn(targetRealmUrl, testRunId, {
-        authorization: this.config.authorization,
-        fetch: this.config.fetch,
-      });
+      let result = await this.readCardFn(targetRealmUrl, testRunId);
 
       if (!result.ok || !result.document) {
         log.warn(

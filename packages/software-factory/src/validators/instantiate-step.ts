@@ -15,21 +15,18 @@
  * *load*, instantiate verifies cards can be *created from JSON*.
  */
 
-import type { ResolvedCodeRef } from '@cardstack/runtime-common';
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import type {
+  LooseSingleCardDocument,
+  ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 import { specRef } from '@cardstack/runtime-common/constants';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import type { ValidationStepResult } from '../factory-agent';
 import { deriveIssueSlug } from '../factory-agent-types';
 
-import {
-  searchRealm,
-  readFile,
-  fetchRealmFilenames,
-  getNextValidationSequenceNumber,
-  runRealmCommand,
-  type RealmFetchOptions,
-} from '../realm-operations';
+import { getNextValidationSequenceNumber } from '../realm-operations';
 import {
   createInstantiateResult,
   completeInstantiateResult,
@@ -52,24 +49,19 @@ export interface InstantiateModuleResult {
 }
 
 export interface InstantiateValidationStepConfig {
-  /** Realm-scoped authorization token for realm API calls (searchRealm, readFile, writeFile). */
-  authorization?: string;
-  /** Realm server token for _run-command calls (prerenderer). Distinct from realm-scoped authorization. */
-  serverToken?: string;
-  fetch?: typeof globalThis.fetch;
+  client: BoxelCLIClient;
   realmServerUrl: string;
   instantiateResultsModuleUrl: string;
   issueId?: string;
-  /** Injected for testing — defaults to fetchRealmFilenames. */
+  /** Injected for testing — defaults to client.listFiles. */
   fetchFilenames?: (
     realmUrl: string,
-    options?: RealmFetchOptions,
   ) => Promise<{ filenames: string[]; error?: string }>;
-  /** Injected for testing — defaults to searchRealm-based spec discovery. */
+  /** Injected for testing — defaults to client.search-based spec discovery. */
   searchSpecsFn?: (
     realmUrl: string,
   ) => Promise<{ specs: SpecInfo[]; error?: string }>;
-  /** Injected for testing — defaults to runRealmCommand calling the instantiate-card host command. */
+  /** Injected for testing — defaults to client.runCommand calling the instantiate-card host command. */
   instantiateCardFn?: (
     moduleUrl: string,
     cardName: string,
@@ -118,7 +110,6 @@ export class InstantiateValidationStep implements ValidationStepRunner {
 
   private fetchFilenamesFn: (
     realmUrl: string,
-    options?: RealmFetchOptions,
   ) => Promise<{ filenames: string[]; error?: string }>;
   private searchSpecsFn: (
     realmUrl: string,
@@ -136,7 +127,9 @@ export class InstantiateValidationStep implements ValidationStepRunner {
 
   constructor(config: InstantiateValidationStepConfig) {
     this.config = config;
-    this.fetchFilenamesFn = config.fetchFilenames ?? fetchRealmFilenames;
+    this.fetchFilenamesFn =
+      config.fetchFilenames ??
+      ((realmUrl: string) => config.client.listFiles(realmUrl));
     this.searchSpecsFn =
       config.searchSpecsFn ??
       ((realmUrl: string) => this.defaultSearchSpecs(realmUrl));
@@ -158,15 +151,12 @@ export class InstantiateValidationStep implements ValidationStepRunner {
       config.getNextSequenceNumber ??
       ((slug: string, targetRealmUrl: string) =>
         getNextValidationSequenceNumber(
+          config.client,
           slug,
           'Validations/instantiate_',
           config.instantiateResultsModuleUrl,
           'InstantiateResult',
-          {
-            targetRealmUrl,
-            authorization: config.authorization,
-            fetch: config.fetch,
-          },
+          targetRealmUrl,
         ));
   }
 
@@ -195,10 +185,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
     if (specInfos.length === 0) {
       let hasModules = false;
       try {
-        let filesResult = await this.fetchFilenamesFn(targetRealmUrl, {
-          authorization: this.config.authorization,
-          fetch: this.config.fetch,
-        });
+        let filesResult = await this.fetchFilenamesFn(targetRealmUrl);
         hasModules = (filesResult.filenames ?? []).some(
           (f) => f.endsWith('.gts') && !f.endsWith('.test.gts'),
         );
@@ -259,8 +246,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         this.config.instantiateResultsModuleUrl,
         {
           targetRealmUrl,
-          authorization: this.config.authorization,
-          fetch: this.config.fetch,
+          client: this.config.client,
           sequenceNumber: seq,
           issueURL,
         },
@@ -291,10 +277,17 @@ export class InstantiateValidationStep implements ValidationStepRunner {
       let exampleInstances: { url: string; data: string }[] = [];
       for (let exampleUrl of spec.exampleUrls) {
         try {
-          let exampleRead = await readFile(targetRealmUrl, exampleUrl, {
-            authorization: this.config.authorization,
-            fetch: this.config.fetch,
-          });
+          let rawRead = await this.config.client.read(
+            targetRealmUrl,
+            exampleUrl,
+          );
+          let exampleRead = {
+            ok: rawRead.ok,
+            document: rawRead.document as unknown as
+              | LooseSingleCardDocument
+              | undefined,
+            error: rawRead.error,
+          };
           if (exampleRead.ok && exampleRead.document) {
             // The card+source format uses relative adoptsFrom.module paths
             // and has no id field (the id IS the file path). Resolve the
@@ -404,8 +397,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         },
         {
           targetRealmUrl,
-          authorization: this.config.authorization,
-          fetch: this.config.fetch,
+          client: this.config.client,
         },
       );
       if (!completeResult.updated) {
@@ -482,21 +474,12 @@ export class InstantiateValidationStep implements ValidationStepRunner {
   private async defaultSearchSpecs(
     realmUrl: string,
   ): Promise<{ specs: SpecInfo[]; error?: string }> {
-    let fetchOptions: RealmFetchOptions = {
-      authorization: this.config.authorization,
-      fetch: this.config.fetch,
-    };
-
     // Search the target realm for Spec cards using the canonical code ref.
-    let searchResult = await searchRealm(
-      realmUrl,
-      {
-        filter: {
-          type: specRef,
-        },
+    let searchResult = await this.config.client.search(realmUrl, {
+      filter: {
+        type: specRef,
       },
-      fetchOptions,
-    );
+    });
 
     if (!searchResult.ok) {
       return { specs: [], error: searchResult.error };
@@ -576,14 +559,6 @@ export class InstantiateValidationStep implements ValidationStepRunner {
     realmUrl: string,
     instanceData?: string,
   ): Promise<InstantiateModuleResult> {
-    if (!this.config.serverToken) {
-      return {
-        passed: false,
-        error:
-          'serverToken is required for instantiate validation via _run-command',
-      };
-    }
-
     let commandInput: Record<string, unknown> = {
       moduleUrl,
       cardName,
@@ -593,15 +568,11 @@ export class InstantiateValidationStep implements ValidationStepRunner {
       commandInput.instanceData = instanceData;
     }
 
-    let response = await runRealmCommand(
+    let response = await this.config.client.runCommand(
       this.config.realmServerUrl,
       realmUrl,
       INSTANTIATE_CARD_COMMAND,
       commandInput,
-      {
-        authorization: this.config.serverToken,
-        fetch: this.config.fetch,
-      },
     );
 
     log.info(

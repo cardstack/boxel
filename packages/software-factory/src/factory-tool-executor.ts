@@ -3,17 +3,8 @@ import { resolve } from 'node:path';
 
 import type { ToolResult } from './factory-agent';
 import type { ToolRegistry } from './factory-tool-registry';
-import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
-
-import {
-  readFile,
-  writeFile,
-  deleteFile,
-  searchRealm,
-  getServerSession,
-  getRealmScopedAuth,
-} from './realm-operations';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -27,7 +18,6 @@ const DEFAULT_TIMEOUT_MS = 60_000;
  */
 const SCRIPT_FILE_MAP: Record<string, string> = {
   'search-realm': 'boxel-search.ts',
-  'get-session': 'boxel-session.ts',
   'run-realm-tests': 'run-realm-tests.ts',
 };
 
@@ -56,20 +46,12 @@ export interface ToolExecutorConfig {
   allowedRealmPrefixes?: string[];
   /** Source realm URL — tools must NEVER target this realm. */
   sourceRealmUrl?: string;
-  /** Fetch implementation for realm API calls. */
-  fetch?: typeof globalThis.fetch;
-  /** Authorization header value for realm API calls. */
-  authorization?: string;
+  /** Boxel CLI client — owns all realm auth and API calls. */
+  client: BoxelCLIClient;
   /** Per-invocation timeout in ms (default: 60 000). */
   timeoutMs?: number;
   /** Optional log function for auditability. */
   log?: (entry: ToolExecutionLogEntry) => void;
-  /** Matrix homeserver URL (for post-create account data update). */
-  matrixUrl?: string;
-  /** Matrix access token (from Matrix login). */
-  matrixAccessToken?: string;
-  /** Matrix user ID (e.g. @factory:localhost). */
-  matrixUserId?: string;
 }
 
 export interface ToolExecutionLogEntry {
@@ -134,7 +116,6 @@ export class ToolExecutor {
   async execute(
     toolName: string,
     toolArgs: Record<string, unknown> = {},
-    options?: { authorization?: string },
   ): Promise<ToolResult> {
     if (!toolName) {
       throw new ToolNotFoundError('(empty)');
@@ -156,10 +137,6 @@ export class ToolExecutor {
     // Safety: reject source realm targeting
     this.enforceRealmSafety(toolName, toolArgs);
 
-    // Per-call authorization override (used by ToolBuilder to inject
-    // the correct per-realm JWT). Falls back to config.authorization.
-    let authorization = options?.authorization ?? this.config.authorization;
-
     let start = Date.now();
     let result: ToolResult;
 
@@ -172,11 +149,7 @@ export class ToolExecutor {
           result = await this.executeBoxelCli(toolName, toolArgs);
           break;
         case 'realm-api':
-          result = await this.executeRealmApi(
-            toolName,
-            toolArgs,
-            authorization,
-          );
+          result = await this.executeRealmApi(toolName, toolArgs);
           break;
         default:
           throw new Error(`Unknown tool category: ${manifest.category}`);
@@ -400,176 +373,117 @@ export class ToolExecutor {
   private async executeRealmApi(
     toolName: string,
     toolArgs: Record<string, unknown>,
-    authorization?: string,
   ): Promise<ToolResult> {
-    let baseFetch = this.config.fetch ?? globalThis.fetch;
+    let client = this.config.client;
     let start = Date.now();
 
-    // Wrap fetch with AbortController for timeout enforcement
-    let controller = new AbortController();
-    let timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    let fetchImpl = ((input: RequestInfo | URL, init?: RequestInit) => {
-      return baseFetch(input, { ...init, signal: controller.signal });
-    }) as typeof globalThis.fetch;
+    let output: unknown;
+    let ok: boolean;
 
-    let fetchOptions = { authorization, fetch: fetchImpl };
-
-    try {
-      let output: unknown;
-      let ok: boolean;
-
-      switch (toolName) {
-        case 'realm-read': {
-          let result = await readFile(
-            String(toolArgs['realm-url']),
-            String(toolArgs['path']),
-            fetchOptions,
-          );
-          ok = result.ok;
-          output = ok ? result.document : { error: result.error };
-          break;
-        }
-
-        case 'realm-write': {
-          let result = await writeFile(
-            String(toolArgs['realm-url']),
-            String(toolArgs['path']),
-            String(toolArgs['content']),
-            fetchOptions,
-          );
-          ok = result.ok;
-          output = ok ? result : { error: result.error };
-          break;
-        }
-
-        case 'realm-delete': {
-          let result = await deleteFile(
-            String(toolArgs['realm-url']),
-            String(toolArgs['path']),
-            fetchOptions,
-          );
-          ok = result.ok;
-          output = ok ? result : { error: result.error };
-          break;
-        }
-
-        case 'realm-search': {
-          let rawQuery = toolArgs['query'];
-          if (typeof rawQuery !== 'string') {
-            ok = false;
-            output = {
-              error:
-                "Invalid 'query' argument for realm-search: expected a JSON string.",
-            };
-            break;
-          }
-          let query: Record<string, unknown>;
-          try {
-            query = JSON.parse(rawQuery);
-          } catch {
-            ok = false;
-            output = {
-              error:
-                "Invalid JSON for 'query' in realm-search: expected valid JSON.",
-            };
-            break;
-          }
-          let result = await searchRealm(
-            String(toolArgs['realm-url']),
-            query,
-            fetchOptions,
-          );
-          ok = result.ok;
-          output = result.ok
-            ? { data: result.data }
-            : { error: result.error, status: result.status };
-          break;
-        }
-
-        case 'realm-create': {
-          let displayName = String(toolArgs['name']);
-          let realmName = String(toolArgs['endpoint']);
-          let requestedServerUrl = ensureTrailingSlash(
-            String(toolArgs['realm-server-url']),
-          );
-          try {
-            let client = new BoxelCLIClient();
-            let active = client.getActiveProfile();
-            if (
-              active &&
-              ensureTrailingSlash(active.realmServerUrl) !== requestedServerUrl
-            ) {
-              throw new Error(
-                `realm-create cannot target "${requestedServerUrl}": active Boxel profile realm server is "${ensureTrailingSlash(active.realmServerUrl)}".`,
-              );
-            }
-            let result = await client.createRealm({
-              realmName,
-              displayName,
-              iconURL: toolArgs['iconURL'] as string | undefined,
-              backgroundURL: toolArgs['backgroundURL'] as string | undefined,
-            });
-            ok = true;
-            output = { data: { id: result.realmUrl } };
-          } catch (error) {
-            ok = false;
-            output = {
-              error: error instanceof Error ? error.message : String(error),
-            };
-          }
-          break;
-        }
-
-        case 'realm-server-session': {
-          let result = await getServerSession(
-            String(toolArgs['realm-server-url']),
-            String(toolArgs['openid-token']),
-            { fetch: fetchImpl, authorization },
-          );
-          ok = !!result.token;
-          output = ok ? { token: result.token } : { error: result.error };
-          break;
-        }
-
-        case 'realm-auth': {
-          let result = await getRealmScopedAuth(
-            String(toolArgs['realm-server-url']),
-            authorization ?? '',
-            { fetch: fetchImpl },
-          );
-          ok = !result.error;
-          output = ok ? result.tokens : { error: result.error };
-          break;
-        }
-
-        default:
-          throw new Error(`Unknown realm-api tool: "${toolName}"`);
+    switch (toolName) {
+      case 'realm-read': {
+        let result = await client.read(
+          String(toolArgs['realm-url']),
+          String(toolArgs['path']),
+        );
+        ok = result.ok;
+        output = ok ? result.document : { error: result.error };
+        break;
       }
 
-      // If the controller aborted (timeout), the realm-operations function
-      // may have caught the AbortError and returned { ok: false }. Check for
-      // this and throw ToolTimeoutError instead of returning a silent failure.
-      if (controller.signal.aborted) {
-        throw new ToolTimeoutError(toolName, this.timeoutMs);
+      case 'realm-write': {
+        let result = await client.write(
+          String(toolArgs['realm-url']),
+          String(toolArgs['path']),
+          String(toolArgs['content']),
+        );
+        ok = result.ok;
+        output = ok ? result : { error: result.error };
+        break;
       }
 
-      return {
-        tool: toolName,
-        exitCode: ok ? 0 : 1,
-        output,
-        durationMs: Date.now() - start,
-      };
-    } catch (error) {
-      if (
-        controller.signal.aborted ||
-        (error instanceof DOMException && error.name === 'AbortError')
-      ) {
-        throw new ToolTimeoutError(toolName, this.timeoutMs);
+      case 'realm-delete': {
+        let result = await client.delete(
+          String(toolArgs['realm-url']),
+          String(toolArgs['path']),
+        );
+        ok = result.ok;
+        output = ok ? result : { error: result.error };
+        break;
       }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
+
+      case 'realm-search': {
+        let rawQuery = toolArgs['query'];
+        if (typeof rawQuery !== 'string') {
+          ok = false;
+          output = {
+            error:
+              "Invalid 'query' argument for realm-search: expected a JSON string.",
+          };
+          break;
+        }
+        let query: Record<string, unknown>;
+        try {
+          query = JSON.parse(rawQuery);
+        } catch {
+          ok = false;
+          output = {
+            error:
+              "Invalid JSON for 'query' in realm-search: expected valid JSON.",
+          };
+          break;
+        }
+        let result = await client.search(String(toolArgs['realm-url']), query);
+        ok = result.ok;
+        output = result.ok
+          ? { data: result.data }
+          : { error: result.error, status: result.status };
+        break;
+      }
+
+      case 'realm-create': {
+        let displayName = String(toolArgs['name']);
+        let realmName = String(toolArgs['endpoint']);
+        let requestedServerUrl = ensureTrailingSlash(
+          String(toolArgs['realm-server-url']),
+        );
+        try {
+          let active = client.getActiveProfile();
+          if (
+            active &&
+            ensureTrailingSlash(active.realmServerUrl) !== requestedServerUrl
+          ) {
+            throw new Error(
+              `realm-create cannot target "${requestedServerUrl}": active Boxel profile realm server is "${ensureTrailingSlash(active.realmServerUrl)}".`,
+            );
+          }
+          let result = await client.createRealm({
+            realmName,
+            displayName,
+            iconURL: toolArgs['iconURL'] as string | undefined,
+            backgroundURL: toolArgs['backgroundURL'] as string | undefined,
+          });
+          ok = true;
+          output = { data: { id: result.realmUrl } };
+        } catch (error) {
+          ok = false;
+          output = {
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+        break;
+      }
+
+      default:
+        throw new Error(`Unknown realm-api tool: "${toolName}"`);
     }
+
+    return {
+      tool: toolName,
+      exitCode: ok ? 0 : 1,
+      output,
+      durationMs: Date.now() - start,
+    };
   }
 
   // -------------------------------------------------------------------------

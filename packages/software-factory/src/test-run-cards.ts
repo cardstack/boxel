@@ -1,6 +1,5 @@
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
-import { readFile, writeFile } from './realm-operations';
 import type {
   CreateTestRunOptions,
   TestModuleResultData,
@@ -32,11 +31,10 @@ export async function createTestRun(
     },
   );
 
-  let result = await writeFile(
+  let result = await options.client.write(
     options.targetRealmUrl,
     `${testRunId}.json`,
     JSON.stringify(document, null, 2),
-    { authorization: options.authorization, fetch: options.fetch },
   );
 
   if (!result.ok) {
@@ -54,20 +52,11 @@ export async function completeTestRun(
   attrs: TestRunAttributes,
   options: TestRunRealmOptions & { projectCardUrl?: string },
 ): Promise<{ updated: boolean; error?: string }> {
-  let fetchOptions = {
-    authorization: options.authorization,
-    fetch: options.fetch,
-  };
-
   // Retry the read — after a long spawnSync (Playwright), TCP connections
   // may be stale causing the first fetch to fail with "fetch failed".
-  let readResult: Awaited<ReturnType<typeof readFile>> | undefined;
+  let readResult: Awaited<ReturnType<typeof options.client.read>> | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
-    readResult = await readFile(
-      options.targetRealmUrl,
-      testRunId,
-      fetchOptions,
-    );
+    readResult = await options.client.read(options.targetRealmUrl, testRunId);
     if (readResult.ok && readResult.document) {
       break;
     }
@@ -83,6 +72,7 @@ export async function completeTestRun(
     };
   }
 
+  let document = readResult.document as unknown as LooseSingleCardDocument;
   let completionAttrs: Record<string, unknown> = {
     status: attrs.status,
     completedAt: new Date().toISOString(),
@@ -93,8 +83,8 @@ export async function completeTestRun(
     completionAttrs.errorMessage = attrs.errorMessage;
   }
 
-  readResult.document.data.attributes = {
-    ...readResult.document.data.attributes,
+  document.data.attributes = {
+    ...document.data.attributes,
     ...completionAttrs,
   };
 
@@ -102,18 +92,17 @@ export async function completeTestRun(
   // the realm may not include relationships if indexing hasn't completed.
   if (options.projectCardUrl) {
     let existingRelationships =
-      (readResult.document.data as Record<string, unknown>).relationships ?? {};
-    (readResult.document.data as Record<string, unknown>).relationships = {
+      (document.data as Record<string, unknown>).relationships ?? {};
+    (document.data as Record<string, unknown>).relationships = {
       ...(existingRelationships as Record<string, unknown>),
       project: { links: { self: options.projectCardUrl } },
     };
   }
 
-  let writeResult = await writeFile(
+  let writeResult = await options.client.write(
     options.targetRealmUrl,
     `${testRunId}.json`,
-    JSON.stringify(readResult.document, null, 2),
-    fetchOptions,
+    JSON.stringify(document, null, 2),
   );
 
   if (!writeResult.ok) {

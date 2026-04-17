@@ -14,6 +14,7 @@ import {
 
 import { NoOpStepRunner } from '../src/validators/noop-step';
 import { InstantiateValidationStep } from '../src/validators/instantiate-step';
+import { createMockClient } from './helpers/mock-client';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -205,6 +206,7 @@ module('ValidationPipeline', function () {
 
   test('createDefaultPipeline creates 5 steps in correct order', async function (assert) {
     let pipeline = createDefaultPipeline({
+      client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       hostAppUrl: 'https://example.test/',
       testResultsModuleUrl: 'https://example.test/test-results',
@@ -302,6 +304,7 @@ module('NoOpStepRunner', function () {
 module('InstantiateValidationStep', function () {
   test('passes with no artifact when no specs and no modules exist (bootstrap)', async function (assert) {
     let step = new InstantiateValidationStep({
+      client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
       searchSpecsFn: async () => ({ specs: [] }),
@@ -322,6 +325,7 @@ module('InstantiateValidationStep', function () {
 
   test('fails with no artifact when modules exist but no specs found', async function (assert) {
     let step = new InstantiateValidationStep({
+      client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
       searchSpecsFn: async () => ({ specs: [] }),
@@ -348,6 +352,7 @@ module('InstantiateValidationStep', function () {
 
   test('test files alone do not trigger missing-spec failure', async function (assert) {
     let step = new InstantiateValidationStep({
+      client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
       searchSpecsFn: async () => ({ specs: [] }),
@@ -365,6 +370,7 @@ module('InstantiateValidationStep', function () {
 
   test('passes with artifact when spec with examples all instantiate successfully', async function (assert) {
     let step = new InstantiateValidationStep({
+      client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
       searchSpecsFn: async () => ({
@@ -398,6 +404,7 @@ module('InstantiateValidationStep', function () {
 
   test('fails when an example fails instantiation', async function (assert) {
     let step = new InstantiateValidationStep({
+      client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
       searchSpecsFn: async () => ({

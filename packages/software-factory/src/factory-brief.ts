@@ -1,3 +1,4 @@
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
@@ -32,8 +33,10 @@ interface FactoryBriefCardAttributes {
 }
 
 interface FactoryBriefLoadOptions {
+  /** Boxel CLI client — used to apply per-realm auth to the brief fetch. */
+  client?: BoxelCLIClient;
+  /** Override fetch (testing). Bypasses client when set. */
   fetch?: typeof globalThis.fetch;
-  authorization?: string;
 }
 
 export class FactoryBriefError extends Error {
@@ -47,23 +50,23 @@ export async function loadFactoryBrief(
   sourceUrl: string,
   options?: FactoryBriefLoadOptions,
 ): Promise<FactoryBrief> {
-  let fetchImpl = options?.fetch ?? globalThis.fetch;
-
-  if (typeof fetchImpl !== 'function') {
-    throw new FactoryBriefError('Global fetch is not available');
-  }
-
-  let response;
+  let headers = { accept: SupportedMimeType.CardSource };
+  let response: Response;
 
   try {
-    response = await fetchImpl(sourceUrl, {
-      headers: {
-        accept: SupportedMimeType.CardSource,
-        ...(options?.authorization
-          ? { authorization: options.authorization }
-          : {}),
-      },
-    });
+    if (options?.fetch) {
+      response = await options.fetch(sourceUrl, { headers });
+    } else if (options?.client) {
+      // Prefer an authed fetch for private briefs, fall back to anonymous
+      // for public briefs whose realm isn't in the user's token set.
+      try {
+        response = await options.client.authedFetch(sourceUrl, { headers });
+      } catch {
+        response = await globalThis.fetch(sourceUrl, { headers });
+      }
+    } else {
+      response = await globalThis.fetch(sourceUrl, { headers });
+    }
   } catch (error) {
     throw new FactoryBriefError(
       `Failed to fetch brief from ${sourceUrl}: ${formatErrorMessage(error)}`,

@@ -4,6 +4,18 @@ export {
   type CreateRealmResult,
   type PullOptions,
   type PullResult,
+  type ReadResult,
+  type WriteResult,
+  type DeleteResult,
+  type SearchResult,
+  type ListFilesResult,
+  type RunCommandResult,
+  type LintMessage,
+  type LintResult,
+  type WaitForReadyResult,
+  type WaitForFileOptions,
+  type AtomicResult,
+  type CancelIndexingResult,
 } from './src/lib/boxel-cli-client';
 
 export {

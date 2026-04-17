@@ -10,7 +10,6 @@ import './factory-tool-executor.integration.test';
 import './factory-tool-registry.test';
 import './factory-context-builder.test';
 import './factory-tool-builder.test';
-import './realm-auth.test';
 import './issue-loop.test';
 import './issue-scheduler.test';
 import './retry-blocked-issues.test';

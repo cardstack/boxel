@@ -13,6 +13,8 @@
 import '../../src/setup-logger';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
 import { logger } from '../../src/logger';
 
 import {
@@ -20,6 +22,100 @@ import {
   ToolNotFoundError,
   ToolSafetyError,
 } from '../../src/factory-tool-executor';
+
+function makeMockClient(fetchImpl: typeof globalThis.fetch): BoxelCLIClient {
+  async function jsonFetch(
+    input: string,
+    init?: RequestInit,
+  ): Promise<Response> {
+    return fetchImpl(input, init);
+  }
+  let mock = {
+    async read(realmUrl: string, path: string) {
+      let url = new URL(
+        path,
+        realmUrl.endsWith('/') ? realmUrl : `${realmUrl}/`,
+      ).href;
+      let response = await jsonFetch(url, { method: 'GET' });
+      if (!response.ok) {
+        return { ok: false, status: response.status, error: 'http error' };
+      }
+      return {
+        ok: true,
+        status: response.status,
+        document: await response.json(),
+      };
+    },
+    async write(realmUrl: string, path: string) {
+      let url = new URL(
+        path,
+        realmUrl.endsWith('/') ? realmUrl : `${realmUrl}/`,
+      ).href;
+      let response = await jsonFetch(url, { method: 'POST' });
+      return response.ok ? { ok: true } : { ok: false, error: 'http error' };
+    },
+    async delete(realmUrl: string, path: string) {
+      let url = new URL(
+        path,
+        realmUrl.endsWith('/') ? realmUrl : `${realmUrl}/`,
+      ).href;
+      let response = await jsonFetch(url, { method: 'DELETE' });
+      return response.ok ? { ok: true } : { ok: false, error: 'http error' };
+    },
+    async search(realmUrl: string) {
+      let response = await jsonFetch(`${realmUrl}_search`, { method: 'QUERY' });
+      if (!response.ok) {
+        return { ok: false, status: response.status, error: 'http error' };
+      }
+      let json = await response.json();
+      return { ok: true, data: json?.data };
+    },
+    async listFiles() {
+      return { filenames: [] };
+    },
+    async runCommand() {
+      return { status: 'ready' as const, result: null, error: null };
+    },
+    async lint() {
+      return { fixed: false, output: '', messages: [] };
+    },
+    async waitForReady() {
+      return { ready: true };
+    },
+    async waitForFile() {
+      return true;
+    },
+    async atomicOperation() {
+      return { ok: true };
+    },
+    async cancelAllIndexingJobs() {
+      return { ok: true };
+    },
+    async getRealmToken() {
+      return 'Bearer mock-jwt';
+    },
+    async authedFetch(input: string | URL | Request, init?: RequestInit) {
+      return fetchImpl(input, init);
+    },
+    async authedServerFetch(input: string | URL | Request, init?: RequestInit) {
+      return fetchImpl(input, init);
+    },
+    getActiveProfile() {
+      return null;
+    },
+    async pull() {
+      return { files: [] };
+    },
+    async createRealm() {
+      return {
+        realmUrl: 'https://realms.example.test/mock/',
+        created: true,
+        authorization: 'Bearer mock',
+      };
+    },
+  };
+  return mock as unknown as BoxelCLIClient;
+}
 import {
   buildFactoryTools,
   DONE_SIGNAL,
@@ -93,9 +189,9 @@ async function main(): Promise<void> {
     log.info('');
   }
 
-  check('has script tools', byCategory['script']?.length === 4);
+  check('has script tools', byCategory['script']?.length === 2);
   check('has boxel-cli tools', byCategory['boxel-cli']?.length === 6);
-  check('has realm-api tools', byCategory['realm-api']?.length === 8);
+  check('has realm-api tools', byCategory['realm-api']?.length === 5);
   check(
     'all names unique',
     new Set(manifests.map((m) => m.name)).size === manifests.length,
@@ -134,11 +230,13 @@ async function main(): Promise<void> {
   log.info('=== Safety Constraints ===');
   log.info('');
 
+  let safetyClient = makeMockClient(async () => new Response('{}'));
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
     targetRealmUrl: 'https://realms.example.test/user/target/',
     sourceRealmUrl: 'https://realms.example.test/user/source/',
     allowedRealmPrefixes: ['https://realms.example.test/user/scratch-'],
+    client: safetyClient,
   });
 
   // Unregistered tool
@@ -180,21 +278,23 @@ async function main(): Promise<void> {
 
   let mockCallCount = 0;
 
+  let mockFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    mockCallCount++;
+    let url = String(input);
+    let method = init?.method ?? 'GET';
+    log.info(`  -> ${method} ${url}`);
+    return new Response(
+      JSON.stringify({
+        data: [{ id: 'CardDef/hello', type: 'card' }],
+      }),
+      { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
+    );
+  }) as typeof globalThis.fetch;
+  let mockClient = makeMockClient(mockFetch);
   let mockExecutor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
     targetRealmUrl: 'https://realms.example.test/user/target/',
-    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-      mockCallCount++;
-      let url = String(input);
-      let method = init?.method ?? 'GET';
-      log.info(`  -> ${method} ${url}`);
-      return new Response(
-        JSON.stringify({
-          data: [{ id: 'CardDef/hello', type: 'card' }],
-        }),
-        { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
-      );
-    }) as typeof globalThis.fetch,
+    client: mockClient,
   });
 
   let readResult = await mockExecutor.execute('realm-read', {
@@ -246,10 +346,11 @@ async function main(): Promise<void> {
     });
   }) as typeof globalThis.fetch;
 
+  let toolBuilderClient = makeMockClient(toolBuilderFetch);
   let toolBuilderExecutor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
     targetRealmUrl: 'https://realms.example.test/user/target/',
-    fetch: toolBuilderFetch,
+    client: toolBuilderClient,
   });
 
   let factoryTools = buildFactoryTools(
@@ -258,11 +359,7 @@ async function main(): Promise<void> {
       darkfactoryModuleUrl:
         'https://realms.example.test/software-factory/darkfactory',
       realmServerUrl: 'https://realms.example.test/',
-      realmTokens: {
-        'https://realms.example.test/user/target/': 'Bearer target-jwt',
-        'https://realms.example.test/user/target-tests/': 'Bearer test-jwt',
-      },
-      fetch: toolBuilderFetch,
+      client: toolBuilderClient,
     },
     toolBuilderExecutor,
     registry,

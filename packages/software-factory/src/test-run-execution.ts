@@ -6,10 +6,7 @@ import { logger } from './logger';
 
 import { chromium } from '@playwright/test';
 
-import {
-  getNextValidationSequenceNumber,
-  searchRealm,
-} from './realm-operations';
+import { getNextValidationSequenceNumber } from './realm-operations';
 import { createTestRun, completeTestRun } from './test-run-cards';
 import { parseQunitResults } from './test-run-parsing';
 import type {
@@ -43,8 +40,7 @@ export async function resolveTestRun(
   let realmOptions: TestRunRealmOptions = {
     targetRealmUrl: options.targetRealmUrl,
     testResultsModuleUrl: options.testResultsModuleUrl,
-    authorization: options.authorization,
-    fetch: options.fetch,
+    client: options.client,
   };
 
   let resumeResult = options.forceNew
@@ -97,17 +93,13 @@ async function findResumableTestRun(
 ): Promise<ResumableTestRun | undefined> {
   let targetRealmUrl = ensureTrailingSlash(options.targetRealmUrl);
 
-  let result = await searchRealm(
-    options.targetRealmUrl,
-    {
-      filter: {
-        on: { module: options.testResultsModuleUrl, name: 'TestRun' },
-      },
-      sort: [{ by: 'sequenceNumber', direction: 'desc' }],
-      page: { size: 1 },
+  let result = await options.client.search(options.targetRealmUrl, {
+    filter: {
+      on: { module: options.testResultsModuleUrl, name: 'TestRun' },
     },
-    { authorization: options.authorization, fetch: options.fetch },
-  );
+    sort: [{ by: 'sequenceNumber', direction: 'desc' }],
+    page: { size: 1 },
+  });
 
   if (!result?.ok) {
     return undefined;
@@ -158,15 +150,12 @@ async function getNextSequenceNumber(
   minSequenceNumber = 0,
 ): Promise<number> {
   let seq = await getNextValidationSequenceNumber(
+    options.client,
     slug,
     'Validations/test_',
     options.testResultsModuleUrl,
     'TestRun',
-    {
-      targetRealmUrl: options.targetRealmUrl,
-      authorization: options.authorization,
-      fetch: options.fetch,
-    },
+    options.targetRealmUrl,
   );
   return Math.max(seq, minSequenceNumber + 1);
 }
@@ -423,8 +412,7 @@ export async function executeTestRunFromRealm(
   let realmOptions: TestRunRealmOptions = {
     targetRealmUrl: options.targetRealmUrl,
     testResultsModuleUrl: options.testResultsModuleUrl,
-    authorization: options.authorization,
-    fetch: options.fetch,
+    client: options.client,
   };
   let completeOptions = {
     ...realmOptions,
@@ -500,12 +488,13 @@ export async function executeTestRunFromRealm(
     let realmParam = encodeURIComponent(options.targetRealmUrl);
     let pageUrl = `${testPageUrl}?liveTest=true&realmURL=${realmParam}&hidepassed`;
 
-    if (options.authorization) {
+    let realmToken = await options.client.getRealmToken(options.targetRealmUrl);
+    if (realmToken) {
       let realmOrigin = new URL(options.targetRealmUrl).origin;
       await page.route(`${realmOrigin}/**`, (route) => {
         let headers = {
           ...route.request().headers(),
-          Authorization: options.authorization!,
+          Authorization: realmToken,
         };
         route.continue({ headers });
       });
