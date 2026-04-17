@@ -96,14 +96,13 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
     const res = await oneShot.execute({
       systemPrompt,
       userPrompt,
-      llmModel: llmModel || 'anthropic/claude-haiku-4.5',
+      llmModel,
       codeRef: selectionContextCodeRef ?? candidateTypeCodeRef,
     });
 
     const validInstances = instances.filter((c: any) => c && c.id);
-    const selectedIndices = this.parseIndicesFromLlmOutput(
-      res.output || '[]',
-    ).slice(0, max);
+    const rawIndices = this.parseIndicesFromLlmOutput(res.output || '[]');
+    const selectedIndices = Array.from(new Set(rawIndices)).slice(0, max);
     const selectedCards = selectedIndices
       .map((i) => validInstances[i - 1])
       .filter(Boolean);
@@ -112,14 +111,7 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
     // Log a warning if the LLM output could not be parsed into valid selections, to aid debugging
     if (selectedCards.length === 0) {
       console.warn(
-        `[SearchAndChoose:${candidateTypeCodeRef.name}] result is empty. candidates sent to LLM:\n${numberedCandidates}`,
-      );
-      console.warn(
-        `[SearchAndChoose:${candidateTypeCodeRef.name}] LLM raw output: "${res.output}"`,
-      );
-      console.warn(
-        `[SearchAndChoose:${candidateTypeCodeRef.name}] parsed indices:`,
-        selectedIndices,
+        `[SearchAndChoose:${candidateTypeCodeRef.name}] LLM could not find a relevant option from ${validInstances.length} available cards. LLM output: "${res.output}" (Parsed indices: ${selectedIndices})`,
       );
     }
 
@@ -179,7 +171,7 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
     return instances
       .filter((c) => c && c.id)
       .map((c, i) => {
-        const name = c.cardInfo?.name || c.name || '';
+        const name = c.cardTitle || c.name || '';
         const summary = c.cardInfo?.summary || '';
         return summary ? `${i + 1}. ${name} — ${summary}` : `${i + 1}. ${name}`;
       })

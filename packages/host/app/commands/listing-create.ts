@@ -153,34 +153,44 @@ export default class ListingCreateCommand extends HostBaseCommand<
     const listingCard = listing as CardAPI.CardDef;
     const firstOpenCardId = openCardIds?.[0];
 
-    const backgroundWork = Promise.allSettled([
-      this.autoPatchName(listingCard, codeRef),
-      this.autoPatchSummary(listingCard, codeRef),
-      this.autoLinkTag(listingCard, codeRef),
-      this.autoLinkCategory(listingCard, codeRef),
-      this.autoLinkLicense(listingCard),
-      this.autoLinkExample(listingCard, codeRef, openCardIds),
-      this.linkSpecs(
-        listingCard,
-        targetRealm,
-        firstOpenCardId ?? codeRef?.module,
-        codeRef.module,
-        codeRef,
-      ),
-    ]).then((results) => {
-      const names = [
-        'autoPatchName',
-        'autoPatchSummary',
-        'autoLinkTag',
-        'autoLinkCategory',
-        'autoLinkLicense',
-        'autoLinkExample',
-        'linkSpecs',
-      ];
+    const backgroundTasks = [
+      {
+        name: 'autoPatchName',
+        promise: this.autoPatchName(listingCard, codeRef),
+      },
+      {
+        name: 'autoPatchSummary',
+        promise: this.autoPatchSummary(listingCard, codeRef),
+      },
+      { name: 'autoLinkTag', promise: this.autoLinkTag(listingCard, codeRef) },
+      {
+        name: 'autoLinkCategory',
+        promise: this.autoLinkCategory(listingCard, codeRef),
+      },
+      { name: 'autoLinkLicense', promise: this.autoLinkLicense(listingCard) },
+      {
+        name: 'autoLinkExample',
+        promise: this.autoLinkExample(listingCard, codeRef, openCardIds),
+      },
+      {
+        name: 'linkSpecs',
+        promise: this.linkSpecs(
+          listingCard,
+          targetRealm,
+          firstOpenCardId ?? codeRef?.module,
+          codeRef.module,
+          codeRef,
+        ),
+      },
+    ];
+
+    const backgroundWork = Promise.allSettled(
+      backgroundTasks.map((t) => t.promise),
+    ).then((results) => {
       results.forEach((result, i) => {
         if (result.status === 'rejected') {
           console.warn(
-            `Background autopatch failed [${names[i]}]:`,
+            `Background autopatch failed [${backgroundTasks[i].name}]:`,
             result.reason,
           );
         }
