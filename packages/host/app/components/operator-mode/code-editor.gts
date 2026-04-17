@@ -23,6 +23,7 @@ import { Position } from 'monaco-editor';
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import {
+  cardIdToURL,
   hasExecutableExtension,
   logger,
   isSingleCardDocument,
@@ -379,14 +380,14 @@ export default class CodeEditor extends Component<Signature> {
     }
     adoptsFrom = codeRefWithAbsoluteURL(
       adoptsFrom,
-      new URL(this.args.file.url),
+      cardIdToURL(this.args.file.url),
     );
     if (
       !isEqual(
         adoptsFrom,
         codeRefWithAbsoluteURL(
           json.data.meta.adoptsFrom,
-          new URL(this.args.file.url),
+          cardIdToURL(this.args.file.url),
         ),
       )
     ) {

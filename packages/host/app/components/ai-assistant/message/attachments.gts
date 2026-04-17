@@ -1,8 +1,9 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import type {
-  CardErrorJSONAPI,
-  getCardCollection,
+import {
+  cardIdToURL,
+  type CardErrorJSONAPI,
+  type getCardCollection,
 } from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
@@ -40,7 +41,7 @@ function cardErrorRealm(cardError: CardErrorJSONAPI) {
   }
 
   try {
-    let url = new URL(id);
+    let url = cardIdToURL(id);
     let lastSlashIndex = url.pathname.lastIndexOf('/');
     let pathname =
       lastSlashIndex >= 0 ? url.pathname.slice(0, lastSlashIndex + 1) : '/';
@@ -62,7 +63,7 @@ function cardErrorDisplayTitle(cardError: CardErrorJSONAPI) {
 
   let path = id;
   try {
-    path = new URL(id).pathname;
+    path = cardIdToURL(id).pathname;
   } catch {
     // ignore invalid urls
   }

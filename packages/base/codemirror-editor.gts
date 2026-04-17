@@ -8,6 +8,7 @@ import { scheduleOnce } from '@ember/runloop';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
+  cardIdToURL,
   resolveCardReference,
   trimJsonExtension,
   maybeRelativeURL,
@@ -100,7 +101,11 @@ function makeCardRef(
 ): string {
   if (!baseUrl) return cardUrl;
   try {
-    return maybeRelativeURL(new URL(cardUrl), new URL(baseUrl), undefined);
+    return maybeRelativeURL(
+      cardIdToURL(cardUrl),
+      cardIdToURL(baseUrl),
+      undefined,
+    );
   } catch {
     return cardUrl;
   }

@@ -33,6 +33,7 @@ import type { CodeRef } from '@cardstack/runtime-common';
 import {
   isCardDocumentString,
   isCardErrorJSONAPI,
+  cardIdToURL,
   RealmPaths,
   PermissionsContextName,
   GetCardContextName,
@@ -512,7 +513,7 @@ export default class CodeSubmode extends Component<Signature> {
         // TODO: This is a side effect of the recent-file service making assumptions about
         // what realm we are in. we should refactor that so that callers have to tell
         // it the realm of the file in question
-        let realmURL = new URL(this.operatorModeStateService.realmURL);
+        let realmURL = cardIdToURL(this.operatorModeStateService.realmURL);
 
         if (realmURL) {
           let realmPaths = new RealmPaths(realmURL);
@@ -533,7 +534,7 @@ export default class CodeSubmode extends Component<Signature> {
       let recentFileUrl = `${recentFile.realmURL}${recentFile.filePath}`;
 
       await this.operatorModeStateService.updateCodePath(
-        new URL(recentFileUrl),
+        cardIdToURL(recentFileUrl),
       );
     } else {
       await this.operatorModeStateService.updateCodePath(null);
@@ -573,7 +574,7 @@ export default class CodeSubmode extends Component<Signature> {
       this.isCreateModalOpen = true;
       let url = await this.createFileModal.createNewFile(
         fileType,
-        new URL(destinationRealm),
+        destinationRealm,
         definitionClass,
         sourceInstance,
       );
@@ -591,11 +592,13 @@ export default class CodeSubmode extends Component<Signature> {
     if (!realmURL) {
       throw new Error('No realm available for upload');
     }
-    let task = this.fileUpload.uploadFile({ realmURL: new URL(realmURL) });
+    let task = this.fileUpload.uploadFile({ realmURL: cardIdToURL(realmURL) });
     task.result
       .then((fileDef) => {
         if (fileDef?.url) {
-          this.operatorModeStateService.updateCodePath(new URL(fileDef.url));
+          this.operatorModeStateService.updateCodePath(
+            cardIdToURL(fileDef.url),
+          );
         }
       })
       .catch((error) => {
@@ -629,9 +632,9 @@ export default class CodeSubmode extends Component<Signature> {
   };
 
   @action private async openSearchResultInEditor(cardId: string) {
-    let codePath = cardId.endsWith('.json')
-      ? new URL(cardId)
-      : new URL(cardId + '.json');
+    let codePath = cardIdToURL(
+      cardId.endsWith('.json') ? cardId : `${cardId}.json`,
+    );
     await this.operatorModeStateService.updateCodePath(codePath);
   }
 

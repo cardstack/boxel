@@ -31,6 +31,7 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import {
+  cardIdToURL,
   hasExecutableExtension,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
@@ -836,7 +837,7 @@ export default class Workspace extends Component<Signature> {
 
   private get displayPublishedURL() {
     try {
-      let url = new URL(this.primaryPublishedURL);
+      let url = cardIdToURL(this.primaryPublishedURL);
       return url.host + url.pathname.replace(/\/$/, '');
     } catch {
       return this.primaryPublishedURL;
@@ -1028,7 +1029,7 @@ function summarizeWorkspaceContents(
 ): WorkspaceDeleteSummary {
   return fileURLs.reduce(
     (summary, fileURL) => {
-      let path = new URL(fileURL).pathname;
+      let path = cardIdToURL(fileURL).pathname;
       if (path.endsWith('/.realm.json')) {
         return summary;
       }

@@ -308,35 +308,47 @@ export default class OperatorModeStateService extends Service {
   }
 
   async deleteCard(cardId: string) {
-    let cardRealmUrl = (await this.network.authedFetch(cardId)).headers.get(
-      'X-Boxel-Realm-Url',
-    );
+    let resolvedCardId = cardIdToURL(cardId).href;
+    let cardRealmUrl = (
+      await this.network.authedFetch(resolvedCardId)
+    ).headers.get('X-Boxel-Realm-Url');
     if (!cardRealmUrl) {
       throw new Error(`Could not determine the realm for card "${cardId}"`);
     }
 
-    await this.store.delete(cardId);
+    await this.store.delete(resolvedCardId);
 
     // remove all stack items for the deleted card
+    let normalizeCardId = (id: string) => {
+      let trimmed = removeFileExtension(id) ?? id;
+      try {
+        return cardIdToURL(trimmed).href;
+      } catch {
+        return trimmed;
+      }
+    };
+    let normalizedDeletedId = normalizeCardId(cardId);
     let items: StackItem[] = [];
     for (let stack of this._state.stacks || []) {
       items.push(
         ...(stack.filter(
-          (i: StackItem) => i.id && removeFileExtension(i.id) === cardId,
+          (i: StackItem) =>
+            i.id != null && normalizeCardId(i.id) === normalizedDeletedId,
         ) as StackItem[]),
       );
     }
     for (let item of items) {
       this.trimItemsFromStack(item);
     }
-    let realmPaths = new RealmPaths(new URL(cardRealmUrl));
-    let cardPath = realmPaths.local(cardIdToURL(`${cardId}.json`));
+    let realmPaths = new RealmPaths(cardIdToURL(cardRealmUrl));
+    let cardPath = realmPaths.local(cardIdToURL(`${resolvedCardId}.json`));
     this.recentFilesService.removeRecentFile(cardPath);
     this.recentCardsService.remove(cardId);
+    this.recentCardsService.remove(resolvedCardId);
   }
 
   async copySource(fromUrl: string, toUrl: string) {
-    await this.cardService.copySource(new URL(fromUrl), new URL(toUrl));
+    await this.cardService.copySource(cardIdToURL(fromUrl), cardIdToURL(toUrl));
   }
 
   trimItemsFromStack(item: StackItem) {
@@ -643,7 +655,7 @@ export default class OperatorModeStateService extends Service {
     if (codeRef && isResolvedCodeRef(codeRef)) {
       //(possibly) in a different module
       this._state.codeSelection = codeRef.name;
-      await this.updateCodePath(new URL(codeRef.module));
+      await this.updateCodePath(cardIdToURL(codeRef.module));
     } else if (
       codeRef &&
       'type' in codeRef &&
@@ -653,7 +665,7 @@ export default class OperatorModeStateService extends Service {
     ) {
       this._state.fieldSelection = codeRef.field;
       this._state.codeSelection = codeRef.card.name;
-      await this.updateCodePath(new URL(codeRef.card.module));
+      await this.updateCodePath(cardIdToURL(codeRef.card.module));
     } else if (localName && onLocalSelection) {
       //in the same module
       this._state.codeSelection = localName;
@@ -665,7 +677,7 @@ export default class OperatorModeStateService extends Service {
 
   get codePathRelativeToRealm() {
     if (this._state.codePath && this.realmURL) {
-      let realmPath = new RealmPaths(new URL(this.realmURL));
+      let realmPath = new RealmPaths(cardIdToURL(this.realmURL));
 
       if (realmPath.inRealm(this._state.codePath)) {
         try {
@@ -687,7 +699,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   onFileSelected = async (entryPath: LocalPath) => {
-    let fileUrl = new RealmPaths(new URL(this.realmURL)).fileURL(entryPath);
+    let fileUrl = new RealmPaths(cardIdToURL(this.realmURL)).fileURL(entryPath);
     await this.updateCodePath(fileUrl);
   };
 
@@ -955,7 +967,7 @@ export default class OperatorModeStateService extends Service {
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submodes.Interact,
-      codePath: rawState.codePath ? new URL(rawState.codePath) : null,
+      codePath: rawState.codePath ? cardIdToURL(rawState.codePath) : null,
       hostModePrimaryCard: rawState.trail?.[0]?.replace(/\.json$/, '') ?? null,
       hostModeStack: new TrackedArray(
         rawState.trail
@@ -1109,11 +1121,11 @@ export default class OperatorModeStateService extends Service {
     let foundURL = urlsToCheck.find((url) => this.realm.canWrite(url));
 
     if (foundURL) {
-      return new URL(this.realm.url(foundURL)!);
+      return cardIdToURL(this.realm.url(foundURL)!);
     }
 
     if (this.realm.defaultWritableRealm) {
-      return new URL(this.realm.defaultWritableRealm.path);
+      return cardIdToURL(this.realm.defaultWritableRealm.path);
     }
 
     return undefined; // no writable realm found
@@ -1142,7 +1154,7 @@ export default class OperatorModeStateService extends Service {
       url: codePath!.href,
       onStateChange: (state: FileResource['state']) => {
         if (state === 'ready') {
-          this.cachedRealmURL = new URL(this.readyFile.realmURL);
+          this.cachedRealmURL = cardIdToURL(this.readyFile.realmURL);
           this.updateOpenDirsForNestedPath();
         }
 
@@ -1154,7 +1166,7 @@ export default class OperatorModeStateService extends Service {
         if (!url) {
           return;
         }
-        this.replaceCodePath(new URL(url));
+        this.replaceCodePath(cardIdToURL(url));
       },
     }));
   });
@@ -1229,13 +1241,13 @@ export default class OperatorModeStateService extends Service {
     );
     await this.updateCodePath(
       lastOpenedFile
-        ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
-        : new URL(id),
+        ? cardIdToURL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
+        : cardIdToURL(id),
     );
     this.updateSubmode(Submodes.Interact);
 
     this._state.workspaceChooserOpened = false;
-    this.cachedRealmURL = new URL(realmUrl);
+    this.cachedRealmURL = cardIdToURL(realmUrl);
   };
 
   get workspaceChooserOpened() {

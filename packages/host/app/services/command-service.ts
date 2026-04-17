@@ -15,6 +15,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import type { Command, CommandContext } from '@cardstack/runtime-common';
 import {
+  cardIdToURL,
   Deferred,
   CommandContextStamp,
   delay,
@@ -157,7 +158,7 @@ export default class CommandService extends Service {
 
     let realmURL: URL | undefined;
     try {
-      realmURL = this.realm.realmOfURL(new URL(fileUrl)) ?? undefined;
+      realmURL = this.realm.realmOfURL(cardIdToURL(fileUrl)) ?? undefined;
     } catch (_e) {
       return clientRequestId;
     }

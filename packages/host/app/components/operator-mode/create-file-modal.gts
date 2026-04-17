@@ -617,7 +617,10 @@ export default class CreateFileModal extends Component<Signature> {
       );
     }
     this.clearSaveError();
-    this.currentRequest = { ...this.currentRequest, realmURL: new URL(path) };
+    this.currentRequest = {
+      ...this.currentRequest,
+      realmURL: cardIdToURL(path),
+    };
   }
 
   @action private setDisplayName(name: string) {
@@ -796,7 +799,7 @@ export default class CreateFileModal extends Component<Signature> {
     let isField = this.fileType.id === 'field-definition';
     let isFileDef = this.fileType.id === 'file-definition';
 
-    let realmPath = new RealmPaths(new URL(this.selectedRealmURL));
+    let realmPath = new RealmPaths(cardIdToURL(this.selectedRealmURL));
     // assert that filename is a GTS file and is a LocalPath
     let fileName: LocalPath = `${this.fileName.replace(
       /\.[^.].+$/,
@@ -835,14 +838,14 @@ export default class CreateFileModal extends Component<Signature> {
           module: spec?.moduleHref ?? module,
           name: exportName,
         },
-        new URL(this.selectedRealmURL),
+        cardIdToURL(this.selectedRealmURL),
       ) as ResolvedCodeRef
     ).module;
-    const absoluteModule = new URL(absoluteModuleHref);
+    const absoluteModule = cardIdToURL(absoluteModuleHref);
     let moduleURL = maybeRelativeURL(
       absoluteModule,
       url,
-      new URL(this.selectedRealmURL),
+      cardIdToURL(this.selectedRealmURL),
     );
     let src: string[] = [];
 
@@ -915,7 +918,9 @@ export class ${className} extends ${exportName} {
       sourceCard: this.currentRequest.sourceInstance,
       targetRealm: this.selectedRealmURL,
     });
-    this.currentRequest.newFileDeferred.fulfill(new URL(`${newCardId}.json`));
+    this.currentRequest.newFileDeferred.fulfill(
+      cardIdToURL(`${newCardId}.json`),
+    );
   });
 
   private createCardInstance = restartableTask(async () => {
@@ -968,7 +973,9 @@ export class ${className} extends ${exportName} {
         let error = maybeId;
         throw error;
       }
-      this.currentRequest.newFileDeferred.fulfill(new URL(`${maybeId}.json`));
+      this.currentRequest.newFileDeferred.fulfill(
+        cardIdToURL(`${maybeId}.json`),
+      );
     } catch (e: any) {
       console.log('Error saving', e);
       this.saveError = e;
@@ -995,7 +1002,7 @@ export class ${className} extends ${exportName} {
       return;
     }
 
-    let realmPath = new RealmPaths(new URL(this.selectedRealmURL));
+    let realmPath = new RealmPaths(cardIdToURL(this.selectedRealmURL));
     let filePath: LocalPath = fileName as LocalPath;
     let url = realmPath.fileURL(filePath);
 

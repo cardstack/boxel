@@ -1,5 +1,7 @@
 import { service } from '@ember/service';
 
+import { cardIdToURL } from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -37,7 +39,7 @@ export default class WriteTextFileCommand extends HostBaseCommand<
     }
     let realm;
     if (input.realm) {
-      realm = this.realm.realmOfURL(new URL(input.realm));
+      realm = this.realm.realmOfURL(cardIdToURL(input.realm));
       if (!realm) {
         throw new Error(`Invalid or unknown realm provided: ${input.realm}`);
       }
@@ -46,7 +48,12 @@ export default class WriteTextFileCommand extends HostBaseCommand<
     if (path.startsWith('/')) {
       path = path.slice(1);
     }
-    let url = new URL(path, realm?.href);
+    let url: URL;
+    try {
+      url = cardIdToURL(path);
+    } catch {
+      url = new URL(path, realm?.href);
+    }
     let finalUrl = url;
     let shouldWrite = true;
     if (!input.overwrite) {
@@ -96,7 +103,9 @@ export default class WriteTextFileCommand extends HostBaseCommand<
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {
-    let getSourceResult = await this.cardService.getSource(new URL(fileUrl));
+    let getSourceResult = await this.cardService.getSource(
+      cardIdToURL(fileUrl),
+    );
     return getSourceResult.status !== 404;
   }
 }

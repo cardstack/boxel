@@ -279,7 +279,7 @@ export default class StoreService extends Service implements StoreInterface {
           ? instanceOrError[realmURLSymbol]?.href
           : instanceOrError.realm;
         if (realmURL) {
-          this.subscribeToRealm(new URL(realmURL));
+          this.subscribeToRealm(cardIdToURL(realmURL));
         }
       }
     } else {
@@ -687,7 +687,7 @@ export default class StoreService extends Service implements StoreInterface {
       }
   > {
     let normalizedRealms = (realms ?? [])
-      .map((realm) => new RealmPaths(new URL(realm)).url)
+      .map((realm) => new RealmPaths(cardIdToURL(realm)).url)
       .filter(Boolean);
     let searchRealms =
       normalizedRealms.length > 0
@@ -2173,7 +2173,7 @@ function resolveDocUrl(id?: string, realm?: string, local?: string) {
   if (!realm) {
     throw new Error('Cannot resolve target url without a realm');
   }
-  let path = new RealmPaths(new URL(realm));
+  let path = new RealmPaths(cardIdToURL(realm));
   if (local) {
     return path.directoryURL(local).href;
   }

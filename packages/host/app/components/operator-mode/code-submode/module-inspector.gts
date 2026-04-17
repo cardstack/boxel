@@ -43,6 +43,7 @@ import {
   localId,
   meta,
   hasExtension,
+  cardIdToURL,
   resolveCardReference,
 } from '@cardstack/runtime-common';
 
@@ -151,7 +152,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       return state;
     }
     let loader = this.loaderService.loader;
-    let relativeTo = new URL(this.operatorModeStateService.realmURL);
+    let relativeTo = cardIdToURL(this.operatorModeStateService.realmURL);
     runWhileActive(on, async (isActive) => {
       try {
         let cardDef = await loadCardDef(codeRef, {
@@ -355,7 +356,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     }
 
     const fileUrl = hasExtension(cardId) ? cardId : `${cardId}.json`;
-    await this.operatorModeStateService.updateCodePath(new URL(fileUrl));
+    await this.operatorModeStateService.updateCodePath(cardIdToURL(fileUrl));
   };
 
   @action private setActivePanel(item: ModuleInspectorView) {

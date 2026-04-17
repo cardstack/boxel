@@ -16,6 +16,8 @@
 
 import { service } from '@ember/service';
 
+import { cardIdToURL } from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -110,7 +112,7 @@ export default class InstantiateCardCommand extends HostBaseCommand<
       await this.store.__dangerousCreateFromSerialized(
         doc.data,
         doc,
-        resolveFrom ? new URL(resolveFrom) : undefined,
+        resolveFrom ? cardIdToURL(resolveFrom) : undefined,
       );
 
       return new commandModule.InstantiateCardResult({ passed: true });
@@ -135,6 +137,8 @@ export default class InstantiateCardCommand extends HostBaseCommand<
    * Throws if validation fails.
    */
   private validateModuleUrl(moduleUrl: string, realmUrl: string): void {
+    moduleUrl = cardIdToURL(moduleUrl).href;
+    realmUrl = cardIdToURL(realmUrl).href;
     this.assertHttpOrHttpsUrl(moduleUrl, 'moduleUrl');
     this.assertHttpOrHttpsUrl(realmUrl, 'realmUrl');
 

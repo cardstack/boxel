@@ -20,6 +20,7 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   type ResolvedCodeRef,
+  cardIdToURL,
   type getCard,
   type getCards,
   type getCardCollection,
@@ -173,7 +174,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
       return;
     }
 
-    const selectedUrl = new URL(this.selectedId);
+    const selectedUrl = cardIdToURL(this.selectedId);
     await this.operatorModeStateService.updateCodePath(selectedUrl);
   }
 
@@ -345,7 +346,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       return state;
     }
     let loader = this.loaderService.loader;
-    let relativeTo = new URL(this.operatorModeStateService.realmURL);
+    let relativeTo = cardIdToURL(this.operatorModeStateService.realmURL);
     runWhileActive(on, async (isActive) => {
       try {
         let cardDef = await loadCardDef(codeRef, {
@@ -426,7 +427,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 }
 
 function getRelativePath(baseUrl: string, targetUrl: string) {
-  const basePath = new URL(baseUrl).pathname;
-  const targetPath = new URL(targetUrl).pathname;
+  const basePath = cardIdToURL(baseUrl).pathname;
+  const targetPath = cardIdToURL(targetUrl).pathname;
   return targetPath.replace(basePath, '') || '/';
 }

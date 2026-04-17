@@ -1,6 +1,7 @@
 import { service } from '@ember/service';
 
 import {
+  cardIdToURL,
   isResolvedCodeRef,
   RealmPaths,
   type ResolvedCodeRef,
@@ -114,7 +115,7 @@ export default class RemixCommand extends HostBaseCommand<
   ): Promise<undefined> {
     let realmUrls = this.realmServer.availableRealmURLs;
     let { realm, listing: listingInput } = input;
-    let realmUrl = new RealmPaths(new URL(realm)).url;
+    let realmUrl = new RealmPaths(cardIdToURL(realm)).url;
 
     // Make sure realm is valid
     if (!realmUrls.includes(realmUrl)) {

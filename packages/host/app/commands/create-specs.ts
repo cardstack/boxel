@@ -1,6 +1,7 @@
 import { service } from '@ember/service';
 
 import {
+  cardIdToURL,
   loadCardDef,
   specRef,
   type ResolvedCodeRef,
@@ -259,7 +260,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
 
     let url: string;
     if (codeRef) {
-      let relativeTo = new URL(targetRealm);
+      let relativeTo = cardIdToURL(targetRealm);
       let maybeAbsoluteRef = codeRefWithAbsoluteURL(codeRef, relativeTo);
       if (isResolvedCodeRef(maybeAbsoluteRef)) {
         codeRef = maybeAbsoluteRef;
@@ -382,7 +383,7 @@ async function getSpecClassFromDeclaration(
     };
     const loadedSpec = await loadCardDef(specCodeRef, {
       loader,
-      relativeTo: new URL(targetRealm),
+      relativeTo: cardIdToURL(targetRealm),
     });
 
     if (

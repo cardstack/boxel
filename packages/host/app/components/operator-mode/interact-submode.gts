@@ -33,6 +33,7 @@ import {
   Deferred,
   cardTypeDisplayName,
   cardTypeIcon,
+  cardIdToURL,
   codeRefWithAbsoluteURL,
   identifyCard,
   isCardInstance,
@@ -424,7 +425,7 @@ export default class InteractSubmode extends Component {
         title: loadedCard.cardTitle,
       };
     } else {
-      let cardUrl = card instanceof URL ? card : new URL(card as string);
+      let cardUrl = card instanceof URL ? card : cardIdToURL(card as string);
       let loadedCard = await this.store.get(cardUrl.href);
       if (isCardInstance(loadedCard)) {
         cardToDelete = {
@@ -504,7 +505,7 @@ export default class InteractSubmode extends Component {
   private openSelectedSearchResultInStack = restartableTask(
     async (cardId: string) => {
       let waiterToken = waiter.beginAsync();
-      let url = new URL(cardId);
+      let url = cardIdToURL(cardId);
       try {
         let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
 
@@ -704,9 +705,14 @@ export default class InteractSubmode extends Component {
     }
 
     // assumption: take actions in the right-most stack
-    await this.createCard(this.rightMostStackIndex, spec.ref, new URL(specId), {
-      realmURL: this.operatorModeStateService.getWritableRealmURL(),
-    });
+    await this.createCard(
+      this.rightMostStackIndex,
+      spec.ref,
+      cardIdToURL(specId),
+      {
+        realmURL: this.operatorModeStateService.getWritableRealmURL(),
+      },
+    );
   });
 
   private createNewFromRecentType = restartableTask(

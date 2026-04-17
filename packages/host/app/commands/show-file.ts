@@ -1,5 +1,7 @@
 import { service } from '@ember/service';
 
+import { cardIdToURL } from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -31,7 +33,7 @@ export default class ShowFileCommand extends HostBaseCommand<
     if (operatorModeStateService.workspaceChooserOpened) {
       operatorModeStateService.closeWorkspaceChooser();
     }
-    await operatorModeStateService.updateCodePath(new URL(input.fileUrl));
+    await operatorModeStateService.updateCodePath(cardIdToURL(input.fileUrl));
     await operatorModeStateService.updateSubmode('code');
   }
 }

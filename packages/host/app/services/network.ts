@@ -5,6 +5,7 @@ import {
   VirtualNetwork,
   authorizationMiddleware,
   baseRealm,
+  cardIdToURL,
   registerCardReferencePrefix,
   fetcher,
 } from '@cardstack/runtime-common';
@@ -39,10 +40,13 @@ export default class NetworkService extends Service {
   }
 
   get authedFetch() {
-    return fetcher(this.fetch, [
+    let authenticatedFetch = fetcher(this.fetch, [
       authorizationMiddleware(this.realm),
       authErrorEventMiddleware(),
     ]);
+    return (url: string | URL | Request, init?: RequestInit) => {
+      return authenticatedFetch(normalizeAuthedFetchURL(url), init);
+    };
   }
 
   get mount() {
@@ -99,4 +103,15 @@ declare module '@ember/service' {
 
 function withTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
+}
+
+function normalizeAuthedFetchURL(url: string | URL | Request) {
+  if (url instanceof URL || url instanceof Request) {
+    return url;
+  }
+  try {
+    return cardIdToURL(url).href;
+  } catch {
+    return url;
+  }
 }

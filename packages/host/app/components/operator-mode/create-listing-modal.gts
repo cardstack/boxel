@@ -19,6 +19,7 @@ import {
 import { IconX, IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
+  cardIdToURL,
   chooseCard,
   isResolvedCodeRef,
   removeFileExtension,
@@ -96,7 +97,7 @@ export default class CreateListingModal extends Component<Signature> {
   private get selectedExampleRealms(): string[] {
     let realms = this.selectedExampleURLs.flatMap((cardUrl) => {
       try {
-        let realmURL = this.realm.realmOfURL(new URL(cardUrl))?.href;
+        let realmURL = this.realm.realmOfURL(cardIdToURL(cardUrl))?.href;
         return realmURL ? [realmURL] : [];
       } catch (_error) {
         return [];
@@ -111,7 +112,7 @@ export default class CreateListingModal extends Component<Signature> {
       return;
     }
     let consumingRealm = this.payload?.targetRealm
-      ? new URL(this.payload.targetRealm)
+      ? cardIdToURL(this.payload.targetRealm)
       : undefined;
     let selected = await chooseCard(
       { filter: { type: codeRef } },
@@ -164,7 +165,7 @@ export default class CreateListingModal extends Component<Signature> {
       }
       await this.operatorModeStateService.updateSubmode(Submodes.Code);
       await this.operatorModeStateService.updateCodePath(
-        new URL(cardUrl + '.json'),
+        cardIdToURL(`${cardUrl}.json`),
         'preview',
       );
       this.operatorModeStateService.updateCardPreviewFormat('isolated');

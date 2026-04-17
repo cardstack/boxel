@@ -9,7 +9,12 @@ import { timeout } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
-import { isCardInstance } from '@cardstack/runtime-common';
+import {
+  isCardInstance,
+  isRegisteredPrefix,
+  resolveCardReference,
+  unresolveCardReference,
+} from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
@@ -52,6 +57,31 @@ export interface SessionRoomData {
   lastMessage: Message | undefined;
   created: Date;
   lastActiveTimestamp: number;
+}
+
+function canonicalCardId(id: string): string {
+  try {
+    if (isRegisteredPrefix(id)) {
+      let stripped = id.split('#')[0] ?? id;
+      return stripped.split('?')[0] ?? stripped;
+    }
+    let resolved = resolveCardReference(id, undefined);
+    let parsed = new URL(resolved);
+    parsed.search = '';
+    parsed.hash = '';
+    return unresolveCardReference(parsed.href);
+  } catch (_e) {
+    let stripped = id.split('#')[0] ?? id;
+    return stripped.split('?')[0] ?? stripped;
+  }
+}
+
+function resolveAbsoluteCardId(id: string): string | undefined {
+  try {
+    return resolveCardReference(id, undefined);
+  } catch (_e) {
+    return undefined;
+  }
 }
 
 export default class AiAssistantPanelService extends Service {
@@ -383,10 +413,18 @@ export default class AiAssistantPanelService extends Service {
       // Collect attached cards (using sourceUrl from the message's attachedCardIds)
       if (message.attachedCardIds) {
         for (const cardId of message.attachedCardIds) {
-          if (cardId && !seenCardUrls.has(cardId)) {
-            seenCardUrls.add(cardId);
+          if (!cardId) {
+            continue;
+          }
+          let canonicalId = canonicalCardId(cardId);
+          if (!seenCardUrls.has(canonicalId)) {
+            seenCardUrls.add(canonicalId);
             // We need to get the actual card from the store
-            const card = this.store.peek<CardDef>(cardId);
+            const resolvedId = resolveAbsoluteCardId(cardId);
+            const card =
+              this.store.peek<CardDef>(cardId) ??
+              (resolvedId ? this.store.peek<CardDef>(resolvedId) : undefined) ??
+              this.store.peek<CardDef>(canonicalId);
             if (card && isCardInstance(card)) {
               attachedCards.push(card);
             }

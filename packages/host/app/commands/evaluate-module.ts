@@ -10,6 +10,8 @@
  * Used by the software-factory's EvalValidationStep via `_run-command`.
  */
 
+import { cardIdToURL } from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -70,6 +72,8 @@ export default class EvaluateModuleCommand extends HostBaseCommand<
    * Throws if validation fails.
    */
   private validateModuleUrl(moduleUrl: string, realmUrl: string): void {
+    moduleUrl = cardIdToURL(moduleUrl).href;
+    realmUrl = cardIdToURL(realmUrl).href;
     this.assertHttpOrHttpsUrl(moduleUrl, 'moduleUrl');
     this.assertHttpOrHttpsUrl(realmUrl, 'realmUrl');
 

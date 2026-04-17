@@ -24,7 +24,7 @@ import {
 import { not } from '@cardstack/boxel-ui/helpers';
 import { IconX, Warning as WarningIcon } from '@cardstack/boxel-ui/icons';
 
-import { ensureTrailingSlash } from '@cardstack/runtime-common';
+import { cardIdToURL, ensureTrailingSlash } from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
@@ -239,7 +239,7 @@ export default class PublishRealmModal extends Component<Signature> {
       return null;
     }
 
-    let overriddenURL = new URL(publishedRealmURL);
+    let overriddenURL = cardIdToURL(publishedRealmURL);
     overriddenURL.host = overrideDomain;
     return ensureTrailingSlash(overriddenURL.toString());
   }
@@ -476,8 +476,8 @@ export default class PublishRealmModal extends Component<Signature> {
     }
 
     try {
-      const pathSegments = new URL(realmUrl).pathname
-        .split('/')
+      const pathSegments = cardIdToURL(realmUrl)
+        .pathname.split('/')
         .filter((segment) => segment);
       const lastSegment = pathSegments[pathSegments.length - 1];
 

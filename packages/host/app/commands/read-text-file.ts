@@ -1,5 +1,7 @@
 import { service } from '@ember/service';
 
+import { cardIdToURL } from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -26,9 +28,17 @@ export default class ReadTextFileCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.ReadTextFileInput,
   ): Promise<BaseCommandModule.FileContents> {
-    let url = input.realm
-      ? new URL(input.path, input.realm)
-      : new URL(input.path);
+    let url: URL;
+    if (input.realm) {
+      let realmURL = cardIdToURL(input.realm);
+      try {
+        url = cardIdToURL(input.path);
+      } catch {
+        url = new URL(input.path, realmURL);
+      }
+    } else {
+      url = cardIdToURL(input.path);
+    }
     let response = await this.network.authedFetch(url, {
       headers: { Accept: 'text/plain' },
     });

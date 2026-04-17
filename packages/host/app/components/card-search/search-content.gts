@@ -13,6 +13,7 @@ import type { PickerOption } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
+  cardIdToURL,
   type CodeRef,
   type Filter,
   type getCard,
@@ -201,7 +202,7 @@ export default class SearchContent extends Component<Signature> {
 
   private get searchKeyIsURL() {
     try {
-      new URL(this.args.searchKey);
+      cardIdToURL(this.args.searchKey);
       return true;
     } catch (_e) {
       return false;
@@ -390,7 +391,7 @@ export default class SearchContent extends Component<Signature> {
 
   private realmNameFromUrl(realmUrl: string): string {
     try {
-      const pathname = new URL(realmUrl).pathname;
+      const pathname = cardIdToURL(realmUrl).pathname;
       const segments = pathname.split('/').filter(Boolean);
       return segments[segments.length - 1] ?? 'Workspace';
     } catch {
@@ -517,7 +518,7 @@ export default class SearchContent extends Component<Signature> {
       }
     }
     try {
-      const url = new URL(cardIdOrUrl);
+      const url = cardIdToURL(cardIdOrUrl);
       return `${url.origin}${url.pathname.split('/').slice(0, -1)?.join('/') ?? ''}/`;
     } catch {
       return '';

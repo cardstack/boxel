@@ -1,5 +1,6 @@
 import { service } from '@ember/service';
 
+import { cardIdToURL } from '@cardstack/runtime-common';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import type { FieldType } from 'https://cardstack.com/base/card-api';
@@ -36,13 +37,13 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
   ): Promise<undefined> {
     let moduleSource = (
       await this.cardService.getSource(
-        new URL(input.cardDefinitionToModify.module),
+        cardIdToURL(input.cardDefinitionToModify.module),
       )
     ).content;
 
     let moduleSyntax = new ModuleSyntax(
       moduleSource,
-      new URL(input.cardDefinitionToModify.module),
+      cardIdToURL(input.cardDefinitionToModify.module),
     );
 
     moduleSyntax.addField({
@@ -52,13 +53,13 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
       fieldType: input.fieldType as FieldType,
       fieldDefinitionType: input.fieldDefinitionType as 'field' | 'card',
       incomingRelativeTo: input.incomingRelativeTo
-        ? new URL(input.incomingRelativeTo)
+        ? cardIdToURL(input.incomingRelativeTo)
         : undefined,
       outgoingRelativeTo: input.outgoingRelativeTo
-        ? new URL(input.outgoingRelativeTo)
+        ? cardIdToURL(input.outgoingRelativeTo)
         : undefined,
       outgoingRealmURL: input.outgoingRealmURL
-        ? new URL(input.outgoingRealmURL)
+        ? cardIdToURL(input.outgoingRealmURL)
         : undefined,
       addFieldAtIndex: input.addFieldAtIndex,
       computedFieldFunctionSourceCode: input.computedFieldFunctionSourceCode,

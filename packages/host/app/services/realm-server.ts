@@ -14,6 +14,7 @@ import { TrackedArray } from 'tracked-built-ins';
 
 import {
   baseRealm,
+  cardIdToURL,
   ensureTrailingSlash,
   SupportedMimeType,
   Deferred,
@@ -173,7 +174,7 @@ export default class RealmServerService extends Service {
     let {
       data: { id: realmURL },
     } = (await response.json()) as { data: { id: string } };
-    return new URL(realmURL);
+    return cardIdToURL(realmURL);
   }
 
   async deleteRealm(realmURL: string) {

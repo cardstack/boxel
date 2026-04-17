@@ -8,6 +8,8 @@ import { and, bool, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconGlobe, Warning as IconWarning } from '@cardstack/boxel-ui/icons';
 
+import { cardIdToURL } from '@cardstack/runtime-common';
+
 import type URLBarResource from '@cardstack/host/resources/url-bar';
 import { urlBarResource } from '@cardstack/host/resources/url-bar';
 
@@ -183,7 +185,7 @@ export default class CardURLBar extends Component<Signature> {
   private urlBar: URLBarResource = urlBarResource(this, () => ({
     getValue: () => (this.codePath ? decodeURI(this.codePath) : ''),
     setValue: async (url: string) => {
-      await this.operatorModeStateService.updateCodePath(new URL(url));
+      await this.operatorModeStateService.updateCodePath(cardIdToURL(url));
     },
     setValueError: this.args.loadFileError,
     resetValueError: this.args.resetLoadFileError,

@@ -6,6 +6,7 @@ import type {
   LooseCardResource,
 } from '@cardstack/runtime-common';
 import {
+  cardIdToURL,
   type ResolvedCodeRef,
   RealmPaths,
   join,
@@ -62,7 +63,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
     let realmUrls = this.realmServer.availableRealmURLs;
     let { realm, listing: listingInput } = input;
 
-    let realmUrl = new RealmPaths(new URL(realm)).url;
+    let realmUrl = new RealmPaths(cardIdToURL(realm)).url;
 
     if (!realmUrls.includes(realmUrl)) {
       throw new Error(`Invalid realm: ${realmUrl}`);
@@ -107,7 +108,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
     let sourceOperations = await Promise.all(
       plan.modulesToInstall.map(async (moduleMeta: CopyModuleMeta) => {
         let { sourceModule, targetModule } = moduleMeta;
-        let res = await this.cardService.getSource(new URL(sourceModule));
+        let res = await this.cardService.getSource(cardIdToURL(sourceModule));
         let moduleResource: ModuleResource = {
           type: 'source',
           attributes: { content: res.content },
@@ -147,7 +148,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
 
     let results = await this.cardService.executeAtomicOperations(
       operations,
-      new URL(realmUrl),
+      cardIdToURL(realmUrl),
     );
 
     let atomicResults: AtomicOperationResult[] | undefined =

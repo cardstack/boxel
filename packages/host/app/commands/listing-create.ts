@@ -7,6 +7,7 @@ import type {
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import {
+  cardIdToURL,
   isCardInstance,
   SupportedMimeType,
   isFieldDef,
@@ -79,7 +80,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     // "https://…/foo.gts" and "https://…/foo" don't produce separate entries.
     const seen = new Map<string, string>(); // normalized → original
     for (const m of modulesToCreate) {
-      const normalized = trimExecutableExtension(new URL(m)).href;
+      const normalized = trimExecutableExtension(cardIdToURL(m)).href;
       if (!seen.has(normalized)) {
         seen.set(normalized, m);
       }
@@ -102,7 +103,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
       }
 
       // Only allow modulesToCreate that belong to a realm we can read
-      const url = new URL(dep);
+      const url = cardIdToURL(dep);
       const realmURL = this.realm.realmOfURL(url);
       if (!realmURL) {
         return false;
@@ -256,7 +257,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     codeRef: ResolvedCodeRef, // the specific export being listed
   ): Promise<Spec[]> {
     const resourceRealm =
-      this.realm.realmOfURL(new URL(resourceUrl))?.href ?? targetRealm;
+      this.realm.realmOfURL(cardIdToURL(resourceUrl))?.href ?? targetRealm;
     const url = `${resourceRealm}_dependencies?url=${encodeURIComponent(resourceUrl)}`;
     const response = await this.network.authedFetch(url, {
       headers: { Accept: SupportedMimeType.JSONAPI },
@@ -297,7 +298,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     if (sanitizedModules.length > 0) {
       const createSpecCommand = new CreateSpecCommand(this.commandContext);
       const normalizedModuleUrl = trimExecutableExtension(
-        new URL(moduleUrl),
+        cardIdToURL(moduleUrl),
       ).href;
       const specResults = await Promise.all(
         sanitizedModules.map((module) => {
@@ -308,7 +309,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
           // is often extensionless, so a bare string comparison would create
           // duplicate specs for the same source file.
           const normalizedModule = trimExecutableExtension(
-            new URL(module),
+            cardIdToURL(module),
           ).href;
           const input =
             normalizedModule === normalizedModuleUrl

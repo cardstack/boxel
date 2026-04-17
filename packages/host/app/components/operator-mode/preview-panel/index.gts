@@ -18,6 +18,7 @@ import { eq, toMenuItems } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode } from '@cardstack/boxel-ui/icons';
 
 import {
+  cardIdToURL,
   cardTypeDisplayName,
   cardTypeIcon,
   formats as allFormats,
@@ -114,7 +115,7 @@ export default class PreviewPanel extends Component<Signature> {
       const gtsFileUrl = type.module.endsWith('.gts')
         ? type.module
         : `${type.module}.gts`;
-      this.operatorModeStateService.updateCodePath(new URL(gtsFileUrl));
+      this.operatorModeStateService.updateCodePath(cardIdToURL(gtsFileUrl));
     }
   };
 

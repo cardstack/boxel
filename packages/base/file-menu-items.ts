@@ -12,6 +12,7 @@ import CopyFileToRealmCommand from '@cardstack/boxel-host/commands/copy-file-to-
 import OpenInInteractModeCommand from '@cardstack/boxel-host/commands/open-in-interact-mode';
 import ShowFileCommand from '@cardstack/boxel-host/commands/show-file';
 import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
+import { cardIdToURL } from '@cardstack/runtime-common';
 
 import type { FileDef } from './card-api';
 import type { GetMenuItemParams } from './menu-items';
@@ -81,7 +82,7 @@ export function getDefaultFileMenuItems(
         await new SwitchSubmodeCommand(params.commandContext).execute({
           submode: 'code',
           codePath: fileDefInstanceId
-            ? new URL(fileDefInstanceId).href
+            ? cardIdToURL(fileDefInstanceId).href
             : undefined,
         });
       },

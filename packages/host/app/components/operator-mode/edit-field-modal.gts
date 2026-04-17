@@ -22,6 +22,7 @@ import {
 import { bool, cssVar } from '@cardstack/boxel-ui/helpers';
 
 import {
+  cardIdToURL,
   chooseCard,
   loadCardDef,
   identifyCard,
@@ -141,8 +142,8 @@ export default class EditFieldModal extends Component<Signature> {
         throw error;
       }
 
-      this.fieldModuleURL = new URL(ref.module);
-      this.cardURL = new URL(ref.module);
+      this.fieldModuleURL = cardIdToURL(ref.module);
+      this.cardURL = cardIdToURL(ref.module);
       this.fieldRef = ref;
       return;
     }
@@ -160,8 +161,8 @@ export default class EditFieldModal extends Component<Signature> {
       });
 
       let moduleRef = moduleFrom(ref);
-      this.fieldModuleURL = new URL(moduleRef);
-      this.cardURL = new URL(moduleRef);
+      this.fieldModuleURL = cardIdToURL(moduleRef);
+      this.cardURL = cardIdToURL(moduleRef);
       this.fieldRef = ref;
 
       // Field's card can descend from a FieldDef or a CardDef, so we need to determine which one it is. We do this by checking the field's type -
@@ -185,11 +186,11 @@ export default class EditFieldModal extends Component<Signature> {
       if (spec && isCardInstance<Spec>(spec)) {
         this.fieldCard = await loadCardDef(spec.ref, {
           loader: this.loaderService.loader,
-          relativeTo: new URL(specId),
+          relativeTo: cardIdToURL(specId),
         });
 
         this.isFieldDef = spec.isField;
-        this.cardURL = new URL(spec.id);
+        this.cardURL = cardIdToURL(spec.id);
         this.fieldRef = spec.ref;
 
         // This transforms relative module paths, such as "../person", to absolute ones -
@@ -238,10 +239,8 @@ export default class EditFieldModal extends Component<Signature> {
         fieldType,
         fieldDefinitionType: this.isFieldDef ? 'field' : 'card',
         incomingRelativeTo,
-        outgoingRelativeTo: new URL(
-          this.operatorModeStateService.state.codePath!,
-        ),
-        outgoingRealmURL: new URL(this.args.file.realmURL),
+        outgoingRelativeTo: this.operatorModeStateService.state.codePath!,
+        outgoingRealmURL: cardIdToURL(this.args.file.realmURL),
         addFieldAtIndex,
       });
     } catch (error) {

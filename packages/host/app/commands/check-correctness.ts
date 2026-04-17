@@ -1,6 +1,7 @@
 import { service } from '@ember/service';
 
 import {
+  cardIdToURL,
   isCardDocumentString,
   isCardErrorJSONAPI,
   type CardErrorJSONAPI,
@@ -192,14 +193,14 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     targetRef: string,
   ): { moduleURL: URL; realmURL: URL; fileURL: URL } | undefined {
     try {
-      let fileURL = new URL(targetRef);
+      let fileURL = cardIdToURL(targetRef);
       let realmURL = this.realm.realmOfURL(fileURL);
       if (!realmURL) {
         return undefined;
       }
 
       let moduleHref = fileURL.href.replace(/\.gts$/, '');
-      let moduleURL = new URL(moduleHref);
+      let moduleURL = cardIdToURL(moduleHref);
       return { moduleURL, realmURL, fileURL };
     } catch {
       return undefined;
@@ -263,7 +264,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
 
   private async isEmptyFileContent(targetRef: string): Promise<boolean> {
     try {
-      let fileUrl = new URL(targetRef);
+      let fileUrl = cardIdToURL(targetRef);
       let { status, content } = await this.cardService.getSource(fileUrl);
       return status === 200 && content.trim() === '';
     } catch {
@@ -289,7 +290,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
   ): Promise<string | undefined> {
     try {
       let { status, content } = await this.cardService.getSource(
-        new URL(fileUrl),
+        cardIdToURL(fileUrl),
       );
       if (status !== 200) {
         return undefined;

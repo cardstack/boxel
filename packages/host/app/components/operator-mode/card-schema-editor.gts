@@ -18,7 +18,7 @@ import { and, bool, gt } from '@cardstack/boxel-ui/helpers';
 
 import { ArrowTopLeft, IconLink, IconPlus } from '@cardstack/boxel-ui/icons';
 
-import { getPlural, isOwnField } from '@cardstack/runtime-common';
+import { cardIdToURL, getPlural, isOwnField } from '@cardstack/runtime-common';
 
 import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
@@ -500,7 +500,7 @@ export default class CardSchemaEditor extends Component<Signature> {
   }
 
   @action async openCardDefinition(moduleURL: string) {
-    await this.operatorModeStateService.updateCodePath(new URL(moduleURL));
+    await this.operatorModeStateService.updateCodePath(cardIdToURL(moduleURL));
   }
 
   @action

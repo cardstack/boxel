@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { hasExecutableExtension } from '@cardstack/runtime-common';
+import { cardIdToURL, hasExecutableExtension } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -86,7 +86,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
       );
       if (!savedThroughOpenFile) {
         this.cardService
-          .saveSource(new URL(finalFileUrl), patchedCode, 'bot-patch', {
+          .saveSource(cardIdToURL(finalFileUrl), patchedCode, 'bot-patch', {
             resetLoader: hasExecutableExtension(finalFileUrl),
             clientRequestId,
           })
@@ -122,8 +122,8 @@ export default class PatchCodeCommand extends HostBaseCommand<
       if (!isReady(openFileResource)) {
         return false;
       }
-      let normalizedOpenUrl = new URL(openFileResource.url).href;
-      let normalizedTarget = new URL(targetFileUrl).href;
+      let normalizedOpenUrl = cardIdToURL(openFileResource.url).href;
+      let normalizedTarget = cardIdToURL(targetFileUrl).href;
       if (normalizedOpenUrl !== normalizedTarget) {
         return false;
       }
@@ -150,7 +150,9 @@ export default class PatchCodeCommand extends HostBaseCommand<
   }
 
   private async getFileInfo(fileUrl: string): Promise<FileInfo> {
-    let getSourceResult = await this.cardService.getSource(new URL(fileUrl));
+    let getSourceResult = await this.cardService.getSource(
+      cardIdToURL(fileUrl),
+    );
     let exists = getSourceResult.status !== 404;
     let content = exists ? getSourceResult.content : '';
     let hasContent = exists && content.trim() !== '';
@@ -205,7 +207,8 @@ export default class PatchCodeCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.LintAndFixResult> {
     let lintCommand = new LintAndFixCommand(this.commandContext);
     let realmURL = this.realm.url(fileUrl);
-    let filename = new URL(fileUrl).pathname.split('/').pop() || 'input.gts';
+    let filename =
+      cardIdToURL(fileUrl).pathname.split('/').pop() || 'input.gts';
 
     return await lintCommand.execute({
       realm: realmURL,
@@ -216,7 +219,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
 
   private isLintableFile(fileUrl: string): boolean {
     try {
-      return /\.(gts|ts)$/.test(new URL(fileUrl).pathname);
+      return /\.(gts|ts)$/.test(cardIdToURL(fileUrl).pathname);
     } catch {
       return /\.(gts|ts)$/.test(fileUrl);
     }
@@ -237,7 +240,9 @@ export default class PatchCodeCommand extends HostBaseCommand<
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {
-    let getSourceResult = await this.cardService.getSource(new URL(fileUrl));
+    let getSourceResult = await this.cardService.getSource(
+      cardIdToURL(fileUrl),
+    );
     return getSourceResult.status !== 404;
   }
 }

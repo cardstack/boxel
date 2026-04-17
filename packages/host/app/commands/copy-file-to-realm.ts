@@ -1,5 +1,7 @@
 import { service } from '@ember/service';
 
+import { cardIdToURL } from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -39,12 +41,12 @@ export default class CopyFileToRealmCommand extends HostBaseCommand<
       throw new Error(`Do not have write permissions to ${targetRealm}`);
     }
 
-    let sourceUrl = new URL(input.sourceFileUrl);
+    let sourceUrl = cardIdToURL(input.sourceFileUrl);
     let filename = decodeURIComponent(
       sourceUrl.pathname.split('/').pop() ?? sourceUrl.pathname,
     );
 
-    let destinationUrl = new URL(filename, targetRealm);
+    let destinationUrl = new URL(filename, cardIdToURL(targetRealm));
 
     let existing = await this.cardService.getSource(destinationUrl);
     if (existing.status === 200 || existing.status === 406) {
@@ -72,7 +74,9 @@ export default class CopyFileToRealmCommand extends HostBaseCommand<
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {
-    let getSourceResult = await this.cardService.getSource(new URL(fileUrl));
+    let getSourceResult = await this.cardService.getSource(
+      cardIdToURL(fileUrl),
+    );
     return getSourceResult.status !== 404;
   }
 }

@@ -10,6 +10,7 @@ import type {
   PrerenderedCardCollectionDocument,
 } from './document-types';
 import { SupportedMimeType } from './router';
+import { canonicalURL } from './index-runner/dependency-url';
 
 export type SearchRequestErrorCode =
   | 'missing-realms'
@@ -268,10 +269,11 @@ export function combineSearchResults(
     if (doc.included) {
       for (let resource of doc.included) {
         if (resource.id) {
-          if (includedById.has(resource.id)) {
+          let canonicalId = canonicalURL(resource.id);
+          if (includedById.has(canonicalId)) {
             continue;
           }
-          includedById.add(resource.id);
+          includedById.add(canonicalId);
         }
         included.push(resource);
       }

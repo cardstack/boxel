@@ -2,7 +2,11 @@ import { service } from '@ember/service';
 
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
-import { isCardInstance, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  cardIdToURL,
+  isCardInstance,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 
@@ -48,7 +52,7 @@ export default class ListingUpdateSpecsCommand extends HostBaseCommand<
         return false;
       }
       try {
-        const url = new URL(dep);
+        const url = cardIdToURL(dep);
         const realmURL = this.realm.realmOfURL(url);
         if (!realmURL) {
           return false;

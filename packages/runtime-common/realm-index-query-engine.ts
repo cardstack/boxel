@@ -665,10 +665,14 @@ export class RealmIndexQueryEngine {
     }
 
     for (let result of realmResults) {
-      if (!result?.id || seen.has(result.id)) {
+      if (!result?.id) {
         continue;
       }
-      seen.add(result.id);
+      let canonicalResultId = canonicalURL(result.id);
+      if (seen.has(canonicalResultId)) {
+        continue;
+      }
+      seen.add(canonicalResultId);
       aggregated.push(result);
     }
 

@@ -10,6 +10,7 @@ import { Button as BoxelButton } from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 import { Download } from '@cardstack/boxel-ui/icons';
 
+import { cardIdToURL } from '@cardstack/runtime-common';
 import { createURLSignature } from '@cardstack/runtime-common/url-signature';
 
 import RealmDropdown from '@cardstack/host/components/realm-dropdown';
@@ -90,12 +91,12 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
         this.recentFilesService.findRecentFileByRealmURL(realmUrl);
       if (recentFile) {
         this.operatorModeStateService.updateCodePath(
-          new URL(`${realmUrl}${recentFile.filePath}`),
+          new URL(recentFile.filePath, cardIdToURL(realmUrl)),
         );
         return;
       }
       this.operatorModeStateService.updateCodePath(
-        new URL('./index.json', realmUrl),
+        new URL('./index.json', cardIdToURL(realmUrl)),
       );
     }
   }
@@ -105,13 +106,16 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
   };
 
   private get downloadFilename() {
-    return fallbackDownloadName(new URL(this.args.realmURL));
+    return fallbackDownloadName(cardIdToURL(this.args.realmURL));
   }
 
   downloadRealm = async (event: Event) => {
     event.preventDefault();
 
-    let downloadURL = new URL('/_download-realm', this.args.realmURL);
+    let downloadURL = new URL(
+      '/_download-realm',
+      cardIdToURL(this.args.realmURL),
+    );
     downloadURL.searchParams.set('realm', this.args.realmURL);
 
     let token = this.realm.token(this.args.realmURL);

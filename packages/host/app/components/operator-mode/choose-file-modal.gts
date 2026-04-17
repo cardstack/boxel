@@ -22,6 +22,7 @@ import {
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
+  cardIdToURL,
   Deferred,
   RealmPaths,
   isCardErrorJSONAPI,
@@ -257,7 +258,7 @@ export default class ChooseFileModal extends Component<Signature> {
 
   private get knownRealms() {
     return Object.entries(this.realm.allRealmsInfo).map((entry) => ({
-      url: new URL(entry[0]),
+      url: cardIdToURL(entry[0]),
       info: entry[1].info,
     }));
   }

@@ -1,5 +1,7 @@
 import { service } from '@ember/service';
 
+import { cardIdToURL } from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -25,8 +27,8 @@ export default class CopySourceCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.CopySourceInput,
   ): Promise<BaseCommandModule.CopySourceResult> {
-    const originSourceUrl = new URL(input.originSourceUrl);
-    const destinationSourceUrl = new URL(input.destinationSourceUrl);
+    const originSourceUrl = cardIdToURL(input.originSourceUrl);
+    const destinationSourceUrl = cardIdToURL(input.destinationSourceUrl);
     let r = await this.cardService.copySource(
       originSourceUrl,
       destinationSourceUrl,

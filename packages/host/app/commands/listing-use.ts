@@ -45,7 +45,7 @@ export default class ListingUseCommand extends HostBaseCommand<
 
     const listing = listingInput as Listing;
 
-    let realmUrl = new RealmPaths(new URL(realm)).url;
+    let realmUrl = new RealmPaths(cardIdToURL(realm)).url;
 
     // Make sure realm is valid
     if (!realmUrls.includes(realmUrl)) {
