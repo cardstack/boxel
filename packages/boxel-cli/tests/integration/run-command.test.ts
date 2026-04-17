@@ -126,6 +126,51 @@ describe('run-command (integration)', () => {
     fs.rmSync(emptyDir, { recursive: true, force: true });
   });
 
+  it('returns error status on non-2xx HTTP response', async () => {
+    let fetchSpy = vi
+      .spyOn(profileManager, 'authedRealmServerFetch')
+      .mockResolvedValueOnce(new Response('Not Found', { status: 404 }));
+    try {
+      let result = await runCommand('some/command', realmUrl, {
+        profileManager,
+      });
+      expect(result.status).toBe('error');
+      expect(result.error).toContain('404');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('returns error status when response body is not valid JSON', async () => {
+    let fetchSpy = vi
+      .spyOn(profileManager, 'authedRealmServerFetch')
+      .mockResolvedValueOnce(new Response('not json', { status: 200 }));
+    try {
+      let result = await runCommand('some/command', realmUrl, {
+        profileManager,
+      });
+      expect(result.status).toBe('error');
+      expect(result.error).toContain('not valid JSON');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('returns error status when fetch throws', async () => {
+    let fetchSpy = vi
+      .spyOn(profileManager, 'authedRealmServerFetch')
+      .mockRejectedValueOnce(new Error('network failure'));
+    try {
+      let result = await runCommand('some/command', realmUrl, {
+        profileManager,
+      });
+      expect(result.status).toBe('error');
+      expect(result.error).toContain('network failure');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
   it('strips trailing slash from realm server URL before appending endpoint', async () => {
     let fetchSpy = vi.spyOn(profileManager, 'authedRealmServerFetch');
     try {

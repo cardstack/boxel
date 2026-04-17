@@ -14,6 +14,12 @@ export interface RunCommandOptions {
   profileManager?: ProfileManager;
 }
 
+interface RunCommandCliOptions {
+  realm: string;
+  input?: string;
+  json?: boolean;
+}
+
 export async function runCommand(
   commandSpecifier: string,
   realmUrl: string,
@@ -66,7 +72,7 @@ export async function runCommand(
     };
   }
 
-  let json = (await response.json()) as {
+  let json: {
     data?: {
       attributes?: {
         status?: string;
@@ -75,6 +81,15 @@ export async function runCommand(
       };
     };
   };
+
+  try {
+    json = await response.json();
+  } catch {
+    return {
+      status: 'error',
+      error: `run-command response was not valid JSON (HTTP ${response.status})`,
+    };
+  }
 
   let attrs = json.data?.attributes;
   return {
@@ -100,11 +115,22 @@ export function registerRunCommand(program: Command): void {
     )
     .option('--input <json>', 'JSON string of command input')
     .option('--json', 'Output raw JSON response')
-    .action(async (commandSpecifier: string, opts: Record<string, string>) => {
+    .action(async (commandSpecifier: string, opts: RunCommandCliOptions) => {
       let input: Record<string, unknown> | undefined;
       if (opts.input) {
         try {
-          input = JSON.parse(opts.input);
+          let parsed = JSON.parse(opts.input);
+          if (
+            typeof parsed !== 'object' ||
+            parsed === null ||
+            Array.isArray(parsed)
+          ) {
+            console.error(
+              `${FG_RED}Error:${RESET} --input must be a JSON object, got ${Array.isArray(parsed) ? 'array' : typeof parsed}`,
+            );
+            process.exit(1);
+          }
+          input = parsed;
         } catch {
           console.error(
             `${FG_RED}Error:${RESET} --input is not valid JSON: ${opts.input}`,
