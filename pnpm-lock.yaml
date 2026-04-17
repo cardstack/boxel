@@ -2364,6 +2364,9 @@ importers:
       stream-browserify:
         specifier: 'catalog:'
         version: 3.0.0
+      stream-json:
+        specifier: 'catalog:'
+        version: 1.9.1
       super-fast-md5:
         specifier: 'catalog:'
         version: 1.0.3
