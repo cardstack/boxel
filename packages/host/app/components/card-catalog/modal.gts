@@ -22,11 +22,16 @@ import {
   type CodeRef,
   type CreateNewCard,
   type Filter,
+  type ResolvedCodeRef,
   baseRealm,
   Deferred,
+  isResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import type { Query } from '@cardstack/runtime-common/query';
+
+import { getFilterTypeRefs } from '@cardstack/host/utils/card-search/type-filter';
+import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -46,7 +51,6 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import type RealmService from '../../services/realm';
 import type RealmServerService from '../../services/realm-server';
 import type StoreService from '../../services/store';
-import type { NewCardArgs } from '../card-search/utils';
 
 interface Signature {
   Args: {};
@@ -111,9 +115,8 @@ export default class CardCatalogModal extends Component<Signature> {
           <SearchPanel
             @searchKey={{state.searchKey}}
             @baseFilter={{state.baseFilter}}
-            @availableRealmUrls={{state.availableRealmUrls}}
-            @consumingRealm={{state.consumingRealm}}
-            @preselectConsumingRealm={{state.preselectConsumingRealm}}
+            @initialSelectedRealms={{this.initialSelectedRealmsForPanel}}
+            @initialSelectedTypes={{this.initialSelectedTypesForPanel}}
             as |Bar Content|
           >
             <ModalContainer
@@ -134,7 +137,6 @@ export default class CardCatalogModal extends Component<Signature> {
               <:header>
                 <Bar
                   class='card-catalog-search'
-                  @value={{state.searchKey}}
                   @onInput={{this.setSearchKey}}
                   @placeholder='Search for a card or enter card URL'
                   @pickerDestination='card-catalog-picker-wormhole'
@@ -240,6 +242,28 @@ export default class CardCatalogModal extends Component<Signature> {
 
   private get state(): State | undefined {
     return this.stateStack[this.stateStack.length - 1];
+  }
+
+  private get initialSelectedRealmsForPanel(): URL[] | undefined {
+    if (!this.state?.preselectConsumingRealm || !this.state?.consumingRealm) {
+      return undefined;
+    }
+    return [this.state.consumingRealm];
+  }
+
+  private get initialSelectedTypesForPanel(): ResolvedCodeRef[] | undefined {
+    let baseFilter = this.state?.baseFilter;
+    if (!baseFilter) {
+      return undefined;
+    }
+    let typeRefs = getFilterTypeRefs(baseFilter);
+    if (!typeRefs || typeRefs.length === 0) {
+      return undefined;
+    }
+    let refs = typeRefs
+      .filter((r) => !r.negated && isResolvedCodeRef(r.ref))
+      .map((r) => r.ref as ResolvedCodeRef);
+    return refs.length > 0 ? refs : undefined;
   }
 
   private get offerToCreateArg() {

@@ -102,6 +102,10 @@ export default class RealmServerService extends Service {
     return this._ready.promise;
   }
 
+  get canFetch(): boolean {
+    return this.client !== undefined || this.auth.type === 'logged-in';
+  }
+
   resetState() {
     let catalogRealms = this.availableRealms.filter(
       (realm) => realm.type === 'catalog',

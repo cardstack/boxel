@@ -1,4 +1,6 @@
+import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { action } from '@ember/object';
+import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
@@ -8,42 +10,54 @@ import { consume } from 'ember-provide-consume-context';
 
 import pluralize from 'pluralize';
 
-import type { PickerOption } from '@cardstack/boxel-ui/components';
-
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   type CodeRef,
   type Filter,
   type getCard,
+  type getCardCollection,
+  CardContextName,
   GetCardContextName,
+  GetCardCollectionContextName,
+  internalKeyFor,
 } from '@cardstack/runtime-common';
 
-import { cardTypeDisplayName } from '@cardstack/runtime-common/helpers/card-type-display-name';
-
-import { urlForRealmLookup } from '@cardstack/host/lib/utils';
-import type { PrerenderedSearchResource } from '@cardstack/host/resources/prerendered-search';
-import type LoaderService from '@cardstack/host/services/loader-service';
+import type { RealmFilter } from '@cardstack/host/components/realm-picker';
+import type { TypeFilter } from '@cardstack/host/components/type-picker';
+import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
-import type StoreService from '@cardstack/host/services/store';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type RecentCards from '@cardstack/host/services/recent-cards-service';
 
 import {
-  SECTION_DISPLAY_LIMIT_FOCUSED,
-  SECTION_DISPLAY_LIMIT_UNFOCUSED,
-  SECTION_SHOW_MORE_INCREMENT,
-  SORT_OPTIONS,
-  VIEW_OPTIONS,
-  type SortOption,
-} from './constants';
+  buildSearchQuery,
+  shouldSkipSearchQuery,
+} from '@cardstack/host/utils/card-search/query-builder';
+import {
+  filterRecentCards,
+  sortAndFilterRecentCards,
+} from '@cardstack/host/utils/card-search/recent-cards';
+import { SectionPagination } from '@cardstack/host/utils/card-search/section-pagination';
+import {
+  assembleSections,
+  buildQuerySections,
+  buildRecentsSection,
+  buildUrlSection,
+  type SearchSheetSection,
+} from '@cardstack/host/utils/card-search/sections';
+import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
+import {
+  isURLSearchKey,
+  resolveSearchKeyAsURL,
+} from '@cardstack/host/utils/card-search/url';
+
+import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+
+import { SORT_OPTIONS, VIEW_OPTIONS, type SortOption } from './constants';
 import SearchResultHeader from './search-result-header';
 import SearchResultSection from './search-result-section';
 
-import type { PrerenderedCard } from '../prerendered-card-search';
-
-import type { NewCardArgs } from './utils';
 import type { NamedArgs } from 'ember-modifier';
 
 interface ScrollToFocusedSectionSignature {
@@ -103,59 +117,25 @@ class ScrollToFocusedSection extends Modifier<ScrollToFocusedSectionSignature> {
   }
 }
 
-export interface RealmSectionInfo {
-  name: string;
-  iconURL: string | null;
-  publishable: boolean | null;
-}
-
-export interface RealmSection {
-  sid: string;
-  type: 'realm';
-  realmUrl: string;
-  realmInfo: RealmSectionInfo;
-  cards: PrerenderedCard[];
-  totalCount: number;
-}
-
-export interface RecentsSection {
-  sid: string;
-  type: 'recents';
-  cards: CardDef[];
-  totalCount: number;
-}
-
-export interface UrlSection {
-  sid: string;
-  type: 'url';
-  card: CardDef;
-  realmInfo: RealmSectionInfo;
-}
-
-export type SearchSheetSection = RealmSection | RecentsSection | UrlSection;
-
 interface Signature {
   Element: HTMLElement;
   Args: {
     searchKey: string;
-    selectedRealmURLs: string[];
+    realmFilter: RealmFilter;
+    typeFilter: TypeFilter;
+    baseFilter?: Filter;
     isCompact: boolean;
     handleSelect: (selection: string | NewCardArgs) => void;
     selectedCards?: (string | NewCardArgs)[];
     multiSelect?: boolean;
     onSelectAll?: (cards: string[]) => void;
     onDeselectAll?: () => void;
-    baseFilter?: Filter;
-    skipTypeFiltering?: boolean;
     offerToCreate?: {
       ref: CodeRef;
       relativeTo: URL | undefined;
     };
     onSubmit?: (selection: string | NewCardArgs) => void;
     showHeader?: boolean;
-    selectedCardTypes?: PickerOption[];
-    filteredRecentCards?: CardDef[];
-    searchResource: PrerenderedSearchResource;
     activeSort: SortOption;
     onSortChange: (sort: SortOption) => void;
     initialFocusedSection?: string | null;
@@ -163,23 +143,107 @@ interface Signature {
   Blocks: {};
 }
 
+const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
+
 export default class SearchContent extends Component<Signature> {
-  @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
-  @service declare store: StoreService;
+  @service('recent-cards-service')
+  declare private recentCardsService: RecentCards;
 
   @tracked activeViewId = 'grid';
-  /** Section id when focused: 'realm:<url>' or 'recents'. Null = no focus */
-  @tracked focusedSection: string | null =
-    this.args.initialFocusedSection ?? null;
-  @tracked displayedCountBySection: Record<string, number> = {};
+  private pagination = new SectionPagination(this.args.initialFocusedSection);
 
   @consume(GetCardContextName) declare private getCard: getCard;
+  @consume(CardContextName) declare private cardContext:
+    | CardContext
+    | undefined;
+  @consume(GetCardCollectionContextName)
+  declare private getCardCollection: getCardCollection;
+
+  private get searchKeyIsURL() {
+    return isURLSearchKey(this.args.searchKey);
+  }
+
+  private get searchKeyAsURL() {
+    return resolveSearchKeyAsURL(
+      this.args.searchKey,
+      this.realmServer.availableRealmURLs,
+    );
+  }
 
   @cached
   private get cardResource(): ReturnType<getCard> {
     return this.getCard(this, () => this.searchKeyAsURL);
+  }
+
+  private get resolvedCard(): CardDef | undefined {
+    return this.cardResource?.card;
+  }
+
+  private get isCardResourceLoaded(): boolean {
+    return this.cardResource?.isLoaded ?? false;
+  }
+
+  // -- Card component modifier --
+
+  private get cardComponentModifier() {
+    if (isDestroying(this) || isDestroyed(this)) {
+      return undefined;
+    }
+    try {
+      return this.cardContext?.cardComponentModifier;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes(OWNER_DESTROYED_ERROR)
+      ) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  private searchResource = getPrerenderedSearch(this, getOwner(this)!, () => {
+    // Consume selectedTypeIds outside the ternary so the tracking
+    // dependency is always established, even when the query is skipped.
+    const selectedTypeIds = this.args.typeFilter.selected.map((ref) =>
+      internalKeyFor(ref, undefined),
+    );
+    return {
+      query: shouldSkipSearchQuery(this.args.searchKey, this.args.baseFilter)
+        ? undefined
+        : buildSearchQuery(
+            this.args.searchKey,
+            this.args.activeSort,
+            this.args.baseFilter,
+            selectedTypeIds,
+          ),
+      format: 'fitted' as const,
+      realms: this.args.realmFilter.selectedURLs,
+      isLive: true,
+      cardComponentModifier: this.cardComponentModifier,
+    };
+  });
+
+  @cached
+  private get recentCardCollection(): ReturnType<getCardCollection> {
+    return this.getCardCollection(
+      this,
+      () => this.recentCardsService.recentCardIds,
+    );
+  }
+
+  private get filteredRecentCards(): CardDef[] {
+    const cards =
+      (this.recentCardCollection?.cards?.filter(Boolean) as
+        | CardDef[]
+        | undefined) ?? [];
+    return filterRecentCards(
+      cards,
+      this.args.realmFilter.selectedURLs,
+      this.args.baseFilter,
+    );
   }
 
   private get shouldSkipQuery() {
@@ -199,15 +263,6 @@ export default class SearchContent extends Component<Signature> {
     return (this.args.searchKey?.trim() ?? '') === '';
   }
 
-  private get searchKeyIsURL() {
-    try {
-      new URL(this.args.searchKey);
-      return true;
-    } catch (_e) {
-      return false;
-    }
-  }
-
   private get searchTerm(): string | undefined {
     if (this.isSearchKeyEmpty || this.searchKeyIsURL) {
       return undefined;
@@ -215,30 +270,10 @@ export default class SearchContent extends Component<Signature> {
     return this.args.searchKey?.trim();
   }
 
-  private get searchKeyAsURL() {
-    if (!this.searchKeyIsURL) {
-      return undefined;
-    }
-    let cardURL = this.args.searchKey;
-
-    let maybeIndexCardURL = this.realmServer.availableRealmURLs.find(
-      (u) => u === cardURL + '/',
-    );
-    return maybeIndexCardURL ?? cardURL;
-  }
-
-  private get resolvedCard() {
-    return this.cardResource?.card;
-  }
-
-  private get isCardResourceLoaded() {
-    return this.cardResource?.isLoaded ?? false;
-  }
-
   private get realms() {
     const urls =
-      this.args.selectedRealmURLs.length > 0
-        ? this.args.selectedRealmURLs
+      this.args.realmFilter.selectedURLs.length > 0
+        ? this.args.realmFilter.selectedURLs
         : this.realmServer.availableRealmURLs;
     return urls ?? [];
   }
@@ -248,7 +283,7 @@ export default class SearchContent extends Component<Signature> {
       return '';
     }
 
-    if (this.args.searchResource.isLoading) {
+    if (this.searchResource.isLoading) {
       return 'Searching…';
     }
 
@@ -261,7 +296,7 @@ export default class SearchContent extends Component<Signature> {
     }
 
     // Query search results
-    const total = this.args.searchResource.meta.page?.total ?? 0;
+    const total = this.searchResource.meta.page?.total ?? 0;
     const realms = this.realms;
 
     // Default: all results across all realms
@@ -269,79 +304,13 @@ export default class SearchContent extends Component<Signature> {
   }
 
   private get sortedRecentCards(): CardDef[] {
-    let cards = [...(this.args.filteredRecentCards ?? [])];
-
-    // Apply type picker filter (from TypePicker selection).
-    // Skip when baseFilter has a non-root type — the server already
-    // constrains results via the adoption chain, and recent cards are
-    // pre-filtered by filterCardsByTypeRefs which handles subtypes.
-    if (!this.args.skipTypeFiltering) {
-      const pickerSelectedTypeNames = new Set(
-        (this.args.selectedCardTypes ?? [])
-          .filter((opt) => opt.type !== 'select-all')
-          .map((opt) => opt.label),
-      );
-      if (pickerSelectedTypeNames.size > 0) {
-        cards = cards.filter((card) =>
-          pickerSelectedTypeNames.has(cardTypeDisplayName(card)),
-        );
-      }
-    }
-
-    if (this.args.isCompact) {
-      return cards;
-    }
-    let filtered = cards;
-    const term = this.searchTerm;
-    if (term) {
-      const lowerTerm = term.toLowerCase();
-      filtered = cards.filter((c) =>
-        (c.cardTitle ?? '').toLowerCase().includes(lowerTerm),
-      );
-    }
-    const sortOption = this.args.activeSort;
-    const displayName = sortOption.displayName;
-    return [...filtered].sort((a, b) => {
-      if (displayName === 'A-Z') {
-        return (a.cardTitle ?? '').localeCompare(b.cardTitle ?? '');
-      }
-      if (displayName === 'Last Updated') {
-        const aVal =
-          'lastModified' in a
-            ? ((a as Record<string, unknown>).lastModified as number)
-            : 0;
-        const bVal =
-          'lastModified' in b
-            ? ((b as Record<string, unknown>).lastModified as number)
-            : 0;
-        return bVal - aVal;
-      }
-      if (displayName === 'Date Created') {
-        const aVal =
-          'createdAt' in a
-            ? ((a as Record<string, unknown>).createdAt as number)
-            : 0;
-        const bVal =
-          'createdAt' in b
-            ? ((b as Record<string, unknown>).createdAt as number)
-            : 0;
-        return bVal - aVal;
-      }
-      return 0;
+    return sortAndFilterRecentCards(this.filteredRecentCards, {
+      selectedTypes: this.args.typeFilter.selected,
+      skipTypeFiltering: this.args.typeFilter.skipTypeFiltering,
+      searchTerm: this.searchTerm,
+      activeSort: this.args.activeSort,
+      isCompact: this.args.isCompact,
     });
-  }
-
-  private get recentCardsSection(): RecentsSection | undefined {
-    const cards = this.sortedRecentCards;
-    if (cards.length === 0) {
-      return undefined;
-    }
-    return {
-      sid: 'recents',
-      type: 'recents',
-      cards,
-      totalCount: cards.length,
-    };
   }
 
   @action
@@ -356,183 +325,60 @@ export default class SearchContent extends Component<Signature> {
 
   @action
   onFocusSection(sectionId: string | null) {
-    this.focusedSection = sectionId;
-    if (sectionId) {
-      const current = this.displayedCountBySection[sectionId] ?? 0;
-      const limit = SECTION_DISPLAY_LIMIT_FOCUSED;
-      if (current < limit) {
-        this.displayedCountBySection = {
-          ...this.displayedCountBySection,
-          [sectionId]: limit,
-        };
-      }
-    }
+    this.pagination.focus(sectionId);
   }
 
   getDisplayedCount = (sectionId: string, totalCount: number): number => {
-    const isFocused = this.focusedSection === sectionId;
-    const initialLimit = isFocused
-      ? SECTION_DISPLAY_LIMIT_FOCUSED
-      : SECTION_DISPLAY_LIMIT_UNFOCUSED;
-    const current = this.displayedCountBySection[sectionId] ?? initialLimit;
-    return Math.min(current, totalCount);
+    return this.pagination.getDisplayedCount(sectionId, totalCount);
   };
 
   @action
   onShowMore(sectionId: string, totalCount: number) {
-    const current = this.getDisplayedCount(sectionId, totalCount);
-    const next = Math.min(current + SECTION_SHOW_MORE_INCREMENT, totalCount);
-    this.displayedCountBySection = {
-      ...this.displayedCountBySection,
-      [sectionId]: next,
-    };
+    this.pagination.showMore(sectionId, totalCount);
   }
 
-  private realmNameFromUrl(realmUrl: string): string {
-    try {
-      const pathname = new URL(realmUrl).pathname;
-      const segments = pathname.split('/').filter(Boolean);
-      return segments[segments.length - 1] ?? 'Workspace';
-    } catch {
-      return 'Workspace';
-    }
+  private get recentCardsSection() {
+    return buildRecentsSection(this.sortedRecentCards);
   }
 
-  private get cardByUrlSection(): SearchSheetSection | undefined {
-    if (!this.searchKeyIsURL || !this.resolvedCard) {
-      return undefined;
-    }
-    const card = this.resolvedCard;
-    const urlForRealm = urlForRealmLookup(card);
-    const realmUrl = this.realmUrlForCard(urlForRealm);
-    const realmInfo = realmUrl ? this.realm.info(realmUrl) : null;
-    return {
-      sid: `url:${card.id}`,
-      type: 'url',
-      card,
-      realmInfo: {
-        name: realmInfo?.name ?? this.realmNameFromUrl(realmUrl),
-        iconURL: realmInfo?.iconURL ?? null,
-        publishable: realmInfo?.publishable ?? null,
-      },
-    } as UrlSection;
+  private get cardByUrlSection() {
+    return buildUrlSection(
+      this.resolvedCard,
+      this.searchKeyIsURL,
+      this.realms,
+      this.realm,
+    );
   }
 
-  private get cardsByQuerySection(): SearchSheetSection[] | null {
-    if (this.searchKeyIsURL) {
-      return null;
-    }
-
-    // In search-sheet mode (no baseFilter), skip when search key is empty
-    if (!this.args.baseFilter && this.isSearchKeyEmpty) {
-      return null;
-    }
-
-    const cards = this.args.searchResource.instances;
-    const byRealm = new Map<string, PrerenderedCard[]>();
-
-    for (const card of cards) {
-      const list: PrerenderedCard[] = byRealm.get(card.realmUrl) ?? [];
-      list.push(card);
-      byRealm.set(card.realmUrl, list);
-    }
-
-    const sections: RealmSection[] = [];
-    for (const [realmUrl, realmCards] of byRealm) {
-      const realmInfo = this.realm.info(realmUrl);
-      sections.push({
-        sid: `realm:${realmUrl}`,
-        type: 'realm',
-        realmUrl,
-        realmInfo: {
-          name: realmInfo?.name ?? this.realmNameFromUrl(realmUrl),
-          iconURL: realmInfo?.iconURL ?? null,
-          publishable: realmInfo?.publishable ?? null,
-        },
-        cards: realmCards,
-        totalCount: realmCards.length,
-      });
-    }
-
-    // When offerToCreate is provided, include empty sections for all
-    // available/selected realms that have no results, so users can
-    // create new cards in those realms.
-    if (this.args.offerToCreate) {
-      for (const realmUrl of this.realms) {
-        if (!byRealm.has(realmUrl)) {
-          const realmInfo = this.realm.info(realmUrl);
-          sections.push({
-            sid: `realm:${realmUrl}`,
-            type: 'realm',
-            realmUrl,
-            realmInfo: {
-              name: realmInfo?.name ?? this.realmNameFromUrl(realmUrl),
-              iconURL: realmInfo?.iconURL ?? null,
-              publishable: realmInfo?.publishable ?? null,
-            },
-            cards: [],
-            totalCount: 0,
-          });
-        }
-      }
-    }
-
-    return sections;
+  private get cardsByQuerySection() {
+    return buildQuerySections(this.searchResource.instances, {
+      isURL: this.searchKeyIsURL,
+      isSearchKeyEmpty: this.isSearchKeyEmpty,
+      hasBaseFilter: !!this.args.baseFilter,
+      realmURLs: this.realms,
+      offerToCreate: this.args.offerToCreate,
+      realm: this.realm,
+    });
   }
 
   private get sections(): SearchSheetSection[] {
-    const sections: SearchSheetSection[] = [];
-
-    // Add recents section if present
-    if (this.recentCardsSection) {
-      sections.push(this.recentCardsSection);
-    }
-
-    // Add URL section if present
-    if (this.cardByUrlSection) {
-      sections.push(this.cardByUrlSection);
-    }
-
-    // Add query sections if present
-    if (this.cardsByQuerySection) {
-      sections.push(...this.cardsByQuerySection);
-    }
-
-    // Move focused section to front so it appears at the top
-    if (this.focusedSection) {
-      const idx = sections.findIndex((s) => s.sid === this.focusedSection);
-      if (idx > 0) {
-        const [focused] = sections.splice(idx, 1);
-        sections.unshift(focused);
-      }
-    }
-
-    return sections;
-  }
-
-  private realmUrlForCard(cardIdOrUrl: string): string {
-    for (const realm of this.realms) {
-      if (cardIdOrUrl.startsWith(realm)) {
-        return realm;
-      }
-    }
-    try {
-      const url = new URL(cardIdOrUrl);
-      return `${url.origin}${url.pathname.split('/').slice(0, -1)?.join('/') ?? ''}/`;
-    } catch {
-      return '';
-    }
+    return assembleSections(
+      this.recentCardsSection,
+      this.cardByUrlSection,
+      this.cardsByQuerySection,
+      this.pagination.focusedSection,
+    );
   }
 
   @action
   isSectionCollapsed(sectionId: string): boolean {
-    return !!this.focusedSection && this.focusedSection !== sectionId;
+    return this.pagination.isCollapsed(sectionId);
   }
 
   private get allCards(): string[] {
     const urls: string[] = [];
     // Cards from search results (realm sections) - respects type filter
-    for (const card of this.args.searchResource.instances) {
+    for (const card of this.searchResource.instances) {
       if (card.url) {
         urls.push(card.url.replace(/\.json$/, ''));
       }
@@ -553,7 +399,7 @@ export default class SearchContent extends Component<Signature> {
   private get hasNoResults(): boolean {
     return (
       this.sections.length === 0 &&
-      !this.args.searchResource.isLoading &&
+      !this.searchResource.isLoading &&
       !this.shouldSkipQuery
     );
   }
@@ -561,7 +407,7 @@ export default class SearchContent extends Component<Signature> {
   <template>
     <div
       {{ScrollToFocusedSection
-        focusedSectionSid=this.focusedSection
+        focusedSectionSid=this.pagination.focusedSection
         sectionSelector='[data-section-sid]'
       }}
       class='search-sheet-content {{if @isCompact "compact"}}'
@@ -614,7 +460,7 @@ export default class SearchContent extends Component<Signature> {
             @section={{section}}
             @viewOption={{this.activeViewId}}
             @handleSelect={{@handleSelect}}
-            @isFocused={{eq this.focusedSection section.sid}}
+            @isFocused={{eq this.pagination.focusedSection section.sid}}
             @isCollapsed={{this.isSectionCollapsed section.sid}}
             @onFocusSection={{this.onFocusSection}}
             @getDisplayedCount={{this.getDisplayedCount}}
