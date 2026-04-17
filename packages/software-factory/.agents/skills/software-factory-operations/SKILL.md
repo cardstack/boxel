@@ -118,9 +118,33 @@ comment or a template expression — line 66 in your `.gts` source is
 unrelated. Reading the transpiled line is what connects the error back
 to the source.
 
-**Always edit the `.gts` source, never the transpiled output.** The
-realm regenerates the transpiled JS on every write, so any edit to it
-would be discarded.
+### The transpiled output is for DEBUGGING ONLY — never for implementation
+
+**Critical rule:** `fetch_transpiled_module` exists solely to help you
+locate the source-level cause of a runtime error. It is **not** a
+reference for how to structure your code, and it is **never** a model
+to imitate.
+
+- **Do not copy patterns, imports, or shapes from the transpiled
+  output into your `.gts` source.** The transpiler emits artifacts
+  like `setComponentTemplate(...)`, `precompileTemplate(...)`, wire-format
+  template arrays, base64 CSS imports (`./file.gts.CiAg...`), and other
+  compiler internals. None of those belong in source code.
+- **Do not write `.gts` that "looks like" the compiled JS.** Always
+  write clean, idiomatic Ember / `<template>`-tag / CardDef / FieldDef
+  source. If you find yourself tempted to hand-write a
+  `setComponentTemplate(...)` call or a wire-format template, stop —
+  you're modeling the wrong layer.
+- **Always edit the `.gts` source, never the transpiled output.** The
+  realm regenerates the transpiled JS on every write, so any edit
+  there is silently discarded.
+- **When in doubt, favor idiomatic card development practices.** The
+  `boxel-development` skill and existing cards in the target realm are
+  the right references — not what the compiler happens to emit.
+
+Use `fetch_transpiled_module` the way a developer uses a source map:
+to translate a runtime line number back to a source construct, and
+then close the transpiled view and fix the source idiomatically.
 
 ## Writing QUnit Card Tests
 
