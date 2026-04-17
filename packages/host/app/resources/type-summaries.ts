@@ -199,6 +199,11 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
       if (isDestroyed(this) || isDestroying(this)) return;
       if (!result) {
         this._isLoading = false;
+        this._typeSummariesData = [];
+        this._options = [];
+        this._selected = [];
+        this._hasMore = false;
+        this._totalCount = 0;
         return;
       }
 
