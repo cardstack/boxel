@@ -6,9 +6,7 @@ Boxel `.gts` templates run in **strict mode**. Every helper, modifier, and compo
 
 ```gts
 // ❌ WRONG — "eq" is not in scope
-<template>
-  {{#if (eq @model.status 'active')}}Active{{/if}}
-</template>
+<template>{{#if (eq @model.status 'active')}}Active{{/if}}</template>
 
 // ✅ CORRECT — import every helper you use
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -24,12 +22,12 @@ import { on } from '@ember/modifier';
 
 **Common helper imports:**
 
-| Helper/Modifier | Import from |
-|---|---|
+| Helper/Modifier                                         | Import from                   |
+| ------------------------------------------------------- | ----------------------------- |
 | `eq`, `not`, `or`, `and`, `gt`, `lt`, `subtract`, `add` | `@cardstack/boxel-ui/helpers` |
-| `fn`, `get`, `concat`, `array`, `hash` | `@ember/helper` |
-| `on` | `@ember/modifier` |
-| `tracked` | `@glimmer/tracking` |
+| `fn`, `get`, `concat`, `array`, `hash`                  | `@ember/helper`               |
+| `on`                                                    | `@ember/modifier`             |
+| `tracked`                                               | `@glimmer/tracking`           |
 
 **Field access patterns:**
 

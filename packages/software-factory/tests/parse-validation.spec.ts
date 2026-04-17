@@ -157,6 +157,12 @@ test.describe('parse-validation e2e', () => {
 
     // Must pass — valid GTS + valid JSON example
     expect(result.step).toBe('parse');
+    if (!result.passed) {
+      console.log(
+        'PARSE TEST 1 ERRORS:',
+        JSON.stringify(result.errors.slice(0, 5), null, 2),
+      );
+    }
     expect(result.passed).toBe(true);
     expect(result.files).toBeTruthy();
     expect(result.files!.length).toBeGreaterThan(0);
@@ -263,6 +269,12 @@ test.describe('parse-validation e2e', () => {
     // The fixture realm has pre-existing .gts files (hello.gts, home.gts)
     // so the step should find and parse them. They should all be valid.
     expect(result.step).toBe('parse');
+    if (!result.passed) {
+      console.log(
+        'PARSE TEST 3 ERRORS:',
+        JSON.stringify(result.errors.slice(0, 5), null, 2),
+      );
+    }
     expect(result.passed).toBe(true);
 
     let details = result.details as unknown as ParseValidationDetails;
