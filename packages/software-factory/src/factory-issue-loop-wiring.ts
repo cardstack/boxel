@@ -54,11 +54,11 @@ import {
 import { RealmIssueStore, type IssueStore } from './issue-scheduler';
 import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader';
 import {
-  ensureTrailingSlash,
   fetchRealmFilenames,
   type RealmFetchOptions,
 } from './realm-operations';
 import { fetchCardTypeSchema } from './darkfactory-schemas';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 let log = logger('factory-issue-loop-wiring');
 
@@ -166,6 +166,14 @@ export async function runFactoryIssueLoop(
     'software-factory/lint-result',
     realmServerUrl,
   ).href;
+  let evalResultsModuleUrl = new URL(
+    'software-factory/eval-result',
+    realmServerUrl,
+  ).href;
+  let instantiateResultsModuleUrl = new URL(
+    'software-factory/instantiate-result',
+    realmServerUrl,
+  ).href;
   let hostAppUrl = config.hostAppUrl ?? realmServerUrl;
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealmUrl,
@@ -201,10 +209,13 @@ export async function runFactoryIssueLoop(
     createDefaultPipeline({
       realmServerUrl,
       authorization: config.authorization,
+      serverToken,
       fetch: fetchImpl,
       hostAppUrl,
       testResultsModuleUrl,
       lintResultsModuleUrl,
+      evalResultsModuleUrl,
+      instantiateResultsModuleUrl,
       issueId,
       fetchFilenames: (realmUrl: string) =>
         fetchRealmFilenames(realmUrl, fetchOptions),

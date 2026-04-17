@@ -21,6 +21,7 @@ import * as CreateAndOpenSubmissionWorkflowCard from './create-and-open-submissi
 import * as CreateSpecCommandModule from './create-specs';
 import * as CreateSubmissionWorkflowCommandModule from './create-submission-workflow';
 import * as ExecuteAtomicOperationsCommandModule from './execute-atomic-operations';
+import * as EvaluateModuleCommandModule from './evaluate-module';
 import * as FetchCardJsonCommandModule from './fetch-card-json';
 import * as FullReindexRealmCommandModule from './full-reindex-realm';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
@@ -35,6 +36,7 @@ import * as GetDefaultWritableRealmCommandModule from './get-default-writable-re
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
 import * as GetRealmOfUrlCommandModule from './get-realm-of-url';
 import * as GetUserSystemCardCommandModule from './get-user-system-card';
+import * as InstantiateCardCommandModule from './instantiate-card';
 import * as InvalidateRealmUrlsCommandModule from './invalidate-realm-urls';
 import * as InviteUserToRoomCommandModule from './invite-user-to-room';
 import * as LintAndFixCommandModule from './lint-and-fix';
@@ -143,6 +145,14 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/check-correctness',
     CheckCorrectnessCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/evaluate-module',
+    EvaluateModuleCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/instantiate-card',
+    InstantiateCardCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/cancel-indexing-job',
@@ -533,6 +543,8 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   UnregisterBotCommandModule.default,
   CancelIndexingJobCommandModule.default,
   CheckCorrectnessCommandModule.default,
+  EvaluateModuleCommandModule.default,
+  InstantiateCardCommandModule.default,
   UpdateCodePathWithSelectionCommandModule.default,
   UpdatePlaygroundSelectionCommandModule.default,
   UpdateRoomSkillsCommandModule.default,

@@ -13,9 +13,10 @@
 import { test } from './fixtures';
 import { expect } from '@playwright/test';
 
-import { runRealmCommand, ensureTrailingSlash } from '../src/realm-operations';
+import { runRealmCommand } from '../src/realm-operations';
 import { fetchCardTypeSchema } from '../src/darkfactory-schemas';
 import { sourceRealmURLFor } from '../src/harness/shared';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 const GET_CARD_TYPE_SCHEMA_COMMAND =
   '@cardstack/boxel-host/commands/get-card-type-schema/default';

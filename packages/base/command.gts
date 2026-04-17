@@ -422,6 +422,31 @@ export class VisitCardsInput extends CardDef {
   @field commandRef = contains(CodeRefField);
 }
 
+export class EvaluateModuleInput extends CardDef {
+  @field moduleUrl = contains(StringField);
+  @field realmUrl = contains(StringField);
+}
+
+export class EvaluateModuleResult extends CardDef {
+  @field passed = contains(BooleanField);
+  @field error = contains(StringField);
+  @field stackTrace = contains(StringField);
+  @field deps = containsMany(StringField);
+}
+
+export class InstantiateCardInput extends CardDef {
+  @field moduleUrl = contains(StringField);
+  @field cardName = contains(StringField);
+  @field realmUrl = contains(StringField);
+  @field instanceData = contains(StringField);
+}
+
+export class InstantiateCardResult extends CardDef {
+  @field passed = contains(BooleanField);
+  @field error = contains(StringField);
+  @field stackTrace = contains(StringField);
+}
+
 export class JsonCard extends CardDef {
   @field json = contains(JsonField);
 }
