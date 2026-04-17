@@ -374,6 +374,39 @@ export class ToolExecutor {
     toolName: string,
     toolArgs: Record<string, unknown>,
   ): Promise<ToolResult> {
+    return this.withTimeout(
+      toolName,
+      this.executeRealmApiInner(toolName, toolArgs),
+    );
+  }
+
+  /**
+   * Race an operation against `this.timeoutMs` and throw `ToolTimeoutError`
+   * if the timeout wins. `BoxelCLIClient` methods don't accept an
+   * AbortSignal (auth + retry live inside ProfileManager), so we enforce
+   * the timeout at the executor boundary — the in-flight request becomes
+   * best-effort and is reaped by the GC.
+   */
+  private async withTimeout<T>(toolName: string, op: Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new ToolTimeoutError(toolName, this.timeoutMs));
+      }, this.timeoutMs);
+    });
+    try {
+      return await Promise.race([op, timeoutPromise]);
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  private async executeRealmApiInner(
+    toolName: string,
+    toolArgs: Record<string, unknown>,
+  ): Promise<ToolResult> {
     let client = this.config.client;
     let start = Date.now();
 

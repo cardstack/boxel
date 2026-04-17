@@ -57,12 +57,18 @@ export async function loadFactoryBrief(
     if (options?.fetch) {
       response = await options.fetch(sourceUrl, { headers });
     } else if (options?.client) {
-      // Prefer an authed fetch for private briefs, fall back to anonymous
-      // for public briefs whose realm isn't in the user's token set.
+      // Prefer an authed fetch for private briefs. Fall back to anonymous
+      // only when the brief URL isn't in the user's token set (public
+      // brief). Other auth failures (Matrix login, token refresh, etc.)
+      // rethrow so the real problem surfaces.
       try {
         response = await options.client.authedFetch(sourceUrl, { headers });
-      } catch {
-        response = await globalThis.fetch(sourceUrl, { headers });
+      } catch (error) {
+        if (isNoRealmTokenError(error)) {
+          response = await globalThis.fetch(sourceUrl, { headers });
+        } else {
+          throw error;
+        }
       }
     } else {
       response = await globalThis.fetch(sourceUrl, { headers });
@@ -315,4 +321,17 @@ function parseOptionalStringArray(
 
 function formatErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Matches `ProfileManager.authedRealmFetch`'s "No realm token available for
+ * <url>" error. Scoping the fallback to this specific case keeps Matrix
+ * login / token refresh failures visible instead of masking them as
+ * anonymous HTTP errors.
+ */
+function isNoRealmTokenError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return /No realm token available/i.test(error.message);
 }

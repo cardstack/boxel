@@ -1,9 +1,10 @@
 /**
  * Test helpers for building a real BoxelCLIClient wired to a harness-
- * generated realm. The harness issues raw JWTs via `realm.authorizationHeaders()`
- * and `realm.serverToken` — we pre-seed those into a ProfileManager pointed
- * at an isolated config dir, so BoxelCLIClient can make authenticated realm
- * calls without needing matrix login.
+ * generated realm. The harness issues realm auth headers via
+ * `realm.authorizationHeaders()` and `realm.serverToken` — we pre-seed
+ * those into a ProfileManager pointed at an isolated config dir, so
+ * BoxelCLIClient can make authenticated realm calls without needing
+ * matrix login.
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -16,11 +17,18 @@ import {
 } from '@cardstack/boxel-cli/api';
 
 export interface TestClientOptions {
-  /** Raw JWT (no "Bearer " prefix) for the target realm URL. */
   realmUrl: string;
+  /**
+   * Full `Authorization` header value (typically `"Bearer <jwt>"`) for the
+   * target realm URL. ProfileManager injects this verbatim as the
+   * `Authorization` header on realm requests.
+   */
   realmToken: string;
-  /** Raw JWT (no "Bearer " prefix) for the realm server. */
   realmServerUrl: string;
+  /**
+   * Full `Authorization` header value (typically `"Bearer <jwt>"`) for the
+   * realm server. Injected verbatim on server-level requests.
+   */
   realmServerToken: string;
   /** Optional matrix URL — defaults to a localhost placeholder. */
   matrixUrl?: string;
