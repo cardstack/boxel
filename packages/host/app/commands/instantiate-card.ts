@@ -62,6 +62,15 @@ export default class InstantiateCardCommand extends HostBaseCommand<
     let commandModule = await this.loadCommandModule();
 
     try {
+      // Reset the loader to clear cached modules from prior runs.
+      // Without this, the Loader's internal module Map retains stale
+      // compiled bytecode — edits the factory agent makes between
+      // validation turns are invisible to instantiation.
+      this.loaderService.resetLoader({
+        clearFetchCache: true,
+        reason: 'instantiate-card: fresh instantiation requires uncached loader',
+      });
+
       // Build or parse the card document
       let doc;
       if (input.instanceData) {
