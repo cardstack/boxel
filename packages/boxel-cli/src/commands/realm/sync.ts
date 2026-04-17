@@ -89,14 +89,17 @@ class RealmSyncer extends RealmSyncBase {
     }
     console.log('Realm access verified');
 
-    // Phase 1: Gather state
-    const [localFiles, localFilesWithMtimes, remoteMtimes, manifest] =
-      await Promise.all([
-        this.getLocalFileList(),
-        this.getLocalFileListWithMtimes(),
-        this.getRemoteMtimes(),
-        loadManifest(this.options.localDir),
-      ]);
+    // Phase 1: Gather state (single local traversal — derive localFiles from mtimes result)
+    const [localFilesWithMtimes, remoteMtimes, manifest] = await Promise.all([
+      this.getLocalFileListWithMtimes(),
+      this.getRemoteMtimes(),
+      loadManifest(this.options.localDir),
+    ]);
+
+    const localFiles = new Map<string, string>();
+    for (const [rel, info] of localFilesWithMtimes) {
+      localFiles.set(rel, info.path);
+    }
 
     // Fall back to file listing when _mtimes endpoint is unavailable
     if (remoteMtimes.size === 0 && remoteFileList && remoteFileList.size > 0) {
@@ -486,16 +489,22 @@ class RealmSyncer extends RealmSyncBase {
     manifest: SyncManifest | null,
   ): SideStatus {
     const hasRemote = remoteMtimes.has(relativePath);
-    const inManifest = manifest?.remoteMtimes?.[relativePath] !== undefined;
+    const inManifestMtimes =
+      manifest?.remoteMtimes?.[relativePath] !== undefined;
+    // Use manifest.files as secondary known-paths set when remoteMtimes is missing
+    const inManifestFiles = manifest?.files[relativePath] !== undefined;
+    const knownInManifest = inManifestMtimes || inManifestFiles;
 
-    if (hasRemote && inManifest) {
+    if (hasRemote && inManifestMtimes) {
       return remoteMtimes.get(relativePath) ===
         manifest!.remoteMtimes![relativePath]
         ? 'unchanged'
         : 'changed';
     }
-    if (hasRemote && !inManifest) return 'added';
-    if (!hasRemote && inManifest) return 'deleted';
+    // Known in manifest.files but no mtime to compare — treat as changed, not added
+    if (hasRemote && inManifestFiles) return 'changed';
+    if (hasRemote && !knownInManifest) return 'added';
+    if (!hasRemote && knownInManifest) return 'deleted';
     // Not remote, not in manifest — only exists locally
     return 'unchanged'; // not relevant on remote side
   }
