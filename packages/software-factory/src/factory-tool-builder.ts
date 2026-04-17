@@ -209,7 +209,7 @@ function buildFetchTranspiledModuleTool(
   return {
     name: 'fetch_transpiled_module',
     description:
-      'Fetch the transpiled (compiled JavaScript) output of a .gts module from the realm. Use this when an eval or instantiate validation error reports a line/column number — those line numbers refer to the transpiled output, not your .gts source. Editing: only edit the .gts source file (the transpiled output is regenerated on the next write). Auth: per-realm JWT.',
+      "Debugging tool ONLY for investigating runtime errors in .gts modules you've written. Use when an eval or instantiate validation error reports a line/column number — those line numbers refer to the transpiled output, not your .gts source, so fetching the transpiled output is how you locate the offending source construct. Never use the transpiled output as a reference for how to write code. Do NOT copy its patterns (setComponentTemplate, precompileTemplate, wire-format templates, base64 CSS imports) into source — always write idiomatic Ember / <template>-tag / CardDef source. Editing: only edit the .gts source (the transpiled output is regenerated on the next write). Auth: per-realm JWT.",
     parameters: {
       type: 'object',
       properties: {

@@ -1,13 +1,18 @@
+import {
+  readTranspiledModule,
+  type ReadTranspiledResult,
+} from '../commands/read-transpiled';
 import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { pull as realmPull } from '../commands/realm/pull';
 import { getProfileManager, type ProfileManager } from './profile-manager';
+
+export type { ReadTranspiledResult };
 
 const MIME = {
   CardSource: 'application/vnd.card+source',
   CardJson: 'application/vnd.card+json',
   JSON: 'application/json',
   JSONAPI: 'application/vnd.api+json',
-  All: '*/*',
 } as const;
 
 function ensureTrailingSlash(url: string): string {
@@ -47,14 +52,6 @@ export interface ReadResult {
   /** Parsed JSON document (for .json files). */
   document?: Record<string, unknown>;
   /** Raw text content (for non-JSON files like .gts). */
-  content?: string;
-  error?: string;
-}
-
-export interface ReadTranspiledResult {
-  ok: boolean;
-  status?: number;
-  /** Transpiled JavaScript output as text. */
   content?: string;
   error?: string;
 }
@@ -201,41 +198,16 @@ export class BoxelCLIClient {
   }
 
   /**
-   * Fetch the TRANSPILED JavaScript output for a realm module. Runtime
-   * evaluation errors carry line/column references that point to the
-   * transpiled output, not the raw .gts source — this lets callers
-   * inspect what the realm actually compiled. The realm accepts the
-   * module path either with or without the `.gts` extension.
+   * Fetch the TRANSPILED JavaScript output for a realm module. Thin
+   * wrapper around the `read-transpiled` CLI command — delegates to
+   * `readTranspiledModule()` in `commands/read-transpiled.ts` so the
+   * CLI and programmatic API share one implementation.
    */
   async readTranspiled(
     realmUrl: string,
     path: string,
   ): Promise<ReadTranspiledResult> {
-    let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
-
-    try {
-      let response = await this.pm.authedRealmFetch(url, {
-        method: 'GET',
-        headers: { Accept: MIME.All },
-      });
-
-      if (!response.ok) {
-        let body = await response.text();
-        return {
-          ok: false,
-          status: response.status,
-          error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-        };
-      }
-
-      let text = await response.text();
-      return { ok: true, status: response.status, content: text };
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
+    return readTranspiledModule(realmUrl, path, { profileManager: this.pm });
   }
 
   /**

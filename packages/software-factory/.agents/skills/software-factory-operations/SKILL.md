@@ -120,10 +120,13 @@ to the source.
 
 ### The transpiled output is for DEBUGGING ONLY — never for implementation
 
-**Critical rule:** `fetch_transpiled_module` exists solely to help you
-locate the source-level cause of a runtime error. It is **not** a
-reference for how to structure your code, and it is **never** a model
-to imitate.
+**Scope of this tool:** `fetch_transpiled_module` is only for
+investigating **runtime errors in `.gts` modules you have already
+written** — when an eval or instantiate validation failure points to
+a line/column in the transpiled output and you need to map that
+coordinate back to your source. It is not for learning how to write
+cards, not for understanding Boxel patterns, and not a general
+reference.
 
 - **Do not copy patterns, imports, or shapes from the transpiled
   output into your `.gts` source.** The transpiler emits artifacts
@@ -143,8 +146,9 @@ to imitate.
   the right references — not what the compiler happens to emit.
 
 Use `fetch_transpiled_module` the way a developer uses a source map:
-to translate a runtime line number back to a source construct, and
-then close the transpiled view and fix the source idiomatically.
+to translate a runtime line number back to a source construct in the
+code **you wrote**, then close the transpiled view and fix the source
+idiomatically.
 
 ## Writing QUnit Card Tests
 

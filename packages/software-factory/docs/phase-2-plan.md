@@ -605,7 +605,7 @@ The `LoopAgent` and `runFactoryLoop` signatures don't change — the signal mech
 The boxel-cli integration work is tracked in a dedicated Linear project: **"Incorporate Boxel CLI to Monorepo"**. Key tickets include:
 
 - **CS-10519** — Import boxel-cli into monorepo as `packages/boxel-cli`
-- **CS-10520** — Factory as boxel-cli subcommands; migrate realm-operations; retire file I/O tools
+- **CS-10520** — Factory as boxel-cli subcommands; migrate realm-operations; retire all thin-wrapper factory tools whose sole job is to proxy a single boxel-cli command or client method (see "Wrapper-Tool Retirement" below for the inclusive list and the wrapper-vs-compound distinction). Compound domain tools and factory-only control-flow tools stay.
 - **CS-10642** — boxel-cli owns full auth lifecycle (realm server tokens, per-realm tokens, auto-acquisition)
 - **CS-10613** — Skill alignment: deduplicate, establish consistent homes, create `boxel-api` skill
 - **CS-10670** — boxel-cli publishes tool definitions for factory consumption (tool delegation)
@@ -783,7 +783,33 @@ The `ToolRegistry` in phase 2 includes all three categories:
 let allManifests = [...SCRIPT_TOOLS, ...BOXEL_CLI_TOOLS, ...REALM_API_TOOLS];
 ```
 
-`BOXEL_CLI_TOOLS` (`boxel-sync`, `boxel-push`, `boxel-pull`, `boxel-status`, `boxel-create`, `boxel-history`) become available to the agent. The factory-level wrapper tools (`write_file`, `read_file`, `search_realm`) can be retired or kept as convenience aliases that delegate to the filesystem + sync.
+`BOXEL_CLI_TOOLS` (`boxel-sync`, `boxel-push`, `boxel-pull`, `boxel-status`, `boxel-create`, `boxel-history`) become available to the agent. The factory-level wrapper tools are retired per the "Wrapper-Tool Retirement" rule below — they don't stay as convenience aliases.
+
+#### Wrapper-Tool Retirement (the intended outcome of CS-10520)
+
+The goal of CS-10520 is to eliminate every factory tool that exists solely to proxy a single boxel-cli operation. When the agent has (a) a synced local workspace for file I/O and (b) boxel-cli commands for everything that can't be a filesystem op, there is no remaining reason to maintain a parallel set of factory tools that wrap the same calls.
+
+**Retired — thin 1:1 wrappers over a boxel-cli command or client method:**
+
+| Factory tool                                  | Replacement                                                          |
+| --------------------------------------------- | -------------------------------------------------------------------- |
+| `read_file`                                   | Local filesystem read on the synced workspace                        |
+| `write_file`                                  | Local filesystem write + `boxel sync`                                |
+| `search_realm`                                | `boxel search` (federated) or `client.search` for index queries      |
+| `run_command`                                 | `boxel run-command` (already a CLI)                                  |
+| `fetch_transpiled_module`                     | `boxel read-transpiled` (CS-10806)                                   |
+| `realm-read` / `realm-write` / `realm-delete` | Native file I/O on the workspace; CLI commands for non-target realms |
+
+**Kept — compound tools with factory-owned domain logic on top of the CLI:**
+
+- `update_issue`, `update_project`, `create_knowledge`, `create_catalog_spec`, `add_comment` — these do read-patch-write merging, schema enforcement, `adoptsFrom` wiring, and other Boxel-card-specific semantics. Not 1:1 with any CLI call. Long-term these may migrate into boxel-cli as higher-level card commands (e.g., `boxel card-merge`), but the compound logic has to move with them — they don't retire in this wave.
+
+**Kept — factory-only control flow, no CLI equivalent exists:**
+
+- `signal_done`, `request_clarification` — control signals back to the ralph loop; no realm I/O.
+- `run_tests` — Playwright orchestration across realm server + host app + Synapse; factory-specific.
+
+The test for whether a tool retires is: _would replacing it with a skill that says "use `boxel <cmd>` / native file I/O" leave behind any logic the factory uniquely owns?_ If no, retire. If yes, keep (or migrate that logic into boxel-cli first).
 
 ### Target-Realm I/O Migrates to Local Filesystem
 
