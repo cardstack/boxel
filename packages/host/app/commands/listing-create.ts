@@ -55,7 +55,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
   private async getCatalogRealm(): Promise<string | undefined> {
     const { urls } = await new GetCatalogRealmUrlsCommand(
       this.commandContext,
-    ).execute(undefined);
+    ).execute();
     return urls.find((realm: string) => realm.endsWith('/catalog/'));
   }
 

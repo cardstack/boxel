@@ -27,7 +27,7 @@ export default class ValidateRealmCommand extends HostBaseCommand<
 
     let { urls: realmUrls } = await new GetAvailableRealmUrlsCommand(
       this.commandContext,
-    ).execute(undefined);
+    ).execute();
 
     if (!realmUrls.includes(realmUrl)) {
       throw new Error(`Invalid realm: ${realmUrl}`);
