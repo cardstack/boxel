@@ -699,9 +699,14 @@ export default class CardPrerender extends Component {
 
       // ── cardRender pass ────────────────────────────────────────────────
       if (requested.cardRender) {
+        // Bump nonce between passes so the render route's model cache keys
+        // them distinctly — matches the separate-task behavior in the legacy
+        // paths and avoids subtle model/store lifecycle issues from reusing
+        // the same nonce across passes with different options.
+        this.#nonce++;
         // [CS-10759-DEBUG] remove after host-test stabilization
         console.info(
-          `[CS-10759-DEBUG][prerenderVisit] cardRender pass start url=${url}`,
+          `[CS-10759-DEBUG][prerenderVisit] cardRender pass start url=${url} nonce=${this.#nonce}`,
         );
         let context: CardRenderContext = {
           cardId: url.replace(/\.json$/, ''),
@@ -810,8 +815,10 @@ export default class CardPrerender extends Component {
       // ── fileRender pass ────────────────────────────────────────────────
       if (requested.fileRender) {
         // [CS-10759-DEBUG] remove after host-test stabilization
+        // Bump nonce between passes (see cardRender pass for rationale).
+        this.#nonce++;
         console.info(
-          `[CS-10759-DEBUG][prerenderVisit] fileRender pass start url=${url}`,
+          `[CS-10759-DEBUG][prerenderVisit] fileRender pass start url=${url} nonce=${this.#nonce}`,
         );
         let effectiveFileData =
           fileData ??
