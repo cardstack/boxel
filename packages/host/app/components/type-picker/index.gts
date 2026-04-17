@@ -52,12 +52,14 @@ export default class TypePicker extends Component<Signature> {
   }
 
   private get pickerOptions(): PickerOption[] {
+    const lockOptions = this.args.filter.disableSelectAll;
     const options: PickerOption[] = this.args.filter.options.map((opt) => ({
       id: opt.id,
       label: opt.displayName,
       tooltip: opt.id,
       icon: opt.icon,
       type: 'option' as const,
+      ...(lockOptions ? { disabled: true } : {}),
     }));
     return [this.selectAllOption, ...options];
   }
