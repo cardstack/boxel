@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "dueDate": null,
+      "dueDate": "2026-04-22",
       "cardInfo": {
         "name": null,
         "notes": null,
@@ -19,25 +19,71 @@
       "projectCode": "DFX",
       "projectName": "DarkFactory Adoption Harness",
       "projectStatus": "active",
-      "issueStatusLabels": [
-        "Backlog",
-        "In Progress",
-        "In Review",
-        "Done"
+      "issueTypeOptions": [
+        {
+          "value": "bootstrap",
+          "label": "Bootstrap"
+        },
+        {
+          "value": "feature",
+          "label": "Feature"
+        },
+        {
+          "value": "bug",
+          "label": "Bug"
+        },
+        {
+          "value": "task",
+          "label": "Task"
+        },
+        {
+          "value": "research",
+          "label": "Research"
+        },
+        {
+          "value": "infrastructure",
+          "label": "Home"
+        }
       ],
-      "issuePriorityLabels": [
-        "Low",
-        "Medium",
-        "High",
-        "Critical"
+      "issueStatusOptions": [
+        {
+          "value": "backlog",
+          "label": "Backlog"
+        },
+        {
+          "value": "in_progress",
+          "label": "In Progress"
+        },
+        {
+          "value": "review",
+          "label": "In Review"
+        },
+        {
+          "value": "done",
+          "label": "Done"
+        },
+        {
+          "value": "blocked",
+          "label": "Blocked"
+        }
       ],
-      "issueTypeLabels": [
-        "Bootstrap",
-        "Feature",
-        "Bug",
-        "Task",
-        "Research",
-        "Infrastructure"
+      "issuePriorityOptions": [
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        },
+        {
+          "value": "critical",
+          "label": "Critical"
+        }
       ]
     },
     "relationships": {

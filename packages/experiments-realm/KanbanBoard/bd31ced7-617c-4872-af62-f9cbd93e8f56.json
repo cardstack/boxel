@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "title": "Personal Board",
+      "title": "To Do",
       "groupBy": "ticketType",
       "cardInfo": {
         "name": null,
@@ -17,8 +17,82 @@
         "cardThumbnailURL": null
       },
       "hideEmptyColumns": false,
-      "typeColumnConfig": [],
-      "statusColumnConfig": [],
+      "typeColumnConfig": [
+        {
+          "key": "feature",
+          "label": null,
+          "color": "#db63f2",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        },
+        {
+          "key": "bug",
+          "label": null,
+          "color": "#e52e2e",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        },
+        {
+          "key": "task",
+          "label": null,
+          "color": "#696bf2",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        },
+        {
+          "key": "research",
+          "label": null,
+          "color": "#6ef264",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        },
+        {
+          "key": "infrastructure",
+          "label": null,
+          "color": "#303036",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        }
+      ],
+      "statusColumnConfig": [
+        {
+          "key": "done",
+          "label": null,
+          "color": null,
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 0
+        },
+        {
+          "key": "review",
+          "label": null,
+          "color": null,
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 3
+        },
+        {
+          "key": "in_progress",
+          "label": null,
+          "color": null,
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 2
+        },
+        {
+          "key": "backlog",
+          "label": null,
+          "color": null,
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 1
+        }
+      ],
       "priorityColumnConfig": [
         {
           "key": "low",

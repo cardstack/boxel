@@ -11,6 +11,7 @@ import {
   linksToMany,
   CSSField,
   CssImportField,
+  realmURL,
 } from '../card-api';
 import {
   ContextButton,
@@ -26,6 +27,7 @@ import { fn, get } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import KanbanIcon from '@cardstack/boxel-icons/columns-3';
+import SquareKanban from '@cardstack/boxel-icons/square-kanban';
 
 import { KanbanColumnField } from './kanban-column';
 import { KanbanPlane } from './kanban-plane';
@@ -38,6 +40,11 @@ import {
   issuePriorityOptions,
   issueTypeOptions,
 } from './issue';
+
+const issueSource = {
+  module: 'https://cardstack.com/base/issue-tracker/issue',
+  name: 'Issue',
+};
 
 const defaultColumnOptions: {
   value: string;
@@ -72,6 +79,58 @@ const defaultColumnOptions: {
     options: issueTypeOptions,
   },
 ];
+
+function defaultThemeColumnColor(
+  groupBy: string,
+  optionValue: string,
+  index: number,
+): string {
+  if (groupBy === 'status') {
+    switch (optionValue) {
+      case 'backlog':
+        return 'var(--muted-foreground)';
+      case 'in_progress':
+      case 'in-progress':
+      case 'active':
+        return 'var(--primary)';
+      case 'review':
+      case 'in-review':
+      case 'completed':
+        return 'var(--accent)';
+      case 'blocked':
+      case 'on_hold':
+        return 'var(--destructive)';
+      case 'done':
+      case 'archived':
+        return 'var(--secondary)';
+      default:
+        return 'var(--primary)';
+    }
+  }
+
+  if (groupBy === 'priority') {
+    switch (optionValue) {
+      case 'critical':
+        return 'var(--destructive)';
+      case 'high':
+        return 'var(--primary)';
+      case 'medium':
+        return 'var(--accent)';
+      case 'low':
+        return 'var(--muted-foreground)';
+      default:
+        return 'var(--primary)';
+    }
+  }
+
+  const typePalette = [
+    'var(--primary)',
+    'var(--accent)',
+    'var(--secondary)',
+    'var(--muted-foreground)',
+  ];
+  return typePalette[index % typePalette.length]!;
+}
 
 class Isolated extends Component<typeof KanbanBoard> {
   @tracked selectedCardIndex: number | null = null;
@@ -162,6 +221,39 @@ class Isolated extends Component<typeof KanbanBoard> {
   get cardCount(): number {
     return this.args.model?.cards?.length ?? 0;
   }
+
+  get realmURL(): URL | undefined {
+    return (this.args.model as any)[realmURL];
+  }
+
+  addCardToColumn = async (
+    columnKey: string | null | undefined,
+  ): Promise<void> => {
+    if (!columnKey) return;
+    const model = this.args.model;
+    if (!model) return;
+
+    const source =
+      defaultColumnOptions.find((o) => o.value === (model as any).groupBy) ??
+      defaultColumnOptions[0]!;
+    const attributeName =
+      source.value === 'ticketType' ? 'issueType' : source.writeFieldName;
+    const projectId = (model as any).project?.id ?? null;
+
+    await this.args.createCard?.(issueSource, new URL(issueSource.module), {
+      realmURL: this.realmURL,
+      doc: {
+        data: {
+          type: 'card',
+          attributes: { [attributeName]: columnKey },
+          relationships: {
+            project: { links: { self: projectId } },
+          },
+          meta: { adoptsFrom: issueSource },
+        },
+      },
+    });
+  };
 
   get groupByOptions(): { displayName: string; sort: string }[] {
     return defaultColumnOptions.map(({ value, label }) => ({
@@ -305,18 +397,7 @@ class Isolated extends Component<typeof KanbanBoard> {
         <div class='toolbar-left'>
           <div class='kanban-heading'>
             <h2 class='kanban-title'>
-              <svg
-                width='18'
-                height='18'
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <rect x='3' y='3' width='5' height='18' rx='1' />
-                <rect x='10' y='3' width='5' height='12' rx='1' />
-                <rect x='17' y='3' width='5' height='15' rx='1' />
-              </svg>
+              <SquareKanban />
               <@fields.cardTitle />
             </h2>
             {{#if @model.project}}
@@ -326,7 +407,9 @@ class Isolated extends Component<typeof KanbanBoard> {
               </div>
             {{/if}}
           </div>
-          <span class='card-count'>{{this.cardCount}} cards</span>
+          <div>
+            <span class='card-count'>{{this.cardCount}} cards</span>
+          </div>
         </div>
         <div class='toolbar-right'>
           <div class='column-visibility-toggle'>
@@ -362,6 +445,7 @@ class Isolated extends Component<typeof KanbanBoard> {
             @manager={{this.manager}}
             @interactive={{true}}
             @hideEmpty={{@model.hideEmptyColumns}}
+            @onAddCard={{this.addCardToColumn}}
           >
             <:card as |placement|>
               {{#let (get @fields.cards placement.index) as |CardField|}}
@@ -470,7 +554,6 @@ class Isolated extends Component<typeof KanbanBoard> {
       }
       .toolbar-left {
         display: flex;
-        align-items: center;
         gap: 0.5rem;
       }
       .kanban-heading {
@@ -716,7 +799,9 @@ export class KanbanBoard extends CardDef {
           return new KanbanColumnField({
             key: o.value,
             label: o.label,
-            color: stored?.color ?? null,
+            color:
+              stored?.color ??
+              defaultThemeColumnColor(source.value, o.value, i),
             wipLimit: stored?.wipLimit ?? null,
             collapsed: stored?.collapsed ?? null,
             sortOrder: stored?.sortOrder ?? i,

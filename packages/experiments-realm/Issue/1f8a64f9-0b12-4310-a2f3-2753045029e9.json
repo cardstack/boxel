@@ -8,26 +8,26 @@
     },
     "type": "card",
     "attributes": {
-      "status": null,
+      "status": "blocked",
       "issueId": null,
-      "summary": "Test",
+      "summary": "Bug",
       "cardInfo": {
         "name": null,
         "notes": null,
         "summary": null,
         "cardThumbnailURL": null
       },
-      "priority": null,
-      "issueType": null,
+      "priority": "critical",
+      "issueType": "bug",
       "description": null,
-      "statusBoardOrder": null,
-      "priorityBoardOrder": null,
+      "statusBoardOrder": 1,
+      "priorityBoardOrder": 1,
       "issueTypeBoardOrder": null
     },
     "relationships": {
       "project": {
         "links": {
-          "self": "../Project/44f10566-6bde-4bf4-b3a7-d347a65c2d53"
+          "self": "../Project/2bd7e5a6-5c73-464a-a124-8e863fb03901"
         }
       },
       "cardInfo.theme": {

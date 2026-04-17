@@ -8,26 +8,26 @@
     },
     "type": "card",
     "attributes": {
-      "status": "in-progress",
-      "issueId": null,
-      "summary": null,
+      "status": "in_progress",
+      "issueId": "DF-3",
+      "summary": "Seed new issue cards with usable defaults",
       "cardInfo": {
-        "name": "Issue 8",
+        "name": null,
         "notes": null,
         "summary": null,
         "cardThumbnailURL": null
       },
       "priority": "medium",
-      "issueType": null,
-      "description": null,
-      "statusBoardOrder": 3,
-      "priorityBoardOrder": 3,
-      "issueTypeBoardOrder": null
+      "issueType": "task",
+      "description": "Make newly created issues land on the board with complete metadata so follow-up editing starts from a valid title, type, priority, and status configuration.",
+      "statusBoardOrder": 2,
+      "priorityBoardOrder": 2,
+      "issueTypeBoardOrder": 1
     },
     "relationships": {
       "project": {
         "links": {
-          "self": "../Project/44f10566-6bde-4bf4-b3a7-d347a65c2d53"
+          "self": "../Project/2bd7e5a6-5c73-464a-a124-8e863fb03901"
         }
       },
       "cardInfo.theme": {

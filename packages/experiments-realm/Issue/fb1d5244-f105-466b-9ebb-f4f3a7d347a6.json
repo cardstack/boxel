@@ -8,8 +8,9 @@
     },
     "type": "card",
     "attributes": {
-      "title": null,
       "status": "review",
+      "issueId": null,
+      "summary": null,
       "cardInfo": {
         "name": "Issue 2",
         "notes": null,
@@ -17,12 +18,11 @@
         "cardThumbnailURL": null
       },
       "priority": "critical",
-      "ticketId": "cs-2",
-      "ticketType": "feature",
+      "issueType": "bug",
       "description": null,
       "statusBoardOrder": 1,
       "priorityBoardOrder": 2,
-      "ticketTypeBoardOrder": 2
+      "issueTypeBoardOrder": null
     },
     "relationships": {
       "project": {

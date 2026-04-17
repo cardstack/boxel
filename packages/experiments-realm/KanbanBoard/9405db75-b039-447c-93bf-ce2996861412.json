@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "title": "DarkFactory Kanban",
+      "title": "Dark Factory",
       "groupBy": "status",
       "cardInfo": {
         "name": null,
@@ -27,40 +27,7 @@
           "sortOrder": null
         }
       ],
-      "statusColumnConfig": [
-        {
-          "key": "backlog",
-          "label": null,
-          "color": "#1f1f23",
-          "wipLimit": null,
-          "collapsed": false,
-          "sortOrder": null
-        },
-        {
-          "key": "in-progress",
-          "label": null,
-          "color": "#64f26e",
-          "wipLimit": null,
-          "collapsed": false,
-          "sortOrder": null
-        },
-        {
-          "key": "in-review",
-          "label": null,
-          "color": "#64eff2",
-          "wipLimit": null,
-          "collapsed": false,
-          "sortOrder": null
-        },
-        {
-          "key": "done",
-          "label": null,
-          "color": "#6669f4",
-          "wipLimit": null,
-          "collapsed": false,
-          "sortOrder": null
-        }
-      ],
+      "statusColumnConfig": [],
       "priorityColumnConfig": []
     },
     "relationships": {

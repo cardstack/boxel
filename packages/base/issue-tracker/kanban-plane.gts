@@ -5,6 +5,8 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+import { concat, fn } from '@ember/helper';
+import { ContextButton } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import Modifier from 'ember-modifier';
 import { KanbanDragManager } from './kanban-drag';
@@ -28,6 +30,7 @@ export class KanbanPlane extends Component<{
     manager: KanbanDragManager;
     interactive: boolean;
     hideEmpty?: boolean;
+    onAddCard?: (columnKey: string | null) => void;
   };
   Blocks: {
     card: [KanbanPlacement];
@@ -189,14 +192,29 @@ export class KanbanPlane extends Component<{
                   }}</span>
                 <span class='col-count'>{{this.columnCardCount colIdx}}</span>
               </div>
-              {{#if column.wipLimit}}
-                <span
-                  class='col-wip {{if (this.isOverWip column colIdx) "over"}}'
-                >
-                  max
-                  {{column.wipLimit}}
-                </span>
-              {{/if}}
+              <div class='col-header-right'>
+                {{#if column.wipLimit}}
+                  <span
+                    class='col-wip {{if (this.isOverWip column colIdx) "over"}}'
+                  >
+                    max
+                    {{column.wipLimit}}
+                  </span>
+                {{/if}}
+                {{#if @onAddCard}}
+                  <ContextButton
+                    class='col-add-btn'
+                    @label={{if
+                      column.label
+                      (concat 'Add card to ' column.label)
+                      'Add card to column'
+                    }}
+                    @icon='add'
+                    @variant='ghost'
+                    {{on 'click' (fn @onAddCard column.key)}}
+                  />
+                {{/if}}
+              </div>
             </div>
 
             <div class='col-body'>
@@ -305,6 +323,11 @@ export class KanbanPlane extends Component<{
         font-weight: 500;
         color: #94a3b8;
       }
+      .col-header-right {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
       .col-wip {
         font-size: 10px;
         color: #94a3b8;
@@ -313,6 +336,14 @@ export class KanbanPlane extends Component<{
       .col-wip.over {
         color: #d97706;
         font-weight: 600;
+      }
+      .col-add-btn {
+        color: #94a3b8;
+        opacity: 0.6;
+      }
+      .col-add-btn:hover {
+        opacity: 1;
+        color: #1e293b;
       }
 
       /* Target column during drag */

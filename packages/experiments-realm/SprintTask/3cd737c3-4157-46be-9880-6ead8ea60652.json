@@ -1,30 +1,40 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SprintTask",
+        "module": "../sprint-task"
+      }
+    },
     "type": "card",
     "attributes": {
+      "name": "Build Kanban Board Component",
       "status": {
+        "color": "#66BB6A",
         "index": 6,
         "label": "Shipped",
-        "color": "#66BB6A",
         "completed": true
       },
-      "dateRange": {
-        "start": "2024-11-06",
-        "end": "2025-02-04"
+      "details": "Implement drag and drop functionality using ember-modifier-drag-and-drop:\n\n- Install addon and implement TypeScript interfaces for events/data transfer\n- Create reusable drag/drop modifiers with visual feedback and preview\n- Add validation logic and write tests",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "priority": {
         "index": null,
         "label": null
       },
-      "name": "Build Kanban Board Component",
-      "details": "Implement drag and drop functionality using ember-modifier-drag-and-drop:\n\n- Install addon and implement TypeScript interfaces for events/data transfer\n- Create reusable drag/drop modifiers with visual feedback and preview\n- Add validation logic and write tests",
-      "cardDescription": null,
-      "cardThumbnailURL": null
+      "dateRange": {
+        "end": "2025-02-04",
+        "start": "2024-11-06"
+      }
     },
     "relationships": {
-      "project": {
+      "tags": {
         "links": {
-          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
+          "self": null
         }
       },
       "team": {
@@ -32,9 +42,9 @@
           "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
         }
       },
-      "subtasks": {
+      "project": {
         "links": {
-          "self": null
+          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
         }
       },
       "assignee": {
@@ -42,16 +52,20 @@
           "self": "../TeamMember/847c1f4e-e0ae-43d3-a012-8ffaa66f5925"
         }
       },
-      "tags": {
+      "subtasks": {
         "links": {
           "self": null
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../sprint-task",
-        "name": "SprintTask"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

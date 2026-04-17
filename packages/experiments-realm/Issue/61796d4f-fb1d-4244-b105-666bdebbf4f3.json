@@ -8,8 +8,9 @@
     },
     "type": "card",
     "attributes": {
-      "title": null,
-      "status": "in_progress",
+      "status": "review",
+      "issueId": null,
+      "summary": null,
       "cardInfo": {
         "name": "Issue 1",
         "notes": null,
@@ -17,12 +18,11 @@
         "cardThumbnailURL": null
       },
       "priority": "medium",
-      "ticketId": "cs-1",
-      "ticketType": "unset",
+      "issueType": null,
       "description": null,
       "statusBoardOrder": 5,
       "priorityBoardOrder": 3,
-      "ticketTypeBoardOrder": 6
+      "issueTypeBoardOrder": null
     },
     "relationships": {
       "project": {
@@ -35,9 +35,19 @@
           "self": null
         }
       },
-      "relatedTickets": {
+      "relatedTickets.0": {
         "links": {
-          "self": null
+          "self": "./8c0344a3-3237-48c8-813b-93beea73ab9c"
+        }
+      },
+      "relatedTickets.1": {
+        "links": {
+          "self": "./6d4ffb1d-5244-4105-a66b-debbf4f3a7d3"
+        }
+      },
+      "relatedTickets.2": {
+        "links": {
+          "self": "./6a50ab30-3a69-495d-aee7-11fad4e7f5cc"
         }
       },
       "cardInfo.cardThumbnail": {

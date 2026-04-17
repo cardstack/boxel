@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "status": "in-progress",
+      "status": "in_progress",
       "issueId": "DF-1",
       "summary": "Verify public DarkFactory adoption",
       "cardInfo": {
@@ -18,7 +18,7 @@
         "cardThumbnailURL": null
       },
       "priority": "high",
-      "issueType": "task",
+      "issueType": "feature",
       "description": "Render tracker cards from an adopter realm using the public software-factory module URL.",
       "statusBoardOrder": 1,
       "priorityBoardOrder": 1,

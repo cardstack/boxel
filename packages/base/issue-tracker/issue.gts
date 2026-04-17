@@ -17,37 +17,34 @@ import DateField from '../date';
 import MarkdownField from '../markdown';
 
 import { FieldContainer, Pill } from '@cardstack/boxel-ui/components';
-import { dasherize } from '@cardstack/boxel-ui/helpers';
 
-export const issueStatusLabels = [
-  'Backlog',
-  'In Progress',
-  'Blocked',
-  'In Review',
-  'Done',
+export const issueStatusOptions = [
+  { value: 'backlog', label: 'Backlog' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'blocked', label: 'Blocked' },
+  { value: 'review', label: 'In Review' },
+  { value: 'done', label: 'Done' },
 ];
 
-export const issuePriorityLabels = ['Low', 'Medium', 'High', 'Critical'];
-
-export const issueTypeLabels = [
-  'Bootstrap',
-  'Feature',
-  'Bug',
-  'Task',
-  'Research',
-  'Infrastructure',
+export const issuePriorityOptions = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'critical', label: 'Critical' },
 ];
 
-function buildIssueOptions(labels: string[]) {
-  return labels.map((label) => ({
-    value: dasherize(label),
-    label,
-  }));
+export const issueTypeOptions = [
+  { value: 'bootstrap', label: 'Bootstrap' },
+  { value: 'feature', label: 'Feature' },
+  { value: 'bug', label: 'Bug' },
+  { value: 'task', label: 'Task' },
+  { value: 'research', label: 'Research' },
+  { value: 'infrastructure', label: 'Infrastructure' },
+];
+
+function makeIssueOptionFields(options: { value: string; label: string }[]) {
+  return options.map((option) => new IssueOptionField(option));
 }
-
-export const issueStatusOptions = buildIssueOptions(issueStatusLabels);
-export const issuePriorityOptions = buildIssueOptions(issuePriorityLabels);
-export const issueTypeOptions = buildIssueOptions(issueTypeLabels);
 
 export const projectStatusOptions = [
   { value: 'planning', label: 'Planning' },
@@ -61,6 +58,26 @@ class IssueOptionField extends FieldDef {
   static displayName = 'Issue Option';
   @field value = contains(StringField);
   @field label = contains(StringField);
+
+  static edit = class Edit extends Component<typeof IssueOptionField> {
+    <template>
+      <div class='option-edit'>
+        <FieldContainer @label='Label' @vertical={{true}}>
+          <@fields.label />
+        </FieldContainer>
+        <FieldContainer @label='Id' @vertical={{true}}>
+          <@fields.value />
+        </FieldContainer>
+      </div>
+      <style scoped>
+        .option-edit {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: var(--boxel-sp);
+        }
+      </style>
+    </template>
+  };
 
   static embedded = class Embedded extends Component<typeof IssueOptionField> {
     <template>
@@ -111,13 +128,13 @@ const IssueTypeField = enumField(StringField, {
 
 function getStatusVariant(statusId?: string) {
   switch (statusId) {
-    case 'in-progress':
+    case 'in_progress':
     case 'active':
       return 'primary';
     case 'blocked':
     case 'on_hold':
       return 'destructive';
-    case 'in-review':
+    case 'review':
     case 'completed':
       return 'accent';
     case 'done':
@@ -153,6 +170,11 @@ export class Issue extends CardDef {
   @field issueTypeBoardOrder = contains(NumberField);
   @field project = linksTo(() => Project);
   @field relatedTickets = linksToMany(() => Issue);
+  @field kanbanBoards = linksToMany(() => CardDef, {
+    computeVia: function (this: Issue) {
+      return this.project?.kanbanBoards ?? [];
+    },
+  });
 
   @field cssVariables = contains(CSSField, {
     computeVia: function (this: Issue) {
@@ -211,12 +233,13 @@ export class Issue extends CardDef {
             <@fields.computedStatus @format='atom' />
           </Pill>
         </div>
-        <div><@fields.cardTitle /></div>
+        <div class='title'><@fields.cardTitle /></div>
       </div>
       <style scoped>
         .ticket-card {
           display: grid;
           gap: 0.35rem;
+          overflow: hidden;
         }
         .compact {
           padding: 0.75rem;
@@ -226,6 +249,19 @@ export class Issue extends CardDef {
           justify-content: space-between;
           gap: 0.75rem;
           font-size: 0.8rem;
+        }
+        @container fitted-card (height < 65px) {
+          .compact {
+            padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+          }
+          .row {
+            display: none;
+          }
+          .title {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+          }
         }
       </style>
     </template>
@@ -358,7 +394,8 @@ export class Issue extends CardDef {
           background: var(--muted, var(--boxel-100));
           border: 1px solid var(--border, var(--boxel-border-color));
           border-radius: var(--boxel-border-radius);
-          box-shadow: inset 0 1px 0 rgb(from var(--card, white) r g b / 0.35);
+          box-shadow: inset 0 1px 0
+            color-mix(in oklch, var(--card) 35%, transparent);
         }
         .option-panel-header {
           display: grid;
@@ -398,26 +435,14 @@ export class Issue extends CardDef {
     <template>
       <article class='issue'>
         <header class='issue-header'>
-          <div class='issue-pills'>
-            <div>
-              <Pill @size='extra-small' @variant='secondary'>
-                {{#if @model.issueId}}
-                  <@fields.issueId />
-                {{else}}
-                  Issue
-                {{/if}}
-              </Pill>
-              {{#if @model.issueType}}
-                <Pill @size='extra-small' @variant='default'>
-                  <@fields.issueType @format='atom' />
-                </Pill>
+          <div class='issue-meta-top'>
+            <Pill @size='extra-small' @variant='secondary'>
+              {{#if @model.issueId}}
+                <@fields.issueId />
+              {{else}}
+                Issue
               {{/if}}
-              {{#if @model.priority}}
-                <Pill @size='extra-small' @variant='default'>
-                  <@fields.priority @format='atom' />
-                </Pill>
-              {{/if}}
-            </div>
+            </Pill>
             <Pill
               @size='extra-small'
               @variant={{getStatusVariant @model.computedStatus}}
@@ -425,17 +450,37 @@ export class Issue extends CardDef {
               <@fields.computedStatus @format='atom' />
             </Pill>
           </div>
+
           <h1 class='issue-title'><@fields.cardTitle /></h1>
 
-          <div class='issue-project'>
+          <dl class='issue-attrs'>
             {{#if @model.project}}
-              <span class='dim-label'>Project</span>
-              <@fields.project @format='atom' />
-            {{else}}
-              <em class='dim-label'>No Project</em>
+              <div class='attr-item'>
+                <dt class='attr-label'>Project</dt>
+                <dd class='attr-value'><@fields.project @format='atom' /></dd>
+              </div>
             {{/if}}
-          </div>
-
+            {{#if @model.kanbanBoards.length}}
+              <div class='attr-item'>
+                <dt class='attr-label'>Board</dt>
+                <dd class='attr-value'>
+                  <@fields.kanbanBoards @format='atom' />
+                </dd>
+              </div>
+            {{/if}}
+            {{#if @model.issueType}}
+              <div class='attr-item'>
+                <dt class='attr-label'>Type</dt>
+                <dd class='attr-value'><@fields.issueType @format='atom' /></dd>
+              </div>
+            {{/if}}
+            {{#if @model.priority}}
+              <div class='attr-item'>
+                <dt class='attr-label'>Priority</dt>
+                <dd class='attr-value'><@fields.priority @format='atom' /></dd>
+              </div>
+            {{/if}}
+          </dl>
         </header>
 
         <section class='issue-body'>
@@ -464,12 +509,12 @@ export class Issue extends CardDef {
           display: flex;
           flex-direction: column;
           gap: var(--boxel-sp-sm);
-          padding-bottom: var(--boxel-sp-xl);
+          padding-bottom: var(--boxel-sp-lg);
           border-bottom: 1px solid var(--border);
         }
-        .issue-pills {
+        .issue-meta-top {
           display: flex;
-          flex-wrap: wrap;
+          align-items: center;
           justify-content: space-between;
           gap: var(--boxel-sp-xs);
         }
@@ -477,24 +522,37 @@ export class Issue extends CardDef {
           font-size: 1.5rem;
           font-weight: 700;
           line-height: 1.3;
-          margin: var(--boxel-sp-xs) 0 0;
+          margin: 0;
           color: var(--foreground);
         }
-        .issue-project {
+        .issue-attrs {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-xs) var(--boxel-sp-lg);
+          margin: 0;
+        }
+        .attr-item {
           display: flex;
           align-items: center;
           gap: var(--boxel-sp-xs);
-          margin-top: var(--boxel-sp-xs);
         }
-        .dim-label {
+        .attr-label {
           font-size: 0.75rem;
           font-weight: 500;
           color: var(--muted-foreground);
           text-transform: uppercase;
           letter-spacing: 0.05em;
         }
+        .attr-value {
+          margin: 0;
+          font-size: 0.875rem;
+          color: var(--foreground);
+        }
         .issue-body {
           flex: 1;
+        }
+        .issue-body :deep(p:first-child) {
+          margin-top: 0;
         }
         .issue-related {
           border-top: 1px solid var(--border);
@@ -510,6 +568,8 @@ export class Issue extends CardDef {
           text-transform: uppercase;
           letter-spacing: 0.05em;
           margin: 0;
+          padding-bottom: var(--boxel-sp-xs);
+          border-bottom: 1px solid var(--border);
         }
       </style>
     </template>
@@ -527,42 +587,20 @@ export class Project extends CardDef {
   );
   @field description = contains(MarkdownField);
   @field dueDate = contains(DateField);
-  @field issuePriorityLabels = containsMany(StringField);
-  @field issuePriorityOptions = containsMany(IssueOptionField, {
-    computeVia: function (this: Project) {
-      return this.issuePriorityLabels?.map(
-        (l) =>
-          new IssueOptionField({
-            value: dasherize(l),
-            label: l,
-          }),
-      );
+  @field kanbanBoards = linksToMany(() => CardDef, {
+    query: {
+      filter: {
+        on: {
+          module: 'https://cardstack.com/base/issue-tracker/kanban-board',
+          name: 'KanbanBoard',
+        },
+        eq: { 'project.id': '$this.id' },
+      },
     },
   });
-  @field issueStatusLabels = containsMany(StringField);
-  @field issueStatusOptions = containsMany(IssueOptionField, {
-    computeVia: function (this: Project) {
-      return this.issueStatusLabels?.map(
-        (l) =>
-          new IssueOptionField({
-            value: dasherize(l),
-            label: l,
-          }),
-      );
-    },
-  });
-  @field issueTypeLabels = containsMany(StringField);
-  @field issueTypeOptions = containsMany(IssueOptionField, {
-    computeVia: function (this: Project) {
-      return this.issueTypeLabels?.map(
-        (l) =>
-          new IssueOptionField({
-            value: dasherize(l),
-            label: l,
-          }),
-      );
-    },
-  });
+  @field issuePriorityOptions = containsMany(IssueOptionField);
+  @field issueStatusOptions = containsMany(IssueOptionField);
+  @field issueTypeOptions = containsMany(IssueOptionField);
   @field issues = linksToMany(() => Issue, {
     query: {
       filter: {
@@ -590,14 +628,15 @@ export class Project extends CardDef {
         let model = this.args.model as Project | undefined;
         if (!model) return;
 
-        if (!model.issuePriorityLabels?.length) {
-          model.issuePriorityLabels = issuePriorityLabels;
+        if (!model.issuePriorityOptions?.length) {
+          model.issuePriorityOptions =
+            makeIssueOptionFields(issuePriorityOptions);
         }
-        if (!model.issueStatusLabels?.length) {
-          model.issueStatusLabels = issueStatusLabels;
+        if (!model.issueStatusOptions?.length) {
+          model.issueStatusOptions = makeIssueOptionFields(issueStatusOptions);
         }
-        if (!model.issueTypeLabels?.length) {
-          model.issueTypeLabels = issueTypeLabels;
+        if (!model.issueTypeOptions?.length) {
+          model.issueTypeOptions = makeIssueOptionFields(issueTypeOptions);
         }
       });
     }
@@ -620,6 +659,11 @@ export class Project extends CardDef {
             <@fields.dueDate />
           </FieldContainer>
         </div>
+        <div class='row'>
+          <FieldContainer @label='Kanban Board' @vertical={{true}}>
+            <@fields.kanbanBoards />
+          </FieldContainer>
+        </div>
         <FieldContainer @label='Description' @vertical={{true}}>
           <@fields.description />
         </FieldContainer>
@@ -629,14 +673,17 @@ export class Project extends CardDef {
           </FieldContainer>
         </div>
 
-        Issue Status Labels:
-        <@fields.issueStatusLabels />
+        <FieldContainer @label='Issue Status Options' @vertical={{true}}>
+          <@fields.issueStatusOptions />
+        </FieldContainer>
 
-        Issue Priority Labels:
-        <@fields.issuePriorityLabels />
+        <FieldContainer @label='Issue Priority Options' @vertical={{true}}>
+          <@fields.issuePriorityOptions />
+        </FieldContainer>
 
-        Issue Type Labels:
-        <@fields.issueTypeLabels />
+        <FieldContainer @label='Issue Type Options' @vertical={{true}}>
+          <@fields.issueTypeOptions />
+        </FieldContainer>
       </div>
       <style scoped>
         .project-edit {
@@ -659,7 +706,8 @@ export class Project extends CardDef {
       <div class='project-card compact'>
         <div class='row'>
           <Pill @size='extra-small' @variant='secondary'>
-            {{if @model.projectCode @model.projectCode 'PROJECT'}}
+            {{#if @model.projectCode}}<@fields.projectCode
+              />{{else}}PROJECT{{/if}}
           </Pill>
           <Pill
             @size='extra-small'
@@ -672,12 +720,13 @@ export class Project extends CardDef {
             {{/if}}
           </Pill>
         </div>
-        <div><@fields.cardTitle /></div>
+        <div class='title'><@fields.cardTitle /></div>
       </div>
       <style scoped>
         .project-card {
           display: grid;
           gap: 0.35rem;
+          overflow: hidden;
         }
         .compact {
           padding: 0.75rem;
@@ -688,6 +737,19 @@ export class Project extends CardDef {
           gap: 0.75rem;
           font-size: 0.8rem;
         }
+        @container fitted-card (height < 65px) {
+          .compact {
+            padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+          }
+          .row {
+            display: none;
+          }
+          .title {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+          }
+        }
       </style>
     </template>
   };
@@ -696,46 +758,135 @@ export class Project extends CardDef {
 
   static isolated = class Isolated extends Component<typeof Project> {
     <template>
-      <article class='surface'>
-        <header>
-          <div class='row'>
-            <Pill @size='extra-small' @variant='secondary'>
-              {{if @model.projectCode @model.projectCode 'PROJECT'}}
-            </Pill>
-            <Pill
-              @size='extra-small'
-              @variant={{getStatusVariant @model.projectStatus}}
-            >
-              {{#if @model.projectStatus}}
-                <@fields.projectStatus @format='atom' />
-              {{else}}
-                Planning
+      <div class='background-container'>
+        <article class='surface'>
+          <header class='project-header'>
+            <div class='project-meta-top'>
+              <Pill @size='extra-small' @variant='secondary'>
+                {{#if @model.projectCode}}
+                  <@fields.projectCode />
+                {{else}}
+                  PROJECT
+                {{/if}}
+              </Pill>
+              <Pill
+                @size='extra-small'
+                @variant={{getStatusVariant @model.projectStatus}}
+              >
+                {{#if @model.projectStatus}}
+                  <@fields.projectStatus @format='atom' />
+                {{else}}
+                  Planning
+                {{/if}}
+              </Pill>
+            </div>
+            <h1><@fields.cardTitle /></h1>
+            <dl class='project-attrs'>
+              {{#if @model.dueDate}}
+                <div class='attr-item'>
+                  <dt class='attr-label'>Due Date</dt>
+                  <dd class='attr-value'><@fields.dueDate @format='atom' /></dd>
+                </div>
               {{/if}}
-            </Pill>
-          </div>
-          <h1><@fields.cardTitle /></h1>
-        </header>
-        <section>
-          <h2>Description</h2>
-          <@fields.description />
-        </section>
-        {{#if @model.issues.length}}
-          <section>
-            <h2>Issues</h2>
-            <@fields.issues />
+              {{#if @model.kanbanBoards.length}}
+                <div class='attr-item'>
+                  <dt class='attr-label'>Board</dt>
+                  <dd class='attr-value'>
+                    <@fields.kanbanBoards @format='atom' />
+                  </dd>
+                </div>
+              {{/if}}
+            </dl>
+          </header>
+
+          <section class='project-section'>
+            <h2 class='section-label'>Description</h2>
+            <@fields.description />
           </section>
-        {{/if}}
-      </article>
+
+          {{#if @model.issues.length}}
+            <section class='project-section'>
+              <h2 class='section-label'>Issues</h2>
+              <@fields.issues />
+            </section>
+          {{/if}}
+        </article>
+      </div>
       <style scoped>
-        .surface {
-          padding: 1.5rem;
-          display: grid;
-          gap: 1rem;
+        .background-container {
+          height: 100%;
+          overflow-y: auto;
+          background-color: var(--background);
+          color: var(--foreground);
         }
-        .row {
+        .surface {
+          max-width: 60rem;
+          margin: 0 auto;
+          padding: var(--boxel-sp-xl);
           display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xl);
+        }
+        .project-header {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-sm);
+          padding-bottom: var(--boxel-sp-lg);
+          border-bottom: 1px solid var(--border);
+        }
+        .project-meta-top {
+          display: flex;
+          align-items: center;
           justify-content: space-between;
-          gap: 0.75rem;
+          gap: var(--boxel-sp-xs);
+        }
+        h1 {
+          font-size: 1.5rem;
+          font-weight: 700;
+          line-height: 1.3;
+          margin: 0;
+          color: var(--foreground);
+        }
+        .project-attrs {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-xs) var(--boxel-sp-lg);
+          margin: 0;
+        }
+        .attr-item {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+        }
+        .attr-label {
+          font-size: 0.75rem;
+          font-weight: 500;
+          color: var(--muted-foreground);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+        .attr-value {
+          margin: 0;
+          font-size: 0.875rem;
+          color: var(--foreground);
+        }
+        .project-section {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp);
+        }
+        .project-section :deep(p:first-child) {
+          margin-top: 0;
+        }
+        .section-label {
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: var(--muted-foreground);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          margin: 0;
+          padding-bottom: var(--boxel-sp-xs);
+          border-bottom: 1px solid var(--border);
         }
       </style>
     </template>
