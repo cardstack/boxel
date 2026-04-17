@@ -577,6 +577,10 @@ export default class CardPrerender extends Component {
       types,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> => {
       this.#nonce++;
+      // Clear any residual render error from a previous visit so the earliest
+      // pass (fileExtract) doesn't falsely throw on stale state.
+      this.localIndexer.renderError = undefined;
+      this.localIndexer.prerenderStatus = 'loading';
       let shouldClearCache = this.#consumeClearCacheForRender(
         Boolean(renderOptions?.clearCache),
       );
