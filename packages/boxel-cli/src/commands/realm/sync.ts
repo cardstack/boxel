@@ -77,8 +77,9 @@ class RealmSyncer extends RealmSyncBase {
     );
 
     console.log('Testing realm access...');
+    let remoteFileList: Map<string, boolean> | undefined;
     try {
-      await this.getRemoteFileList('');
+      remoteFileList = await this.getRemoteFileList('');
     } catch (error) {
       console.error('Failed to access realm:', error);
       throw new Error(
@@ -96,6 +97,16 @@ class RealmSyncer extends RealmSyncBase {
         this.getRemoteMtimes(),
         loadManifest(this.options.localDir),
       ]);
+
+    // Fall back to file listing when _mtimes endpoint is unavailable
+    if (remoteMtimes.size === 0 && remoteFileList && remoteFileList.size > 0) {
+      console.log(
+        'Remote mtimes unavailable, falling back to file listing for remote detection',
+      );
+      for (const [filePath] of remoteFileList) {
+        remoteMtimes.set(filePath, 0);
+      }
+    }
 
     console.log(`Found ${localFiles.size} local files`);
     console.log(`Found ${remoteMtimes.size} remote files`);
@@ -369,19 +380,32 @@ class RealmSyncer extends RealmSyncBase {
 
     // Phase 6: Update manifest
     if (!this.options.dryRun && !this.hasError) {
-      // Recompute hashes for pulled files and update manifest
-      const updatedHashes = new Map(localHashes);
+      // Build updated hashes from prior manifest + current local files + executed ops.
+      // Start with the previous manifest so that files deleted locally but not
+      // propagated (no --delete) retain their entries and aren't re-pulled next sync.
+      const updatedHashes = new Map<string, string>();
+      if (effectiveManifest) {
+        for (const [rel, hash] of Object.entries(effectiveManifest.files)) {
+          updatedHashes.set(rel, hash);
+        }
+      }
+      // Overlay current local file hashes (covers new, changed, and unchanged local files)
+      for (const [rel, hash] of localHashes) {
+        updatedHashes.set(rel, hash);
+      }
+      // Recompute hashes for pushed files (content may have been normalized)
       for (const rel of pushedFiles) {
         const absPath = localFiles.get(rel);
         if (absPath) {
           updatedHashes.set(rel, await computeFileHash(absPath));
         }
       }
+      // Add hashes for pulled files (newly downloaded)
       for (const rel of pulledFiles) {
         const absPath = path.join(this.options.localDir, rel);
         updatedHashes.set(rel, await computeFileHash(absPath));
       }
-      // Remove deleted files
+      // Remove files that were actually deleted (propagated deletions only)
       for (const rel of remoteDeletedFiles) updatedHashes.delete(rel);
       for (const rel of localDeletedFiles) updatedHashes.delete(rel);
 
@@ -586,7 +610,7 @@ class RealmSyncer extends RealmSyncBase {
     for (const [rel, hash] of hashes) {
       manifest.files[rel] = hash;
       const mtime = remoteMtimes.get(rel);
-      if (mtime !== undefined) {
+      if (mtime !== undefined && mtime !== 0) {
         manifest.remoteMtimes![rel] = mtime;
       }
     }
