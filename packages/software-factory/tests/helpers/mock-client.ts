@@ -191,7 +191,6 @@ export function createMockClient(options?: MockClientOptions): BoxelCLIClient {
     createRealm: async () => ({
       realmUrl: '',
       created: false,
-      authorization: '',
     }),
     ensureProfile: async () => {},
   } as unknown as BoxelCLIClient;

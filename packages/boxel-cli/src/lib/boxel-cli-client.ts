@@ -27,10 +27,6 @@ export interface CreateRealmOptions {
 export interface CreateRealmResult {
   realmUrl: string;
   created: boolean;
-  // TODO: Remove once pull/push/sync/search are added to BoxelCLIClient.
-  // Callers should not manage tokens directly — this is transitional glue
-  // until the factory uses BoxelCLIClient for all realm operations.
-  authorization: string;
 }
 
 export interface PullOptions {
@@ -627,16 +623,9 @@ export class BoxelCLIClient {
       waitForReady: options.waitForReady !== false,
     });
 
-    if (!result.realmToken) {
-      throw new Error(
-        `Realm "${options.realmName}" was created, but no authorization token was returned.`,
-      );
-    }
-
     return {
       realmUrl: result.realmUrl,
       created: result.created,
-      authorization: result.realmToken,
     };
   }
 }

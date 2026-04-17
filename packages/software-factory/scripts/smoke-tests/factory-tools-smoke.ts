@@ -110,7 +110,6 @@ function makeMockClient(fetchImpl: typeof globalThis.fetch): BoxelCLIClient {
       return {
         realmUrl: 'https://realms.example.test/mock/',
         created: true,
-        authorization: 'Bearer mock',
       };
     },
   };
