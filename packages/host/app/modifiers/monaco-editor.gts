@@ -1,5 +1,4 @@
 import { registerDestructor } from '@ember/destroyable';
-import { isTesting } from '@embroider/macros';
 
 import Modifier from 'ember-modifier';
 
@@ -193,12 +192,13 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
     // Monaco contribution setup can continue past initial layout into the next
     // paint. When a streaming code block is immediately replaced by a diff
     // block, disposing in the same render turn can race that bootstrap and
-    // throw "InstantiationService has been disposed". We therefore teardown on
-    // the next paint instead of using a fixed sleep. In tests, rAF may never
-    // fire between teardown and the next test — dispose synchronously there so
-    // Monaco's StandaloneCodeEditorService._codeEditors registry releases its
-    // reference and internal DOMTimers stop retaining the owner.
-    let dispose = () => {
+    // throw "InstantiationService has been disposed". Unlike the operator-mode
+    // Monaco modifiers, this code-block variant is used inside streaming AI
+    // messages where rapid render/teardown cycles reliably hit that race, so
+    // we defer to the next paint even in tests rather than disposing
+    // synchronously.
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- Monaco dispose must wait for paint to avoid bootstrap race
+    requestAnimationFrame(() => {
       try {
         editor.dispose();
       } catch {
@@ -207,12 +207,6 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
       if (model && !model.isDisposed() && !model.isAttachedToEditor()) {
         model.dispose();
       }
-    };
-    if (isTesting()) {
-      dispose();
-    } else {
-      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- Monaco dispose must wait for paint to avoid bootstrap race
-      requestAnimationFrame(dispose);
-    }
+    });
   }
 }
