@@ -10,9 +10,7 @@ import {
   type JobInfo,
   type LocalPath,
   type LooseCardResource,
-  type Prerenderer,
   type RenderResponse,
-  type RenderRouteOptions,
 } from '../index';
 import { CardError, isCardError, serializableError } from '../error';
 import { unresolveResourceInstanceURLs } from '../url';
@@ -20,7 +18,7 @@ import type { IndexRunnerDependencyManager } from './dependency-resolver';
 import { uniqueDeps } from './dependency-collections';
 import { canonicalURL } from './dependency-url';
 
-interface CardIndexerBaseOptions {
+export interface CardIndexerOptions {
   path: LocalPath;
   lastModified: number;
   resourceCreatedAt: number;
@@ -30,6 +28,9 @@ interface CardIndexerBaseOptions {
   realmURL: URL;
   auth: string;
   jobInfo: JobInfo;
+  // Render result from the fused visit's cardRender pass. Always supplied
+  // by the fused indexer.
+  precomputedRenderResult: RenderResponse;
   dependencyResolver: IndexRunnerDependencyManager;
   updateEntry(
     instanceURL: URL,
@@ -37,25 +38,6 @@ interface CardIndexerBaseOptions {
   ): Promise<void>;
   logWarn(message: string): void;
 }
-
-// Discriminated union: either a precomputed render result (fused-visit path)
-// or a prerenderer + clearCache consumer (legacy path). Mixing is disallowed
-// so callers can't accidentally omit one half of the legacy pair.
-type CardIndexerPrerenderedOptions = CardIndexerBaseOptions & {
-  prerenderer: Prerenderer;
-  consumeClearCacheForRender: () => boolean;
-  precomputedRenderResult?: never;
-};
-
-type CardIndexerPrecomputedOptions = CardIndexerBaseOptions & {
-  precomputedRenderResult: RenderResponse;
-  prerenderer?: never;
-  consumeClearCacheForRender?: never;
-};
-
-export type CardIndexerOptions =
-  | CardIndexerPrerenderedOptions
-  | CardIndexerPrecomputedOptions;
 
 export async function performCardIndexing({
   path,
@@ -65,42 +47,15 @@ export async function performCardIndexing({
   fileURL,
   instanceURL,
   realmURL,
-  auth,
+  auth: _auth,
   jobInfo,
-  prerenderer,
-  consumeClearCacheForRender,
   precomputedRenderResult,
   dependencyResolver,
   updateEntry,
   logWarn,
 }: CardIndexerOptions): Promise<void> {
   let uncaughtError: Error | undefined;
-  let renderResult: RenderResponse | undefined = precomputedRenderResult;
-
-  if (!renderResult) {
-    if (!prerenderer || !consumeClearCacheForRender) {
-      throw new Error(
-        'performCardIndexing: neither precomputedRenderResult nor prerenderer+consumeClearCacheForRender was supplied',
-      );
-    }
-    try {
-      let clearCache = consumeClearCacheForRender();
-      let prerenderOptions: RenderRouteOptions | undefined = clearCache
-        ? { clearCache }
-        : undefined;
-
-      renderResult = await prerenderer.prerenderCard({
-        affinityType: 'realm',
-        affinityValue: realmURL.href,
-        url: fileURL,
-        realm: realmURL.href,
-        auth,
-        renderOptions: prerenderOptions,
-      });
-    } catch (err: unknown) {
-      uncaughtError = err as Error;
-    }
-  }
+  let renderResult: RenderResponse = precomputedRenderResult;
 
   // [CS-10759-DEBUG] Log the serialized relationships to diagnose the
   // create-file test relationships mismatch. Remove after stabilization.

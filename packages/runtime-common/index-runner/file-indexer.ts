@@ -9,8 +9,6 @@ import {
   type FileRenderResponse,
   type JobInfo,
   type LocalPath,
-  type Prerenderer,
-  type RenderRouteOptions,
   type ResolvedCodeRef,
 } from '../index';
 import { CardError, isCardError, serializableError } from '../error';
@@ -21,7 +19,7 @@ import {
   resolveFileDefCodeRef,
 } from '../file-def-code-ref';
 
-interface FileIndexerBaseOptions {
+export interface FileIndexerOptions {
   path: LocalPath;
   fileURL: string;
   lastModified: number;
@@ -30,6 +28,12 @@ interface FileIndexerBaseOptions {
   realmURL: URL;
   auth: string;
   jobInfo: JobInfo;
+  // Extract / render results from the fused visit. extractResult may be
+  // undefined if the visit short-circuited before the fileExtract pass ran;
+  // renderResult may be undefined if the visit skipped fileRender (e.g. for
+  // module files, which produce HTML via their own module prerender).
+  precomputedExtractResult: FileExtractResponse | undefined;
+  precomputedRenderResult?: FileRenderResponse;
   dependencyResolver: IndexRunnerDependencyManager;
   updateEntry(
     entryURL: URL,
@@ -38,38 +42,15 @@ interface FileIndexerBaseOptions {
   logWarn(message: string): void;
 }
 
-// Discriminated union: either supply precomputed results (fused-visit path)
-// or a prerenderer + clearCache consumer (legacy path). TypeScript rejects
-// call sites that mix halves across the two variants.
-type FileIndexerPrerenderedOptions = FileIndexerBaseOptions & {
-  prerenderer: Prerenderer;
-  consumeClearCacheForRender: () => boolean;
-  precomputedExtractResult?: never;
-  precomputedRenderResult?: never;
-};
-
-type FileIndexerPrecomputedOptions = FileIndexerBaseOptions & {
-  precomputedExtractResult: FileExtractResponse | undefined;
-  precomputedRenderResult?: FileRenderResponse;
-  prerenderer?: never;
-  consumeClearCacheForRender?: never;
-};
-
-export type FileIndexerOptions =
-  | FileIndexerPrerenderedOptions
-  | FileIndexerPrecomputedOptions;
-
 export async function performFileIndexing({
   path,
   fileURL,
   lastModified,
   resourceCreatedAt,
   hasModulePrerender,
-  realmURL,
-  auth,
+  realmURL: _realmURL,
+  auth: _auth,
   jobInfo,
-  prerenderer,
-  consumeClearCacheForRender,
   precomputedExtractResult,
   precomputedRenderResult,
   dependencyResolver,
@@ -91,32 +72,6 @@ export async function performFileIndexing({
 
   let extractResult: FileExtractResponse | undefined = precomputedExtractResult;
   let uncaughtError: Error | undefined;
-
-  if (!extractResult) {
-    if (!prerenderer || !consumeClearCacheForRender) {
-      throw new Error(
-        'performFileIndexing: neither precomputedExtractResult nor prerenderer+consumeClearCacheForRender was supplied',
-      );
-    }
-    let clearCache = consumeClearCacheForRender();
-    let renderOptions: RenderRouteOptions = {
-      fileExtract: true,
-      fileDefCodeRef,
-      ...(clearCache ? { clearCache } : {}),
-    };
-    try {
-      extractResult = await prerenderer.prerenderFileExtract({
-        affinityType: 'realm',
-        affinityValue: realmURL.href,
-        url: fileURL,
-        realm: realmURL.href,
-        auth,
-        renderOptions,
-      });
-    } catch (err: unknown) {
-      uncaughtError = err as Error;
-    }
-  }
 
   let normalizeToErrorEntry = (
     entry: ErrorEntry | undefined,
@@ -206,46 +161,18 @@ export async function performFileIndexing({
     return 'error';
   }
 
-  // Phase 2: Render HTML for file entry (non-fatal).
-  // Skip for files that already have their own prerender (modules) since
-  // they add significant per-file Puppeteer overhead and already produce HTML
-  // through their module prerender path.
+  // HTML for the file entry comes from the fused visit's fileRender pass
+  // (when the visit chose to run it — modules skip fileRender since their
+  // module prerender already produces HTML).
   let renderResult: FileRenderResponse | undefined = precomputedRenderResult;
-  if (
-    !renderResult &&
-    prerenderer &&
-    extractResult.resource &&
-    !hasModulePrerender
-  ) {
-    try {
-      let fileRenderOptions: RenderRouteOptions = {
-        fileRender: true,
-        fileDefCodeRef,
-      };
-      renderResult = await prerenderer.prerenderFileRender({
-        affinityType: 'realm',
-        affinityValue: realmURL.href,
-        url: fileURL,
-        realm: realmURL.href,
-        auth,
-        fileData: {
-          resource: extractResult.resource,
-          fileDefCodeRef,
-        },
-        types: fileTypes,
-        renderOptions: fileRenderOptions,
-      });
-      if (renderResult?.error) {
-        logWarn(
-          `${jobIdentity(jobInfo)} file render produced error for ${path}, retaining partial HTML: ${renderResult.error.error?.message}`,
-        );
-      }
-    } catch (err: unknown) {
-      logWarn(
-        `${jobIdentity(jobInfo)} file render failed for ${path}, continuing without HTML: ${(err as Error).message}`,
-      );
-    }
+  if (renderResult?.error) {
+    logWarn(
+      `${jobIdentity(jobInfo)} file render produced error for ${path}, retaining partial HTML: ${renderResult.error.error?.message}`,
+    );
   }
+  // hasModulePrerender is retained on the options as a hint for callers but
+  // is no longer acted on here — the fused visit already gates fileRender.
+  void hasModulePrerender;
 
   await updateEntry(entryURL, {
     type: 'file',
