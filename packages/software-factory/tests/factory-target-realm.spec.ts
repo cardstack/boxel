@@ -1,5 +1,11 @@
 import { createServer } from 'node:http';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -67,6 +73,13 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
     realmServerURL,
   ).href;
 
+  let tempProfileHome = createTempProfileHome(
+    targetUsername,
+    targetPassword,
+    matrixURL,
+    realmServerURL,
+  );
+
   try {
     // The factory always runs the issue loop after seed creation. Without
     // OPENROUTER_API_KEY the loop will fail when it tries to invoke the LLM
@@ -91,11 +104,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         cwd: packageRoot,
         env: {
           ...process.env,
-          HOME: mkdtempSync(join(tmpdir(), 'boxel-test-')),
-          MATRIX_USERNAME: targetUsername,
-          MATRIX_PASSWORD: targetPassword,
-          MATRIX_URL: matrixURL,
-          REALM_SERVER_URL: realmServerURL,
+          HOME: tempProfileHome,
         },
         timeoutMs: 120_000,
       },
@@ -143,8 +152,33 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       'Process brief and create project artifacts',
     );
   } finally {
+    rmSync(tempProfileHome, { recursive: true, force: true });
     await new Promise<void>((r, reject) =>
       briefServer.close((err) => (err ? reject(err) : r())),
     );
   }
 });
+
+function createTempProfileHome(
+  username: string,
+  password: string,
+  matrixUrl: string,
+  realmServerUrl: string,
+): string {
+  let tempHome = mkdtempSync(join(tmpdir(), 'boxel-test-'));
+  let boxelCliDir = join(tempHome, '.boxel-cli');
+  mkdirSync(boxelCliDir, { recursive: true });
+
+  let profileId = `@${username}:localhost`;
+  writeFileSync(
+    join(boxelCliDir, 'profiles.json'),
+    JSON.stringify({
+      profiles: {
+        [profileId]: { matrixUrl, realmServerUrl, password },
+      },
+      activeProfile: profileId,
+    }),
+  );
+
+  return tempHome;
+}

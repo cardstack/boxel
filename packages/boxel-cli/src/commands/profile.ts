@@ -223,17 +223,29 @@ async function addProfile(manager: ProfileManager): Promise<void> {
   console.log(`Which environment?`);
   console.log(`  ${FG_CYAN}1${RESET}) Staging (realms-staging.stack.cards)`);
   console.log(`  ${FG_MAGENTA}2${RESET}) Production (app.boxel.ai)`);
+  console.log(`  ${FG_GREEN}3${RESET}) Local (localhost:4201)`);
 
-  const envChoice = await prompt('\nChoice [1/2]: ');
+  const envChoice = await prompt('\nChoice [1/2/3]: ');
   const isProduction = envChoice === '2';
+  const isLocal = envChoice === '3';
 
-  const domain = isProduction ? 'boxel.ai' : 'stack.cards';
-  const defaultMatrixUrl = isProduction
-    ? 'https://matrix.boxel.ai'
-    : 'https://matrix-staging.stack.cards';
-  const defaultRealmUrl = isProduction
-    ? 'https://app.boxel.ai/'
-    : 'https://realms-staging.stack.cards/';
+  let domain: string;
+  let defaultMatrixUrl: string;
+  let defaultRealmUrl: string;
+
+  if (isLocal) {
+    domain = 'localhost';
+    defaultMatrixUrl = 'http://localhost:8008';
+    defaultRealmUrl = 'http://localhost:4201/';
+  } else if (isProduction) {
+    domain = 'boxel.ai';
+    defaultMatrixUrl = 'https://matrix.boxel.ai';
+    defaultRealmUrl = 'https://app.boxel.ai/';
+  } else {
+    domain = 'stack.cards';
+    defaultMatrixUrl = 'https://matrix-staging.stack.cards';
+    defaultRealmUrl = 'https://realms-staging.stack.cards/';
+  }
 
   console.log(`\nEnter your Boxel username (without @ or domain)`);
   console.log(`${DIM}Example: ctse, aallen90${RESET}`);

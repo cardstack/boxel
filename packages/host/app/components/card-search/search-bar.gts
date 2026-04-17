@@ -8,12 +8,15 @@ import {
   BoxelInput,
   type BoxelInputBottomTreatments,
 } from '@cardstack/boxel-ui/components';
-import type { PickerOption } from '@cardstack/boxel-ui/components';
 import { IconSearch } from '@cardstack/boxel-ui/icons';
 import { autoFocus } from '@cardstack/boxel-ui/modifiers';
 
-import RealmPicker from '@cardstack/host/components/realm-picker';
-import TypePicker from '@cardstack/host/components/type-picker';
+import RealmPicker, {
+  type RealmFilter,
+} from '@cardstack/host/components/realm-picker';
+import TypePicker, {
+  type TypeFilter,
+} from '@cardstack/host/components/type-picker';
 
 let elementCallback = modifier(
   (element, [callback]: [((element: HTMLElement) => void) | undefined]) => {
@@ -27,6 +30,8 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     value: string;
+    realmFilter: RealmFilter;
+    typeFilter: TypeFilter;
     placeholder?: string;
     autocomplete?: string;
     onInput?: (value: string) => void;
@@ -34,18 +39,6 @@ interface Signature {
     onBlur?: (ev: Event) => void;
     onKeyDown?: (ev: Event) => void;
     onInputInsertion?: (element: HTMLElement) => void;
-    selectedRealms: PickerOption[];
-    onRealmChange: (selected: PickerOption[]) => void;
-    typeOptions: PickerOption[];
-    selectedTypes: PickerOption[];
-    onTypeChange: (selected: PickerOption[]) => void;
-    onTypeSearchChange?: (term: string) => void;
-    onLoadMoreTypes?: () => void;
-    hasMoreTypes?: boolean;
-    isLoadingTypes?: boolean;
-    isLoadingMoreTypes?: boolean;
-    typesTotalCount?: number;
-    disableSelectAll?: boolean;
     pickerDestination?: string;
     bottomTreatment?: BoxelInputBottomTreatments;
     state?: 'none' | 'valid' | 'invalid' | 'loading' | 'initial';
@@ -75,23 +68,13 @@ export default class SearchBar extends Component<Signature> {
       </div>
       <div class='search-sheet__search-bar-picker'>
         <RealmPicker
-          @selected={{@selectedRealms}}
-          @onChange={{@onRealmChange}}
+          @filter={{@realmFilter}}
           @destination={{@pickerDestination}}
         />
       </div>
       <div class='search-sheet__search-bar-picker'>
         <TypePicker
-          @options={{@typeOptions}}
-          @selected={{@selectedTypes}}
-          @onChange={{@onTypeChange}}
-          @onSearchChange={{@onTypeSearchChange}}
-          @onLoadMore={{@onLoadMoreTypes}}
-          @hasMore={{@hasMoreTypes}}
-          @isLoading={{@isLoadingTypes}}
-          @isLoadingMore={{@isLoadingMoreTypes}}
-          @totalCount={{@typesTotalCount}}
-          @disableSelectAll={{@disableSelectAll}}
+          @filter={{@typeFilter}}
           @destination={{@pickerDestination}}
         />
       </div>

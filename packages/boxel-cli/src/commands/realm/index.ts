@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { registerCreateCommand } from './create';
 import { registerPullCommand } from './pull';
 import { registerPushCommand } from './push';
+import { registerSyncCommand } from './sync';
 
 export function registerRealmCommand(program: Command): void {
   let realm = program
@@ -11,4 +12,5 @@ export function registerRealmCommand(program: Command): void {
   registerCreateCommand(realm);
   registerPullCommand(realm);
   registerPushCommand(realm);
+  registerSyncCommand(realm);
 }

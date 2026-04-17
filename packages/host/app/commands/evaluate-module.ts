@@ -45,6 +45,15 @@ export default class EvaluateModuleCommand extends HostBaseCommand<
     let commandModule = await this.loadCommandModule();
 
     try {
+      // Reset the loader to clear cached modules from prior eval runs.
+      // Without this, the Loader's internal module Map retains the old
+      // compiled bytecode and `loader.import()` returns the cached
+      // (stale) result — so edits the factory agent makes between
+      // validation turns are invisible to the eval step.
+      this.loaderService.resetLoader({
+        clearFetchCache: true,
+        reason: 'evaluate-module: fresh eval requires uncached loader',
+      });
       let loader = this.loaderService.loader;
       await loader.import(moduleUrl);
 

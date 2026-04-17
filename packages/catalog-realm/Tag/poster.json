@@ -1,20 +1,20 @@
 {
   "data": {
-    "meta": {
-      "adoptsFrom": {
-        "name": "Tag",
-        "module": "../catalog-app/listing/tag"
-      }
-    },
     "type": "card",
     "attributes": {
       "name": "Poster",
-      "color": "#ff7f00",
+      "color": "#10B981",
       "cardInfo": {
         "notes": null,
-        "name": "",
+        "name": "Poster",
         "summary": "Cards designed for creating posters, flyers, promotional visuals, or any print-ready or display-ready graphical layouts.",
         "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/tag",
+        "name": "Tag"
       }
     },
     "relationships": {

@@ -5,7 +5,6 @@ import { tracked } from '@glimmer/tracking';
 import type { ComponentLike } from '@glint/template';
 import { modifier } from 'ember-modifier';
 import type { Select } from 'ember-power-select/components/power-select';
-import { includes } from 'lodash';
 
 import type { Icon } from '../../icons/types.ts';
 import LoadingIndicator from '../loading-indicator/index.gts';
@@ -88,6 +87,7 @@ let loadMoreSentinel = modifier(
 
     // Check immediately: if the list is short enough to fit without
     // scrolling, we're already at the "bottom" and should load more.
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- scroll measurement needs post-paint layout
     requestAnimationFrame(() => handleScroll());
 
     return () => optionsList!.removeEventListener('scroll', handleScroll);
@@ -192,7 +192,9 @@ export default class Picker extends Component<PickerSignature> {
   }
 
   get isSelected() {
-    return (option: PickerOption) => includes(this.args.selected, option);
+    return (option: PickerOption) => {
+      return this.args.selected.some((o) => o.id === option.id);
+    };
   }
 
   isLastOption = (option: PickerOption): boolean => {
@@ -251,10 +253,12 @@ export default class Picker extends Component<PickerSignature> {
   }
 
   onToggleItem = (item: PickerOption) => {
-    const isCurrentlySelected = this.args.selected.includes(item);
+    const isCurrentlySelected = this.args.selected.some(
+      (o) => o.id === item.id,
+    );
     let newSelected: PickerOption[];
     if (isCurrentlySelected) {
-      newSelected = this.args.selected.filter((o) => o !== item);
+      newSelected = this.args.selected.filter((o) => o.id !== item.id);
     } else {
       newSelected = [...this.args.selected, item];
     }
@@ -263,7 +267,9 @@ export default class Picker extends Component<PickerSignature> {
 
   onChange = (selected: PickerOption[]) => {
     // Ignore clicks on disabled options
-    const lastAdded = selected.find((opt) => !this.args.selected.includes(opt));
+    const lastAdded = selected.find(
+      (opt) => !this.args.selected.some((o) => o.id === opt.id),
+    );
     if (lastAdded?.disabled) {
       return;
     }

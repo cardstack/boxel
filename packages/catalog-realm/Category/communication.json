@@ -1,0 +1,32 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Category",
+        "module": "../catalog-app/listing/category"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Communication",
+      "cardInfo": {
+        "name": "Communication",
+        "notes": null,
+        "summary": "Email management, messaging, chat apps, notifications, team collaboration, and communication workflow tools.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/work"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

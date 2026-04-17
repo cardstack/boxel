@@ -15,8 +15,57 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 
-import { getActiveProfile, parseArgs } from '../src/boxel';
-import { ensureTrailingSlash } from '../src/realm-operations';
+import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+
+type ParsedArgValue = string | boolean | string[];
+type ParsedArgs = Record<string, ParsedArgValue | undefined> & {
+  _: string[];
+};
+
+function parseArgs(argv: string[]): ParsedArgs {
+  let out: ParsedArgs = { _: [] };
+  for (let i = 0; i < argv.length; i++) {
+    let token = argv[i];
+    if (!token.startsWith('--')) {
+      out._.push(token);
+      continue;
+    }
+    let key = token.slice(2);
+    let next = argv[i + 1];
+    if (!next || next.startsWith('--')) {
+      out[key] = true;
+      continue;
+    }
+    let existing = out[key];
+    if (existing === undefined) {
+      out[key] = next;
+    } else if (Array.isArray(existing)) {
+      existing.push(next);
+    } else if (typeof existing === 'string') {
+      out[key] = [existing, next];
+    } else {
+      out[key] = next;
+    }
+    i++;
+  }
+  return out;
+}
+
+function getActiveProfileInfo(): { username: string; realmServerUrl: string } {
+  let client = new BoxelCLIClient();
+  let active = client.getActiveProfile();
+  if (!active) {
+    throw new Error(
+      'No active Boxel profile found. Run `boxel profile add` to configure one.',
+    );
+  }
+  let username = active.matrixId.replace(/^@/, '').replace(/:.*$/, '');
+  return {
+    username,
+    realmServerUrl: ensureTrailingSlash(active.realmServerUrl),
+  };
+}
 
 type CommandOptions = {
   cwd?: string;
@@ -223,7 +272,7 @@ let endpoint =
   typeof args.endpoint === 'string'
     ? args.endpoint
     : `${sourceRealmName}-test-${timestampSlug()}`;
-let credentials = getActiveProfile();
+let credentials = getActiveProfileInfo();
 let scratchRoot = resolve(
   typeof args['scratch-root'] === 'string'
     ? args['scratch-root']

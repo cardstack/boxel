@@ -57,6 +57,7 @@ import {
   CardContextName,
   CardCrudFunctionsContextName,
   getMenuItems,
+  baseCardRef,
 } from '@cardstack/runtime-common';
 
 import {
@@ -488,6 +489,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
         commandContext: this.args.commandContext,
+        format: this.cardFormat,
+        useBaseTemplate: this.args.item.useBaseTemplate,
       }) ?? [],
     );
   }
@@ -680,6 +683,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.isFileCard ? 'isolated' : this.args.item.format;
   }
 
+  private get defaultCodeRef() {
+    return this.args.item.useBaseTemplate ? baseCardRef : undefined;
+  }
+
   private get showError() {
     // in edit format, prefer showing the stale card if possible so user can
     // attempt to fix the card error
@@ -850,6 +857,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               class='stack-item-preview'
               @card={{this.card}}
               @format={{this.cardFormat}}
+              @codeRef={{this.defaultCodeRef}}
             />
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}

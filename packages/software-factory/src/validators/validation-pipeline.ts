@@ -7,6 +7,8 @@
  * in `createDefaultPipeline()`.
  */
 
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
 import type {
   ValidationStep,
   ValidationStepResult,
@@ -15,14 +17,17 @@ import type {
 
 import type { Validator } from '../issue-loop';
 
-import { NoOpStepRunner } from './noop-step';
 import { TestValidationStep } from './test-step';
 import { LintValidationStep } from './lint-step';
 import { EvalValidationStep } from './eval-step';
+import { InstantiateValidationStep } from './instantiate-step';
+import { ParseValidationStep } from './parse-step';
 
 import type { TestValidationStepConfig } from './test-step';
 import type { LintValidationStepConfig } from './lint-step';
 import type { EvalValidationStepConfig } from './eval-step';
+import type { InstantiateValidationStepConfig } from './instantiate-step';
+import type { ParseValidationStepConfig } from './parse-step';
 
 import { logger } from '../logger';
 
@@ -42,7 +47,10 @@ let log = logger('validation-pipeline');
  */
 export interface ValidationStepRunner {
   readonly step: ValidationStep;
-  run(targetRealmUrl: string): Promise<ValidationStepResult>;
+  run(
+    targetRealmUrl: string,
+    iteration?: number,
+  ): Promise<ValidationStepResult>;
   /** Format step results for LLM context. Returns human-readable string, empty if nothing to report. */
   formatForContext(result: ValidationStepResult): string;
 }
@@ -63,13 +71,16 @@ export class ValidationPipeline implements Validator {
     this.runners = runners;
   }
 
-  async validate(targetRealmUrl: string): Promise<ValidationResults> {
+  async validate(
+    targetRealmUrl: string,
+    iteration?: number,
+  ): Promise<ValidationResults> {
     if (this.runners.length === 0) {
       return { passed: true, steps: [] };
     }
 
     let settled = await Promise.allSettled(
-      this.runners.map((runner) => runner.run(targetRealmUrl)),
+      this.runners.map((runner) => runner.run(targetRealmUrl, iteration)),
     );
 
     let stepResults: ValidationStepResult[] = [];
@@ -143,31 +154,40 @@ export class ValidationPipeline implements Validator {
 // ---------------------------------------------------------------------------
 
 export interface ValidationPipelineConfig {
-  /** Realm-scoped authorization token for realm API calls (readFile, writeFile, _lint, _search). */
-  authorization?: string;
-  /** Realm server token for _run-command calls (prerenderer). Distinct from realm-scoped authorization. */
-  serverToken?: string;
-  fetch?: typeof globalThis.fetch;
+  client: BoxelCLIClient;
   realmServerUrl: string;
   hostAppUrl: string;
   testResultsModuleUrl: string;
   lintResultsModuleUrl: string;
   evalResultsModuleUrl: string;
+  instantiateResultsModuleUrl: string;
+  parseResultsModuleUrl: string;
   issueId?: string;
-  /** Injected for testing — passed through to TestValidationStep, LintValidationStep, and EvalValidationStep. */
+  /** Injected for testing — passed through to TestValidationStep, LintValidationStep, EvalValidationStep, and ParseValidationStep. */
   fetchFilenames?: TestValidationStepConfig['fetchFilenames'];
+  /** Injected for testing — passed through to InstantiateValidationStep and ParseValidationStep. */
+  searchSpecsFn?: InstantiateValidationStepConfig['searchSpecsFn'];
+  /** Injected for testing — passed through to ParseValidationStep. */
+  parseSearchSpecsFn?: ParseValidationStepConfig['searchSpecsFn'];
 }
 
 /**
  * Create the default validation pipeline with all 5 steps.
- * Currently only the test step is implemented; others are NoOp placeholders.
  */
 export function createDefaultPipeline(
   config: ValidationPipelineConfig,
 ): ValidationPipeline {
+  let parseConfig: ParseValidationStepConfig = {
+    client: config.client,
+    realmServerUrl: config.realmServerUrl,
+    parseResultsModuleUrl: config.parseResultsModuleUrl,
+    issueId: config.issueId,
+    fetchFilenames: config.fetchFilenames,
+    searchSpecsFn: config.parseSearchSpecsFn,
+  };
+
   let testConfig: TestValidationStepConfig = {
-    authorization: config.authorization,
-    fetch: config.fetch,
+    client: config.client,
     realmServerUrl: config.realmServerUrl,
     hostAppUrl: config.hostAppUrl,
     testResultsModuleUrl: config.testResultsModuleUrl,
@@ -176,8 +196,7 @@ export function createDefaultPipeline(
   };
 
   let lintConfig: LintValidationStepConfig = {
-    authorization: config.authorization,
-    fetch: config.fetch,
+    client: config.client,
     realmServerUrl: config.realmServerUrl,
     lintResultsModuleUrl: config.lintResultsModuleUrl,
     issueId: config.issueId,
@@ -185,20 +204,27 @@ export function createDefaultPipeline(
   };
 
   let evalConfig: EvalValidationStepConfig = {
-    authorization: config.authorization,
-    serverToken: config.serverToken,
-    fetch: config.fetch,
+    client: config.client,
     realmServerUrl: config.realmServerUrl,
     evalResultsModuleUrl: config.evalResultsModuleUrl,
     issueId: config.issueId,
     fetchFilenames: config.fetchFilenames,
   };
 
+  let instantiateConfig: InstantiateValidationStepConfig = {
+    client: config.client,
+    realmServerUrl: config.realmServerUrl,
+    instantiateResultsModuleUrl: config.instantiateResultsModuleUrl,
+    issueId: config.issueId,
+    searchSpecsFn: config.searchSpecsFn,
+    fetchFilenames: config.fetchFilenames,
+  };
+
   return new ValidationPipeline([
-    new NoOpStepRunner('parse'),
+    new ParseValidationStep(parseConfig),
     new LintValidationStep(lintConfig),
     new EvalValidationStep(evalConfig),
-    new NoOpStepRunner('instantiate'),
+    new InstantiateValidationStep(instantiateConfig),
     new TestValidationStep(testConfig),
   ]);
 }

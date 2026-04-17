@@ -1,5 +1,7 @@
 import { parseArgs as parseNodeArgs } from 'node:util';
 
+import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
 import { inferDarkfactoryModuleUrl } from './factory-seed';
 import { loadFactoryBrief, type FactoryBrief } from './factory-brief';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
@@ -16,7 +18,6 @@ import {
   type ResolveFactoryTargetRealmOptions,
 } from './factory-target-realm';
 import type { IssueLoopResult } from './issue-loop';
-import { createBoxelRealmFetch } from './realm-auth';
 
 export interface FactoryEntrypointOptions {
   briefUrl: string;
@@ -80,7 +81,10 @@ export interface RunFactoryEntrypointDependencies {
   createSeed?: (
     brief: FactoryBrief,
     targetRealmUrl: string,
-    options: { fetch?: typeof globalThis.fetch; darkfactoryModuleUrl: string },
+    options: {
+      client: BoxelCLIClient;
+      darkfactoryModuleUrl: string;
+    },
   ) => Promise<SeedIssueResult>;
   runIssueLoop?: (config: IssueLoopWiringConfig) => Promise<IssueLoopResult>;
 }
@@ -96,20 +100,19 @@ export function getFactoryEntrypointUsage(): string {
     '  --target-realm-url <url>    Absolute URL for the target realm',
     '',
     'Options:',
-    '  --realm-server-url <url>   Realm server URL (default: http://localhost:4201/)',
+    '  --realm-server-url <url>   Realm server URL (default: from active Boxel profile)',
     '  --no-retry-blocked          Skip retrying blocked issues (by default, blocked issues are reset to backlog)',
     '  --model <model>             OpenRouter model ID (e.g., anthropic/claude-sonnet-4)',
     '  --debug                     Log LLM prompts and responses to stderr',
     '  --help                      Show this usage information',
     '',
     'Auth:',
-    '  MATRIX_USERNAME is required and determines the target realm owner.',
-    '  For public briefs, no auth setup is needed.',
-    '  For private briefs, factory:go can authenticate via:',
-    '    1. the active Boxel profile, or',
-    '    2. MATRIX_URL + MATRIX_USERNAME + MATRIX_PASSWORD environment variables',
-    '  The realm server URL comes from --realm-server-url (default: http://localhost:4201/).',
-    '  It is never inferred from --target-realm-url or read from an environment variable.',
+    '  Authentication uses the active Boxel profile (see: boxel profile add).',
+    '  The target realm owner is determined from the active profile username.',
+    '  For public briefs, no further auth setup is needed.',
+    '  For private briefs, factory:go authenticates via the active Boxel profile.',
+    '  The realm server URL comes from --realm-server-url, or the active Boxel profile.',
+    '  It is never inferred from --target-realm-url.',
   ].join('\n');
 }
 
@@ -198,23 +201,17 @@ export async function runFactoryEntrypoint(
     targetRealmUrl: options.targetRealmUrl,
     realmServerUrl: options.realmServerUrl,
   });
-  let fetchImpl = createBoxelRealmFetch(options.briefUrl, {
-    fetch: dependencies?.fetch,
-  });
+
+  let client = new BoxelCLIClient();
 
   let brief = await loadFactoryBrief(options.briefUrl, {
-    fetch: fetchImpl,
+    client,
+    fetch: dependencies?.fetch,
   });
 
   let targetRealm = await (
     dependencies?.bootstrapTargetRealm ?? bootstrapFactoryTargetRealm
   )(targetRealmResolution);
-
-  let realmFetch = createBoxelRealmFetch(targetRealm.url, {
-    authorization: targetRealm.authorization,
-    fetch: dependencies?.fetch,
-    primeRealmURL: targetRealm.url,
-  });
 
   let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealm.url);
 
@@ -222,7 +219,7 @@ export async function runFactoryEntrypoint(
   let seedResult = await (dependencies?.createSeed ?? createSeedIssue)(
     brief,
     targetRealm.url,
-    { fetch: realmFetch, darkfactoryModuleUrl },
+    { client, darkfactoryModuleUrl },
   );
 
   let summary = buildFactoryEntrypointSummary(
@@ -239,11 +236,10 @@ export async function runFactoryEntrypoint(
     targetRealmUrl: targetRealm.url,
     realmServerUrl: targetRealm.serverUrl,
     ownerUsername: targetRealm.ownerUsername,
-    authorization: targetRealm.authorization,
+    client,
     model: options.model,
     debug: options.debug,
     retryBlocked: options.retryBlocked,
-    fetch: dependencies?.fetch,
   });
 
   summary.issueLoop = {

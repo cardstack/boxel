@@ -177,6 +177,7 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
     // block, disposing in the same render turn can race that bootstrap and
     // throw "InstantiationService has been disposed". We therefore teardown on
     // the next paint instead of using a fixed sleep.
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- Monaco dispose must wait for paint to avoid bootstrap race
     requestAnimationFrame(() => {
       editor.dispose();
       if (model && !model.isDisposed() && !model.isAttachedToEditor()) {
