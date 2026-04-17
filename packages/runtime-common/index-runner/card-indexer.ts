@@ -102,6 +102,24 @@ export async function performCardIndexing({
     }
   }
 
+  // [CS-10759-DEBUG] Log the serialized relationships to diagnose the
+  // create-file test relationships mismatch. Remove after stabilization.
+  if (renderResult?.serialized?.data) {
+    let data = renderResult.serialized.data as {
+      id?: string;
+      relationships?: unknown;
+    };
+    // eslint-disable-next-line no-console
+    console.info(
+      `[CS-10759-DEBUG][card-indexer] url=${fileURL} id=${data.id} relationships=${JSON.stringify(data.relationships)}`,
+    );
+  } else {
+    // eslint-disable-next-line no-console
+    console.info(
+      `[CS-10759-DEBUG][card-indexer] url=${fileURL} no serialized data (renderResult=${renderResult ? 'present' : 'missing'}, hasError=${Boolean(renderResult?.error)})`,
+    );
+  }
+
   try {
     // we tack on data that can only be determined via access to underlying filesystem/DB
     let serialized = renderResult?.serialized;

@@ -853,6 +853,12 @@ export default class CardPrerender extends Component {
             fileDefCodeRef: effectiveFileData.fileDefCodeRef,
           };
           (globalThis as any).__boxelFileRenderData = effectiveFileData;
+          // [CS-10759-DEBUG] remove after stabilization — log file-render
+          // inputs so we can correlate with the ref-count error that fires
+          // on entry to this pass.
+          console.info(
+            `[CS-10759-DEBUG][prerenderVisit] fileRender stashed data url=${url} resourceId=${effectiveFileData.resource?.id} fileDefCodeRef=${effectiveFileData.fileDefCodeRef?.module}::${effectiveFileData.fileDefCodeRef?.name} types=${JSON.stringify(effectiveTypes)}`,
+          );
 
           let fileError: RenderError | undefined;
           let isolatedHTML: string | null = null;
@@ -865,11 +871,19 @@ export default class CardPrerender extends Component {
           try {
             let subsequentRenderOptions =
               omitOneTimeOptions(initialRenderOptions);
+            // [CS-10759-DEBUG] remove after stabilization
+            console.info(
+              `[CS-10759-DEBUG][prerenderVisit] fileRender isolated perform starting url=${url}`,
+            );
             isolatedHTML = await this.renderHTML.perform(
               url,
               'isolated',
               0,
               initialRenderOptions,
+            );
+            // [CS-10759-DEBUG] remove after stabilization
+            console.info(
+              `[CS-10759-DEBUG][prerenderVisit] fileRender isolated perform done url=${url} hasHTML=${Boolean(isolatedHTML)}`,
             );
             headHTML = await this.renderHTML.perform(
               url,
