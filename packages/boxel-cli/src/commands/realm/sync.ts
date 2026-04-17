@@ -252,7 +252,11 @@ class RealmSyncer extends RealmSyncBase {
 
     if (totalOps === 0) {
       console.log('\nEverything is up to date');
-      if (!this.options.dryRun && !effectiveManifest && skippedConflicts.length === 0) {
+      if (
+        !this.options.dryRun &&
+        !effectiveManifest &&
+        skippedConflicts.length === 0
+      ) {
         // First sync with no changes needed - still write manifest
         await this.writeManifest(localHashes, remoteMtimes);
       }
