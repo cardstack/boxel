@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { pull } from '../../src/commands/realm/pull';
 import { CheckpointManager } from '../../src/lib/checkpoint-manager';
-import { ProfileManager } from '../../src/lib/profile-manager';
+import type { ProfileManager } from '../../src/lib/profile-manager';
 import {
   startTestRealmServer,
   stopTestRealmServer,
