@@ -318,7 +318,15 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
 
     if (initialTypes && initialTypes.length > 0 && prevKeys.size === 0) {
       // First launch with initialSelectedTypes (e.g., from "Find Instances").
-      this._selected = [...initialTypes];
+      for (const ref of initialTypes) {
+        if (
+          ref.name === 'CardDef' &&
+          ref.module === 'https://cardstack.com/base/card-api'
+        ) {
+          continue; // ignore CardDef from initialSelectedTypes since it's not a type that can be selected
+        }
+        this.selected.push(ref);
+      }
     } else if (hadSelectAll) {
       // If baseFilter constrains to specific types and they exist in options,
       // auto-select them instead of defaulting to "Any Type"

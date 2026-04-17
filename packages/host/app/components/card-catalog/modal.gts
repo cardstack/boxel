@@ -33,7 +33,7 @@ import type { Query } from '@cardstack/runtime-common/query';
 import { getFilterTypeRefs } from '@cardstack/host/utils/card-search/type-filter';
 import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   suggestCardChooserTitle,
