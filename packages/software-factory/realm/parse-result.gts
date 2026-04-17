@@ -362,7 +362,9 @@ export class ParseResult extends CardDef {
                   {{unless fileResult.passed "file-has-errors"}}'
               >
                 <div class='file-group-header'>
-                  <span class='file-group-name'>{{fileResult.displayFile}}</span>
+                  <span
+                    class='file-group-name'
+                  >{{fileResult.displayFile}}</span>
                   {{#if fileResult.passed}}
                     <span class='file-group-status has-passes'>valid</span>
                   {{else}}
