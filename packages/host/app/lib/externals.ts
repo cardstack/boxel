@@ -14,16 +14,6 @@ import * as emberTestHelpers from '@ember/test-helpers';
 import * as glimmerComponent from '@glimmer/component';
 import * as glimmerTracking from '@glimmer/tracking';
 
-import * as boxelIconBuilding from '@cardstack/boxel-icons/building';
-import * as boxelIconBuildingBank from '@cardstack/boxel-icons/building-bank';
-import * as boxelIconCaptions from '@cardstack/boxel-icons/captions';
-import * as boxelIconCategory from '@cardstack/boxel-icons/category';
-import * as boxelIconHealthRecognition from '@cardstack/boxel-icons/health-recognition';
-import * as boxelIconImage from '@cardstack/boxel-icons/image';
-import * as boxelIconLayoutGridPlus from '@cardstack/boxel-icons/layout-grid-plus';
-import * as boxelIconPackage from '@cardstack/boxel-icons/package';
-import * as boxelIconRefresh from '@cardstack/boxel-icons/refresh';
-import * as boxelIconTag from '@cardstack/boxel-icons/tag';
 import * as viewTransitions from '@cardstack/view-transitions';
 import * as floatingUiDom from '@floating-ui/dom';
 import * as awesomePhoneNumber from 'awesome-phonenumber';
@@ -64,14 +54,6 @@ import * as boxelUiHelpers from '@cardstack/boxel-ui/helpers';
 import * as boxelUiIcons from '@cardstack/boxel-ui/icons';
 import * as boxelUiModifiers from '@cardstack/boxel-ui/modifiers';
 
-// Individual @cardstack/boxel-icons used by catalog-realm card modules that
-// are rendered during live tests. The @cardstack/boxel-icons package exports
-// each icon as a separate module — unlike @cardstack/boxel-ui/icons (an
-// aggregate), these must be shimmed individually.
-import * as boxelIconUsers from '@cardstack/boxel-icons/users';
-import * as boxelIconWand from '@cardstack/boxel-icons/wand';
-import * as boxelIconWorld from '@cardstack/boxel-icons/world';
-
 import * as runtime from '@cardstack/runtime-common';
 import type { VirtualNetwork } from '@cardstack/runtime-common';
 
@@ -98,37 +80,6 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/boxel-ui/helpers', boxelUiHelpers);
   virtualNetwork.shimModule('@cardstack/boxel-ui/icons', boxelUiIcons);
   virtualNetwork.shimModule('@cardstack/boxel-ui/modifiers', boxelUiModifiers);
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-icons/building-bank',
-    boxelIconBuildingBank,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-icons/building',
-    boxelIconBuilding,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-icons/captions',
-    boxelIconCaptions,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-icons/category',
-    boxelIconCategory,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-icons/health-recognition',
-    boxelIconHealthRecognition,
-  );
-  virtualNetwork.shimModule('@cardstack/boxel-icons/image', boxelIconImage);
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-icons/layout-grid-plus',
-    boxelIconLayoutGridPlus,
-  );
-  virtualNetwork.shimModule('@cardstack/boxel-icons/package', boxelIconPackage);
-  virtualNetwork.shimModule('@cardstack/boxel-icons/refresh', boxelIconRefresh);
-  virtualNetwork.shimModule('@cardstack/boxel-icons/tag', boxelIconTag);
-  virtualNetwork.shimModule('@cardstack/boxel-icons/users', boxelIconUsers);
-  virtualNetwork.shimModule('@cardstack/boxel-icons/wand', boxelIconWand);
-  virtualNetwork.shimModule('@cardstack/boxel-icons/world', boxelIconWorld);
   virtualNetwork.shimModule('@glimmer/component', glimmerComponent);
   virtualNetwork.shimModule('@glimmer/tracking', glimmerTracking);
   virtualNetwork.shimModule('@ember/component', emberComponent);
