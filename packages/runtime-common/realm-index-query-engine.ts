@@ -1024,19 +1024,12 @@ export class RealmIndexQueryEngine {
             }
             const id = includedResource.id;
             let isAlreadyOmitted = omit.some((item) =>
-              item
-                ? canonicalURL(item) === canonicalURL(id)
-                : false,
+              item ? canonicalURL(item) === canonicalURL(id) : false,
             );
             let isAlreadyIncluded = included.some((r) =>
-              r.id
-                ? canonicalURL(r.id) === canonicalURL(id)
-                : false,
+              r.id ? canonicalURL(r.id) === canonicalURL(id) : false,
             );
-            if (
-              !isAlreadyOmitted &&
-              !isAlreadyIncluded
-            ) {
+            if (!isAlreadyOmitted && !isAlreadyIncluded) {
               let rewrittenResource = cloneDeep({
                 ...includedResource,
                 ...{ links: { self: includedResource.id } },
