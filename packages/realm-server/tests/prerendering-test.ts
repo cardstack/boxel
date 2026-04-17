@@ -5428,4 +5428,213 @@ module(basename(__filename), function () {
       });
     },
   );
+
+  // Composite "visit" prerender — fuses the three passes into one call.
+  module('prerenderVisit - composite pass orchestration', function (hooks) {
+    let realmURL = 'http://127.0.0.1:4458/test/';
+    let prerenderServerURL = new URL(realmURL).origin;
+    let testUserId = '@user1:localhost';
+    let permissions: RealmPermissions = {
+      [realmURL]: ['read', 'write', 'realm-owner'],
+    };
+    let prerenderer: Prerenderer;
+    let auth = () => {
+      let sessions = JSON.parse(
+        testCreatePrerenderAuth(testUserId, permissions),
+      ) as Record<string, string>;
+      let token = sessions[realmURL];
+      if (token) {
+        sessions[new URL(realmURL).origin + '/'] = token;
+      }
+      return JSON.stringify(sessions);
+    };
+
+    hooks.before(async () => {
+      prerenderer = getPrerendererForTesting({
+        maxPages: 2,
+        serverURL: prerenderServerURL,
+      });
+    });
+
+    hooks.after(async () => {
+      await prerenderer.stop();
+    });
+
+    hooks.afterEach(async () => {
+      await prerenderer.disposeAffinity({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+      });
+    });
+
+    setupPermissionedRealmsCached(hooks, {
+      realms: [
+        {
+          realmURL,
+          permissions: {
+            '*': ['read'],
+            [testUserId]: ['read', 'write', 'realm-owner'],
+          },
+          fileSystem: {
+            'person.gts': `
+              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+              export class Person extends CardDef {
+                static displayName = "Person";
+                @field name = contains(StringField);
+                static isolated = class extends Component<typeof this> {
+                  <template>{{@model.name}}</template>
+                }
+              }
+            `,
+            'maple.json': {
+              data: {
+                attributes: { name: 'Maple' },
+                meta: {
+                  adoptsFrom: { module: './person', name: 'Person' },
+                },
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    test('all three passes populate all sub-fields', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      let result = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: {
+          cardRender: true,
+          fileExtract: true,
+          fileRender: true,
+        },
+      });
+
+      assert.ok(result.response.card, 'card sub-response populated');
+      assert.ok(
+        result.response.fileExtract,
+        'fileExtract sub-response populated',
+      );
+      assert.ok(
+        result.response.fileRender,
+        'fileRender sub-response populated',
+      );
+      assert.notOk(result.response.pageUnusableError, 'no page-unusable error');
+      assert.ok(
+        result.response.card?.isolatedHTML?.includes('Maple'),
+        'card isolated HTML rendered',
+      );
+      assert.strictEqual(
+        result.response.fileExtract?.status,
+        'ready',
+        'file extract reports ready',
+      );
+    });
+
+    test('cardRender-only visit leaves file sub-fields unset', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      let result = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: { cardRender: true },
+      });
+
+      assert.ok(result.response.card, 'card sub-response populated');
+      assert.notOk(result.response.fileExtract, 'fileExtract skipped');
+      assert.notOk(result.response.fileRender, 'fileRender skipped');
+    });
+
+    test('fileExtract-only visit returns only the extract', async function (assert) {
+      const moduleURL = `${realmURL}person.gts`;
+      let result = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: moduleURL,
+        auth: auth(),
+        renderOptions: { fileExtract: true },
+      });
+
+      assert.ok(result.response.fileExtract, 'fileExtract populated');
+      assert.notOk(result.response.card, 'card skipped');
+      assert.notOk(result.response.fileRender, 'fileRender skipped');
+      assert.strictEqual(
+        result.response.fileExtract?.status,
+        'ready',
+        'file extract reports ready',
+      );
+    });
+
+    test('fileExtract + fileRender chains resource automatically', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      // Caller does NOT supply fileData; it should be derived from the extract
+      // pass's resource within the composite. The caller does supply
+      // fileDefCodeRef (like the indexer does) — that's the one piece the
+      // composite can't infer on its own since it depends on file extension
+      // and the caller's file-def resolution rules.
+      let result = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: {
+          fileExtract: true,
+          fileRender: true,
+          fileDefCodeRef: {
+            module: `${baseRealm.url}json-file-def`,
+            name: 'JsonFileDef',
+          },
+        },
+      });
+
+      assert.ok(result.response.fileExtract, 'fileExtract populated');
+      assert.ok(
+        result.response.fileRender,
+        'fileRender populated via chained resource',
+      );
+      assert.notOk(
+        result.response.fileRender?.error,
+        `fileRender completed without error: ${JSON.stringify(result.response.fileRender?.error)}`,
+      );
+    });
+
+    test('reuses a single pooled page for all three passes', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      // Warm the pool
+      await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: {
+          cardRender: true,
+          fileExtract: true,
+          fileRender: true,
+        },
+      });
+      // Second call should reuse the warm page
+      let result = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: {
+          cardRender: true,
+          fileExtract: true,
+          fileRender: true,
+        },
+      });
+      assert.true(result.pool.reused, 'second visit reused the pooled page');
+    });
+  });
 });

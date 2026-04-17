@@ -50,6 +50,7 @@ const noopPrerenderer: Prerenderer = {
   prerenderModule: async () => ({ html: '', status: 200 }) as any,
   prerenderFileExtract: async () => ({ html: '', status: 200 }) as any,
   prerenderFileRender: async () => ({ html: '', status: 200 }) as any,
+  prerenderVisit: async () => ({}) as any,
   runCommand: async () => ({ status: 'ready' }),
 };
 

@@ -150,6 +150,9 @@ module(basename(__filename), function () {
         async prerenderFileRender() {
           throw new Error('Not implemented in mock');
         },
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
         async runCommand() {
           throw new Error('Not implemented in mock');
         },
@@ -332,6 +335,9 @@ module(basename(__filename), function () {
         async prerenderFileRender() {
           throw new Error('Not implemented in mock');
         },
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
         async runCommand() {
           throw new Error('Not implemented in mock');
         },
@@ -425,6 +431,9 @@ module(basename(__filename), function () {
         async prerenderFileRender() {
           throw new Error('Not implemented in mock');
         },
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
         async runCommand() {
           throw new Error('Not implemented in mock');
         },
@@ -503,6 +512,9 @@ module(basename(__filename), function () {
           throw new Error('Not implemented in mock');
         },
         async prerenderFileRender() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },
         async runCommand() {
@@ -652,6 +664,9 @@ module(basename(__filename), function () {
           throw new Error('Not implemented in mock');
         },
         async prerenderFileRender() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },
         async runCommand() {
@@ -810,6 +825,9 @@ module(basename(__filename), function () {
           throw new Error('Not implemented in mock');
         },
         async prerenderFileRender() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },
         async runCommand() {
@@ -1188,6 +1206,9 @@ module(basename(__filename), function () {
           throw new Error('Not implemented in mock');
         },
         async prerenderFileRender() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },
         async runCommand() {

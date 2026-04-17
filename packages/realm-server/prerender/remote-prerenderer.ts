@@ -6,6 +6,8 @@ import {
   type FileExtractResponse,
   type FileRenderResponse,
   type FileRenderArgs,
+  type PrerenderVisitArgs,
+  type RenderVisitResponse,
   type RenderRouteOptions,
   type RunCommandResponse,
   logger,
@@ -226,6 +228,29 @@ export function createRemotePrerenderer(
           fileData,
           types,
           renderOptions: renderOptions ?? {},
+        },
+      );
+    },
+    async prerenderVisit({
+      realm,
+      url,
+      auth,
+      renderOptions,
+      fileData,
+      types,
+    }: PrerenderVisitArgs): Promise<RenderVisitResponse> {
+      return await requestWithRetry<RenderVisitResponse>(
+        'prerender-visit',
+        'prerender-visit-request',
+        {
+          affinityType: 'realm',
+          affinityValue: realm,
+          realm,
+          url,
+          auth,
+          renderOptions: renderOptions ?? {},
+          ...(fileData ? { fileData } : {}),
+          ...(types ? { types } : {}),
         },
       );
     },

@@ -954,6 +954,9 @@ export function buildPrerenderManagerApp(options?: {
   router.post('/prerender-file-render', (ctxt) =>
     proxyPrerenderRequest(ctxt, 'prerender-file-render', 'file-render'),
   );
+  router.post('/prerender-visit', (ctxt) =>
+    proxyPrerenderRequest(ctxt, 'prerender-visit', 'visit'),
+  );
   router.post('/run-command', (ctxt) =>
     proxyPrerenderRequest(ctxt, 'run-command', 'command'),
   );

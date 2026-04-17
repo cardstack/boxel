@@ -143,6 +143,38 @@ export type ModulePrerenderArgs = {
 
 export type PrerenderCardArgs = ModulePrerenderArgs;
 
+// Canonical ordering for the composite "visit" prerender. The server-side
+// RenderRunner and the in-browser card-prerender component share this order
+// so both code paths exercise passes identically.
+export const VISIT_PASS_ORDER = [
+  'fileExtract',
+  'cardRender',
+  'fileRender',
+] as const;
+export type VisitPass = (typeof VISIT_PASS_ORDER)[number];
+
+export type PrerenderVisitArgs = {
+  affinityType: AffinityType;
+  affinityValue: string;
+  realm: string;
+  url: string;
+  auth: string;
+  renderOptions?: RenderRouteOptions;
+  // Inputs required only when the fileRender pass is requested
+  fileData?: FileRenderArgs['fileData'];
+  types?: string[];
+};
+
+// Each sub-field is populated only when the corresponding pass was requested.
+// `pageUnusableError` is set when the page itself died mid-visit (e.g.
+// window.onerror, eviction) and remaining passes were short-circuited.
+export interface RenderVisitResponse {
+  card?: RenderResponse;
+  fileExtract?: FileExtractResponse;
+  fileRender?: FileRenderResponse;
+  pageUnusableError?: RenderError;
+}
+
 export type RunCommandArgs = {
   userId: string;
   auth: string;
@@ -161,6 +193,7 @@ export interface Prerenderer {
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
   prerenderFileExtract(args: ModulePrerenderArgs): Promise<FileExtractResponse>;
   prerenderFileRender(args: FileRenderArgs): Promise<FileRenderResponse>;
+  prerenderVisit(args: PrerenderVisitArgs): Promise<RenderVisitResponse>;
   runCommand(args: RunCommandArgs): Promise<RunCommandResponse>;
 }
 

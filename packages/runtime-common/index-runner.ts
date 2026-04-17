@@ -31,7 +31,10 @@ import { isCardError } from './error';
 import type { IndexingProgressEvent } from './worker';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver';
 import { discoverInvalidations } from './index-runner/discover-invalidations';
-import { visitFileForIndexing } from './index-runner/visit-file';
+import {
+  visitFileForIndexing,
+  visitFileForIndexingFused,
+} from './index-runner/visit-file';
 import { performCardIndexing } from './index-runner/card-indexer';
 import { performFileIndexing } from './index-runner/file-indexer';
 
@@ -445,6 +448,27 @@ export class IndexRunner {
   }
 
   private async visitFile(url: URL): Promise<void> {
+    // Fused composite prerender is the default. Set SKIP_FUSED_PRERENDER_VISIT=true
+    // to fall back to the legacy 3-call path (kept for safety during rollout).
+    if (process.env.SKIP_FUSED_PRERENDER_VISIT !== 'true') {
+      await visitFileForIndexingFused({
+        url,
+        realmURL: this.#realmURL,
+        ignoreMap: this.ignoreMap,
+        realmPaths: this.#realmPaths,
+        reader: this.#reader,
+        batch: this.batch,
+        jobInfo: this.#jobInfo,
+        auth: this.#auth,
+        prerenderer: this.#prerenderer,
+        consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+        logDebug: (message) => this.#log.debug(message),
+        logWarn: (message) => this.#log.warn(message),
+        indexCardWithResult: async (args) => await this.indexCard(args),
+        indexFileWithResults: async (args) => await this.indexFile(args),
+      });
+      return;
+    }
     await visitFileForIndexing({
       url,
       realmURL: this.#realmURL,
@@ -481,11 +505,17 @@ export class IndexRunner {
     lastModified,
     resourceCreatedAt,
     resource,
+    renderResult,
   }: {
     path: LocalPath;
     lastModified: number;
     resourceCreatedAt: number;
     resource: LooseCardResource;
+    // When supplied (by the fused-visit path), performCardIndexing skips its
+    // own prerenderCard call and uses this result instead.
+    renderResult?: NonNullable<
+      Parameters<typeof performCardIndexing>[0]['precomputedRenderResult']
+    >;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let instanceURL = new URL(
@@ -510,8 +540,13 @@ export class IndexRunner {
         realmURL: this.#realmURL,
         auth: this.#auth,
         jobInfo: this.#jobInfo,
-        prerenderer: this.#prerenderer,
-        consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+        ...(renderResult
+          ? { precomputedRenderResult: renderResult }
+          : {
+              prerenderer: this.#prerenderer,
+              consumeClearCacheForRender: () =>
+                this.#consumeClearCacheForRender(),
+            }),
         dependencyResolver: this.#dependencyResolver,
         updateEntry: async (entryURL, entry) =>
           await this.updateEntry(entryURL, entry),
@@ -528,13 +563,24 @@ export class IndexRunner {
     lastModified,
     resourceCreatedAt,
     hasModulePrerender,
+    extractResult,
+    renderResult,
   }: {
     path: LocalPath;
     lastModified: number;
     resourceCreatedAt: number;
     hasModulePrerender?: boolean;
+    // When supplied (by the fused-visit path), performFileIndexing uses these
+    // in place of its own prerender calls.
+    extractResult?: Parameters<
+      typeof performFileIndexing
+    >[0]['precomputedExtractResult'];
+    renderResult?: Parameters<
+      typeof performFileIndexing
+    >[0]['precomputedRenderResult'];
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
+    let usePrecomputed = extractResult !== undefined;
     let result = await performFileIndexing({
       path,
       fileURL,
@@ -544,8 +590,16 @@ export class IndexRunner {
       realmURL: this.#realmURL,
       auth: this.#auth,
       jobInfo: this.#jobInfo,
-      prerenderer: this.#prerenderer,
-      consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+      ...(usePrecomputed
+        ? {
+            precomputedExtractResult: extractResult,
+            precomputedRenderResult: renderResult,
+          }
+        : {
+            prerenderer: this.#prerenderer,
+            consumeClearCacheForRender: () =>
+              this.#consumeClearCacheForRender(),
+          }),
       dependencyResolver: this.#dependencyResolver,
       updateEntry: async (entryURL, entry) => {
         await this.batch.updateEntry(entryURL, entry);

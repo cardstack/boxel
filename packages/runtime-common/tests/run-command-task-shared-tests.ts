@@ -59,6 +59,9 @@ function makeTaskArgs({
     prerenderFileRender: async () => {
       throw new Error('not used');
     },
+    prerenderVisit: async () => {
+      throw new Error('not used');
+    },
     runCommand: async (args) => {
       onRunCommand?.(args);
       return prerenderResult ?? { status: 'ready', cardResultString: '{}' };

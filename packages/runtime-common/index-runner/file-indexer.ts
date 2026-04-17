@@ -30,8 +30,13 @@ interface FileIndexerOptions {
   realmURL: URL;
   auth: string;
   jobInfo: JobInfo;
-  prerenderer: Prerenderer;
-  consumeClearCacheForRender(): boolean;
+  // Either supply `prerenderer` + `consumeClearCacheForRender` so this function
+  // makes its own prerenderFileExtract/prerenderFileRender calls, OR supply
+  // precomputed results from a fused visit to skip those calls.
+  prerenderer?: Prerenderer;
+  consumeClearCacheForRender?: () => boolean;
+  precomputedExtractResult?: FileExtractResponse;
+  precomputedRenderResult?: FileRenderResponse;
   dependencyResolver: IndexRunnerDependencyManager;
   updateEntry(
     entryURL: URL,
@@ -51,6 +56,8 @@ export async function performFileIndexing({
   jobInfo,
   prerenderer,
   consumeClearCacheForRender,
+  precomputedExtractResult,
+  precomputedRenderResult,
   dependencyResolver,
   updateEntry,
   logWarn,
@@ -68,26 +75,33 @@ export async function performFileIndexing({
     fileTypeRefs.push(BASE_FILE_DEF_CODE_REF);
   }
 
-  let clearCache = consumeClearCacheForRender();
-  let renderOptions: RenderRouteOptions = {
-    fileExtract: true,
-    fileDefCodeRef,
-    ...(clearCache ? { clearCache } : {}),
-  };
-
-  let extractResult: FileExtractResponse | undefined;
+  let extractResult: FileExtractResponse | undefined = precomputedExtractResult;
   let uncaughtError: Error | undefined;
-  try {
-    extractResult = await prerenderer.prerenderFileExtract({
-      affinityType: 'realm',
-      affinityValue: realmURL.href,
-      url: fileURL,
-      realm: realmURL.href,
-      auth,
-      renderOptions,
-    });
-  } catch (err: unknown) {
-    uncaughtError = err as Error;
+
+  if (!extractResult) {
+    if (!prerenderer || !consumeClearCacheForRender) {
+      throw new Error(
+        'performFileIndexing: neither precomputedExtractResult nor prerenderer+consumeClearCacheForRender was supplied',
+      );
+    }
+    let clearCache = consumeClearCacheForRender();
+    let renderOptions: RenderRouteOptions = {
+      fileExtract: true,
+      fileDefCodeRef,
+      ...(clearCache ? { clearCache } : {}),
+    };
+    try {
+      extractResult = await prerenderer.prerenderFileExtract({
+        affinityType: 'realm',
+        affinityValue: realmURL.href,
+        url: fileURL,
+        realm: realmURL.href,
+        auth,
+        renderOptions,
+      });
+    } catch (err: unknown) {
+      uncaughtError = err as Error;
+    }
   }
 
   let normalizeToErrorEntry = (
@@ -182,8 +196,13 @@ export async function performFileIndexing({
   // Skip for files that already have their own prerender (modules) since
   // they add significant per-file Puppeteer overhead and already produce HTML
   // through their module prerender path.
-  let renderResult: FileRenderResponse | undefined;
-  if (extractResult.resource && !hasModulePrerender) {
+  let renderResult: FileRenderResponse | undefined = precomputedRenderResult;
+  if (
+    !renderResult &&
+    prerenderer &&
+    extractResult.resource &&
+    !hasModulePrerender
+  ) {
     try {
       let fileRenderOptions: RenderRouteOptions = {
         fileRender: true,

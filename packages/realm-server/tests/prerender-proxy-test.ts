@@ -98,6 +98,10 @@ module(basename(__filename), function () {
             iconHTML: null,
           };
         },
+        async prerenderVisit(args) {
+          renderCalls.push({ kind: 'visit', args });
+          return {};
+        },
         async runCommand(args) {
           renderCalls.push({ kind: 'command', args });
           return {

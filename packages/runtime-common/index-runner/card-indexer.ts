@@ -30,8 +30,12 @@ interface CardIndexerOptions {
   realmURL: URL;
   auth: string;
   jobInfo: JobInfo;
-  prerenderer: Prerenderer;
-  consumeClearCacheForRender(): boolean;
+  // Either supply `prerenderer` + `consumeClearCacheForRender` so this function
+  // can make its own prerenderCard call, OR supply `precomputedRenderResult`
+  // from a fused visit and we'll skip the prerender call entirely.
+  prerenderer?: Prerenderer;
+  consumeClearCacheForRender?: () => boolean;
+  precomputedRenderResult?: RenderResponse;
   dependencyResolver: IndexRunnerDependencyManager;
   updateEntry(
     instanceURL: URL,
@@ -52,28 +56,40 @@ export async function performCardIndexing({
   jobInfo,
   prerenderer,
   consumeClearCacheForRender,
+  precomputedRenderResult,
   dependencyResolver,
   updateEntry,
   logWarn,
 }: CardIndexerOptions): Promise<void> {
   let uncaughtError: Error | undefined;
-  let renderResult: RenderResponse | undefined;
+  let renderResult: RenderResponse | undefined = precomputedRenderResult;
+
+  if (!renderResult) {
+    if (!prerenderer || !consumeClearCacheForRender) {
+      throw new Error(
+        'performCardIndexing: neither precomputedRenderResult nor prerenderer+consumeClearCacheForRender was supplied',
+      );
+    }
+    try {
+      let clearCache = consumeClearCacheForRender();
+      let prerenderOptions: RenderRouteOptions | undefined = clearCache
+        ? { clearCache }
+        : undefined;
+
+      renderResult = await prerenderer.prerenderCard({
+        affinityType: 'realm',
+        affinityValue: realmURL.href,
+        url: fileURL,
+        realm: realmURL.href,
+        auth,
+        renderOptions: prerenderOptions,
+      });
+    } catch (err: unknown) {
+      uncaughtError = err as Error;
+    }
+  }
 
   try {
-    let clearCache = consumeClearCacheForRender();
-    let prerenderOptions: RenderRouteOptions | undefined = clearCache
-      ? { clearCache }
-      : undefined;
-
-    renderResult = await prerenderer.prerenderCard({
-      affinityType: 'realm',
-      affinityValue: realmURL.href,
-      url: fileURL,
-      realm: realmURL.href,
-      auth,
-      renderOptions: prerenderOptions,
-    });
-
     // we tack on data that can only be determined via access to underlying filesystem/DB
     let serialized = renderResult?.serialized;
     if (serialized) {
@@ -92,7 +108,7 @@ export async function performCardIndexing({
       unresolveResourceInstanceURLs(serialized.data);
     }
   } catch (err: unknown) {
-    uncaughtError = err as Error;
+    uncaughtError = uncaughtError ?? (err as Error);
   }
 
   if (!renderResult || ('error' in renderResult && renderResult.error)) {

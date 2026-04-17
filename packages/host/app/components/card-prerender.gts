@@ -24,12 +24,15 @@ import {
   type FileExtractResponse,
   type FileRenderResponse,
   type FileRenderArgs,
+  type PrerenderVisitArgs,
+  type RenderVisitResponse,
   type Prerenderer,
   type RunCommandArgs,
   type RunCommandResponse,
   type Format,
   type PrerenderMeta,
   type RenderRouteOptions,
+  VISIT_PASS_ORDER,
   serializeRenderRouteOptions,
   cleanCapturedHTML,
 } from '@cardstack/runtime-common';
@@ -98,6 +101,7 @@ export default class CardPrerender extends Component {
       prerenderModule: this.prerenderModule.bind(this),
       prerenderFileExtract: this.prerenderFileExtract.bind(this),
       prerenderFileRender: this.prerenderFileRenderPublic.bind(this),
+      prerenderVisit: this.prerenderVisitPublic.bind(this),
       runCommand: this.runCommand.bind(this),
     };
     this.localIndexer.setup(this.#prerendererDelegate);
@@ -227,6 +231,24 @@ export default class CardPrerender extends Component {
       }
       throw new Error(
         `card-prerender component is missing or being destroyed before file render prerender of url ${args.url} was completed`,
+      );
+    });
+  }
+
+  private async prerenderVisitPublic(
+    args: PrerenderVisitArgs,
+  ): Promise<RenderVisitResponse> {
+    return await withRenderContext(async () => {
+      try {
+        let run = () => this.prerenderVisitTask.perform(args);
+        return isTesting() ? await run() : await withTimersBlocked(run);
+      } catch (e: any) {
+        if (!didCancel(e)) {
+          throw e;
+        }
+      }
+      throw new Error(
+        `card-prerender component is missing or being destroyed before visit prerender of url ${args.url} was completed`,
       );
     });
   }
@@ -541,6 +563,330 @@ export default class CardPrerender extends Component {
         iconHTML,
         ...(error ? { error } : {}),
       };
+    },
+  );
+
+  // Composite visit task — runs the caller-selected subset of
+  // {fileExtract, cardRender, fileRender} on a shared nonce and with a single
+  // clearCache consumption. Mirrors the server-side prerenderVisitAttempt.
+  private prerenderVisitTask = enqueueTask(
+    async ({
+      url,
+      renderOptions,
+      fileData,
+      types,
+    }: PrerenderVisitArgs): Promise<RenderVisitResponse> => {
+      this.#nonce++;
+      let shouldClearCache = this.#consumeClearCacheForRender(
+        Boolean(renderOptions?.clearCache),
+      );
+      let baseOptions: RenderRouteOptions = { ...(renderOptions ?? {}) };
+      let requested = {
+        fileExtract: Boolean(baseOptions.fileExtract),
+        cardRender: Boolean(baseOptions.cardRender),
+        fileRender: Boolean(baseOptions.fileRender),
+      };
+      if (shouldClearCache) {
+        this.loaderService.resetLoader({
+          clearFetchCache: true,
+          reason: 'card-prerender visit clearCache',
+        });
+        this.store.resetCache();
+      }
+      let clearCacheConsumed = !shouldClearCache;
+      let optionsForPass = (
+        pass: 'fileExtract' | 'cardRender' | 'fileRender',
+      ): RenderRouteOptions => {
+        let out: RenderRouteOptions = {
+          ...baseOptions,
+          fileExtract: pass === 'fileExtract' ? true : undefined,
+          cardRender: pass === 'cardRender' ? true : undefined,
+          fileRender: pass === 'fileRender' ? true : undefined,
+        };
+        if (!clearCacheConsumed) {
+          out.clearCache = true;
+          clearCacheConsumed = true;
+        } else {
+          delete out.clearCache;
+        }
+        for (let key of Object.keys(out) as (keyof RenderRouteOptions)[]) {
+          if (out[key] === undefined) {
+            delete out[key];
+          }
+        }
+        return out;
+      };
+
+      let response: RenderVisitResponse = {};
+
+      // Iterate in canonical VISIT_PASS_ORDER. This import exists only to tie
+      // the browser-side order to the server-side order — the actual branching
+      // is explicit below.
+      void VISIT_PASS_ORDER;
+
+      // ── fileExtract pass ───────────────────────────────────────────────
+      if (requested.fileExtract) {
+        let passOptions = optionsForPass('fileExtract');
+        try {
+          let routeInfo = await this.router.recognizeAndLoad(
+            `${this.#renderBasePath(url, passOptions)}/file-extract`,
+          );
+          if (this.localIndexer.renderError) {
+            throw new Error(this.localIndexer.renderError);
+          }
+          await this.#ensureRenderReady(routeInfo);
+          response.fileExtract = routeInfo.attributes as FileExtractResponse;
+        } catch (e: any) {
+          let renderError: RenderError;
+          try {
+            renderError = {
+              ...JSON.parse(e.message),
+              type: 'file-error',
+            };
+          } catch {
+            let cardErr = new CardError(e.message);
+            cardErr.stack = e.stack;
+            renderError = {
+              error: {
+                ...cardErr.toJSON(),
+                deps: [url],
+                additionalErrors: null,
+              },
+              type: 'file-error',
+            };
+          }
+          response.fileExtract = {
+            id: url,
+            nonce: String(this.#nonce),
+            status: 'error',
+            searchDoc: null,
+            deps: renderError.error.deps ?? [],
+            error: renderError,
+          };
+          response.pageUnusableError =
+            response.pageUnusableError ?? renderError;
+          return response;
+        }
+      }
+
+      // ── cardRender pass ────────────────────────────────────────────────
+      if (requested.cardRender) {
+        let context: CardRenderContext = {
+          cardId: url.replace(/\.json$/, ''),
+          nonce: String(this.#nonce),
+        };
+        this.#currentContext = context;
+        this.localIndexer.renderError = undefined;
+        this.localIndexer.prerenderStatus = 'loading';
+        let initialRenderOptions = optionsForPass('cardRender');
+        let cardError: RenderError | undefined;
+        let isolatedHTML: string | null = null;
+        let headHTML: string | null = null;
+        let atomHTML: string | null = null;
+        let iconHTML: string | null = null;
+        let embeddedHTML: Record<string, string> | null = null;
+        let fittedHTML: Record<string, string> | null = null;
+        let meta: PrerenderMeta = {
+          serialized: null,
+          searchDoc: null,
+          displayNames: null,
+          deps: null,
+          types: null,
+        };
+        try {
+          await this.#primeCardType(url, context);
+          let subsequentRenderOptions =
+            omitOneTimeOptions(initialRenderOptions);
+          isolatedHTML = await this.renderHTML.perform(
+            url,
+            'isolated',
+            0,
+            initialRenderOptions,
+          );
+          meta = await this.renderMeta.perform(url, subsequentRenderOptions);
+          headHTML = await this.renderHTML.perform(
+            url,
+            'head',
+            0,
+            subsequentRenderOptions,
+          );
+          atomHTML = await this.renderHTML.perform(
+            url,
+            'atom',
+            0,
+            subsequentRenderOptions,
+          );
+          iconHTML = await this.renderIcon.perform(
+            url,
+            subsequentRenderOptions,
+          );
+          if (meta?.types) {
+            embeddedHTML = await this.renderAncestors.perform(
+              url,
+              'embedded',
+              meta.types,
+              subsequentRenderOptions,
+            );
+            fittedHTML = await this.renderAncestors.perform(
+              url,
+              'fitted',
+              meta.types,
+              subsequentRenderOptions,
+            );
+          }
+        } catch (e: any) {
+          try {
+            cardError = { ...JSON.parse(e.message), type: 'instance-error' };
+          } catch (_err) {
+            let cardErr = new CardError(e.message);
+            cardErr.stack = e.stack;
+            cardError = {
+              error: {
+                ...cardErr.toJSON(),
+                deps: [url.replace(/\.json$/, '')],
+                additionalErrors: null,
+              },
+              type: 'instance-error',
+            };
+          }
+          this.store.resetCache();
+        } finally {
+          this.#cardTypeTracker.set(context, undefined);
+          if (this.#currentContext === context) {
+            this.#currentContext = undefined;
+          }
+        }
+        if (this.localIndexer.prerenderStatus === 'loading') {
+          this.localIndexer.prerenderStatus = 'ready';
+        }
+        response.card = {
+          ...meta,
+          isolatedHTML,
+          headHTML,
+          atomHTML,
+          embeddedHTML,
+          fittedHTML,
+          iconHTML,
+          ...(cardError ? { error: cardError } : {}),
+        };
+      }
+
+      // ── fileRender pass ────────────────────────────────────────────────
+      if (requested.fileRender) {
+        let effectiveFileData =
+          fileData ??
+          (response.fileExtract?.resource && baseOptions.fileDefCodeRef
+            ? {
+                resource: response.fileExtract.resource,
+                fileDefCodeRef: baseOptions.fileDefCodeRef,
+              }
+            : undefined);
+        let effectiveTypes = types ?? response.fileExtract?.types ?? undefined;
+        if (!effectiveFileData) {
+          response.fileRender = {
+            isolatedHTML: null,
+            headHTML: null,
+            atomHTML: null,
+            embeddedHTML: null,
+            fittedHTML: null,
+            iconHTML: null,
+            error: {
+              type: 'file-error',
+              error: {
+                message:
+                  'prerenderVisit requested fileRender pass without fileData',
+                status: 500,
+                additionalErrors: null,
+              },
+            },
+          };
+        } else {
+          let initialRenderOptions: RenderRouteOptions = {
+            ...optionsForPass('fileRender'),
+            fileDefCodeRef: effectiveFileData.fileDefCodeRef,
+          };
+          (globalThis as any).__boxelFileRenderData = effectiveFileData;
+
+          let fileError: RenderError | undefined;
+          let isolatedHTML: string | null = null;
+          let headHTML: string | null = null;
+          let atomHTML: string | null = null;
+          let iconHTML: string | null = null;
+          let embeddedHTML: Record<string, string> | null = null;
+          let fittedHTML: Record<string, string> | null = null;
+
+          try {
+            let subsequentRenderOptions =
+              omitOneTimeOptions(initialRenderOptions);
+            isolatedHTML = await this.renderHTML.perform(
+              url,
+              'isolated',
+              0,
+              initialRenderOptions,
+            );
+            headHTML = await this.renderHTML.perform(
+              url,
+              'head',
+              0,
+              subsequentRenderOptions,
+            );
+            atomHTML = await this.renderHTML.perform(
+              url,
+              'atom',
+              0,
+              subsequentRenderOptions,
+            );
+            iconHTML = await this.renderIcon.perform(
+              url,
+              subsequentRenderOptions,
+            );
+            if (effectiveTypes?.length) {
+              embeddedHTML = await this.renderAncestors.perform(
+                url,
+                'embedded',
+                effectiveTypes,
+                subsequentRenderOptions,
+              );
+              fittedHTML = await this.renderAncestors.perform(
+                url,
+                'fitted',
+                effectiveTypes,
+                subsequentRenderOptions,
+              );
+            }
+          } catch (e: any) {
+            try {
+              fileError = { ...JSON.parse(e.message), type: 'file-error' };
+            } catch (_err) {
+              let cardErr = new CardError(e.message);
+              cardErr.stack = e.stack;
+              fileError = {
+                error: {
+                  ...cardErr.toJSON(),
+                  deps: [url],
+                  additionalErrors: null,
+                },
+                type: 'file-error',
+              };
+            }
+            this.store.resetCache();
+          } finally {
+            delete (globalThis as any).__boxelFileRenderData;
+          }
+
+          response.fileRender = {
+            isolatedHTML,
+            headHTML,
+            atomHTML,
+            embeddedHTML,
+            fittedHTML,
+            iconHTML,
+            ...(fileError ? { error: fileError } : {}),
+          };
+        }
+      }
+
+      return response;
     },
   );
 

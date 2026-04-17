@@ -9,6 +9,9 @@ import {
   type RenderRouteOptions,
   type RunCommandResponse,
   type AffinityType,
+  type RenderVisitResponse,
+  type PrerenderVisitArgs,
+  VISIT_PASS_ORDER,
   serializeRenderRouteOptions,
   logger,
 } from '@cardstack/runtime-common';
@@ -1238,6 +1241,745 @@ export class RenderRunner {
         });
       release();
     }
+  }
+
+  // Composite "visit" prerender — acquires one page, runs whichever of the
+  // fileExtract/cardRender/fileRender passes the caller requests, and returns a
+  // union response. This eliminates the page acquisition, auth setup, and HTTP
+  // round-trip overhead incurred by calling the three individual attempt
+  // methods in sequence. Passes execute in VISIT_PASS_ORDER and short-circuit
+  // when the page becomes unusable (eviction or auth failure).
+  async prerenderVisitAttempt({
+    affinityType,
+    affinityValue,
+    realm,
+    url,
+    auth,
+    opts,
+    renderOptions,
+    fileData,
+    types,
+  }: PrerenderVisitArgs & {
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+  }): Promise<{
+    response: RenderVisitResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      affinityType: AffinityType;
+      affinityValue: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let requested = {
+      fileExtract: Boolean(renderOptions?.fileExtract),
+      cardRender: Boolean(renderOptions?.cardRender),
+      fileRender: Boolean(renderOptions?.fileRender),
+    };
+    log.info(
+      `visit prerender url=${url} affinity=${affinityKey} realm=${realm} passes=${VISIT_PASS_ORDER.filter(
+        (p) => requested[p],
+      ).join(',')}`,
+    );
+
+    const { page, reused, launchMs, pageId, release } =
+      await this.#getPageForAffinity(affinityKey, auth);
+    const poolInfo = {
+      pageId: pageId ?? 'unknown',
+      affinityType,
+      affinityValue,
+      reused,
+      evicted: false,
+      timedOut: false,
+    };
+    this.#pagePool.resetConsoleErrors(pageId);
+    const markTimeout = (err?: RenderError) => {
+      if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
+        poolInfo.timedOut = true;
+      }
+    };
+
+    let renderStart = Date.now();
+    let response: RenderVisitResponse = {};
+    let baseOptions: RenderRouteOptions = { ...(renderOptions ?? {}) };
+    let didStashFileRenderData = false;
+
+    try {
+      await page.evaluate((sessionAuth) => {
+        localStorage.setItem('boxel-session', sessionAuth);
+      }, auth);
+      // defense-in-depth: clear any stale file render data left on globalThis
+      // from a prior visit before we start running passes.
+      await page
+        .evaluate(() => {
+          delete (globalThis as any).__boxelFileRenderData;
+        })
+        .catch(() => {
+          /* best-effort */
+        });
+
+      // Serialized options carry the pass flags into the route — the host
+      // render/module routes consume these to decide which mode to run. The
+      // first pass in the visit keeps any clearCache flag; subsequent passes
+      // must not attempt another loader reset, so we strip it after first use.
+      let clearCacheConsumed = false;
+      let optionsForPass = (
+        pass: 'fileExtract' | 'cardRender' | 'fileRender',
+      ) => {
+        let optionsForThisPass: RenderRouteOptions = {
+          ...baseOptions,
+          // Always set only the flag for the current pass so the host route
+          // picks the right branch in #buildModel regardless of what other
+          // passes are part of this visit.
+          fileExtract: pass === 'fileExtract' ? true : undefined,
+          fileRender: pass === 'fileRender' ? true : undefined,
+          cardRender: pass === 'cardRender' ? true : undefined,
+        };
+        if (!clearCacheConsumed && baseOptions.clearCache) {
+          optionsForThisPass.clearCache = true;
+          clearCacheConsumed = true;
+        } else {
+          delete optionsForThisPass.clearCache;
+        }
+        // Clean undefined keys so serializeRenderRouteOptions stays stable.
+        for (let k of Object.keys(
+          optionsForThisPass,
+        ) as (keyof RenderRouteOptions)[]) {
+          if (optionsForThisPass[k] === undefined) {
+            delete optionsForThisPass[k];
+          }
+        }
+        return optionsForThisPass;
+      };
+
+      // ── fileExtract pass ───────────────────────────────────────────────
+      if (requested.fileExtract) {
+        let extractOptions = optionsForPass('fileExtract');
+        let serializedOptions = serializeRenderRouteOptions(extractOptions);
+        let captureOptions: CaptureOptions = {
+          expectedId: url,
+          expectedNonce: String(++this.#nonce),
+          simulateTimeoutMs: opts?.simulateTimeoutMs,
+          timeoutMs: opts?.timeoutMs,
+        };
+        let capture = await withTimeout(
+          page,
+          async () => {
+            await transitionTo(
+              page,
+              'render.file-extract',
+              url,
+              captureOptions.expectedNonce!,
+              serializedOptions,
+            );
+            return await captureFileExtract(page, captureOptions);
+          },
+          opts?.timeoutMs,
+        );
+        let extractResponse: FileExtractResponse;
+        if (isRenderError(capture)) {
+          let renderError = capture as RenderError;
+          markTimeout(renderError);
+          if (
+            await this.#maybeEvict(
+              affinityKey,
+              'visit file extract',
+              renderError,
+            )
+          ) {
+            poolInfo.evicted = true;
+          }
+          extractResponse = {
+            id: url,
+            nonce: captureOptions.expectedNonce!,
+            status: 'error',
+            searchDoc: null,
+            deps: renderError.error.deps ?? [],
+            error: renderError,
+          };
+          if (poolInfo.evicted || this.#isAuthError(renderError)) {
+            response.fileExtract = extractResponse;
+            response.pageUnusableError = renderError;
+            return this.#finalizeVisit(
+              response,
+              pageId,
+              renderStart,
+              launchMs,
+              poolInfo,
+            );
+          }
+        } else {
+          let fileCapture = capture as FileExtractCapture;
+          try {
+            extractResponse = JSON.parse(
+              fileCapture.value,
+            ) as FileExtractResponse;
+            if (extractResponse.status !== fileCapture.status) {
+              let renderError = buildInvalidFileExtractResponseError(
+                page,
+                `file extract status mismatch (${fileCapture.status} vs ${extractResponse.status})`,
+                { title: 'Invalid file extract response', evict: true },
+              );
+              markTimeout(renderError);
+              if (
+                await this.#maybeEvict(
+                  affinityKey,
+                  'visit file extract',
+                  renderError,
+                )
+              ) {
+                poolInfo.evicted = true;
+              }
+              extractResponse = {
+                id: url,
+                nonce: fileCapture.nonce ?? captureOptions.expectedNonce!,
+                status: 'error',
+                searchDoc: null,
+                deps: renderError.error.deps ?? [],
+                error: {
+                  type: 'file-error',
+                  error: renderError.error,
+                },
+              };
+            }
+          } catch (_e) {
+            let renderError = buildInvalidFileExtractResponseError(
+              page,
+              `file extract returned invalid payload: ${fileCapture.value}`,
+              { title: 'Invalid file extract response' },
+            );
+            markTimeout(renderError);
+            if (
+              await this.#maybeEvict(
+                affinityKey,
+                'visit file extract',
+                renderError,
+              )
+            ) {
+              poolInfo.evicted = true;
+            }
+            extractResponse = {
+              id: url,
+              nonce: fileCapture.nonce ?? captureOptions.expectedNonce!,
+              status: 'error',
+              searchDoc: null,
+              deps: renderError.error.deps ?? [],
+              error: renderError,
+            };
+          }
+        }
+        extractResponse.error = this.#mergeConsoleErrors(
+          pageId,
+          extractResponse.error,
+        );
+        response.fileExtract = extractResponse;
+        if (poolInfo.evicted) {
+          response.pageUnusableError =
+            extractResponse.error ?? response.pageUnusableError;
+          return this.#finalizeVisit(
+            response,
+            pageId,
+            renderStart,
+            launchMs,
+            poolInfo,
+          );
+        }
+      }
+
+      // ── cardRender pass ────────────────────────────────────────────────
+      if (requested.cardRender) {
+        let cardOptions = optionsForPass('cardRender');
+        let serializedOptions = serializeRenderRouteOptions(cardOptions);
+        let optionsSegment = encodeURIComponent(serializedOptions);
+        let nonce = String(++this.#nonce);
+        let captureOptions: CaptureOptions = {
+          expectedId: url.replace(/\.json$/i, ''),
+          expectedNonce: nonce,
+          simulateTimeoutMs: opts?.simulateTimeoutMs,
+          timeoutMs: opts?.timeoutMs,
+        };
+        reproduceLog.debug(
+          `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${nonce}/${optionsSegment}/html/isolated/0 with boxel-session = ${auth}`,
+        );
+
+        let cardError: RenderError | undefined;
+        let cardShortCircuit = false;
+        let isolatedHTML: string | null = null;
+        let applyStepError = (stepError: RenderError, evicted: boolean) => {
+          cardError = cardError ?? stepError;
+          markTimeout(stepError);
+          if (evicted) {
+            poolInfo.evicted = true;
+            cardShortCircuit = true;
+          }
+          if (this.#isAuthError(cardError)) {
+            cardShortCircuit = true;
+          }
+        };
+        let runTimedStep = async <T>(
+          step: string,
+          fn: () => Promise<T | RenderError>,
+        ): Promise<T | undefined> => {
+          if (cardShortCircuit) {
+            return;
+          }
+          let stepResult = await this.#step(affinityKey, step, () =>
+            withTimeout(page, fn, opts?.timeoutMs),
+          );
+          if (stepResult.ok) {
+            return stepResult.value as T;
+          }
+          applyStepError(stepResult.error, stepResult.evicted);
+          return;
+        };
+
+        let isolatedResult = await withTimeout(
+          page,
+          async () => {
+            await transitionTo(
+              page,
+              'render.html',
+              url,
+              nonce,
+              serializedOptions,
+              'isolated',
+              '0',
+            );
+            return await renderHTML(page, 'isolated', 0, captureOptions);
+          },
+          opts?.timeoutMs,
+        );
+        if (isRenderError(isolatedResult)) {
+          cardShortCircuit = true;
+          let renderError = isolatedResult as RenderError;
+          let evicted = await this.#maybeEvict(
+            affinityKey,
+            'visit card isolated render',
+            renderError,
+          );
+          applyStepError(renderError, evicted);
+        } else {
+          isolatedHTML = isolatedResult as string;
+        }
+
+        let emptyMeta: PrerenderMeta = {
+          serialized: null,
+          searchDoc: null,
+          displayNames: null,
+          deps: null,
+          types: null,
+        };
+        let meta: PrerenderMeta = emptyMeta;
+        let metaForTypes: PrerenderMeta = emptyMeta;
+        let headHTML: string | null = null;
+        let atomHTML: string | null = null;
+        let iconHTML: string | null = null;
+        let embeddedHTML: Record<string, string> | null = null;
+        let fittedHTML: Record<string, string> | null = null;
+
+        if (!cardShortCircuit) {
+          const formatSteps = [
+            {
+              name: 'visit card head render',
+              cb: () => renderHTML(page, 'head', 0, captureOptions),
+              assign: (v: string) => {
+                headHTML = v;
+              },
+            },
+            {
+              name: 'visit card atom render',
+              cb: () => renderHTML(page, 'atom', 0, captureOptions),
+              assign: (v: string) => {
+                atomHTML = v;
+              },
+            },
+            {
+              name: 'visit card icon render',
+              cb: () => renderIcon(page, captureOptions),
+              assign: (v: string) => {
+                iconHTML = v;
+              },
+            },
+          ];
+          for (let step of formatSteps) {
+            if (cardShortCircuit) break;
+            let v = await runTimedStep<string>(step.name, step.cb);
+            if (v !== undefined) step.assign(v);
+          }
+        }
+
+        if (!cardShortCircuit) {
+          let metaForTypesResult = await runTimedStep<PrerenderMeta>(
+            'visit card render.meta (types)',
+            () => renderMeta(page, captureOptions),
+          );
+          if (metaForTypesResult !== undefined) {
+            metaForTypes = metaForTypesResult;
+          }
+        }
+
+        if (!cardShortCircuit && metaForTypes.types) {
+          const ancestorSteps = [
+            {
+              name: 'visit card fitted render',
+              cb: () =>
+                renderAncestors(
+                  page,
+                  'fitted',
+                  metaForTypes.types!,
+                  captureOptions,
+                ),
+              assign: (v: Record<string, string>) => {
+                fittedHTML = v;
+              },
+            },
+            {
+              name: 'visit card embedded render',
+              cb: () =>
+                renderAncestors(
+                  page,
+                  'embedded',
+                  metaForTypes.types!,
+                  captureOptions,
+                ),
+              assign: (v: Record<string, string>) => {
+                embeddedHTML = v;
+              },
+            },
+          ];
+          for (let step of ancestorSteps) {
+            if (cardShortCircuit) break;
+            let v = await runTimedStep<Record<string, string>>(
+              step.name,
+              step.cb,
+            );
+            if (v !== undefined) step.assign(v);
+          }
+        }
+
+        if (!cardShortCircuit) {
+          let finalMetaResult = await runTimedStep<PrerenderMeta>(
+            'visit card render.meta (final)',
+            () => renderMeta(page, captureOptions),
+          );
+          if (finalMetaResult !== undefined) {
+            meta = finalMetaResult;
+          }
+        }
+
+        let cardResponse: RenderResponse = {
+          ...(meta as PrerenderMeta),
+          ...(cardError ? { error: cardError } : {}),
+          iconHTML,
+          isolatedHTML,
+          headHTML,
+          atomHTML,
+          embeddedHTML,
+          fittedHTML,
+        };
+        cardResponse.error = this.#mergeConsoleErrors(
+          pageId,
+          cardResponse.error,
+        );
+        response.card = cardResponse;
+        if (poolInfo.evicted) {
+          response.pageUnusableError =
+            cardResponse.error ?? response.pageUnusableError;
+          return this.#finalizeVisit(
+            response,
+            pageId,
+            renderStart,
+            launchMs,
+            poolInfo,
+          );
+        }
+      }
+
+      // ── fileRender pass ────────────────────────────────────────────────
+      if (requested.fileRender) {
+        // If fileExtract ran earlier in this visit and produced a resource,
+        // use it to populate fileData/types so the caller doesn't need to
+        // thread extract output back through a second round-trip.
+        let effectiveFileData =
+          fileData ??
+          (response.fileExtract?.resource && baseOptions.fileDefCodeRef
+            ? {
+                resource: response.fileExtract.resource,
+                fileDefCodeRef: baseOptions.fileDefCodeRef,
+              }
+            : undefined);
+        let effectiveTypes = types ?? response.fileExtract?.types ?? undefined;
+        if (!effectiveFileData) {
+          // Without fileData we can't populate the host route's model. This is
+          // a caller error — mark the sub-response accordingly rather than
+          // throwing so the other passes' results remain usable.
+          response.fileRender = {
+            isolatedHTML: null,
+            headHTML: null,
+            atomHTML: null,
+            embeddedHTML: null,
+            fittedHTML: null,
+            iconHTML: null,
+            error: {
+              type: 'file-error',
+              error: {
+                message:
+                  'prerenderVisit requested fileRender pass without fileData (and fileExtract did not supply a resource)',
+                status: 500,
+                additionalErrors: null,
+              },
+            },
+          };
+        } else {
+          let fileOptions: RenderRouteOptions = {
+            ...optionsForPass('fileRender'),
+            fileDefCodeRef: effectiveFileData.fileDefCodeRef,
+          };
+          let serializedOptions = serializeRenderRouteOptions(fileOptions);
+          let nonce = String(++this.#nonce);
+          let captureOptions: CaptureOptions = {
+            expectedId: url,
+            expectedNonce: nonce,
+            simulateTimeoutMs: opts?.simulateTimeoutMs,
+            timeoutMs: opts?.timeoutMs,
+          };
+
+          // stash file data for the render route model hook to consume
+          await page.evaluate((data) => {
+            (globalThis as any).__boxelFileRenderData = data;
+          }, effectiveFileData);
+          didStashFileRenderData = true;
+
+          let fileError: RenderError | undefined;
+          let fileShortCircuit = false;
+          let isolatedHTML: string | null = null;
+          let headHTML: string | null = null;
+          let atomHTML: string | null = null;
+          let iconHTML: string | null = null;
+          let embeddedHTML: Record<string, string> | null = null;
+          let fittedHTML: Record<string, string> | null = null;
+
+          let applyStepError = (stepError: RenderError, evicted: boolean) => {
+            fileError = fileError ?? stepError;
+            markTimeout(stepError);
+            if (evicted) {
+              poolInfo.evicted = true;
+              fileShortCircuit = true;
+            }
+            if (this.#isAuthError(fileError)) {
+              fileShortCircuit = true;
+            }
+          };
+
+          let isolatedResult = await withTimeout(
+            page,
+            async () => {
+              await transitionTo(
+                page,
+                'render.html',
+                url,
+                nonce,
+                serializedOptions,
+                'isolated',
+                '0',
+              );
+              return await captureResult(page, 'innerHTML', captureOptions);
+            },
+            opts?.timeoutMs,
+          );
+          if (isRenderError(isolatedResult)) {
+            let renderError = isolatedResult as RenderError;
+            let evicted = await this.#maybeEvict(
+              affinityKey,
+              'visit file isolated render',
+              renderError,
+            );
+            applyStepError(renderError, evicted);
+          } else {
+            let capture = isolatedResult as RenderCapture;
+            if (capture.status === 'ready') {
+              isolatedHTML = capture.value;
+            } else {
+              let capErr = this.#captureToError(capture);
+              let evicted = await this.#maybeEvict(
+                affinityKey,
+                'visit file isolated render',
+                capErr,
+              );
+              if (capErr) {
+                applyStepError(capErr, evicted);
+              }
+            }
+          }
+
+          if (!fileShortCircuit) {
+            let headHTMLResult = await this.#step(
+              affinityKey,
+              'visit file head render',
+              () =>
+                withTimeout(
+                  page,
+                  () => renderHTML(page, 'head', 0, captureOptions),
+                  opts?.timeoutMs,
+                ),
+            );
+            if (headHTMLResult.ok) {
+              headHTML = headHTMLResult.value as string;
+            } else {
+              applyStepError(headHTMLResult.error, headHTMLResult.evicted);
+            }
+          }
+
+          if (!fileShortCircuit) {
+            let steps: Array<{
+              name: string;
+              cb: () => Promise<string | Record<string, string> | RenderError>;
+              assign: (value: string | Record<string, string>) => void;
+            }> = [];
+
+            if (effectiveTypes && effectiveTypes.length > 0) {
+              steps.push(
+                {
+                  name: 'visit file fitted render',
+                  cb: () =>
+                    renderAncestors(
+                      page,
+                      'fitted',
+                      effectiveTypes!,
+                      captureOptions,
+                    ),
+                  assign: (v) => {
+                    fittedHTML = v as Record<string, string>;
+                  },
+                },
+                {
+                  name: 'visit file embedded render',
+                  cb: () =>
+                    renderAncestors(
+                      page,
+                      'embedded',
+                      effectiveTypes!,
+                      captureOptions,
+                    ),
+                  assign: (v) => {
+                    embeddedHTML = v as Record<string, string>;
+                  },
+                },
+              );
+            }
+
+            steps.push(
+              {
+                name: 'visit file atom render',
+                cb: () => renderHTML(page, 'atom', 0, captureOptions),
+                assign: (v) => {
+                  atomHTML = v as string;
+                },
+              },
+              {
+                name: 'visit file icon render',
+                cb: () => renderIcon(page, captureOptions),
+                assign: (v) => {
+                  iconHTML = v as string;
+                },
+              },
+            );
+
+            for (let step of steps) {
+              if (fileShortCircuit) break;
+              let res = await this.#step(affinityKey, step.name, () =>
+                withTimeout(page, step.cb, opts?.timeoutMs),
+              );
+              if (res.ok) {
+                step.assign(res.value);
+              } else {
+                applyStepError(res.error, res.evicted);
+                if (fileShortCircuit) break;
+              }
+            }
+          }
+
+          let fileResponse: FileRenderResponse = {
+            ...(fileError ? { error: fileError } : {}),
+            iconHTML,
+            isolatedHTML,
+            headHTML,
+            atomHTML,
+            embeddedHTML,
+            fittedHTML,
+          };
+          fileResponse.error = this.#mergeConsoleErrors(
+            pageId,
+            fileResponse.error,
+          );
+          response.fileRender = fileResponse;
+          if (poolInfo.evicted) {
+            response.pageUnusableError =
+              fileResponse.error ?? response.pageUnusableError;
+          }
+        }
+      }
+
+      return this.#finalizeVisit(
+        response,
+        pageId,
+        renderStart,
+        launchMs,
+        poolInfo,
+      );
+    } finally {
+      if (didStashFileRenderData) {
+        await page
+          .evaluate(() => {
+            delete (globalThis as any).__boxelFileRenderData;
+          })
+          .catch(() => {
+            /* best-effort cleanup */
+          });
+      }
+      release();
+    }
+  }
+
+  #finalizeVisit(
+    response: RenderVisitResponse,
+    pageId: string,
+    renderStart: number,
+    launchMs: number,
+    poolInfo: {
+      pageId: string;
+      affinityType: AffinityType;
+      affinityValue: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    },
+  ): {
+    response: RenderVisitResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      affinityType: AffinityType;
+      affinityValue: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  } {
+    if (response.pageUnusableError) {
+      response.pageUnusableError = this.#mergeConsoleErrors(
+        pageId,
+        response.pageUnusableError,
+      );
+    }
+    return {
+      response,
+      timings: { launchMs, renderMs: Date.now() - renderStart },
+      pool: poolInfo,
+    };
   }
 
   shouldRetryWithClearCache(
