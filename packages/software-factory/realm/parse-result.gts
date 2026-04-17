@@ -84,11 +84,19 @@ export class ParseFileResult extends FieldDef {
     return (this.errorCount ?? 0) === 0;
   }
 
+  get displayFile() {
+    let f = this.file ?? '';
+    if (f && !f.includes('.')) {
+      return `${f}.json`;
+    }
+    return f;
+  }
+
   static embedded = class Embedded extends Component<typeof ParseFileResult> {
     <template>
       <div class='file-result'>
         <div class='file-header'>
-          <span class='file-name'>{{@model.file}}</span>
+          <span class='file-name'>{{@model.displayFile}}</span>
           {{#if @model.passed}}
             <span class='file-status passed'>valid</span>
           {{else}}
@@ -354,7 +362,7 @@ export class ParseResult extends CardDef {
                   {{unless fileResult.passed "file-has-errors"}}'
               >
                 <div class='file-group-header'>
-                  <span class='file-group-name'>{{fileResult.file}}</span>
+                  <span class='file-group-name'>{{fileResult.displayFile}}</span>
                   {{#if fileResult.passed}}
                     <span class='file-group-status has-passes'>valid</span>
                   {{else}}
