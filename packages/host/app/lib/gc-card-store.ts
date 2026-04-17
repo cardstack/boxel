@@ -663,7 +663,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       if (!localId) {
         localId = remoteId.split('/').pop()!;
         item = bucket.get(localId) ?? silentBucket.get(localId);
-        if (item && type === 'instance' && isCardOrFileInstance(item)) {
+        if (
+          item &&
+          type === 'instance' &&
+          isCardOrFileInstance(item) &&
+          (!item.id || isLocalId(item.id))
+        ) {
           item.id = remoteId;
         }
       }

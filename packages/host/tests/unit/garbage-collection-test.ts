@@ -749,6 +749,36 @@ module('Unit | identity-context garbage collection', function (hooks) {
     );
   });
 
+  test('does not overwrite id for a saved instance when tail-correlation resolves an alias id', async function (assert) {
+    let {
+      store,
+      instances: { hassan },
+    } = await setupTest(async ({ store, hassan }) => {
+      await saveCard(
+        hassan,
+        `${testRealmURL}${hassan[localId]}`,
+        loader,
+        store,
+      );
+    });
+    let originalId = hassan.id;
+    if (!originalId) {
+      throw new Error('expected hassan to have a remote id');
+    }
+    let aliasId = `https://alias.example/${originalId.split('/').pop()}`;
+
+    assert.strictEqual(
+      store.getCardInstanceOrError(aliasId),
+      hassan,
+      'card instance is returned via tail-correlation lookup',
+    );
+    assert.strictEqual(
+      hassan.id,
+      originalId,
+      'saved instance keeps its original id',
+    );
+  });
+
   test('return a stale instance when the server state reflects an error for an id', async function (assert) {
     let {
       store,
