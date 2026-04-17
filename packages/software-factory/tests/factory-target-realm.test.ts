@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { module, test } from 'qunit';
 
-import { setProfileManager, resetProfileManager } from '@cardstack/boxel-cli/api';
+import {
+  setProfileManager,
+  resetProfileManager,
+} from '@cardstack/boxel-cli/api';
 
 import { FactoryEntrypointUsageError } from '../src/factory-entrypoint-errors';
 import {
