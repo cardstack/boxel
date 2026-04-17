@@ -263,6 +263,7 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
     // search/replace blocks finish streaming and swap render modes within one
     // Glimmer turn. Waiting until the next paint keeps teardown deterministic
     // without relying on a fixed timeout.
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- Monaco dispose must wait for paint to avoid bootstrap race
     requestAnimationFrame(() => {
       try {
         editor.dispose();

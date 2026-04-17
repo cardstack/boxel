@@ -7,7 +7,6 @@ import { logger } from './logger';
 import { chromium } from '@playwright/test';
 
 import {
-  ensureTrailingSlash,
   getNextValidationSequenceNumber,
   searchRealm,
 } from './realm-operations';
@@ -20,6 +19,7 @@ import type {
   TestRunRealmOptions,
 } from './test-run-types';
 import { findHostDistPackageDir } from './host-dist';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 let log = logger('test-run-execution');
 

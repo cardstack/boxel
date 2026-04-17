@@ -18,9 +18,13 @@ import type { Validator } from '../issue-loop';
 import { NoOpStepRunner } from './noop-step';
 import { TestValidationStep } from './test-step';
 import { LintValidationStep } from './lint-step';
+import { EvalValidationStep } from './eval-step';
+import { InstantiateValidationStep } from './instantiate-step';
 
 import type { TestValidationStepConfig } from './test-step';
 import type { LintValidationStepConfig } from './lint-step';
+import type { EvalValidationStepConfig } from './eval-step';
+import type { InstantiateValidationStepConfig } from './instantiate-step';
 
 import { logger } from '../logger';
 
@@ -141,15 +145,22 @@ export class ValidationPipeline implements Validator {
 // ---------------------------------------------------------------------------
 
 export interface ValidationPipelineConfig {
+  /** Realm-scoped authorization token for realm API calls (readFile, writeFile, _lint, _search). */
   authorization?: string;
+  /** Realm server token for _run-command calls (prerenderer). Distinct from realm-scoped authorization. */
+  serverToken?: string;
   fetch?: typeof globalThis.fetch;
   realmServerUrl: string;
   hostAppUrl: string;
   testResultsModuleUrl: string;
   lintResultsModuleUrl: string;
+  evalResultsModuleUrl: string;
+  instantiateResultsModuleUrl: string;
   issueId?: string;
-  /** Injected for testing — passed through to TestValidationStep and LintValidationStep. */
+  /** Injected for testing — passed through to TestValidationStep, LintValidationStep, and EvalValidationStep. */
   fetchFilenames?: TestValidationStepConfig['fetchFilenames'];
+  /** Injected for testing — passed through to InstantiateValidationStep. */
+  searchSpecsFn?: InstantiateValidationStepConfig['searchSpecsFn'];
 }
 
 /**
@@ -178,11 +189,32 @@ export function createDefaultPipeline(
     fetchFilenames: config.fetchFilenames,
   };
 
+  let evalConfig: EvalValidationStepConfig = {
+    authorization: config.authorization,
+    serverToken: config.serverToken,
+    fetch: config.fetch,
+    realmServerUrl: config.realmServerUrl,
+    evalResultsModuleUrl: config.evalResultsModuleUrl,
+    issueId: config.issueId,
+    fetchFilenames: config.fetchFilenames,
+  };
+
+  let instantiateConfig: InstantiateValidationStepConfig = {
+    authorization: config.authorization,
+    serverToken: config.serverToken,
+    fetch: config.fetch,
+    realmServerUrl: config.realmServerUrl,
+    instantiateResultsModuleUrl: config.instantiateResultsModuleUrl,
+    issueId: config.issueId,
+    searchSpecsFn: config.searchSpecsFn,
+    fetchFilenames: config.fetchFilenames,
+  };
+
   return new ValidationPipeline([
     new NoOpStepRunner('parse'),
     new LintValidationStep(lintConfig),
-    new NoOpStepRunner('evaluate'),
-    new NoOpStepRunner('instantiate'),
+    new EvalValidationStep(evalConfig),
+    new InstantiateValidationStep(instantiateConfig),
     new TestValidationStep(testConfig),
   ]);
 }

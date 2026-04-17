@@ -16,6 +16,7 @@ import type { Spec } from 'https://cardstack.com/base/spec';
 const sourceRealmURL = new URL('https://localhost:4201/catalog/');
 const targetRealmURL = new URL('https://localhost:4201/experiments/');
 const baseRealmURL = new URL('https://cardstack.com/base/');
+const foreignRealmURL = new URL('https://localhost:4201/user1/personal-realm/');
 
 module('Unit | Catalog | Install Plan Builder', function () {
   test('when listing name is not provided, just provides uuid (in this case uuid="xyz")', function (assert) {
@@ -268,6 +269,161 @@ module('Unit | Catalog | Install Plan Builder', function () {
         module: `${baseRealmURL}skill`,
         name: 'Some Ref Name',
       });
+    });
+  });
+
+  module('cross-realm support', function () {
+    test('ListingPathResolver.local() strips foreign realm prefix when registered', function (assert) {
+      const listing = {
+        name: 'Some Listing',
+        specs: [],
+        examples: [],
+        skills: [],
+        [realmURL]: sourceRealmURL,
+      } as any;
+      let resolver = new ListingPathResolver(
+        targetRealmURL.href,
+        listing,
+        'xyz',
+      );
+      resolver.addKnownRealmURL(foreignRealmURL);
+
+      // Same-realm URL resolves as before
+      let sameRealmLocal = resolver.local(
+        `${sourceRealmURL.href}some-folder/Example/1`,
+      );
+      assert.strictEqual(sameRealmLocal, 'some-folder/Example/1');
+
+      // Cross-realm URL with registered realm strips the foreign realm prefix
+      let crossRealmLocal = resolver.local(
+        `${foreignRealmURL.href}CyclingMileageLog/abc`,
+      );
+      assert.strictEqual(crossRealmLocal, 'CyclingMileageLog/abc');
+    });
+
+    test('ListingPathResolver.local() falls back to full path for unregistered foreign realm', function (assert) {
+      const listing = {
+        name: 'Some Listing',
+        specs: [],
+        examples: [],
+        skills: [],
+        [realmURL]: sourceRealmURL,
+      } as any;
+      let resolver = new ListingPathResolver(
+        targetRealmURL.href,
+        listing,
+        'xyz',
+      );
+
+      let crossRealmLocal = resolver.local(
+        `${foreignRealmURL.href}CyclingMileageLog/abc`,
+      );
+      assert.strictEqual(
+        crossRealmLocal,
+        'user1/personal-realm/CyclingMileageLog/abc',
+      );
+    });
+
+    test('ListingPathResolver.target() maps cross-realm URLs into target directory', function (assert) {
+      const listing = {
+        name: 'Some Listing',
+        specs: [],
+        examples: [],
+        skills: [],
+        [realmURL]: sourceRealmURL,
+      } as any;
+      let resolver = new ListingPathResolver(
+        targetRealmURL.href,
+        listing,
+        'xyz',
+      );
+      resolver.addKnownRealmURL(foreignRealmURL);
+
+      let target = resolver.target(
+        `${foreignRealmURL.href}CyclingMileageLog/abc`,
+      );
+      assert.strictEqual(
+        target,
+        `${targetRealmURL.href}some-listing-xyz/CyclingMileageLog/abc`,
+      );
+    });
+
+    test('planInstanceInstall handles instances from a foreign realm', function (assert) {
+      const instances = [
+        {
+          id: `${foreignRealmURL.href}CyclingMileageLog/abc`,
+          [meta]: {
+            adoptsFrom: {
+              name: 'CyclingMileageLog',
+              module: `${foreignRealmURL.href}cycling-mileage-log`,
+            },
+          },
+          [realmURL]: foreignRealmURL,
+        },
+      ] as CardDef[];
+      const listing = {
+        name: 'Some Listing',
+        specs: [],
+        examples: instances,
+        skills: [],
+        [realmURL]: sourceRealmURL,
+      } as any;
+      let resolver = new ListingPathResolver(
+        targetRealmURL.href,
+        listing,
+        'xyz',
+      );
+      resolver.addKnownRealmURL(foreignRealmURL);
+      let { instancesCopy, modulesCopy } = planInstanceInstall(
+        instances,
+        resolver,
+      );
+
+      assert.strictEqual(instancesCopy.length, 1);
+      assert.strictEqual(
+        instancesCopy[0].lid,
+        'some-listing-xyz/CyclingMileageLog/abc',
+      );
+      assert.strictEqual(modulesCopy.length, 1);
+      assert.strictEqual(
+        modulesCopy[0].sourceCodeRef.module,
+        `${foreignRealmURL.href}cycling-mileage-log`,
+      );
+    });
+
+    test('planModuleInstall handles specs from a foreign realm', function (assert) {
+      const specs = [
+        {
+          ref: { name: 'CyclingMileageLog' },
+          moduleHref: `${foreignRealmURL.href}cycling-mileage-log`,
+          [realmURL]: foreignRealmURL,
+        },
+      ] as Spec[];
+      const listing = {
+        name: 'Some Listing',
+        specs,
+        examples: [],
+        skills: [],
+        [realmURL]: sourceRealmURL,
+      } as any;
+      let resolver = new ListingPathResolver(
+        targetRealmURL.href,
+        listing,
+        'xyz',
+      );
+      resolver.addKnownRealmURL(foreignRealmURL);
+      let { modulesCopy, modulesToInstall } = planModuleInstall(
+        specs,
+        resolver,
+      );
+
+      assert.strictEqual(modulesCopy.length, 1);
+      assert.deepEqual(modulesToInstall, [
+        {
+          sourceModule: `${foreignRealmURL.href}cycling-mileage-log`,
+          targetModule: `${targetRealmURL.href}some-listing-xyz/cycling-mileage-log`,
+        },
+      ]);
     });
   });
 

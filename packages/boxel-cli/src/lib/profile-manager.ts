@@ -27,7 +27,7 @@ export interface ProfilesConfig {
   activeProfile: string | null;
 }
 
-export type Environment = 'staging' | 'production' | 'unknown';
+export type Environment = 'staging' | 'production' | 'local' | 'unknown';
 
 /**
  * Extract environment from Matrix user ID
@@ -37,6 +37,7 @@ export type Environment = 'staging' | 'production' | 'unknown';
 export function getEnvironmentFromMatrixId(matrixId: string): Environment {
   if (matrixId.endsWith(':stack.cards')) return 'staging';
   if (matrixId.endsWith(':boxel.ai')) return 'production';
+  if (matrixId.endsWith(':localhost')) return 'local';
   return 'unknown';
 }
 
@@ -67,6 +68,8 @@ export function getEnvironmentLabel(env: Environment): string {
       return 'stack.cards';
     case 'production':
       return 'boxel.ai';
+    case 'local':
+      return 'localhost';
     default:
       return 'unknown';
   }

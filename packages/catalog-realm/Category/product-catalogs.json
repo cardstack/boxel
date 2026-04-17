@@ -11,15 +11,15 @@
       "name": "Product Catalogs",
       "cardInfo": {
         "notes": null,
-        "name": null,
-        "summary": null,
+        "name": "Product Catalogs",
+        "summary": "Product listings, inventory catalogs, digital product stores, merchandise catalogs, and product collection management.",
         "cardThumbnailURL": null
       }
     },
     "relationships": {
       "sphere": {
         "links": {
-          "self": "../Sphere/20dcc8f6-891d-4570-a0c0-1e07b14c97ee"
+          "self": "../Sphere/work"
         }
       },
       "cardInfo.theme": {

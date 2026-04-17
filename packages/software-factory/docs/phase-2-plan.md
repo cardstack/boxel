@@ -82,7 +82,9 @@ interface ValidationStepRunner {
 
 - **Test step**: `{ testRunId, passedCount, failedCount, failures: [{ testName, module, message, stackTrace }] }` — reads back the completed TestRun card from the realm for detailed failure data (will become cheap local filesystem reads after boxel-cli integration)
 - **Lint step** (CS-10714): `{ lintResultId, filesChecked, filesWithErrors, totalViolations, violations: [{ rule, file, line, message }] }` — calls the realm's `_lint` endpoint (ESLint + Prettier + `@cardstack/boxel` rules) for each `.gts`, `.gjs`, `.ts`, `.js` file. Creates a `LintResult` card as a persistent artifact.
-- **Future parse/evaluate/instantiate steps**: each defines its own `details` shape
+- **Eval step** (CS-10715): `{ evalResultId, modulesChecked, modulesWithErrors, modules: [{ path, error, stackTrace? }] }` — evaluates each non-test `.gts` module via `_run-command` → `evaluate-module` host command → `/_prerender-module` (prerenderer sandbox). Creates an `EvalResult` card as a persistent artifact. Files matching `*.test.gts` are excluded.
+- **Instantiate step** (CS-10716): `{ instantiateResultId, cardsChecked, cardsWithErrors, cards: [{ specId, cardName, error, stackTrace? }] }` — discovers Spec cards in the realm, resolves each spec's `ref` to a card definition module, reads `linkedExamples` entries as instance data, and instantiates via `_run-command` → `instantiate-card` host command → `store.__dangerousCreateFromSerialized(...)` (prerenderer sandbox) so `Field.validate()` failures surface during instantiation. Creates an `InstantiateResult` card as a persistent artifact. Field specs (`specType: 'field'`) are excluded.
+- **Future parse step**: defines its own `details` shape
 
 **Adding a new validation step** = creating a new module file in `src/validators/` + replacing the `NoOpStepRunner` in `createDefaultPipeline()`.
 
@@ -92,8 +94,10 @@ All validation artifacts (test runs, lint results, future validation types) are 
 
 - Test runs: `Validations/test_{issue-slug}-{seq}.json` (e.g., `Validations/test_sticky-note-define-core-1.json`)
 - Lint results: `Validations/lint_{issue-slug}-{seq}.json` (e.g., `Validations/lint_sticky-note-define-core-1.json`)
+- Eval results: `Validations/eval_{issue-slug}-{seq}.json` (e.g., `Validations/eval_sticky-note-define-core-1.json`)
+- Instantiate results: `Validations/instantiate_{issue-slug}-{seq}.json` (e.g., `Validations/instantiate_sticky-note-define-core-1.json`)
 
-Each artifact is a card instance (`TestRun` or `LintResult`) with `linksTo` relationships to the `Issue` and `Project` being validated.
+Each artifact is a card instance (`TestRun`, `LintResult`, `EvalResult`, or `InstantiateResult`) with `linksTo` relationships to the `Issue` and `Project` being validated.
 
 ### Validation Context Flow
 
@@ -116,6 +120,32 @@ The lint validation step (`src/validators/lint-step.ts`) uses the realm's existi
 4. Collect `messages` from the response where `severity === 2` (errors)
 
 The `LintResult` card definition (`realm/lint-result.gts`) mirrors the `TestRun` card structure with fitted/embedded/isolated templates, a running state, and links to Issue/Project. Card CRUD is in `src/lint-result-cards.ts`.
+
+### Eval Step Details (CS-10715)
+
+The eval validation step (`src/validators/eval-step.ts`) verifies that `.gts` modules load and evaluate without runtime errors. Module evaluation must happen in a sandbox — the prerenderer's headless Chrome — never directly in the factory's Node process. The step chains through three layers: `_run-command` → `evaluate-module` host command (`packages/host/app/commands/evaluate-module.ts`) → `/_prerender-module` endpoint. The prerenderer returns a `ModuleRenderResponse` with `status: 'ready' | 'error'` and structured error details including message and stack trace.
+
+For each non-test `.gts` file discovered in the realm (files matching `*.test.gts` are excluded — test files are the test step's responsibility):
+
+1. Construct the module URL (strip `.gts` extension, resolve against realm URL)
+2. Call the `evaluate-module` host command via `runRealmCommand()`
+3. The host command calls `/_prerender-module` on the realm server
+4. The prerenderer evaluates the module in headless Chrome and returns success/error
+5. Collect errors with module path, error message, and optional stack trace
+
+The `EvalResult` card definition (`realm/eval-result.gts`) follows the same structure as `LintResult` and `TestRun` — fitted/embedded/isolated templates, a running state, and links to Issue/Project. Card CRUD is in `src/eval-result-cards.ts`. Sequence numbers use the shared `getNextValidationSequenceNumber()` from `realm-operations.ts`.
+
+### Instantiate Step Details (CS-10716)
+
+The instantiate validation step (`src/validators/instantiate-step.ts`) verifies that card definitions can produce live instances from JSON. This catches errors that the eval step misses — eval only verifies modules _load_ (via `loader.import()`), instantiate verifies cards can be _created from JSON_ (via `store.__dangerousCreateFromSerialized(...)`). The step chains through: `_run-command` → `instantiate-card` host command (`packages/host/app/commands/instantiate-card.ts`) → store-based instantiation in the prerenderer sandbox.
+
+**Discovery is spec-based, not file-based.** Unlike eval (which discovers all `.gts` files), the instantiate step searches for `Spec` cards in the realm using `searchRealm()` with the canonical `specRef` (`https://cardstack.com/base/spec`). This aligns with the factory's "one issue per entrypoint card" model where each entrypoint has a matching Spec. Field specs (`specType: 'field'`) are excluded. Each Spec's `ref` field identifies the card definition module and exported class name.
+
+**All `linkedExamples` are instantiated, not just the first.** For each Spec, the step reads every entry in the `linkedExamples` relationship (using the Boxel dotted-key format `linkedExamples.0`, `linkedExamples.1`, etc.), resolves relative `adoptsFrom.module` paths to absolute URLs using `codeRefWithAbsoluteURL` logic, and instantiates all examples in parallel via `Promise.allSettled`. If a Spec has no linked examples, the host command builds a minimal document with just `adoptsFrom` and empty attributes — this still validates that the card class can be loaded and an empty instance deserialized.
+
+**Missing specs is a failure when card modules exist.** During bootstrap (no `.gts` modules, no Specs), the step passes vacuously with no artifact created. But when non-test `.gts` card modules exist and no Spec cards are found, the step fails with an actionable error: "Each entrypoint card needs a Catalog Spec with linkedExamples for instantiation validation." This ensures the agent creates Specs as part of each implementation issue. The `InstantiateResult` artifact is only created when there are Specs to validate — no empty artifacts are written for bootstrap issues.
+
+The host command uses `store.__dangerousCreateFromSerialized(...)` — a public method we added to `StoreService` that calls `card-api.createFromSerialized` directly. We initially tried the public API (`store.add(doc, { doNotPersist: true })`) but discovered that `store.add()` relaxes serialization errors: `Field.validate()` failures during deserialization are caught internally and logged as console warnings rather than thrown. This is correct behavior for the UI (a broken card should degrade gracefully), but the factory needs those validation errors to propagate as thrown exceptions so they can be reported to the agent as actionable failures. The `__dangerous` prefix signals that callers should not use this method for normal store operations — it bypasses persistence, identity mapping, and auto-saving. Auth token routing follows the same pattern as the eval step. The `InstantiateResult` card definition (`realm/instantiate-result.gts`) and CRUD (`src/instantiate-result-cards.ts`) follow the same patterns as `EvalResult`.
 
 ### Handling Failures
 
@@ -160,13 +190,13 @@ The agent does **not** need to create "run tests" issues. Test execution happens
 
 Bootstrap issues (the seed issue that creates Project, KnowledgeArticles, and implementation issues) produce no testable code artifacts — only JSON card instances. Validation still runs after every inner-loop iteration, but each step gracefully handles "nothing to validate":
 
-| Step                   | Bootstrap behavior                                                   |
-| ---------------------- | -------------------------------------------------------------------- |
-| **Parse**              | Checks created `.json` files are valid — useful                      |
-| **Lint**               | No-op for JSON card instances — pass                                 |
-| **Module evaluation**  | No `.gts` modules created — no-op, pass                              |
-| **Card instantiation** | Verifies Project/KnowledgeArticle/Issue instances are valid — useful |
-| **Run tests**          | No test files exist yet — vacuous pass                               |
+| Step                   | Bootstrap behavior                                          |
+| ---------------------- | ----------------------------------------------------------- |
+| **Parse**              | Checks created `.json` files are valid — useful             |
+| **Lint**               | No-op for JSON card instances — pass                        |
+| **Module evaluation**  | No `.gts` modules created — no-op, pass                     |
+| **Card instantiation** | No `.gts` modules or Spec cards — pass, no artifact created |
+| **Run tests**          | No test files exist yet — vacuous pass                      |
 
 **Design principle**: No special-casing per issue type. Each validation step returns `passed: true` with an empty errors array when there is nothing to validate. "Nothing to validate" is a pass, not an error.
 
