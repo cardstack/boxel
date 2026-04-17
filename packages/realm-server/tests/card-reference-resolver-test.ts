@@ -664,7 +664,7 @@ module(basename(__filename), function () {
     test('knownRealms returns registered realm identifiers', function (assert) {
       let realms = vn.knownRealms();
       assert.true(
-        realms.includes('@test/realm/' as any),
+        realms.includes('@test/realm/' as RealmIdentifier),
         'contains the registered realm',
       );
     });
@@ -673,8 +673,8 @@ module(basename(__filename), function () {
       vn.addRealmMapping('@test/other/', 'http://localhost:9000/other/');
       let realms = vn.knownRealms();
       assert.strictEqual(realms.length, 2);
-      assert.true(realms.includes('@test/realm/' as any));
-      assert.true(realms.includes('@test/other/' as any));
+      assert.true(realms.includes('@test/realm/' as RealmIdentifier));
+      assert.true(realms.includes('@test/other/' as RealmIdentifier));
       unregisterCardReferencePrefix('@test/other/');
     });
   });

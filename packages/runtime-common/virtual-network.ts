@@ -71,6 +71,13 @@ export class VirtualNetwork {
     this.importMap.set(prefix, handler);
   }
 
+  /**
+   * Register a scoped realm prefix and its target URL. This populates the
+   * import map (for module loading) and global prefix mappings (for card
+   * reference resolution). It does NOT add a URL-to-URL mapping — use
+   * `addURLMapping` separately when a virtual URL (e.g.
+   * `https://cardstack.com/base/`) needs to map to a real URL.
+   */
   addRealmMapping(realmIdentifier: string, targetURL: string): void {
     let normalizedId = ensureTrailingSlash(realmIdentifier);
     let normalizedTarget = ensureTrailingSlash(targetURL);
