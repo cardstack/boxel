@@ -92,6 +92,7 @@ export async function cfgDirFromTemplate(
     publicBaseUrl?: string;
     host?: string;
     port?: number;
+    smtpHost?: string;
   },
 ): Promise<SynapseConfig> {
   const templateDir = path.join(__dirname, template);
@@ -128,6 +129,10 @@ export async function cfgDirFromTemplate(
   hsYaml = hsYaml.replace(/{{MACAROON_SECRET_KEY}}/g, macaroonSecret);
   hsYaml = hsYaml.replace(/{{FORM_SECRET}}/g, formSecret);
   hsYaml = hsYaml.replace(/{{PUBLIC_BASEURL}}/g, baseUrl);
+  hsYaml = hsYaml.replace(
+    /{{SMTP_HOST}}/g,
+    options?.smtpHost ?? 'boxel-smtp',
+  );
 
   await fse.writeFile(path.join(configDir, 'homeserver.yaml'), hsYaml);
 
@@ -158,6 +163,7 @@ interface StartOptions {
   containerName?: string;
   suppressRegistrationSecretFile?: true;
   traefikServiceName?: string;
+  smtpHost?: string;
   dynamicHostPort?: true;
 }
 
@@ -201,6 +207,7 @@ export async function synapseStart(
       host: useDynamicHostPort ? '127.0.0.1' : SYNAPSE_IP_ADDRESS,
       port: hostPort,
       publicBaseUrl: `http://localhost:${hostPort}`,
+      smtpHost: opts?.smtpHost,
     });
     containerName =
       opts?.containerName ||

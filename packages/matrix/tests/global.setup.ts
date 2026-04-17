@@ -29,9 +29,15 @@ export default async function setup() {
   const envMode = isEnvironmentMode();
 
   await smtpStart({ traefikServiceName: MATRIX_TEST_SMTP_SERVICE });
+  // The SMTP container name must be passed to Synapse so its homeserver.yaml
+  // smtp_host points to the right Docker container on the network.
+  let smtpContainerName = envMode
+    ? `boxel-${MATRIX_TEST_SMTP_SERVICE}-${getEnvironmentSlug()}`
+    : 'boxel-smtp';
   const synapse = await synapseStart(
     {
       traefikServiceName: MATRIX_TEST_SYNAPSE_SERVICE,
+      smtpHost: smtpContainerName,
       // Use a separate container so the dev Synapse keeps running
       ...(envMode
         ? { containerName: `boxel-synapse-test-${getEnvironmentSlug()}` }
