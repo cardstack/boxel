@@ -1,6 +1,5 @@
 import {
   isResolvedCodeRef,
-  RealmPaths,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
@@ -12,8 +11,8 @@ import HostBaseCommand from '../lib/host-base-command';
 import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
 
 import UseAiAssistantCommand from './ai-assistant';
-import GetAvailableRealmUrlsCommand from './get-available-realm-urls';
 import ListingInstallCommand from './listing-install';
+import ValidateRealmCommand from './validate-realm';
 import PersistModuleInspectorViewCommand from './persist-module-inspector-view';
 import SwitchSubmodeCommand from './switch-submode';
 import UpdateCodePathWithSelectionCommand from './update-code-path-with-selection';
@@ -111,15 +110,9 @@ export default class RemixCommand extends HostBaseCommand<
     input: BaseCommandModule.ListingInstallInput,
   ): Promise<undefined> {
     let { realm, listing: listingInput } = input;
-    let realmUrl = new RealmPaths(new URL(realm)).url;
-
-    // Make sure realm is valid
-    let { urls: realmUrls } = await new GetAvailableRealmUrlsCommand(
+    let { realmUrl } = await new ValidateRealmCommand(
       this.commandContext,
-    ).execute(undefined);
-    if (!realmUrls.includes(realmUrl)) {
-      throw new Error(`Invalid realm: ${realmUrl}`);
-    }
+    ).execute({ realmUrl: realm });
 
     // this is intentionally to type because base command cannot interpret Listing type from catalog
     const listing = listingInput as Listing;

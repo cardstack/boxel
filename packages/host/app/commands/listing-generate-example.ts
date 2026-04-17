@@ -44,7 +44,7 @@ export default class ListingGenerateExampleCommand extends HostBaseCommand<
       );
     }
 
-    const { realmPath: defaultWritableRealmPath } =
+    const { realmUrl: defaultWritableRealmPath } =
       await new GetDefaultWritableRealmCommand(this.commandContext).execute(
         undefined,
       );

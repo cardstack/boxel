@@ -1,5 +1,3 @@
-import { isScopedCSSRequest } from 'glimmer-scoped-css';
-
 import { isCardInstance, SupportedMimeType } from '@cardstack/runtime-common';
 
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
@@ -10,9 +8,8 @@ import type { Spec } from 'https://cardstack.com/base/spec';
 import HostBaseCommand from '../lib/host-base-command';
 
 import AuthedFetchCommand from './authed-fetch';
-import CanReadRealmCommand from './can-read-realm';
 import CreateSpecCommand from './create-specs';
-import GetRealmOfUrlCommand from './get-realm-of-url';
+import SanitizeModuleListCommand from './sanitize-module-list';
 
 export default class ListingUpdateSpecsCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingUpdateSpecsInput,
@@ -29,37 +26,10 @@ export default class ListingUpdateSpecsCommand extends HostBaseCommand<
   }
 
   private async sanitizeDeps(deps: string[]): Promise<string[]> {
-    const results = await Promise.all(
-      deps.map(async (dep) => {
-        if (isScopedCSSRequest(dep)) {
-          return null;
-        }
-        if (
-          [
-            'https://cardstack.com',
-            'https://packages',
-            'https://boxel-icons.boxel.ai',
-          ].some((urlStem) => dep.startsWith(urlStem))
-        ) {
-          return null;
-        }
-        try {
-          const { realmUrl } = await new GetRealmOfUrlCommand(
-            this.commandContext,
-          ).execute({ url: dep });
-          if (!realmUrl) {
-            return null;
-          }
-          const { canRead } = await new CanReadRealmCommand(
-            this.commandContext,
-          ).execute({ realmUrl });
-          return canRead ? dep : null;
-        } catch {
-          return null;
-        }
-      }),
-    );
-    return results.filter((dep): dep is string => dep !== null);
+    const { moduleUrls } = await new SanitizeModuleListCommand(
+      this.commandContext,
+    ).execute({ moduleUrls: deps });
+    return moduleUrls;
   }
 
   protected async run(

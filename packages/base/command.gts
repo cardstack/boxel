@@ -573,7 +573,23 @@ export class AuthedFetchResult extends CardDef {
 }
 
 export class GetDefaultWritableRealmResult extends CardDef {
-  @field realmPath = contains(StringField); // empty string if no writable realm found
+  @field realmUrl = contains(StringField); // empty string if no writable realm found
+}
+
+export class ValidateRealmInput extends CardDef {
+  @field realmUrl = contains(StringField);
+}
+
+export class ValidateRealmResult extends CardDef {
+  @field realmUrl = contains(StringField); // normalized with trailing slash
+}
+
+export class SanitizeModuleListInput extends CardDef {
+  @field moduleUrls = containsMany(StringField);
+}
+
+export class SanitizeModuleListResult extends CardDef {
+  @field moduleUrls = containsMany(StringField);
 }
 
 export class SearchGoogleImagesInput extends CardDef {

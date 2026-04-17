@@ -5,7 +5,6 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   type ResolvedCodeRef,
-  RealmPaths,
   join,
   planModuleInstall,
   planInstanceInstall,
@@ -24,10 +23,10 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import ExecuteAtomicOperationsCommand from './execute-atomic-operations';
 import FetchCardJsonCommand from './fetch-card-json';
-import GetAvailableRealmUrlsCommand from './get-available-realm-urls';
 import GetCardCommand from './get-card';
 import ReadSourceCommand from './read-source';
 import SerializeCardCommand from './serialize-card';
+import ValidateRealmCommand from './validate-realm';
 
 import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
@@ -53,14 +52,9 @@ export default class ListingInstallCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.ListingInstallResult> {
     let { realm, listing: listingInput } = input;
 
-    let realmUrl = new RealmPaths(new URL(realm)).url;
-
-    let { urls: realmUrls } = await new GetAvailableRealmUrlsCommand(
+    let { realmUrl } = await new ValidateRealmCommand(
       this.commandContext,
-    ).execute(undefined);
-    if (!realmUrls.includes(realmUrl)) {
-      throw new Error(`Invalid realm: ${realmUrl}`);
-    }
+    ).execute({ realmUrl: realm });
 
     // this is intentionally to type because base command cannot interpret Listing type from catalog
     const listing = listingInput as Listing;

@@ -64,6 +64,7 @@ import * as ReadSourceCommandModule from './read-source';
 import * as ReadTextFileCommandModule from './read-text-file';
 import * as RegisterBotCommandModule from './register-bot';
 import * as ReindexRealmCommandModule from './reindex-realm';
+import * as SanitizeModuleListCommandModule from './sanitize-module-list';
 import * as SaveCardCommandModule from './save-card';
 import * as StoreAddCommandModule from './store-add';
 import * as SearchAndChooseCommandModule from './search-and-choose';
@@ -84,6 +85,7 @@ import * as UnregisterBotCommandModule from './unregister-bot';
 import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-with-selection';
 import * as UpdatePlaygroundSelectionCommandModule from './update-playground-selection';
 import * as UpdateRoomSkillsCommandModule from './update-room-skills';
+import * as ValidateRealmCommandModule from './validate-realm';
 import * as CommandUtilsModule from './utils';
 import * as WriteTextFileCommandModule from './write-text-file';
 
@@ -415,8 +417,16 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GetRealmOfUrlCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/sanitize-module-list',
+    SanitizeModuleListCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/store-add',
     StoreAddCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/validate-realm',
+    ValidateRealmCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-user-system-card',
@@ -502,6 +512,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   RegisterBotCommandModule.default,
   ReindexRealmCommandModule.default,
   SaveCardCommandModule.default,
+  SanitizeModuleListCommandModule.default,
   StoreAddCommandModule.default,
   SerializeCardCommandModule.default,
   SearchAndChooseCommandModule.default,
@@ -526,5 +537,6 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   UpdatePlaygroundSelectionCommandModule.default,
   UpdateRoomSkillsCommandModule.default,
   UseAiAssistantCommandModule.default,
+  ValidateRealmCommandModule.default,
   WriteTextFileCommandModule.default,
 ];
