@@ -61,11 +61,16 @@ export async function resolveTestRun(
     };
   }
 
-  let sequenceNumber = await getNextSequenceNumber(
-    options.slug,
-    realmOptions,
-    options.lastSequenceNumber,
-  );
+  let sequenceNumber: number;
+  if (options.iteration != null) {
+    sequenceNumber = options.iteration;
+  } else {
+    sequenceNumber = await getNextSequenceNumber(
+      options.slug,
+      realmOptions,
+      options.lastSequenceNumber,
+    );
+  }
 
   let createResult = await createTestRun(options.slug, options.testNames, {
     ...realmOptions,

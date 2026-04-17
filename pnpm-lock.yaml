@@ -3083,6 +3083,9 @@ importers:
       '@types/tmp':
         specifier: 'catalog:'
         version: 0.2.6
+      '@universal-ember/test-support':
+        specifier: 'catalog:'
+        version: 0.5.1(@babel/core@7.28.6)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.0.0)(rsvp@4.8.5))(qunit@2.25.0)
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
@@ -3110,6 +3113,9 @@ importers:
       qunit:
         specifier: 'catalog:'
         version: 2.25.0
+      qunit-dom:
+        specifier: 'catalog:'
+        version: 3.5.0
       tmp:
         specifier: 'catalog:'
         version: 0.2.5

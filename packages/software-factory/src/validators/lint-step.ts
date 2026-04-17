@@ -127,7 +127,10 @@ export class LintValidationStep implements ValidationStepRunner {
         ));
   }
 
-  async run(targetRealmUrl: string): Promise<ValidationStepResult> {
+  async run(
+    targetRealmUrl: string,
+    iteration?: number,
+  ): Promise<ValidationStepResult> {
     // Step 1: Discover lintable files
     let lintableFiles: string[];
     try {
@@ -163,17 +166,21 @@ export class LintValidationStep implements ValidationStepRunner {
       : undefined;
 
     let seq: number;
-    try {
-      let realmSeq = await this.getNextSeqFn(slug, targetRealmUrl);
-      // Use the higher of realm state vs in-memory floor. The realm index
-      // may be stale if the prior lint run just completed (lint is fast),
-      // so the floor prevents sequence reuse / artifact overwrite.
-      seq = Math.max(realmSeq, this.lastSequenceNumber + 1);
-    } catch (err) {
-      log.warn(
-        `Failed to resolve sequence number, using floor: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      seq = this.lastSequenceNumber + 1;
+    if (iteration != null) {
+      seq = iteration;
+    } else {
+      try {
+        let realmSeq = await this.getNextSeqFn(slug, targetRealmUrl);
+        // Use the higher of realm state vs in-memory floor. The realm index
+        // may be stale if the prior lint run just completed (lint is fast),
+        // so the floor prevents sequence reuse / artifact overwrite.
+        seq = Math.max(realmSeq, this.lastSequenceNumber + 1);
+      } catch (err) {
+        log.warn(
+          `Failed to resolve sequence number, using floor: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        seq = this.lastSequenceNumber + 1;
+      }
     }
 
     let lintResultId: string;
