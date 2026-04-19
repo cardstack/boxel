@@ -1,0 +1,107 @@
+import { getOwner } from '@ember/owner';
+import Service from '@ember/service';
+import type { RenderingTestContext } from '@ember/test-helpers';
+
+import { getService } from '@universal-ember/test-support';
+import { module, test } from 'qunit';
+
+import AuthedFetchCommand from '@cardstack/host/commands/authed-fetch';
+import RealmService from '@cardstack/host/services/realm';
+
+import {
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
+  testRealmURL,
+  testRealmInfo,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
+} from '../../helpers';
+import { setupBaseRealm } from '../../helpers/base-realm';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { setupRenderingTest } from '../../helpers/setup';
+
+let mockFetchResponse: {
+  ok: boolean;
+  status: number;
+  json: () => Promise<Record<string, any>>;
+};
+
+class StubRealmService extends RealmService {
+  get defaultReadableRealm() {
+    return {
+      path: testRealmURL,
+      info: testRealmInfo,
+    };
+  }
+}
+
+class StubNetworkService extends Service {
+  authedFetch = async (
+    _url: string,
+    _options?: RequestInit,
+  ): Promise<typeof mockFetchResponse> => {
+    return mockFetchResponse;
+  };
+}
+
+module('Integration | commands | authed-fetch', function (hooks) {
+  setupRenderingTest(hooks);
+  setupBaseRealm(hooks);
+  setupLocalIndexing(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
+    getOwner(this)!.register('service:network', StubNetworkService);
+  });
+
+  setupRealmCacheTeardown(hooks);
+
+  hooks.beforeEach(async function () {
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+      }),
+    );
+  });
+
+  test('returns ok, status, and body for a successful JSON response', async function (assert) {
+    mockFetchResponse = {
+      ok: true,
+      status: 200,
+      json: async () => ({ data: 'hello' }),
+    };
+    let commandService = getService('command-service');
+    let command = new AuthedFetchCommand(commandService.commandContext);
+    let result = await command.execute({
+      url: 'https://example.com/api/resource',
+    });
+    assert.true(result.ok);
+    assert.strictEqual(result.status, 200);
+    assert.deepEqual(result.body, { data: 'hello' });
+  });
+
+  test('returns ok=false for a failed response', async function (assert) {
+    mockFetchResponse = {
+      ok: false,
+      status: 404,
+      json: async () => {
+        throw new Error('not json');
+      },
+    };
+    let commandService = getService('command-service');
+    let command = new AuthedFetchCommand(commandService.commandContext);
+    let result = await command.execute({
+      url: 'https://example.com/api/missing',
+    });
+    assert.false(result.ok);
+    assert.strictEqual(result.status, 404);
+    assert.deepEqual(result.body, {});
+  });
+});
