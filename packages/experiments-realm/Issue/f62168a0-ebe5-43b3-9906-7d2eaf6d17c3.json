@@ -23,7 +23,7 @@
       "description": null,
       "statusBoardOrder": null,
       "priorityBoardOrder": null,
-      "issueTypeBoardOrder": null
+      "issueTypeBoardOrder": 2
     },
     "relationships": {
       "project": {

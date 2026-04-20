@@ -71,11 +71,11 @@ const defaultColumnOptions: {
     options: issuePriorityOptions,
   },
   {
-    value: 'ticketType',
+    value: 'issueType',
     label: 'Type',
     fieldName: 'issueType',
-    writeFieldName: 'ticketType',
-    orderField: 'ticketTypeBoardOrder',
+    writeFieldName: 'issueType',
+    orderField: 'issueTypeBoardOrder',
     options: issueTypeOptions,
   },
 ];
@@ -236,8 +236,7 @@ class Isolated extends Component<typeof KanbanBoard> {
     const source =
       defaultColumnOptions.find((o) => o.value === (model as any).groupBy) ??
       defaultColumnOptions[0]!;
-    const attributeName =
-      source.value === 'ticketType' ? 'issueType' : source.writeFieldName;
+    const attributeName = source.writeFieldName;
     const projectId = (model as any).project?.id ?? null;
 
     await this.args.createCard?.(issueSource, new URL(issueSource.module), {
@@ -321,8 +320,8 @@ class Isolated extends Component<typeof KanbanBoard> {
     if (!model) return;
     const groupBy = model.groupBy ?? 'status';
     const configField =
-      groupBy === 'ticketType'
-        ? 'typeColumnConfig'
+      groupBy === 'issueType'
+        ? 'issueColumnConfig'
         : groupBy === 'priority'
           ? 'priorityColumnConfig'
           : 'statusColumnConfig';
@@ -778,7 +777,7 @@ export class KanbanBoard extends CardDef {
           ? (this.project?.issuePriorityOptions as
               | { value: string; label: string }[]
               | undefined)
-          : source.value === 'ticketType'
+          : source.value === 'issueType'
             ? (this.project?.issueTypeOptions as
                 | { value: string; label: string }[]
                 | undefined)
@@ -788,7 +787,7 @@ export class KanbanBoard extends CardDef {
                   | undefined)
               : null;
       const options = projectOptions?.length ? projectOptions : source.options;
-      const config = ((source.value === 'ticketType'
+      const config = ((source.value === 'issueType'
         ? this.typeColumnConfig
         : source.value === 'priority'
           ? this.priorityColumnConfig
@@ -857,7 +856,7 @@ export class KanbanBoard extends CardDef {
     }
     get colConfigLabel(): string {
       if (this.groupBy === 'priority') return 'Priority Column Config';
-      if (this.groupBy === 'ticketType') return 'Type Column Config';
+      if (this.groupBy === 'issueType') return 'Type Column Config';
       return 'Status Column Config';
     }
 

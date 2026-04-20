@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "title": "To Do Board",
-      "groupBy": "ticketType",
+      "groupBy": "issueType",
       "cardInfo": {
         "name": null,
         "notes": null,

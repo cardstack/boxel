@@ -19,11 +19,11 @@
       },
       "comments": [],
       "priority": "no-rush",
-      "issueType": null,
+      "issueType": "house-chores",
       "description": null,
       "statusBoardOrder": null,
       "priorityBoardOrder": 1,
-      "issueTypeBoardOrder": null
+      "issueTypeBoardOrder": 1
     },
     "relationships": {
       "project": {
