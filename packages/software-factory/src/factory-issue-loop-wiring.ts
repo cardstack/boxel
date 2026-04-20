@@ -183,14 +183,15 @@ export async function runFactoryIssueLoop(
     agent = config.agentOverride;
     log.info(`Agent backend: override (${agent.constructor.name})`);
   } else {
-    agent = createLoopAgent({
+    let built = createLoopAgentWithLabel({
       provider,
       openRouterModel: config.openRouterModel,
       realmServerUrl,
       client,
       debug: config.debug,
     });
-    log.info(`Agent backend: ${provider}`);
+    agent = built.agent;
+    log.info(`Agent backend: ${built.label}`);
   }
 
   // 5. Validator factory
@@ -260,10 +261,26 @@ export function assertAgentProviderImplemented(
 }
 
 export function createLoopAgent(config: CreateLoopAgentConfig): LoopAgent {
+  return createLoopAgentWithLabel(config).agent;
+}
+
+/**
+ * Variant of `createLoopAgent` that also returns a human-readable label for
+ * logging (e.g., `"openrouter (model=anthropic/claude-opus-4)"`). The wiring
+ * logs the label so operators can tell at a glance which backend — and, for
+ * OpenRouter, which model — is driving the run.
+ */
+export function createLoopAgentWithLabel(config: CreateLoopAgentConfig): {
+  agent: LoopAgent;
+  label: string;
+} {
   assertAgentProviderImplemented(config.provider);
   switch (config.provider) {
     case 'claude':
-      return new ClaudeCodeFactoryAgent({ debug: config.debug });
+      return {
+        agent: new ClaudeCodeFactoryAgent({ debug: config.debug }),
+        label: 'claude',
+      };
 
     case 'codex':
       // Unreachable — assertAgentProviderImplemented() threw above. The
@@ -276,12 +293,15 @@ export function createLoopAgent(config: CreateLoopAgentConfig): LoopAgent {
         config.openRouterModel && config.openRouterModel.trim() !== ''
           ? config.openRouterModel.trim()
           : FACTORY_DEFAULT_OPENROUTER_MODEL;
-      return new ToolUseFactoryAgent({
-        model,
-        realmServerUrl: config.realmServerUrl,
-        client: config.client,
-        debug: config.debug,
-      } satisfies FactoryAgentConfig);
+      return {
+        agent: new ToolUseFactoryAgent({
+          model,
+          realmServerUrl: config.realmServerUrl,
+          client: config.client,
+          debug: config.debug,
+        } satisfies FactoryAgentConfig),
+        label: `openrouter (model=${model})`,
+      };
     }
   }
 }

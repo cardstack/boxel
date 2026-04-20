@@ -33,7 +33,11 @@ export function jsonSchemaToZodShape(
   schema: Record<string, unknown> | undefined,
 ): ZodRawShape {
   let effective = schema ?? { type: 'object', properties: {} };
-  let zodType = convertJsonSchemaToZod(effective);
+  let normalized = normalizeFreeFormObjects(effective) as Record<
+    string,
+    unknown
+  >;
+  let zodType = convertJsonSchemaToZod(normalized);
   if (zodType instanceof z.ZodObject) {
     return (zodType as ZodObject).shape as ZodRawShape;
   }
@@ -41,6 +45,45 @@ export function jsonSchemaToZodShape(
     'Expected JSON Schema of type "object" for FactoryTool parameters; ' +
       `got Zod type ${zodType.constructor.name}.`,
   );
+}
+
+/**
+ * Walk a JSON Schema and inject `additionalProperties: true` wherever a
+ * node has `type: "object"` but no `properties` (and no
+ * `additionalProperties`) defined.
+ *
+ * Without this, `convertJsonSchemaToZod({type:'object'})` produces a
+ * `ZodCustom` (a runtime refinement) instead of a `ZodObject`. The Claude
+ * Agent SDK's MCP tool enumeration silently drops tools whose schema
+ * contains any `ZodCustom` child — connection stays "connected" but the
+ * tool disappears from the model's tool list. Injecting
+ * `additionalProperties: true` forces the converter to emit a proper
+ * `ZodObject`, which serializes cleanly and appears in the tool list.
+ *
+ * The semantic intent of a bare `{type:'object'}` in a tool-parameter
+ * JSON Schema is "free-form object" — so `additionalProperties: true`
+ * (accept any keys) is the faithful translation.
+ */
+function normalizeFreeFormObjects(node: unknown): unknown {
+  if (Array.isArray(node)) {
+    return node.map(normalizeFreeFormObjects);
+  }
+  if (!node || typeof node !== 'object') {
+    return node;
+  }
+  let obj = node as Record<string, unknown>;
+  let copy: Record<string, unknown> = {};
+  for (let [key, value] of Object.entries(obj)) {
+    copy[key] = normalizeFreeFormObjects(value);
+  }
+  if (
+    copy.type === 'object' &&
+    !('properties' in copy) &&
+    !('additionalProperties' in copy)
+  ) {
+    copy.additionalProperties = true;
+  }
+  return copy;
 }
 
 /**

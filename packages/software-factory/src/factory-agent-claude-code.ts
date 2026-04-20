@@ -87,7 +87,7 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     context: AgentContext,
     tools: FactoryTool[],
   ): Promise<AgentRunResult> {
-    let systemPrompt = this.buildSystemPrompt(context);
+    let systemPrompt = this.buildSystemPrompt(context, tools);
     let userPrompt = this.buildUserPrompt(context);
 
     let toolCallLog: ToolCallEntry[] = [];
@@ -163,17 +163,45 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     };
   }
 
-  private buildSystemPrompt(context: AgentContext): string {
+  private buildSystemPrompt(
+    context: AgentContext,
+    tools: FactoryTool[],
+  ): string {
     let skills = context.skills.map((s: ResolvedSkill) => ({
       name: s.name,
       content: s.content,
       references: s.references ?? [],
     }));
 
-    return this.promptLoader.load('system', {
+    let base = this.promptLoader.load('system', {
       targetRealmUrl: context.targetRealmUrl,
       skills,
     });
+
+    // The shared prompt template references tools by their plain names
+    // (`read_file`, `signal_done`, etc.) — which is what OpenRouter's
+    // tool-use protocol registers. The Claude Agent SDK exposes tools via
+    // an MCP server and prefixes every tool name with `mcp__<server>__`,
+    // so without a bridge the model can see "write_file" in the prompt
+    // but only `mcp__factory__write_file` in its tool list. Append a
+    // short tool-naming note so the model can resolve the two
+    // consistently. The OpenRouter path leaves the template untouched.
+    let renameList = tools
+      .map((t) => `- \`${t.name}\` → \`mcp__${MCP_SERVER_NAME}__${t.name}\``)
+      .join('\n');
+    let toolNamingNote = [
+      '',
+      '# Tool naming (Claude Code backend)',
+      '',
+      `Your tools are exposed through an MCP server named \`${MCP_SERVER_NAME}\`.`,
+      `When you invoke a tool, use its MCP-prefixed name — not the plain`,
+      `name used elsewhere in this prompt. Mapping:`,
+      '',
+      renameList,
+      '',
+    ].join('\n');
+
+    return base + toolNamingNote;
   }
 
   private buildUserPrompt(context: AgentContext): string {
