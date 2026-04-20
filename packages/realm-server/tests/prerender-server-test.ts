@@ -554,6 +554,46 @@ module(basename(__filename), function () {
       );
     });
 
+    test('reports per-affinity vacancy for warm-vacancy-first routing', async function (assert) {
+      let url = `${realmURL.href}1`;
+      let permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> = {
+        [realmURL.href]: ['read', 'write', 'realm-owner'],
+      };
+      let auth = testCreatePrerenderAuth(testUserId, permissions);
+      // Warm the affinity with a visit.
+      await request
+        .post('/prerender-visit')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'prerender-visit-request',
+            attributes: {
+              url,
+              auth,
+              realm: realmURL.href,
+              affinityType: 'realm',
+              affinityValue: realmURL.href,
+              renderOptions: { cardRender: true },
+            },
+          },
+        });
+
+      let affinityKey = toAffinityKey({
+        affinityType: 'realm',
+        affinityValue: realmURL.href,
+      });
+      let snapshot = prerenderer.getVacancySnapshot();
+      let entry = snapshot[affinityKey];
+      assert.ok(entry, `vacancy snapshot includes ${affinityKey}`);
+      assert.true(entry.idle, 'affinity is idle after the visit completes');
+      assert.strictEqual(
+        entry.tabCount,
+        1,
+        'affinity owns exactly one tab after a single visit',
+      );
+    });
+
     test('responds draining immediately when shutdown begins during an in-flight prerender', async function (assert) {
       let localDraining = false;
       let drainingDeferred = new Deferred<void>();

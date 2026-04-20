@@ -331,6 +331,135 @@ module(basename(__filename), function () {
       );
     });
 
+    test('heartbeat records affinityVacancy per-affinity {idle, tabCount}', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      let warmKey = realmAffinityKey('https://realm.example/A');
+      let busyKey = realmAffinityKey('https://realm.example/B');
+
+      let registration = await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 4,
+            url: serverUrlA,
+            status: 'active',
+            warmedAffinities: [warmKey, busyKey],
+            affinityVacancy: {
+              [warmKey]: { idle: true, tabCount: 1 },
+              [busyKey]: { idle: false, tabCount: 2 },
+            },
+          },
+        },
+      });
+      assert.strictEqual(registration.status, 204, 'heartbeat accepted');
+
+      let health = await request.get('/');
+      let server = (health.body.included as any[]).find(
+        (s) => s.id === serverUrlA,
+      );
+      assert.ok(server, 'server present in health included');
+      assert.deepEqual(
+        server.attributes.affinityVacancy,
+        {
+          [warmKey]: { idle: true, tabCount: 1 },
+          [busyKey]: { idle: false, tabCount: 2 },
+        },
+        'affinityVacancy snapshot round-trips through the heartbeat',
+      );
+
+      // Subsequent heartbeat with updated vacancy overwrites the snapshot.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 4,
+            url: serverUrlA,
+            status: 'active',
+            warmedAffinities: [warmKey, busyKey],
+            affinityVacancy: {
+              [warmKey]: { idle: true, tabCount: 1 },
+              [busyKey]: { idle: true, tabCount: 2 },
+            },
+          },
+        },
+      });
+      let health2 = await request.get('/');
+      let server2 = (health2.body.included as any[]).find(
+        (s) => s.id === serverUrlA,
+      );
+      assert.deepEqual(
+        server2.attributes.affinityVacancy[busyKey],
+        { idle: true, tabCount: 2 },
+        'busy affinity flips to idle on the next heartbeat',
+      );
+    });
+
+    test('heartbeat without affinityVacancy is accepted (legacy server during rollout)', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      let registration = await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            status: 'active',
+            warmedAffinities: [realmAffinityKey('https://realm.example/A')],
+            // affinityVacancy intentionally omitted — predates CS-10758
+          },
+        },
+      });
+      assert.strictEqual(registration.status, 204, 'legacy heartbeat accepted');
+
+      let health = await request.get('/');
+      let server = (health.body.included as any[]).find(
+        (s) => s.id === serverUrlA,
+      );
+      assert.deepEqual(
+        server.attributes.affinityVacancy,
+        {},
+        'missing affinityVacancy normalized to empty object, not null',
+      );
+    });
+
+    test('heartbeat drops malformed affinityVacancy entries', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      let goodKey = realmAffinityKey('https://realm.example/A');
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            status: 'active',
+            warmedAffinities: [goodKey],
+            affinityVacancy: {
+              [goodKey]: { idle: true, tabCount: 1 },
+              badShape1: { idle: 'yes', tabCount: 1 }, // wrong type
+              badShape2: { idle: true }, // missing tabCount
+              badShape3: null, // not an object
+            },
+          },
+        },
+      });
+
+      let health = await request.get('/');
+      let server = (health.body.included as any[]).find(
+        (s) => s.id === serverUrlA,
+      );
+      assert.deepEqual(
+        server.attributes.affinityVacancy,
+        { [goodKey]: { idle: true, tabCount: 1 } },
+        'only well-formed entries are recorded',
+      );
+    });
+
     test('heartbeat: url required; heartbeat updates warmed affinities and status', async function (assert) {
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());

@@ -755,6 +755,10 @@ export function createPrerenderHttpServer(options?: {
             url: serverURL,
             status: status ?? (draining ? 'draining' : 'active'),
             warmedAffinities: prerenderer.getWarmAffinities(),
+            // Per-affinity vacancy snapshot. Consumed by the prerender
+            // manager's warm-vacancy-first routing (CS-10758). Additive to
+            // warmedAffinities for rolling-deploy back-compat.
+            affinityVacancy: prerenderer.getVacancySnapshot(),
           },
         },
       };

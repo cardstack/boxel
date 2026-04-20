@@ -103,6 +103,10 @@ export class Prerenderer {
     return this.#pagePool.getWarmAffinities();
   }
 
+  getVacancySnapshot(): Record<string, { idle: boolean; tabCount: number }> {
+    return this.#pagePool.getVacancySnapshot();
+  }
+
   async stop(): Promise<void> {
     if (this.#cleanupInterval) {
       clearInterval(this.#cleanupInterval);

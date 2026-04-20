@@ -12,11 +12,22 @@ import {
 import { fromAffinityKey, toAffinityKey } from './affinity';
 import type { AffinityType } from '@cardstack/runtime-common';
 
+// Per-affinity vacancy reported by a prerender server in its heartbeat.
+// Consumed by warm-vacancy-first routing (CS-10758): `idle: true` means
+// every tab for this affinity has an empty render queue; `tabCount`
+// tracks the affinity's claimed tabs.
+export type AffinityVacancy = { idle: boolean; tabCount: number };
+
 type ServerInfo = {
   url: string;
   capacity: number;
   activeAffinities: Set<string>;
   warmedAffinities: Set<string>;
+  // Populated from the `affinityVacancy` field of the server's heartbeat.
+  // Older servers that predate CS-10758 won't include this field; in that
+  // case the Map stays empty and callers should fall back to inferring
+  // warmth from `warmedAffinities` without vacancy information.
+  affinityVacancy: Map<string, AffinityVacancy>;
   status: 'active' | 'draining';
   registeredAt: number;
   lastSeenAt: number;
@@ -204,17 +215,22 @@ export function buildPrerenderManagerApp(options?: {
     capacity,
     status,
     warmedAffinities,
+    affinityVacancy,
   }: {
     url: string;
     capacity?: number;
     status?: 'active' | 'draining';
     warmedAffinities?: string[];
+    affinityVacancy?: Record<string, AffinityVacancy>;
   }) {
     log.debug(
       `received heartbeat from ${url} status=${status} capacity=${capacity} warmedAffinities=${warmedAffinities ? warmedAffinities.join() : 'none'}`,
     );
     let existing = registry.servers.get(url);
     let changed = false;
+    let vacancyMap = affinityVacancy
+      ? new Map<string, AffinityVacancy>(Object.entries(affinityVacancy))
+      : undefined;
     if (existing) {
       let warmSet = new Set(warmedAffinities ?? []);
       existing.lastSeenAt = now();
@@ -233,6 +249,9 @@ export function buildPrerenderManagerApp(options?: {
       ) {
         existing.warmedAffinities = warmSet;
         changed = true;
+      }
+      if (vacancyMap) {
+        existing.affinityVacancy = vacancyMap;
       }
       if (warmSet.size === 0) {
         // server restarted; clear tracked active affinities and mappings
@@ -280,6 +299,7 @@ export function buildPrerenderManagerApp(options?: {
       capacity: capacity || 4,
       activeAffinities: new Set(),
       warmedAffinities: new Set(warmedAffinities ?? []),
+      affinityVacancy: vacancyMap ?? new Map(),
       status: status ?? 'active',
       registeredAt: now(),
       lastSeenAt: now(),
@@ -347,6 +367,7 @@ export function buildPrerenderManagerApp(options?: {
           lastSeenAt: formatTimestampWithTimezone(serverInfo.lastSeenAt),
           status: serverInfo.status,
           warmedAffinities: Array.from(serverInfo.warmedAffinities.values()),
+          affinityVacancy: Object.fromEntries(serverInfo.affinityVacancy),
           affinities,
         },
       });
@@ -390,6 +411,28 @@ export function buildPrerenderManagerApp(options?: {
           (v: unknown): v is string => Boolean(v && typeof v === 'string'),
         );
       }
+      let affinityVacancy: Record<string, AffinityVacancy> | undefined;
+      if (
+        attrs.affinityVacancy &&
+        typeof attrs.affinityVacancy === 'object' &&
+        !Array.isArray(attrs.affinityVacancy)
+      ) {
+        let parsed: Record<string, AffinityVacancy> = {};
+        for (let [key, value] of Object.entries(attrs.affinityVacancy)) {
+          if (
+            value &&
+            typeof value === 'object' &&
+            typeof (value as AffinityVacancy).idle === 'boolean' &&
+            typeof (value as AffinityVacancy).tabCount === 'number'
+          ) {
+            parsed[key] = {
+              idle: (value as AffinityVacancy).idle,
+              tabCount: (value as AffinityVacancy).tabCount,
+            };
+          }
+        }
+        affinityVacancy = parsed;
+      }
       if (!url) {
         log.warn('Heartbeat rejected: prerender server URL not provided');
         ctxt.status = 400;
@@ -400,7 +443,13 @@ export function buildPrerenderManagerApp(options?: {
       }
       url = normalizeURL(url);
 
-      recordHeartbeat({ url, capacity, status, warmedAffinities });
+      recordHeartbeat({
+        url,
+        capacity,
+        status,
+        warmedAffinities,
+        affinityVacancy,
+      });
       ctxt.status = 204;
       ctxt.set('X-Prerender-Server-Id', url);
     } catch (e) {
