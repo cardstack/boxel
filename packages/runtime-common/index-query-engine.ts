@@ -64,7 +64,7 @@ import {
   isFilterRefersToNonexistentTypeError,
   type DefinitionLookup,
 } from './definition-lookup';
-import { isScopedCSSRequest } from 'glimmer-scoped-css';
+import { isScopedCSSRequest } from './scoped-css';
 import type { FileMetaResource } from './resource-types';
 
 export interface IndexedFile {
