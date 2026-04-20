@@ -1052,8 +1052,8 @@ export default class StoreService extends Service implements StoreInterface {
         };
       }
 
-      let normalizedId = normalizeId(relationship.data.id);
-      if (normalizedId === relationship.data.id) {
+      let normalizedId = normalizeId((relationship.data as any).id);
+      if (normalizedId === (relationship.data as any).id) {
         return relationship;
       }
 
