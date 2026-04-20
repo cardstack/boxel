@@ -4,6 +4,7 @@ import type { ResolvedCodeRef } from './code-ref';
 
 export interface RenderRouteOptions {
   clearCache?: true;
+  cardRender?: true;
   fileExtract?: true;
   fileRender?: true;
   fileDefCodeRef?: ResolvedCodeRef;
@@ -22,6 +23,9 @@ export function parseRenderRouteOptions(
     let options: RenderRouteOptions = {};
     if (parsed.clearCache) {
       options.clearCache = true;
+    }
+    if (parsed.cardRender) {
+      options.cardRender = true;
     }
     if (parsed.fileExtract) {
       options.fileExtract = true;
@@ -53,6 +57,9 @@ export function serializeRenderRouteOptions(
   let serialized: RenderRouteOptions = {};
   if (options.clearCache) {
     serialized.clearCache = true;
+  }
+  if (options.cardRender) {
+    serialized.cardRender = true;
   }
   if (options.fileExtract) {
     serialized.fileExtract = true;

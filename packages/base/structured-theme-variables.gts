@@ -3,6 +3,7 @@ import {
   buildCssVariableName,
   dasherize,
   entriesToCssRuleMap,
+  markdownEscape,
   type CssVariableEntry,
   type CssRuleMap,
 } from '@cardstack/boxel-ui/helpers';
@@ -141,6 +142,33 @@ export class ThemeTypographyField extends FieldDef {
     }
     return entriesToCssRuleMap(this.cssVariableFields);
   }
+
+  // CS-10787: emit a small header + bulleted entries section for each
+  // populated typography slot. Delegates the per-slot rendering to
+  // TypographyField.markdown by emitting its text directly.
+  static markdown = class Markdown extends Component<
+    typeof ThemeTypographyField
+  > {
+    get text() {
+      let model = this.args.model;
+      if (!model) {
+        return '';
+      }
+      let entries = model.cssVariableFields ?? [];
+      if (!entries.length) {
+        return '';
+      }
+      let rows: string[] = [];
+      for (let { name, value } of entries) {
+        if (!value) continue;
+        rows.push(
+          `- ${markdownEscape(name ?? '')}: \`${value}\``,
+        );
+      }
+      return rows.join('\n');
+    }
+    <template>{{this.text}}</template>
+  };
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -604,4 +632,27 @@ export default class ThemeVarField extends FieldDef {
   }
 
   static embedded: BaseDefComponent = Embedded;
+
+  // CS-10787: emit a bulleted list of populated CSS variables — each entry
+  // is the CSS variable name paired with its value in inline code. Empty
+  // slots are skipped.
+  static markdown = class Markdown extends Component<typeof ThemeVarField> {
+    get text() {
+      let model = this.args.model;
+      if (!model) {
+        return '';
+      }
+      let entries = model.cssVariableFields ?? [];
+      if (!entries.length) {
+        return '';
+      }
+      let rows: string[] = [];
+      for (let { name, value } of entries) {
+        if (!value) continue;
+        rows.push(`- ${markdownEscape(name ?? '')}: \`${value}\``);
+      }
+      return rows.join('\n');
+    }
+    <template>{{this.text}}</template>
+  };
 }

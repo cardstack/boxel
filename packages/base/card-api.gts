@@ -3,7 +3,11 @@ import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash';
 import { WatchedArray } from './watched-array';
 import { BoxelInput, CopyButton } from '@cardstack/boxel-ui/components';
-import { type MenuItemOptions, not } from '@cardstack/boxel-ui/helpers';
+import {
+  markdownEscape,
+  type MenuItemOptions,
+  not,
+} from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
   type BoxComponent,
@@ -105,6 +109,8 @@ import DefaultHeadTemplate from './default-templates/head';
 import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import MarkdownTemplate from './default-templates/markdown';
+import DefaultMarkdownFallbackTemplate from './default-templates/markdown-fallback';
+import { markdownImage } from './markdown-helpers';
 import FileDefEditTemplate from './default-templates/file-def-edit';
 import ImageDefAtomTemplate from './default-templates/image-def-atom';
 import ImageDefEmbeddedTemplate from './default-templates/image-def-embedded';
@@ -2369,6 +2375,11 @@ export class FieldDef extends BaseDef {
   static edit: BaseDefComponent = FieldDefEditTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
   static fitted: BaseDefComponent = MissingTemplate;
+  // Default `markdown` fallback (CS-10784): renders the field's HTML embedded
+  // template into a hidden source container, then converts it to markdown via
+  // turndown (registered on `globalThis` by `packages/host`). Subclasses can
+  // override `static markdown` to author bespoke markdown directly.
+  static markdown: BaseDefComponent = DefaultMarkdownFallbackTemplate;
 }
 
 export class ReadOnlyField extends FieldDef {
@@ -2379,6 +2390,12 @@ export class ReadOnlyField extends FieldDef {
   };
   static edit = class Edit extends Component<typeof this> {
     <template>{{@model}}</template>
+  };
+  // CS-10785: emit plain text, escaped so markdown metacharacters in the
+  // raw string (e.g. `*`, `#`, `1.`) don't trigger formatting when the
+  // value is interpolated into a surrounding markdown document.
+  static markdown = class Markdown extends Component<typeof this> {
+    <template>{{markdownEscape @model}}</template>
   };
 }
 
@@ -2402,6 +2419,15 @@ export class StringField extends FieldDef {
   static atom = class Atom extends Component<typeof this> {
     <template>{{@model}}</template>
   };
+  // CS-10785: plain text, escaped. Same rationale as ReadOnlyField.
+  // Explicit `BaseDefComponent` annotation so subclass overrides (e.g.
+  // TextAreaField, MarkdownField, MaybeBase64Field) aren't forced to
+  // structurally match this inline class shape.
+  static markdown: BaseDefComponent = class Markdown extends Component<
+    typeof this
+  > {
+    <template>{{markdownEscape @model}}</template>
+  };
 }
 
 // TODO: This is a simple workaround until the thumbnailURL is converted into an actual image field
@@ -2419,6 +2445,24 @@ export class MaybeBase64Field extends StringField {
     </template>
   };
   static atom = MaybeBase64Field.embedded;
+  // CS-10785: suppress embedded base64 payloads from the markdown emission —
+  // they're never useful to downstream markdown consumers and would blow up
+  // the output size. Non-base64 strings are escaped like a StringField.
+  static markdown = class Markdown extends Component<typeof this> {
+    get isBase64() {
+      return this.args.model?.startsWith('data:');
+    }
+    get escaped() {
+      return markdownEscape(this.args.model);
+    }
+    <template>
+      {{#if this.isBase64}}
+        [binary content]
+      {{else}}
+        {{this.escaped}}
+      {{/if}}
+    </template>
+  };
 }
 
 export class TextAreaField extends StringField {
@@ -2434,6 +2478,22 @@ export class TextAreaField extends StringField {
         @readonly={{not @canEdit}}
       />
     </template>
+  };
+  // CS-10785: escape the content and convert single `\n` to a CommonMark
+  // hard-break (`  \n`) so a multi-line text area renders as stacked lines
+  // rather than collapsing into one paragraph. Empty-line paragraph breaks
+  // (`\n\n`) are preserved — the regex touches every newline, producing
+  // `  \n  \n`, which is still a valid paragraph separator.
+  // Explicit `BaseDefComponent` annotation so subclass overrides (e.g.
+  // CSSField) aren't forced to structurally match this inline class shape.
+  static markdown: BaseDefComponent = class Markdown extends Component<
+    typeof this
+  > {
+    get escapedWithBreaks() {
+      let escaped = markdownEscape(this.args.model);
+      return escaped.replace(/\n/g, '  \n');
+    }
+    <template>{{this.escapedWithBreaks}}</template>
   };
 }
 
@@ -2488,6 +2548,26 @@ export class CSSField extends TextAreaField {
       </style>
     </template>
   };
+  // CS-10785: emit the CSS in a fenced code block with a `css` info string.
+  // The fence is computed as the longest run of backticks in the content
+  // plus one (minimum 3), so embedded triple-backtick sequences in CSS
+  // content can't prematurely close the block. Content itself is not
+  // escaped — inside a fenced block, CommonMark treats it as literal.
+  static markdown = class Markdown extends Component<typeof this> {
+    get fenced() {
+      let value = this.args.model ?? '';
+      let longestRun = 0;
+      let match = value.match(/`+/g);
+      if (match) {
+        for (let run of match) {
+          if (run.length > longestRun) longestRun = run.length;
+        }
+      }
+      let fence = '`'.repeat(Math.max(3, longestRun + 1));
+      return `${fence}css\n${value}\n${fence}`;
+    }
+    <template>{{this.fenced}}</template>
+  };
 }
 
 export class MarkdownField extends StringField {
@@ -2516,6 +2596,13 @@ export class MarkdownField extends StringField {
         @readonly={{not @canEdit}}
       />
     </template>
+  };
+  // CS-10785: raw markdown passthrough. Content is already authored as
+  // markdown, so interpolating a value with `#`, `*`, etc. must NOT
+  // double-escape. This overrides the StringField inherited `static
+  // markdown` to suppress escaping.
+  static markdown = class Markdown extends Component<typeof MarkdownField> {
+    <template>{{@model}}</template>
   };
 }
 
@@ -2565,6 +2652,13 @@ export class NumberField extends FieldDef {
       serializeForUI,
       NumberSerializer.validate,
     );
+  };
+  // CS-10785: render the number as text. `markdownEscape` handles the null/
+  // undefined case (empty string) and also protects against line-start
+  // `1.`/`2.` etc. being interpreted as ordered list markers when this
+  // value gets interpolated into a larger markdown document.
+  static markdown = class Markdown extends Component<typeof this> {
+    <template>{{markdownEscape @model}}</template>
   };
 }
 
@@ -2628,6 +2722,13 @@ export class FileDef extends BaseDef {
   static isolated = this.embedded;
   static atom = this.embedded;
   static edit: BaseDefComponent = FileDefEditTemplate;
+  // Default `markdown` fallback (CS-10784): inherits from FieldDef but
+  // restated explicitly so this class's own slot is set rather than relying on
+  // prototype lookup — the format-resolution code reads slots via bracket
+  // notation on the resolved class (`(cls as any)[format]`), which traverses
+  // the prototype chain, but having an own property keeps subclass overrides
+  // less surprising.
+  static markdown: BaseDefComponent = DefaultMarkdownFallbackTemplate;
 
   static async extractAttributes(
     url: string,
@@ -2712,6 +2813,27 @@ export class ImageDef extends FileDef {
   static atom: BaseDefComponent = ImageDefAtomTemplate;
   static embedded: BaseDefComponent = ImageDefEmbeddedTemplate;
   static fitted: BaseDefComponent = ImageDefFittedTemplate;
+
+  // CS-10787: emit a markdown image reference. If no URL is available we
+  // fall back to a placeholder that names the image — useful to downstream
+  // consumers (e.g. an LLM ingesting the markdown) without a broken link.
+  static markdown: BaseDefComponent = class Markdown extends Component<
+    typeof ImageDef
+  > {
+    get text() {
+      let model = this.args.model;
+      if (!model) {
+        return '';
+      }
+      let url = model.url ?? model.sourceUrl ?? '';
+      let name = model.name ?? '';
+      if (!url && !name) {
+        return '';
+      }
+      return markdownImage(name, url);
+    }
+    <template>{{this.text}}</template>
+  };
 }
 
 export class CardInfoField extends FieldDef {
@@ -2797,6 +2919,11 @@ export class CardDef extends BaseDef {
   static edit: BaseDefComponent = DefaultCardDefTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
   static head: BaseDefComponent = DefaultHeadTemplate;
+  // Default `markdown` fallback (CS-10784): renders the card's HTML isolated
+  // template into a hidden source container, then converts it to markdown via
+  // turndown (registered on `globalThis` by `packages/host`). Subclasses can
+  // override `static markdown` to author bespoke markdown directly.
+  static markdown: BaseDefComponent = DefaultMarkdownFallbackTemplate;
 
   static get hasCustomEditTemplate(): boolean {
     return this.edit !== CardDef.edit;

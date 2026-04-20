@@ -84,6 +84,7 @@ export interface InstanceEntry {
   fittedHtml?: Record<string, string>;
   atomHtml?: string;
   iconHTML?: string;
+  markdown?: string;
   types: string[];
   displayNames: string[];
   deps: Set<string>;
@@ -137,6 +138,7 @@ export interface FileEntry {
   fittedHtml?: Record<string, string>;
   atomHtml?: string;
   iconHTML?: string;
+  markdown?: string;
 }
 
 export class Batch {
@@ -301,6 +303,7 @@ export class Batch {
           fitted_html: entry.fittedHtml,
           atom_html: entry.atomHtml,
           icon_html: entry.iconHTML,
+          markdown: entry.markdown ?? null,
           deps: [...entry.deps],
           last_known_good_deps: [...entry.deps],
           types: entry.types,
@@ -326,6 +329,7 @@ export class Batch {
           fitted_html: entry.fittedHtml ?? null,
           atom_html: entry.atomHtml ?? null,
           icon_html: entry.iconHTML ?? null,
+          markdown: entry.markdown ?? null,
           last_modified: entry.lastModified,
           resource_created_at: entry.resourceCreatedAt,
           error_doc: null,

@@ -8,6 +8,7 @@ import {
   primitive,
   useIndexBasedKey,
 } from './card-api';
+import { markdownEscape } from '@cardstack/boxel-ui/helpers';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -321,6 +322,23 @@ export default class Base64ImageField extends FieldDef {
     </template>
   };
   static embedded = Base64ImageField.isolated;
+
+  // CS-10786: never emit the raw base64 payload — it bloats the document
+  // and is useless to downstream consumers. Emit a placeholder that names
+  // the alt text if available, mirroring MaybeBase64Field's behavior.
+  static markdown = class Markdown extends Component<typeof Base64ImageField> {
+    get text() {
+      if (!this.args.model?.base64) {
+        return '';
+      }
+      let alt = this.args.model?.altText;
+      if (alt) {
+        return `[binary image: ${markdownEscape(alt)}]`;
+      }
+      return '[binary image]';
+    }
+    <template>{{this.text}}</template>
+  };
 }
 
 // from "ember-css-url"

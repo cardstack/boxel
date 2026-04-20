@@ -16,6 +16,7 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
+import { fencedCodeBlock } from './markdown-helpers';
 
 const EXCERPT_MAX_LENGTH = 500;
 
@@ -550,6 +551,21 @@ export class CsvFileDef extends FileDef {
   static fitted: BaseDefComponent = Fitted;
   static atom: BaseDefComponent = Atom;
   static head: BaseDefComponent = Head;
+
+  // CS-10787: emit the CSV source as a fenced `csv` code block. Empty
+  // content produces an empty string.
+  static markdown: BaseDefComponent = class Markdown extends Component<
+    typeof CsvFileDef
+  > {
+    get text() {
+      let content = this.args.model?.content;
+      if (!content) {
+        return '';
+      }
+      return fencedCodeBlock(content, 'csv');
+    }
+    <template>{{this.text}}</template>
+  };
 
   static async extractAttributes(
     url: string,

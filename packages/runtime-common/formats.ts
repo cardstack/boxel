@@ -5,7 +5,8 @@ export type Format =
   | 'edit'
   | 'atom'
   | 'head'
-  | 'metadata';
+  | 'metadata'
+  | 'markdown';
 
 export function isValidFormat(
   format: string,
@@ -21,6 +22,7 @@ export const formats: Format[] = [
   'atom',
   'edit',
   'head',
+  'markdown',
 ];
 
 export const FITTED_FORMATS = [

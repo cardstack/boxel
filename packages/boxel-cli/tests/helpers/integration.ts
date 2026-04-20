@@ -26,30 +26,8 @@ import type { Server } from 'http';
 // CLI tests don't need card rendering — stub out the prerenderer
 // so we don't launch Chrome.
 const noopPrerenderer: Prerenderer = {
-  prerenderCard: async () => ({
-    serialized: null,
-    searchDoc: null,
-    displayNames: null,
-    deps: null,
-    types: null,
-    isolatedHTML: null,
-    headHTML: null,
-    atomHTML: null,
-    embeddedHTML: null,
-    fittedHTML: null,
-    iconHTML: null,
-    error: {
-      type: 'instance-error' as const,
-      error: {
-        message: 'Prerendering disabled in CLI tests',
-        status: 500,
-        additionalErrors: null,
-      },
-    },
-  }),
   prerenderModule: async () => ({ html: '', status: 200 }) as any,
-  prerenderFileExtract: async () => ({ html: '', status: 200 }) as any,
-  prerenderFileRender: async () => ({ html: '', status: 200 }) as any,
+  prerenderVisit: async () => ({}) as any,
   runCommand: async () => ({ status: 'ready' }),
 };
 

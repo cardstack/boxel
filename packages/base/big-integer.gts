@@ -1,7 +1,7 @@
 import { primitive, Component, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { markdownEscape, not } from '@cardstack/boxel-ui/helpers';
 import Number99SmallIcon from '@cardstack/boxel-icons/number-99-small';
 import {
   fieldSerializer,
@@ -64,4 +64,18 @@ export default class BigIntegerField extends FieldDef {
   static embedded = View;
   static atom = View;
   static edit = Edit;
+
+  // CS-10786: serialize the bigint to a decimal string and escape it — the
+  // leading `-` of a negative value would otherwise look like a bullet
+  // marker at line start.
+  static markdown = class Markdown extends Component<typeof this> {
+    get text() {
+      let value = this.args.model;
+      if (value == null) {
+        return '';
+      }
+      return markdownEscape(BigIntegerSerializer.serialize(value));
+    }
+    <template>{{this.text}}</template>
+  };
 }
