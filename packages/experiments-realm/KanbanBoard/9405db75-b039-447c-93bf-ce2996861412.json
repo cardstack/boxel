@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "title": "Dark Factory",
+      "dueDate": null,
       "groupBy": "status",
       "cardInfo": {
         "name": null,
@@ -16,7 +16,37 @@
         "summary": null,
         "cardThumbnailURL": null
       },
+      "description": null,
+      "projectCode": "DF",
+      "projectName": "Dark Factory",
+      "projectStatus": null,
       "hideEmptyColumns": false,
+      "issueTypeOptions": [
+        {
+          "value": "bootstrap",
+          "label": "Bootstrap"
+        },
+        {
+          "value": "feature",
+          "label": "Feature"
+        },
+        {
+          "value": "bug",
+          "label": "Bug"
+        },
+        {
+          "value": "task",
+          "label": "Task"
+        },
+        {
+          "value": "research",
+          "label": "Research"
+        },
+        {
+          "value": "infrastructure",
+          "label": "Infrastructure"
+        }
+      ],
       "typeColumnConfig": [
         {
           "key": "bootstrap",
@@ -27,18 +57,53 @@
           "sortOrder": null
         }
       ],
+      "issueStatusOptions": [
+        {
+          "value": "backlog",
+          "label": "Backlog"
+        },
+        {
+          "value": "in_progress",
+          "label": "In Progress"
+        },
+        {
+          "value": "blocked",
+          "label": "Blocked"
+        },
+        {
+          "value": "review",
+          "label": "In Review"
+        },
+        {
+          "value": "done",
+          "label": "Done"
+        }
+      ],
       "statusColumnConfig": [],
+      "issuePriorityOptions": [
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        },
+        {
+          "value": "critical",
+          "label": "Critical"
+        }
+      ],
       "priorityColumnConfig": []
     },
     "relationships": {
-      "project": {
-        "links": {
-          "self": "../Project/2bd7e5a6-5c73-464a-a124-8e863fb03901"
-        }
-      },
       "cardInfo.theme": {
         "links": {
-          "self": null
+          "self": "https://cardstack.com/base/Theme/boxel-brand-guide"
         }
       },
       "cardInfo.cardThumbnail": {

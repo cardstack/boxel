@@ -12,7 +12,6 @@ import {
 import enumField from '../enum';
 import StringField from '../string';
 import NumberField from '../number';
-import DateField from '../date';
 import MarkdownField from '../markdown';
 import { CommentField } from './comment';
 
@@ -42,7 +41,9 @@ export const issueTypeOptions = [
   { value: 'infrastructure', label: 'Infrastructure' },
 ];
 
-function makeIssueOptionFields(options: { value: string; label: string }[]) {
+export function makeIssueOptionFields(
+  options: { value: string; label: string }[],
+) {
   return options.map((option) => new IssueOptionField(option));
 }
 
@@ -54,7 +55,7 @@ export const projectStatusOptions = [
   { value: 'archived', label: 'Archived' },
 ];
 
-class IssueOptionField extends FieldDef {
+export class IssueOptionField extends FieldDef {
   static displayName = 'Issue Option';
   @field value = contains(StringField);
   @field label = contains(StringField);
@@ -107,26 +108,26 @@ class IssueOptionField extends FieldDef {
 
 const IssueStatusField = enumField(StringField, {
   options: function (this: any) {
-    const opts = this.project?.issueStatusOptions;
+    const opts = this.kanbanBoard?.issueStatusOptions;
     return opts?.length ? opts : issueStatusOptions;
   },
 });
 
 const IssuePriorityField = enumField(StringField, {
   options: function (this: any) {
-    const opts = this.project?.issuePriorityOptions;
+    const opts = this.kanbanBoard?.issuePriorityOptions;
     return opts?.length ? opts : issuePriorityOptions;
   },
 });
 
 const IssueTypeField = enumField(StringField, {
   options: function (this: any) {
-    const opts = this.project?.issueTypeOptions;
+    const opts = this.kanbanBoard?.issueTypeOptions;
     return opts?.length ? opts : issueTypeOptions;
   },
 });
 
-function getStatusVariant(statusId?: string) {
+export function getStatusVariant(statusId?: string) {
   switch (statusId) {
     case 'in_progress':
     case 'active':
@@ -159,7 +160,7 @@ export class Issue extends CardDef {
         return this.status;
       }
       return (
-        this.project?.issueStatusOptions?.[0]?.value ??
+        this.kanbanBoard?.issueStatusOptions?.[0]?.value ??
         issueStatusOptions[0]?.value
       );
     },
@@ -168,18 +169,13 @@ export class Issue extends CardDef {
   @field statusBoardOrder = contains(NumberField);
   @field priorityBoardOrder = contains(NumberField);
   @field issueTypeBoardOrder = contains(NumberField);
-  @field project = linksTo(() => Project);
+  @field kanbanBoard = linksTo(() => CardDef);
   @field relatedTickets = linksToMany(() => Issue);
-  @field kanbanBoards = linksToMany(() => CardDef, {
-    computeVia: function (this: Issue) {
-      return this.project?.kanbanBoards ?? [];
-    },
-  });
   @field comments = containsMany(CommentField);
 
   @field cardTheme = linksTo(() => Theme, {
     computeVia: function (this: Issue) {
-      return this.cardInfo.theme ?? this.project?.cardTheme;
+      return this.cardInfo.theme ?? this.kanbanBoard?.cardTheme;
     },
   });
 
@@ -314,8 +310,8 @@ export class Issue extends CardDef {
 
         <div class='bottom-row'>
           <div class='bottom-cell'>
-            <FieldContainer @label='Project' @vertical={{true}}>
-              <@fields.project />
+            <FieldContainer @label='Board' @vertical={{true}}>
+              <@fields.kanbanBoard />
             </FieldContainer>
           </div>
           <div class='bottom-cell'>
@@ -409,17 +405,11 @@ export class Issue extends CardDef {
           <h1 class='issue-title'><@fields.cardTitle /></h1>
 
           <dl class='issue-attrs'>
-            {{#if @model.project}}
-              <div class='attr-item'>
-                <dt class='attr-label'>Project</dt>
-                <dd class='attr-value'><@fields.project @format='atom' /></dd>
-              </div>
-            {{/if}}
-            {{#if @model.kanbanBoards.length}}
+            {{#if @model.kanbanBoard}}
               <div class='attr-item'>
                 <dt class='attr-label'>Board</dt>
                 <dd class='attr-value'>
-                  <@fields.kanbanBoards @format='atom' />
+                  <@fields.kanbanBoard @format='atom' />
                 </dd>
               </div>
             {{/if}}
@@ -515,383 +505,6 @@ export class Issue extends CardDef {
           display: flex;
           flex-direction: column;
           gap: var(--boxel-sp);
-        }
-        .section-label {
-          font-size: 0.75rem;
-          font-weight: 600;
-          color: var(--muted-foreground);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          margin: 0;
-          padding-bottom: var(--boxel-sp-xs);
-          border-bottom: 1px solid var(--border);
-        }
-      </style>
-    </template>
-  };
-}
-
-export class Project extends CardDef {
-  static displayName = 'Project';
-  static prefersWideFormat = true;
-
-  @field projectCode = contains(StringField);
-  @field projectName = contains(StringField);
-  @field projectStatus = contains(
-    enumField(StringField, { options: projectStatusOptions }),
-  );
-  @field description = contains(MarkdownField);
-  @field dueDate = contains(DateField);
-  @field kanbanBoards = linksToMany(() => CardDef, {
-    query: {
-      filter: {
-        on: {
-          module: 'https://cardstack.com/base/issue-tracker/kanban-board',
-          name: 'KanbanBoard',
-        },
-        eq: { 'project.id': '$this.id' },
-      },
-    },
-  });
-  @field issuePriorityOptions = containsMany(IssueOptionField);
-  @field issueStatusOptions = containsMany(IssueOptionField);
-  @field issueTypeOptions = containsMany(IssueOptionField);
-  @field issues = linksToMany(() => Issue, {
-    query: {
-      filter: {
-        on: {
-          module: 'https://cardstack.com/base/issue-tracker/issue',
-          name: 'Issue',
-        },
-        eq: { 'project.id': '$this.id' },
-      },
-    },
-  });
-
-  @field cardTitle = contains(StringField, {
-    computeVia: function (this: Project) {
-      return this.cardInfo.name?.trim()?.length
-        ? this.cardInfo.name
-        : (this.projectName ?? 'Untitled Project');
-    },
-  });
-
-  static edit = class Edit extends Component<typeof Project> {
-    constructor(owner: unknown, args: any) {
-      super(owner, args);
-      Promise.resolve().then(() => {
-        let model = this.args.model as Project | undefined;
-        if (!model) return;
-
-        if (!model.issuePriorityOptions?.length) {
-          model.issuePriorityOptions =
-            makeIssueOptionFields(issuePriorityOptions);
-        }
-        if (!model.issueStatusOptions?.length) {
-          model.issueStatusOptions = makeIssueOptionFields(issueStatusOptions);
-        }
-        if (!model.issueTypeOptions?.length) {
-          model.issueTypeOptions = makeIssueOptionFields(issueTypeOptions);
-        }
-      });
-    }
-
-    <template>
-      <div class='project-edit'>
-        <div class='row'>
-          <FieldContainer @label='Project Name' @vertical={{true}}>
-            <@fields.projectName />
-          </FieldContainer>
-          <FieldContainer @label='Project Code' @vertical={{true}}>
-            <@fields.projectCode />
-          </FieldContainer>
-        </div>
-        <div class='row'>
-          <FieldContainer @label='Status' @vertical={{true}}>
-            <@fields.projectStatus />
-          </FieldContainer>
-          <FieldContainer @label='Due Date' @vertical={{true}}>
-            <@fields.dueDate />
-          </FieldContainer>
-        </div>
-        <div class='row'>
-          <FieldContainer @label='Kanban Board' @vertical={{true}}>
-            <@fields.kanbanBoards />
-          </FieldContainer>
-        </div>
-        <FieldContainer @label='Description' @vertical={{true}}>
-          <@fields.description />
-        </FieldContainer>
-        <div class='row'>
-          <FieldContainer @label='Theme' @vertical={{true}}>
-            <@fields.cardInfo.theme />
-          </FieldContainer>
-        </div>
-
-        <section class='options-section'>
-          <div class='options-section-header'>
-            <h2 class='section-title'>Issue Configuration</h2>
-            <p class='section-copy'>
-              Define the status, priority, and type options that issues in this
-              project can use.
-            </p>
-          </div>
-
-          <div class='options-section-body'>
-            <div class='options-config-panel'>
-              <FieldContainer @label='Issue Status Options' @vertical={{true}}>
-                <@fields.issueStatusOptions />
-              </FieldContainer>
-            </div>
-
-            <div class='options-config-panel'>
-              <FieldContainer
-                @label='Issue Priority Options'
-                @vertical={{true}}
-              >
-                <@fields.issuePriorityOptions />
-              </FieldContainer>
-            </div>
-
-            <div class='options-config-panel'>
-              <FieldContainer @label='Issue Type Options' @vertical={{true}}>
-                <@fields.issueTypeOptions />
-              </FieldContainer>
-            </div>
-          </div>
-        </section>
-      </div>
-      <style scoped>
-        .project-edit {
-          display: grid;
-          gap: var(--boxel-sp-xl);
-          padding: var(--boxel-sp-xl);
-        }
-        .row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: var(--boxel-sp);
-          min-width: 0;
-        }
-        .options-section {
-          display: grid;
-          gap: var(--boxel-sp);
-          padding: var(--boxel-sp-lg);
-          background: var(--card, var(--boxel-light));
-          border: 1px solid var(--border, var(--boxel-border-color));
-          border-radius: var(--boxel-border-radius-lg);
-        }
-        .options-section-header {
-          display: grid;
-          gap: var(--boxel-sp-2xs);
-        }
-        .options-section-body {
-          display: grid;
-          gap: var(--boxel-sp);
-        }
-        .options-config-panel {
-          display: grid;
-          gap: var(--boxel-sp);
-          padding: var(--boxel-sp);
-          background: var(--sidebar, var(--background));
-          color: var(--sidebar-foreground, var(--foreground));
-          border: 1px solid var(--border, var(--boxel-border-color));
-          border-radius: var(--boxel-border-radius);
-          box-shadow: inset 0 1px 0
-            color-mix(in oklch, var(--card) 35%, transparent);
-        }
-        .section-title {
-          margin: 0;
-          font-size: var(--boxel-font-size-sm);
-          font-weight: 600;
-          color: var(--foreground, var(--boxel-dark));
-        }
-        .section-copy {
-          margin: 0;
-          font-size: var(--boxel-font-size-xs);
-          line-height: 1.5;
-          color: var(--muted-foreground, var(--boxel-600));
-        }
-      </style>
-    </template>
-  };
-
-  static fitted = class Fitted extends Component<typeof Project> {
-    <template>
-      <div class='project-card compact'>
-        <div class='row'>
-          <Pill @size='extra-small' @variant='secondary'>
-            {{#if @model.projectCode}}<@fields.projectCode
-              />{{else}}PROJECT{{/if}}
-          </Pill>
-          <Pill
-            @size='extra-small'
-            @variant={{getStatusVariant @model.projectStatus}}
-          >
-            {{#if @model.projectStatus}}
-              <@fields.projectStatus @format='atom' />
-            {{else}}
-              Planning
-            {{/if}}
-          </Pill>
-        </div>
-        <div class='title'><@fields.cardTitle /></div>
-      </div>
-      <style scoped>
-        .project-card {
-          display: grid;
-          gap: 0.35rem;
-          overflow: hidden;
-        }
-        .compact {
-          padding: 0.75rem;
-        }
-        .row {
-          display: flex;
-          justify-content: space-between;
-          gap: 0.75rem;
-          font-size: 0.8rem;
-        }
-        @container fitted-card (height < 65px) {
-          .compact {
-            padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-          }
-          .row {
-            display: none;
-          }
-          .title {
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-          }
-        }
-      </style>
-    </template>
-  };
-
-  static embedded = this.fitted;
-
-  static isolated = class Isolated extends Component<typeof Project> {
-    <template>
-      <div class='background-container'>
-        <article class='surface'>
-          <header class='project-header'>
-            <div class='project-meta-top'>
-              <Pill @size='extra-small' @variant='secondary'>
-                {{#if @model.projectCode}}
-                  <@fields.projectCode />
-                {{else}}
-                  PROJECT
-                {{/if}}
-              </Pill>
-              <Pill
-                @size='extra-small'
-                @variant={{getStatusVariant @model.projectStatus}}
-              >
-                {{#if @model.projectStatus}}
-                  <@fields.projectStatus @format='atom' />
-                {{else}}
-                  Planning
-                {{/if}}
-              </Pill>
-            </div>
-            <h1><@fields.cardTitle /></h1>
-            <dl class='project-attrs'>
-              {{#if @model.dueDate}}
-                <div class='attr-item'>
-                  <dt class='attr-label'>Due Date</dt>
-                  <dd class='attr-value'><@fields.dueDate @format='atom' /></dd>
-                </div>
-              {{/if}}
-              {{#if @model.kanbanBoards.length}}
-                <div class='attr-item'>
-                  <dt class='attr-label'>Board</dt>
-                  <dd class='attr-value'>
-                    <@fields.kanbanBoards @format='atom' />
-                  </dd>
-                </div>
-              {{/if}}
-            </dl>
-          </header>
-
-          <section class='project-section'>
-            <h2 class='section-label'>Description</h2>
-            <@fields.description />
-          </section>
-
-          {{#if @model.issues.length}}
-            <section class='project-section'>
-              <h2 class='section-label'>Issues</h2>
-              <@fields.issues />
-            </section>
-          {{/if}}
-        </article>
-      </div>
-      <style scoped>
-        .background-container {
-          height: 100%;
-          overflow-y: auto;
-          background-color: var(--background);
-          color: var(--foreground);
-        }
-        .surface {
-          max-width: 60rem;
-          margin: 0 auto;
-          padding: var(--boxel-sp-xl);
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-xl);
-        }
-        .project-header {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-sm);
-          padding-bottom: var(--boxel-sp-lg);
-          border-bottom: 1px solid var(--border);
-        }
-        .project-meta-top {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: var(--boxel-sp-xs);
-        }
-        h1 {
-          font-size: 1.5rem;
-          font-weight: 700;
-          line-height: 1.3;
-          margin: 0;
-          color: var(--foreground);
-        }
-        .project-attrs {
-          display: flex;
-          flex-wrap: wrap;
-          gap: var(--boxel-sp-xs) var(--boxel-sp-lg);
-          margin: 0;
-        }
-        .attr-item {
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-        }
-        .attr-label {
-          font-size: 0.75rem;
-          font-weight: 500;
-          color: var(--muted-foreground);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-        .attr-value {
-          margin: 0;
-          font-size: 0.875rem;
-          color: var(--foreground);
-        }
-        .project-section {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp);
-        }
-        .project-section :deep(p:first-child) {
-          margin-top: 0;
         }
         .section-label {
           font-size: 0.75rem;

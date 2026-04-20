@@ -7,20 +7,21 @@ import {
   field,
   contains,
   containsMany,
-  linksTo,
   linksToMany,
-  Theme,
   realmURL,
 } from '../card-api';
 import {
   ContextButton,
   FieldContainer,
+  Pill,
   SortDropdown,
   Switch,
 } from '@cardstack/boxel-ui/components';
 import StringField from '../string';
 import BooleanField from '../boolean';
+import DateField from '../date';
 import enumField from '../enum';
+import MarkdownField from '../markdown';
 import { tracked } from '@glimmer/tracking';
 import { fn, get } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -33,11 +34,14 @@ import { KanbanPlane } from './kanban-plane';
 import { KanbanDragManager } from './kanban-drag';
 import { type KanbanPlacement } from './kanban-engine';
 import {
-  Project,
+  IssueOptionField,
   Issue,
+  makeIssueOptionFields,
   issueStatusOptions,
   issuePriorityOptions,
   issueTypeOptions,
+  projectStatusOptions,
+  getStatusVariant,
 } from './issue';
 
 const issueSource = {
@@ -236,7 +240,7 @@ class Isolated extends Component<typeof KanbanBoard> {
       defaultColumnOptions.find((o) => o.value === (model as any).groupBy) ??
       defaultColumnOptions[0]!;
     const attributeName = source.writeFieldName;
-    const projectId = (model as any).project?.id ?? null;
+    const kanbanBoardId = (model as any).id ?? null;
 
     await this.args.createCard?.(issueSource, new URL(issueSource.module), {
       realmURL: this.realmURL,
@@ -245,7 +249,7 @@ class Isolated extends Component<typeof KanbanBoard> {
           type: 'card',
           attributes: { [attributeName]: columnKey },
           relationships: {
-            project: { links: { self: projectId } },
+            kanbanBoard: { links: { self: kanbanBoardId } },
           },
           meta: { adoptsFrom: issueSource },
         },
@@ -394,14 +398,27 @@ class Isolated extends Component<typeof KanbanBoard> {
       <header class='kanban-toolbar'>
         <div class='toolbar-left'>
           <div class='kanban-heading'>
+            <div class='kanban-meta-top'>
+              <Pill @size='extra-small' @variant='secondary'>
+                {{if @model.projectCode @model.projectCode 'BOARD'}}
+              </Pill>
+              {{#if @model.projectStatus}}
+                <Pill
+                  @size='extra-small'
+                  @variant={{getStatusVariant @model.projectStatus}}
+                >
+                  <@fields.projectStatus @format='atom' />
+                </Pill>
+              {{/if}}
+            </div>
             <h2 class='kanban-title'>
               <SquareKanban />
               <@fields.cardTitle />
             </h2>
-            {{#if @model.project}}
+            {{#if @model.dueDate}}
               <div class='kanban-project'>
-                <span class='dim-label'>Project</span>
-                <@fields.project @format='atom' />
+                <span class='dim-label'>Due Date</span>
+                <@fields.dueDate @format='atom' />
               </div>
             {{/if}}
           </div>
@@ -558,6 +575,11 @@ class Isolated extends Component<typeof KanbanBoard> {
         display: flex;
         flex-direction: column;
         gap: 0.25rem;
+      }
+      .kanban-meta-top {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
       }
       .toolbar-right {
         display: flex;
@@ -747,9 +769,14 @@ export class KanbanBoard extends CardDef {
   static icon = KanbanIcon;
   static prefersWideFormat = true;
 
-  @field title = contains(StringField);
+  @field projectCode = contains(StringField);
+  @field projectName = contains(StringField);
+  @field projectStatus = contains(
+    enumField(StringField, { options: projectStatusOptions }),
+  );
+  @field description = contains(MarkdownField);
+  @field dueDate = contains(DateField);
   @field hideEmptyColumns = contains(BooleanField);
-  @field project = linksTo(() => Project);
   @field groupBy = contains(
     enumField(StringField, {
       options: defaultColumnOptions.map(({ value, label }) => ({
@@ -758,9 +785,18 @@ export class KanbanBoard extends CardDef {
       })),
     }),
   );
+  @field issuePriorityOptions = containsMany(IssueOptionField);
+  @field issueStatusOptions = containsMany(IssueOptionField);
+  @field issueTypeOptions = containsMany(IssueOptionField);
   @field cards = linksToMany(Issue, {
-    computeVia: function (this: KanbanBoard) {
-      return this.project?.issues ?? [];
+    query: {
+      filter: {
+        on: {
+          module: 'https://cardstack.com/base/issue-tracker/issue',
+          name: 'Issue',
+        },
+        eq: { 'kanbanBoard.id': '$this.id' },
+      },
     },
   });
   @field statusColumnConfig = containsMany(KanbanColumnField);
@@ -771,21 +807,21 @@ export class KanbanBoard extends CardDef {
       const source =
         defaultColumnOptions.find((o) => o.value === this.groupBy) ??
         defaultColumnOptions[0]!;
-      const projectOptions =
+      const boardOptions =
         source.value === 'priority'
-          ? (this.project?.issuePriorityOptions as
+          ? (this.issuePriorityOptions as
               | { value: string; label: string }[]
               | undefined)
           : source.value === 'issueType'
-            ? (this.project?.issueTypeOptions as
+            ? (this.issueTypeOptions as
                 | { value: string; label: string }[]
                 | undefined)
             : source.value === 'status'
-              ? (this.project?.issueStatusOptions as
+              ? (this.issueStatusOptions as
                   | { value: string; label: string }[]
                   | undefined)
               : null;
-      const options = projectOptions?.length ? projectOptions : source.options;
+      const options = boardOptions?.length ? boardOptions : source.options;
       const config = ((source.value === 'issueType'
         ? this.typeColumnConfig
         : source.value === 'priority'
@@ -810,17 +846,7 @@ export class KanbanBoard extends CardDef {
   });
   @field cardTitle = contains(StringField, {
     computeVia: function (this: KanbanBoard) {
-      return (
-        this.cardInfo?.name ??
-        this.title ??
-        this.project?.cardTitle ??
-        'Untitled Kanban'
-      );
-    },
-  });
-  @field cardTheme = linksTo(() => Theme, {
-    computeVia: function (this: Issue) {
-      return this.cardInfo.theme ?? this.project?.cardTheme;
+      return this.cardInfo?.name ?? this.projectName ?? 'Untitled Kanban';
     },
   });
 
@@ -831,6 +857,25 @@ export class KanbanBoard extends CardDef {
   // ── Edit ───────────────────────────────────────────────────────────
 
   static edit = class Edit extends Component<typeof KanbanBoard> {
+    constructor(owner: unknown, args: any) {
+      super(owner, args);
+      Promise.resolve().then(() => {
+        let model = this.args.model as KanbanBoard | undefined;
+        if (!model) return;
+
+        if (!model.issuePriorityOptions?.length) {
+          model.issuePriorityOptions =
+            makeIssueOptionFields(issuePriorityOptions);
+        }
+        if (!model.issueStatusOptions?.length) {
+          model.issueStatusOptions = makeIssueOptionFields(issueStatusOptions);
+        }
+        if (!model.issueTypeOptions?.length) {
+          model.issueTypeOptions = makeIssueOptionFields(issueTypeOptions);
+        }
+      });
+    }
+
     get groupBy(): string {
       return (this.args.model as any)?.groupBy ?? 'status';
     }
@@ -849,22 +894,74 @@ export class KanbanBoard extends CardDef {
     <template>
       <div class='kanban-edit'>
         <div class='row'>
-          <FieldContainer @label='Title' @vertical={{true}}>
-            <@fields.title />
+          <FieldContainer @label='Project Name' @vertical={{true}}>
+            <@fields.projectName />
           </FieldContainer>
-          <FieldContainer @label='Project' @vertical={{true}}>
-            <@fields.project />
+          <FieldContainer @label='Project Code' @vertical={{true}}>
+            <@fields.projectCode />
           </FieldContainer>
         </div>
 
         <div class='row'>
+          <FieldContainer @label='Status' @vertical={{true}}>
+            <@fields.projectStatus />
+          </FieldContainer>
+          <FieldContainer @label='Due Date' @vertical={{true}}>
+            <@fields.dueDate />
+          </FieldContainer>
+        </div>
+
+        <FieldContainer @label='Description' @vertical={{true}}>
+          <@fields.description />
+        </FieldContainer>
+
+        <div class='row'>
+          <FieldContainer @label='Theme' @vertical={{true}}>
+            <@fields.cardInfo.theme />
+          </FieldContainer>
           <FieldContainer @label='Group By' @vertical={{true}}>
             <@fields.groupBy />
           </FieldContainer>
+        </div>
+
+        <div class='row'>
           <FieldContainer @label='Hide Empty Columns' @vertical={{true}}>
             <@fields.hideEmptyColumns />
           </FieldContainer>
         </div>
+
+        <section class='options-section'>
+          <div class='options-section-header'>
+            <h2 class='section-title'>Issue Configuration</h2>
+            <p class='section-copy'>
+              Define the status, priority, and type options that issues in this
+              board can use.
+            </p>
+          </div>
+
+          <div class='options-section-body'>
+            <div class='options-config-panel'>
+              <FieldContainer @label='Issue Status Options' @vertical={{true}}>
+                <@fields.issueStatusOptions />
+              </FieldContainer>
+            </div>
+
+            <div class='options-config-panel'>
+              <FieldContainer
+                @label='Issue Priority Options'
+                @vertical={{true}}
+              >
+                <@fields.issuePriorityOptions />
+              </FieldContainer>
+            </div>
+
+            <div class='options-config-panel'>
+              <FieldContainer @label='Issue Type Options' @vertical={{true}}>
+                <@fields.issueTypeOptions />
+              </FieldContainer>
+            </div>
+          </div>
+        </section>
 
         <div class='col-config-row'>
           <FieldContainer @label='Configured Columns' @vertical={{true}}>
@@ -883,6 +980,45 @@ export class KanbanBoard extends CardDef {
           grid-template-columns: 1fr 1fr;
           gap: var(--boxel-sp);
           min-width: 0;
+        }
+        .options-section {
+          display: grid;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp-lg);
+          background: var(--card, var(--boxel-light));
+          border: 1px solid var(--border, var(--boxel-border-color));
+          border-radius: var(--boxel-border-radius-lg);
+        }
+        .options-section-header {
+          display: grid;
+          gap: var(--boxel-sp-2xs);
+        }
+        .options-section-body {
+          display: grid;
+          gap: var(--boxel-sp);
+        }
+        .options-config-panel {
+          display: grid;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp);
+          background: var(--sidebar, var(--background));
+          color: var(--sidebar-foreground, var(--foreground));
+          border: 1px solid var(--border, var(--boxel-border-color));
+          border-radius: var(--boxel-border-radius);
+          box-shadow: inset 0 1px 0
+            color-mix(in oklch, var(--card) 35%, transparent);
+        }
+        .section-title {
+          margin: 0;
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 600;
+          color: var(--foreground, var(--boxel-dark));
+        }
+        .section-copy {
+          margin: 0;
+          font-size: var(--boxel-font-size-xs);
+          line-height: 1.5;
+          color: var(--muted-foreground, var(--boxel-600));
         }
         .col-config-row {
           display: grid;
@@ -922,11 +1058,7 @@ export class KanbanBoard extends CardDef {
             <rect x='10' y='3' width='5' height='12' rx='1' />
             <rect x='17' y='3' width='5' height='15' rx='1' />
           </svg>
-          <span class='fitted-title'>{{if
-              @model.title
-              @model.title
-              'Kanban'
-            }}</span>
+          <span class='fitted-title'><@fields.cardTitle /></span>
         </div>
         <div class='fitted-lanes'>
           {{#each @model.columns as |col|}}

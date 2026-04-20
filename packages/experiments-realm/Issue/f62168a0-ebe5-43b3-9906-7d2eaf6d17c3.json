@@ -26,9 +26,9 @@
       "issueTypeBoardOrder": 2
     },
     "relationships": {
-      "project": {
+      "kanbanBoard": {
         "links": {
-          "self": "../Project/44f10566-6bde-4bf4-b3a7-d347a65c2d53"
+          "self": "../KanbanBoard/9405db75-b039-447c-93bf-ce2996861412"
         }
       },
       "cardInfo.theme": {
