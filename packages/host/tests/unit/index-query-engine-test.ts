@@ -12,6 +12,7 @@ import {
   internalKeyFor,
   identifyCard,
   getFieldDefinitions,
+  type RealmResourceIdentifier,
   type ResolvedCodeRef,
   type Definition,
   type LooseCardResource,
@@ -1328,7 +1329,7 @@ module('Unit | query', function (hooks) {
       {
         filter: {
           on: {
-            module: `${testRealmURL}nonexistent`,
+            module: `${testRealmURL}nonexistent` as RealmResourceIdentifier,
             name: 'Nonexistent',
           },
           eq: { nonExistentField: 'hello' },
@@ -3298,7 +3299,7 @@ function internalKeyToCodeRef(key: string): ResolvedCodeRef {
   let parts = key.split('/');
   let name = parts.pop()!;
   return {
-    module: parts.join('/'),
+    module: parts.join('/') as RealmResourceIdentifier,
     name,
   };
 }

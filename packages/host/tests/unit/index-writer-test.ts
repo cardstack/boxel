@@ -13,6 +13,8 @@ import {
   type IndexedInstance,
   type BoxelIndexTable,
   type CardResource,
+  type RealmIdentifier,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import { CachingDefinitionLookup } from '@cardstack/runtime-common/definition-lookup';
 import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
@@ -48,7 +50,7 @@ const makeCardResource = (
   name: string,
   adoptsFrom: { module: string; name: string },
 ): CardResource => ({
-  id: `${testRealmURL}${id}`,
+  id: `${testRealmURL}${id}` as RealmResourceIdentifier,
   type: 'card',
   attributes: {
     name,
@@ -335,14 +337,14 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let resource: CardResource = {
-      id: `${testRealmURL}1.json`,
+      id: `${testRealmURL}1.json` as RealmResourceIdentifier,
       type: 'card',
       attributes: {
         name: 'Van Gogh',
       },
       meta: {
         adoptsFrom: {
-          module: `./fancy-person`,
+          module: `./fancy-person` as RealmResourceIdentifier,
           name: 'FancyPerson',
         },
       },
@@ -495,14 +497,14 @@ module('Unit | index-writer', function (hooks) {
     );
     let modified = Date.now();
     let resource: CardResource = {
-      id: `${testRealmURL}1`,
+      id: `${testRealmURL}1` as RealmResourceIdentifier,
       type: 'card',
       attributes: {
         name: 'Mango',
       },
       meta: {
         adoptsFrom: {
-          module: `./person`,
+          module: `./person` as RealmResourceIdentifier,
           name: 'Person',
         },
       },
@@ -587,10 +589,10 @@ module('Unit | index-writer', function (hooks) {
         has_error: false,
         pristine_doc: {
           ...resource,
-          id: `${testRealmURL2}1`,
+          id: `${testRealmURL2}1` as RealmResourceIdentifier,
           meta: {
             ...resource.meta,
-            realmURL: testRealmURL2,
+            realmURL: testRealmURL2 as RealmIdentifier,
           },
         },
         error_doc: null,
@@ -662,14 +664,14 @@ module('Unit | index-writer', function (hooks) {
     );
     let modified = Date.now();
     let resource: CardResource = {
-      id: `${testRealmURL}1`,
+      id: `${testRealmURL}1` as RealmResourceIdentifier,
       type: 'card',
       attributes: {
         name: 'Mango',
       },
       meta: {
         adoptsFrom: {
-          module: `./person`,
+          module: `./person` as RealmResourceIdentifier,
           name: 'Person',
         },
       },
@@ -929,7 +931,7 @@ module('Unit | index-writer', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `./person`,
+          module: `./person` as RealmResourceIdentifier,
           name: 'Person',
         },
       },
@@ -976,7 +978,7 @@ module('Unit | index-writer', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `./person`,
+          module: `./person` as RealmResourceIdentifier,
           name: 'Person',
         },
       },
@@ -997,14 +999,14 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let resource: CardResource = {
-      id: `${testRealmURL}1.json`,
+      id: `${testRealmURL}1.json` as RealmResourceIdentifier,
       type: 'card',
       attributes: {
         name: 'Van Gogh',
       },
       meta: {
         adoptsFrom: {
-          module: `./person`,
+          module: `./person` as RealmResourceIdentifier,
           name: 'Person',
         },
       },
@@ -1030,14 +1032,14 @@ module('Unit | index-writer', function (hooks) {
         realmURL: testRealmURL,
         canonicalURL: `${testRealmURL}1.json`,
         instance: {
-          id: `${testRealmURL}1`,
+          id: `${testRealmURL}1` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             name: 'Mango',
           },
           meta: {
             adoptsFrom: {
-              module: `./person`,
+              module: `./person` as RealmResourceIdentifier,
               name: 'Person',
             },
           },
@@ -1085,14 +1087,14 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let resource: CardResource = {
-      id: `${testRealmURL}1.json`,
+      id: `${testRealmURL}1.json` as RealmResourceIdentifier,
       type: 'card',
       attributes: {
         name: 'Van Gogh',
       },
       meta: {
         adoptsFrom: {
-          module: `./person`,
+          module: `./person` as RealmResourceIdentifier,
           name: 'Person',
         },
       },
@@ -1126,14 +1128,14 @@ module('Unit | index-writer', function (hooks) {
         realmURL: testRealmURL,
         canonicalURL: `${testRealmURL}1.json`,
         instance: {
-          id: `${testRealmURL}1.json`,
+          id: `${testRealmURL}1.json` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             name: 'Van Gogh',
           },
           meta: {
             adoptsFrom: {
-              module: `./person`,
+              module: `./person` as RealmResourceIdentifier,
               name: 'Person',
             },
           },
@@ -1162,11 +1164,11 @@ module('Unit | index-writer', function (hooks) {
       [],
     );
     let resource: CardResource = {
-      id: `${testRealmURL}1.json`,
+      id: `${testRealmURL}1.json` as RealmResourceIdentifier,
       type: 'card',
       attributes: { name: 'Van Gogh' },
       meta: {
-        adoptsFrom: { module: `./person`, name: 'Person' },
+        adoptsFrom: { module: `./person` as RealmResourceIdentifier, name: 'Person' },
       },
     };
     let now = Date.now();

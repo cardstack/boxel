@@ -5,7 +5,12 @@ import { waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import type { DataQuery, Loader, Realm } from '@cardstack/runtime-common';
+import type {
+  DataQuery,
+  Loader,
+  Realm,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import {
   baseRealm,
   type LooseSingleCardDocument,
@@ -141,7 +146,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         type: {
-          module: `${testRealmURL}book`,
+          module: `${testRealmURL}book` as RealmResourceIdentifier,
           name: 'Book',
         },
       },
@@ -173,7 +178,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         on: {
-          module: `${testRealmURL}book`,
+          module: `${testRealmURL}book` as RealmResourceIdentifier,
           name: 'Book',
         },
         eq: {
@@ -207,7 +212,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         type: {
-          module: `${baseRealm.url}card-api`,
+          module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
           name: 'FileDef',
         },
       },
@@ -243,7 +248,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         type: {
-          module: `${testRealmURL}book`,
+          module: `${testRealmURL}book` as RealmResourceIdentifier,
           name: 'Book',
         },
       },
@@ -293,7 +298,7 @@ module(`Integration | search data resource`, function (hooks) {
     );
     let ids = search.resources.map((r) => r.id);
     assert.ok(
-      ids.includes(`${testRealmURL}books/3`),
+      ids.includes(`${testRealmURL}books/3` as RealmResourceIdentifier),
       'new book appears in results',
     );
   });
@@ -302,7 +307,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         type: {
-          module: `${testRealmURL}book`,
+          module: `${testRealmURL}book` as RealmResourceIdentifier,
           name: 'Book',
         },
       },

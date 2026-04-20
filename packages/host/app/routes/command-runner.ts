@@ -9,6 +9,7 @@ import type {
   Command,
   CommandContext,
   CommandInvocation,
+  RealmResourceIdentifier,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import {
@@ -232,7 +233,7 @@ function parseCommandParam(
       return undefined;
     }
     return {
-      module: `${url.origin}${pathname.slice(0, index)}`,
+      module: `${url.origin}${pathname.slice(0, index)}` as RealmResourceIdentifier,
       name: pathname.slice(index + 1),
     };
   } catch {
@@ -244,7 +245,7 @@ function parseCommandParam(
     return undefined;
   }
   return {
-    module: value.slice(0, index),
+    module: value.slice(0, index) as RealmResourceIdentifier,
     name: value.slice(index + 1),
   };
 }

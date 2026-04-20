@@ -1,7 +1,10 @@
 import { service } from '@ember/service';
 
 import { isCardInstance } from '@cardstack/runtime-common';
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import type {
+  LooseSingleCardDocument,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -91,7 +94,8 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
         },
         meta: {
           adoptsFrom: {
-            module: `${catalogRealm}submission-workflow-card/submission-workflow-card`,
+            module:
+              `${catalogRealm}submission-workflow-card/submission-workflow-card` as RealmResourceIdentifier,
             name: 'SubmissionWorkflowCard',
           },
         },

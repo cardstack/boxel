@@ -4,7 +4,11 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import type { Loader, LooseCardResource } from '@cardstack/runtime-common';
+import type {
+  Loader,
+  LooseCardResource,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import {
   baseRealm,
   loadCardDef,
@@ -119,7 +123,7 @@ module('code-ref', function (hooks) {
     let json: LooseCardResource = {
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}code-ref-test`,
+          module: `${testRealmURL}code-ref-test` as RealmResourceIdentifier,
           name: 'TestCard',
         },
         fields: {
@@ -148,12 +152,14 @@ module('code-ref', function (hooks) {
       },
     };
     visitModuleDeps(json, (moduleURL, setModuleURL) => {
-      setModuleURL(moduleURL.replace('code-ref-test', 'foo-bar'));
+      setModuleURL(
+        moduleURL.replace('code-ref-test', 'foo-bar') as RealmResourceIdentifier,
+      );
     });
     assert.deepEqual(json, {
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}foo-bar`,
+          module: `${testRealmURL}foo-bar` as RealmResourceIdentifier,
           name: 'TestCard',
         },
         fields: {

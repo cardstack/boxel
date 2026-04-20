@@ -4,6 +4,7 @@ import {
   Deferred,
   registerCardReferencePrefix,
   unregisterCardReferencePrefix,
+  type RealmResourceIdentifier,
   type SingleCardDocument,
   type SingleFileMetaDocument,
 } from '@cardstack/runtime-common';
@@ -78,7 +79,7 @@ module('Unit | Service | render-service', function (hooks) {
         type: 'card',
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
             name: 'CardDef',
           },
         },
@@ -134,7 +135,7 @@ module('Unit | Service | render-service', function (hooks) {
         type: 'file-meta',
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
             name: 'FileDef',
           },
         },

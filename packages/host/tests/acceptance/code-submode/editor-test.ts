@@ -11,6 +11,7 @@ import {
   type LooseSingleCardDocument,
   Deferred,
   baseRealm,
+  type RealmResourceIdentifier,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 
@@ -392,7 +393,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}person`,
+            module: `${testRealmURL}person` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
@@ -423,7 +424,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}pet`,
+            module: `${testRealmURL}pet` as RealmResourceIdentifier,
             name: 'Pet',
           },
         },
@@ -471,7 +472,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}pet`,
+            module: `${testRealmURL}pet` as RealmResourceIdentifier,
             name: 'Pet',
           },
         },
@@ -535,7 +536,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `../pet`,
+            module: `../pet` as RealmResourceIdentifier,
             name: 'Pet',
           },
         },

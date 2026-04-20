@@ -68,6 +68,8 @@ import {
   type LooseSingleResourceDocument,
   type StoreReadType,
   type CardResource,
+  type RealmIdentifier,
+  type RealmResourceIdentifier,
   type Saved,
   resolveCardReference,
 } from '@cardstack/runtime-common';
@@ -317,7 +319,10 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<string | CardErrorJSONAPI> {
     return await this.withTestWaiters(async () => {
       if (opts?.realm) {
-        doc.data.meta = { ...(doc.data.meta ?? {}), realmURL: opts.realm };
+        doc.data.meta = {
+          ...(doc.data.meta ?? {}),
+          realmURL: opts.realm as RealmIdentifier,
+        };
       }
       let cardOrError = await this.getCardInstance({
         idOrDoc: doc,
@@ -1507,7 +1512,7 @@ export default class StoreService extends Service implements StoreInterface {
         }
         if (!json.data.id) {
           // card source format is not serialized with the ID, so we add that back in.
-          json.data.id = url;
+          json.data.id = url as RealmResourceIdentifier;
         }
         if (!json.data.meta?.realmURL) {
           // Source-mode loads in render context don't include realm metadata.
@@ -1517,7 +1522,7 @@ export default class StoreService extends Service implements StoreInterface {
           if (realmURL) {
             json.data.meta = {
               ...(json.data.meta ?? {}),
-              realmURL,
+              realmURL: realmURL as RealmIdentifier,
             };
           }
         }

@@ -1,6 +1,9 @@
 import { module, test } from 'qunit';
 
-import type { CodeRef } from '@cardstack/runtime-common';
+import type {
+  CodeRef,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import { getCardDirectoryName } from '@cardstack/runtime-common/helpers/card-directory-name';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
@@ -13,23 +16,23 @@ module('Unit | runtime-common | card directory names', function () {
     });
 
     test('returns explicit export names when provided', function (assert) {
-      let ref: CodeRef = { module: '../pet', name: 'PetCard' };
+      let ref: CodeRef = { module: '../pet' as RealmResourceIdentifier, name: 'PetCard' };
       assert.strictEqual(getCardDirectoryName(ref, paths), 'PetCard');
     });
 
     test('infers directory from module name for default exports', function (assert) {
-      let ref: CodeRef = { module: '../pet', name: 'default' };
+      let ref: CodeRef = { module: '../pet' as RealmResourceIdentifier, name: 'default' };
       assert.strictEqual(getCardDirectoryName(ref, paths), 'Pet');
     });
 
     test('uses parent directory when module is an index file', function (assert) {
-      let ref: CodeRef = { module: '../animals/index', name: 'default' };
+      let ref: CodeRef = { module: '../animals/index' as RealmResourceIdentifier, name: 'default' };
       assert.strictEqual(getCardDirectoryName(ref, paths), 'Animals');
     });
 
     test('strips executable extensions before inferring name', function (assert) {
       let ref: CodeRef = {
-        module: '../cards/preview-card.gts',
+        module: '../cards/preview-card.gts' as RealmResourceIdentifier,
         name: 'default',
       };
       assert.strictEqual(getCardDirectoryName(ref, paths), 'PreviewCard');
@@ -37,14 +40,14 @@ module('Unit | runtime-common | card directory names', function () {
 
     test('sanitizes names with dashes and encoded characters', function (assert) {
       let ref: CodeRef = {
-        module: '../fancy/%E2%9C%A8-sparkle-card',
+        module: '../fancy/%E2%9C%A8-sparkle-card' as RealmResourceIdentifier,
         name: 'default',
       };
       assert.strictEqual(getCardDirectoryName(ref, paths), 'SparkleCard');
     });
 
     test('prefixes directories that would start with invalid characters', function (assert) {
-      let ref: CodeRef = { module: '../123', name: 'default' };
+      let ref: CodeRef = { module: '../123' as RealmResourceIdentifier, name: 'default' };
       assert.strictEqual(getCardDirectoryName(ref, paths), 'Card123');
     });
 

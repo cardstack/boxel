@@ -1,6 +1,9 @@
 import { module, test } from 'qunit';
 
-import type { LooseCardResource } from '@cardstack/runtime-common';
+import type {
+  LooseCardResource,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common';
 import {
   getValueForResourcePath,
@@ -20,7 +23,7 @@ module('normalizeQueryDefinition', function () {
     let resource: LooseCardResource = {
       id: 'https://realm.example/cards/1',
       meta: {
-        adoptsFrom: { module: 'https://example.com/base', name: 'BaseCard' },
+        adoptsFrom: { module: 'https://example.com/base' as RealmResourceIdentifier, name: 'BaseCard' },
       },
       attributes: {
         profile: { city: 'NYC', realmVal: 'https://other.realm/' },

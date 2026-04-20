@@ -1,5 +1,6 @@
 import type {
   LooseSingleCardDocument,
+  RealmResourceIdentifier,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import {
@@ -115,7 +116,8 @@ export default class ListingCreateCommand extends HostBaseCommand<
         relationships,
         meta: {
           adoptsFrom: {
-            module: `${catalogRealm}catalog-app/listing/listing`,
+            module:
+              `${catalogRealm}catalog-app/listing/listing` as RealmResourceIdentifier,
             name: listingSubClass[listingType],
           },
         },
