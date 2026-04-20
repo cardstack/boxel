@@ -1,6 +1,7 @@
-import { isScopedCSSRequest } from 'glimmer-scoped-css';
-
-import { rri, trimExecutableExtension } from '@cardstack/runtime-common';
+import {
+  isScopedCSSRequest,
+  trimExecutableExtension,
+} from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 

@@ -33,12 +33,29 @@ const postcssTerminalHighlightResolver = {
   },
 };
 
+// resolve.alias does not apply during optimizeDeps pre-bundling, so we
+// stub out Node built-ins here too. recast eagerly requires 'fs' (for a
+// CLI helper we never call) and ast-types-browser's package.json has a
+// "browser" field for fs that Rolldown doesn't honor.
+const emptyFsPath = require.resolve('./lib/empty-fs.js');
+const nodeBuiltinStubResolver = {
+  name: 'node-builtin-stub-resolver',
+  resolveId(id) {
+    if (id === 'fs' || id === 'node:fs') {
+      return emptyFsPath;
+    }
+    return null;
+  },
+};
+
 export default defineConfig({
   resolve: {
     alias: {
       path: require.resolve('path-browserify'),
       crypto: require.resolve('crypto-browserify'),
       stream: require.resolve('stream-browserify'),
+      // recast's main.js eagerly requires 'fs'; we stub it for the browser.
+      fs: require.resolve('./lib/empty-fs.js'),
     },
   },
   plugins: [
@@ -54,7 +71,7 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['@sqlite.org/sqlite-wasm', 'content-tag'],
     rolldownOptions: {
-      plugins: [postcssTerminalHighlightResolver],
+      plugins: [postcssTerminalHighlightResolver, nodeBuiltinStubResolver],
     },
   },
 });
