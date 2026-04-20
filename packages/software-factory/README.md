@@ -74,13 +74,13 @@ The factory is a plain Node.js CLI. "Running it from inside Claude Code" just me
 
 One CLI flag picks the LLM backend. Omit it to get the default.
 
-| Flag                            | Backend                                     | When to use                                            |
-| ------------------------------- | ------------------------------------------- | ------------------------------------------------------ |
-| _(omitted)_                     | `claude` (default)                          | Anywhere Claude Code can run.                          |
-| `--agent claude`                | Claude Code Agent SDK                       | Same as default; use to be explicit.                   |
-| `--agent openrouter`            | OpenRouter, model `anthropic/claude-opus-4` | You want the OpenRouter path.                          |
-| `--agent openrouter=<model-id>` | OpenRouter, specific model                  | E.g., `--agent openrouter=anthropic/claude-sonnet-4`.  |
-| `--agent codex`                 | Codex CLI (not yet implemented)             | Reserved; currently errors with a pointer to CS-10594. |
+| Flag                            | Backend                                       | When to use                                            |
+| ------------------------------- | --------------------------------------------- | ------------------------------------------------------ |
+| _(omitted)_                     | `claude` (default)                            | Anywhere Claude Code can run.                          |
+| `--agent claude`                | Claude Code Agent SDK                         | Same as default; use to be explicit.                   |
+| `--agent openrouter`            | OpenRouter, model `anthropic/claude-opus-4-7` | You want the OpenRouter path.                          |
+| `--agent openrouter=<model-id>` | OpenRouter, specific model                    | E.g., `--agent openrouter=anthropic/claude-sonnet-4`.  |
+| `--agent codex`                 | Codex CLI (not yet implemented)               | Reserved; currently errors with a pointer to CS-10594. |
 
 ### Retrying blocked issues
 

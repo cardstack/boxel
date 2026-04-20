@@ -15,10 +15,19 @@ export const OPENROUTER_CHAT_URL =
 
 /**
  * Default OpenRouter model when `--agent openrouter` is selected without
- * a `=<model-id>` suffix. Uses the unversioned Claude Opus alias so new
- * releases route automatically. Update if a newer flagship family ships.
+ * a `=<model-id>` suffix.
+ *
+ * Pinned to `claude-opus-4-7` rather than the unversioned `claude-opus-4`
+ * alias. The alias route exhibited a deterministic mid-stream truncation
+ * on large tool-call arguments (`finish_reason: null`, `completion=1`)
+ * that broke every `write_file` for full `.gts` card definitions. Opus
+ * 4.7 on the pinned route returned clean `finish_reason: tool_calls`
+ * responses with completions up to ~4.7K tokens in a single turn, and
+ * ran an end-to-end factory loop to `outcome=all_issues_done` with no
+ * retries. Revisit the pin once OpenRouter ships a fix for the alias
+ * route.
  */
-export const FACTORY_DEFAULT_OPENROUTER_MODEL = 'anthropic/claude-opus-4';
+export const FACTORY_DEFAULT_OPENROUTER_MODEL = 'anthropic/claude-opus-4-7';
 
 export const FACTORY_AGENT_PROVIDERS = [
   'claude',
@@ -64,7 +73,7 @@ export type AgentActionType = (typeof VALID_ACTION_TYPES)[number];
 export type ActionRealm = (typeof VALID_REALMS)[number];
 
 export interface FactoryAgentConfig {
-  /** OpenRouter model ID (e.g., `anthropic/claude-opus-4`). */
+  /** OpenRouter model ID (e.g., `anthropic/claude-opus-4-7`). */
   model: string;
   realmServerUrl: string;
   /** Boxel CLI client used to forward OpenRouter requests through the realm server. */
