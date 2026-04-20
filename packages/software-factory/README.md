@@ -40,20 +40,22 @@ The orchestrator (`runIssueLoop`) is a thin scheduler that picks the next unbloc
 - Docker running
 - `mise run dev-all` (starts realm server, host app, icons server, Postgres, Synapse)
 - Active Boxel CLI profile (`boxel profile add`)
-- An [OpenRouter API key](https://openrouter.ai/keys) for the LLM agent (when running the full factory)
+- LLM backend credentials, matching your chosen `--agent` (see [Choosing an LLM backend](#choosing-an-llm-backend---agent) below):
+  - **Default (`--agent claude`)**: `claude` CLI installed and authenticated (run `claude login` once), or `ANTHROPIC_API_KEY` set in the environment. The factory uses the Claude Agent SDK, which picks up whichever is available.
+  - **`--agent openrouter`**: `OPENROUTER_API_KEY` in the environment.
+  - **`--agent codex`**: not yet implemented (tracked in CS-10594).
 
 ## Running the Factory
 
 Make sure the prerequisites above are met, and that you have a brief card published in the software-factory realm (e.g., `http://localhost:4201/software-factory/Wiki/sticky-note`).
 
-Set up your profile and API key first:
+Set up your profile:
 
 ```bash
 boxel profile add     # Interactive wizard — choose your environment, enter credentials
-export OPENROUTER_API_KEY=sk-or-v1-your-key-here
 ```
 
-Then run the factory:
+Then run the factory (default backend is Claude via the Agent SDK):
 
 ```bash
 cd packages/software-factory
@@ -65,6 +67,20 @@ pnpm factory:go \
 ```
 
 The `--debug` flag shows LLM prompts, tool calls and their results, and `console.log` output from QUnit tests as they run.
+
+The factory is a plain Node.js CLI. "Running it from inside Claude Code" just means Claude Code's Bash tool runs the same `pnpm factory:go …` command on your behalf — there's no separate mode, no custom skill required. You can always run it directly from your shell instead.
+
+### Choosing an LLM backend (`--agent`)
+
+One CLI flag picks the LLM backend. Omit it to get the default.
+
+| Flag                            | Backend                                     | When to use                                            |
+| ------------------------------- | ------------------------------------------- | ------------------------------------------------------ |
+| _(omitted)_                     | `claude` (default)                          | Anywhere Claude Code can run.                          |
+| `--agent claude`                | Claude Code Agent SDK                       | Same as default; use to be explicit.                   |
+| `--agent openrouter`            | OpenRouter, model `anthropic/claude-opus-4` | You want the OpenRouter path.                          |
+| `--agent openrouter=<model-id>` | OpenRouter, specific model                  | E.g., `--agent openrouter=anthropic/claude-sonnet-4`.  |
+| `--agent codex`                 | Codex CLI (not yet implemented)             | Reserved; currently errors with a pointer to CS-10594. |
 
 ### Retrying blocked issues
 

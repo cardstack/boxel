@@ -69,10 +69,128 @@ module('factory-entrypoint', function (hooks) {
       briefUrl,
       targetRealmUrl,
       realmServerUrl: 'https://realms.example.test/',
-      model: undefined,
+      agent: 'claude',
+      openRouterModel: undefined,
       debug: undefined,
       retryBlocked: true,
     });
+  });
+
+  test('parseFactoryEntrypointArgs accepts --agent claude', function (assert) {
+    let options = parseFactoryEntrypointArgs([
+      '--brief-url',
+      briefUrl,
+      '--target-realm-url',
+      targetRealmUrl,
+      '--agent',
+      'claude',
+    ]);
+
+    assert.strictEqual(options.agent, 'claude');
+    assert.strictEqual(options.openRouterModel, undefined);
+  });
+
+  test('parseFactoryEntrypointArgs accepts --agent codex', function (assert) {
+    let options = parseFactoryEntrypointArgs([
+      '--brief-url',
+      briefUrl,
+      '--target-realm-url',
+      targetRealmUrl,
+      '--agent',
+      'codex',
+    ]);
+
+    assert.strictEqual(options.agent, 'codex');
+  });
+
+  test('parseFactoryEntrypointArgs accepts --agent openrouter', function (assert) {
+    let options = parseFactoryEntrypointArgs([
+      '--brief-url',
+      briefUrl,
+      '--target-realm-url',
+      targetRealmUrl,
+      '--agent',
+      'openrouter',
+    ]);
+
+    assert.strictEqual(options.agent, 'openrouter');
+    assert.strictEqual(options.openRouterModel, undefined);
+  });
+
+  test('parseFactoryEntrypointArgs accepts --agent openrouter=<model-id>', function (assert) {
+    let options = parseFactoryEntrypointArgs([
+      '--brief-url',
+      briefUrl,
+      '--target-realm-url',
+      targetRealmUrl,
+      '--agent',
+      'openrouter=anthropic/claude-sonnet-4',
+    ]);
+
+    assert.strictEqual(options.agent, 'openrouter');
+    assert.strictEqual(options.openRouterModel, 'anthropic/claude-sonnet-4');
+  });
+
+  test('parseFactoryEntrypointArgs defaults --agent to claude when omitted', function (assert) {
+    let options = parseFactoryEntrypointArgs([
+      '--brief-url',
+      briefUrl,
+      '--target-realm-url',
+      targetRealmUrl,
+    ]);
+
+    assert.strictEqual(options.agent, 'claude');
+  });
+
+  test('parseFactoryEntrypointArgs rejects invalid --agent provider', function (assert) {
+    assert.throws(
+      () =>
+        parseFactoryEntrypointArgs([
+          '--brief-url',
+          briefUrl,
+          '--target-realm-url',
+          targetRealmUrl,
+          '--agent',
+          'ollama',
+        ]),
+      (error: unknown) =>
+        error instanceof FactoryEntrypointUsageError &&
+        /Invalid --agent provider/.test(error.message),
+    );
+  });
+
+  test('parseFactoryEntrypointArgs rejects --agent claude=foo suffix', function (assert) {
+    assert.throws(
+      () =>
+        parseFactoryEntrypointArgs([
+          '--brief-url',
+          briefUrl,
+          '--target-realm-url',
+          targetRealmUrl,
+          '--agent',
+          'claude=foo',
+        ]),
+      (error: unknown) =>
+        error instanceof FactoryEntrypointUsageError &&
+        /does not accept a .*=.*suffix/.test(error.message),
+    );
+  });
+
+  test('parseFactoryEntrypointArgs rejects --agent openrouter= with empty suffix', function (assert) {
+    assert.throws(
+      () =>
+        parseFactoryEntrypointArgs([
+          '--brief-url',
+          briefUrl,
+          '--target-realm-url',
+          targetRealmUrl,
+          '--agent',
+          'openrouter=',
+        ]),
+      (error: unknown) =>
+        error instanceof FactoryEntrypointUsageError &&
+        /non-empty model id/.test(error.message),
+    );
   });
 
   test('parseFactoryEntrypointArgs accepts --no-retry-blocked', function (assert) {
@@ -102,6 +220,7 @@ module('factory-entrypoint', function (hooks) {
         briefUrl,
         targetRealmUrl,
         realmServerUrl: null,
+        agent: 'claude',
       },
       normalizedBrief,
       bootstrappedTargetRealm,
@@ -167,6 +286,7 @@ module('factory-entrypoint', function (hooks) {
         briefUrl,
         targetRealmUrl,
         realmServerUrl: null,
+        agent: 'claude',
       },
       {
         bootstrapTargetRealm: async (resolution) => ({
@@ -239,6 +359,7 @@ module('factory-entrypoint', function (hooks) {
         briefUrl,
         targetRealmUrl,
         realmServerUrl: 'https://realms.example.test/app/',
+        agent: 'claude',
       },
       {
         bootstrapTargetRealm: async (resolution) => ({

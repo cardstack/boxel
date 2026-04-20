@@ -14,11 +14,25 @@ export const OPENROUTER_CHAT_URL =
   'https://openrouter.ai/api/v1/chat/completions' as const;
 
 /**
- * Default model for the factory. Uses OpenRouter's unversioned alias so it
- * automatically routes to the latest release in the family.
- * Update this constant when a newer Claude family ships.
+ * Default OpenRouter model when `--agent openrouter` is selected without
+ * a `=<model-id>` suffix. Uses the unversioned Claude Opus alias so new
+ * releases route automatically. Update if a newer flagship family ships.
  */
-export const FACTORY_DEFAULT_MODEL = 'anthropic/claude-sonnet-4';
+export const FACTORY_DEFAULT_OPENROUTER_MODEL = 'anthropic/claude-opus-4';
+
+export const FACTORY_AGENT_PROVIDERS = [
+  'claude',
+  'codex',
+  'openrouter',
+] as const;
+
+export type FactoryAgentProvider = (typeof FACTORY_AGENT_PROVIDERS)[number];
+
+export interface ParsedAgentFlag {
+  provider: FactoryAgentProvider;
+  /** Only set when provider === 'openrouter'. */
+  openRouterModel?: string;
+}
 
 export const VALID_ACTION_TYPES = [
   'create_file',
@@ -50,6 +64,7 @@ export type AgentActionType = (typeof VALID_ACTION_TYPES)[number];
 export type ActionRealm = (typeof VALID_REALMS)[number];
 
 export interface FactoryAgentConfig {
+  /** OpenRouter model ID (e.g., `anthropic/claude-opus-4`). */
   model: string;
   realmServerUrl: string;
   /** Boxel CLI client used to forward OpenRouter requests through the realm server. */
@@ -59,6 +74,12 @@ export interface FactoryAgentConfig {
    *  realm server _request-forward proxy. Useful for local dev / CI. */
   openRouterApiKey?: string;
   /** When true, log prompts sent to the LLM and responses received to stderr. */
+  debug?: boolean;
+}
+
+/** Config for the Claude Code (Agent SDK) backend. */
+export interface ClaudeCodeAgentConfig {
+  /** When true, log SDK events to stderr. */
   debug?: boolean;
 }
 
@@ -274,20 +295,55 @@ export interface LoopAgent {
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve which model to use.
- * Priority: explicit CLI arg > FACTORY_LLM_MODEL env > FACTORY_DEFAULT_MODEL
+ * Parse a `--agent` CLI flag value into a provider + optional OpenRouter model.
+ *
+ * Accepted shapes:
+ *   - undefined / empty → { provider: 'claude' } (default)
+ *   - 'claude' → { provider: 'claude' }
+ *   - 'codex' → { provider: 'codex' }
+ *   - 'openrouter' → { provider: 'openrouter' } (caller applies FACTORY_DEFAULT_OPENROUTER_MODEL)
+ *   - 'openrouter=anthropic/claude-sonnet-4' → { provider: 'openrouter', openRouterModel: 'anthropic/claude-sonnet-4' }
+ *
+ * A `=<model>` suffix is only legal for `openrouter`. Anything else throws.
  */
-export function resolveFactoryModel(cliModel?: string): string {
-  if (cliModel && cliModel.trim() !== '') {
-    return cliModel.trim();
+export function parseAgentFlag(raw: string | undefined): ParsedAgentFlag {
+  let trimmed = typeof raw === 'string' ? raw.trim() : '';
+  if (trimmed === '') {
+    return { provider: 'claude' };
   }
 
-  let envModel = process.env.FACTORY_LLM_MODEL;
-  if (envModel && envModel.trim() !== '') {
-    return envModel.trim();
+  let eq = trimmed.indexOf('=');
+  let providerPart = eq === -1 ? trimmed : trimmed.slice(0, eq);
+  let suffixPart = eq === -1 ? '' : trimmed.slice(eq + 1).trim();
+
+  if (!FACTORY_AGENT_PROVIDERS.includes(providerPart as FactoryAgentProvider)) {
+    throw new Error(
+      `Invalid --agent provider: "${providerPart}". ` +
+        `Valid values: ${FACTORY_AGENT_PROVIDERS.join(', ')}.`,
+    );
+  }
+  let provider = providerPart as FactoryAgentProvider;
+
+  if (eq !== -1 && provider !== 'openrouter') {
+    throw new Error(
+      `--agent ${provider} does not accept a "=<model>" suffix. ` +
+        `Only --agent openrouter=<model-id> is supported.`,
+    );
   }
 
-  return FACTORY_DEFAULT_MODEL;
+  if (provider === 'openrouter') {
+    if (eq === -1) {
+      return { provider };
+    }
+    if (suffixPart === '') {
+      throw new Error(
+        `--agent openrouter=<model-id> requires a non-empty model id after "=".`,
+      );
+    }
+    return { provider, openRouterModel: suffixPart };
+  }
+
+  return { provider };
 }
 
 /**

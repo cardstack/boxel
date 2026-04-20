@@ -11,4 +11,5 @@
 
 export * from './factory-agent-types';
 export { ToolUseFactoryAgent } from './factory-agent-tool-use';
+export { ClaudeCodeFactoryAgent } from './factory-agent-claude-code';
 export { MockFactoryAgent, MockLoopAgent } from './factory-agent-mocks';
