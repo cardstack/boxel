@@ -1,6 +1,12 @@
+import {
+  readTranspiledModule,
+  type ReadTranspiledResult,
+} from '../commands/read-transpiled';
 import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { pull as realmPull } from '../commands/realm/pull';
 import { getProfileManager, type ProfileManager } from './profile-manager';
+
+export type { ReadTranspiledResult };
 
 const MIME = {
   CardSource: 'application/vnd.card+source',
@@ -189,6 +195,19 @@ export class BoxelCLIClient {
         error: err instanceof Error ? err.message : String(err),
       };
     }
+  }
+
+  /**
+   * Fetch the TRANSPILED JavaScript output for a realm module. Thin
+   * wrapper around the `read-transpiled` CLI command — delegates to
+   * `readTranspiledModule()` in `commands/read-transpiled.ts` so the
+   * CLI and programmatic API share one implementation.
+   */
+  async readTranspiled(
+    realmUrl: string,
+    path: string,
+  ): Promise<ReadTranspiledResult> {
+    return readTranspiledModule(realmUrl, path, { profileManager: this.pm });
   }
 
   /**

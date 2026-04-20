@@ -97,6 +97,7 @@ export function buildFactoryTools(
   let tools: FactoryTool[] = [
     buildWriteFileTool(config),
     buildReadFileTool(config),
+    buildFetchTranspiledModuleTool(config),
     buildSearchRealmTool(config),
     buildRunCommandTool(config),
     buildSignalDoneTool(),
@@ -198,6 +199,37 @@ function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
       let path = args.path as string;
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
       return config.client.read(realmUrl, path);
+    },
+  };
+}
+
+function buildFetchTranspiledModuleTool(
+  config: ToolBuilderConfig,
+): FactoryTool {
+  return {
+    name: 'fetch_transpiled_module',
+    description:
+      "Debugging tool ONLY for investigating runtime errors in .gts modules you've written. Use when an eval or instantiate validation error reports a line/column number — those line numbers refer to the transpiled output, not your .gts source, so fetching the transpiled output is how you locate the offending source construct. Never use the transpiled output as a reference for how to write code. Do NOT copy its patterns (setComponentTemplate, precompileTemplate, wire-format templates, base64 CSS imports) into source — always write idiomatic Ember / <template>-tag / CardDef source. Editing: only edit the .gts source (the transpiled output is regenerated on the next write). Auth: per-realm JWT.",
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Realm-relative module path. The .gts extension is optional — the realm accepts either form.',
+        },
+        realm: {
+          type: 'string',
+          enum: ['target'],
+          description: 'Which realm to read from (default: target)',
+        },
+      },
+      required: ['path'],
+    },
+    execute: async (args) => {
+      let path = args.path as string;
+      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
+      return config.client.readTranspiled(realmUrl, path);
     },
   };
 }

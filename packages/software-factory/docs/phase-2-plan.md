@@ -177,6 +177,14 @@ The instantiate validation step (`src/validators/instantiate-step.ts`) verifies 
 
 The host command uses `store.__dangerousCreateFromSerialized(...)` — a public method we added to `StoreService` that calls `card-api.createFromSerialized` directly. We initially tried the public API (`store.add(doc, { doNotPersist: true })`) but discovered that `store.add()` relaxes serialization errors: `Field.validate()` failures during deserialization are caught internally and logged as console warnings rather than thrown. This is correct behavior for the UI (a broken card should degrade gracefully), but the factory needs those validation errors to propagate as thrown exceptions so they can be reported to the agent as actionable failures. The `__dangerous` prefix signals that callers should not use this method for normal store operations — it bypasses persistence, identity mapping, and auto-saving. Auth token routing follows the same pattern as the eval step. The `InstantiateResult` card definition (`realm/instantiate-result.gts`) and CRUD (`src/instantiate-result-cards.ts`) follow the same patterns as `EvalResult`.
 
+### Transpiled-Source Debugging for Runtime Errors (CS-10806)
+
+Eval and instantiate validation errors carry line/column references that point to **transpiled** module output, not the `.gts` source the agent wrote. The realm server compiles `.gts` to JS before executing modules in the prerenderer sandbox, and the runtime error frames reference the compiled output. For example, a CSS-comment bug in the source often surfaces as `" is not a valid character within attribute names: (error occurred in '/.../sticky-note.gts' @ line 66 : column 32)` — line 66 points inside a `precompileTemplate(...)` block in the transpiled module, not line 66 of the source.
+
+The agent has a `fetch_transpiled_module` factory tool that GETs the module URL with `Accept: */*` (compared to `read_file` which uses `application/vnd.card+source` for the raw `.gts`). The underlying call is `BoxelCLIClient.readTranspiled(realmUrl, path)` in `packages/boxel-cli` — it returns the compiled JS as text, and the realm accepts the path with or without the `.gts` extension. The `software-factory-operations` skill teaches the agent to recognize line/column references in eval/instantiate failures and reach for this tool when debugging. The agent still edits the `.gts` source — the transpiled output is regenerated on every write.
+
+**Rationale:** This path was chosen over source-map correlation or rewriting prerenderer error messages in the validation pipeline. Keeping the validation steps untouched and pushing the debugging affordance to the agent's toolbelt + skill is simpler, scoped to the agent's workflow, and avoids coupling the validator to transpiler internals.
+
 ### Handling Failures
 
 Validation failures are fed back to the agent as context in the **next inner-loop iteration**. The orchestrator does not create fix issues for validation failures — it iterates with the failure details so the agent can self-correct. This mirrors Phase 1's approach (feed test results back, iterate) but with a broader validation pipeline.
@@ -597,7 +605,7 @@ The `LoopAgent` and `runFactoryLoop` signatures don't change — the signal mech
 The boxel-cli integration work is tracked in a dedicated Linear project: **"Incorporate Boxel CLI to Monorepo"**. Key tickets include:
 
 - **CS-10519** — Import boxel-cli into monorepo as `packages/boxel-cli`
-- **CS-10520** — Factory as boxel-cli subcommands; migrate realm-operations; retire file I/O tools
+- **CS-10520** — Factory as boxel-cli subcommands; migrate realm-operations; retire all thin-wrapper factory tools whose sole job is to proxy a single boxel-cli command or client method (see "Wrapper-Tool Retirement" below for the inclusive list and the wrapper-vs-compound distinction). Compound domain tools and factory-only control-flow tools stay.
 - **CS-10642** — boxel-cli owns full auth lifecycle (realm server tokens, per-realm tokens, auto-acquisition)
 - **CS-10613** — Skill alignment: deduplicate, establish consistent homes, create `boxel-api` skill
 - **CS-10670** — boxel-cli publishes tool definitions for factory consumption (tool delegation)
@@ -775,7 +783,33 @@ The `ToolRegistry` in phase 2 includes all three categories:
 let allManifests = [...SCRIPT_TOOLS, ...BOXEL_CLI_TOOLS, ...REALM_API_TOOLS];
 ```
 
-`BOXEL_CLI_TOOLS` (`boxel-sync`, `boxel-push`, `boxel-pull`, `boxel-status`, `boxel-create`, `boxel-history`) become available to the agent. The factory-level wrapper tools (`write_file`, `read_file`, `search_realm`) can be retired or kept as convenience aliases that delegate to the filesystem + sync.
+`BOXEL_CLI_TOOLS` (`boxel-sync`, `boxel-push`, `boxel-pull`, `boxel-status`, `boxel-create`, `boxel-history`) become available to the agent. The factory-level wrapper tools are retired per the "Wrapper-Tool Retirement" rule below — they don't stay as convenience aliases.
+
+#### Wrapper-Tool Retirement (the intended outcome of CS-10520)
+
+The goal of CS-10520 is to eliminate every factory tool that exists solely to proxy a single boxel-cli operation. When the agent has (a) a synced local workspace for file I/O and (b) boxel-cli commands for everything that can't be a filesystem op, there is no remaining reason to maintain a parallel set of factory tools that wrap the same calls.
+
+**Retired — thin 1:1 wrappers over a boxel-cli command or client method:**
+
+| Factory tool                                  | Replacement                                                          |
+| --------------------------------------------- | -------------------------------------------------------------------- |
+| `read_file`                                   | Local filesystem read on the synced workspace                        |
+| `write_file`                                  | Local filesystem write + `boxel sync`                                |
+| `search_realm`                                | `boxel search` (federated) or `client.search` for index queries      |
+| `run_command`                                 | `boxel run-command` (already a CLI)                                  |
+| `fetch_transpiled_module`                     | `boxel read-transpiled` (CS-10806)                                   |
+| `realm-read` / `realm-write` / `realm-delete` | Native file I/O on the workspace; CLI commands for non-target realms |
+
+**Kept — compound tools with factory-owned domain logic on top of the CLI:**
+
+- `update_issue`, `update_project`, `create_knowledge`, `create_catalog_spec`, `add_comment` — these do read-patch-write merging, schema enforcement, `adoptsFrom` wiring, and other Boxel-card-specific semantics. Not 1:1 with any CLI call. Long-term these may migrate into boxel-cli as higher-level card commands (e.g., `boxel card-merge`), but the compound logic has to move with them — they don't retire in this wave.
+
+**Kept — factory-only control flow, no CLI equivalent exists:**
+
+- `signal_done`, `request_clarification` — control signals back to the ralph loop; no realm I/O.
+- `run_tests` — Playwright orchestration across realm server + host app + Synapse; factory-specific.
+
+The test for whether a tool retires is: _would replacing it with a skill that says "use `boxel <cmd>` / native file I/O" leave behind any logic the factory uniquely owns?_ If no, retire. If yes, keep (or migrate that logic into boxel-cli first).
 
 ### Target-Realm I/O Migrates to Local Filesystem
 

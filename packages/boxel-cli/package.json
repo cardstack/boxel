@@ -38,6 +38,7 @@
     "@cardstack/local-types": "workspace:*",
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
+    "content-tag": "catalog:",
     "@types/node": "catalog:",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
