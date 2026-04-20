@@ -583,7 +583,7 @@ export class SubmissionWorkflowCard extends CardDef {
                         {{#if this.isSourceListing}}
                           <span class='sw-draft-badge'>
                             <EditIcon class='sw-draft-icon' />
-                            User Draft
+                            Source Listing
                           </span>
                         {{/if}}
                         <@fields.listing @format='fitted' />
@@ -711,7 +711,7 @@ export class SubmissionWorkflowCard extends CardDef {
                 {{#if this.isSourceListing}}
                   <span class='sw-draft-badge'>
                     <EditIcon class='sw-draft-icon' />
-                    User Draft
+                    Source Listing
                   </span>
                 {{/if}}
                 <@fields.listing @format='fitted' />
