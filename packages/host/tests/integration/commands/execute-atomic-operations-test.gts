@@ -32,10 +32,7 @@ class StubRealmService extends RealmService {
 }
 
 class StubCardService extends CardService {
-  override async executeAtomicOperations(
-    _operations: any[],
-    _realmUrl: URL,
-  ) {
+  override async executeAtomicOperations(_operations: any[], _realmUrl: URL) {
     return mockAtomicResponse;
   }
 }

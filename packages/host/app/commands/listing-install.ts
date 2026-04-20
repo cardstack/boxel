@@ -130,10 +130,9 @@ export default class ListingInstallCommand extends HostBaseCommand<
 
     let atomicResults;
     try {
-      ({ results: atomicResults } =
-        await new ExecuteAtomicOperationsCommand(
-          this.commandContext,
-        ).execute({ realmUrl, operations }));
+      ({ results: atomicResults } = await new ExecuteAtomicOperationsCommand(
+        this.commandContext,
+      ).execute({ realmUrl, operations }));
     } catch (e: any) {
       if (
         typeof e?.message === 'string' &&
