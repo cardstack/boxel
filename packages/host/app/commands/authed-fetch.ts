@@ -37,10 +37,11 @@ export default class AuthedFetchCommand extends HostBaseCommand<
     });
     let body: Record<string, any> = {};
     if (response.ok) {
+      let text = await response.text();
       try {
-        body = await response.json();
+        body = JSON.parse(text);
       } catch {
-        // non-JSON response
+        body = { rawText: text };
       }
     }
     return new AuthedFetchResult({

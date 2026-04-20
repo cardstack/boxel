@@ -52,11 +52,19 @@ export default class ListingCreateCommand extends HostBaseCommand<
   static actionVerb = 'Create';
   description = 'Create a catalog listing for an example card';
 
-  private async getCatalogRealm(): Promise<string | undefined> {
+  private async getCatalogRealm(): Promise<string> {
     const { urls } = await new GetCatalogRealmUrlsCommand(
       this.commandContext,
     ).execute();
-    return urls.find((realm: string) => realm.endsWith('/catalog/'));
+    let catalogRealm = urls.find((realm: string) =>
+      realm.endsWith('/catalog/'),
+    );
+    if (!catalogRealm) {
+      throw new Error(
+        'Catalog realm not found. No available realm URL ends with /catalog/',
+      );
+    }
+    return catalogRealm;
   }
 
   async getInputType() {

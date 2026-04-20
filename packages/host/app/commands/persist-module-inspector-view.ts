@@ -25,9 +25,16 @@ export default class PersistModuleInspectorViewCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.PersistModuleInspectorViewInput,
   ): Promise<undefined> {
+    let view = input.moduleInspectorView;
+    let allowedViews: Set<string> = new Set(['schema', 'spec', 'preview']);
+    if (!allowedViews.has(view)) {
+      throw new Error(
+        `Invalid moduleInspectorView "${view}". Must be one of: schema, spec, preview`,
+      );
+    }
     this.operatorModeStateService.persistModuleInspectorView(
       input.codePath,
-      input.moduleInspectorView as 'schema' | 'spec' | 'preview',
+      view as 'schema' | 'spec' | 'preview',
     );
     return undefined;
   }

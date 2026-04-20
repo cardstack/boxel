@@ -128,13 +128,27 @@ export default class ListingInstallCommand extends HostBaseCommand<
 
     const operations = [...sourceOperations, ...instanceOperations];
 
-    const { results: atomicResults } = await new ExecuteAtomicOperationsCommand(
-      this.commandContext,
-    ).execute({ realmUrl, operations });
+    let atomicResults;
+    try {
+      ({ results: atomicResults } =
+        await new ExecuteAtomicOperationsCommand(
+          this.commandContext,
+        ).execute({ realmUrl, operations }));
+    } catch (e: any) {
+      if (
+        typeof e?.message === 'string' &&
+        e.message.includes('filter refers to a nonexistent type')
+      ) {
+        throw new Error(
+          'Please click "Update Specs" on the listing and make sure all specs are linked.',
+        );
+      }
+      throw e;
+    }
 
-    let writtenFiles = (atomicResults as Array<Record<string, any>>).map(
-      (r) => r.data?.id,
-    );
+    let writtenFiles = (atomicResults as Array<Record<string, any>>)
+      .map((r) => r.data?.id)
+      .filter(Boolean);
     log.debug('=== Final Results ===');
     log.debug(JSON.stringify(writtenFiles, null, 2));
 
