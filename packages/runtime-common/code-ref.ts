@@ -245,9 +245,10 @@ export function identifyCard(
 
   let ref = Loader.identify(card);
   if (ref) {
+    let resolvedRef = { ...ref, module: resolveCardReference(ref.module, undefined) };
     return maybeRelativeURL
-      ? { ...ref, module: maybeRelativeURL(ref.module) }
-      : ref;
+      ? { ...resolvedRef, module: maybeRelativeURL(resolvedRef.module) }
+      : resolvedRef;
   }
 
   let local = localIdentities.get(card);

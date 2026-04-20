@@ -4,7 +4,7 @@ import { tracked } from '@glimmer/tracking';
 
 import window from 'ember-window-mock';
 
-import { sanitizeHeadHTML } from '@cardstack/runtime-common';
+import { cardIdToURL, sanitizeHeadHTML } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
 
@@ -194,6 +194,16 @@ export default class HostModeService extends Service {
 
     let normalizedCardURL =
       (cardURL ?? this.currentCardId)?.replace(/\.json$/, '') ?? null;
+    if (normalizedCardURL) {
+      try {
+        normalizedCardURL = cardIdToURL(normalizedCardURL).href.replace(
+          /\.json$/,
+          '',
+        );
+      } catch (_e) {
+        return;
+      }
+    }
     let requestId = ++this.headUpdateRequestId;
 
     if (normalizedCardURL === null) {
@@ -236,7 +246,7 @@ export default class HostModeService extends Service {
   private async fetchPrerenderedHead(
     cardURL: string,
   ): Promise<string | null | undefined> {
-    let card = new URL(cardURL);
+    let card = cardIdToURL(cardURL);
     let realmRoot =
       this.realm.realmOfURL(card)?.href ??
       new URL(

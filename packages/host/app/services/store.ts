@@ -687,7 +687,7 @@ export default class StoreService extends Service implements StoreInterface {
       }
   > {
     let normalizedRealms = (realms ?? [])
-      .map((realm) => new RealmPaths(new URL(realm)).url)
+      .map((realm) => new RealmPaths(cardIdToURL(realm)).url)
       .filter(Boolean);
     let searchRealms =
       normalizedRealms.length > 0
@@ -1028,6 +1028,27 @@ export default class StoreService extends Service implements StoreInterface {
     relativeTo?: URL | undefined,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<T> {
+    if (resource.id && !isLocalId(resource.id)) {
+      let absoluteId = cardIdToURL(resource.id).href;
+      resource = { ...resource, id: absoluteId };
+      doc = {
+        ...doc,
+        data: { ...(doc as LooseSingleCardDocument).data, id: absoluteId },
+      } as LooseSingleCardDocument;
+    }
+    // Also normalize IDs in included resources so that linked cards
+    // (e.g. linksToMany fields) have absolute URL ids after deserialization.
+    if (doc.included?.length) {
+      doc = {
+        ...doc,
+        included: doc.included.map((included) => {
+          if (included.id && !isLocalId(included.id)) {
+            return { ...included, id: cardIdToURL(included.id).href };
+          }
+          return included;
+        }),
+      } as typeof doc;
+    }
     let api = await this.cardService.getAPI();
     let shouldStubTimers =
       this.renderContextBlocksPersistence() && !isTesting();
@@ -1333,6 +1354,11 @@ export default class StoreService extends Service implements StoreInterface {
     relativeTo: URL | undefined,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<FileDef> {
+    if (resource.id && !isLocalId(resource.id)) {
+      let absoluteId = cardIdToURL(resource.id).href;
+      resource = { ...resource, id: absoluteId };
+      doc = { ...doc, data: { ...doc.data, id: absoluteId } };
+    }
     let api = await this.cardService.getAPI();
     let instance = (await api.createFromSerialized(resource, doc, relativeTo, {
       store: this.store,
@@ -1908,6 +1934,17 @@ export default class StoreService extends Service implements StoreInterface {
           clientRequestId: opts?.clientRequestId,
         });
 
+        // Normalize the server response ID to absolute URL so that
+        // needsServerStateMerge compares correctly and updateFromSerialized
+        // doesn't try to change an existing ID to a prefix form.
+        if (json.data.id && !isLocalId(json.data.id)) {
+          let absoluteId = cardIdToURL(json.data.id).href;
+          json = {
+            ...json,
+            data: { ...json.data, id: absoluteId },
+          } as SingleCardDocument;
+        }
+
         let api = await this.cardService.getAPI();
         // the store state represents the latest state and the server state is
         // potentially out-of-date. As such we only merge the server state that
@@ -1921,7 +1958,7 @@ export default class StoreService extends Service implements StoreInterface {
           await api.updateFromSerialized(instance, serverState, this.store);
         }
         if (isNew) {
-          api.setId(instance, json.data.id!);
+          api.setId(instance, cardIdToURL(json.data.id!).href);
           this.subscribeToRealm(cardIdToURL(instance.id));
           this.operatorModeStateService.handleCardIdAssignment(
             instance[localIdSymbol],
@@ -2173,7 +2210,7 @@ function resolveDocUrl(id?: string, realm?: string, local?: string) {
   if (!realm) {
     throw new Error('Cannot resolve target url without a realm');
   }
-  let path = new RealmPaths(new URL(realm));
+  let path = new RealmPaths(cardIdToURL(realm));
   if (local) {
     return path.directoryURL(local).href;
   }

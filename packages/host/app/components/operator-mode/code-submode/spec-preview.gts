@@ -173,8 +173,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
       return;
     }
 
-    const selectedUrl = new URL(this.selectedId);
-    await this.operatorModeStateService.updateCodePath(selectedUrl);
+    await this.operatorModeStateService.updateCodePathFromId(this.selectedId);
   }
 
   <template>

@@ -629,10 +629,8 @@ export default class CodeSubmode extends Component<Signature> {
   };
 
   @action private async openSearchResultInEditor(cardId: string) {
-    let codePath = cardId.endsWith('.json')
-      ? new URL(cardId)
-      : new URL(cardId + '.json');
-    await this.operatorModeStateService.updateCodePath(codePath);
+    let codePath = cardId.endsWith('.json') ? cardId : `${cardId}.json`;
+    await this.operatorModeStateService.updateCodePathFromId(codePath);
   }
 
   get cardPreviewFormat() {

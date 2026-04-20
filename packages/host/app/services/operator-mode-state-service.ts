@@ -536,7 +536,14 @@ export default class OperatorModeStateService extends Service {
 
   setHostModePrimaryCard(cardId?: string) {
     if (cardId && !isLocalId(cardId)) {
-      this._state.hostModePrimaryCard = cardId.replace(/\.json$/, '');
+      try {
+        this._state.hostModePrimaryCard = cardIdToURL(cardId).href.replace(
+          /\.json$/,
+          '',
+        );
+      } catch (_e) {
+        this._state.hostModePrimaryCard = null;
+      }
     } else if (!cardId) {
       this._state.hostModePrimaryCard = null;
     }
@@ -682,7 +689,7 @@ export default class OperatorModeStateService extends Service {
     if (codeRef && isResolvedCodeRef(codeRef)) {
       //(possibly) in a different module
       this._state.codeSelection = codeRef.name;
-      await this.updateCodePath(new URL(codeRef.module));
+      await this.updateCodePathFromId(codeRef.module);
     } else if (
       codeRef &&
       'type' in codeRef &&
@@ -692,7 +699,7 @@ export default class OperatorModeStateService extends Service {
     ) {
       this._state.fieldSelection = codeRef.field;
       this._state.codeSelection = codeRef.card.name;
-      await this.updateCodePath(new URL(codeRef.card.module));
+      await this.updateCodePathFromId(codeRef.card.module);
     } else if (localName && onLocalSelection) {
       //in the same module
       this._state.codeSelection = localName;
@@ -747,6 +754,16 @@ export default class OperatorModeStateService extends Service {
     this.updateModuleInspectorView(moduleInspectorView);
 
     this.specPanelService.setSelection(null);
+  }
+
+  async updateCodePathFromId(
+    id: string,
+    moduleInspectorView?: ModuleInspectorView,
+  ) {
+    if (!id || isLocalId(id)) {
+      return;
+    }
+    await this.updateCodePath(cardIdToURL(id), moduleInspectorView);
   }
 
   persistModuleInspectorView(
@@ -985,6 +1002,16 @@ export default class OperatorModeStateService extends Service {
   // Deserialize a stringified JSON version of OperatorModeState into a Glimmer tracked object
   // so that templates can react to changes in stacks and their items
   deserialize(rawState: SerializedState): OperatorModeState {
+    let normalizeTrailItem = (item: string | undefined): string | undefined => {
+      if (!item || isLocalId(item)) {
+        return undefined;
+      }
+      try {
+        return cardIdToURL(item).href.replace(/\.json$/, '');
+      } catch (_e) {
+        return undefined;
+      }
+    };
     let openDirs = new TrackedMap<string, string[]>(
       Object.entries(rawState.openDirs ?? {}).map(([realmURL, dirs]) => [
         realmURL,
@@ -996,11 +1023,12 @@ export default class OperatorModeStateService extends Service {
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submodes.Interact,
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
-      hostModePrimaryCard: rawState.trail?.[0]?.replace(/\.json$/, '') ?? null,
+      hostModePrimaryCard: normalizeTrailItem(rawState.trail?.[0]) ?? null,
       hostModeStack: new TrackedArray(
         rawState.trail
           ?.slice(1, rawState.trail?.length)
-          .map((item) => item.replace(/\.json$/, '')) ?? [],
+          .map((item) => normalizeTrailItem(item))
+          .filter((item): item is string => Boolean(item)) ?? [],
       ),
       fileView: rawState.fileView ?? 'inspector',
       openDirs,

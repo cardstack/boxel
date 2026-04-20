@@ -7,7 +7,7 @@ import { tracked } from '@glimmer/tracking';
 import window from 'ember-window-mock';
 import { TrackedArray } from 'tracked-built-ins';
 
-import { RealmPaths } from '@cardstack/runtime-common';
+import { cardIdToURL, RealmPaths } from '@cardstack/runtime-common';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 
 import { RecentFiles } from '../utils/local-storage-keys';
@@ -15,7 +15,7 @@ import { RecentFiles } from '../utils/local-storage-keys';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type ResetService from './reset';
 
-type SerialRecentFile = [URL, string, CursorPosition, number];
+type SerialRecentFile = [string, string, CursorPosition, number];
 
 export type CursorPosition = {
   line: number;
@@ -63,7 +63,12 @@ export default class RecentFilesService extends Service {
   }
 
   removeRecentFilesForRealmURL(url: string) {
-    let realmURL = new RealmPaths(new URL(url)).url;
+    let realmURL: string;
+    try {
+      realmURL = new RealmPaths(cardIdToURL(url)).url;
+    } catch (_e) {
+      return;
+    }
     let removedAny = false;
 
     for (let index = this.recentFiles.length - 1; index >= 0; index--) {
@@ -87,8 +92,14 @@ export default class RecentFilesService extends Service {
     let realmURL = this.operatorModeStateService.realmURL;
 
     if (realmURL) {
-      let realmPaths = new RealmPaths(new URL(realmURL));
-      let url = new URL(urlString);
+      let realmPaths: RealmPaths;
+      let url: URL;
+      try {
+        realmPaths = new RealmPaths(cardIdToURL(realmURL));
+        url = cardIdToURL(urlString);
+      } catch (_e) {
+        return;
+      }
 
       if (realmPaths.inRealm(url)) {
         this.addRecentFile(realmPaths.local(url));
@@ -116,7 +127,7 @@ export default class RecentFilesService extends Service {
     }
 
     this.recentFiles.unshift({
-      realmURL: new URL(currentRealmUrl),
+      realmURL: cardIdToURL(currentRealmUrl),
       filePath: file,
       cursorPosition: cursorPosition ?? null,
       timestamp: Date.now(),
@@ -135,8 +146,13 @@ export default class RecentFilesService extends Service {
   }
 
   findRecentFileByRealmURL(url: string) {
+    let realmUrl: string;
+    try {
+      realmUrl = new RealmPaths(cardIdToURL(url)).url;
+    } catch (_e) {
+      return undefined;
+    }
     return this.recentFiles.find((recentFile) => {
-      const realmUrl = new RealmPaths(new URL(url)).url;
       return realmUrl === recentFile.realmURL.href;
     });
   }
@@ -195,7 +211,7 @@ export default class RecentFilesService extends Service {
             [realmUrl, filePath, cursorPosition, timestamp]: SerialRecentFile,
           ) {
             try {
-              let url = new URL(realmUrl);
+              let url = cardIdToURL(realmUrl);
               recentFiles.push({
                 realmURL: url,
                 filePath,

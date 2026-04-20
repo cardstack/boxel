@@ -355,7 +355,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     }
 
     const fileUrl = hasExtension(cardId) ? cardId : `${cardId}.json`;
-    await this.operatorModeStateService.updateCodePath(new URL(fileUrl));
+    await this.operatorModeStateService.updateCodePathFromId(fileUrl);
   };
 
   @action private setActivePanel(item: ModuleInspectorView) {

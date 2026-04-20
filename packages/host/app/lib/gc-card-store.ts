@@ -8,6 +8,7 @@ import {
   isFileDefInstance,
   isBaseInstance,
   isLocalId,
+  cardIdToURL,
   localId as localIdSymbol,
   loadCardDocument,
   loadFileMetaDocument,
@@ -596,6 +597,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     id: string,
   ): CardDef | CardErrorJSONAPI | undefined {
     id = id.replace(/\.json$/, '');
+    if (!isLocalId(id)) {
+      id = cardIdToURL(id).href;
+    }
     let { item, localId } = this.tryFindingCardItem(type, id);
 
     if (!item && isLocalId(id)) {
@@ -621,6 +625,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     id: string,
   ): FileDef | CardErrorJSONAPI | undefined {
     id = id.replace(/\.json$/, '');
+    if (!isLocalId(id)) {
+      id = cardIdToURL(id).href;
+    }
     let bucket =
       type === 'instance'
         ? this.#fileMetaInstances
@@ -686,6 +693,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     notTracked?: true,
   ) {
     id = id.replace(/\.json$/, '');
+    if (!isLocalId(id)) {
+      id = cardIdToURL(id).href;
+    }
     let cardBucket = notTracked
       ? this.#nonTrackedCardInstances
       : this.#cardInstances;
@@ -763,6 +773,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     notTracked?: true,
   ) {
     id = id.replace(/\.json$/, '');
+    if (!isLocalId(id)) {
+      id = cardIdToURL(id).href;
+    }
     let instanceBucket = notTracked
       ? this.#nonTrackedFileMetaInstances
       : this.#fileMetaInstances;
