@@ -6,6 +6,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { concat, fn } from '@ember/helper';
+import { htmlSafe, type SafeString } from '@ember/template';
 import { ContextButton } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import Modifier from 'ember-modifier';
@@ -17,9 +18,39 @@ import {
 } from './kanban-engine';
 import { KanbanColumnField } from './kanban-column';
 
-class CaptureElement extends Modifier {
+class CaptureElement extends Modifier<{
+  Element: HTMLElement;
+  Args: {
+    Positional: [(el: HTMLElement) => void];
+  };
+}> {
   modify(el: HTMLElement, [callback]: [(el: HTMLElement) => void]) {
     callback(el);
+  }
+}
+
+class BindPointerDown extends Modifier<{
+  Element: HTMLElement;
+  Args: {
+    Positional: [(event: PointerEvent) => void];
+  };
+}> {
+  #element: HTMLElement | null = null;
+  #handler: ((event: PointerEvent) => void) | null = null;
+
+  modify(el: HTMLElement, [handler]: [(event: PointerEvent) => void]) {
+    if (this.#element && this.#handler) {
+      this.#element.removeEventListener('pointerdown', this.#handler);
+    }
+    el.addEventListener('pointerdown', handler);
+    this.#element = el;
+    this.#handler = handler;
+  }
+
+  willRemove() {
+    if (this.#element && this.#handler) {
+      this.#element.removeEventListener('pointerdown', this.#handler);
+    }
   }
 }
 
@@ -38,9 +69,17 @@ export class KanbanPlane extends Component<{
   };
 }> {
   @tracked containerElement: HTMLElement | null = null;
+  get manager(): KanbanDragManager {
+    return this.args.manager;
+  }
+
+  get columns(): KanbanColumnField[] {
+    return this.args.columns;
+  }
+
   captureRef = (el: HTMLElement): void => {
     this.containerElement = el;
-    this.args.manager.registerContainer(el);
+    this.manager.registerContainer(el);
   };
 
   // ── Helpers ────────────────────────────────────────────────────────
@@ -66,58 +105,58 @@ export class KanbanPlane extends Component<{
   };
 
   get isDragging(): boolean {
-    return this.args.manager.interactionMode === 'drag';
+    return this.manager.interactionMode === 'drag';
   }
   get showGhost(): boolean {
-    return this.args.manager.activeDragIndex !== null;
+    return this.manager.activeDragIndex !== null;
   }
   get isSettling(): boolean {
-    return this.args.manager.isSettling;
+    return this.manager.isSettling;
   }
 
   isSource = (p: KanbanPlacement): boolean =>
-    p.index === this.args.manager.activeDragIndex;
+    p.index === this.manager.activeDragIndex;
 
   isTargetColumn = (colIndex: number): boolean => {
-    const ins = this.args.manager.insertion;
+    const ins = this.manager.insertion;
     return ins !== null && ins.column === colIndex && this.isDragging;
   };
 
   shouldShiftDown = (p: KanbanPlacement): boolean => {
     // ¹²
-    const ins = this.args.manager.insertion;
+    const ins = this.manager.insertion;
     if (!ins || !this.isDragging || p.column !== ins.column) return false;
-    if (p.index === this.args.manager.activeDragIndex) return false;
+    if (p.index === this.manager.activeDragIndex) return false;
     return p.sortOrder >= ins.position;
   };
 
-  cardShiftStyle = (p: KanbanPlacement): string => {
+  cardShiftStyle = (p: KanbanPlacement): SafeString => {
     if (this.shouldShiftDown(p)) {
-      const gap = (this.args.manager.dragGhostHeight || 170) + 8;
-      return `transform: translateY(${gap}px)`;
+      const gap = (this.manager.dragGhostHeight || 170) + 8;
+      return htmlSafe(`transform: translateY(${gap}px)`);
     }
-    return '';
+    return htmlSafe('');
   };
 
   showInsertionBox = (colIndex: number): boolean => {
     return (
-      this.args.manager.insertion !== null &&
-      this.args.manager.insertion.column === colIndex &&
+      this.manager.insertion !== null &&
+      this.manager.insertion.column === colIndex &&
       this.isDragging
     );
   };
 
-  insertionBoxStyle = (colIndex: number): string => {
+  insertionBoxStyle = (colIndex: number): SafeString => {
     // ¹³
     if (!this.showInsertionBox(colIndex) || !this.containerElement)
-      return 'display: none';
-    const ins = this.args.manager.insertion!;
-    const ghostH = this.args.manager.dragGhostHeight || 170;
+      return htmlSafe('display: none');
+    const ins = this.manager.insertion!;
+    const ghostH = this.manager.dragGhostHeight || 170;
     const colCards = this.columnCards(colIndex).filter(
-      (p) => p.index !== this.args.manager.activeDragIndex,
+      (p) => p.index !== this.manager.activeDragIndex,
     );
 
-    if (colCards.length === 0) return `top: 0; height: ${ghostH}px`;
+    if (colCards.length === 0) return htmlSafe(`top: 0; height: ${ghostH}px`);
 
     const insertIdx = Math.min(ins.position - 1, colCards.length);
 
@@ -130,7 +169,9 @@ export class KanbanPlane extends Component<{
         const parentRect = lastEl.parentElement!.getBoundingClientRect();
         const cs = getComputedStyle(lastEl);
         const matrix = new DOMMatrix(cs.transform);
-        return `top: ${rect.bottom - matrix.m42 - parentRect.top + 6}px; height: ${ghostH}px`;
+        return htmlSafe(
+          `top: ${rect.bottom - matrix.m42 - parentRect.top + 6}px; height: ${ghostH}px`,
+        );
       }
     } else {
       const beforeEl = this.containerElement.querySelector(
@@ -141,22 +182,31 @@ export class KanbanPlane extends Component<{
         const parentRect = beforeEl.parentElement!.getBoundingClientRect();
         const cs = getComputedStyle(beforeEl);
         const matrix = new DOMMatrix(cs.transform);
-        return `top: ${rect.top - matrix.m42 - parentRect.top - 3}px; height: ${ghostH}px`;
+        return htmlSafe(
+          `top: ${rect.top - matrix.m42 - parentRect.top - 3}px; height: ${ghostH}px`,
+        );
       }
     }
-    return `top: 0; height: ${ghostH}px`;
+    return htmlSafe(`top: 0; height: ${ghostH}px`);
   };
 
-  get ghostStyle(): string {
-    const m = this.args.manager;
+  columnDotStyle = (column: KanbanColumnField): SafeString =>
+    htmlSafe(`background: ${column.color ?? '#94a3b8'}`);
+
+  get ghostStyle(): SafeString {
+    const m = this.manager;
     if (m.isSettling) {
-      return `left: ${m.settleX}px; top: ${m.settleY}px; width: ${m.settleWidth}px; height: ${m.settleHeight}px`;
+      return htmlSafe(
+        `left: ${m.settleX}px; top: ${m.settleY}px; width: ${m.settleWidth}px; height: ${m.settleHeight}px`,
+      );
     }
-    return `left: ${m.pointerClientX - m.dragOffsetX}px; top: ${m.pointerClientY - m.dragOffsetY}px; width: ${m.dragGhostWidth}px; height: ${m.dragGhostHeight}px`;
+    return htmlSafe(
+      `left: ${m.pointerClientX - m.dragOffsetX}px; top: ${m.pointerClientY - m.dragOffsetY}px; width: ${m.dragGhostWidth}px; height: ${m.dragGhostHeight}px`,
+    );
   }
 
   get ghostIndex(): number {
-    return this.args.manager.activeDragIndex ?? -1;
+    return this.manager.activeDragIndex ?? -1;
   }
 
   // ── Template ───────────────────────────────────────────────────────
@@ -165,13 +215,13 @@ export class KanbanPlane extends Component<{
     <div
       class='board {{if this.isDragging "is-dragging"}}'
       {{CaptureElement this.captureRef}}
-      {{on 'pointerdown' this.args.manager.onPointerDown}}
-      {{on 'pointermove' this.args.manager.onPointerMove}}
-      {{on 'pointerup' this.args.manager.onPointerUp}}
-      {{on 'keydown' this.args.manager.onKeyDown}}
+      {{BindPointerDown this.manager.onPointerDown}}
+      {{on 'pointermove' this.manager.onPointerMove}}
+      {{on 'pointerup' this.manager.onPointerUp}}
+      {{on 'keydown' this.manager.onKeyDown}}
       tabindex='0'
     >
-      {{#each this.args.columns as |column colIdx|}}
+      {{#each this.columns as |column colIdx|}}
         {{#if (this.isColumnVisible column colIdx)}}
           <div
             class='column
@@ -183,7 +233,7 @@ export class KanbanPlane extends Component<{
               <div class='col-header-left'>
                 <span
                   class='col-dot'
-                  style='background: {{if column.color column.color "#94a3b8"}}'
+                  style={{this.columnDotStyle column}}
                 ></span>
                 <span class='col-name'>{{if
                     column.label
@@ -229,7 +279,7 @@ export class KanbanPlane extends Component<{
                 <div
                   class='card
                     {{if
-                      (eq placement.index this.args.manager.selectedIndex)
+                      (eq placement.index this.manager.selectedIndex)
                       "selected"
                     }}
                     {{if (this.isSource placement) "dragging"}}'
