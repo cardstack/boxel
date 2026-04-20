@@ -396,7 +396,8 @@ function makeTestRealmFileSystem(): Record<
         attributes: {},
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+            module:
+              'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
             name: 'CardDef',
           },
         },
@@ -1112,7 +1113,8 @@ module(basename(__filename), function () {
       assert.deepEqual(
         doc.data.meta?.adoptsFrom,
         {
-          module: 'https://cardstack.com/base/text-file-def' as RealmResourceIdentifier,
+          module:
+            'https://cardstack.com/base/text-file-def' as RealmResourceIdentifier,
           name: 'TextFileDef',
         },
         'adoptsFrom sourced from pristine file resource',
@@ -1450,7 +1452,10 @@ module(basename(__filename), function () {
 
         let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
-            on: { module: `${testRealm}person` as RealmResourceIdentifier, name: 'Person' },
+            on: {
+              module: `${testRealm}person` as RealmResourceIdentifier,
+              name: 'Person',
+            },
             eq: { firstName: 'Mang-Mang' },
           },
         });
@@ -1757,7 +1762,10 @@ module(basename(__filename), function () {
         );
         let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
-            type: { module: `${testRealm}person` as RealmResourceIdentifier, name: 'Person' },
+            type: {
+              module: `${testRealm}person` as RealmResourceIdentifier,
+              name: 'Person',
+            },
           },
         });
         assert.deepEqual(
@@ -1779,7 +1787,10 @@ module(basename(__filename), function () {
         result = (
           await realm.realmIndexQueryEngine.searchCards({
             filter: {
-              type: { module: `${testRealm}person` as RealmResourceIdentifier, name: 'Person' },
+              type: {
+                module: `${testRealm}person` as RealmResourceIdentifier,
+                name: 'Person',
+              },
             },
           })
         ).data;
@@ -2013,7 +2024,10 @@ module(basename(__filename), function () {
         try {
           await realm.realmIndexQueryEngine.searchCards({
             filter: {
-              on: { module: `${testRealm}deep-card` as RealmResourceIdentifier, name: 'DeepCard' },
+              on: {
+                module: `${testRealm}deep-card` as RealmResourceIdentifier,
+                name: 'DeepCard',
+              },
               eq: { 'middle.leaf.value': 'Root' },
             },
           });
@@ -2098,7 +2112,10 @@ module(basename(__filename), function () {
           try {
             await realm.realmIndexQueryEngine.searchCards({
               filter: {
-                on: { module: `${testRealm}deep-card` as RealmResourceIdentifier, name: 'DeepCard' },
+                on: {
+                  module: `${testRealm}deep-card` as RealmResourceIdentifier,
+                  name: 'DeepCard',
+                },
                 eq: { 'middle.leaf.value': 'Root' },
               },
             });
@@ -2828,7 +2845,8 @@ module(basename(__filename), function () {
               attributes: { cardTitle: 'overlap-target' },
               meta: {
                 adoptsFrom: {
-                  module: './query-rel-overlap-target' as RealmResourceIdentifier,
+                  module:
+                    './query-rel-overlap-target' as RealmResourceIdentifier,
                   name: 'QueryRelOverlapTarget',
                 },
               },
@@ -2845,7 +2863,8 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './query-rel-overlap-consumer' as RealmResourceIdentifier,
+                  module:
+                    './query-rel-overlap-consumer' as RealmResourceIdentifier,
                   name: 'QueryRelOverlapConsumer',
                 },
               },
@@ -3083,7 +3102,8 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './css-relationship-consumer' as RealmResourceIdentifier,
+                  module:
+                    './css-relationship-consumer' as RealmResourceIdentifier,
                   name: 'CssRelationshipConsumer',
                 },
               },
@@ -3405,7 +3425,8 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './relationship-grandparent' as RealmResourceIdentifier,
+                  module:
+                    './relationship-grandparent' as RealmResourceIdentifier,
                   name: 'RelationshipGrandParent',
                 },
               },
@@ -3600,7 +3621,8 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './relationship-file-parent' as RealmResourceIdentifier,
+                  module:
+                    './relationship-file-parent' as RealmResourceIdentifier,
                   name: 'RelationshipFileParent',
                 },
               },
@@ -3617,7 +3639,8 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './relationship-file-grandparent' as RealmResourceIdentifier,
+                  module:
+                    './relationship-file-grandparent' as RealmResourceIdentifier,
                   name: 'RelationshipFileGrandParent',
                 },
               },
@@ -3808,7 +3831,8 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './file-relationship-consumer' as RealmResourceIdentifier,
+                  module:
+                    './file-relationship-consumer' as RealmResourceIdentifier,
                   name: 'FileRelationshipConsumer',
                 },
               },
@@ -3860,7 +3884,10 @@ module(basename(__filename), function () {
 
         let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
-            on: { module: `${testRealm}person` as RealmResourceIdentifier, name: 'Person' },
+            on: {
+              module: `${testRealm}person` as RealmResourceIdentifier,
+              name: 'Person',
+            },
             eq: { firstName: 'Mango' },
           },
         });
@@ -3905,7 +3932,10 @@ module(basename(__filename), function () {
 
         let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
-            on: { module: `${testRealm}post` as RealmResourceIdentifier, name: 'Post' },
+            on: {
+              module: `${testRealm}post` as RealmResourceIdentifier,
+              name: 'Post',
+            },
             eq: { nickName: 'Van Gogh-poo' },
           },
         });
@@ -4108,7 +4138,10 @@ module(basename(__filename), function () {
 
         let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
-            on: { module: `${testRealm}post` as RealmResourceIdentifier, name: 'Post' },
+            on: {
+              module: `${testRealm}post` as RealmResourceIdentifier,
+              name: 'Post',
+            },
             eq: { 'author.nickName': 'Van Gogh-poo' },
           },
         });
@@ -4120,7 +4153,10 @@ module(basename(__filename), function () {
         {
           let { data: result } = await realm.realmIndexQueryEngine.searchCards({
             filter: {
-              type: { module: `${testRealm}post` as RealmResourceIdentifier, name: 'Post' },
+              type: {
+                module: `${testRealm}post` as RealmResourceIdentifier,
+                name: 'Post',
+              },
             },
           });
           assert.deepEqual(
@@ -4194,7 +4230,10 @@ module(basename(__filename), function () {
         {
           let { data: result } = await realm.realmIndexQueryEngine.searchCards({
             filter: {
-              on: { module: `${testRealm}post` as RealmResourceIdentifier, name: 'Post' },
+              on: {
+                module: `${testRealm}post` as RealmResourceIdentifier,
+                name: 'Post',
+              },
               eq: { nickName: 'Van Gogh-poo' },
             },
           });

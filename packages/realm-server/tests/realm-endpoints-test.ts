@@ -13,10 +13,7 @@ import {
   removeSync,
   writeFileSync,
 } from 'fs-extra';
-import type {
-  Realm,
-  RealmResourceIdentifier,
-} from '@cardstack/runtime-common';
+import type { Realm, RealmResourceIdentifier } from '@cardstack/runtime-common';
 import {
   baseRealm,
   CachingDefinitionLookup,

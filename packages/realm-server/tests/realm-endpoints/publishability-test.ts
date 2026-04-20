@@ -2,10 +2,7 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import supertest from 'supertest';
 import type { SuperTest, Test } from 'supertest';
-import type {
-  Realm,
-  RealmResourceIdentifier,
-} from '@cardstack/runtime-common';
+import type { Realm, RealmResourceIdentifier } from '@cardstack/runtime-common';
 import {
   DEFAULT_PERMISSIONS,
   SupportedMimeType,

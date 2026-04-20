@@ -106,7 +106,8 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           let unknownTypeQuery: Query = {
             filter: {
               on: {
-                module: 'http://some-realm-server/some-realm/some-card' as RealmResourceIdentifier,
+                module:
+                  'http://some-realm-server/some-realm/some-card' as RealmResourceIdentifier,
                 name: 'SomeCard',
               },
               eq: {
@@ -148,7 +149,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             sort: [
               {
                 by: 'firstName',
-                on: { module: `${realmHref}person` as RealmResourceIdentifier, name: 'Person' },
+                on: {
+                  module: `${realmHref}person` as RealmResourceIdentifier,
+                  name: 'Person',
+                },
                 direction: 'asc',
               },
             ],
@@ -978,7 +982,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { firstName: 'Mango', city: 'Barksville' },
                 meta: {
-                  adoptsFrom: { module: './person' as RealmResourceIdentifier, name: 'Person' },
+                  adoptsFrom: {
+                    module: './person' as RealmResourceIdentifier,
+                    name: 'Person',
+                  },
                 },
               },
             },
@@ -987,7 +994,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { firstName: 'Van Gogh', city: 'Barksville' },
                 meta: {
-                  adoptsFrom: { module: './person' as RealmResourceIdentifier, name: 'Person' },
+                  adoptsFrom: {
+                    module: './person' as RealmResourceIdentifier,
+                    name: 'Person',
+                  },
                 },
               },
             },
@@ -996,7 +1006,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { firstName: 'Ringo', city: 'Waggington' },
                 meta: {
-                  adoptsFrom: { module: './person' as RealmResourceIdentifier, name: 'Person' },
+                  adoptsFrom: {
+                    module: './person' as RealmResourceIdentifier,
+                    name: 'Person',
+                  },
                 },
               },
             },
@@ -1229,7 +1242,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { title: 'Book A', editions: 3 },
                 meta: {
-                  adoptsFrom: { module: './book' as RealmResourceIdentifier, name: 'Book' },
+                  adoptsFrom: {
+                    module: './book' as RealmResourceIdentifier,
+                    name: 'Book',
+                  },
                 },
               },
             },
@@ -1238,7 +1254,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { title: 'Book B', editions: 200 },
                 meta: {
-                  adoptsFrom: { module: './book' as RealmResourceIdentifier, name: 'Book' },
+                  adoptsFrom: {
+                    module: './book' as RealmResourceIdentifier,
+                    name: 'Book',
+                  },
                 },
               },
             },
@@ -1247,7 +1266,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { title: 'Book C', editions: 10 },
                 meta: {
-                  adoptsFrom: { module: './book' as RealmResourceIdentifier, name: 'Book' },
+                  adoptsFrom: {
+                    module: './book' as RealmResourceIdentifier,
+                    name: 'Book',
+                  },
                 },
               },
             },

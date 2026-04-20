@@ -47,7 +47,10 @@ module(basename(__filename), function () {
           data: {
             attributes: { name: 'Maple' },
             meta: {
-              adoptsFrom: { module: './pet' as RealmResourceIdentifier, name: 'Pet' },
+              adoptsFrom: {
+                module: './pet' as RealmResourceIdentifier,
+                name: 'Pet',
+              },
             },
           },
         },

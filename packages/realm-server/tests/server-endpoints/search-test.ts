@@ -47,7 +47,8 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+              module:
+                'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
               name: 'CardDef',
             },
           },
@@ -63,7 +64,8 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+              module:
+                'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
               name: 'CardDef',
             },
           },

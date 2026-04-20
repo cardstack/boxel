@@ -681,7 +681,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './query-person-finder.gts' as RealmResourceIdentifier,
+                      module:
+                        './query-person-finder.gts' as RealmResourceIdentifier,
                       name: 'QueryPersonFinder',
                     },
                   },
@@ -793,7 +794,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './query-person-finder-nested.gts' as RealmResourceIdentifier,
+                      module:
+                        './query-person-finder-nested.gts' as RealmResourceIdentifier,
                       name: 'OuterQueryCard',
                     },
                   },
@@ -815,7 +817,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './query-person-finder-nested.gts' as RealmResourceIdentifier,
+                      module:
+                        './query-person-finder-nested.gts' as RealmResourceIdentifier,
                       name: 'DeepOuterQueryCard',
                     },
                   },
@@ -1166,7 +1169,8 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+                    module:
+                      'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
                     name: 'CardDef',
                   },
                 },
@@ -1231,7 +1235,8 @@ module(basename(__filename), function () {
                 type: 'card',
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+                    module:
+                      'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
                     name: 'CardDef',
                   },
                 },
@@ -1260,7 +1265,8 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                    module:
+                      'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                     name: 'Friend',
                   },
                 },
@@ -1288,7 +1294,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                      module:
+                        'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                       name: 'Friend',
                     },
                   },
@@ -1301,7 +1308,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                      module:
+                        'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                       name: 'Friend',
                     },
                   },
@@ -1314,7 +1322,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                      module:
+                        'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                       name: 'Friend',
                     },
                   },
@@ -1363,7 +1372,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                      module:
+                        'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                       name: 'Friend',
                     },
                   },
@@ -1404,7 +1414,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                      module:
+                        'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                       name: 'Friend',
                     },
                   },
@@ -1433,7 +1444,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                      module:
+                        'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                       name: 'Friend',
                     },
                   },
@@ -1462,7 +1474,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                      module:
+                        'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                       name: 'Friend',
                     },
                   },
@@ -1520,7 +1533,8 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                  module:
+                    'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -1587,7 +1601,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                      module:
+                        'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                       name: 'Friend',
                     },
                   },
@@ -1621,7 +1636,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                      module:
+                        'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                       name: 'Friend',
                     },
                   },
@@ -1655,7 +1671,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                      module:
+                        'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                       name: 'Friend',
                     },
                   },
@@ -1727,7 +1744,8 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                  module:
+                    'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -1776,7 +1794,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                      module:
+                        'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                       name: 'Friend',
                     },
                   },
@@ -1810,7 +1829,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                      module:
+                        'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                       name: 'Friend',
                     },
                   },
@@ -1865,7 +1885,8 @@ module(basename(__filename), function () {
                 meta: {
                   adoptsFrom: {
                     name: 'Friend',
-                    module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                    module:
+                      'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                   },
                   realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
@@ -1922,7 +1943,8 @@ module(basename(__filename), function () {
                 meta: {
                   adoptsFrom: {
                     name: 'Friend',
-                    module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                    module:
+                      'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                   },
                   realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
@@ -1954,7 +1976,8 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                    module:
+                      'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                     name: 'Friend',
                   },
                 },
@@ -1968,7 +1991,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                      module:
+                        'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                       name: 'Friend',
                     },
                     realmURL: `http://some-other-realm/` as RealmIdentifier,
@@ -2016,7 +2040,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                      module:
+                        'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                       name: 'Friend',
                     },
                   },
@@ -2052,7 +2077,8 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                    module:
+                      'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                     name: 'Friend',
                   },
                   realmURL: testRealmHref.replace(/\/$/, '') as RealmIdentifier,
@@ -2088,7 +2114,8 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                    module:
+                      'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                     name: 'Friend',
                   },
                 },
@@ -2141,7 +2168,8 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                  module:
+                    'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -2215,7 +2243,8 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+                    module:
+                      'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
                     name: 'CardDef',
                   },
                 },
@@ -3604,7 +3633,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
+                      module:
+                        'http://localhost:4202/node-test/friend' as RealmResourceIdentifier,
                       name: 'Friend',
                     },
                     realmURL: `http://some-other-realm/` as RealmIdentifier,
@@ -4026,7 +4056,8 @@ module(basename(__filename), function () {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+                  module:
+                    'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
                   name: 'CardDef',
                 },
               },
@@ -4143,7 +4174,8 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: `${providerRealmURL}person` as RealmResourceIdentifier,
+                    module:
+                      `${providerRealmURL}person` as RealmResourceIdentifier,
                     name: 'Person',
                   },
                 },

@@ -1,10 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import type {
-  Realm,
-  RealmResourceIdentifier,
-} from '@cardstack/runtime-common';
+import type { Realm, RealmResourceIdentifier } from '@cardstack/runtime-common';
 import { setupPermissionedRealmCached, createJWT } from './helpers';
 import { PRERENDERED_HTML_FORMATS, baseRealm } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -557,7 +554,10 @@ module(basename(__filename), function () {
             sort: [
               {
                 by: 'firstName',
-                on: { module: `${realmHref}person` as RealmResourceIdentifier, name: 'Person' },
+                on: {
+                  module: `${realmHref}person` as RealmResourceIdentifier,
+                  name: 'Person',
+                },
                 direction: 'desc',
               },
             ],
@@ -590,7 +590,10 @@ module(basename(__filename), function () {
             sort: [
               {
                 by: 'firstName',
-                on: { module: `${realmHref}person` as RealmResourceIdentifier, name: 'Person' },
+                on: {
+                  module: `${realmHref}person` as RealmResourceIdentifier,
+                  name: 'Person',
+                },
                 direction: 'asc',
               },
             ],

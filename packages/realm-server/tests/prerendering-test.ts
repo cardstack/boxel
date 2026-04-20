@@ -1875,7 +1875,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './prerendered-search-live' as RealmResourceIdentifier,
+                      module:
+                        './prerendered-search-live' as RealmResourceIdentifier,
                       name: 'LiveSearchHost',
                     },
                   },
@@ -1885,7 +1886,8 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './prerendered-search-live' as RealmResourceIdentifier,
+                      module:
+                        './prerendered-search-live' as RealmResourceIdentifier,
                       name: 'LiveSearchInner',
                     },
                   },
@@ -1898,7 +1900,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './prerendered-search-live' as RealmResourceIdentifier,
+                      module:
+                        './prerendered-search-live' as RealmResourceIdentifier,
                       name: 'LiveSearchResult',
                     },
                   },
@@ -1992,7 +1995,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './live-file-search-card' as RealmResourceIdentifier,
+                      module:
+                        './live-file-search-card' as RealmResourceIdentifier,
                       name: 'LiveFileSearchHost',
                     },
                   },
@@ -2002,7 +2006,8 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './live-file-search-card' as RealmResourceIdentifier,
+                      module:
+                        './live-file-search-card' as RealmResourceIdentifier,
                       name: 'LiveFileSearchInner',
                     },
                   },
@@ -3143,7 +3148,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './non-isolated-links-card' as RealmResourceIdentifier,
+                      module:
+                        './non-isolated-links-card' as RealmResourceIdentifier,
                       name: 'NonIsolatedLinks',
                     },
                   },
@@ -3160,7 +3166,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/brand-guide' as RealmResourceIdentifier,
+                      module:
+                        'https://cardstack.com/base/brand-guide' as RealmResourceIdentifier,
                       name: 'default',
                     },
                   },
@@ -5281,7 +5288,10 @@ module(basename(__filename), function () {
           data: {
             attributes: { info: `Detail ${i}` },
             meta: {
-              adoptsFrom: { module: '../detail' as RealmResourceIdentifier, name: 'Detail' },
+              adoptsFrom: {
+                module: '../detail' as RealmResourceIdentifier,
+                name: 'Detail',
+              },
             },
           },
         };
@@ -5335,7 +5345,10 @@ module(basename(__filename), function () {
               },
             },
             meta: {
-              adoptsFrom: { module: '../child-config' as RealmResourceIdentifier, name: 'ChildConfig' },
+              adoptsFrom: {
+                module: '../child-config' as RealmResourceIdentifier,
+                name: 'ChildConfig',
+              },
             },
           },
         };
@@ -5352,7 +5365,10 @@ module(basename(__filename), function () {
         data: {
           relationships: childRelationships,
           meta: {
-            adoptsFrom: { module: './parent-card' as RealmResourceIdentifier, name: 'ParentCard' },
+            adoptsFrom: {
+              module: './parent-card' as RealmResourceIdentifier,
+              name: 'ParentCard',
+            },
           },
         },
       };
@@ -5493,7 +5509,10 @@ module(basename(__filename), function () {
               data: {
                 attributes: { name: 'Maple' },
                 meta: {
-                  adoptsFrom: { module: './person' as RealmResourceIdentifier, name: 'Person' },
+                  adoptsFrom: {
+                    module: './person' as RealmResourceIdentifier,
+                    name: 'Person',
+                  },
                 },
               },
             },

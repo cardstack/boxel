@@ -2528,7 +2528,8 @@ export const cardDefinition: Definition['fields'] = {
       isComputed: false,
       fieldOrCard: {
         name: 'StringField',
-        module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+        module:
+          'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
       },
       isPrimitive: true,
     },
@@ -2538,7 +2539,8 @@ export const cardDefinition: Definition['fields'] = {
       isComputed: false,
       fieldOrCard: {
         name: 'MaybeBase64Field',
-        module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+        module:
+          'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
       },
       isPrimitive: true,
     },
@@ -2548,7 +2550,8 @@ export const cardDefinition: Definition['fields'] = {
       isComputed: true,
       fieldOrCard: {
         name: 'StringField',
-        module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+        module:
+          'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
       },
       isPrimitive: true,
     },
@@ -2576,7 +2579,8 @@ export const cardDefinition: Definition['fields'] = {
       isComputed: true,
       fieldOrCard: {
         name: 'MaybeBase64Field',
-        module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+        module:
+          'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
       },
       isPrimitive: true,
     },
@@ -2586,7 +2590,8 @@ export const cardDefinition: Definition['fields'] = {
       isComputed: false,
       fieldOrCard: {
         name: 'Theme',
-        module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+        module:
+          'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
       },
       isPrimitive: false,
     },

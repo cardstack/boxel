@@ -351,7 +351,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+                  module:
+                    'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
                   name: 'Theme',
                 },
               },
@@ -368,7 +369,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/brand-guide' as RealmResourceIdentifier,
+                  module:
+                    'https://cardstack.com/base/brand-guide' as RealmResourceIdentifier,
                   name: 'default',
                 },
               },

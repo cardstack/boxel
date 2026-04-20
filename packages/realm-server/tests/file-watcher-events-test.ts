@@ -4,10 +4,7 @@ import { join, basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
 import { removeSync, writeJSONSync, writeFileSync } from 'fs-extra';
-import type {
-  Realm,
-  RealmResourceIdentifier,
-} from '@cardstack/runtime-common';
+import type { Realm, RealmResourceIdentifier } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
   setupMatrixRoom,

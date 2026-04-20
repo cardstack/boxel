@@ -133,7 +133,8 @@ module(basename(__filename), function () {
                       isPrimitive: true,
                       isComputed: false,
                       fieldOrCard: {
-                        module: 'https://cardstack.com/base/string' as RealmResourceIdentifier,
+                        module:
+                          'https://cardstack.com/base/string' as RealmResourceIdentifier,
                         name: 'default',
                       },
                       serializerName: undefined,

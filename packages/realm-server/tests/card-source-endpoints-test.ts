@@ -8,10 +8,7 @@ import {
   cardSrc,
   compiledCard,
 } from '@cardstack/runtime-common/etc/test-fixtures';
-import type {
-  Realm,
-  RealmResourceIdentifier,
-} from '@cardstack/runtime-common';
+import type { Realm, RealmResourceIdentifier } from '@cardstack/runtime-common';
 import {
   RealmPaths,
   type LooseSingleCardDocument,
