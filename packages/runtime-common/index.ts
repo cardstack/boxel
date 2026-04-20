@@ -166,8 +166,12 @@ export type PrerenderVisitArgs = {
 };
 
 // Each sub-field is populated only when the corresponding pass was requested.
-// `pageUnusableError` is set when the page itself died mid-visit (e.g.
-// window.onerror, eviction) and remaining passes were short-circuited.
+// `pageUnusableError` is set ONLY when the page itself died mid-visit and
+// remaining passes were short-circuited as a result — e.g. the page was
+// evicted or window.onerror fired an unrecoverable error. Auth failures
+// (401/403) do NOT set this field; they populate the per-pass `.error`
+// instead, because the page is still healthy, just not authorized for the
+// current caller.
 export interface RenderVisitResponse {
   card?: RenderResponse;
   fileExtract?: FileExtractResponse;

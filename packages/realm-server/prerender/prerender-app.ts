@@ -492,6 +492,19 @@ export function buildPrerenderApp(options: {
           'fileData (required when fileRender pass is requested without fileExtract)',
         );
       }
+      // Chaining fileExtract → fileRender also needs fileDefCodeRef so the
+      // renderer can resolve the file definition for the extracted resource.
+      // Catch this at the HTTP boundary rather than failing mid-render.
+      if (
+        renderOptions.fileRender &&
+        !fileData &&
+        renderOptions.fileExtract &&
+        !renderOptions.fileDefCodeRef
+      ) {
+        missing.push(
+          'renderOptions.fileDefCodeRef (required when fileRender chains off fileExtract)',
+        );
+      }
 
       log.debug(
         `received visit prerender request ${rawUrl}: affinityType=${rawAffinityType} affinityValue=${rawAffinityValue} realm=${rawRealm} options=${JSON.stringify(renderOptions)}`,

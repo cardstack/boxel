@@ -620,9 +620,23 @@ export class RenderRunner {
             deps: renderError.error.deps ?? [],
             error: renderError,
           };
-          if (poolInfo.evicted || this.#isAuthError(renderError)) {
+          if (poolInfo.evicted) {
             response.fileExtract = extractResponse;
             response.pageUnusableError = renderError;
+            return this.#finalizeVisit(
+              response,
+              pageId,
+              renderStart,
+              launchMs,
+              poolInfo,
+            );
+          }
+          if (this.#isAuthError(renderError)) {
+            // Auth failure means the caller isn't allowed — the page itself
+            // is still healthy. Record the per-pass error and short-circuit
+            // subsequent passes (they'd hit the same auth failure) without
+            // marking the page unusable.
+            response.fileExtract = extractResponse;
             return this.#finalizeVisit(
               response,
               pageId,
