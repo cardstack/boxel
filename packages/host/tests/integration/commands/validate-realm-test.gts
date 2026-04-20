@@ -31,6 +31,7 @@ class StubRealmService extends RealmService {
 
 class StubRealmServerService extends Service {
   availableRealmURLs = [testRealmURL];
+  async fetchCatalogRealms() {}
 }
 
 module('Integration | commands | validate-realm', function (hooks) {
