@@ -1,3 +1,4 @@
+import type { RealmResourceIdentifier } from './card-reference-resolver';
 import { ensureTrailingSlash } from './paths';
 import { assertQuery, InvalidQueryError, type Query } from './query';
 import {
@@ -19,7 +20,7 @@ export type SearchRequestErrorCode =
   | 'invalid-prerendered-html-format';
 
 type PrerenderedRenderType = {
-  module: string;
+  module: RealmResourceIdentifier;
   name: string;
 };
 
