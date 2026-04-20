@@ -251,7 +251,7 @@ module(basename(__filename), function () {
         'card result type returned',
       );
       assert.true(
-        proxyResponse.body?.data?.attributes?.ok,
+        proxyResponse.body?.data?.attributes?.card?.ok,
         'card proxy payload echoed',
       );
     });
