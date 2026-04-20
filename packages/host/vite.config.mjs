@@ -36,13 +36,38 @@ const postcssTerminalHighlightResolver = {
 // resolve.alias does not apply during optimizeDeps pre-bundling, so we
 // stub out Node built-ins here too. recast eagerly requires 'fs' (for a
 // CLI helper we never call) and ast-types-browser's package.json has a
-// "browser" field for fs that Rolldown doesn't honor.
+// "browser" field for fs that Rolldown doesn't honor. postcss requires
+// 'url' for optional fileURLToPath/pathToFileURL helpers and guards
+// their usage with truthy checks, so an empty module is safe.
 const emptyFsPath = require.resolve('./lib/empty-fs.js');
 const nodeBuiltinStubResolver = {
   name: 'node-builtin-stub-resolver',
   resolveId(id) {
-    if (id === 'fs' || id === 'node:fs') {
+    if (
+      id === 'fs' ||
+      id === 'node:fs' ||
+      id === 'url' ||
+      id === 'node:url'
+    ) {
       return emptyFsPath;
+    }
+    return null;
+  },
+};
+
+// pnpm keeps source-map-js nested under postcss's own node_modules, so
+// bare `require('source-map-js')` from postcss can't resolve from the
+// host package root during optimizeDeps pre-bundling. Point rolldown at
+// the actual install so it inlines the module instead of emitting a
+// runtime __require that throws in the browser.
+const sourceMapJsPath = require.resolve('source-map-js', {
+  paths: [require.resolve('postcss/package.json')],
+});
+const sourceMapJsResolver = {
+  name: 'source-map-js-resolver',
+  resolveId(id) {
+    if (id === 'source-map-js') {
+      return sourceMapJsPath;
     }
     return null;
   },
@@ -71,7 +96,11 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['@sqlite.org/sqlite-wasm', 'content-tag'],
     rolldownOptions: {
-      plugins: [postcssTerminalHighlightResolver, nodeBuiltinStubResolver],
+      plugins: [
+        postcssTerminalHighlightResolver,
+        nodeBuiltinStubResolver,
+        sourceMapJsResolver,
+      ],
     },
   },
 });

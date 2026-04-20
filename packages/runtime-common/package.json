@@ -10,10 +10,6 @@
     "#fetch": {
       "node": "./fetch-node.ts",
       "browser": "./fetch-browser.ts"
-    },
-    "#transpile": {
-      "node": "./transpile.ts",
-      "browser": "./transpile-browser.ts"
     }
   },
   "dependencies": {

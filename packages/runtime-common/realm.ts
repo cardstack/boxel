@@ -104,7 +104,7 @@ import {
   getFileWithFallbacks,
   type TextFileRef,
 } from './stream';
-import { transpileJS } from '#transpile';
+import { transpileJS } from './transpile';
 import type { Method, RouteTable } from './router';
 import {
   AuthenticationError,
