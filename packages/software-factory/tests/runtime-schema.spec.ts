@@ -87,7 +87,10 @@ test('fetches Issue schema with enum fields', async ({ realm }) => {
       client,
       realmServerUrl,
       sourceRealmUrl,
-      { module: `${sourceRealmUrl}darkfactory` as RealmResourceIdentifier, name: 'Issue' },
+      {
+        module: `${sourceRealmUrl}darkfactory` as RealmResourceIdentifier,
+        name: 'Issue',
+      },
     );
 
     expect(schema).toBeDefined();
@@ -123,7 +126,10 @@ test('fetches KnowledgeArticle schema', async ({ realm }) => {
       client,
       realmServerUrl,
       sourceRealmUrl,
-      { module: `${sourceRealmUrl}darkfactory` as RealmResourceIdentifier, name: 'KnowledgeArticle' },
+      {
+        module: `${sourceRealmUrl}darkfactory` as RealmResourceIdentifier,
+        name: 'KnowledgeArticle',
+      },
     );
 
     expect(schema).toBeDefined();

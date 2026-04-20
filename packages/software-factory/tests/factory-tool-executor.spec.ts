@@ -296,7 +296,10 @@ async function buildToolsForRealm(
     client,
     realm.realmServerURL.href,
     baseRealmUrl,
-    { module: 'https://cardstack.com/base/spec' as RealmResourceIdentifier, name: 'Spec' },
+    {
+      module: 'https://cardstack.com/base/spec' as RealmResourceIdentifier,
+      name: 'Spec',
+    },
   );
   if (specSchema) {
     cardTypeSchemas.set('Spec', specSchema);

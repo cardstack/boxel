@@ -309,10 +309,8 @@ export class InstantiateValidationStep implements ValidationStepRunner {
               | ResolvedCodeRef
               | undefined;
             if (adoptsFrom && typeof adoptsFrom.module === 'string') {
-              adoptsFrom.module = new URL(
-                adoptsFrom.module,
-                exampleCardUrl,
-              ).href as RealmResourceIdentifier;
+              adoptsFrom.module = new URL(adoptsFrom.module, exampleCardUrl)
+                .href as RealmResourceIdentifier;
             }
             exampleRead.document.data.id = exampleCardUrl;
             exampleInstances.push({

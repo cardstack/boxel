@@ -310,7 +310,10 @@ async function loadDarkFactorySchemas(
         client,
         realmServerUrl,
         commandRealmUrl,
-        { module: darkfactoryModule as RealmResourceIdentifier, name: cardName },
+        {
+          module: darkfactoryModule as RealmResourceIdentifier,
+          name: cardName,
+        },
       );
       if (schema) {
         schemas.set(cardName, schema);

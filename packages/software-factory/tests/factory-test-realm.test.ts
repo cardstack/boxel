@@ -373,7 +373,12 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
     let doc = buildTestRunCardDocument(
       ['test A'],
       testRealmOptions.testResultsModuleUrl,
-      { moduleRef: { module: './test-spec' as RealmResourceIdentifier, name: 'default' } },
+      {
+        moduleRef: {
+          module: './test-spec' as RealmResourceIdentifier,
+          name: 'default',
+        },
+      },
     );
 
     let moduleResults = doc.data.attributes!.moduleResults as {

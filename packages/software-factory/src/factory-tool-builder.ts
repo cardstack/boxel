@@ -522,7 +522,8 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
           attributes,
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/spec' as RealmResourceIdentifier,
+              module:
+                'https://cardstack.com/base/spec' as RealmResourceIdentifier,
               name: 'Spec',
             },
           },

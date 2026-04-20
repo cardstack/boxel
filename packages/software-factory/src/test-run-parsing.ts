@@ -64,7 +64,10 @@ export function parseQunitResults(results: QunitResults): TestRunAttributes {
   let moduleResults: TestModuleResultData[] = [];
   for (let [moduleName, testResults] of moduleMap) {
     moduleResults.push({
-      moduleRef: { module: moduleName as RealmResourceIdentifier, name: 'default' },
+      moduleRef: {
+        module: moduleName as RealmResourceIdentifier,
+        name: 'default',
+      },
       results: testResults,
     });
   }
