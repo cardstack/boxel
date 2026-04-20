@@ -1082,13 +1082,13 @@ export default class StoreService extends Service implements StoreInterface {
 
       return {
         ...resource,
-        ...(normalizedId === resource.id ? null : { id: normalizedId }),
+        ...(normalizedId === resource.id ? {} : { id: normalizedId }),
         ...(normalizedRelationships
           ? {
               relationships:
                 normalizedRelationships as typeof resource.relationships,
             }
-          : null),
+          : {}),
       } as R;
     };
 
@@ -1108,7 +1108,7 @@ export default class StoreService extends Service implements StoreInterface {
               normalizeResource(included as LooseCardResource),
             ),
           }
-        : null),
+        : {}),
     } as typeof doc;
 
     let api = await this.cardService.getAPI();

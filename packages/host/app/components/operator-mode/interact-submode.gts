@@ -663,7 +663,7 @@ export default class InteractSubmode extends Component {
     }
 
     let items: { name: string; icon: Icon; ref: ResolvedCodeRef }[] = [];
-    let seenTypeNames = new Set<string>();
+    let seenTypeKeys = new Set<string>();
     const excludedCardIds = this.realmServer.availableRealmIndexCardIds;
 
     for (let card of recentCards) {
@@ -677,13 +677,14 @@ export default class InteractSubmode extends Component {
         continue;
       }
 
-      let name = cardTypeDisplayName(card);
-      if (seenTypeNames.has(name)) {
+      let typeKey = `${ref.module}::${ref.name}`;
+      if (seenTypeKeys.has(typeKey)) {
         // do not add duplicates of the same card type
         continue;
       }
 
-      seenTypeNames.add(name);
+      let name = cardTypeDisplayName(card);
+      seenTypeKeys.add(typeKey);
       items.push({
         name,
         icon: cardTypeIcon(card) as Icon,
