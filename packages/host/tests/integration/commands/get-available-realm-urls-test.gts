@@ -1,13 +1,12 @@
 import { getOwner } from '@ember/owner';
-import Service from '@ember/service';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import GetAvailableRealmUrlsCommand from '@cardstack/host/commands/get-available-realm-urls';
-
 import RealmService from '@cardstack/host/services/realm';
+import RealmServerService from '@cardstack/host/services/realm-server';
 
 import {
   setupIntegrationTestRealm,
@@ -30,8 +29,8 @@ class StubRealmService extends RealmService {
   }
 }
 
-class StubRealmServerService extends Service {
-  availableRealmURLs = [
+class StubRealmServerService extends RealmServerService {
+  override availableRealmURLs = [
     'https://example.com/realm-a/',
     'https://example.com/realm-b/',
   ];

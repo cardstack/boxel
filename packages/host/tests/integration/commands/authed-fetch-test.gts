@@ -1,11 +1,11 @@
 import { getOwner } from '@ember/owner';
-import Service from '@ember/service';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import AuthedFetchCommand from '@cardstack/host/commands/authed-fetch';
+import type NetworkService from '@cardstack/host/services/network';
 import RealmService from '@cardstack/host/services/realm';
 
 import {
@@ -35,15 +35,6 @@ class StubRealmService extends RealmService {
   }
 }
 
-class StubNetworkService extends Service {
-  authedFetch = async (
-    _url: string,
-    _options?: RequestInit,
-  ): Promise<typeof mockFetchResponse> => {
-    return mockFetchResponse;
-  };
-}
-
 module('Integration | commands | authed-fetch', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
@@ -57,7 +48,6 @@ module('Integration | commands | authed-fetch', function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
-    getOwner(this)!.register('service:network', StubNetworkService);
   });
 
   setupRealmCacheTeardown(hooks);
@@ -69,6 +59,21 @@ module('Integration | commands | authed-fetch', function (hooks) {
         contents: {},
       }),
     );
+  });
+
+  hooks.beforeEach(function () {
+    let networkService = getService<NetworkService>('network');
+    Object.defineProperty(networkService, 'authedFetch', {
+      get() {
+        return async (
+          _url: string,
+          _options?: RequestInit,
+        ): Promise<typeof mockFetchResponse> => {
+          return mockFetchResponse;
+        };
+      },
+      configurable: true,
+    });
   });
 
   test('returns ok, status, and body for a successful JSON response', async function (assert) {

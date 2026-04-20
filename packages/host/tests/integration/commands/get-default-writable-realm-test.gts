@@ -19,30 +19,12 @@ import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-class StubRealmServiceWithWritable extends RealmService {
+class StubRealmService extends RealmService {
   get defaultReadableRealm() {
     return {
       path: testRealmURL,
       info: testRealmInfo,
     };
-  }
-  get defaultWritableRealm() {
-    return {
-      path: testRealmURL,
-      info: testRealmInfo,
-    };
-  }
-}
-
-class StubRealmServiceWithoutWritable extends RealmService {
-  get defaultReadableRealm() {
-    return {
-      path: testRealmURL,
-      info: testRealmInfo,
-    };
-  }
-  get defaultWritableRealm() {
-    return null;
   }
 }
 
@@ -57,6 +39,10 @@ module('Integration | commands | get-default-writable-realm', function (hooks) {
     autostart: true,
   });
 
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
+  });
+
   setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function () {
@@ -68,8 +54,7 @@ module('Integration | commands | get-default-writable-realm', function (hooks) {
     );
   });
 
-  test('returns realm path when a default writable realm exists', async function (this: RenderingTestContext, assert) {
-    getOwner(this)!.register('service:realm', StubRealmServiceWithWritable);
+  test('returns realm path when a default writable realm exists', async function (assert) {
     let commandService = getService('command-service');
     let command = new GetDefaultWritableRealmCommand(
       commandService.commandContext,
@@ -78,8 +63,14 @@ module('Integration | commands | get-default-writable-realm', function (hooks) {
     assert.strictEqual(result.realmUrl, testRealmURL);
   });
 
-  test('returns empty string when no default writable realm exists', async function (this: RenderingTestContext, assert) {
-    getOwner(this)!.register('service:realm', StubRealmServiceWithoutWritable);
+  test('returns empty string when no default writable realm exists', async function (assert) {
+    let realmService = getService<RealmService>('realm');
+    Object.defineProperty(realmService, 'defaultWritableRealm', {
+      get() {
+        return null;
+      },
+      configurable: true,
+    });
     let commandService = getService('command-service');
     let command = new GetDefaultWritableRealmCommand(
       commandService.commandContext,

@@ -28,9 +28,6 @@ class StubRealmService extends RealmService {
       info: testRealmInfo,
     };
   }
-  canRead = (url: string): boolean => {
-    return readableUrls.includes(url);
-  };
 }
 
 module('Integration | commands | can-read-realm', function (hooks) {
@@ -57,6 +54,13 @@ module('Integration | commands | can-read-realm', function (hooks) {
         contents: {},
       }),
     );
+  });
+
+  hooks.beforeEach(function () {
+    let realmService = getService<RealmService>('realm');
+    realmService.canRead = (url: string): boolean => {
+      return readableUrls.includes(url);
+    };
   });
 
   test('returns true for a readable realm', async function (assert) {

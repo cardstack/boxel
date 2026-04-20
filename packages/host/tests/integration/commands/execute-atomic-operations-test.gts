@@ -1,11 +1,11 @@
 import { getOwner } from '@ember/owner';
-import Service from '@ember/service';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import ExecuteAtomicOperationsCommand from '@cardstack/host/commands/execute-atomic-operations';
+import CardService from '@cardstack/host/services/card-service';
 import RealmService from '@cardstack/host/services/realm';
 
 import {
@@ -31,13 +31,13 @@ class StubRealmService extends RealmService {
   }
 }
 
-class StubCardService extends Service {
-  executeAtomicOperations = async (
+class StubCardService extends CardService {
+  override async executeAtomicOperations(
     _operations: any[],
     _realmUrl: URL,
-  ): Promise<Record<string, any>> => {
+  ) {
     return mockAtomicResponse;
-  };
+  }
 }
 
 module('Integration | commands | execute-atomic-operations', function (hooks) {
