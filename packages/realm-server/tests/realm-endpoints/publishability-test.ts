@@ -2,7 +2,10 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import supertest from 'supertest';
 import type { SuperTest, Test } from 'supertest';
-import type { Realm } from '@cardstack/runtime-common';
+import type {
+  Realm,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import {
   DEFAULT_PERMISSIONS,
   SupportedMimeType,
@@ -61,7 +64,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             },
             meta: {
               adoptsFrom: {
-                module: './source-card',
+                module: './source-card' as RealmResourceIdentifier,
                 name: 'SourceCard',
               },
             },
@@ -134,7 +137,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './broken-card.gts',
+                    module: './broken-card.gts' as RealmResourceIdentifier,
                     name: 'BrokenCard',
                   },
                 },
@@ -268,7 +271,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './source-card',
+                      module: './source-card' as RealmResourceIdentifier,
                       name: 'SourceCard',
                     },
                   },
@@ -412,7 +415,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                     },
                     meta: {
                       adoptsFrom: {
-                        module: './source-card',
+                        module: './source-card' as RealmResourceIdentifier,
                         name: 'SourceCard',
                       },
                     },
@@ -528,7 +531,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                     },
                     meta: {
                       adoptsFrom: {
-                        module: './source-card',
+                        module: './source-card' as RealmResourceIdentifier,
                         name: 'SourceCard',
                       },
                     },
@@ -641,7 +644,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './source-card',
+                      module: './source-card' as RealmResourceIdentifier,
                       name: 'SourceCard',
                     },
                   },
@@ -763,7 +766,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './source-card',
+                      module: './source-card' as RealmResourceIdentifier,
                       name: 'SourceCard',
                     },
                   },

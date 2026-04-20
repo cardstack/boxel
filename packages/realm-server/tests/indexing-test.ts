@@ -12,6 +12,7 @@ import type {
   LooseSingleCardDocument,
   Realm,
   RealmPermissions,
+  RealmResourceIdentifier,
   RealmAdapter,
 } from '@cardstack/runtime-common';
 import type {
@@ -236,7 +237,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './person',
+            module: './person' as RealmResourceIdentifier,
             name: 'Person',
           },
         },
@@ -250,7 +251,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './person',
+            module: './person' as RealmResourceIdentifier,
             name: 'Person',
           },
         },
@@ -266,7 +267,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './pet-person',
+            module: './pet-person' as RealmResourceIdentifier,
             name: 'PetPerson',
           },
         },
@@ -279,7 +280,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './pet',
+            module: './pet' as RealmResourceIdentifier,
             name: 'Pet',
           },
         },
@@ -299,7 +300,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './post',
+            module: './post' as RealmResourceIdentifier,
             name: 'Post',
           },
         },
@@ -319,7 +320,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './post',
+            module: './post' as RealmResourceIdentifier,
             name: 'Post',
           },
         },
@@ -332,7 +333,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './boom',
+            module: './boom' as RealmResourceIdentifier,
             name: 'Boom',
           },
         },
@@ -345,7 +346,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './boom2',
+            module: './boom2' as RealmResourceIdentifier,
             name: 'Boom',
           },
         },
@@ -358,7 +359,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './atom-boom',
+            module: './atom-boom' as RealmResourceIdentifier,
             name: 'Boom',
           },
         },
@@ -371,7 +372,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './embedded-boom',
+            module: './embedded-boom' as RealmResourceIdentifier,
             name: 'Boom',
           },
         },
@@ -384,7 +385,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './fitted-boom',
+            module: './fitted-boom' as RealmResourceIdentifier,
             name: 'Boom',
           },
         },
@@ -395,7 +396,7 @@ function makeTestRealmFileSystem(): Record<
         attributes: {},
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
             name: 'CardDef',
           },
         },
@@ -1111,7 +1112,7 @@ module(basename(__filename), function () {
       assert.deepEqual(
         doc.data.meta?.adoptsFrom,
         {
-          module: 'https://cardstack.com/base/text-file-def',
+          module: 'https://cardstack.com/base/text-file-def' as RealmResourceIdentifier,
           name: 'TextFileDef',
         },
         'adoptsFrom sourced from pristine file resource',
@@ -1125,7 +1126,7 @@ module(basename(__filename), function () {
     test('file meta adoptsFrom prefers index types', async function (assert) {
       let fileDefModule = new URL('filedef-mismatch', testRealm).href;
       let fileDefKey = internalKeyFor(
-        { module: fileDefModule, name: 'FileDef' },
+        { module: fileDefModule as RealmResourceIdentifier, name: 'FileDef' },
         undefined,
       );
       await testDbAdapter.execute(
@@ -1199,7 +1200,7 @@ module(basename(__filename), function () {
                     attributes: {},
                     meta: {
                       adoptsFrom: {
-                        module: './website',
+                        module: './website' as RealmResourceIdentifier,
                         name: 'Website',
                       },
                     },
@@ -1449,7 +1450,7 @@ module(basename(__filename), function () {
 
         let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
-            on: { module: `${testRealm}person`, name: 'Person' },
+            on: { module: `${testRealm}person` as RealmResourceIdentifier, name: 'Person' },
             eq: { firstName: 'Mang-Mang' },
           },
         });
@@ -1756,7 +1757,7 @@ module(basename(__filename), function () {
         );
         let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
-            type: { module: `${testRealm}person`, name: 'Person' },
+            type: { module: `${testRealm}person` as RealmResourceIdentifier, name: 'Person' },
           },
         });
         assert.deepEqual(
@@ -1778,7 +1779,7 @@ module(basename(__filename), function () {
         result = (
           await realm.realmIndexQueryEngine.searchCards({
             filter: {
-              type: { module: `${testRealm}person`, name: 'Person' },
+              type: { module: `${testRealm}person` as RealmResourceIdentifier, name: 'Person' },
             },
           })
         ).data;
@@ -1823,7 +1824,7 @@ module(basename(__filename), function () {
           ?.definitionLookup as DefinitionLookup | undefined;
         if (definitionLookup) {
           await definitionLookup.lookupDefinition({
-            module: fileDefAlias,
+            module: fileDefAlias as RealmResourceIdentifier,
             name: 'FileDef',
           });
         } else {
@@ -2012,7 +2013,7 @@ module(basename(__filename), function () {
         try {
           await realm.realmIndexQueryEngine.searchCards({
             filter: {
-              on: { module: `${testRealm}deep-card`, name: 'DeepCard' },
+              on: { module: `${testRealm}deep-card` as RealmResourceIdentifier, name: 'DeepCard' },
               eq: { 'middle.leaf.value': 'Root' },
             },
           });
@@ -2063,7 +2064,7 @@ module(basename(__filename), function () {
 
           try {
             await definitionLookup.lookupDefinition({
-              module: `${testRealm}middle-field`,
+              module: `${testRealm}middle-field` as RealmResourceIdentifier,
               name: 'MiddleField',
             });
           } catch (_error) {
@@ -2097,7 +2098,7 @@ module(basename(__filename), function () {
           try {
             await realm.realmIndexQueryEngine.searchCards({
               filter: {
-                on: { module: `${testRealm}deep-card`, name: 'DeepCard' },
+                on: { module: `${testRealm}deep-card` as RealmResourceIdentifier, name: 'DeepCard' },
                 eq: { 'middle.leaf.value': 'Root' },
               },
             });
@@ -3859,7 +3860,7 @@ module(basename(__filename), function () {
 
         let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
-            on: { module: `${testRealm}person`, name: 'Person' },
+            on: { module: `${testRealm}person` as RealmResourceIdentifier, name: 'Person' },
             eq: { firstName: 'Mango' },
           },
         });
@@ -3904,7 +3905,7 @@ module(basename(__filename), function () {
 
         let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
-            on: { module: `${testRealm}post`, name: 'Post' },
+            on: { module: `${testRealm}post` as RealmResourceIdentifier, name: 'Post' },
             eq: { nickName: 'Van Gogh-poo' },
           },
         });
@@ -4107,7 +4108,7 @@ module(basename(__filename), function () {
 
         let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
-            on: { module: `${testRealm}post`, name: 'Post' },
+            on: { module: `${testRealm}post` as RealmResourceIdentifier, name: 'Post' },
             eq: { 'author.nickName': 'Van Gogh-poo' },
           },
         });
@@ -4119,7 +4120,7 @@ module(basename(__filename), function () {
         {
           let { data: result } = await realm.realmIndexQueryEngine.searchCards({
             filter: {
-              type: { module: `${testRealm}post`, name: 'Post' },
+              type: { module: `${testRealm}post` as RealmResourceIdentifier, name: 'Post' },
             },
           });
           assert.deepEqual(
@@ -4193,7 +4194,7 @@ module(basename(__filename), function () {
         {
           let { data: result } = await realm.realmIndexQueryEngine.searchCards({
             filter: {
-              on: { module: `${testRealm}post`, name: 'Post' },
+              on: { module: `${testRealm}post` as RealmResourceIdentifier, name: 'Post' },
               eq: { nickName: 'Van Gogh-poo' },
             },
           });

@@ -7,6 +7,7 @@ import type { DirResult } from 'tmp';
 import { existsSync, readJSONSync, statSync, writeFileSync } from 'fs-extra';
 import type {
   Realm,
+  RealmResourceIdentifier,
   Relationship,
   ResourceID,
 } from '@cardstack/runtime-common';
@@ -373,7 +374,7 @@ module(basename(__filename), function () {
           assert.strictEqual(hero?.attributes?.name, 'hero.png');
           assert.strictEqual(hero?.attributes?.contentType, 'image/png');
           assert.deepEqual(hero?.meta?.adoptsFrom, {
-            module: `${baseRealm.url}png-image-def`,
+            module: `${baseRealm.url}png-image-def` as RealmResourceIdentifier,
             name: 'PngDef',
           });
 
@@ -2334,7 +2335,7 @@ module(basename(__filename), function () {
           let query: Query = {
             filter: {
               on: {
-                module: `${testRealmHref}person`,
+                module: `${testRealmHref}person` as RealmResourceIdentifier,
                 name: 'Person',
               },
               eq: {
@@ -4081,7 +4082,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: './person' as RealmResourceIdentifier,
                     name: 'Person',
                   },
                 },
@@ -4128,7 +4129,7 @@ module(basename(__filename), function () {
               data: {
                 meta: {
                   adoptsFrom: {
-                    module: './favorite-finder',
+                    module: './favorite-finder' as RealmResourceIdentifier,
                     name: 'FavoriteLookup',
                   },
                 },
@@ -4141,7 +4142,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: `${providerRealmURL}person`,
+                    module: `${providerRealmURL}person` as RealmResourceIdentifier,
                     name: 'Person',
                   },
                 },

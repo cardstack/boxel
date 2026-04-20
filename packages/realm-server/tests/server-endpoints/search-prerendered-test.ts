@@ -8,6 +8,7 @@ import type {
   QueuePublisher,
   QueueRunner,
   Realm,
+  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import { baseCardRef, buildQueryParamValue } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -47,7 +48,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
                 name: 'CardDef',
               },
             },
@@ -63,7 +64,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
                 name: 'CardDef',
               },
             },

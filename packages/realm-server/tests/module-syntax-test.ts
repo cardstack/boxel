@@ -13,6 +13,7 @@ import {
   baseCardRef,
   baseFieldRef,
   RealmPaths,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import { testRealm } from './helpers';
 import { basename } from 'path';
@@ -24,12 +25,12 @@ module(basename(__filename), function () {
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person.gts`));
       mod.addField({
         cardBeingModified: {
-          module: `${testRealm}dir/person.gts`,
+          module: `${testRealm}dir/person.gts` as RealmResourceIdentifier,
           name: 'Person',
         },
         fieldName: 'age',
         fieldRef: {
-          module: 'https://cardstack.com/base/number',
+          module: 'https://cardstack.com/base/number' as RealmResourceIdentifier,
           name: 'default',
         },
         fieldType: 'contains',
@@ -142,12 +143,12 @@ module(basename(__filename), function () {
       // the new field must go after this field
       mod.addField({
         cardBeingModified: {
-          module: `${testRealm}dir/person.gts`,
+          module: `${testRealm}dir/person.gts` as RealmResourceIdentifier,
           name: 'Person',
         },
         fieldName: 'lastName',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: 'https://cardstack.com/base/string' as RealmResourceIdentifier,
           name: 'default',
         },
         fieldType: 'contains',
@@ -347,7 +348,7 @@ module(basename(__filename), function () {
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/pet.gts`));
 
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/pet`, name: 'Pet' }, // Card we want to add to
+        cardBeingModified: { module: `${testRealm}dir/pet` as RealmResourceIdentifier, name: 'Pet' }, // Card we want to add to
         fieldName: 'card',
         fieldRef: baseCardRef,
         fieldType: 'linksTo',
@@ -382,7 +383,7 @@ module(basename(__filename), function () {
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/pet.gts`));
 
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/pet`, name: 'Pet' }, // Card we want to add to
+        cardBeingModified: { module: `${testRealm}dir/pet` as RealmResourceIdentifier, name: 'Pet' }, // Card we want to add to
         fieldName: 'field',
         fieldRef: baseFieldRef,
         fieldType: 'contains',
@@ -417,10 +418,10 @@ module(basename(__filename), function () {
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/pet.gts`));
 
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/pet`, name: 'Pet' }, // Card we want to add to
+        cardBeingModified: { module: `${testRealm}dir/pet` as RealmResourceIdentifier, name: 'Pet' }, // Card we want to add to
         fieldName: 'bestFriend',
         fieldRef: {
-          module: '../person',
+          module: '../person' as RealmResourceIdentifier,
           name: 'Person',
         },
         fieldType: 'linksTo',
@@ -456,10 +457,10 @@ module(basename(__filename), function () {
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/pet.gts`));
 
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/pet`, name: 'Pet' }, // card we want to add to
+        cardBeingModified: { module: `${testRealm}dir/pet` as RealmResourceIdentifier, name: 'Pet' }, // card we want to add to
         fieldName: 'bestFriend',
         fieldRef: {
-          module: '../person', // the other realm (will be from the /test realm not the /node-test)
+          module: '../person' as RealmResourceIdentifier, // the other realm (will be from the /test realm not the /node-test)
           name: 'Person',
         },
         fieldType: 'linksTo',
@@ -492,10 +493,10 @@ module(basename(__filename), function () {
 
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         fieldName: 'firstName',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: 'https://cardstack.com/base/string' as RealmResourceIdentifier,
           name: 'default',
         },
         fieldType: 'contains',
@@ -546,7 +547,7 @@ module(basename(__filename), function () {
         fieldName: 'age',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module: 'https://cardstack.com/base/number',
+          module: 'https://cardstack.com/base/number' as RealmResourceIdentifier,
           name: 'default',
         },
         fieldType: 'contains',
@@ -604,7 +605,7 @@ module(basename(__filename), function () {
         fieldName: 'age',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module: 'https://cardstack.com/base/number',
+          module: 'https://cardstack.com/base/number' as RealmResourceIdentifier,
           name: 'default',
         },
         fieldType: 'contains',
@@ -665,7 +666,7 @@ module(basename(__filename), function () {
         fieldName: 'age',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module: 'https://cardstack.com/base/number',
+          module: 'https://cardstack.com/base/number' as RealmResourceIdentifier,
           name: 'default',
         },
         fieldType: 'contains',
@@ -714,11 +715,11 @@ module(basename(__filename), function () {
 
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         fieldName: 'aliases',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: 'https://cardstack.com/base/string' as RealmResourceIdentifier,
           name: 'default',
         },
         fieldType: 'containsMany',
@@ -768,10 +769,10 @@ module(basename(__filename), function () {
     `;
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         fieldName: 'pet',
         fieldRef: {
-          module: `${testRealm}dir/pet`,
+          module: `${testRealm}dir/pet` as RealmResourceIdentifier,
           name: 'Pet',
         },
         fieldDefinitionType: 'card',
@@ -820,10 +821,10 @@ module(basename(__filename), function () {
     `;
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         fieldName: 'friend',
         fieldRef: {
-          module: `${testRealm}dir/person`,
+          module: `${testRealm}dir/person` as RealmResourceIdentifier,
           name: 'Person',
         },
         fieldType: 'linksTo',
@@ -874,12 +875,12 @@ module(basename(__filename), function () {
 
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         fieldName: 'fullName',
         fieldType: 'contains',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: 'https://cardstack.com/base/string' as RealmResourceIdentifier,
           name: 'default',
         },
         incomingRelativeTo: undefined,
@@ -924,10 +925,10 @@ module(basename(__filename), function () {
 
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         fieldName: 'age',
         fieldRef: {
-          module: 'https://cardstack.com/base/number',
+          module: 'https://cardstack.com/base/number' as RealmResourceIdentifier,
           name: 'default',
         },
         fieldType: 'contains',
@@ -970,12 +971,12 @@ module(basename(__filename), function () {
       try {
         mod.addField({
           cardBeingModified: {
-            module: `${testRealm}dir/person`,
+            module: `${testRealm}dir/person` as RealmResourceIdentifier,
             name: 'Person',
           },
           fieldName: 'firstName',
           fieldRef: {
-            module: 'https://cardstack.com/base/string',
+            module: 'https://cardstack.com/base/string' as RealmResourceIdentifier,
             name: 'default',
           },
           fieldType: 'contains',
@@ -1005,7 +1006,7 @@ module(basename(__filename), function () {
     `;
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.removeField(
-        { module: `${testRealm}dir/person`, name: 'Person' },
+        { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         'firstName',
       );
 
@@ -1055,15 +1056,15 @@ module(basename(__filename), function () {
 
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       let addFieldAtIndex = mod.removeField(
-        { module: `${testRealm}dir/person`, name: 'Person' },
+        { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         'artistName',
       );
 
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         fieldName: 'artistNames',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: 'https://cardstack.com/base/string' as RealmResourceIdentifier,
           name: 'default',
         },
         fieldType: 'containsMany',
@@ -1105,15 +1106,15 @@ module(basename(__filename), function () {
 
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       let addFieldAtIndex = mod.removeField(
-        { module: `${testRealm}dir/person`, name: 'Person' },
+        { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         'firstName',
       );
 
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         fieldName: 'firstNameAdjusted',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: 'https://cardstack.com/base/string' as RealmResourceIdentifier,
           name: 'default',
         },
         fieldType: 'contains',
@@ -1155,15 +1156,15 @@ module(basename(__filename), function () {
 
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       let addFieldAtIndex = mod.removeField(
-        { module: `${testRealm}dir/person`, name: 'Person' },
+        { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         'streetName',
       );
 
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         fieldName: 'streetNameAdjusted',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: 'https://cardstack.com/base/string' as RealmResourceIdentifier,
           name: 'default',
         },
         fieldType: 'contains',
@@ -1202,7 +1203,7 @@ module(basename(__filename), function () {
 
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.removeField(
-        { module: `${testRealm}dir/person`, name: 'Person' },
+        { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         'firstName',
       );
 
@@ -1227,7 +1228,7 @@ module(basename(__filename), function () {
     `;
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.removeField(
-        { module: `${testRealm}dir/person`, name: 'Friend' },
+        { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Friend' },
         'friend',
       );
 
@@ -1348,7 +1349,7 @@ module(basename(__filename), function () {
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       try {
         mod.removeField(
-          { module: `${testRealm}dir/person`, name: 'Person' },
+          { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
           'foo',
         );
         throw new Error('expected error was not thrown');

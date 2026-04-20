@@ -113,14 +113,14 @@ module(basename(__filename), function () {
       // - meta.adoptsFrom.module is a relative URL (from serialization)
       let doc: SingleCardDocument = {
         data: {
-          id: '@test-rel/realm/Card/my-instance',
+          id: '@test-rel/realm/Card/my-instance' as RealmResourceIdentifier,
           type: 'card' as const,
           attributes: { name: 'Test' },
           relationships: {},
           links: { self: 'http://test-host/my-realm/Card/my-instance' },
           meta: {
             adoptsFrom: {
-              module: '../card-def',
+              module: '../card-def' as RealmResourceIdentifier,
               name: 'MyCard',
             },
           },
@@ -155,7 +155,7 @@ module(basename(__filename), function () {
       // prefix-form base before resolving the relative URL.
       let doc: SingleCardDocument = {
         data: {
-          id: '@test-rel/realm/Skill/my-skill',
+          id: '@test-rel/realm/Skill/my-skill' as RealmResourceIdentifier,
           type: 'card' as const,
           attributes: { name: 'My Skill' },
           relationships: {
@@ -168,7 +168,7 @@ module(basename(__filename), function () {
           links: { self: 'http://test-host/my-realm/Skill/my-skill' },
           meta: {
             adoptsFrom: {
-              module: '../skill',
+              module: '../skill' as RealmResourceIdentifier,
               name: 'Skill',
             },
           },
@@ -194,7 +194,7 @@ module(basename(__filename), function () {
       // URL without using the prefix-form base.
       let doc: SingleCardDocument = {
         data: {
-          id: '@test-rel/realm/Skill/env',
+          id: '@test-rel/realm/Skill/env' as RealmResourceIdentifier,
           type: 'card' as const,
           attributes: { name: 'Environment' },
           relationships: {
@@ -207,7 +207,7 @@ module(basename(__filename), function () {
           links: { self: 'http://test-host/my-realm/Skill/env' },
           meta: {
             adoptsFrom: {
-              module: '../skill',
+              module: '../skill' as RealmResourceIdentifier,
               name: 'Skill',
             },
           },
@@ -229,14 +229,14 @@ module(basename(__filename), function () {
     test('succeeds when resource ID is a regular URL', async function (assert) {
       let doc: SingleCardDocument = {
         data: {
-          id: 'http://test-host/my-realm/Card/my-instance',
+          id: 'http://test-host/my-realm/Card/my-instance' as RealmResourceIdentifier,
           type: 'card' as const,
           attributes: { name: 'Test' },
           relationships: {},
           links: { self: 'http://test-host/my-realm/Card/my-instance' },
           meta: {
             adoptsFrom: {
-              module: '../card-def',
+              module: '../card-def' as RealmResourceIdentifier,
               name: 'MyCard',
             },
           },

@@ -1,7 +1,11 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import { baseRealm, type Realm } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  type Realm,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupPermissionedRealmCached,
@@ -33,7 +37,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       return {
         filter: {
           on: {
-            module: `${realmHref}person`,
+            module: `${realmHref}person` as RealmResourceIdentifier,
             name: 'Person',
           },
           eq: {
@@ -47,7 +51,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       return {
         filter: {
           type: {
-            module: `${baseRealm.url}card-api`,
+            module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
             name: 'FileDef',
           },
         },
@@ -102,7 +106,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           let unknownTypeQuery: Query = {
             filter: {
               on: {
-                module: 'http://some-realm-server/some-realm/some-card',
+                module: 'http://some-realm-server/some-realm/some-card' as RealmResourceIdentifier,
                 name: 'SomeCard',
               },
               eq: {
@@ -133,7 +137,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           let paginationQuery: Query = {
             filter: {
               type: {
-                module: `${realmHref}person`,
+                module: `${realmHref}person` as RealmResourceIdentifier,
                 name: 'Person',
               },
             },
@@ -144,7 +148,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             sort: [
               {
                 by: 'firstName',
-                on: { module: `${realmHref}person`, name: 'Person' },
+                on: { module: `${realmHref}person` as RealmResourceIdentifier, name: 'Person' },
                 direction: 'asc',
               },
             ],
@@ -574,7 +578,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './friend',
+                    module: './friend' as RealmResourceIdentifier,
                     name: 'Friend',
                   },
                 },
@@ -595,7 +599,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './friend',
+                    module: './friend' as RealmResourceIdentifier,
                     name: 'Friend',
                   },
                 },
@@ -609,7 +613,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './friend',
+                    module: './friend' as RealmResourceIdentifier,
                     name: 'Friend',
                   },
                 },
@@ -623,7 +627,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           return {
             filter: {
               on: {
-                module: `${realmHref}friend`,
+                module: `${realmHref}friend` as RealmResourceIdentifier,
                 name: 'Friend',
               },
               eq: {
@@ -974,7 +978,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { firstName: 'Mango', city: 'Barksville' },
                 meta: {
-                  adoptsFrom: { module: './person', name: 'Person' },
+                  adoptsFrom: { module: './person' as RealmResourceIdentifier, name: 'Person' },
                 },
               },
             },
@@ -983,7 +987,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { firstName: 'Van Gogh', city: 'Barksville' },
                 meta: {
-                  adoptsFrom: { module: './person', name: 'Person' },
+                  adoptsFrom: { module: './person' as RealmResourceIdentifier, name: 'Person' },
                 },
               },
             },
@@ -992,7 +996,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { firstName: 'Ringo', city: 'Waggington' },
                 meta: {
-                  adoptsFrom: { module: './person', name: 'Person' },
+                  adoptsFrom: { module: './person' as RealmResourceIdentifier, name: 'Person' },
                 },
               },
             },
@@ -1225,7 +1229,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { title: 'Book A', editions: 3 },
                 meta: {
-                  adoptsFrom: { module: './book', name: 'Book' },
+                  adoptsFrom: { module: './book' as RealmResourceIdentifier, name: 'Book' },
                 },
               },
             },
@@ -1234,7 +1238,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { title: 'Book B', editions: 200 },
                 meta: {
-                  adoptsFrom: { module: './book', name: 'Book' },
+                  adoptsFrom: { module: './book' as RealmResourceIdentifier, name: 'Book' },
                 },
               },
             },
@@ -1243,7 +1247,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { title: 'Book C', editions: 10 },
                 meta: {
-                  adoptsFrom: { module: './book', name: 'Book' },
+                  adoptsFrom: { module: './book' as RealmResourceIdentifier, name: 'Book' },
                 },
               },
             },

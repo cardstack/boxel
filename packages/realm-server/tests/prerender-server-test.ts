@@ -9,7 +9,10 @@ import {
 } from './helpers';
 import { buildPrerenderApp } from '../prerender/prerender-app';
 import type { Prerenderer } from '../prerender';
-import { baseCardRef } from '@cardstack/runtime-common';
+import {
+  baseCardRef,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
@@ -44,7 +47,7 @@ module(basename(__filename), function () {
           data: {
             attributes: { name: 'Maple' },
             meta: {
-              adoptsFrom: { module: './pet', name: 'Pet' },
+              adoptsFrom: { module: './pet' as RealmResourceIdentifier, name: 'Pet' },
             },
           },
         },

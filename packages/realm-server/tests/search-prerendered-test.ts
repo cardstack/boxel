@@ -1,7 +1,10 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import type { Realm } from '@cardstack/runtime-common';
+import type {
+  Realm,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import { setupPermissionedRealmCached, createJWT } from './helpers';
 import { PRERENDERED_HTML_FORMATS, baseRealm } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -68,7 +71,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: './person' as RealmResourceIdentifier,
                       name: 'Person',
                     },
                   },
@@ -99,7 +102,7 @@ module(basename(__filename), function () {
             let query: Query & { prerenderedHtmlFormat: string } = {
               filter: {
                 on: {
-                  module: `${realmHref}person`,
+                  module: `${realmHref}person` as RealmResourceIdentifier,
                   name: 'Person',
                 },
                 eq: {
@@ -159,7 +162,7 @@ module(basename(__filename), function () {
             let queryBase: Query = {
               filter: {
                 on: {
-                  module: `${baseRealm.url}card-api`,
+                  module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
                   name: 'FileDef',
                 },
                 eq: {
@@ -297,7 +300,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: './person' as RealmResourceIdentifier,
                     name: 'Person',
                   },
                 },
@@ -311,7 +314,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: './person' as RealmResourceIdentifier,
                     name: 'Person',
                   },
                 },
@@ -326,7 +329,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './fancy-person',
+                    module: './fancy-person' as RealmResourceIdentifier,
                     name: 'FancyPerson',
                   },
                 },
@@ -341,7 +344,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './fancy-person',
+                    module: './fancy-person' as RealmResourceIdentifier,
                     name: 'FancyPerson',
                   },
                 },
@@ -428,7 +431,7 @@ module(basename(__filename), function () {
           let query: Query & { prerenderedHtmlFormat: string } = {
             filter: {
               on: {
-                module: `${realmHref}fancy-person`,
+                module: `${realmHref}fancy-person` as RealmResourceIdentifier,
                 name: 'FancyPerson',
               },
               not: {
@@ -480,7 +483,7 @@ module(basename(__filename), function () {
           let query: Query & { prerenderedHtmlFormat: string } = {
             filter: {
               on: {
-                module: `${realmHref}person`,
+                module: `${realmHref}person` as RealmResourceIdentifier,
                 name: 'Person',
               },
               eq: {
@@ -554,7 +557,7 @@ module(basename(__filename), function () {
             sort: [
               {
                 by: 'firstName',
-                on: { module: `${realmHref}person`, name: 'Person' },
+                on: { module: `${realmHref}person` as RealmResourceIdentifier, name: 'Person' },
                 direction: 'desc',
               },
             ],
@@ -587,7 +590,7 @@ module(basename(__filename), function () {
             sort: [
               {
                 by: 'firstName',
-                on: { module: `${realmHref}person`, name: 'Person' },
+                on: { module: `${realmHref}person` as RealmResourceIdentifier, name: 'Person' },
                 direction: 'asc',
               },
             ],
@@ -665,7 +668,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: './person' as RealmResourceIdentifier,
                       name: 'Person',
                     },
                   },
@@ -694,7 +697,7 @@ module(basename(__filename), function () {
             let query: Query & { prerenderedHtmlFormat: string } = {
               filter: {
                 on: {
-                  module: `${realmHref}person`,
+                  module: `${realmHref}person` as RealmResourceIdentifier,
                   name: 'Person',
                 },
                 eq: {
@@ -813,7 +816,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: './person' as RealmResourceIdentifier,
                     name: 'Person',
                   },
                 },
@@ -827,7 +830,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: './person' as RealmResourceIdentifier,
                     name: 'Person',
                   },
                 },
@@ -842,7 +845,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './fancy-person',
+                    module: './fancy-person' as RealmResourceIdentifier,
                     name: 'FancyPerson',
                   },
                 },
@@ -857,7 +860,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './fancy-person',
+                    module: './fancy-person' as RealmResourceIdentifier,
                     name: 'FancyPerson',
                   },
                 },
@@ -1082,7 +1085,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: './person' as RealmResourceIdentifier,
                     name: 'Person',
                   },
                 },
