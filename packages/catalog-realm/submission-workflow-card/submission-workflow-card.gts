@@ -12,6 +12,7 @@ import StringField from 'https://cardstack.com/base/string';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import { eq } from '@cardstack/boxel-ui/helpers';
+import EditIcon from '@cardstack/boxel-icons/edit';
 
 import { Listing } from '../catalog-app/listing/listing';
 import { PrCard } from '../pr-card/pr-card';
@@ -422,9 +423,10 @@ export class SubmissionWorkflowCard extends CardDef {
 
     get ciIsLoading() {
       return (
-        this.checkRunEventData?.isLoading ||
-        this.checkSuiteEventData?.isLoading
-      ) ?? false;
+        (this.checkRunEventData?.isLoading ||
+          this.checkSuiteEventData?.isLoading) ??
+        false
+      );
     }
 
     // ── Review state ──
@@ -484,6 +486,13 @@ export class SubmissionWorkflowCard extends CardDef {
       }
     }
 
+    get isUserDraft(): boolean {
+      return (
+        !!this.args.model.listing &&
+        !this.args.model.listing[realmURL]?.pathname.includes('/catalog/')
+      );
+    }
+
     <template>
       <div class='sw-layout'>
 
@@ -503,7 +512,7 @@ export class SubmissionWorkflowCard extends CardDef {
 
           {{! ── Step tracker ── }}
           <div class='sw-steps'>
-            {{#each this.workflowState.steps key="key" as |step idx|}}
+            {{#each this.workflowState.steps key='key' as |step idx|}}
               <div class={{concat 'sw-step ' step.status}}>
                 <div class='sw-step-indicator'>
                   {{#if (eq step.status 'completed')}}
@@ -570,7 +579,13 @@ export class SubmissionWorkflowCard extends CardDef {
                   {{! ── Step detail cards ── }}
                   {{#if (eq step.key 'choose-listing')}}
                     {{#if @model.listing}}
-                      <div class='sw-step-detail sw-fitted-card-container'>
+                      <div class='sw-fitted-card-container'>
+                        {{#if this.isUserDraft}}
+                          <span class='sw-draft-badge'>
+                            <EditIcon class='sw-draft-icon' />
+                            User Draft
+                          </span>
+                        {{/if}}
                         <@fields.listing @format='fitted' />
                       </div>
                     {{/if}}
@@ -611,7 +626,9 @@ export class SubmissionWorkflowCard extends CardDef {
           <div class='sw-progress-section'>
             <div
               class={{concat 'sw-donut ' this.overallStatusTone}}
-              style={{htmlSafe (concat '--pct:' this.workflowState.progressPercent ';')}}
+              style={{htmlSafe
+                (concat '--pct:' this.workflowState.progressPercent ';')
+              }}
             >
               <span
                 class='sw-donut-pct'
@@ -623,7 +640,7 @@ export class SubmissionWorkflowCard extends CardDef {
           {{! Step summary }}
           <div class='sw-sidebar-section'>
             <div class='sw-sidebar-heading'>Steps</div>
-            {{#each this.workflowState.steps key="key" as |step|}}
+            {{#each this.workflowState.steps key='key' as |step|}}
               <div class={{concat 'sw-sidebar-step ' step.status}}>
                 {{#if (eq step.status 'completed')}}
                   <span class='sw-sidebar-icon completed'>
@@ -691,6 +708,12 @@ export class SubmissionWorkflowCard extends CardDef {
             <div class='sw-sidebar-heading'>Linked Cards</div>
             {{#if @model.listing}}
               <div class='sw-sidebar-fitted-card'>
+                {{#if this.isUserDraft}}
+                  <span class='sw-draft-badge'>
+                    <EditIcon class='sw-draft-icon' />
+                    User Draft
+                  </span>
+                {{/if}}
                 <@fields.listing @format='fitted' />
               </div>
             {{/if}}
@@ -970,12 +993,41 @@ export class SubmissionWorkflowCard extends CardDef {
         }
 
         .sw-fitted-card-container {
+          position: relative;
           max-width: 360px;
           height: 180px;
           border-radius: 10px;
-          overflow: hidden;
           border: 1px solid var(--c-border);
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+          margin-top: 15px;
+        }
+
+        .sw-draft-badge {
+          position: absolute;
+          top: -10px;
+          right: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 3px;
+          background-color: var(--boxel-dark);
+          color: white;
+          font: 600 var(--boxel-font-4xs);
+          padding: 3px 10px;
+          border-radius: 4px;
+          z-index: 15;
+          white-space: nowrap;
+          letter-spacing: 0.1px;
+          text-transform: uppercase;
+          font-size: 10px;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+          border: none;
+        }
+
+        .sw-draft-icon {
+          width: 9px;
+          height: 9px;
+          flex-shrink: 0;
         }
 
         .sw-embedded-card-container {
@@ -1172,9 +1224,9 @@ export class SubmissionWorkflowCard extends CardDef {
 
         /* ── Sidebar linked cards ── */
         .sw-sidebar-fitted-card {
-          height: 100px;
+          position: relative;
+          height: 70px;
           border-radius: 8px;
-          overflow: hidden;
           border: 1px solid var(--c-border);
           margin-bottom: 6px;
         }
