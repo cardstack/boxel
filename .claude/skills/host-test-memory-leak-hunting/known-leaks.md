@@ -89,6 +89,97 @@ private async setup() {
 
 ---
 
+## 6. `MonacoService.onDidCreateEditor` global listener never disposed
+
+**Commit:** (this branch) "Dispose monaco global listeners on MonacoService destroy"
+**Severity:** ~38 MB / test in shards that inject MonacoService (operator mode / code-submode / markdown-preview / spec-preview tests).
+
+`monaco-editor` is imported as an ES-module singleton, so `monaco.editor.onDidCreateEditor(cb)` registers `cb` on a global emitter (`StandaloneCodeEditorService._onCodeEditorAdd`) that lives for the lifetime of the V8 isolate. `MonacoService` called this from its `loadMonacoSDK` task and threw away the returned `IDisposable`. Every test that injects `MonacoService` leaves one listener behind; each listener's closure captures `this`, which `setOwner` ties to the test's `ApplicationInstance`. The Monaco editor's own live `DOMTimer` is a GC root, so the listener array — and thus every prior owner — is permanently reachable.
+
+Each retained owner pins its 4 Realms → 4 Loaders → 4 copies of every base-realm module source (card-api, field-component, links-to-many-component, etc.), producing the `+42 copies of define("https://cardstack.com/base/card-api"…)` signature between t=10 and t=20.
+
+**Retainer chain:**
+```
+(Global handles) → NativeContext → Window → DOMTimer → ScheduledAction →
+  V8Function → StandaloneEditor → StandaloneCodeEditorService →
+  _onCodeEditorAdd Emitter → _listeners Array → closure → MonacoService →
+  <symbol OWNER> → ApplicationInstance → Registry → Realm → Loader →
+  modules Map → … → Context:src → string::define("…base/card-api"…)
+```
+
+**Fix pattern:** When calling a singleton API that returns an `IDisposable`, push it onto a per-instance list and call `.dispose()` in `registerDestructor`. Applies to **every** `monaco.editor.onDid*`, `monaco.editor.onDidCreateEditor`, and any per-editor `editor.onDidFocusEditorText` / `onDidBlurEditorText` / `onDidChangeCursorSelection` / `onDidDispose` call. `resetState()` is not enough — the service's `this` still exists until the owner tears down, and the listener array has already leaked its closure.
+
+**Diagnostic:** `MEMPROBE` shows `app_instances=0` (so the ApplicationInstance Set leak — #1 — is NOT active), yet heap climbs linearly. Top-growth constructors are `string::define("https://cardstack.com/base/...")` duplicating at ~4 copies per test. `snapshot-retainers.js --strong` on one of the `define()` strings reveals the path through `StandaloneCodeEditorService._onCodeEditorAdd`.
+
+---
+
+## 7. Monaco per-editor `onDid*` subscriptions not disposed in modifiers
+
+**Commit:** (this branch) "Fix host-test memory leaks in Monaco modifiers and AiAssistantToast"
+**Severity:** Contributor to Shard 16 OOM; combined with #6/#8/#9 cut peak heap 602→319 MB.
+
+Same root cause as #6 but at the modifier level. `packages/host/app/modifiers/monaco.ts`, `monaco-editor.gts`, and `monaco-diff-editor.gts` each call `onDidContentSizeChange`, `onDidChangeContent`, `onDidChangeCursorSelection`, or `onDidUpdateDiff` on their per-editor instances. Each returns an `IDisposable`; discarding it leaves the listener on `StandaloneCodeEditorService._codeEditors` / `_diffEditors` whose closure captures the modifier `this`, which transitively retains the owning component (e.g. `HtmlGroupCodeBlock`) and its `ApplicationInstance`.
+
+**Retainer chain (from `_diffEditors` variant):**
+```
+StandaloneCodeEditorService._diffEditors → IDiffEditor:v2:17 →
+  _diffValue → observers[] → updateDiffEditorStats closure →
+  HtmlGroupCodeBlock → ApplicationInstance
+```
+
+**Fix pattern:** Same as #6 — collect every `onDid*` result into a `disposables: IDisposable[]` array (store on `monacoState` if the modifier re-creates the editor during `modify()`), and in `registerDestructor` iterate and call `.dispose()` (wrapped in try/catch: Monaco's own disposal can race with test teardown) before disposing the editor itself.
+
+---
+
+## 8. Monaco `editor.dispose()` deferred to `requestAnimationFrame` never fires in tests
+
+**Commit:** (this branch) "Fix host-test memory leaks in Monaco modifiers and AiAssistantToast"
+**Severity:** Significant in Monaco-heavy shards — the editor stays in `_codeEditors` / `_diffEditors` registries and its `DOMTimer`s keep the owner alive.
+
+Both `monaco.ts` and `monaco-diff-editor.gts` introduced `disposeEditorAfterInitialLayout` that calls `editor.dispose()` inside `requestAnimationFrame` to avoid a Monaco bootstrap race (disposing while contribution setup is still running throws "InstantiationService has been disposed"). In tests, `rAF` never fires between `teardownContext` and the next test — QUnit runs tests back-to-back without yielding to a paint. Result: the dispose callback queues but never runs; the editor stays registered; its internal `setInterval`-driven DOMTimers retain the owner.
+
+**Fix pattern:** Branch on `isTesting()` from `@embroider/macros`: dispose synchronously in tests, keep the `rAF` deferral in production.
+
+```ts
+import { isTesting } from '@embroider/macros';
+
+let dispose = () => {
+  try { editor.dispose(); } catch { /* partially-disposed is fine */ }
+  // ... model cleanup ...
+};
+if (isTesting()) {
+  dispose();
+} else {
+  // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- Monaco dispose must wait for paint to avoid bootstrap race
+  requestAnimationFrame(dispose);
+}
+```
+
+**Diagnostic:** `native::DOMTimer` constructor count climbs across tests even though your destructors run. Retainer trace on a DOMTimer leads back to a Monaco editor that should have been disposed — check whether the dispose path defers to `rAF` / `setTimeout` / `queueMicrotask` without a testing fast-path.
+
+---
+
+## 9. `ember-lifeline` `pollTask` pins owner via `LIFELINE_QUEUED_POLL_TASKS` global Map
+
+**Commit:** (this branch) "Fix host-test memory leaks in Monaco modifiers and AiAssistantToast"
+**Severity:** Dominant retainer in Shard 16 before fix (~42 MB saved).
+
+`ember-lifeline`'s `pollTask` registers the task's owner in a module-global Map at `window[LIFELINE_QUEUED_POLL_TASKS]`. If the owner is destroyed without first calling `cancelPoll`, the Map entry stays — and because the Map uses the owner object as key, the owner (and everything it transitively retains, including the test's `ApplicationInstance` and all its realm data) leaks until the Map is manually drained.
+
+`AiAssistantToast` used `pollTask` for its auto-hide timer. The getter that triggered the poll had side effects (`onMessageSeen` inside `latestUnseenMessage`), and in some teardown paths the toast was destroyed before `cancelPoll` ran.
+
+**Retainer chain:**
+```
+window[LIFELINE_QUEUED_POLL_TASKS] (Map) → AiAssistantToast →
+  ApplicationInstance → (all the usual card-api retention)
+```
+
+**Fix pattern:** For timers that don't genuinely need `ember-lifeline`'s task lifecycle coordination, use plain `setTimeout` + `clearTimeout` in a `registerDestructor`. Timer closures are GC'd when the timer fires; no global Map is involved. Reserve `pollTask` / `runTask` for cases where you actually need Ember's runloop integration.
+
+**Diagnostic:** Grep for `pollTask` / `runTask` imports in the leaking module. Retainer trace that terminates at a synthetic root labeled "Window" with a property named `LIFELINE_QUEUED_POLL_TASKS` (or similar ember-lifeline symbol) is the smoking gun.
+
+---
+
 ## Patterns to look for when adding new code
 
 These are not bugs — they're shapes of code that have repeatedly turned out to be leaks. Audit your PR for them:
@@ -100,5 +191,8 @@ These are not bugs — they're shapes of code that have repeatedly turned out to
 - **A service that registers itself with another service in `init()`** but doesn't unregister in `willDestroy()`. The other service's registry holds a strong reference.
 - **An `async setup()` or `init()` that creates timers/listeners after an `await`.** Ember destroys services synchronously during test teardown. If the `await` is still pending when `willDestroy` fires, the continuation runs on a dead service. Guard with `isDestroyed(this) || isDestroying(this)` after every `await` before creating any long-lived resource.
 - **A service cache (`this.fooCache`) not cleared in `resetCache()` or `willDestroy()`.** Even if the cache is repopulated next test, the old value is retained until then — and if the old value is a large compiled module graph, that's tens of MB pinned.
+- **A third-party singleton API that returns an `IDisposable` from its `onX` / `addEventListener`-style method.** Monaco (`onDidCreateEditor`, per-editor `onDid*`), VS Code-style APIs, and many RxJS-adjacent libraries return disposables whose callers must hold and later dispose them. Throwing the disposable away leaks the listener *and* everything its closure captured (usually `this` → the service → the owner). Always collect disposables into a per-instance array and call `.dispose()` from `registerDestructor`.
+- **Cleanup deferred to `requestAnimationFrame` / `setTimeout` / `queueMicrotask` without a testing fast-path.** QUnit runs tests back-to-back without yielding to a paint, so deferred dispose callbacks never fire between teardown and the next test. Branch on `isTesting()` and dispose synchronously in tests (the race that the deferral was avoiding usually only matters in production).
+- **`ember-lifeline`'s `pollTask` / `runTask` when a plain `setTimeout` would do.** `pollTask` registers the owner in a module-global Map; if the task isn't cancelled before the owner is destroyed, the Map pins the owner forever. Plain `setTimeout` timers auto-GC their closure when they fire — much safer for simple one-shot delays. Only reach for `ember-lifeline` when you actually need runloop coordination.
 
 When you ship one of these patterns, add a probe of `MEMPROBE` over the relevant test module before declaring done.

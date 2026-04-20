@@ -30,6 +30,7 @@ export interface MonacoDiffEditorSignature {
 export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
   private monacoState: {
     editor: _MonacoSDK.editor.IStandaloneDiffEditor;
+    disposables: _MonacoSDK.IDisposable[];
   } | null = null;
   private hasDestructor = false;
   private waiterManager = createMonacoWaiterManager();
@@ -58,6 +59,7 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
 
     if (editor && hasDisposedModels) {
       this.destroyEditor(editor, model);
+      this.disposeListenerDisposables();
       editor = undefined;
       model = undefined;
       originalModel = undefined;
@@ -96,22 +98,30 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
         element.style.height = `${contentHeight}px`;
       }
 
-      editor.getModifiedEditor().onDidContentSizeChange(() => {
-        const newHeight = editor.getModifiedEditor().getContentHeight();
-        if (newHeight > 0) {
-          element.style.height = `${newHeight}px`;
-        }
-      });
+      let disposables: _MonacoSDK.IDisposable[] = [];
+      disposables.push(
+        editor.getModifiedEditor().onDidContentSizeChange(() => {
+          const newHeight = editor.getModifiedEditor().getContentHeight();
+          if (newHeight > 0) {
+            element.style.height = `${newHeight}px`;
+          }
+        }),
+      );
 
       this.monacoState = {
         editor,
+        disposables,
       };
 
-      editor.onDidUpdateDiff(() => {
-        if (updateDiffEditorStats) {
-          updateDiffEditorStats(makeCodeDiffStats(this.getLineChanges(editor)));
-        }
-      });
+      disposables.push(
+        editor.onDidUpdateDiff(() => {
+          if (updateDiffEditorStats) {
+            updateDiffEditorStats(
+              makeCodeDiffStats(this.getLineChanges(editor)),
+            );
+          }
+        }),
+      );
 
       // Track editor initialization for test waiters after diff models are ready
       if (this.waiterManager) {
@@ -127,9 +137,26 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
         if (editor) {
           this.destroyEditor(editor, editor.getModel());
         }
+        this.disposeListenerDisposables();
         this.monacoState = null;
       });
     }
+  }
+
+  private disposeListenerDisposables() {
+    let disposables = this.monacoState?.disposables;
+    if (!disposables) {
+      return;
+    }
+    for (let d of disposables) {
+      try {
+        d.dispose();
+      } catch {
+        // Monaco listeners can be in a partially-disposed state when tests
+        // tear down mid-turn; ignore so one bad listener doesn't block others.
+      }
+    }
+    disposables.length = 0;
   }
 
   private destroyEditor(
@@ -259,16 +286,18 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
     editor: _MonacoSDK.editor.IStandaloneDiffEditor,
     model: _MonacoSDK.editor.IDiffEditorModel | null | undefined,
   ) {
-    // Diff editors hit the same Monaco bootstrap race as standard editors when
-    // search/replace blocks finish streaming and swap render modes within one
-    // Glimmer turn. Waiting until the next paint keeps teardown deterministic
-    // without relying on a fixed timeout.
+    // Diff editors are only rendered inside streaming AI code blocks, where the
+    // modifier is regularly torn down while Monaco's CodeEditorContributions
+    // instantiation is still queued. Synchronous dispose trips "InstantiationService
+    // has been disposed" on the next deferred `_instantiateSome` call — same race
+    // that forced monaco-editor.gts to always defer. Keep the rAF deferral even in
+    // tests; the leak hunt never implicated this code path.
     // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- Monaco dispose must wait for paint to avoid bootstrap race
     requestAnimationFrame(() => {
       try {
         editor.dispose();
       } catch {
-        // See note above: cleanup should be tolerant of partially-disposed editors.
+        // cleanup should be tolerant of partially-disposed editors.
       }
       if (model?.original) {
         this.disposeModelWhenDetached(model.original);

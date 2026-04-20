@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -40,11 +41,44 @@ export default class MonacoService extends Service {
   serverEchoDebounceMs = serverEchoDebounceMs;
 
   private waiterManager = createMonacoWaiterManager();
+  // Disposables for global Monaco listeners (e.g. `onDidCreateEditor`). Monaco
+  // is a module-level singleton, so anything we register on it stays on the
+  // global emitter until explicitly disposed — otherwise the listener closure
+  // pins this service (and its owner's ApplicationInstance) across test
+  // teardown.
+  private globalDisposables: Array<{ dispose(): void }> = [];
+  // Disposables for per-editor listeners. Tracked separately so that when the
+  // main editor is disposed and later replaced in the same session, the old
+  // editor's listeners can be released without waiting for service teardown.
+  private editorDisposables: Array<{ dispose(): void }> = [];
 
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
+    registerDestructor(this, () => {
+      this.disposeEditorListeners();
+      for (let d of this.globalDisposables) {
+        try {
+          d.dispose();
+        } catch (_) {
+          // Monaco's dispose throws if the editor was already disposed; safe
+          // to ignore since we're tearing down anyway.
+        }
+      }
+      this.globalDisposables.length = 0;
+    });
     this.#ready = this.loadMonacoSDK.perform();
+  }
+
+  private disposeEditorListeners() {
+    for (let d of this.editorDisposables) {
+      try {
+        d.dispose();
+      } catch (_) {
+        // see globalDisposables note
+      }
+    }
+    this.editorDisposables.length = 0;
   }
 
   resetState() {
@@ -70,42 +104,52 @@ export default class MonacoService extends Service {
       this.extendMonacoLanguage(lang, monaco),
     );
     monaco.editor.setTheme('vs-dark');
-    monaco.editor.onDidCreateEditor((editor: _MonacoSDK.editor.ICodeEditor) => {
-      let isMainEditor = ((editor as any)._domElement as HTMLElement)
-        .getAttributeNames()
-        .includes('data-monaco-container-operator-mode');
+    this.globalDisposables.push(
+      monaco.editor.onDidCreateEditor(
+        (editor: _MonacoSDK.editor.ICodeEditor) => {
+          let isMainEditor = ((editor as any)._domElement as HTMLElement)
+            .getAttributeNames()
+            .includes('data-monaco-container-operator-mode');
 
-      if (!isMainEditor) {
-        // Other editors (code blocks) are read only, so we don't need to track focus
-        return;
-      }
+          if (!isMainEditor) {
+            // Other editors (code blocks) are read only, so we don't need to track focus
+            return;
+          }
 
-      // Track editor initialization with shared waiter manager
-      const initOperation = `editor-init-${editor.getId()}`;
+          // Track editor initialization with shared waiter manager
+          const initOperation = `editor-init-${editor.getId()}`;
 
-      this.editor = editor;
-      this.editor.onDidFocusEditorText(() => {
-        this.hasFocus = true;
-      });
-      this.editor.onDidBlurEditorText(() => {
-        this.hasFocus = false;
-      });
-      this.editor.onDidChangeCursorSelection(() => {
-        debounce(this, this.updateSelection, isTesting() ? 10 : 200);
-      });
-      this.editor.onDidDispose(() => {
-        if (this.editor === editor) {
-          this.editor = null;
-          this.hasFocus = false;
-          this.trackedSelection = undefined;
-        }
-      });
+          // A new main editor replaces any prior one — release the old
+          // editor's listeners so its closures stop retaining it.
+          this.disposeEditorListeners();
+          this.editor = editor;
+          this.editorDisposables.push(
+            editor.onDidFocusEditorText(() => {
+              this.hasFocus = true;
+            }),
+            editor.onDidBlurEditorText(() => {
+              this.hasFocus = false;
+            }),
+            editor.onDidChangeCursorSelection(() => {
+              debounce(this, this.updateSelection, isTesting() ? 10 : 200);
+            }),
+            editor.onDidDispose(() => {
+              if (this.editor === editor) {
+                this.editor = null;
+                this.hasFocus = false;
+                this.trackedSelection = undefined;
+                this.disposeEditorListeners();
+              }
+            }),
+          );
 
-      // Use shared waiter manager to track editor initialization
-      if (this.waiterManager) {
-        this.waiterManager.trackEditorInit(this.editor, initOperation);
-      }
-    });
+          // Use shared waiter manager to track editor initialization
+          if (this.waiterManager) {
+            this.waiterManager.trackEditorInit(editor, initOperation);
+          }
+        },
+      ),
+    );
     await Promise.all(promises);
     this.#monacoSDK = monaco;
     return monaco;
