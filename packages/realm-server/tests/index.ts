@@ -47,7 +47,37 @@ if (testModules) {
 }
 
 // Cleanup here ensures lingering servers/prerenderers/queues don't keep the
-// Node event loop alive after tests finish.
+// Node event loop alive after tests finish — and equivalently, don't leave
+// hardcoded test ports (4444-4471, etc.) bound after a test is aborted by
+// Ctrl+C or an abnormal exit (but not SIGKILL, which bypasses handlers).
+async function runTrackedCleanup(): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const helpers = require('./helpers') as {
+    closeTrackedServers?: () => Promise<void>;
+    stopTrackedPrerenderers?: () => Promise<void>;
+    destroyTrackedQueueRunners?: () => Promise<void>;
+    destroyTrackedQueuePublishers?: () => Promise<void>;
+    closeTrackedDbAdapters?: () => Promise<void>;
+  };
+  await helpers.stopTrackedPrerenderers?.();
+  await helpers.closeTrackedServers?.();
+  await helpers.destroyTrackedQueueRunners?.();
+  await helpers.destroyTrackedQueuePublishers?.();
+  await helpers.closeTrackedDbAdapters?.();
+}
+
+for (let signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+  process.once(signal, () => {
+    runTrackedCleanup()
+      .catch((error) => console.error(`Cleanup on ${signal} failed:`, error))
+      .finally(() => {
+        // Re-raise the signal with default disposition so the exit code
+        // reflects it (SIGINT → 130, SIGTERM → 143).
+        process.kill(process.pid, signal);
+      });
+  });
+}
+
 QUnit.done(() => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const helpers = require('./helpers') as {

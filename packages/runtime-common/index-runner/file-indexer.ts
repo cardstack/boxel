@@ -9,8 +9,6 @@ import {
   type FileRenderResponse,
   type JobInfo,
   type LocalPath,
-  type Prerenderer,
-  type RenderRouteOptions,
   type ResolvedCodeRef,
 } from '../index';
 import { CardError, isCardError, serializableError } from '../error';
@@ -21,7 +19,7 @@ import {
   resolveFileDefCodeRef,
 } from '../file-def-code-ref';
 
-interface FileIndexerOptions {
+export interface FileIndexerOptions {
   path: LocalPath;
   fileURL: string;
   lastModified: number;
@@ -30,8 +28,12 @@ interface FileIndexerOptions {
   realmURL: URL;
   auth: string;
   jobInfo: JobInfo;
-  prerenderer: Prerenderer;
-  consumeClearCacheForRender(): boolean;
+  // Extract / render results from the fused visit. extractResult may be
+  // undefined if the visit short-circuited before the fileExtract pass ran;
+  // renderResult may be undefined if the visit skipped fileRender (e.g. for
+  // module files, which produce HTML via their own module prerender).
+  precomputedExtractResult: FileExtractResponse | undefined;
+  precomputedRenderResult?: FileRenderResponse;
   dependencyResolver: IndexRunnerDependencyManager;
   updateEntry(
     entryURL: URL,
@@ -46,11 +48,11 @@ export async function performFileIndexing({
   lastModified,
   resourceCreatedAt,
   hasModulePrerender,
-  realmURL,
-  auth,
+  realmURL: _realmURL,
+  auth: _auth,
   jobInfo,
-  prerenderer,
-  consumeClearCacheForRender,
+  precomputedExtractResult,
+  precomputedRenderResult,
   dependencyResolver,
   updateEntry,
   logWarn,
@@ -68,27 +70,8 @@ export async function performFileIndexing({
     fileTypeRefs.push(BASE_FILE_DEF_CODE_REF);
   }
 
-  let clearCache = consumeClearCacheForRender();
-  let renderOptions: RenderRouteOptions = {
-    fileExtract: true,
-    fileDefCodeRef,
-    ...(clearCache ? { clearCache } : {}),
-  };
-
-  let extractResult: FileExtractResponse | undefined;
+  let extractResult: FileExtractResponse | undefined = precomputedExtractResult;
   let uncaughtError: Error | undefined;
-  try {
-    extractResult = await prerenderer.prerenderFileExtract({
-      affinityType: 'realm',
-      affinityValue: realmURL.href,
-      url: fileURL,
-      realm: realmURL.href,
-      auth,
-      renderOptions,
-    });
-  } catch (err: unknown) {
-    uncaughtError = err as Error;
-  }
 
   let normalizeToErrorEntry = (
     entry: ErrorEntry | undefined,
@@ -178,41 +161,18 @@ export async function performFileIndexing({
     return 'error';
   }
 
-  // Phase 2: Render HTML for file entry (non-fatal).
-  // Skip for files that already have their own prerender (modules) since
-  // they add significant per-file Puppeteer overhead and already produce HTML
-  // through their module prerender path.
-  let renderResult: FileRenderResponse | undefined;
-  if (extractResult.resource && !hasModulePrerender) {
-    try {
-      let fileRenderOptions: RenderRouteOptions = {
-        fileRender: true,
-        fileDefCodeRef,
-      };
-      renderResult = await prerenderer.prerenderFileRender({
-        affinityType: 'realm',
-        affinityValue: realmURL.href,
-        url: fileURL,
-        realm: realmURL.href,
-        auth,
-        fileData: {
-          resource: extractResult.resource,
-          fileDefCodeRef,
-        },
-        types: fileTypes,
-        renderOptions: fileRenderOptions,
-      });
-      if (renderResult?.error) {
-        logWarn(
-          `${jobIdentity(jobInfo)} file render produced error for ${path}, retaining partial HTML: ${renderResult.error.error?.message}`,
-        );
-      }
-    } catch (err: unknown) {
-      logWarn(
-        `${jobIdentity(jobInfo)} file render failed for ${path}, continuing without HTML: ${(err as Error).message}`,
-      );
-    }
+  // HTML for the file entry comes from the fused visit's fileRender pass
+  // (when the visit chose to run it — modules skip fileRender since their
+  // module prerender already produces HTML).
+  let renderResult: FileRenderResponse | undefined = precomputedRenderResult;
+  if (renderResult?.error) {
+    logWarn(
+      `${jobIdentity(jobInfo)} file render produced error for ${path}, retaining partial HTML: ${renderResult.error.error?.message}`,
+    );
   }
+  // hasModulePrerender is retained on the options as a hint for callers but
+  // is no longer acted on here — the fused visit already gates fileRender.
+  void hasModulePrerender;
 
   await updateEntry(entryURL, {
     type: 'file',

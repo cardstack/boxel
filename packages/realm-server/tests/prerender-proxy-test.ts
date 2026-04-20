@@ -33,7 +33,7 @@ module(basename(__filename), function () {
 
     function makePrerenderer() {
       let renderCalls: Array<{
-        kind: 'card' | 'module' | 'file-extract' | 'file-render' | 'command';
+        kind: 'module' | 'visit' | 'command';
         args: {
           affinityType?: 'realm' | 'user';
           affinityValue?: string;
@@ -48,22 +48,6 @@ module(basename(__filename), function () {
       }> = [];
 
       let prerenderer: Prerenderer = {
-        async prerenderCard(args) {
-          renderCalls.push({ kind: 'card', args });
-          return {
-            serialized: null,
-            searchDoc: { url: args.url, cardTitle: 'through proxy' },
-            displayNames: ['Proxy Card'],
-            deps: [],
-            types: [],
-            isolatedHTML: `<div>${args.url}</div>`,
-            headHTML: null,
-            atomHTML: null,
-            embeddedHTML: {},
-            fittedHTML: {},
-            iconHTML: null,
-          };
-        },
         async prerenderModule(args) {
           renderCalls.push({ kind: 'module', args });
           return {
@@ -77,26 +61,44 @@ module(basename(__filename), function () {
             definitions: {},
           };
         },
-        async prerenderFileExtract(args) {
-          renderCalls.push({ kind: 'file-extract', args });
-          return {
-            id: args.url,
-            nonce: 'nonce',
-            status: 'ready',
-            searchDoc: { url: args.url, title: 'through proxy' },
-            deps: [],
-          };
-        },
-        async prerenderFileRender(args) {
-          renderCalls.push({ kind: 'file-render', args });
-          return {
-            isolatedHTML: null,
-            headHTML: null,
-            atomHTML: null,
-            embeddedHTML: null,
-            fittedHTML: null,
-            iconHTML: null,
-          };
+        async prerenderVisit(args) {
+          renderCalls.push({ kind: 'visit', args });
+          let response: any = {};
+          if (args.renderOptions?.cardRender) {
+            response.card = {
+              serialized: null,
+              searchDoc: { url: args.url, cardTitle: 'through proxy' },
+              displayNames: ['Proxy Card'],
+              deps: [],
+              types: [],
+              isolatedHTML: `<div>${args.url}</div>`,
+              headHTML: null,
+              atomHTML: null,
+              embeddedHTML: {},
+              fittedHTML: {},
+              iconHTML: null,
+            };
+          }
+          if (args.renderOptions?.fileExtract) {
+            response.fileExtract = {
+              id: args.url,
+              nonce: 'nonce',
+              status: 'ready',
+              searchDoc: { url: args.url, title: 'through proxy' },
+              deps: [],
+            };
+          }
+          if (args.renderOptions?.fileRender) {
+            response.fileRender = {
+              isolatedHTML: null,
+              headHTML: null,
+              atomHTML: null,
+              embeddedHTML: null,
+              fittedHTML: null,
+              iconHTML: null,
+            };
+          }
+          return response;
         },
         async runCommand(args) {
           renderCalls.push({ kind: 'command', args });
@@ -176,7 +178,7 @@ module(basename(__filename), function () {
         'returns prerender response body',
       );
       assert.deepEqual(renderCalls.length, 1, 'invokes prerenderer once');
-      assert.strictEqual(renderCalls[0]?.kind, 'card');
+      assert.strictEqual(renderCalls[0]?.kind, 'visit');
       assert.deepEqual(
         renderCalls[0]?.args,
         {
@@ -185,7 +187,7 @@ module(basename(__filename), function () {
           realm,
           url: cardURL,
           auth: renderCalls[0]?.args.auth,
-          renderOptions: undefined,
+          renderOptions: { cardRender: true },
         },
         'forwards request to prerenderer with derived realm and url',
       );
@@ -401,7 +403,7 @@ module(basename(__filename), function () {
         }),
         [
           {
-            kind: 'card',
+            kind: 'visit',
             realm,
             url: cardUrl,
             permissions: { [realm]: ['read', 'write'] },

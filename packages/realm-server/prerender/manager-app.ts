@@ -942,17 +942,11 @@ export function buildPrerenderManagerApp(options?: {
   }
 
   // proxy prerender endpoints
-  router.post('/prerender-card', (ctxt) =>
-    proxyPrerenderRequest(ctxt, 'prerender-card', 'card'),
-  );
   router.post('/prerender-module', (ctxt) =>
     proxyPrerenderRequest(ctxt, 'prerender-module', 'module'),
   );
-  router.post('/prerender-file-extract', (ctxt) =>
-    proxyPrerenderRequest(ctxt, 'prerender-file-extract', 'file-extract'),
-  );
-  router.post('/prerender-file-render', (ctxt) =>
-    proxyPrerenderRequest(ctxt, 'prerender-file-render', 'file-render'),
+  router.post('/prerender-visit', (ctxt) =>
+    proxyPrerenderRequest(ctxt, 'prerender-visit', 'visit'),
   );
   router.post('/run-command', (ctxt) =>
     proxyPrerenderRequest(ctxt, 'run-command', 'command'),

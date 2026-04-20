@@ -10,9 +10,7 @@ import {
   type JobInfo,
   type LocalPath,
   type LooseCardResource,
-  type Prerenderer,
   type RenderResponse,
-  type RenderRouteOptions,
 } from '../index';
 import { CardError, isCardError, serializableError } from '../error';
 import { unresolveResourceInstanceURLs } from '../url';
@@ -20,7 +18,7 @@ import type { IndexRunnerDependencyManager } from './dependency-resolver';
 import { uniqueDeps } from './dependency-collections';
 import { canonicalURL } from './dependency-url';
 
-interface CardIndexerOptions {
+export interface CardIndexerOptions {
   path: LocalPath;
   lastModified: number;
   resourceCreatedAt: number;
@@ -30,8 +28,9 @@ interface CardIndexerOptions {
   realmURL: URL;
   auth: string;
   jobInfo: JobInfo;
-  prerenderer: Prerenderer;
-  consumeClearCacheForRender(): boolean;
+  // Render result from the fused visit's cardRender pass. Always supplied
+  // by the fused indexer.
+  precomputedRenderResult: RenderResponse;
   dependencyResolver: IndexRunnerDependencyManager;
   updateEntry(
     instanceURL: URL,
@@ -45,35 +44,20 @@ export async function performCardIndexing({
   lastModified,
   resourceCreatedAt,
   resource,
-  fileURL,
+  fileURL: _fileURL,
   instanceURL,
   realmURL,
-  auth,
+  auth: _auth,
   jobInfo,
-  prerenderer,
-  consumeClearCacheForRender,
+  precomputedRenderResult,
   dependencyResolver,
   updateEntry,
   logWarn,
 }: CardIndexerOptions): Promise<void> {
   let uncaughtError: Error | undefined;
-  let renderResult: RenderResponse | undefined;
+  let renderResult: RenderResponse = precomputedRenderResult;
 
   try {
-    let clearCache = consumeClearCacheForRender();
-    let prerenderOptions: RenderRouteOptions | undefined = clearCache
-      ? { clearCache }
-      : undefined;
-
-    renderResult = await prerenderer.prerenderCard({
-      affinityType: 'realm',
-      affinityValue: realmURL.href,
-      url: fileURL,
-      realm: realmURL.href,
-      auth,
-      renderOptions: prerenderOptions,
-    });
-
     // we tack on data that can only be determined via access to underlying filesystem/DB
     let serialized = renderResult?.serialized;
     if (serialized) {
@@ -92,7 +76,7 @@ export async function performCardIndexing({
       unresolveResourceInstanceURLs(serialized.data);
     }
   } catch (err: unknown) {
-    uncaughtError = err as Error;
+    uncaughtError = uncaughtError ?? (err as Error);
   }
 
   if (!renderResult || ('error' in renderResult && renderResult.error)) {
