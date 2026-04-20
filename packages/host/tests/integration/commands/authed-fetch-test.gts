@@ -24,7 +24,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 let mockFetchResponse: {
   ok: boolean;
   status: number;
-  json: () => Promise<Record<string, any>>;
+  text: () => Promise<string>;
 };
 
 class StubRealmService extends RealmService {
