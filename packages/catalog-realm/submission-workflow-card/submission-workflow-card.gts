@@ -486,10 +486,10 @@ export class SubmissionWorkflowCard extends CardDef {
       }
     }
 
-    get isUserDraft(): boolean {
+    get isSourceListing(): boolean {
       return (
         !!this.args.model.listing &&
-        !this.args.model.listing[realmURL]?.pathname.includes('/catalog/')
+        !this.args.model.listing[realmURL]?.pathname?.includes('/catalog/')
       );
     }
 
@@ -580,7 +580,7 @@ export class SubmissionWorkflowCard extends CardDef {
                   {{#if (eq step.key 'choose-listing')}}
                     {{#if @model.listing}}
                       <div class='sw-fitted-card-container'>
-                        {{#if this.isUserDraft}}
+                        {{#if this.isSourceListing}}
                           <span class='sw-draft-badge'>
                             <EditIcon class='sw-draft-icon' />
                             User Draft
@@ -708,7 +708,7 @@ export class SubmissionWorkflowCard extends CardDef {
             <div class='sw-sidebar-heading'>Linked Cards</div>
             {{#if @model.listing}}
               <div class='sw-sidebar-fitted-card'>
-                {{#if this.isUserDraft}}
+                {{#if this.isSourceListing}}
                   <span class='sw-draft-badge'>
                     <EditIcon class='sw-draft-icon' />
                     User Draft
@@ -1000,6 +1000,12 @@ export class SubmissionWorkflowCard extends CardDef {
           border: 1px solid var(--c-border);
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
           margin-top: 15px;
+          overflow: visible;
+        }
+
+        .sw-fitted-card-container > :not(.sw-draft-badge) {
+          border-radius: inherit;
+          overflow: hidden;
         }
 
         .sw-draft-badge {
@@ -1229,6 +1235,12 @@ export class SubmissionWorkflowCard extends CardDef {
           border-radius: 8px;
           border: 1px solid var(--c-border);
           margin-bottom: 6px;
+          overflow: visible;
+        }
+
+        .sw-sidebar-fitted-card > :not(.sw-draft-badge) {
+          border-radius: inherit;
+          overflow: hidden;
         }
         .sw-sidebar-empty {
           font-size: 12px;
