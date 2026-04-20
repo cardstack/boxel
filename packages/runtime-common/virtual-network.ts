@@ -8,6 +8,10 @@ import {
 } from './package-shim-handler';
 import type { Readable } from 'stream';
 import { fetcher, type FetcherMiddlewareHandler } from './fetcher';
+import {
+  isRegisteredPrefix,
+  resolveCardReference,
+} from './card-reference-resolver';
 
 export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
@@ -118,6 +122,9 @@ export class VirtualNetwork {
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ) => {
+    if (typeof urlOrRequest === 'string' && isRegisteredPrefix(urlOrRequest)) {
+      urlOrRequest = resolveCardReference(urlOrRequest, undefined);
+    }
     let request =
       urlOrRequest instanceof Request
         ? urlOrRequest

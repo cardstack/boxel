@@ -1028,6 +1028,31 @@ export default class StoreService extends Service implements StoreInterface {
     relativeTo?: URL | undefined,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<T> {
+    // Normalize prefix-form IDs to absolute URLs before hydration so that
+    // card.id is always an absolute URL after createFromSerialized returns.
+    // This prevents downstream callers (e.g. spec-preview) from crashing when
+    // they call new URL(card.id) on a prefix-form string.
+    if (resource.id && !isLocalId(resource.id)) {
+      let absoluteId = cardIdToURL(resource.id).href;
+      resource = { ...resource, id: absoluteId };
+      doc = {
+        ...doc,
+        data: { ...(doc as LooseSingleCardDocument).data, id: absoluteId },
+      } as LooseSingleCardDocument;
+    }
+    // Also normalize IDs in included resources so linked cards have absolute
+    // URL ids after deserialization (e.g. linksToMany fields).
+    if (doc.included?.length) {
+      doc = {
+        ...doc,
+        included: doc.included.map((included) => {
+          if (included.id && !isLocalId(included.id)) {
+            return { ...included, id: cardIdToURL(included.id).href };
+          }
+          return included;
+        }),
+      } as typeof doc;
+    }
     let api = await this.cardService.getAPI();
     let shouldStubTimers =
       this.renderContextBlocksPersistence() && !isTesting();
@@ -1333,6 +1358,12 @@ export default class StoreService extends Service implements StoreInterface {
     relativeTo: URL | undefined,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<FileDef> {
+    // Normalize prefix-form ID to absolute URL before hydration.
+    if (resource.id && !isLocalId(resource.id)) {
+      let absoluteId = cardIdToURL(resource.id).href;
+      resource = { ...resource, id: absoluteId };
+      doc = { ...doc, data: { ...doc.data, id: absoluteId } };
+    }
     let api = await this.cardService.getAPI();
     let instance = (await api.createFromSerialized(resource, doc, relativeTo, {
       store: this.store,
@@ -1908,6 +1939,20 @@ export default class StoreService extends Service implements StoreInterface {
           clientRequestId: opts?.clientRequestId,
         });
 
+        // Normalize the server response ID to absolute URL BEFORE
+        // needsServerStateMerge runs. needsServerStateMerge compares
+        // instance.id (absolute URL) against json.data.id (could be prefix
+        // form from the server). If they don't match it calls
+        // updateFromSerialized which then tries to change the existing ID →
+        // "cannot change the id for saved instance" crash.
+        if (json.data.id && !isLocalId(json.data.id)) {
+          let absoluteId = cardIdToURL(json.data.id).href;
+          json = {
+            ...json,
+            data: { ...json.data, id: absoluteId },
+          } as SingleCardDocument;
+        }
+
         let api = await this.cardService.getAPI();
         // the store state represents the latest state and the server state is
         // potentially out-of-date. As such we only merge the server state that
@@ -1921,7 +1966,8 @@ export default class StoreService extends Service implements StoreInterface {
           await api.updateFromSerialized(instance, serverState, this.store);
         }
         if (isNew) {
-          api.setId(instance, json.data.id!);
+          // Normalize prefix-form ID to absolute URL before setting on instance.
+          api.setId(instance, cardIdToURL(json.data.id!).href);
           this.subscribeToRealm(cardIdToURL(instance.id));
           this.operatorModeStateService.handleCardIdAssignment(
             instance[localIdSymbol],
