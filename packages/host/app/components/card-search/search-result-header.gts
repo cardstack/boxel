@@ -13,9 +13,10 @@ import {
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
+import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
+
 import type { SortOption } from './constants';
 import type { ViewOption } from './constants';
-import type { NewCardArgs } from './utils';
 
 interface Signature {
   Element: HTMLElement;

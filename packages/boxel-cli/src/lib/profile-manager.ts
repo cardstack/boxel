@@ -380,7 +380,7 @@ export class ProfileManager {
     }
   }
 
-  private async getRealmTokenForUrl(url: string): Promise<string | undefined> {
+  async getRealmTokenForUrl(url: string): Promise<string | undefined> {
     let realmToken = this.findRealmTokenForUrl(url);
     if (realmToken) {
       return realmToken;
@@ -571,4 +571,13 @@ export function getProfileManager(): ProfileManager {
  */
 export function resetProfileManager(): void {
   _instance = null;
+}
+
+/**
+ * Replace the singleton with a ProfileManager using a custom config directory.
+ * Useful for tests that need an isolated profile without touching the real
+ * ~/.boxel-cli/profiles.json.
+ */
+export function setProfileManager(configDir: string): void {
+  _instance = new ProfileManager(configDir);
 }

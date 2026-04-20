@@ -389,6 +389,36 @@ export function setupOperatorModeTests(
       static headerColor = '#6638ff'; // rgb(102, 56, 255);
       @field blogPost = linksTo(BlogPost);
       @field socialBlurb = contains(TextAreaField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-pubpacket-isolated>
+            <h1><@fields.cardTitle /></h1>
+            <p><@fields.socialBlurb /></p>
+            Posts:
+            <@fields.blogPost />
+          </div>
+        </template>
+      };
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <div data-test-pubpacket-edit>
+            <h1><@fields.cardTitle /></h1>
+            <div>
+              <label data-test-field='cardInfo-name'>
+                <@fields.cardInfo.name />
+              </label>
+            </div>
+            <label data-test-field='blogPost'>
+              Blog Post:
+              <@fields.blogPost />
+            </label>
+            <label data-test-field='socialBlurb'>
+              Social Blurb:
+              <@fields.socialBlurb />
+            </label>
+          </div>
+        </template>
+      };
     }
 
     class PetRoom extends CardDef {

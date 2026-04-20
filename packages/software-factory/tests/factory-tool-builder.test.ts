@@ -12,15 +12,13 @@ import {
 } from '../src/factory-tool-builder';
 import type { ToolExecutor } from '../src/factory-tool-executor';
 import { ToolRegistry } from '../src/factory-tool-registry';
+import { createMockClient } from './helpers/mock-client';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 const TARGET_REALM = 'https://realms.example.test/user/target/';
-const TEST_REALM = 'https://realms.example.test/user/target-tests/';
-const TARGET_TOKEN = 'Bearer target-jwt-123';
-const TEST_TOKEN = 'Bearer test-jwt-456';
 
 const DEFAULT_CARD_TYPE_SCHEMAS = new Map<
   string,
@@ -58,18 +56,20 @@ const DEFAULT_CARD_TYPE_SCHEMAS = new Map<
   ],
 ]);
 
-function makeConfig(overrides?: Partial<ToolBuilderConfig>): ToolBuilderConfig {
+function makeConfig(
+  overrides?: Partial<ToolBuilderConfig> & { fetch?: typeof globalThis.fetch },
+): ToolBuilderConfig {
+  let { fetch: fetchOverride, client, ...rest } = overrides ?? {};
   return {
     targetRealmUrl: TARGET_REALM,
     darkfactoryModuleUrl:
       'https://realms.example.test/software-factory/darkfactory',
     realmServerUrl: 'https://realms.example.test/',
-    realmTokens: {
-      [TARGET_REALM]: TARGET_TOKEN,
-      [TEST_REALM]: TEST_TOKEN,
-    },
+    client:
+      client ??
+      createMockClient(fetchOverride ? { fetch: fetchOverride } : undefined),
     cardTypeSchemas: DEFAULT_CARD_TYPE_SCHEMAS,
-    ...overrides,
+    ...rest,
   };
 }
 
@@ -136,7 +136,6 @@ function createMockFetch(
 interface CapturedToolCall {
   toolName: string;
   toolArgs: Record<string, unknown>;
-  authorization?: string;
 }
 
 function createMockToolExecutor(results: Map<string, ToolResult>): {
@@ -148,12 +147,10 @@ function createMockToolExecutor(results: Map<string, ToolResult>): {
     execute: async (
       toolName: string,
       toolArgs: Record<string, unknown>,
-      options?: { authorization?: string },
     ): Promise<ToolResult> => {
       calls.push({
         toolName: toolName as string,
         toolArgs: toolArgs as Record<string, unknown>,
-        authorization: options?.authorization,
       });
       let result = results.get(toolName as string);
       if (!result) {
@@ -289,8 +286,8 @@ module('factory-tool-builder > write_file', function () {
 // Realm targeting (target vs test) + JWT auth
 // ---------------------------------------------------------------------------
 
-module('factory-tool-builder > realm targeting and auth', function () {
-  test('write_file defaults to target realm with target JWT', async function (assert) {
+module('factory-tool-builder > realm targeting', function () {
+  test('write_file defaults to target realm', async function (assert) {
     let { fetch: mockFetch, requests } = createMockFetch(200, {});
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
@@ -301,10 +298,9 @@ module('factory-tool-builder > realm targeting and auth', function () {
     await writeTool.execute({ path: 'card.gts', content: 'content' });
 
     assert.strictEqual(requests[0].url, `${TARGET_REALM}card.gts`);
-    assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
   });
 
-  test('read_file uses correct JWT for target realm', async function (assert) {
+  test('read_file targets target realm', async function (assert) {
     let { fetch: mockFetch, requests } = createMockFetch(200, {
       data: { attributes: {} },
     });
@@ -316,10 +312,10 @@ module('factory-tool-builder > realm targeting and auth', function () {
 
     await readTool.execute({ path: 'card.gts' });
 
-    assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
+    assert.strictEqual(requests[0].url, `${TARGET_REALM}card.gts`);
   });
 
-  test('update_issue uses target realm JWT', async function (assert) {
+  test('update_issue targets target realm', async function (assert) {
     let existingDoc = {
       data: {
         type: 'card',
@@ -346,11 +342,10 @@ module('factory-tool-builder > realm targeting and auth', function () {
 
     // First request is GET (read), second is POST (write)
     let writeRequest = requests.find((r) => r.method === 'POST')!;
-    assert.strictEqual(writeRequest.headers['Authorization'], TARGET_TOKEN);
     assert.strictEqual(writeRequest.url, `${TARGET_REALM}Issues/1.json`);
   });
 
-  test('create_knowledge uses target realm JWT', async function (assert) {
+  test('create_knowledge targets target realm', async function (assert) {
     let { fetch: mockFetch, requests } = createMockFetch(200, {});
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
@@ -363,11 +358,10 @@ module('factory-tool-builder > realm targeting and auth', function () {
       attributes: { articleTitle: 'Guide' },
     });
 
-    assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
     assert.strictEqual(requests[0].url, `${TARGET_REALM}Knowledge/deploy.json`);
   });
 
-  test('search_realm uses correct JWT for target realm', async function (assert) {
+  test('search_realm targets target realm', async function (assert) {
     let { fetch: mockFetch, requests } = createMockFetch(200, { data: [] });
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
@@ -379,20 +373,7 @@ module('factory-tool-builder > realm targeting and auth', function () {
       query: { filter: { type: { name: 'Issue' } } },
     });
 
-    assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
-  });
-
-  test('omits Authorization when token not found for realm', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch, realmTokens: {} });
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    await writeTool.execute({ path: 'card.gts', content: 'content' });
-
-    assert.strictEqual(requests[0].headers['Authorization'], undefined);
+    assert.true(requests[0].url.startsWith(TARGET_REALM));
   });
 });
 
@@ -456,179 +437,6 @@ module('factory-tool-builder > registered tool delegation', function () {
     assert.strictEqual(result.tool, 'search-realm');
     assert.strictEqual(result.exitCode, 0);
     assert.deepEqual(result.output, { data: [{ id: '1' }] });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Registered tool per-realm JWT resolution
-// ---------------------------------------------------------------------------
-
-const SERVER_TOKEN = 'Bearer server-jwt-789';
-
-module('factory-tool-builder > registered tool JWT resolution', function () {
-  test('realm-api tool with realm-url gets per-realm JWT for target realm', async function (assert) {
-    let toolResult: ToolResult = {
-      tool: 'realm-read',
-      exitCode: 0,
-      output: {},
-      durationMs: 5,
-    };
-    let { executor, calls } = createMockToolExecutor(
-      new Map([['realm-read', toolResult]]),
-    );
-    let registry = new ToolRegistry();
-    let config = makeConfig({ serverToken: SERVER_TOKEN });
-    let tools = buildFactoryTools(config, executor, registry);
-    let realmReadTool = findTool(tools, 'realm-read');
-
-    await realmReadTool.execute({
-      'realm-url': TARGET_REALM,
-      path: 'card.gts',
-    });
-
-    assert.strictEqual(calls.length, 1);
-    assert.strictEqual(
-      calls[0].authorization,
-      TARGET_TOKEN,
-      'should use target realm JWT',
-    );
-  });
-
-  test('realm-api tool with realm-url gets per-realm JWT for test realm', async function (assert) {
-    let toolResult: ToolResult = {
-      tool: 'realm-read',
-      exitCode: 0,
-      output: {},
-      durationMs: 5,
-    };
-    let { executor, calls } = createMockToolExecutor(
-      new Map([['realm-read', toolResult]]),
-    );
-    let registry = new ToolRegistry();
-    let config = makeConfig({ serverToken: SERVER_TOKEN });
-    let tools = buildFactoryTools(config, executor, registry);
-    let realmReadTool = findTool(tools, 'realm-read');
-
-    await realmReadTool.execute({
-      'realm-url': TEST_REALM,
-      path: 'Tests/spec.ts',
-    });
-
-    assert.strictEqual(calls.length, 1);
-    assert.strictEqual(
-      calls[0].authorization,
-      TEST_TOKEN,
-      'should use test realm JWT',
-    );
-  });
-
-  test('realm-server-url tools get server JWT instead of per-realm JWT', async function (assert) {
-    let toolResult: ToolResult = {
-      tool: 'realm-auth',
-      exitCode: 0,
-      output: { tokens: {} },
-      durationMs: 5,
-    };
-    let { executor, calls } = createMockToolExecutor(
-      new Map([['realm-auth', toolResult]]),
-    );
-    let registry = new ToolRegistry();
-    let config = makeConfig({ serverToken: SERVER_TOKEN });
-    let tools = buildFactoryTools(config, executor, registry);
-    let realmAuthTool = findTool(tools, 'realm-auth');
-
-    await realmAuthTool.execute({
-      'realm-server-url': 'https://realms.example.test/',
-    });
-
-    assert.strictEqual(calls.length, 1);
-    assert.strictEqual(
-      calls[0].authorization,
-      SERVER_TOKEN,
-      'should use server JWT for realm-server-url tools',
-    );
-  });
-
-  test('realm-create gets server JWT', async function (assert) {
-    let toolResult: ToolResult = {
-      tool: 'realm-create',
-      exitCode: 0,
-      output: { data: { id: 'https://realms.example.test/new/' } },
-      durationMs: 10,
-    };
-    let { executor, calls } = createMockToolExecutor(
-      new Map([['realm-create', toolResult]]),
-    );
-    let registry = new ToolRegistry();
-    let config = makeConfig({ serverToken: SERVER_TOKEN });
-    let tools = buildFactoryTools(config, executor, registry);
-    let realmCreateTool = findTool(tools, 'realm-create');
-
-    await realmCreateTool.execute({
-      'realm-server-url': 'https://realms.example.test/',
-      name: 'New Realm',
-      endpoint: 'new-realm',
-    });
-
-    assert.strictEqual(calls.length, 1);
-    assert.strictEqual(
-      calls[0].authorization,
-      SERVER_TOKEN,
-      'should use server JWT for realm-create',
-    );
-  });
-
-  test('script tools do not get per-realm JWT override', async function (assert) {
-    let toolResult: ToolResult = {
-      tool: 'search-realm',
-      exitCode: 0,
-      output: {},
-      durationMs: 5,
-    };
-    let { executor, calls } = createMockToolExecutor(
-      new Map([['search-realm', toolResult]]),
-    );
-    let registry = new ToolRegistry();
-    let config = makeConfig({ serverToken: SERVER_TOKEN });
-    let tools = buildFactoryTools(config, executor, registry);
-    let searchRealmTool = findTool(tools, 'search-realm');
-
-    await searchRealmTool.execute({ realm: TARGET_REALM });
-
-    assert.strictEqual(calls.length, 1);
-    assert.strictEqual(
-      calls[0].authorization,
-      undefined,
-      'script tools should not get auth override — they handle auth internally',
-    );
-  });
-
-  test('realm-api tool with unknown realm URL gets no auth override', async function (assert) {
-    let toolResult: ToolResult = {
-      tool: 'realm-read',
-      exitCode: 0,
-      output: {},
-      durationMs: 5,
-    };
-    let { executor, calls } = createMockToolExecutor(
-      new Map([['realm-read', toolResult]]),
-    );
-    let registry = new ToolRegistry();
-    let config = makeConfig({ serverToken: SERVER_TOKEN });
-    let tools = buildFactoryTools(config, executor, registry);
-    let realmReadTool = findTool(tools, 'realm-read');
-
-    await realmReadTool.execute({
-      'realm-url': 'https://unknown.example.test/realm/',
-      path: 'file.gts',
-    });
-
-    assert.strictEqual(calls.length, 1);
-    assert.strictEqual(
-      calls[0].authorization,
-      undefined,
-      'unknown realm URL should not get auth override',
-    );
   });
 });
 

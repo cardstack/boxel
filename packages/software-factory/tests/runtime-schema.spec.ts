@@ -13,10 +13,10 @@
 import { test } from './fixtures';
 import { expect } from '@playwright/test';
 
-import { runRealmCommand } from '../src/realm-operations';
 import { fetchCardTypeSchema } from '../src/darkfactory-schemas';
 import { sourceRealmURLFor } from '../src/harness/shared';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { buildTestClient } from './helpers/test-client';
 
 const GET_CARD_TYPE_SCHEMA_COMMAND =
   '@cardstack/boxel-host/commands/get-card-type-schema/default';
@@ -30,31 +30,41 @@ test('fetches Project schema via GetCardTypeSchemaCommand', async ({
     sourceRealmURLFor(realm.realmServerURL).href,
   );
 
-  let response = await runRealmCommand(
+  let { client, cleanup } = buildTestClient({
+    realmUrl: sourceRealmUrl,
+    realmToken: `Bearer ${realm.ownerBearerToken}`,
     realmServerUrl,
-    sourceRealmUrl,
-    GET_CARD_TYPE_SCHEMA_COMMAND,
-    {
-      codeRef: {
-        module: `${sourceRealmUrl}darkfactory`,
-        name: 'Project',
+    realmServerToken: `Bearer ${realm.serverToken}`,
+  });
+
+  try {
+    let response = await client.runCommand(
+      realmServerUrl,
+      sourceRealmUrl,
+      GET_CARD_TYPE_SCHEMA_COMMAND,
+      {
+        codeRef: {
+          module: `${sourceRealmUrl}darkfactory`,
+          name: 'Project',
+        },
       },
-    },
-    { authorization: `Bearer ${realm.ownerBearerToken}` },
-  );
+    );
 
-  expect(response.status).toBe('ready');
-  expect(response.result).toBeTruthy();
+    expect(response.status).toBe('ready');
+    expect(response.result).toBeTruthy();
 
-  let parsed = JSON.parse(response.result!);
-  // The result is a serialized JsonCard — schema is in data.attributes.json
-  let schema = parsed?.data?.attributes?.json ?? parsed;
+    let parsed = JSON.parse(response.result!);
+    // The result is a serialized JsonCard — schema is in data.attributes.json
+    let schema = parsed?.data?.attributes?.json ?? parsed;
 
-  expect(schema.attributes).toBeDefined();
-  expect(schema.attributes.properties).toHaveProperty('projectName');
-  expect(schema.attributes.properties).toHaveProperty('projectStatus');
-  expect(schema.attributes.properties).toHaveProperty('objective');
-  expect(schema.attributes.properties).toHaveProperty('scope');
+    expect(schema.attributes).toBeDefined();
+    expect(schema.attributes.properties).toHaveProperty('projectName');
+    expect(schema.attributes.properties).toHaveProperty('projectStatus');
+    expect(schema.attributes.properties).toHaveProperty('objective');
+    expect(schema.attributes.properties).toHaveProperty('scope');
+  } finally {
+    cleanup();
+  }
 });
 
 test('fetches Issue schema with enum fields', async ({ realm }) => {
@@ -63,23 +73,34 @@ test('fetches Issue schema with enum fields', async ({ realm }) => {
     sourceRealmURLFor(realm.realmServerURL).href,
   );
 
-  let schema = await fetchCardTypeSchema(
+  let { client, cleanup } = buildTestClient({
+    realmUrl: sourceRealmUrl,
+    realmToken: `Bearer ${realm.ownerBearerToken}`,
     realmServerUrl,
-    sourceRealmUrl,
-    { module: `${sourceRealmUrl}darkfactory`, name: 'Issue' },
-    { authorization: `Bearer ${realm.ownerBearerToken}` },
-  );
+    realmServerToken: `Bearer ${realm.serverToken}`,
+  });
 
-  expect(schema).toBeDefined();
-  expect(schema!.attributes).toBeDefined();
+  try {
+    let schema = await fetchCardTypeSchema(
+      client,
+      realmServerUrl,
+      sourceRealmUrl,
+      { module: `${sourceRealmUrl}darkfactory`, name: 'Issue' },
+    );
 
-  let attrs = schema!.attributes as {
-    properties: Record<string, Record<string, unknown>>;
-  };
-  expect(attrs.properties).toHaveProperty('issueId');
-  expect(attrs.properties).toHaveProperty('summary');
-  expect(attrs.properties).toHaveProperty('status');
-  expect(attrs.properties).toHaveProperty('priority');
+    expect(schema).toBeDefined();
+    expect(schema!.attributes).toBeDefined();
+
+    let attrs = schema!.attributes as {
+      properties: Record<string, Record<string, unknown>>;
+    };
+    expect(attrs.properties).toHaveProperty('issueId');
+    expect(attrs.properties).toHaveProperty('summary');
+    expect(attrs.properties).toHaveProperty('status');
+    expect(attrs.properties).toHaveProperty('priority');
+  } finally {
+    cleanup();
+  }
 });
 
 test('fetches KnowledgeArticle schema', async ({ realm }) => {
@@ -88,18 +109,29 @@ test('fetches KnowledgeArticle schema', async ({ realm }) => {
     sourceRealmURLFor(realm.realmServerURL).href,
   );
 
-  let schema = await fetchCardTypeSchema(
+  let { client, cleanup } = buildTestClient({
+    realmUrl: sourceRealmUrl,
+    realmToken: `Bearer ${realm.ownerBearerToken}`,
     realmServerUrl,
-    sourceRealmUrl,
-    { module: `${sourceRealmUrl}darkfactory`, name: 'KnowledgeArticle' },
-    { authorization: `Bearer ${realm.ownerBearerToken}` },
-  );
+    realmServerToken: `Bearer ${realm.serverToken}`,
+  });
 
-  expect(schema).toBeDefined();
-  let attrs = schema!.attributes as {
-    properties: Record<string, Record<string, unknown>>;
-  };
-  expect(attrs.properties).toHaveProperty('articleTitle');
-  expect(attrs.properties).toHaveProperty('content');
-  expect(attrs.properties).toHaveProperty('tags');
+  try {
+    let schema = await fetchCardTypeSchema(
+      client,
+      realmServerUrl,
+      sourceRealmUrl,
+      { module: `${sourceRealmUrl}darkfactory`, name: 'KnowledgeArticle' },
+    );
+
+    expect(schema).toBeDefined();
+    let attrs = schema!.attributes as {
+      properties: Record<string, Record<string, unknown>>;
+    };
+    expect(attrs.properties).toHaveProperty('articleTitle');
+    expect(attrs.properties).toHaveProperty('content');
+    expect(attrs.properties).toHaveProperty('tags');
+  } finally {
+    cleanup();
+  }
 });

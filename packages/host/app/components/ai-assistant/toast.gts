@@ -1,15 +1,15 @@
+import { isDestroyed, registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 
 import Component from '@glimmer/component';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { format as formatDate, formatISO, isAfter, subMinutes } from 'date-fns';
-import { cancelPoll, pollTask, runTask } from 'ember-lifeline';
-
-import { TrackedObject } from 'tracked-built-ins';
 
 import { BoxelButton, IconButton } from '@cardstack/boxel-ui/components';
 import { IconX } from '@cardstack/boxel-ui/icons';
@@ -29,6 +29,8 @@ interface Signature {
     onViewInChatClick: () => void;
   };
 }
+
+const AUTO_HIDE_MS = 3000;
 
 export default class AiAssistantToast extends Component<Signature> {
   <template>
@@ -158,95 +160,91 @@ export default class AiAssistantToast extends Component<Signature> {
 
   @service declare private matrixService: MatrixService;
   @service declare private localPersistenceService: LocalPersistenceService;
-  _pollToken: ReturnType<typeof pollTask> | null = null;
 
-  private get state() {
-    const state: {
-      value: {
-        roomId: string;
-        message: Message;
-      } | null;
-      isResetStateValueBlocked: boolean;
-    } = new TrackedObject({
-      value: null,
-      isResetStateValueBlocked: false,
+  @tracked private isForcedHidden = false;
+  @tracked private isResetStateValueBlocked = false;
+  private lastEventIdSeen: string | null = null;
+  private hideTimerId: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    registerDestructor(this, () => {
+      if (this.hideTimerId !== null) {
+        clearTimeout(this.hideTimerId);
+        this.hideTimerId = null;
+      }
     });
+  }
 
-    // Only cancel and recreate poll if we don't already have one running
-    if (this._pollToken) {
-      // Don't cancel here - let the existing poll continue
-    }
-
-    let lastMessages: Map<string, Message> = new Map();
+  @cached
+  private get latestUnseenMessage(): {
+    roomId: string;
+    message: Message;
+  } | null {
+    let candidate: { roomId: string; message: Message } | null = null;
     for (let resource of this.matrixService.roomResources.values()) {
-      if (!resource.matrixRoom) {
+      if (!resource.matrixRoom || !resource.roomId) {
         continue;
       }
       let finishedMessages = resource.messages.filter(
         (m) => m.isStreamingFinished,
       );
-      if (resource.roomId) {
-        lastMessages.set(
-          resource.roomId,
-          finishedMessages[finishedMessages.length - 1],
-        );
+      let lastMessage = finishedMessages[finishedMessages.length - 1];
+      if (!lastMessage) {
+        continue;
       }
+      if (
+        this.matrixService.currentUserEventReadReceipts.has(lastMessage.eventId)
+      ) {
+        continue;
+      }
+      candidate = { roomId: resource.roomId, message: lastMessage };
+      break;
     }
 
-    let lastMessage =
-      Array.from(lastMessages).filter(
-        (lastMessage) =>
-          lastMessage[1] &&
-          !this.matrixService.currentUserEventReadReceipts.has(
-            lastMessage[1].eventId,
-          ),
-      )[0] ?? null;
     let fifteenMinutesAgo = subMinutes(new Date(), 15);
-    if (lastMessage && isAfter(lastMessage[1].created, fifteenMinutesAgo)) {
-      state.value = {
-        roomId: lastMessage[0],
-        message: lastMessage[1],
-      };
-
-      // Only create a new poll task if we don't have one
-      if (!this._pollToken) {
-        // eslint-disable-next-line ember/no-side-effects
-        this._pollToken = pollTask(this, (next: () => void) => {
-          const resetStateValue = (timeout = 3000) => {
-            runTask(
-              this,
-              () => {
-                if (state.isResetStateValueBlocked) {
-                  resetStateValue(1000);
-                  return;
-                }
-                state.value = null;
-                next(); // Continue polling for new messages
-              },
-              timeout,
-            );
-          };
-          resetStateValue();
-        });
-      }
-    } else {
-      // If no messages and we have a poll running, cancel it
-      if (this._pollToken) {
-        cancelPoll(this, this._pollToken);
-        // eslint-disable-next-line ember/no-side-effects
-        this._pollToken = null;
-      }
+    if (candidate && isAfter(candidate.message.created, fifteenMinutesAgo)) {
+      this.onMessageSeen(candidate.message.eventId ?? null);
+      return candidate;
     }
-    return state;
+    return null;
   }
 
+  private onMessageSeen(eventId: string | null) {
+    if (eventId === this.lastEventIdSeen) {
+      return;
+    }
+    this.lastEventIdSeen = eventId;
+    this.isForcedHidden = false;
+    this.scheduleAutoHide();
+  }
+
+  private scheduleAutoHide = () => {
+    if (this.hideTimerId !== null) {
+      clearTimeout(this.hideTimerId);
+      this.hideTimerId = null;
+    }
+    this.hideTimerId = setTimeout(this.onAutoHideTick, AUTO_HIDE_MS);
+  };
+
+  private onAutoHideTick = () => {
+    this.hideTimerId = null;
+    if (isDestroyed(this)) {
+      return;
+    }
+    if (this.isResetStateValueBlocked) {
+      return;
+    }
+    this.isForcedHidden = true;
+  };
+
   private get roomId() {
-    return this.state.value?.roomId ?? '';
+    return this.latestUnseenMessage?.roomId ?? '';
   }
 
   private get unseenMessage() {
     return (
-      this.state.value?.message ??
+      this.latestUnseenMessage?.message ??
       ({
         body: '',
         created: new Date(),
@@ -255,17 +253,25 @@ export default class AiAssistantToast extends Component<Signature> {
   }
 
   private get isVisible() {
-    return this.state.value && !this.args.hide;
+    return (
+      !!this.latestUnseenMessage && !this.isForcedHidden && !this.args.hide
+    );
   }
 
   @action
   private blockResetStateValue() {
-    this.state.isResetStateValueBlocked = true;
+    this.isResetStateValueBlocked = true;
   }
 
   @action
   private unBlockResetStateValue() {
-    this.state.isResetStateValueBlocked = false;
+    if (!this.isResetStateValueBlocked) {
+      return;
+    }
+    this.isResetStateValueBlocked = false;
+    if (this.latestUnseenMessage && !this.isForcedHidden) {
+      this.scheduleAutoHide();
+    }
   }
 
   @action

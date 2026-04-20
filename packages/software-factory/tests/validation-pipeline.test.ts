@@ -14,6 +14,7 @@ import {
 
 import { NoOpStepRunner } from '../src/validators/noop-step';
 import { InstantiateValidationStep } from '../src/validators/instantiate-step';
+import { createMockClient } from './helpers/mock-client';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -205,18 +206,23 @@ module('ValidationPipeline', function () {
 
   test('createDefaultPipeline creates 5 steps in correct order', async function (assert) {
     let pipeline = createDefaultPipeline({
+      client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       hostAppUrl: 'https://example.test/',
       testResultsModuleUrl: 'https://example.test/test-results',
       lintResultsModuleUrl: 'https://example.test/lint-result',
       evalResultsModuleUrl: 'https://example.test/eval-result',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
+      parseResultsModuleUrl: 'https://example.test/parse-result',
       // Inject a fetchFilenames that returns no files so the test, lint,
-      // and eval steps return "nothing to validate" without hitting a real realm
+      // eval, and parse steps return "nothing to validate" without hitting a real realm
       fetchFilenames: async () => ({ filenames: [] }),
       // Inject a searchSpecsFn that returns no specs so the instantiate
       // step returns "nothing to validate" without hitting a real realm
       searchSpecsFn: async () => ({ specs: [] }),
+      // Inject a parseSearchSpecsFn that returns no specs so the parse step's
+      // JSON validation returns "nothing to validate" without hitting a real realm
+      parseSearchSpecsFn: async () => ({ specs: [] }),
     });
 
     // Verify step count and order by running validate and inspecting results
@@ -302,6 +308,7 @@ module('NoOpStepRunner', function () {
 module('InstantiateValidationStep', function () {
   test('passes with no artifact when no specs and no modules exist (bootstrap)', async function (assert) {
     let step = new InstantiateValidationStep({
+      client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
       searchSpecsFn: async () => ({ specs: [] }),
@@ -322,6 +329,7 @@ module('InstantiateValidationStep', function () {
 
   test('fails with no artifact when modules exist but no specs found', async function (assert) {
     let step = new InstantiateValidationStep({
+      client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
       searchSpecsFn: async () => ({ specs: [] }),
@@ -348,6 +356,7 @@ module('InstantiateValidationStep', function () {
 
   test('test files alone do not trigger missing-spec failure', async function (assert) {
     let step = new InstantiateValidationStep({
+      client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
       searchSpecsFn: async () => ({ specs: [] }),
@@ -363,8 +372,10 @@ module('InstantiateValidationStep', function () {
     assert.true(result.passed, 'passes when only test files exist');
   });
 
-  test('passes with artifact when spec with examples all instantiate successfully', async function (assert) {
+  test('passes with artifact when spec with no examples instantiates successfully', async function (assert) {
+    // Spec has no linkedExamples — falls back to empty-data instantiation
     let step = new InstantiateValidationStep({
+      client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
       searchSpecsFn: async () => ({
@@ -373,7 +384,7 @@ module('InstantiateValidationStep', function () {
             specId: 'Spec/my-card',
             moduleUrl: 'https://example.test/realm/my-card',
             cardName: 'MyCard',
-            exampleUrls: ['MyCard/example-1'],
+            exampleUrls: [],
           },
         ],
       }),
@@ -396,8 +407,10 @@ module('InstantiateValidationStep', function () {
     assert.strictEqual(details.cardsWithErrors, 0, '0 errors');
   });
 
-  test('fails when an example fails instantiation', async function (assert) {
+  test('fails when empty-data instantiation fails', async function (assert) {
+    // Spec has no linkedExamples — empty-data instantiation is attempted but fails
     let step = new InstantiateValidationStep({
+      client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
       searchSpecsFn: async () => ({
@@ -406,7 +419,7 @@ module('InstantiateValidationStep', function () {
             specId: 'Spec/my-card',
             moduleUrl: 'https://example.test/realm/my-card',
             cardName: 'MyCard',
-            exampleUrls: ['MyCard/example-1'],
+            exampleUrls: [],
           },
         ],
       }),

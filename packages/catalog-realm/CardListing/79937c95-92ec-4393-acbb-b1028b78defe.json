@@ -29,12 +29,12 @@
       },
       "tags.0": {
         "links": {
-          "self": "../Tag/51de249c-516a-4c4d-bd88-76e88274c483"
+          "self": "../Tag/game"
         }
       },
       "tags.1": {
         "links": {
-          "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
+          "self": "../Tag/ai"
         }
       },
       "license": {

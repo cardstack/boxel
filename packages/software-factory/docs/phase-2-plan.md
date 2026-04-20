@@ -84,20 +84,21 @@ interface ValidationStepRunner {
 - **Lint step** (CS-10714): `{ lintResultId, filesChecked, filesWithErrors, totalViolations, violations: [{ rule, file, line, message }] }` — calls the realm's `_lint` endpoint (ESLint + Prettier + `@cardstack/boxel` rules) for each `.gts`, `.gjs`, `.ts`, `.js` file. Creates a `LintResult` card as a persistent artifact.
 - **Eval step** (CS-10715): `{ evalResultId, modulesChecked, modulesWithErrors, modules: [{ path, error, stackTrace? }] }` — evaluates each non-test `.gts` module via `_run-command` → `evaluate-module` host command → `/_prerender-module` (prerenderer sandbox). Creates an `EvalResult` card as a persistent artifact. Files matching `*.test.gts` are excluded.
 - **Instantiate step** (CS-10716): `{ instantiateResultId, cardsChecked, cardsWithErrors, cards: [{ specId, cardName, error, stackTrace? }] }` — discovers Spec cards in the realm, resolves each spec's `ref` to a card definition module, reads `linkedExamples` entries as instance data, and instantiates via `_run-command` → `instantiate-card` host command → `store.__dangerousCreateFromSerialized(...)` (prerenderer sandbox) so `Field.validate()` failures surface during instantiation. Creates an `InstantiateResult` card as a persistent artifact. Field specs (`specType: 'field'`) are excluded.
-- **Future parse step**: defines its own `details` shape
+- **Parse step** (CS-10713): `{ parseResultId, filesChecked, filesWithErrors, totalErrors, errors: [{ file, line, message }] }` — validates `.gts`/`.ts` files by running `ember-tsc --noEmit` (glint) for template-aware TypeScript type checking, and validates `.json` card instances via structural validation (JSON syntax + card document shape). JSON validation runs against spec `linkedExamples` — same discovery as the instantiate step. Creates a `ParseResult` card as a persistent artifact.
 
-**Adding a new validation step** = creating a new module file in `src/validators/` + replacing the `NoOpStepRunner` in `createDefaultPipeline()`.
+**Adding a new validation step** = creating a new module file in `src/validators/` + wiring it into `createDefaultPipeline()`.
 
 ### Validation Artifacts: Naming and Storage
 
 All validation artifacts (test runs, lint results, future validation types) are stored in a shared `Validations/` directory in the target realm with type-prefixed names:
 
+- Parse results: `Validations/parse_{issue-slug}-{seq}.json` (e.g., `Validations/parse_sticky-note-define-core-1.json`)
 - Test runs: `Validations/test_{issue-slug}-{seq}.json` (e.g., `Validations/test_sticky-note-define-core-1.json`)
 - Lint results: `Validations/lint_{issue-slug}-{seq}.json` (e.g., `Validations/lint_sticky-note-define-core-1.json`)
 - Eval results: `Validations/eval_{issue-slug}-{seq}.json` (e.g., `Validations/eval_sticky-note-define-core-1.json`)
 - Instantiate results: `Validations/instantiate_{issue-slug}-{seq}.json` (e.g., `Validations/instantiate_sticky-note-define-core-1.json`)
 
-Each artifact is a card instance (`TestRun`, `LintResult`, `EvalResult`, or `InstantiateResult`) with `linksTo` relationships to the `Issue` and `Project` being validated.
+Each artifact is a card instance (`ParseResult`, `TestRun`, `LintResult`, `EvalResult`, or `InstantiateResult`) with `linksTo` relationships to the `Issue` and `Project` being validated.
 
 ### Validation Context Flow
 
@@ -109,6 +110,35 @@ Each artifact is a card instance (`TestRun`, `LintResult`, `EvalResult`, or `Ins
 4. The LLM never sees the raw `ValidationResults` struct — only the formatted markdown
 
 The Phase 1 `testResults` field on `AgentContext` is deprecated. All validation flows through `validationResults` (for the loop) and `validationContext` (for the LLM prompt).
+
+### Parse Step Details (CS-10713)
+
+The parse validation step (`src/validators/parse-step.ts`) verifies that `.gts`, `.ts`, and `.json` files are valid. It replaces the `NoOpStepRunner('parse')` placeholder in the default pipeline. For `.gts`/`.ts` files it uses glint (`ember-tsc`) for full template-aware TypeScript type checking. For `.json` files it validates card document structure.
+
+**GTS/TS validation uses glint (ember-tsc):**
+
+The step downloads realm `.gts` and `.ts` files to a temp directory, writes a tsconfig.json (mirroring `realm/tsconfig.json` with absolute paths to `packages/base`), symlinks the software-factory `node_modules` (so glint's internal `@glint/ember-tsc/-private/dsl` module resolves), and runs `ember-tsc --noEmit`. This catches:
+
+- TypeScript type errors (type mismatches, missing properties, bad assignments)
+- Template errors (invalid component args, missing helpers, malformed template expressions)
+- Syntax errors (missing brackets, unterminated strings, malformed type annotations)
+
+**Filtering:** The base package has pre-existing type errors (e.g., `<style scoped>` not in HTML type definitions, missing `@ember/*` module declarations). The step filters output to only errors from the temp directory and suppresses known false positives: TS2353 for `'scoped'` on `<style>` elements (Ember's `<style scoped>` is valid but not in the HTML type definitions).
+
+**Test files excluded:** Files matching `*.test.gts` or `*.test.ts` are excluded — test files require QUnit and `@universal-ember/test-support` type declarations that aren't available in the parse step's isolated temp directory. Test file correctness is the test validation step's responsibility. `.js` files are also excluded because lint (ESLint) already validates JavaScript syntax and the factory agent does not generate `.js` files.
+
+**JSON validation uses spec-based discovery** — the same mechanism as the instantiate step. The step searches the realm for Spec cards and extracts their `linkedExamples` URLs, then reads each example instance and validates:
+
+1. JSON syntax via `JSON.parse()` (when reading raw content from mocks or non-realm sources)
+2. Card document structure: presence of `data` object, `data.type` string, `data.meta.adoptsFrom` with `module` and `name`
+
+When `readFile` returns a parsed `document` (as the realm API does for `.json` files), JSON syntax is already validated — only the structural check runs. When the realm enriches the document during indexing, the structural check validates the enriched version, which may pass even if the raw source was incomplete. This is intentional: if the realm accepted and indexed the card, it is valid from the realm's perspective.
+
+**Bootstrap behavior:** When no `.gts`/`.ts` files exist and no Spec cards are found (bootstrap scenario), the step returns `passed: true` with no files checked and no artifact created. This matches the design principle: "nothing to validate is a pass."
+
+**Performance:** The tsconfig content is cached in memory (it never changes between runs). The `node_modules` symlink avoids copying hundreds of megabytes of dependencies.
+
+The `ParseResult` card definition (`realm/parse-result.gts`) and CRUD (`src/parse-result-cards.ts`) follow the same patterns as `LintResult` and `EvalResult` — fitted/embedded/isolated templates, a running state, `ParseFileResult` field def with nested `ParseError` entries, and links to Issue/Project.
 
 ### Lint Step Details (CS-10714)
 
@@ -190,13 +220,13 @@ The agent does **not** need to create "run tests" issues. Test execution happens
 
 Bootstrap issues (the seed issue that creates Project, KnowledgeArticles, and implementation issues) produce no testable code artifacts — only JSON card instances. Validation still runs after every inner-loop iteration, but each step gracefully handles "nothing to validate":
 
-| Step                   | Bootstrap behavior                                          |
-| ---------------------- | ----------------------------------------------------------- |
-| **Parse**              | Checks created `.json` files are valid — useful             |
-| **Lint**               | No-op for JSON card instances — pass                        |
-| **Module evaluation**  | No `.gts` modules created — no-op, pass                     |
-| **Card instantiation** | No `.gts` modules or Spec cards — pass, no artifact created |
-| **Run tests**          | No test files exist yet — vacuous pass                      |
+| Step                   | Bootstrap behavior                                                              |
+| ---------------------- | ------------------------------------------------------------------------------- |
+| **Parse**              | Checks `.gts` syntax + `.json` spec examples — pass if no specs or `.gts` files |
+| **Lint**               | No-op for JSON card instances — pass                                            |
+| **Module evaluation**  | No `.gts` modules created — no-op, pass                                         |
+| **Card instantiation** | No `.gts` modules or Spec cards — pass, no artifact created                     |
+| **Run tests**          | No test files exist yet — vacuous pass                                          |
 
 **Design principle**: No special-casing per issue type. Each validation step returns `passed: true` with an empty errors array when there is nothing to validate. "Nothing to validate" is a pass, not an error.
 
@@ -668,23 +698,25 @@ Boxel-cli already has profile-based auth — users log in via `boxel profile add
 
 The principle that boxel-cli owns the entire Boxel API surface extends to auth. The factory should never touch a JWT directly — boxel-cli manages the full token lifecycle internally:
 
-1. **Two-tier token model** — boxel-cli understands both realm server tokens (obtained via Matrix OpenID → `POST /_server-session`, grants server-level access) and per-realm tokens (obtained via `POST /_realm-auth`, grants access to specific realms). Both are cached and refreshed automatically.
+1. **Profile-only auth, no environment variables** — phase 1 had a dual-auth path: the factory accepted either `MATRIX_URL`, `MATRIX_USERNAME`, `MATRIX_PASSWORD`, and `REALM_SERVER_URL` env vars **or** an active Boxel profile. That duality is removed. Phase 2 requires an active Boxel profile (`boxel profile add`) for every run — the factory does not read Matrix auth from environment variables. `--realm-server-url` also falls back to the active profile's `realmServerUrl` instead of defaulting to a hardcoded localhost URL, so staging and production Just Work without extra flags. Matrix login, OpenID exchange, server-session minting, and per-realm token acquisition all happen inside boxel-cli's `ProfileManager`, seeded from the profiles file (`~/.boxel-cli/profiles.json`) — never from the process environment. (Exception: the `BOXEL_PASSWORD` env var remains as a non-interactive input to `boxel profile add` itself; the factory runtime never reads it.)
 
-2. **Automatic token acquisition on realm creation** — When `boxel create-realm` creates a new realm, boxel-cli automatically waits for readiness, obtains the per-realm JWT, and stores it in its auth state. Subsequent `boxel pull`/`boxel sync` on that realm Just Work — tokens are managed internally by boxel-cli.
+2. **Two-tier token model** — boxel-cli understands both realm server tokens (obtained via Matrix OpenID → `POST /_server-session`, grants server-level access) and per-realm tokens (obtained via `POST /_realm-auth`, grants access to specific realms). Both are cached and refreshed automatically.
 
-3. **Programmatic auth API** — Export a `BoxelAuth` class (or similar) so the factory imports it and never constructs HTTP requests or manages tokens:
+3. **Automatic token acquisition on realm creation** — When `boxel create-realm` creates a new realm, boxel-cli automatically waits for readiness, obtains the per-realm JWT, and stores it in its auth state. Subsequent `boxel pull`/`boxel sync` on that realm Just Work — tokens are managed internally by boxel-cli.
+
+4. **Programmatic API with implicit auth** — Export a `BoxelCLIClient` that the factory imports. Callers do not pass credentials or tokens; the client reads the active profile on construction and handles auth for every request:
 
    ```typescript
-   import { BoxelAuth } from '@cardstack/boxel-cli';
-   const auth = new BoxelAuth(credentials);
-   await auth.createRealm({ name, owner }); // token auto-acquired
-   await auth.pull(realmUrl, workspaceDir); // uses stored token
-   await auth.sync(workspaceDir, { preferLocal: true });
+   import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+   const client = new BoxelCLIClient();
+   await client.createRealm({ realmName, displayName }); // token auto-acquired
+   await client.pull(realmUrl, workspaceDir); // uses stored token
+   // (sync is a future addition; see CS-10520)
    ```
 
-4. **Token refresh for long-running operations** — The factory loop runs for hours. boxel-cli's `RealmAuthClient` already has token refresh with 60s lead time — this extends to cover all realm operations so long-running sessions don't fail mid-stream.
+5. **Token refresh for long-running operations** — The factory loop runs for hours. boxel-cli's `RealmAuthClient` already has token refresh with 60s lead time — this extends to cover all realm operations so long-running sessions don't fail mid-stream.
 
-After this, the factory deletes `realm-auth.ts`, auth portions of `boxel.ts`, and all `authorization`/`serverToken`/`realmTokens` fields threaded through its config types.
+After this, the factory deletes `realm-auth.ts`, auth portions of `boxel.ts`, and all `authorization`/`serverToken`/`realmTokens` fields threaded through its config types. It also stops reading `MATRIX_URL`/`MATRIX_USERNAME`/`MATRIX_PASSWORD`/`REALM_SERVER_URL` from the environment entirely.
 
 ### Realm Creation via Boxel-CLI
 
@@ -744,6 +776,69 @@ let allManifests = [...SCRIPT_TOOLS, ...BOXEL_CLI_TOOLS, ...REALM_API_TOOLS];
 ```
 
 `BOXEL_CLI_TOOLS` (`boxel-sync`, `boxel-push`, `boxel-pull`, `boxel-status`, `boxel-create`, `boxel-history`) become available to the agent. The factory-level wrapper tools (`write_file`, `read_file`, `search_realm`) can be retired or kept as convenience aliases that delegate to the filesystem + sync.
+
+### Target-Realm I/O Migrates to Local Filesystem
+
+CS-10642 landed the auth-lifecycle migration: the factory no longer manages JWTs and calls the realm through `BoxelCLIClient` instead of raw fetch. It did **not** change _where_ target-realm reads and writes go — they still round-trip over HTTP via `client.read` / `client.write` / `client.delete`. That is the next step.
+
+**Principle:** the target realm is a synced local workspace. Any code that currently does `client.read(targetRealmUrl, …)` or `client.write(targetRealmUrl, …)` against the _target realm_ is replaced by local filesystem operations. Push/pull synchronization (`client.pull`, `client.sync`) is the only path data takes between the local workspace and the target realm.
+
+Operations that do **not** change:
+
+- **Structured search** (`client.search`) is a realm-index query, not a file op. The issue scheduler and instantiate step still need it — an alternative local index would be out of scope. For the target realm, search reads stay as `client.search`.
+- **Server-scoped operations** (`client.runCommand`, `client.lint`, `client.waitForReady`, `client.waitForFile`, `client.atomicOperation`, `client.cancelAllIndexingJobs`) target the realm server or host commands, not target-realm files. They stay.
+- **Source realm / factory realm I/O** (brief loading, darkfactory schema fetches via `_run-command`) is not the target realm. It stays as `client.*`.
+
+**Workspace lifecycle:**
+
+1. At factory start (after `bootstrapFactoryTargetRealm`), pull the target realm into a workspace directory: `await client.pull(targetRealmUrl, workspaceDir, { delete: true })`. This gives the agent a mirror of the realm on disk.
+2. The agent and all factory modules read/write files under `workspaceDir` using `fs` / `fs.promises` — no `client.read` / `client.write` for target-realm paths.
+3. After each inner-loop iteration (agent turn) and at the end of each outer-loop cycle, push: `await client.sync(workspaceDir, { preferLocal: true })`. This uploads agent-authored files and validation artifacts in one batch, and propagates deletions in both directions.
+4. On factory exit, optionally leave the workspace in place so humans can inspect it, or clean it up per the workspace lifecycle policy (see open question below).
+
+**Call sites to convert (target realm only):**
+
+| File                                                                                                    | Current call                                                           | After                                                                                                            |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `factory-tool-builder.ts` — `write_file`                                                                | `client.write(targetRealmUrl, path, content)`                          | `fs.writeFile(join(workspaceDir, path), content)`                                                                |
+| `factory-tool-builder.ts` — `read_file`                                                                 | `client.read(targetRealmUrl, path)`                                    | `fs.readFile(join(workspaceDir, path))`                                                                          |
+| `factory-tool-builder.ts` — `update_project`, `update_issue`, `create_knowledge`, `create_catalog_spec` | read-patch-write via `client.read` + `client.write`                    | same pattern but on local files                                                                                  |
+| `factory-tool-builder.ts` — `add_comment`                                                               | `addCommentToIssue(client, …)` → `client.read` + `client.write`        | `addCommentToIssue(workspaceDir, …)` that operates on local files                                                |
+| `factory-tool-executor.ts` — `realm-read` / `realm-write` / `realm-delete` tools                        | `client.read` / `client.write` / `client.delete`                       | local fs or retire the tool (LLM uses native file I/O)                                                           |
+| `factory-seed.ts` — `createSeedIssue`                                                                   | `client.read` + `client.write` + `client.waitForFile`                  | `fs.access` + `fs.writeFile`; post-sync `waitForFile` is unnecessary because the file exists locally immediately |
+| `issue-scheduler.ts` — `updateIssue`, `updateProjectStatus`, `addComment`                               | `client.read` + `client.write`                                         | local file read-patch-write; sync pushes updated status back to the realm                                        |
+| `issue-scheduler.ts` — `listIssues`, `refreshIssue` (search queries)                                    | `client.search`                                                        | **unchanged** (index query, see principle above)                                                                 |
+| `realm-issue-relationship-loader.ts` — `loadProject`, `loadKnowledge`                                   | `client.read`                                                          | `fs.readFile` from workspace                                                                                     |
+| `realm-operations.ts` — `addCommentToIssue`, `getNextValidationSequenceNumber`                          | `client.read` + `client.write`; `client.search`                        | comments move to local fs; sequence-number search stays                                                          |
+| `test-run-cards.ts`, `lint-result-cards.ts`, `eval-result-cards.ts`, `instantiate-result-cards.ts`      | `client.read` + `client.write` for TestRun/Lint/Eval/Instantiate cards | write/read validation artifacts locally; the next sync push propagates them to the realm                         |
+| `validators/test-step.ts` — reads TestRun card back                                                     | `client.read`                                                          | local `fs.readFile` from workspace                                                                               |
+| `validators/lint-step.ts` — reads source file content                                                   | `client.read`                                                          | local `fs.readFile`                                                                                              |
+| `validators/instantiate-step.ts` — reads Spec example cards                                             | `client.read`                                                          | local `fs.readFile`                                                                                              |
+
+**Sync interleaving with validation:**
+
+The validation pipeline runs after each agent turn. The sync has to interleave carefully with validation because some checks (the prerenderer-backed `eval` and `instantiate` steps) need the realm to reflect the agent's latest writes before they run:
+
+1. Agent turn ends.
+2. `client.sync(workspaceDir, { preferLocal: true })` — push the agent's local writes to the realm so the prerenderer sees them.
+3. Validation pipeline runs. Test artifact cards (TestRun, LintResult, EvalResult, InstantiateResult) are written locally as validation proceeds.
+4. Second `client.sync(workspaceDir, { preferLocal: true })` — push the artifact cards back to the realm so humans/agents can browse them in the Boxel UI.
+
+Steps 2 and 4 can collapse to a single sync if validation artifacts are written before the prerenderer runs, but the two-phase version keeps the contract explicit: the realm is always consistent at validation boundaries.
+
+**What this means for `realm-operations.ts`:**
+
+After target-realm I/O moves to the filesystem, `realm-operations.ts` shrinks further:
+
+- `addCommentToIssue(client, …)` → becomes `addCommentToIssue(workspaceDir, …)` operating on local files
+- `getNextValidationSequenceNumber(client, …)` → stays (it's a search query)
+- `ensureJsonExtension` → unchanged
+- `pullRealmFiles` → deleted; callers use `client.pull` directly
+
+**Out of scope for this migration:**
+
+- Replacing `client.search` with a local FS index walk. The realm's indexed search (filter by type, sort by sequenceNumber, etc.) has no equivalent in pure file operations. A local query engine is future work.
+- Replacing `client.runCommand` / `client.lint`. These are server-side host command invocations, not file I/O.
 
 #### Skill Re-enablement and Alignment (CS-10613)
 

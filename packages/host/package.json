@@ -189,6 +189,7 @@
     "start-server-and-test": "catalog:",
     "statuses": "catalog:",
     "stream-browserify": "catalog:",
+    "stream-json": "catalog:",
     "super-fast-md5": "catalog:",
     "testem": "catalog:",
     "testem-multi-reporter": "catalog:",

@@ -4,13 +4,24 @@
     "attributes": {
       "name": "AI",
       "color": null,
-      "cardDescription": null,
-      "cardThumbnailURL": null
+      "cardInfo": {
+        "notes": null,
+        "name": "AI",
+        "summary": "Cards and apps that use artificial intelligence or machine learning, including LLM-powered features, smart automation, and AI-assisted workflows.",
+        "cardThumbnailURL": null
+      }
     },
     "meta": {
       "adoptsFrom": {
         "module": "../tag",
         "name": "Tag"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

@@ -54,13 +54,13 @@ export default class WorkspaceChooser extends Component<Signature> {
 
   private get displayCatalogWorkspaces() {
     return (
-      this.realmServer.catalogRealmURLs &&
-      this.realmServer.catalogRealmURLs.length > 0
+      this.realmServer.displayedCatalogRealmURLs &&
+      this.realmServer.displayedCatalogRealmURLs.length > 0
     );
   }
 
   private get communityRealmURLs() {
-    let realmURLs = this.realmServer.catalogRealmURLs ?? [];
+    let realmURLs = this.realmServer.displayedCatalogRealmURLs ?? [];
     if (config.environment !== 'production') {
       return realmURLs;
     }
@@ -97,7 +97,7 @@ export default class WorkspaceChooser extends Component<Signature> {
     let favorites = this.matrixService.workspaceFavorites;
     let allURLs = [
       ...this.realmServer.userRealmURLs,
-      ...(this.realmServer.catalogRealmURLs ?? []),
+      ...(this.realmServer.displayedCatalogRealmURLs ?? []),
     ];
     let filtered = favorites.filter((url) => allURLs.includes(url));
     return this.filterByHosted(filtered);

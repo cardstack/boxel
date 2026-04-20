@@ -51,7 +51,22 @@ export type GetMenuItemParams = {
   cardCrudFunctions: Partial<CardCrudFunctions>;
   commandContext: CommandContext;
   format?: Format;
+  useBaseTemplate?: boolean;
 } & MenuContext;
+
+function makeToggleTemplateItem(
+  card: CardDef,
+  useBaseTemplate: boolean | undefined,
+  action: (useBaseTemplate: boolean) => void,
+): MenuItemOptions {
+  return {
+    label: 'Toggle Standard View',
+    action: () => action(!useBaseTemplate),
+    icon: Eye,
+    checked: !!useBaseTemplate,
+    disabled: !card.id,
+  };
+}
 
 export function getDefaultCardMenuItems(
   card: CardDef,
@@ -72,6 +87,37 @@ export function getDefaultCardMenuItems(
     });
   }
   if (params.menuContext === 'interact') {
+    if (
+      cardId &&
+      params.canEdit &&
+      params.format === 'edit' &&
+      (card.constructor as typeof CardDef).hasCustomEditTemplate
+    ) {
+      menuItems.push(
+        makeToggleTemplateItem(
+          card,
+          params.useBaseTemplate,
+          (useBaseTemplate) =>
+            params.cardCrudFunctions.editCard?.(card, { useBaseTemplate }),
+        ),
+      );
+    }
+    if (
+      cardId &&
+      params.format === 'isolated' &&
+      (card.constructor as typeof CardDef).hasCustomIsolatedTemplate
+    ) {
+      menuItems.push(
+        makeToggleTemplateItem(
+          card,
+          params.useBaseTemplate,
+          (useBaseTemplate) =>
+            params.cardCrudFunctions.viewCard?.(card, 'isolated', {
+              useBaseTemplate,
+            }),
+        ),
+      );
+    }
     if (
       !isRealmIndexCard(card) && // workspace index card cannot be deleted
       cardId &&

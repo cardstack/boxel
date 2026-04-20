@@ -7,10 +7,8 @@ import {
   type LintValidationStepConfig,
   type LintValidationDetails,
 } from '../src/validators/lint-step';
-import type {
-  LintFileResponse,
-  RealmFetchOptions,
-} from '../src/realm-operations';
+import type { LintResult } from '@cardstack/boxel-cli/api';
+import { createMockClient } from './helpers/mock-client';
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -20,6 +18,7 @@ function makeConfig(
   overrides: Partial<LintValidationStepConfig> = {},
 ): LintValidationStepConfig {
   return {
+    client: createMockClient(),
     realmServerUrl: 'https://example.test/',
     lintResultsModuleUrl: 'https://example.test/lint-result',
     // Default to a no-op sequence resolver for unit tests
@@ -30,42 +29,26 @@ function makeConfig(
 
 function makeFetchFilenames(
   filenames: string[],
-): (
-  realmUrl: string,
-  options?: RealmFetchOptions,
-) => Promise<{ filenames: string[]; error?: string }> {
+): (realmUrl: string) => Promise<{ filenames: string[]; error?: string }> {
   return async () => ({ filenames });
 }
 
 function makeFetchFilenamesError(
   error: string,
-): (
-  realmUrl: string,
-  options?: RealmFetchOptions,
-) => Promise<{ filenames: string[]; error?: string }> {
+): (realmUrl: string) => Promise<{ filenames: string[]; error?: string }> {
   return async () => ({ filenames: [], error });
 }
 
 function makeLintFile(
-  responses: Record<string, LintFileResponse>,
-): (
-  realmUrl: string,
-  source: string,
-  filename: string,
-  options?: RealmFetchOptions,
-) => Promise<LintFileResponse> {
+  responses: Record<string, LintResult>,
+): (realmUrl: string, source: string, filename: string) => Promise<LintResult> {
   return async (_realmUrl, _source, filename) =>
     responses[filename] ?? { fixed: false, output: '', messages: [] };
 }
 
 function makeLintFileThrows(
   errorMessage: string,
-): (
-  realmUrl: string,
-  source: string,
-  filename: string,
-  options?: RealmFetchOptions,
-) => Promise<LintFileResponse> {
+): (realmUrl: string, source: string, filename: string) => Promise<LintResult> {
   return async () => {
     throw new Error(errorMessage);
   };
@@ -76,7 +59,6 @@ function makeReadFile(
 ): (
   realmUrl: string,
   path: string,
-  options?: RealmFetchOptions,
 ) => Promise<{ ok: boolean; content?: string; error?: string }> {
   return async (_realmUrl, path) => {
     let content = contents[path];

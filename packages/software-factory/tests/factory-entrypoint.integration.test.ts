@@ -1,4 +1,10 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -42,6 +48,36 @@ interface RunCommandResult {
   status: number | null;
   stdout: string;
   stderr: string;
+}
+
+function createTempProfileHome(options: {
+  username: string;
+  matrixUrl: string;
+  realmServerUrl: string;
+  password: string;
+}): string {
+  let tempHome = mkdtempSync(join(tmpdir(), 'boxel-test-'));
+  let boxelCliDir = join(tempHome, '.boxel-cli');
+  mkdirSync(boxelCliDir, { recursive: true });
+
+  let profileId = `@${options.username}:localhost`;
+  let config = {
+    profiles: {
+      [profileId]: {
+        matrixUrl: options.matrixUrl,
+        realmServerUrl: options.realmServerUrl,
+        password: options.password,
+      },
+    },
+    activeProfile: profileId,
+  };
+
+  writeFileSync(
+    join(boxelCliDir, 'profiles.json'),
+    JSON.stringify(config, null, 2),
+  );
+
+  return tempHome;
 }
 
 module('factory-entrypoint integration', function () {
@@ -223,6 +259,13 @@ module('factory-entrypoint integration', function () {
     targetRealmUrl = `${origin}/typed-by-user/personal/`;
     canonicalTargetRealmUrl = `${origin}/hassan/personal/`;
 
+    let tempHome = createTempProfileHome({
+      username: 'hassan',
+      matrixUrl: `${origin}/`,
+      realmServerUrl: `${origin}/`,
+      password: 'secret',
+    });
+
     try {
       let result = await runCommand(
         'pnpm',
@@ -242,11 +285,7 @@ module('factory-entrypoint integration', function () {
           encoding: 'utf8',
           env: {
             ...process.env,
-            HOME: mkdtempSync(join(tmpdir(), 'boxel-test-')),
-            MATRIX_USERNAME: 'hassan',
-            MATRIX_PASSWORD: 'secret',
-            MATRIX_URL: origin,
-            REALM_SERVER_URL: `${origin}/`,
+            HOME: tempHome,
           },
         },
       );
@@ -281,6 +320,7 @@ module('factory-entrypoint integration', function () {
         nextStep: 'all-issues-completed',
       });
     } finally {
+      rmSync(tempHome, { recursive: true, force: true });
       await new Promise<void>((resolvePromise, reject) =>
         server.close((error) => (error ? reject(error) : resolvePromise())),
       );
@@ -321,7 +361,7 @@ module('factory-entrypoint integration', function () {
     assert.true(/--no-retry-blocked/.test(result.stdout));
   });
 
-  test('factory:go fails clearly when MATRIX_USERNAME is missing', async function (assert) {
+  test('factory:go fails clearly when no profile is configured', async function (assert) {
     let server = createServer((_request, response) => {
       response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
       response.end(stickyNoteFixture);
@@ -355,15 +395,13 @@ module('factory-entrypoint integration', function () {
           encoding: 'utf8',
           env: {
             ...process.env,
-            MATRIX_USERNAME: '',
+            HOME: '/tmp/no-boxel-cli-here',
           },
         },
       );
 
       assert.strictEqual(result.status, 1);
-      assert.true(
-        /Set MATRIX_USERNAME before running factory:go/.test(result.stderr),
-      );
+      assert.true(/boxel profile add/.test(result.stderr));
     } finally {
       await new Promise<void>((resolvePromise, reject) =>
         server.close((error) => (error ? reject(error) : resolvePromise())),

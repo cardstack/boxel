@@ -356,7 +356,7 @@ Use:
 - temporary-directory integration tests
 - bootstrap tests that cover missing-realm creation through `/_create-realm`
 - readiness checks that treat a successful `/_create-realm` response as the readiness boundary
-- tests that require `MATRIX_USERNAME` instead of an explicit brief JWT flag
+- tests that require an active Boxel profile instead of an explicit brief JWT flag
 
 ### Project Artifact Bootstrap
 
