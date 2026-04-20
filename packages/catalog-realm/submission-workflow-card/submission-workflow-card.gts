@@ -423,6 +423,27 @@ export class SubmissionWorkflowCard extends CardDef {
       return label === 'Closed' || label === 'Merged';
     }
 
+    get catalogListingUrl(): string | null {
+      if (!this.isMerged) return null;
+      let listing = this.args.model.listing;
+      if (!listing?.id) return null;
+
+      let listingRealmHref = listing[realmURL]?.href;
+      if (!listingRealmHref) return null;
+
+      // Strip the source realm prefix to get the repo-relative path
+      let relativePath = listing.id.startsWith(listingRealmHref)
+        ? listing.id.slice(listingRealmHref.length)
+        : listing.id;
+
+      // Derive external-catalog realm URL from the card's realm origin (convention)
+      let cardRealmHref = this.args.model[realmURL]?.href;
+      if (!cardRealmHref) return null;
+      let origin = new URL(cardRealmHref).origin;
+
+      return `${origin}/external-catalog/${relativePath}`;
+    }
+
     // ── CI state ──
     get ciItems() {
       return buildCiItems(
@@ -666,6 +687,21 @@ export class SubmissionWorkflowCard extends CardDef {
                     {{#if @model.prCard}}
                       <div class='sw-step-detail'>
                         <@fields.reviewStatus />
+                      </div>
+                    {{/if}}
+                  {{/if}}
+
+                  {{#if (eq step.key 'merge-catalog')}}
+                    {{#if this.catalogListingUrl}}
+                      <div class='sw-step-detail sw-catalog-link'>
+                        <a
+                          href={{this.catalogListingUrl}}
+                          target='_blank'
+                          rel='noopener noreferrer'
+                          class='sw-view-in-catalog'
+                        >
+                          View listing in catalog
+                        </a>
                       </div>
                     {{/if}}
                   {{/if}}
@@ -1348,6 +1384,24 @@ export class SubmissionWorkflowCard extends CardDef {
             opacity: 0.6;
             transform: scale(0.85);
           }
+        }
+
+        /* ── Catalog link ── */
+        .sw-catalog-link {
+          margin-top: 8px;
+        }
+        .sw-view-in-catalog {
+          display: inline-block;
+          padding: 8px 16px;
+          background: var(--boxel-highlight);
+          color: white;
+          border-radius: 6px;
+          text-decoration: none;
+          font-size: 13px;
+          font-weight: 600;
+        }
+        .sw-view-in-catalog:hover {
+          opacity: 0.9;
         }
 
         /* ── Responsive ── */
