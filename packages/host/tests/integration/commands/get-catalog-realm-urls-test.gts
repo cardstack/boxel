@@ -1,5 +1,4 @@
 import { getOwner } from '@ember/owner';
-import Service from '@ember/service';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
@@ -7,10 +6,12 @@ import { module, test } from 'qunit';
 
 import GetCatalogRealmUrlsCommand from '@cardstack/host/commands/get-catalog-realm-urls';
 import RealmService from '@cardstack/host/services/realm';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setupRealmServerEndpoints,
   testRealmURL,
   testRealmInfo,
   setupRealmCacheTeardown,
@@ -29,12 +30,6 @@ class StubRealmService extends RealmService {
   }
 }
 
-class StubRealmServerService extends Service {
-  catalogRealmURLs = ['https://example.com/catalog/'];
-  async fetchCatalogRealms() {}
-  setClient() {}
-}
-
 module('Integration | commands | get-catalog-realm-urls', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
@@ -46,20 +41,26 @@ module('Integration | commands | get-catalog-realm-urls', function (hooks) {
     autostart: true,
   });
 
-  hooks.beforeEach(function (this: RenderingTestContext) {
-    getOwner(this)!.register('service:realm', StubRealmService);
-    getOwner(this)!.register('service:realm-server', StubRealmServerService);
-  });
+  setupRealmServerEndpoints(hooks);
 
   setupRealmCacheTeardown(hooks);
 
-  hooks.beforeEach(async function () {
+  hooks.beforeEach(async function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
+
     await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
+        realmURL: testRealmURL,
         contents: {},
       }),
     );
+
+    let realmServer = getService('realm-server') as RealmServerService;
+    Object.defineProperty(realmServer, 'catalogRealmURLs', {
+      get: () => ['https://example.com/catalog/'],
+      configurable: true,
+    });
   });
 
   test('returns the list of catalog realm URLs', async function (assert) {

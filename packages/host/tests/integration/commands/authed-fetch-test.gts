@@ -15,6 +15,7 @@ import {
   testRealmInfo,
   setupRealmCacheTeardown,
   withCachedRealmSetup,
+  setupRealmServerEndpoints,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -39,7 +40,7 @@ module('Integration | commands | authed-fetch', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
-
+  setupRealmServerEndpoints(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
