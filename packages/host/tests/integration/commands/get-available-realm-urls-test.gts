@@ -30,10 +30,12 @@ class StubRealmService extends RealmService {
 }
 
 class StubRealmServerService extends RealmServerService {
-  override availableRealmURLs = [
-    'https://example.com/realm-a/',
-    'https://example.com/realm-b/',
-  ];
+  override get availableRealmURLs() {
+    return [
+      'https://example.com/realm-a/',
+      'https://example.com/realm-b/',
+    ];
+  }
 }
 
 module('Integration | commands | get-available-realm-urls', function (hooks) {

@@ -30,7 +30,9 @@ class StubRealmService extends RealmService {
 }
 
 class StubRealmServerService extends RealmServerService {
-  override catalogRealmURLs = ['https://example.com/catalog/'];
+  override get catalogRealmURLs() {
+    return ['https://example.com/catalog/'];
+  }
 }
 
 module('Integration | commands | get-catalog-realm-urls', function (hooks) {

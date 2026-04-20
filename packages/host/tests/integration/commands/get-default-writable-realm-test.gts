@@ -64,7 +64,7 @@ module('Integration | commands | get-default-writable-realm', function (hooks) {
   });
 
   test('returns empty string when no default writable realm exists', async function (assert) {
-    let realmService = getService<RealmService>('realm');
+    let realmService = getService('realm') as RealmService;
     Object.defineProperty(realmService, 'defaultWritableRealm', {
       get() {
         return null;

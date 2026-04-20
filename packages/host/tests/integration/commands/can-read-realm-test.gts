@@ -57,7 +57,7 @@ module('Integration | commands | can-read-realm', function (hooks) {
   });
 
   hooks.beforeEach(function () {
-    let realmService = getService<RealmService>('realm');
+    let realmService = getService('realm') as RealmService;
     realmService.canRead = (url: string): boolean => {
       return readableUrls.includes(url);
     };

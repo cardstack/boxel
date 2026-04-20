@@ -62,7 +62,7 @@ module('Integration | commands | authed-fetch', function (hooks) {
   });
 
   hooks.beforeEach(function () {
-    let networkService = getService<NetworkService>('network');
+    let networkService = getService('network') as NetworkService;
     Object.defineProperty(networkService, 'authedFetch', {
       get() {
         return async (
