@@ -4,6 +4,7 @@ import {
   type MenuItemOptions,
 } from '@cardstack/boxel-ui/helpers';
 
+import CopyCardAsMarkdownCommand from '@cardstack/boxel-host/commands/copy-card-as-markdown';
 import CopyCardCommand from '@cardstack/boxel-host/commands/copy-card';
 import GenerateExampleCardsCommand from '@cardstack/boxel-host/commands/generate-example-cards';
 import OpenCreateListingModalCommand from '@cardstack/boxel-host/commands/open-create-listing-modal';
@@ -27,6 +28,7 @@ import { resolveAdoptsFrom } from '@cardstack/runtime-common';
 
 import CodeIcon from '@cardstack/boxel-icons/code';
 import ArrowLeft from '@cardstack/boxel-icons/arrow-left';
+import ClipboardCopy from '@cardstack/boxel-icons/clipboard-copy';
 import Eye from '@cardstack/boxel-icons/eye';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import Trash2Icon from '@cardstack/boxel-icons/trash-2';
@@ -87,6 +89,15 @@ export function getDefaultCardMenuItems(
     });
   }
   if (params.menuContext === 'interact') {
+    menuItems.push({
+      label: 'Copy as Markdown',
+      action: () =>
+        new CopyCardAsMarkdownCommand(params.commandContext).execute({
+          cardId,
+        }),
+      icon: ClipboardCopy,
+      disabled: !cardId,
+    });
     if (
       cardId &&
       params.canEdit &&

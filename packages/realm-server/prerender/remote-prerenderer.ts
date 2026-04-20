@@ -1,11 +1,9 @@
 import {
   type Prerenderer,
   type AffinityType,
-  type RenderResponse,
   type ModuleRenderResponse,
-  type FileExtractResponse,
-  type FileRenderResponse,
-  type FileRenderArgs,
+  type PrerenderVisitArgs,
+  type RenderVisitResponse,
   type RenderRouteOptions,
   type RunCommandResponse,
   logger,
@@ -164,20 +162,6 @@ export function createRemotePrerenderer(
   }
 
   return {
-    async prerenderCard({ realm, url, auth, renderOptions }) {
-      return await requestWithRetry<RenderResponse>(
-        'prerender-card',
-        'prerender-request',
-        {
-          affinityType: 'realm',
-          affinityValue: realm,
-          realm,
-          url,
-          auth,
-          renderOptions: renderOptions ?? {},
-        },
-      );
-    },
     async prerenderModule({ realm, url, auth, renderOptions }) {
       return await requestWithRetry<ModuleRenderResponse>(
         'prerender-module',
@@ -192,40 +176,26 @@ export function createRemotePrerenderer(
         },
       );
     },
-    async prerenderFileExtract({ realm, url, auth, renderOptions }) {
-      return await requestWithRetry<FileExtractResponse>(
-        'prerender-file-extract',
-        'prerender-file-extract-request',
-        {
-          affinityType: 'realm',
-          affinityValue: realm,
-          realm,
-          url,
-          auth,
-          renderOptions: renderOptions ?? {},
-        },
-      );
-    },
-    async prerenderFileRender({
+    async prerenderVisit({
       realm,
       url,
       auth,
+      renderOptions,
       fileData,
       types,
-      renderOptions,
-    }: FileRenderArgs) {
-      return await requestWithRetry<FileRenderResponse>(
-        'prerender-file-render',
-        'prerender-file-render-request',
+    }: PrerenderVisitArgs): Promise<RenderVisitResponse> {
+      return await requestWithRetry<RenderVisitResponse>(
+        'prerender-visit',
+        'prerender-visit-request',
         {
           affinityType: 'realm',
           affinityValue: realm,
           realm,
           url,
           auth,
-          fileData,
-          types,
           renderOptions: renderOptions ?? {},
+          ...(fileData ? { fileData } : {}),
+          ...(types ? { types } : {}),
         },
       );
     },

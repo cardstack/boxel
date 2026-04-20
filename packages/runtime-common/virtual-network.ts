@@ -1,5 +1,9 @@
-import { RealmPaths } from './paths';
+import { RealmPaths, ensureTrailingSlash } from './paths';
 import { baseRealm, isNode } from './index';
+import {
+  registerCardReferencePrefix,
+  type RealmIdentifier,
+} from './card-reference-resolver';
 import type { ModuleDescriptor } from './package-shim-handler';
 import {
   PackageShimHandler,
@@ -19,6 +23,7 @@ export class VirtualNetwork {
   private handlers: Handler[] = [];
   private urlMappings: [string, string][] = [];
   private importMap: Map<string, (rest: string) => string> = new Map();
+  private realmMappings = new Map<string, string>();
 
   constructor(nativeFetch = createEnvironmentAwareFetch()) {
     this.nativeFetch = nativeFetch;
@@ -64,6 +69,31 @@ export class VirtualNetwork {
 
   addImportMap(prefix: string, handler: (rest: string) => string): void {
     this.importMap.set(prefix, handler);
+  }
+
+  /**
+   * Register a scoped realm prefix and its target URL. This populates the
+   * import map (for module loading) and global prefix mappings (for card
+   * reference resolution). It does NOT add a URL-to-URL mapping — use
+   * `addURLMapping` separately when a virtual URL (e.g.
+   * `https://cardstack.com/base/`) needs to map to a real URL.
+   */
+  addRealmMapping(realmIdentifier: string, targetURL: string): void {
+    let normalizedId = ensureTrailingSlash(realmIdentifier);
+    let normalizedTarget = ensureTrailingSlash(targetURL);
+    this.realmMappings.set(normalizedId, normalizedTarget);
+
+    // Backward compat bridge: populate both existing registration systems
+    // so that resolveImport and resolveCardReference continue to work
+    this.addImportMap(
+      normalizedId,
+      (rest) => new URL(rest, normalizedTarget).href,
+    );
+    registerCardReferencePrefix(normalizedId, normalizedTarget);
+  }
+
+  knownRealms(): RealmIdentifier[] {
+    return [...this.realmMappings.keys()] as RealmIdentifier[];
   }
 
   private nativeFetch: typeof globalThis.fetch;
@@ -118,6 +148,15 @@ export class VirtualNetwork {
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ) => {
+    // Resolve RRI strings to real URLs before creating the Request,
+    // since new Request('@cardstack/base/...') would throw (not a valid URL).
+    if (typeof urlOrRequest === 'string') {
+      let resolved = this.resolveRRIToURL(urlOrRequest);
+      if (resolved) {
+        urlOrRequest = resolved;
+      }
+    }
+
     let request =
       urlOrRequest instanceof Request
         ? urlOrRequest
@@ -134,6 +173,15 @@ export class VirtualNetwork {
     }
     return response;
   };
+
+  private resolveRRIToURL(rri: string): string | undefined {
+    for (let [prefix, target] of this.realmMappings) {
+      if (rri.startsWith(prefix)) {
+        return new URL(rri.slice(prefix.length), target).href;
+      }
+    }
+    return undefined;
+  }
 
   private async runFetch(request: Request, init?: RequestInit) {
     let handlers: FetcherMiddlewareHandler[] = this.handlers.map((h) => {

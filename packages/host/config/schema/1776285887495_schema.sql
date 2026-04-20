@@ -41,6 +41,7 @@
    head_html TEXT,
    has_error BOOLEAN DEFAULT false NOT NULL,
    last_known_good_deps BLOB,
+   markdown TEXT,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
@@ -68,6 +69,7 @@
    head_html TEXT,
    has_error BOOLEAN DEFAULT false NOT NULL,
    last_known_good_deps BLOB,
+   markdown TEXT,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 

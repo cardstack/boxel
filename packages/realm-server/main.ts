@@ -9,7 +9,6 @@ import {
   CachingDefinitionLookup,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
-  registerCardReferencePrefix,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -237,9 +236,7 @@ for (let i = 0; i < fromUrls.length; i++) {
     virtualNetwork.addURLMapping(fromURL, to);
     urlMappings.push([fromURL, to]);
   } else {
-    // Non-URL prefix like @cardstack/catalog/
-    registerCardReferencePrefix(from, to.href);
-    virtualNetwork.addImportMap(from, (rest) => new URL(rest, to).href);
+    virtualNetwork.addRealmMapping(from, to.href);
     urlMappings.push([to, to]); // use toUrl for both in hrefs
   }
 }

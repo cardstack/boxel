@@ -100,6 +100,16 @@ export class RichMarkdownField extends FieldDef {
     </template>
   };
 
+  // CS-10786: author-authored markdown passes through verbatim — double-
+  // escaping would corrupt the user's formatting. Mirrors MarkdownField's
+  // approach.
+  static markdown = class Markdown extends Component<typeof this> {
+    get text() {
+      return this.args.model?.content ?? '';
+    }
+    <template>{{this.text}}</template>
+  };
+
   static edit = class Edit extends Component<typeof this> {
     _modeState = new TrackedObject({ value: 'compose' as 'compose' | 'source' | 'preview' });
 
