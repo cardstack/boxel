@@ -26,6 +26,7 @@ import * as path from 'path';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
 import {
   type LooseCardResource,
+  type RealmResourceIdentifier,
   ensureTrailingSlash,
   skillCardRef,
 } from '@cardstack/runtime-common';
@@ -215,7 +216,8 @@ Current date and time: 2025-06-11T11:43:00.533Z
               codeMode: {
                 currentFile: 'http://localhost:4201/experiments/author.gts',
                 selectedCodeRef: {
-                  module: 'http://localhost:4201/experiments/author',
+                  module:
+                    'http://localhost:4201/experiments/author' as RealmResourceIdentifier,
                   name: 'Address',
                 },
                 inheritanceChain: [
@@ -399,7 +401,8 @@ Current date and time: 2025-06-11T11:43:00.533Z
                 activeSpecId:
                   'http://localhost:4201/experiments/Spec/author-spec-1',
                 selectedCodeRef: {
-                  module: 'http://localhost:4201/experiments/author',
+                  module:
+                    'http://localhost:4201/experiments/author' as RealmResourceIdentifier,
                   name: 'Author',
                 },
               },
