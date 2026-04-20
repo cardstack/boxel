@@ -2,6 +2,8 @@ import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { join, normalize, resolve } from 'node:path';
 
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
 import { logger } from './logger';
 
 import { chromium } from '@playwright/test';
@@ -12,6 +14,9 @@ import { parseQunitResults } from './test-run-parsing';
 import type {
   ExecuteTestRunOptions,
   QunitResults,
+  RunTestsFailure,
+  RunTestsInMemoryOptions,
+  RunTestsResult,
   TestRunHandle,
   TestRunRealmOptions,
 } from './test-run-types';
@@ -404,35 +409,32 @@ async function startTestPageServer(
 }
 
 // ---------------------------------------------------------------------------
-// Test Execution Orchestration
+// Pure QUnit Runner
 // ---------------------------------------------------------------------------
 
+interface QunitRunnerOptions {
+  targetRealmUrl: string;
+  client: BoxelCLIClient;
+  hostAppUrl: string;
+  hostDistDir?: string;
+  debug?: boolean;
+  /** Optional slug shown in the served test page title. */
+  slug?: string;
+}
+
+interface QunitRunnerOutput {
+  qunitResults: QunitResults;
+  durationMs: number;
+}
+
 /**
- * Orchestrate a full test run: create TestRun card → serve QUnit test page →
- * navigate Playwright → collect results → update TestRun card → return handle.
+ * Serve the QUnit test page, drive Chromium, and collect QUnit results.
+ * Has no realm-artifact side effects — callers own TestRun card creation
+ * (validation pipeline) or result flattening (in-memory tool).
  */
-export async function executeTestRunFromRealm(
-  options: ExecuteTestRunOptions,
-): Promise<TestRunHandle> {
-  let realmOptions: TestRunRealmOptions = {
-    targetRealmUrl: options.targetRealmUrl,
-    testResultsModuleUrl: options.testResultsModuleUrl,
-    client: options.client,
-  };
-  let completeOptions = {
-    ...realmOptions,
-    projectCardUrl: options.projectCardUrl,
-  };
-
-  // Step 1: Resolve or create the TestRun card.
-  let resolved = await resolveTestRun(options);
-  if (resolved.status === 'error') {
-    return resolved;
-  }
-  let testRunId = resolved.testRunId;
-  let sequenceNumber = resolved.sequenceNumber;
-
-  // Step 2: Serve a custom QUnit test page and navigate Playwright to it.
+async function runQunitInBrowser(
+  options: QunitRunnerOptions,
+): Promise<QunitRunnerOutput> {
   let start = Date.now();
   let browser;
   let testPageServer: Server | undefined;
@@ -476,7 +478,6 @@ export async function executeTestRunFromRealm(
     browser = await chromium.launch({ headless: true });
     let page = await browser.newPage();
 
-    // Forward browser console when debug is enabled
     if (options.debug) {
       page.on('console', (msg) => {
         log.debug(`[browser] ${msg.type()}: ${msg.text()}`);
@@ -525,7 +526,56 @@ export async function executeTestRunFromRealm(
       `QUnit completed in ${durationMs}ms: ${qunitResults.runEnd?.testCounts?.total ?? 0} test(s)`,
     );
 
-    // Step 3: Parse results and complete the TestRun card.
+    return { qunitResults, durationMs };
+  } finally {
+    if (browser) {
+      await browser.close().catch(() => {});
+    }
+    if (testPageServer) {
+      testPageServer.close();
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Test Execution Orchestration
+// ---------------------------------------------------------------------------
+
+/**
+ * Orchestrate a full test run: create TestRun card → drive QUnit in browser →
+ * update TestRun card → return handle.
+ */
+export async function executeTestRunFromRealm(
+  options: ExecuteTestRunOptions,
+): Promise<TestRunHandle> {
+  let realmOptions: TestRunRealmOptions = {
+    targetRealmUrl: options.targetRealmUrl,
+    testResultsModuleUrl: options.testResultsModuleUrl,
+    client: options.client,
+  };
+  let completeOptions = {
+    ...realmOptions,
+    projectCardUrl: options.projectCardUrl,
+  };
+
+  let resolved = await resolveTestRun(options);
+  if (resolved.status === 'error') {
+    return resolved;
+  }
+  let testRunId = resolved.testRunId;
+  let sequenceNumber = resolved.sequenceNumber;
+
+  let runnerStart = Date.now();
+  try {
+    let { qunitResults, durationMs } = await runQunitInBrowser({
+      targetRealmUrl: options.targetRealmUrl,
+      client: options.client,
+      hostAppUrl: options.hostAppUrl,
+      hostDistDir: options.hostDistDir,
+      debug: options.debug,
+      slug: options.slug,
+    });
+
     let attrs = parseQunitResults(qunitResults);
     attrs.durationMs = durationMs;
 
@@ -543,7 +593,7 @@ export async function executeTestRunFromRealm(
       ...(completeResult.error ? { error: completeResult.error } : {}),
     };
   } catch (err) {
-    let durationMs = Date.now() - start;
+    let durationMs = Date.now() - runnerStart;
     let errorMessage = err instanceof Error ? err.message : String(err);
     log.error(`Error: ${errorMessage} (${durationMs}ms)`);
     try {
@@ -563,12 +613,115 @@ export async function executeTestRunFromRealm(
       // Best-effort
     }
     return { testRunId, sequenceNumber, status: 'error', errorMessage };
-  } finally {
-    if (browser) {
-      await browser.close().catch(() => {});
-    }
-    if (testPageServer) {
-      testPageServer.close();
-    }
   }
+}
+
+// ---------------------------------------------------------------------------
+// In-Memory Test Runner (agent tool)
+// ---------------------------------------------------------------------------
+
+/**
+ * Run the realm's QUnit tests and return a flat in-memory result object.
+ * Unlike `executeTestRunFromRealm`, this does NOT create or update a
+ * `TestRun` card — the result is consumed by the agent directly for
+ * mid-turn self-validation. The orchestrator's validation pipeline still
+ * writes a `TestRun` artifact after `signal_done`.
+ */
+export async function runTestsInMemory(
+  options: RunTestsInMemoryOptions,
+): Promise<RunTestsResult> {
+  let testFiles: string[];
+  try {
+    let listing = await options.client.listFiles(options.targetRealmUrl);
+    if (listing.error) {
+      return emptyErrorResult(
+        `Failed to discover test files: ${listing.error}`,
+      );
+    }
+    testFiles = listing.filenames.filter((f) => f.endsWith('.test.gts'));
+  } catch (err) {
+    return emptyErrorResult(
+      `Failed to discover test files: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  if (testFiles.length === 0) {
+    return {
+      status: 'passed',
+      passedCount: 0,
+      failedCount: 0,
+      skippedCount: 0,
+      durationMs: 0,
+      testFiles: [],
+      failures: [],
+    };
+  }
+
+  try {
+    let { qunitResults, durationMs } = await runQunitInBrowser({
+      targetRealmUrl: options.targetRealmUrl,
+      client: options.client,
+      hostAppUrl: options.hostAppUrl,
+      hostDistDir: options.hostDistDir,
+      debug: options.debug,
+    });
+
+    let attrs = parseQunitResults(qunitResults);
+    let failures: RunTestsFailure[] = [];
+    for (let moduleResult of attrs.moduleResults) {
+      let moduleName = moduleResult.moduleRef?.module ?? 'unknown';
+      for (let entry of moduleResult.results) {
+        if (entry.status === 'failed' || entry.status === 'error') {
+          failures.push({
+            testName: entry.testName,
+            module: moduleName,
+            message: entry.message ?? `Test ${entry.status}`,
+            ...(entry.stackTrace ? { stackTrace: entry.stackTrace } : {}),
+          });
+        }
+      }
+    }
+
+    // parseQunitResults only ever returns passed/failed/error terminally;
+    // defensively coerce the 'running' branch of the union away.
+    let status: RunTestsResult['status'] =
+      attrs.status === 'running' ? 'error' : attrs.status;
+
+    return {
+      status,
+      passedCount: attrs.passedCount,
+      failedCount: attrs.failedCount,
+      skippedCount: attrs.skippedCount ?? 0,
+      durationMs,
+      testFiles,
+      failures,
+      ...(attrs.errorMessage ? { errorMessage: attrs.errorMessage } : {}),
+    };
+  } catch (err) {
+    let errorMessage = err instanceof Error ? err.message : String(err);
+    log.error(`runTestsInMemory error: ${errorMessage}`);
+    return {
+      status: 'error',
+      passedCount: 0,
+      failedCount: 0,
+      skippedCount: 0,
+      durationMs: 0,
+      testFiles,
+      failures: [],
+      errorMessage,
+    };
+  }
+}
+
+function emptyErrorResult(errorMessage: string): RunTestsResult {
+  return {
+    status: 'error',
+    passedCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    durationMs: 0,
+    testFiles: [],
+    failures: [],
+    errorMessage,
+  };
 }

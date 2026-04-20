@@ -803,10 +803,106 @@ module(
   },
 );
 
-// Note: run_tests is no longer exposed as an agent tool — the validation
-// pipeline runs tests automatically via executeTestRunFromRealm after
-// each agent turn. The former buildRunTestsTool implementation has been
-// removed and is no longer part of buildFactoryTools.
+// ---------------------------------------------------------------------------
+// run_tests tool (in-memory validation — CS-10777)
+// ---------------------------------------------------------------------------
+
+module('buildFactoryTools — run_tests', function () {
+  test('registers run_tests with empty parameters', function (assert) {
+    let config = makeConfig();
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runTests = tools.find((t) => t.name === 'run_tests')!;
+    assert.ok(runTests, 'run_tests tool is registered');
+    assert.deepEqual(
+      runTests.parameters,
+      { type: 'object', properties: {} },
+      'run_tests takes no arguments',
+    );
+  });
+
+  test('delegates to injected runTestsInMemory and forwards realm config', async function (assert) {
+    let capturedOptions:
+      | {
+          targetRealmUrl: string;
+          realmServerUrl: string;
+          hostAppUrl: string;
+        }
+      | undefined;
+    let stubResult = {
+      status: 'passed' as const,
+      passedCount: 3,
+      failedCount: 0,
+      skippedCount: 0,
+      durationMs: 42,
+      testFiles: ['foo.test.gts'],
+      failures: [],
+    };
+
+    let config = makeConfig({
+      hostAppUrl: 'https://host.example.test/',
+      runTestsInMemory: async (options) => {
+        capturedOptions = {
+          targetRealmUrl: options.targetRealmUrl,
+          realmServerUrl: options.realmServerUrl,
+          hostAppUrl: options.hostAppUrl,
+        };
+        return stubResult;
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runTests = tools.find((t) => t.name === 'run_tests')!;
+
+    let result = await runTests.execute({});
+
+    assert.deepEqual(result, stubResult, 'tool returns the in-memory result');
+    assert.strictEqual(
+      capturedOptions?.targetRealmUrl,
+      TARGET_REALM,
+      'forwards targetRealmUrl from config',
+    );
+    assert.strictEqual(
+      capturedOptions?.realmServerUrl,
+      'https://realms.example.test/',
+      'forwards realmServerUrl from config',
+    );
+    assert.strictEqual(
+      capturedOptions?.hostAppUrl,
+      'https://host.example.test/',
+      'forwards hostAppUrl from config',
+    );
+  });
+
+  test('falls back to realmServerUrl when hostAppUrl is not configured', async function (assert) {
+    let capturedHost: string | undefined;
+    let config = makeConfig({
+      runTestsInMemory: async (options) => {
+        capturedHost = options.hostAppUrl;
+        return {
+          status: 'passed' as const,
+          passedCount: 0,
+          failedCount: 0,
+          skippedCount: 0,
+          durationMs: 0,
+          testFiles: [],
+          failures: [],
+        };
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runTests = tools.find((t) => t.name === 'run_tests')!;
+
+    await runTests.execute({});
+
+    assert.strictEqual(
+      capturedHost,
+      'https://realms.example.test/',
+      'hostAppUrl defaults to realmServerUrl',
+    );
+  });
+});
 
 // ---------------------------------------------------------------------------
 // add_comment tool

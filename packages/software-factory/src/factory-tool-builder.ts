@@ -18,6 +18,8 @@ import type { ToolExecutor } from './factory-tool-executor';
 import type { ToolRegistry } from './factory-tool-registry';
 import { logger } from './logger';
 import { ensureJsonExtension, addCommentToIssue } from './realm-operations';
+import { runTestsInMemory } from './test-run-execution';
+import type { RunTestsInMemoryOptions, RunTestsResult } from './test-run-types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -56,6 +58,10 @@ export interface ToolBuilderConfig {
       relationships?: Record<string, unknown>;
     }
   >;
+  /** Injected for testing — defaults to runTestsInMemory. */
+  runTestsInMemory?: (
+    options: RunTestsInMemoryOptions,
+  ) => Promise<RunTestsResult>;
 }
 
 export interface ToolCallEntry {
@@ -100,6 +106,7 @@ export function buildFactoryTools(
     buildFetchTranspiledModuleTool(config),
     buildSearchRealmTool(config),
     buildRunCommandTool(config),
+    buildRunTestsTool(config),
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
@@ -537,8 +544,30 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
   };
 }
 
-// Note: buildRunTestsTool was removed — the validation pipeline runs tests
-// automatically via executeTestRunFromRealm after each agent turn.
+function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
+  let execute = config.runTestsInMemory ?? runTestsInMemory;
+  return {
+    name: 'run_tests',
+    description:
+      "Run the realm's QUnit tests against the target realm and return an " +
+      'in-memory result object (status, pass/fail counts, failure details). ' +
+      'Safe to call repeatedly for mid-turn self-validation — this tool does ' +
+      'NOT create a TestRun card or any other realm artifact. The ' +
+      'orchestrator still runs the full validation pipeline (which writes a ' +
+      'TestRun card) automatically after signal_done, so calling this is ' +
+      'optional. Takes no arguments — runs all *.test.gts files in the ' +
+      'target realm. Auth: per-realm JWT.',
+    parameters: { type: 'object', properties: {} },
+    execute: async () => {
+      return execute({
+        targetRealmUrl: config.targetRealmUrl,
+        client: config.client,
+        realmServerUrl: config.realmServerUrl,
+        hostAppUrl: config.hostAppUrl ?? config.realmServerUrl,
+      });
+    },
+  };
+}
 
 function buildSignalDoneTool(): FactoryTool {
   return {
