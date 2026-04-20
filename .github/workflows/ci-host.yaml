@@ -20,10 +20,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  checks: write
-  contents: write
+  contents: read
   id-token: write
-  pull-requests: write
+  pull-requests: read
 
 jobs:
   check-percy:
@@ -335,6 +334,14 @@ jobs:
       cancel-in-progress: true
     needs: host-test
     runs-on: ubuntu-latest
+    permissions:
+      # checks/pull-requests: needed by publish-unit-test-result-action to post
+      # the junit summary back to the PR / commit.
+      checks: write
+      pull-requests: write
+      # contents: needed only for the "Update memory baseline" step, which
+      # pushes a commit — and only fires on push-to-main (see step condition).
+      contents: write
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
