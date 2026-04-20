@@ -5493,7 +5493,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: { name: 'Maple' },
                 meta: {
-                  adoptsFrom: { module: './person', name: 'Person' },
+                  adoptsFrom: { module: './person' as RealmResourceIdentifier, name: 'Person' },
                 },
               },
             },
@@ -5592,7 +5592,7 @@ module(basename(__filename), function () {
           fileExtract: true,
           fileRender: true,
           fileDefCodeRef: {
-            module: `${baseRealm.url}json-file-def`,
+            module: `${baseRealm.url}json-file-def` as RealmResourceIdentifier,
             name: 'JsonFileDef',
           },
         },

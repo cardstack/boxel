@@ -1,7 +1,10 @@
 import { module, test } from 'qunit';
 import type { SuperTest, Test } from 'supertest';
 import { basename } from 'path';
-import type { Realm } from '@cardstack/runtime-common';
+import type {
+  Realm,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
 import type { Server } from 'http';
 import { closeServer, setupPermissionedRealmCached } from '../helpers';
@@ -313,7 +316,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           type: 'card',
           attributes: { title: 'Hello' },
           meta: {
-            adoptsFrom: { module: './basic.gts', name: 'Basic' },
+            adoptsFrom: { module: './basic.gts' as RealmResourceIdentifier, name: 'Basic' },
           },
         },
       },
@@ -323,7 +326,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           type: 'card',
           attributes: {},
           meta: {
-            adoptsFrom: { module: './whitespace.gts', name: 'Whitespace' },
+            adoptsFrom: { module: './whitespace.gts' as RealmResourceIdentifier, name: 'Whitespace' },
           },
         },
       },
@@ -334,7 +337,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           attributes: { name: '*Alice*' },
           meta: {
             adoptsFrom: {
-              module: './field-delegation.gts',
+              module: './field-delegation.gts' as RealmResourceIdentifier,
               name: 'FieldDelegation',
             },
           },
@@ -347,7 +350,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           attributes: { body: 'Some **bold** text' },
           meta: {
             adoptsFrom: {
-              module: './markdown-field.gts',
+              module: './markdown-field.gts' as RealmResourceIdentifier,
               name: 'PassThrough',
             },
           },
@@ -359,7 +362,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           type: 'card',
           attributes: { value: 'Hello *world* [link]' },
           meta: {
-            adoptsFrom: { module: './escape.gts', name: 'Escape' },
+            adoptsFrom: { module: './escape.gts' as RealmResourceIdentifier, name: 'Escape' },
           },
         },
       },
@@ -369,7 +372,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           type: 'card',
           attributes: { title: 'Fallback Title' },
           meta: {
-            adoptsFrom: { module: './fallback.gts', name: 'Fallback' },
+            adoptsFrom: { module: './fallback.gts' as RealmResourceIdentifier, name: 'Fallback' },
           },
         },
       },
@@ -379,7 +382,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           type: 'card',
           attributes: { title: 'Right' },
           meta: {
-            adoptsFrom: { module: './override.gts', name: 'Override' },
+            adoptsFrom: { module: './override.gts' as RealmResourceIdentifier, name: 'Override' },
           },
         },
       },
@@ -389,7 +392,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           type: 'card',
           attributes: { title: 'Featured' },
           meta: {
-            adoptsFrom: { module: './frontmatter.gts', name: 'Frontmatter' },
+            adoptsFrom: { module: './frontmatter.gts' as RealmResourceIdentifier, name: 'Frontmatter' },
           },
         },
       },
@@ -399,7 +402,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           type: 'card',
           attributes: { childTitle: 'Child' },
           meta: {
-            adoptsFrom: { module: './nested.gts', name: 'NestedChild' },
+            adoptsFrom: { module: './nested.gts' as RealmResourceIdentifier, name: 'NestedChild' },
           },
         },
       },
@@ -413,7 +416,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: './nested.gts', name: 'NestedParent' },
+            adoptsFrom: { module: './nested.gts' as RealmResourceIdentifier, name: 'NestedParent' },
           },
         },
       },
@@ -423,7 +426,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           type: 'card',
           attributes: { title: 'Alpha' },
           meta: {
-            adoptsFrom: { module: './cache.gts', name: 'Cache' },
+            adoptsFrom: { module: './cache.gts' as RealmResourceIdentifier, name: 'Cache' },
           },
         },
       },
