@@ -80,7 +80,7 @@ module('Integration | commands | authed-fetch', function (hooks) {
     mockFetchResponse = {
       ok: true,
       status: 200,
-      json: async () => ({ data: 'hello' }),
+      text: async () => JSON.stringify({ data: 'hello' }),
     };
     let commandService = getService('command-service');
     let command = new AuthedFetchCommand(commandService.commandContext);
@@ -96,9 +96,7 @@ module('Integration | commands | authed-fetch', function (hooks) {
     mockFetchResponse = {
       ok: false,
       status: 404,
-      json: async () => {
-        throw new Error('not json');
-      },
+      text: async () => 'not found',
     };
     let commandService = getService('command-service');
     let command = new AuthedFetchCommand(commandService.commandContext);

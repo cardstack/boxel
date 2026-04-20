@@ -4,9 +4,10 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import Service from '@ember/service';
+
 import GetAvailableRealmUrlsCommand from '@cardstack/host/commands/get-available-realm-urls';
 import RealmService from '@cardstack/host/services/realm';
-import RealmServerService from '@cardstack/host/services/realm-server';
 
 import {
   setupIntegrationTestRealm,
@@ -29,10 +30,10 @@ class StubRealmService extends RealmService {
   }
 }
 
-class StubRealmServerService extends RealmServerService {
-  override get availableRealmURLs() {
-    return ['https://example.com/realm-a/', 'https://example.com/realm-b/'];
-  }
+class StubRealmServerService extends Service {
+  availableRealmURLs = ['https://example.com/realm-a/', 'https://example.com/realm-b/'];
+  async fetchCatalogRealms() {}
+  setClient() {}
 }
 
 module('Integration | commands | get-available-realm-urls', function (hooks) {
