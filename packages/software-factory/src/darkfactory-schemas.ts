@@ -12,6 +12,7 @@ import type {
   ResolvedCodeRef,
   LooseSingleCardDocument,
   Relationship,
+  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import { logger } from './logger';
@@ -111,7 +112,7 @@ export function buildCardDocument(
       attributes,
       meta: {
         adoptsFrom: {
-          module: moduleUrl,
+          module: moduleUrl as RealmResourceIdentifier,
           name: cardName,
         },
       },

@@ -8,7 +8,10 @@
  * that happen to use the Playwright test runner for harness management.
  */
 
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import type {
+  LooseSingleCardDocument,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 
 import { test } from './fixtures';
 import { expect } from '@playwright/test';
@@ -280,7 +283,7 @@ async function buildToolsForRealm(
       client,
       realm.realmServerURL.href,
       realm.realmURL.href,
-      { module: darkfactoryModule, name },
+      { module: darkfactoryModule as RealmResourceIdentifier, name },
     );
     if (schema) {
       cardTypeSchemas.set(name, schema);
@@ -293,7 +296,7 @@ async function buildToolsForRealm(
     client,
     realm.realmServerURL.href,
     baseRealmUrl,
-    { module: 'https://cardstack.com/base/spec', name: 'Spec' },
+    { module: 'https://cardstack.com/base/spec' as RealmResourceIdentifier, name: 'Spec' },
   );
   if (specSchema) {
     cardTypeSchemas.set('Spec', specSchema);

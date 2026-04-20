@@ -18,6 +18,7 @@
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type {
   LooseSingleCardDocument,
+  RealmResourceIdentifier,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { specRef } from '@cardstack/runtime-common/constants';
@@ -311,7 +312,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
               adoptsFrom.module = new URL(
                 adoptsFrom.module,
                 exampleCardUrl,
-              ).href;
+              ).href as RealmResourceIdentifier;
             }
             exampleRead.document.data.id = exampleCardUrl;
             exampleInstances.push({

@@ -11,6 +11,7 @@ import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type {
   LooseSingleCardDocument,
   Relationship,
+  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import { buildCardDocument } from './darkfactory-schemas';
@@ -521,7 +522,7 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
           attributes,
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/spec',
+              module: 'https://cardstack.com/base/spec' as RealmResourceIdentifier,
               name: 'Spec',
             },
           },
