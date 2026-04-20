@@ -117,6 +117,7 @@ module.exports = function (environment) {
       process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
     resolvedOpenRouterRealmURL:
       process.env.RESOLVED_OPENROUTER_REALM_URL || defaults.openRouterRealmURL,
+    useExternalCatalog: process.env.USE_EXTERNAL_CATALOG === 'true',
     featureFlags: {
       SHOW_ASK_AI: process.env.SHOW_ASK_AI === 'true' || false,
     },
@@ -147,6 +148,7 @@ module.exports = function (environment) {
     // Catalog realms are not available in test environment
     ENV.resolvedCatalogRealmURL = undefined;
     ENV.resolvedExternalCatalogRealmURL = undefined;
+    ENV.useExternalCatalog = false;
     ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
   }
 

@@ -352,6 +352,17 @@ export default class RealmServerService extends Service {
   }
 
   @cached
+  get displayedCatalogRealmURLs() {
+    if (ENV.useExternalCatalog && ENV.resolvedCatalogRealmURL) {
+      let catalogURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
+      return this.catalogRealmURLs.filter(
+        (url) => ensureTrailingSlash(url) !== catalogURL,
+      );
+    }
+    return this.catalogRealmURLs;
+  }
+
+  @cached
   get availableRealmIndexCardIds() {
     return this.availableRealmURLs.map((url) => `${url}index`);
   }
@@ -424,6 +435,7 @@ export default class RealmServerService extends Service {
     let { data } = await response.json();
     let externalCatalogURL = ENV.resolvedExternalCatalogRealmURL;
     let showExternalCatalog =
+      ENV.useExternalCatalog ||
       window.localStorage.getItem('boxel:externalCatalog') === 'true';
 
     data.forEach((publicRealm: { id: string }) => {
