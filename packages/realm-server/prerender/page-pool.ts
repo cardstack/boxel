@@ -269,29 +269,19 @@ export class PagePool {
         // best effort
       }
     }
-    // Snapshot and clear state up-front so a concurrent caller (or anyone
-    // iterating the pool while we close) sees an empty pool and doesn't try
-    // to close the same BrowserContext twice. Without this, two concurrent
-    // closeAll calls race on the same entries and the second caller hits
-    // "Failed to find context with id <X>" when its context.close() arrives
-    // after the first caller already disposed the context.
-    let poolEntries: PoolEntry[] = [];
     for (let entries of this.#affinityPages.values()) {
       for (let entry of entries) {
-        poolEntries.push(entry);
+        await this.#closeEntry(entry);
       }
     }
-    let standbys = [...this.#standbys.values()];
+    for (let entry of this.#standbys.values()) {
+      await this.#closeEntry(entry);
+    }
     this.#affinityPages.clear();
     this.#standbys.clear();
     this.#lru.clear();
+    this.#ensuringStandbys = null;
     this.#creatingStandbys = 0;
-    for (let entry of poolEntries) {
-      await this.#closeEntry(entry);
-    }
-    for (let entry of standbys) {
-      await this.#closeEntry(entry);
-    }
   }
 
   async #ensureStandbyPool(): Promise<void> {
