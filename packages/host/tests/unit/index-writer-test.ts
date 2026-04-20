@@ -1168,7 +1168,10 @@ module('Unit | index-writer', function (hooks) {
       type: 'card',
       attributes: { name: 'Van Gogh' },
       meta: {
-        adoptsFrom: { module: `./person` as RealmResourceIdentifier, name: 'Person' },
+        adoptsFrom: {
+          module: `./person` as RealmResourceIdentifier,
+          name: 'Person',
+        },
       },
     };
     let now = Date.now();

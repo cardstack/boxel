@@ -518,7 +518,10 @@ module(`Integration | search resource`, function (hooks) {
       sort: [
         {
           by: 'author.firstName',
-          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
           direction: 'asc',
         },
       ],

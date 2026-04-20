@@ -23,7 +23,10 @@ module('normalizeQueryDefinition', function () {
     let resource: LooseCardResource = {
       id: 'https://realm.example/cards/1',
       meta: {
-        adoptsFrom: { module: 'https://example.com/base' as RealmResourceIdentifier, name: 'BaseCard' },
+        adoptsFrom: {
+          module: 'https://example.com/base' as RealmResourceIdentifier,
+          name: 'BaseCard',
+        },
       },
       attributes: {
         profile: { city: 'NYC', realmVal: 'https://other.realm/' },

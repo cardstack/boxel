@@ -233,7 +233,8 @@ function parseCommandParam(
       return undefined;
     }
     return {
-      module: `${url.origin}${pathname.slice(0, index)}` as RealmResourceIdentifier,
+      module:
+        `${url.origin}${pathname.slice(0, index)}` as RealmResourceIdentifier,
       name: pathname.slice(index + 1),
     };
   } catch {

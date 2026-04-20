@@ -46,7 +46,10 @@ module('Unit | qs | parse', function () {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
         },
       ],
     };

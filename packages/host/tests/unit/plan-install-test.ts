@@ -449,11 +449,13 @@ module('Unit | Catalog | Install Plan Builder', function () {
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name',
-                  module: `${sourceRealmURL.href}some-folder/some` as RealmResourceIdentifier,
+                  module:
+                    `${sourceRealmURL.href}some-folder/some` as RealmResourceIdentifier,
                 },
                 targetCodeRef: {
                   name: 'Some Ref Name',
-                  module: `${targetRealmURL}xyz/some-folder/some` as RealmResourceIdentifier,
+                  module:
+                    `${targetRealmURL}xyz/some-folder/some` as RealmResourceIdentifier,
                 },
               },
             ],
@@ -466,11 +468,13 @@ module('Unit | Catalog | Install Plan Builder', function () {
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name',
-                  module: `${sourceRealmURL.href}some-folder/some` as RealmResourceIdentifier,
+                  module:
+                    `${sourceRealmURL.href}some-folder/some` as RealmResourceIdentifier,
                 },
                 targetCodeRef: {
                   name: 'Some Ref Name',
-                  module: `${targetRealmURL}xyz/some-folder/some` as RealmResourceIdentifier,
+                  module:
+                    `${targetRealmURL}xyz/some-folder/some` as RealmResourceIdentifier,
                 },
               },
             ],
@@ -484,11 +488,13 @@ module('Unit | Catalog | Install Plan Builder', function () {
             [
               {
                 sourceCodeRef: {
-                  module: `${sourceRealmURL.href}some-folder/some` as RealmResourceIdentifier,
+                  module:
+                    `${sourceRealmURL.href}some-folder/some` as RealmResourceIdentifier,
                   name: 'Some Ref Name',
                 },
                 targetCodeRef: {
-                  module: `${targetRealmURL}xyz/some-folder/some` as RealmResourceIdentifier,
+                  module:
+                    `${targetRealmURL}xyz/some-folder/some` as RealmResourceIdentifier,
                   name: 'Some Ref Name',
                 },
               },
@@ -506,7 +512,8 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 sourceCard: {} as CardDef,
                 targetCodeRef: {
                   name: 'Some Ref Name',
-                  module: `${targetRealmURL}xyz/some-folder/some` as RealmResourceIdentifier,
+                  module:
+                    `${targetRealmURL}xyz/some-folder/some` as RealmResourceIdentifier,
                 },
                 lid: 'xyz/some-folder/Example/1',
               },
@@ -521,7 +528,8 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 sourceCard: {} as CardDef,
                 targetCodeRef: {
                   name: 'Some Ref Name',
-                  module: `${targetRealmURL}xyz/some-folder/some` as RealmResourceIdentifier,
+                  module:
+                    `${targetRealmURL}xyz/some-folder/some` as RealmResourceIdentifier,
                 },
                 lid: 'xyz/some-folder/Example/1',
               },
@@ -539,7 +547,8 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 sourceCard: {} as CardDef,
                 targetCodeRef: {
                   name: 'Some Ref Name',
-                  module: `${targetRealmURL}xyz/some-folder/some` as RealmResourceIdentifier,
+                  module:
+                    `${targetRealmURL}xyz/some-folder/some` as RealmResourceIdentifier,
                 },
                 lid: 'xyz/some-folder/Example/1',
               },
@@ -556,11 +565,13 @@ module('Unit | Catalog | Install Plan Builder', function () {
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name',
-                  module: `${sourceRealmURL.href}some-folder/some` as RealmResourceIdentifier,
+                  module:
+                    `${sourceRealmURL.href}some-folder/some` as RealmResourceIdentifier,
                 },
                 targetCodeRef: {
                   name: 'Some Ref Name',
-                  module: `${targetRealmURL}xyz/some-folder/some` as RealmResourceIdentifier,
+                  module:
+                    `${targetRealmURL}xyz/some-folder/some` as RealmResourceIdentifier,
                 },
               },
             ],
@@ -573,11 +584,13 @@ module('Unit | Catalog | Install Plan Builder', function () {
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name 2',
-                  module: `${sourceRealmURL.href}some-folder/some` as RealmResourceIdentifier,
+                  module:
+                    `${sourceRealmURL.href}some-folder/some` as RealmResourceIdentifier,
                 },
                 targetCodeRef: {
                   name: 'Some Ref Name 2',
-                  module: `${targetRealmURL}xyz/some-folder/some` as RealmResourceIdentifier,
+                  module:
+                    `${targetRealmURL}xyz/some-folder/some` as RealmResourceIdentifier,
                 },
               },
             ],
@@ -590,11 +603,13 @@ module('Unit | Catalog | Install Plan Builder', function () {
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name 3',
-                  module: `${sourceRealmURL.href}some-folder/some` as RealmResourceIdentifier,
+                  module:
+                    `${sourceRealmURL.href}some-folder/some` as RealmResourceIdentifier,
                 },
                 targetCodeRef: {
                   name: 'Some Ref Name 3',
-                  module: `${targetRealmURL}xyz/some-folder/some-3` as RealmResourceIdentifier,
+                  module:
+                    `${targetRealmURL}xyz/some-folder/some-3` as RealmResourceIdentifier,
                 },
               },
             ],

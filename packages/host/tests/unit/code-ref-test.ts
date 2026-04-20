@@ -153,7 +153,10 @@ module('code-ref', function (hooks) {
     };
     visitModuleDeps(json, (moduleURL, setModuleURL) => {
       setModuleURL(
-        moduleURL.replace('code-ref-test', 'foo-bar') as RealmResourceIdentifier,
+        moduleURL.replace(
+          'code-ref-test',
+          'foo-bar',
+        ) as RealmResourceIdentifier,
       );
     });
     assert.deepEqual(json, {
