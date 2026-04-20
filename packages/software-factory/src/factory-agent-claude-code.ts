@@ -131,6 +131,20 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
 
     try {
       for await (let message of q) {
+        // Surface the actual model the Agent SDK picked (inherited from the
+        // user's Claude Code install) so operators can tell at a glance
+        // which model is driving the run. The init event fires once at the
+        // start of every `query()` call, before any tool use — logging it
+        // here gives one line per agent turn in the factory's output.
+        if (
+          message.type === 'system' &&
+          (message as { subtype?: string }).subtype === 'init'
+        ) {
+          let modelName = (message as { model?: string }).model;
+          if (modelName) {
+            log.info(`Claude Agent SDK model: ${modelName}`);
+          }
+        }
         if (this.config.debug) {
           this.debugLog(message);
         }
