@@ -354,8 +354,9 @@ export default class RealmServerService extends Service {
   @cached
   get displayedCatalogRealmURLs() {
     if (ENV.useExternalCatalog && ENV.resolvedCatalogRealmURL) {
+      let catalogURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
       return this.catalogRealmURLs.filter(
-        (url) => url !== ENV.resolvedCatalogRealmURL,
+        (url) => ensureTrailingSlash(url) !== catalogURL,
       );
     }
     return this.catalogRealmURLs;
