@@ -178,16 +178,20 @@ export async function runFactoryIssueLoop(
 
   // 4. Agent
   let provider: FactoryAgentProvider = config.agent ?? 'claude';
-  let agent: LoopAgent =
-    config.agentOverride ??
-    createLoopAgent({
+  let agent: LoopAgent;
+  if (config.agentOverride) {
+    agent = config.agentOverride;
+    log.info(`Agent backend: override (${agent.constructor.name})`);
+  } else {
+    agent = createLoopAgent({
       provider,
       openRouterModel: config.openRouterModel,
       realmServerUrl,
       client,
       debug: config.debug,
     });
-  log.info(`Agent backend: ${provider}`);
+    log.info(`Agent backend: ${provider}`);
+  }
 
   // 5. Validator factory
   let createValidator = (issueId: string) =>
@@ -235,16 +239,37 @@ export interface CreateLoopAgentConfig {
   debug?: boolean;
 }
 
+/**
+ * Fail fast when a `--agent` provider is recognized but not yet implemented.
+ *
+ * Call this before doing any work that has observable side effects (brief
+ * fetch, realm bootstrap, seed-issue creation) so an unsupported backend
+ * doesn't leave half-created state behind. It is also called defensively
+ * inside `createLoopAgent()` so a caller that skips the early check still
+ * errors out before the agent is used.
+ */
+export function assertAgentProviderImplemented(
+  provider: FactoryAgentProvider,
+): void {
+  if (provider === 'codex') {
+    throw new Error(
+      'Codex CLI native agent is not yet implemented. ' +
+        'Re-run with --agent openrouter (tracked in CS-10594).',
+    );
+  }
+}
+
 export function createLoopAgent(config: CreateLoopAgentConfig): LoopAgent {
+  assertAgentProviderImplemented(config.provider);
   switch (config.provider) {
     case 'claude':
       return new ClaudeCodeFactoryAgent({ debug: config.debug });
 
     case 'codex':
-      throw new Error(
-        'Codex CLI native agent is not yet implemented. ' +
-          'Re-run with --agent openrouter (tracked in CS-10594).',
-      );
+      // Unreachable — assertAgentProviderImplemented() threw above. The
+      // case remains so exhaustiveness checks on FactoryAgentProvider stay
+      // meaningful if a future provider reuses this pattern.
+      throw new Error('unreachable');
 
     case 'openrouter': {
       let model =

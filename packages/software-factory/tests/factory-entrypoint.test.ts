@@ -257,6 +257,53 @@ module('factory-entrypoint', function (hooks) {
     });
   });
 
+  test('runFactoryEntrypoint rejects --agent codex before any side effects', async function (assert) {
+    useTestProfile();
+    let createSeedCalled = false;
+    let bootstrapCalled = false;
+
+    await assert.rejects(
+      runFactoryEntrypoint(
+        {
+          briefUrl,
+          targetRealmUrl,
+          realmServerUrl: null,
+          agent: 'codex',
+        },
+        {
+          bootstrapTargetRealm: async () => {
+            bootstrapCalled = true;
+            return bootstrappedTargetRealm;
+          },
+          createSeed: async () => {
+            createSeedCalled = true;
+            return mockSeedResult;
+          },
+          runIssueLoop: async () => ({
+            outcome: 'all_issues_done' as const,
+            outerCycles: 0,
+            issueResults: [],
+          }),
+          fetch: async () =>
+            new Response('{}', {
+              status: 200,
+              headers: { 'content-type': SupportedMimeType.JSON },
+            }),
+        },
+      ),
+      /Codex CLI native agent is not yet implemented/,
+    );
+
+    assert.false(
+      bootstrapCalled,
+      'bootstrapTargetRealm must not run for unsupported --agent',
+    );
+    assert.false(
+      createSeedCalled,
+      'createSeed must not run for unsupported --agent',
+    );
+  });
+
   test('wantsFactoryEntrypointHelp detects help flag', function (assert) {
     assert.true(wantsFactoryEntrypointHelp(['--help']));
     assert.true(wantsFactoryEntrypointHelp(['--', '--help']));

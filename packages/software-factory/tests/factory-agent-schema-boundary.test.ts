@@ -186,6 +186,14 @@ module('factory-agent-schema-boundary / runtime', function () {
   });
 
   test('OpenRouter path: the wire body carries raw JSON Schema tool definitions', async function (assert) {
+    // `ToolUseFactoryAgent` switches to a direct OpenRouter HTTP path when
+    // `OPENROUTER_API_KEY` is present in the environment, which would
+    // bypass our `fakeClient.authedServerFetch` capture and make this test
+    // depend on the developer/CI env. Force the proxy path for the duration
+    // of the test and restore the original value afterwards.
+    let savedApiKey = process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
+
     let capturedBody: Record<string, unknown> | undefined;
 
     // Minimal BoxelCLIClient stub that intercepts the proxied request and
@@ -221,7 +229,13 @@ module('factory-agent-schema-boundary / runtime', function () {
       stubPromptLoader,
     );
 
-    await agent.run(makeContext(), [makeTool()]);
+    try {
+      await agent.run(makeContext(), [makeTool()]);
+    } finally {
+      if (savedApiKey !== undefined) {
+        process.env.OPENROUTER_API_KEY = savedApiKey;
+      }
+    }
 
     assert.ok(capturedBody, 'OpenRouter POST body was captured');
     let toolsOnWire = (capturedBody as { tools?: unknown[] }).tools;

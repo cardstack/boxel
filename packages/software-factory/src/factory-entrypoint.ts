@@ -10,6 +10,7 @@ import {
 import { loadFactoryBrief, type FactoryBrief } from './factory-brief';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 import {
+  assertAgentProviderImplemented,
   runFactoryIssueLoop,
   type IssueLoopWiringConfig,
 } from './factory-issue-loop-wiring';
@@ -213,6 +214,12 @@ export async function runFactoryEntrypoint(
   options: FactoryEntrypointOptions,
   dependencies?: RunFactoryEntrypointDependencies,
 ): Promise<FactoryEntrypointSummary> {
+  // Reject unsupported agent backends before any realm/brief side effects
+  // run — otherwise `--agent codex` would create a seed issue and mutate
+  // the target realm only to fail later when the loop tries to build the
+  // (unimplemented) agent.
+  assertAgentProviderImplemented(options.agent);
+
   let targetRealmResolution = (
     dependencies?.resolveTargetRealm ?? resolveFactoryTargetRealm
   )({
