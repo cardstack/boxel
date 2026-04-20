@@ -430,7 +430,7 @@ function makeTestRealmFileSystem(): Record<
             type: 'fieldOf',
             field: 'shippingAddress',
             card: {
-              module: './order-page',
+              module: './order-page' as RealmResourceIdentifier,
               name: 'OrderPage',
             },
           },
@@ -826,7 +826,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './fancy-person',
+                module: './fancy-person' as RealmResourceIdentifier,
                 name: 'FancyPerson',
               },
             },
@@ -1440,7 +1440,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './person.gts',
+                  module: './person.gts' as RealmResourceIdentifier,
                   name: 'Person',
                 },
               },
@@ -1949,7 +1949,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './deep-card',
+                  module: './deep-card' as RealmResourceIdentifier,
                   name: 'DeepCard',
                 },
               },
@@ -2257,7 +2257,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './module-a',
+                  module: './module-a' as RealmResourceIdentifier,
                   name: 'ModuleCard',
                 },
               },
@@ -2443,7 +2443,7 @@ module(basename(__filename), function () {
         );
 
         let personType = {
-          module: './person-rel',
+          module: './person-rel' as RealmResourceIdentifier,
           name: 'PersonRel',
         };
 
@@ -2524,7 +2524,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './relationship-consumer',
+                  module: './relationship-consumer' as RealmResourceIdentifier,
                   name: 'RelationshipConsumer',
                 },
               },
@@ -2686,7 +2686,7 @@ module(basename(__filename), function () {
               attributes: { cardTitle: 'target' },
               meta: {
                 adoptsFrom: {
-                  module: './query-rel-target',
+                  module: './query-rel-target' as RealmResourceIdentifier,
                   name: 'QueryRelTarget',
                 },
               },
@@ -2701,7 +2701,7 @@ module(basename(__filename), function () {
               attributes: { cardTitle: 'consumer' },
               meta: {
                 adoptsFrom: {
-                  module: './query-rel-consumer',
+                  module: './query-rel-consumer' as RealmResourceIdentifier,
                   name: 'QueryRelConsumer',
                 },
               },
@@ -2828,7 +2828,7 @@ module(basename(__filename), function () {
               attributes: { cardTitle: 'overlap-target' },
               meta: {
                 adoptsFrom: {
-                  module: './query-rel-overlap-target',
+                  module: './query-rel-overlap-target' as RealmResourceIdentifier,
                   name: 'QueryRelOverlapTarget',
                 },
               },
@@ -2845,7 +2845,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './query-rel-overlap-consumer',
+                  module: './query-rel-overlap-consumer' as RealmResourceIdentifier,
                   name: 'QueryRelOverlapConsumer',
                 },
               },
@@ -3048,7 +3048,7 @@ module(basename(__filename), function () {
               attributes: { name: 'Second One' },
               meta: {
                 adoptsFrom: {
-                  module: './second-rel',
+                  module: './second-rel' as RealmResourceIdentifier,
                   name: 'SecondRel',
                 },
               },
@@ -3066,7 +3066,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './first-rel',
+                  module: './first-rel' as RealmResourceIdentifier,
                   name: 'FirstRel',
                 },
               },
@@ -3083,7 +3083,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './css-relationship-consumer',
+                  module: './css-relationship-consumer' as RealmResourceIdentifier,
                   name: 'CssRelationshipConsumer',
                 },
               },
@@ -3192,7 +3192,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './loop-card',
+                  module: './loop-card' as RealmResourceIdentifier,
                   name: 'LoopCard',
                 },
               },
@@ -3209,7 +3209,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './loop-card',
+                  module: './loop-card' as RealmResourceIdentifier,
                   name: 'LoopCard',
                 },
               },
@@ -3225,7 +3225,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './loop-consumer',
+                  module: './loop-consumer' as RealmResourceIdentifier,
                   name: 'LoopConsumer',
                 },
               },
@@ -3256,7 +3256,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './loop-card',
+                  module: './loop-card' as RealmResourceIdentifier,
                   name: 'LoopCard',
                 },
               },
@@ -3373,7 +3373,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './missing-child',
+                  module: './missing-child' as RealmResourceIdentifier,
                   name: 'MissingChild',
                 },
               },
@@ -3389,7 +3389,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './relationship-parent',
+                  module: './relationship-parent' as RealmResourceIdentifier,
                   name: 'RelationshipParent',
                 },
               },
@@ -3405,7 +3405,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './relationship-grandparent',
+                  module: './relationship-grandparent' as RealmResourceIdentifier,
                   name: 'RelationshipGrandParent',
                 },
               },
@@ -3600,7 +3600,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './relationship-file-parent',
+                  module: './relationship-file-parent' as RealmResourceIdentifier,
                   name: 'RelationshipFileParent',
                 },
               },
@@ -3617,7 +3617,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './relationship-file-grandparent',
+                  module: './relationship-file-grandparent' as RealmResourceIdentifier,
                   name: 'RelationshipFileGrandParent',
                 },
               },
@@ -3808,7 +3808,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './file-relationship-consumer',
+                  module: './file-relationship-consumer' as RealmResourceIdentifier,
                   name: 'FileRelationshipConsumer',
                 },
               },
@@ -3938,7 +3938,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './pet',
+                  module: './pet' as RealmResourceIdentifier,
                   name: 'Pet',
                 },
               },
@@ -4015,7 +4015,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './pet',
+                  module: './pet' as RealmResourceIdentifier,
                   name: 'Pet',
                 },
               },
@@ -4057,7 +4057,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './pet',
+                  module: './pet' as RealmResourceIdentifier,
                   name: 'Pet',
                 },
               },
@@ -4271,7 +4271,7 @@ module(basename(__filename), function () {
               attributes: { name: 'Paris' },
               meta: {
                 adoptsFrom: {
-                  module: './city',
+                  module: './city' as RealmResourceIdentifier,
                   name: 'City',
                 },
               },
@@ -4332,7 +4332,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './person',
+                  module: './person' as RealmResourceIdentifier,
                   name: 'Person',
                 },
               },

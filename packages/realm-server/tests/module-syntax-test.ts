@@ -542,7 +542,7 @@ module(basename(__filename), function () {
         cardBeingModified: {
           type: 'fieldOf',
           field: 'details',
-          card: { module: `${testRealm}dir/person`, name: 'Person' },
+          card: { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         },
         fieldName: 'age',
         fieldDefinitionType: 'field',
@@ -600,7 +600,7 @@ module(basename(__filename), function () {
       mod.addField({
         cardBeingModified: {
           type: 'ancestorOf',
-          card: { module: `${testRealm}dir/person`, name: 'FancyPerson' },
+          card: { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'FancyPerson' },
         },
         fieldName: 'age',
         fieldDefinitionType: 'field',
@@ -661,7 +661,7 @@ module(basename(__filename), function () {
         cardBeingModified: {
           type: 'fieldOf',
           field: 'details',
-          card: { module: `${testRealm}dir/person`, name: 'Person' },
+          card: { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         },
         fieldName: 'age',
         fieldDefinitionType: 'field',
@@ -1269,7 +1269,7 @@ module(basename(__filename), function () {
       mod.removeField(
         {
           type: 'ancestorOf',
-          card: { module: `${testRealm}dir/person`, name: 'FancyPerson' },
+          card: { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'FancyPerson' },
         },
         'firstName',
       );
@@ -1312,7 +1312,7 @@ module(basename(__filename), function () {
         {
           type: 'fieldOf',
           field: 'details',
-          card: { module: `${testRealm}dir/person`, name: 'Person' },
+          card: { module: `${testRealm}dir/person` as RealmResourceIdentifier, name: 'Person' },
         },
         'nickName',
       );

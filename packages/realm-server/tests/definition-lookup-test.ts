@@ -126,7 +126,7 @@ module(basename(__filename), function () {
                 definition: {
                   type: 'card-def',
                   codeRef: {
-                    module: moduleURL.href,
+                    module: moduleURL.href as RealmResourceIdentifier,
                     name: 'Person',
                   },
                   displayName: 'Person',
@@ -136,7 +136,7 @@ module(basename(__filename), function () {
                       isPrimitive: true,
                       isComputed: false,
                       fieldOrCard: {
-                        module: 'https://cardstack.com/base/string',
+                        module: 'https://cardstack.com/base/string' as RealmResourceIdentifier,
                         name: 'default',
                       },
                       serializerName: undefined,
@@ -361,7 +361,7 @@ module(basename(__filename), function () {
                 definition: {
                   type: 'card-def',
                   codeRef: {
-                    module: moduleAlias,
+                    module: moduleAlias as RealmResourceIdentifier,
                     name: 'Person',
                   },
                   displayName: `Person v${version}`,

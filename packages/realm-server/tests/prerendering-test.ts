@@ -285,7 +285,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './person',
+                  module: './person' as RealmResourceIdentifier,
                   name: 'Person',
                 },
               },
@@ -1921,7 +1921,7 @@ module(basename(__filename), function () {
                     return {
                       filter: {
                         on: {
-                          module: 'https://cardstack.com/base/card-api',
+                          module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
                           name: 'FileDef',
                         },
                         eq: {
@@ -2455,7 +2455,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './person',
+              module: './person' as RealmResourceIdentifier,
               name: 'Person',
             },
           },
@@ -2468,7 +2468,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './person',
+              module: './person' as RealmResourceIdentifier,
               name: 'Person',
             },
           },
@@ -2505,7 +2505,7 @@ module(basename(__filename), function () {
           attributes: {},
           meta: {
             adoptsFrom: {
-              module: './query-directory',
+              module: './query-directory' as RealmResourceIdentifier,
               name: 'QueryDirectory',
             },
           },
@@ -2537,7 +2537,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './query-directory-proxy',
+              module: './query-directory-proxy' as RealmResourceIdentifier,
               name: 'QueryDirectoryProxy',
             },
           },
@@ -2650,7 +2650,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: './person' as RealmResourceIdentifier,
                 name: 'Person',
               },
             },
@@ -2663,7 +2663,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: './person' as RealmResourceIdentifier,
                 name: 'Person',
               },
             },
@@ -2700,7 +2700,7 @@ module(basename(__filename), function () {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: './query-directory',
+                module: './query-directory' as RealmResourceIdentifier,
                 name: 'QueryDirectory',
               },
             },
@@ -2732,7 +2732,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './query-directory-proxy',
+                module: './query-directory-proxy' as RealmResourceIdentifier,
                 name: 'QueryDirectoryProxy',
               },
             },
@@ -5279,7 +5279,7 @@ module(basename(__filename), function () {
           data: {
             attributes: { info: `Detail ${i}` },
             meta: {
-              adoptsFrom: { module: '../detail', name: 'Detail' },
+              adoptsFrom: { module: '../detail' as RealmResourceIdentifier, name: 'Detail' },
             },
           },
         };
@@ -5333,7 +5333,7 @@ module(basename(__filename), function () {
               },
             },
             meta: {
-              adoptsFrom: { module: '../child-config', name: 'ChildConfig' },
+              adoptsFrom: { module: '../child-config' as RealmResourceIdentifier, name: 'ChildConfig' },
             },
           },
         };
@@ -5350,7 +5350,7 @@ module(basename(__filename), function () {
         data: {
           relationships: childRelationships,
           meta: {
-            adoptsFrom: { module: './parent-card', name: 'ParentCard' },
+            adoptsFrom: { module: './parent-card' as RealmResourceIdentifier, name: 'ParentCard' },
           },
         },
       };
