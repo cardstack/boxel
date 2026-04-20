@@ -110,18 +110,7 @@ import {
   getFileWithFallbacks,
   type TextFileRef,
 } from './stream';
-// Lazy import: transpile pulls in glimmer-scoped-css/ast-transform → postcss →
-// source-map-js, which the browser bundler can't resolve at load time. Only
-// the realm server actually calls transpileJS, so defer it.
-let transpileJSImpl: typeof import('./transpile').transpileJS | undefined;
-async function transpileJS(
-  ...args: Parameters<typeof import('./transpile').transpileJS>
-) {
-  if (!transpileJSImpl) {
-    transpileJSImpl = (await import('./transpile')).transpileJS;
-  }
-  return transpileJSImpl(...args);
-}
+import { transpileJS } from './transpile';
 import type { Method, RouteTable } from './router';
 import {
   AuthenticationError,
