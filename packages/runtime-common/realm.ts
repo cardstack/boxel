@@ -112,7 +112,7 @@ async function transpileJS(
   ...args: Parameters<typeof import('./transpile').transpileJS>
 ) {
   if (!transpileJSImpl) {
-    transpileJSImpl = (await import('./transpile')).transpileJS;
+    transpileJSImpl = (await import('./transpile.ts')).transpileJS;
   }
   return transpileJSImpl(...args);
 }
