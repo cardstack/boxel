@@ -223,14 +223,16 @@ Current date and time: 2025-06-11T11:43:00.533Z
                 inheritanceChain: [
                   {
                     codeRef: {
-                      module: 'http://localhost:4201/experiments/author',
+                      module:
+                        'http://localhost:4201/experiments/author' as RealmResourceIdentifier,
                       name: 'Address',
                     },
                     fields: ['street', 'city', 'state'],
                   },
                   {
                     codeRef: {
-                      module: 'https://cardstack.com/base/card-api',
+                      module:
+                        'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
                       name: 'CardDef',
                     },
                     fields: [],
