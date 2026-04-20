@@ -1035,11 +1035,7 @@ export default class StoreService extends Service implements StoreInterface {
       return cardIdToURL(id).href;
     };
 
-    let normalizeRelationship = (
-      relationship: CardDef['relationships'] extends Record<string, infer R>
-        ? R
-        : any,
-    ) => {
+    let normalizeRelationship = (relationship: Relationship | undefined) => {
       if (!relationship?.data) {
         return relationship;
       }

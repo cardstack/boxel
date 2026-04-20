@@ -252,10 +252,9 @@ export function identifyCard(
     // "@cardstack/catalog/piano") for portability. Only resolve to absolute
     // URL when the module path is a registered prefix — relative paths and
     // bare specifiers are left untouched so identifyCard() never throws.
-    let resolvedModule =
-      isRegisteredPrefix(ref.module)
-        ? resolveCardReference(ref.module, undefined)
-        : ref.module;
+    let resolvedModule = isRegisteredPrefix(ref.module)
+      ? resolveCardReference(ref.module, undefined)
+      : ref.module;
     let resolvedRef = { ...ref, module: resolvedModule };
     return maybeRelativeURL
       ? { ...resolvedRef, module: maybeRelativeURL(resolvedRef.module) }
