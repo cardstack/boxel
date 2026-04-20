@@ -12,7 +12,7 @@ import StringField from 'https://cardstack.com/base/string';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import EditIcon from '@cardstack/boxel-icons/edit';
+import SourceCode from '@cardstack/boxel-icons/source-code';
 
 import { Listing } from '../catalog-app/listing/listing';
 import { PrCard } from '../pr-card/pr-card';
@@ -581,8 +581,8 @@ export class SubmissionWorkflowCard extends CardDef {
                     {{#if @model.listing}}
                       <div class='sw-fitted-card-container'>
                         {{#if this.isSourceListing}}
-                          <span class='sw-draft-badge'>
-                            <EditIcon class='sw-draft-icon' />
+                          <span class='sw-source-badge'>
+                            <SourceCode class='sw-source-icon' />
                             Source Listing
                           </span>
                         {{/if}}
@@ -709,8 +709,8 @@ export class SubmissionWorkflowCard extends CardDef {
             {{#if @model.listing}}
               <div class='sw-sidebar-fitted-card'>
                 {{#if this.isSourceListing}}
-                  <span class='sw-draft-badge'>
-                    <EditIcon class='sw-draft-icon' />
+                  <span class='sw-source-badge'>
+                    <SourceCode class='sw-source-icon' />
                     Source Listing
                   </span>
                 {{/if}}
@@ -1003,12 +1003,12 @@ export class SubmissionWorkflowCard extends CardDef {
           overflow: visible;
         }
 
-        .sw-fitted-card-container > :not(.sw-draft-badge) {
+        .sw-fitted-card-container > :not(.sw-source-badge) {
           border-radius: inherit;
           overflow: hidden;
         }
 
-        .sw-draft-badge {
+        .sw-source-badge {
           position: absolute;
           top: -10px;
           right: 10px;
@@ -1030,9 +1030,9 @@ export class SubmissionWorkflowCard extends CardDef {
           border: none;
         }
 
-        .sw-draft-icon {
-          width: 9px;
-          height: 9px;
+        .sw-source-icon {
+          width: 10px;
+          height: 10px;
           flex-shrink: 0;
         }
 
@@ -1238,7 +1238,7 @@ export class SubmissionWorkflowCard extends CardDef {
           overflow: visible;
         }
 
-        .sw-sidebar-fitted-card > :not(.sw-draft-badge) {
+        .sw-sidebar-fitted-card > :not(.sw-source-badge) {
           border-radius: inherit;
           overflow: hidden;
         }
