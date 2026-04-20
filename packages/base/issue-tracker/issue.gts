@@ -15,6 +15,7 @@ import StringField from '../string';
 import NumberField from '../number';
 import DateField from '../date';
 import MarkdownField from '../markdown';
+import { CommentField } from './comment';
 
 import { FieldContainer, Pill } from '@cardstack/boxel-ui/components';
 
@@ -175,6 +176,7 @@ export class Issue extends CardDef {
       return this.project?.kanbanBoards ?? [];
     },
   });
+  @field comments = containsMany(CommentField);
 
   @field cssVariables = contains(CSSField, {
     computeVia: function (this: Issue) {
