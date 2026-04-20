@@ -69,6 +69,11 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
   private config: ClaudeCodeAgentConfig;
   private promptLoader: PromptLoader;
   private queryFn: ClaudeAgentQueryFn;
+  // Emitted once (on the very first SDK `init` message) so the operator can
+  // see which model the Agent SDK inherited from the user's Claude Code
+  // install. Suppressed on every subsequent inner-loop iteration to keep
+  // the log quiet.
+  private modelLogged = false;
 
   constructor(
     config: ClaudeCodeAgentConfig = {},
@@ -131,18 +136,22 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
 
     try {
       for await (let message of q) {
-        // Surface the actual model the Agent SDK picked (inherited from the
-        // user's Claude Code install) so operators can tell at a glance
-        // which model is driving the run. The init event fires once at the
-        // start of every `query()` call, before any tool use — logging it
-        // here gives one line per agent turn in the factory's output.
+        // Surface the actual model the Agent SDK picked (inherited from
+        // the user's Claude Code install) so operators can tell at a
+        // glance which model is driving the run. SDK fires an `init`
+        // message at the start of every `query()` call — we only need it
+        // once per factory run, guarded by `this.modelLogged`. Matches
+        // the openrouter path's `Agent backend: openrouter (model=…)`
+        // format for a single consistent log line across backends.
         if (
+          !this.modelLogged &&
           message.type === 'system' &&
           (message as { subtype?: string }).subtype === 'init'
         ) {
           let modelName = (message as { model?: string }).model;
           if (modelName) {
-            log.info(`Claude Agent SDK model: ${modelName}`);
+            log.info(`Agent backend: claude (model=${modelName})`);
+            this.modelLogged = true;
           }
         }
         if (this.config.debug) {

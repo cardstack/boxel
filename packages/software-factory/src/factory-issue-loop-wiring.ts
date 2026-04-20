@@ -191,7 +191,13 @@ export async function runFactoryIssueLoop(
       debug: config.debug,
     });
     agent = built.agent;
-    log.info(`Agent backend: ${built.label}`);
+    // For the claude backend, the specific model is only known after the
+    // Agent SDK's first `init` event — `ClaudeCodeFactoryAgent` logs a
+    // single `Agent backend: claude (model=<id>)` line there to avoid a
+    // redundant "backend without model" line here.
+    if (provider !== 'claude') {
+      log.info(`Agent backend: ${built.label}`);
+    }
   }
 
   // 5. Validator factory
