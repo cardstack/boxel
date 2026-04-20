@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "status": "planned",
+      "status": "in_progress",
       "issueId": "PTD-1",
       "summary": "Submit documents",
       "cardInfo": {

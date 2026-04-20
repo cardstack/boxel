@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "title": "To Do Board",
-      "groupBy": "issueType",
+      "groupBy": "status",
       "cardInfo": {
         "name": null,
         "notes": null,
@@ -98,7 +98,7 @@
           "color": "#403370",
           "wipLimit": null,
           "collapsed": false,
-          "sortOrder": null
+          "sortOrder": 3
         }
       ],
       "priorityColumnConfig": [

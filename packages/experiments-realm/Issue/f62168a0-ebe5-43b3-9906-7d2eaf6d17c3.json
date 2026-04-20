@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "status": null,
+      "status": "planned",
       "issueId": "PTD-2",
       "summary": "Laundry",
       "cardInfo": {
@@ -21,8 +21,8 @@
       "priority": "high",
       "issueType": "house-chores",
       "description": null,
-      "statusBoardOrder": null,
-      "priorityBoardOrder": null,
+      "statusBoardOrder": 1,
+      "priorityBoardOrder": 1,
       "issueTypeBoardOrder": 2
     },
     "relationships": {

@@ -290,54 +290,41 @@ export class Issue extends CardDef {
           <@fields.description />
         </FieldContainer>
 
-        <section class='options-section'>
-          <div class='options-section-header'>
-            <h2 class='section-title'>Issue Configuration</h2>
-            <p class='section-copy'>
-              Set the issue status, type, and priority using the options
-              available in this project.
-            </p>
+        <div class='options-row'>
+          <div class='option-panel'>
+            <div class='option-panel-header'>
+              <h3 class='option-title'>Status</h3>
+              <p class='option-copy'>
+                Controls the current workflow state for this issue.
+              </p>
+            </div>
+            <FieldContainer @tag='label' @label='Status' @hideLabel={{true}}>
+              <@fields.status />
+            </FieldContainer>
           </div>
-          <div class='options-row'>
-            <div class='option-panel'>
-              <div class='option-panel-header'>
-                <h3 class='option-title'>Status</h3>
-                <p class='option-copy'>
-                  Controls the current workflow state for this issue.
-                </p>
-              </div>
-              <FieldContainer @tag='label' @label='Status' @hideLabel={{true}}>
-                <@fields.status />
-              </FieldContainer>
+          <div class='option-panel'>
+            <div class='option-panel-header'>
+              <h3 class='option-title'>Type</h3>
+              <p class='option-copy'>
+                Classifies the issue as work like feature, bug, or research.
+              </p>
             </div>
-            <div class='option-panel'>
-              <div class='option-panel-header'>
-                <h3 class='option-title'>Type</h3>
-                <p class='option-copy'>
-                  Classifies the issue as work like feature, bug, or research.
-                </p>
-              </div>
-              <FieldContainer @tag='label' @label='Type' @hideLabel={{true}}>
-                <@fields.issueType />
-              </FieldContainer>
-            </div>
-            <div class='option-panel'>
-              <div class='option-panel-header'>
-                <h3 class='option-title'>Priority</h3>
-                <p class='option-copy'>
-                  Indicates the urgency or importance of this issue.
-                </p>
-              </div>
-              <FieldContainer
-                @tag='label'
-                @label='Priority'
-                @hideLabel={{true}}
-              >
-                <@fields.priority />
-              </FieldContainer>
-            </div>
+            <FieldContainer @tag='label' @label='Type' @hideLabel={{true}}>
+              <@fields.issueType />
+            </FieldContainer>
           </div>
-        </section>
+          <div class='option-panel'>
+            <div class='option-panel-header'>
+              <h3 class='option-title'>Priority</h3>
+              <p class='option-copy'>
+                Indicates the urgency or importance of this issue.
+              </p>
+            </div>
+            <FieldContainer @tag='label' @label='Priority' @hideLabel={{true}}>
+              <@fields.priority />
+            </FieldContainer>
+          </div>
+        </div>
 
         <div class='bottom-row'>
           <div class='bottom-cell'>
@@ -362,30 +349,6 @@ export class Issue extends CardDef {
           display: grid;
           grid-template-columns: 1fr;
           gap: var(--boxel-sp);
-        }
-        .options-section {
-          display: grid;
-          gap: var(--boxel-sp);
-          padding: var(--boxel-sp-lg);
-          background: var(--card, var(--boxel-light));
-          border: 1px solid var(--border, var(--boxel-border-color));
-          border-radius: var(--boxel-border-radius-lg);
-        }
-        .options-section-header {
-          display: grid;
-          gap: var(--boxel-sp-2xs);
-        }
-        .section-title {
-          margin: 0;
-          font-size: var(--boxel-font-size-sm);
-          font-weight: 600;
-          color: var(--foreground, var(--boxel-dark));
-        }
-        .section-copy {
-          margin: 0;
-          font-size: var(--boxel-font-size-xs);
-          line-height: 1.5;
-          color: var(--muted-foreground, var(--boxel-600));
         }
         .options-row {
           display: grid;
@@ -679,17 +642,38 @@ export class Project extends CardDef {
           </FieldContainer>
         </div>
 
-        <FieldContainer @label='Issue Status Options' @vertical={{true}}>
-          <@fields.issueStatusOptions />
-        </FieldContainer>
+        <section class='options-section'>
+          <div class='options-section-header'>
+            <h2 class='section-title'>Issue Configuration</h2>
+            <p class='section-copy'>
+              Define the status, priority, and type options that issues in this
+              project can use.
+            </p>
+          </div>
 
-        <FieldContainer @label='Issue Priority Options' @vertical={{true}}>
-          <@fields.issuePriorityOptions />
-        </FieldContainer>
+          <div class='options-section-body'>
+            <div class='options-config-panel'>
+              <FieldContainer @label='Issue Status Options' @vertical={{true}}>
+                <@fields.issueStatusOptions />
+              </FieldContainer>
+            </div>
 
-        <FieldContainer @label='Issue Type Options' @vertical={{true}}>
-          <@fields.issueTypeOptions />
-        </FieldContainer>
+            <div class='options-config-panel'>
+              <FieldContainer
+                @label='Issue Priority Options'
+                @vertical={{true}}
+              >
+                <@fields.issuePriorityOptions />
+              </FieldContainer>
+            </div>
+
+            <div class='options-config-panel'>
+              <FieldContainer @label='Issue Type Options' @vertical={{true}}>
+                <@fields.issueTypeOptions />
+              </FieldContainer>
+            </div>
+          </div>
+        </section>
       </div>
       <style scoped>
         .project-edit {
@@ -702,6 +686,45 @@ export class Project extends CardDef {
           grid-template-columns: 1fr 1fr;
           gap: var(--boxel-sp);
           min-width: 0;
+        }
+        .options-section {
+          display: grid;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp-lg);
+          background: var(--card, var(--boxel-light));
+          border: 1px solid var(--border, var(--boxel-border-color));
+          border-radius: var(--boxel-border-radius-lg);
+        }
+        .options-section-header {
+          display: grid;
+          gap: var(--boxel-sp-2xs);
+        }
+        .options-section-body {
+          display: grid;
+          gap: var(--boxel-sp);
+        }
+        .options-config-panel {
+          display: grid;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp);
+          background: var(--sidebar, var(--background));
+          color: var(--sidebar-foreground, var(--foreground));
+          border: 1px solid var(--border, var(--boxel-border-color));
+          border-radius: var(--boxel-border-radius);
+          box-shadow: inset 0 1px 0
+            color-mix(in oklch, var(--card) 35%, transparent);
+        }
+        .section-title {
+          margin: 0;
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 600;
+          color: var(--foreground, var(--boxel-dark));
+        }
+        .section-copy {
+          margin: 0;
+          font-size: var(--boxel-font-size-xs);
+          line-height: 1.5;
+          color: var(--muted-foreground, var(--boxel-600));
         }
       </style>
     </template>
