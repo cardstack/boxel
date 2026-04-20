@@ -562,7 +562,6 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
       return execute({
         targetRealmUrl: config.targetRealmUrl,
         client: config.client,
-        realmServerUrl: config.realmServerUrl,
         hostAppUrl: config.hostAppUrl ?? config.realmServerUrl,
       });
     },

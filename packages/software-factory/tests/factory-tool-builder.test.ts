@@ -812,10 +812,10 @@ module('buildFactoryTools — run_tests', function () {
     let config = makeConfig();
     let { executor } = createMockToolExecutor(new Map());
     let tools = buildFactoryTools(config, executor, new ToolRegistry());
-    let runTests = tools.find((t) => t.name === 'run_tests')!;
+    let runTests = tools.find((t) => t.name === 'run_tests');
     assert.ok(runTests, 'run_tests tool is registered');
     assert.deepEqual(
-      runTests.parameters,
+      runTests?.parameters,
       { type: 'object', properties: {} },
       'run_tests takes no arguments',
     );
@@ -825,7 +825,6 @@ module('buildFactoryTools — run_tests', function () {
     let capturedOptions:
       | {
           targetRealmUrl: string;
-          realmServerUrl: string;
           hostAppUrl: string;
         }
       | undefined;
@@ -844,7 +843,6 @@ module('buildFactoryTools — run_tests', function () {
       runTestsInMemory: async (options) => {
         capturedOptions = {
           targetRealmUrl: options.targetRealmUrl,
-          realmServerUrl: options.realmServerUrl,
           hostAppUrl: options.hostAppUrl,
         };
         return stubResult;
@@ -852,20 +850,16 @@ module('buildFactoryTools — run_tests', function () {
     });
     let { executor } = createMockToolExecutor(new Map());
     let tools = buildFactoryTools(config, executor, new ToolRegistry());
-    let runTests = tools.find((t) => t.name === 'run_tests')!;
+    let runTests = tools.find((t) => t.name === 'run_tests');
+    assert.ok(runTests, 'run_tests tool is registered');
 
-    let result = await runTests.execute({});
+    let result = await runTests?.execute({});
 
     assert.deepEqual(result, stubResult, 'tool returns the in-memory result');
     assert.strictEqual(
       capturedOptions?.targetRealmUrl,
       TARGET_REALM,
       'forwards targetRealmUrl from config',
-    );
-    assert.strictEqual(
-      capturedOptions?.realmServerUrl,
-      'https://realms.example.test/',
-      'forwards realmServerUrl from config',
     );
     assert.strictEqual(
       capturedOptions?.hostAppUrl,
@@ -892,9 +886,10 @@ module('buildFactoryTools — run_tests', function () {
     });
     let { executor } = createMockToolExecutor(new Map());
     let tools = buildFactoryTools(config, executor, new ToolRegistry());
-    let runTests = tools.find((t) => t.name === 'run_tests')!;
+    let runTests = tools.find((t) => t.name === 'run_tests');
+    assert.ok(runTests, 'run_tests tool is registered');
 
-    await runTests.execute({});
+    await runTests?.execute({});
 
     assert.strictEqual(
       capturedHost,

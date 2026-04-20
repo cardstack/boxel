@@ -638,7 +638,9 @@ export async function runTestsInMemory(
         `Failed to discover test files: ${listing.error}`,
       );
     }
-    testFiles = listing.filenames.filter((f) => f.endsWith('.test.gts'));
+    testFiles = (listing.filenames ?? []).filter((f) =>
+      f.endsWith('.test.gts'),
+    );
   } catch (err) {
     return emptyErrorResult(
       `Failed to discover test files: ${err instanceof Error ? err.message : String(err)}`,

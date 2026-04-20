@@ -47,16 +47,18 @@ test.describe('runTestsInMemory e2e', () => {
       let result = await runTestsInMemory({
         targetRealmUrl: realmUrl,
         client,
-        realmServerUrl: realm.realmServerURL.href,
         hostAppUrl: realm.hostAppUrl,
       });
 
+      // PASSING_TEST_GTS overwrites the single fixture test file with a
+      // module containing exactly one passing test.
       expect(result.status).toBe('passed');
-      expect(result.passedCount).toBeGreaterThan(0);
+      expect(result.passedCount).toBe(1);
       expect(result.failedCount).toBe(0);
+      expect(result.skippedCount).toBe(0);
       expect(result.durationMs).toBeGreaterThan(0);
       expect(result.failures).toEqual([]);
-      expect(result.testFiles).toContain('hello.test.gts');
+      expect(result.testFiles).toEqual(['hello.test.gts']);
       expect(result.errorMessage).toBeUndefined();
 
       // In-memory tool must not write any TestRun card artifact.
@@ -95,16 +97,28 @@ test.describe('runTestsInMemory e2e', () => {
       let result = await runTestsInMemory({
         targetRealmUrl: realmUrl,
         client,
-        realmServerUrl: realm.realmServerURL.href,
         hostAppUrl: realm.hostAppUrl,
       });
 
+      // Fixture hello.test.gts (1 passing test) is untouched; the new
+      // hello-fail.test.gts contributes 1 deliberately failing test.
       expect(result.status).toBe('failed');
-      expect(result.failedCount).toBeGreaterThan(0);
-      expect(result.failures.length).toBeGreaterThan(0);
-      expect(result.failures[0].testName).toBeTruthy();
-      expect(result.failures[0].message).toBeTruthy();
-      expect(result.testFiles).toContain('hello-fail.test.gts');
+      expect(result.passedCount).toBe(1);
+      expect(result.failedCount).toBe(1);
+      expect(result.skippedCount).toBe(0);
+      expect(result.failures).toHaveLength(1);
+      let failure = result.failures[0];
+      expect(failure.testName).toBe('deliberately fails - wrong greeting text');
+      expect(failure.module).toBe('HelloCard Fail');
+      // The failing assertion's expected text must appear in the message
+      // so the agent can see what the test expected.
+      expect(failure.message).toContain('THIS TEXT DOES NOT EXIST');
+      expect(typeof failure.stackTrace).toBe('string');
+      expect(failure.stackTrace!.length).toBeGreaterThan(0);
+      expect(result.testFiles.slice().sort()).toEqual([
+        'hello-fail.test.gts',
+        'hello.test.gts',
+      ]);
 
       let listing = await client.listFiles(realmUrl);
       let validationArtifacts = (listing.filenames ?? []).filter((f) =>
@@ -145,7 +159,6 @@ test.describe('runTestsInMemory e2e', () => {
       let result = await runTestsInMemory({
         targetRealmUrl: realmUrl,
         client,
-        realmServerUrl: realm.realmServerURL.href,
         hostAppUrl: realm.hostAppUrl,
       });
 
@@ -171,7 +184,6 @@ test.describe('runTestsInMemory e2e', () => {
     let result = await runTestsInMemory({
       targetRealmUrl: 'http://localhost:1/',
       client: thrower,
-      realmServerUrl: 'http://localhost:1/',
       hostAppUrl: 'http://localhost:1/',
     });
 

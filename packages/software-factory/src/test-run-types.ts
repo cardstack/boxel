@@ -127,9 +127,7 @@ export interface QunitResults {
 export interface RunTestsInMemoryOptions {
   targetRealmUrl: string;
   client: BoxelCLIClient;
-  /** Required — never inferred from targetRealmUrl. */
-  realmServerUrl: string;
-  /** URL of the host app served by the compat proxy (e.g., the realm server URL). */
+  /** URL of the host app served by the compat proxy (typically the realm server URL). */
   hostAppUrl: string;
   /** Path to the host app's dist directory. Defaults to packages/host/dist. */
   hostDistDir?: string;
