@@ -23,6 +23,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   publish:
@@ -41,8 +42,8 @@ jobs:
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
 
-      - name: Configure npm authentication
-        run: echo '//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}' > $HOME/.npmrc
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
 
       - name: Bump version
         id: version
@@ -61,9 +62,9 @@ jobs:
         working-directory: packages/boxel-cli
         run: |
           if [ "${{ inputs.environment }}" = "production" ]; then
-            npm publish --access public
+            npm publish --access public --provenance
           else
-            npm publish --access public --tag beta
+            npm publish --access public --provenance --tag beta
           fi
 
       - name: Commit version bump and tag
