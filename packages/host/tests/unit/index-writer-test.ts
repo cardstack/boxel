@@ -628,6 +628,7 @@ module('Unit | index-writer', function (hooks) {
         atom_html: `<span class="atom">Atom HTML</span>`,
         head_html: `<span class="head">Head HTML</span>`,
         icon_html: '<svg>test icon</svg>',
+        markdown: null,
         is_deleted: null,
       },
       'the copied instance is correct',
@@ -763,6 +764,7 @@ module('Unit | index-writer', function (hooks) {
         resource_created_at: String(modified),
         is_deleted: null,
         icon_html: '<svg>test icon</svg>',
+        markdown: null,
       },
       'the error entry includes last known good state of instance',
     );
@@ -819,6 +821,7 @@ module('Unit | index-writer', function (hooks) {
         resource_created_at: null,
         is_deleted: false,
         icon_html: null,
+        markdown: null,
       },
       'the error entry does not include last known good state of instance',
     );
@@ -905,6 +908,7 @@ module('Unit | index-writer', function (hooks) {
         fittedHtml: null,
         atomHtml: null,
         headHtml: null,
+        markdown: null,
         searchDoc: null,
         types: null,
         indexedAt: null,
@@ -1049,6 +1053,7 @@ module('Unit | index-writer', function (hooks) {
         embeddedHtml: null,
         fittedHtml: null,
         headHtml: null,
+        markdown: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
@@ -1143,9 +1148,58 @@ module('Unit | index-writer', function (hooks) {
         fittedHtml: null,
         atomHtml: null,
         headHtml: null,
+        markdown: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
+    }
+  });
+
+  test('persists and reads back markdown for an instance entry', async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [],
+    );
+    let resource: CardResource = {
+      id: `${testRealmURL}1.json`,
+      type: 'card',
+      attributes: { name: 'Van Gogh' },
+      meta: {
+        adoptsFrom: { module: `./person`, name: 'Person' },
+      },
+    };
+    let now = Date.now();
+    let markdown = '# Van Gogh\n\n- email: vangogh@example.com';
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
+    await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'instance',
+      resource,
+      lastModified: now,
+      resourceCreatedAt: now,
+      searchData: { name: 'Van Gogh' },
+      deps: new Set(),
+      displayNames: [],
+      types: [],
+      markdown,
+    });
+
+    let entry = await indexQueryEngine.getInstance(
+      new URL(`${testRealmURL}1`),
+      { useWorkInProgressIndex: true },
+    );
+    if (entry?.type === 'instance') {
+      assert.strictEqual(
+        entry.markdown,
+        markdown,
+        'markdown round-trips through updateEntry + getInstance',
+      );
+    } else {
+      assert.ok(
+        false,
+        `expected index entry to be an instance (got ${entry?.type})`,
+      );
     }
   });
 

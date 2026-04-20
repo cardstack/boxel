@@ -1,4 +1,5 @@
 import {
+  markdownEscape,
   sanitizeHtmlSafe,
   type CssVariableEntry,
 } from '@cardstack/boxel-ui/helpers';
@@ -115,4 +116,32 @@ export default class TypographyField extends FieldDef {
   }
 
   static embedded = TypographyEmbedded;
+
+  // CS-10787: render the typography settings as a compact bulleted list of
+  // non-empty properties, each value wrapped in inline code for clarity.
+  static markdown = class Markdown extends Component<typeof TypographyField> {
+    get text() {
+      let model = this.args.model;
+      if (!model) {
+        return '';
+      }
+      let rows: string[] = [];
+      let labels: { key: keyof typeof model; label: string }[] = [
+        { key: 'fontFamily', label: 'Font family' },
+        { key: 'fontSize', label: 'Font size' },
+        { key: 'fontWeight', label: 'Font weight' },
+        { key: 'lineHeight', label: 'Line height' },
+      ];
+      for (let { key, label } of labels) {
+        let value = model[key] as string | undefined;
+        if (!value) continue;
+        rows.push(`- ${markdownEscape(label)}: \`${value}\``);
+      }
+      if (model.sampleText) {
+        rows.push(`- Sample text: ${markdownEscape(model.sampleText)}`);
+      }
+      return rows.join('\n');
+    }
+    <template>{{this.text}}</template>
+  };
 }

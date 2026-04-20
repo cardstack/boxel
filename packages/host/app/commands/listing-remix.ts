@@ -1,8 +1,5 @@
-import { service } from '@ember/service';
-
 import {
   isResolvedCodeRef,
-  RealmPaths,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
@@ -15,20 +12,17 @@ import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
 
 import UseAiAssistantCommand from './ai-assistant';
 import ListingInstallCommand from './listing-install';
+import PersistModuleInspectorViewCommand from './persist-module-inspector-view';
 import SwitchSubmodeCommand from './switch-submode';
 import UpdateCodePathWithSelectionCommand from './update-code-path-with-selection';
 import UpdatePlaygroundSelectionCommand from './update-playground-selection';
+import ValidateRealmCommand from './validate-realm';
 
-import type OperatorModeStateService from '../services/operator-mode-state-service';
-import type RealmServerService from '../services/realm-server';
 import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class RemixCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput
 > {
-  @service declare private operatorModeStateService: OperatorModeStateService;
-  @service declare private realmServer: RealmServerService;
-
   static actionVerb = 'Remix';
 
   description =
@@ -80,10 +74,12 @@ export default class RemixCommand extends HostBaseCommand<
           },
         );
 
-        this.operatorModeStateService.persistModuleInspectorView(
-          codePath + '.gts',
-          'preview',
-        );
+        await new PersistModuleInspectorViewCommand(
+          this.commandContext,
+        ).execute({
+          codePath: codePath + '.gts',
+          moduleInspectorView: 'preview',
+        });
       }
 
       await new UpdateCodePathWithSelectionCommand(this.commandContext).execute(
@@ -112,14 +108,10 @@ export default class RemixCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.ListingInstallInput,
   ): Promise<undefined> {
-    let realmUrls = this.realmServer.availableRealmURLs;
     let { realm, listing: listingInput } = input;
-    let realmUrl = new RealmPaths(new URL(realm)).url;
-
-    // Make sure realm is valid
-    if (!realmUrls.includes(realmUrl)) {
-      throw new Error(`Invalid realm: ${realmUrl}`);
-    }
+    let { realmUrl } = await new ValidateRealmCommand(
+      this.commandContext,
+    ).execute({ realmUrl: realm });
 
     // this is intentionally to type because base command cannot interpret Listing type from catalog
     const listing = listingInput as Listing;

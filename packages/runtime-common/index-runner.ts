@@ -31,7 +31,7 @@ import { isCardError } from './error';
 import type { IndexingProgressEvent } from './worker';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver';
 import { discoverInvalidations } from './index-runner/discover-invalidations';
-import { visitFileForIndexing } from './index-runner/visit-file';
+import { visitFileForIndexingFused } from './index-runner/visit-file';
 import { performCardIndexing } from './index-runner/card-indexer';
 import { performFileIndexing } from './index-runner/file-indexer';
 
@@ -329,7 +329,22 @@ export class IndexRunner {
 
   private async tryToVisit(url: URL) {
     try {
-      await this.visitFile(url);
+      await visitFileForIndexingFused({
+        url,
+        realmURL: this.#realmURL,
+        ignoreMap: this.ignoreMap,
+        realmPaths: this.#realmPaths,
+        reader: this.#reader,
+        batch: this.batch,
+        jobInfo: this.#jobInfo,
+        auth: this.#auth,
+        prerenderer: this.#prerenderer,
+        consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+        logDebug: (message) => this.#log.debug(message),
+        logWarn: (message) => this.#log.warn(message),
+        indexCardWithResult: async (args) => await this.indexCard(args),
+        indexFileWithResults: async (args) => await this.indexFile(args),
+      });
     } catch (err: any) {
       if (isCardError(err) && err.status === 404) {
         this.#log.info(
@@ -444,22 +459,6 @@ export class IndexRunner {
     });
   }
 
-  private async visitFile(url: URL): Promise<void> {
-    await visitFileForIndexing({
-      url,
-      realmURL: this.#realmURL,
-      ignoreMap: this.ignoreMap,
-      realmPaths: this.#realmPaths,
-      reader: this.#reader,
-      batch: this.batch,
-      jobInfo: this.#jobInfo,
-      logDebug: (message) => this.#log.debug(message),
-      logWarn: (message) => this.#log.warn(message),
-      indexCard: async (args) => await this.indexCard(args),
-      indexFile: async (args) => await this.indexFile(args),
-    });
-  }
-
   private reportStatus(
     status: 'start' | 'finish',
     url: string,
@@ -481,11 +480,16 @@ export class IndexRunner {
     lastModified,
     resourceCreatedAt,
     resource,
+    renderResult,
   }: {
     path: LocalPath;
     lastModified: number;
     resourceCreatedAt: number;
     resource: LooseCardResource;
+    // Render result produced by the fused visit's cardRender pass.
+    renderResult: NonNullable<
+      Parameters<typeof performCardIndexing>[0]['precomputedRenderResult']
+    >;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let instanceURL = new URL(
@@ -510,8 +514,7 @@ export class IndexRunner {
         realmURL: this.#realmURL,
         auth: this.#auth,
         jobInfo: this.#jobInfo,
-        prerenderer: this.#prerenderer,
-        consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+        precomputedRenderResult: renderResult,
         dependencyResolver: this.#dependencyResolver,
         updateEntry: async (entryURL, entry) =>
           await this.updateEntry(entryURL, entry),
@@ -528,11 +531,22 @@ export class IndexRunner {
     lastModified,
     resourceCreatedAt,
     hasModulePrerender,
+    extractResult,
+    renderResult,
   }: {
     path: LocalPath;
     lastModified: number;
     resourceCreatedAt: number;
     hasModulePrerender?: boolean;
+    // Extract/render results produced by the fused visit's fileExtract /
+    // fileRender passes. Either may be undefined if the visit chose not to
+    // run that pass (e.g. fileRender is skipped for module files).
+    extractResult?: Parameters<
+      typeof performFileIndexing
+    >[0]['precomputedExtractResult'];
+    renderResult?: Parameters<
+      typeof performFileIndexing
+    >[0]['precomputedRenderResult'];
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let result = await performFileIndexing({
@@ -544,8 +558,8 @@ export class IndexRunner {
       realmURL: this.#realmURL,
       auth: this.#auth,
       jobInfo: this.#jobInfo,
-      prerenderer: this.#prerenderer,
-      consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+      precomputedExtractResult: extractResult,
+      precomputedRenderResult: renderResult,
       dependencyResolver: this.#dependencyResolver,
       updateEntry: async (entryURL, entry) => {
         await this.batch.updateEntry(entryURL, entry);

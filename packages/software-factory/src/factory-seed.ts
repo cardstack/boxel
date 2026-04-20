@@ -7,6 +7,8 @@
  * issue as done.
  */
 
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
 import type { FactoryBrief } from './factory-brief';
 
 import { logger } from './logger';
@@ -19,12 +21,6 @@ export function inferDarkfactoryModuleUrl(targetRealmUrl: string): string {
   let parsed = new URL(targetRealmUrl);
   return new URL('software-factory/darkfactory', parsed.origin + '/').href;
 }
-import {
-  readFile,
-  writeFile,
-  waitForRealmFile,
-  type RealmFetchOptions,
-} from './realm-operations';
 
 let log = logger('factory-seed');
 
@@ -37,7 +33,8 @@ export interface SeedIssueResult {
   status: 'created' | 'existing';
 }
 
-export interface SeedIssueOptions extends RealmFetchOptions {
+export interface SeedIssueOptions {
+  client: BoxelCLIClient;
   darkfactoryModuleUrl: string;
 }
 
@@ -65,8 +62,10 @@ export async function createSeedIssue(
   targetRealmUrl: string,
   options: SeedIssueOptions,
 ): Promise<SeedIssueResult> {
+  let { client, darkfactoryModuleUrl } = options;
+
   // Check if seed issue already exists
-  let existing = await readFile(targetRealmUrl, SEED_ISSUE_PATH, options);
+  let existing = await client.read(targetRealmUrl, SEED_ISSUE_PATH);
   if (existing.ok) {
     log.info(`Seed issue already exists at ${SEED_ISSUE_PATH}`);
     return { issueId: SEED_ISSUE_PATH, status: 'existing' };
@@ -81,14 +80,13 @@ export async function createSeedIssue(
     );
   }
 
-  let document = buildSeedIssueDocument(brief, options.darkfactoryModuleUrl);
+  let document = buildSeedIssueDocument(brief, darkfactoryModuleUrl);
 
   log.info(`Creating seed issue at ${SEED_ISSUE_FILE}`);
-  let writeResult = await writeFile(
+  let writeResult = await client.write(
     targetRealmUrl,
     SEED_ISSUE_FILE,
     JSON.stringify(document, null, 2),
-    options,
   );
 
   if (!writeResult.ok) {
@@ -98,8 +96,7 @@ export async function createSeedIssue(
   }
 
   // Wait for the card to be indexed and readable
-  let readable = await waitForRealmFile(targetRealmUrl, SEED_ISSUE_PATH, {
-    ...options,
+  let readable = await client.waitForFile(targetRealmUrl, SEED_ISSUE_PATH, {
     timeoutMs: 15_000,
     pollMs: 250,
   });

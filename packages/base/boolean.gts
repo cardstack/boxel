@@ -40,6 +40,16 @@ export default class BooleanField extends FieldDef {
   static embedded = View;
   static atom = View;
 
+  // CS-10786: emit `true`/`false` literally. The primitive is already safe
+  // (neither `true` nor `false` is a markdown metacharacter), and `null`/
+  // `undefined` resolves to empty string.
+  static markdown = class Markdown extends Component<typeof this> {
+    get text() {
+      return this.args.model == null ? '' : String(this.args.model);
+    }
+    <template>{{this.text}}</template>
+  };
+
   static edit = class Edit extends Component<typeof this> {
     <template>
       <div data-test-radio-group={{@fieldName}}>

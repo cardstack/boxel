@@ -14,7 +14,7 @@ import {
   type PreparedTemplateMetadata,
   readSupportMetadata,
 } from '../src/runtime-metadata';
-import { buildRealmToken } from '../src/harness/shared';
+import { buildRealmToken, buildServerToken } from '../src/harness/shared';
 import { startHarnessPrerenderServer } from '../src/harness/support-services';
 import { buildBrowserState, installBrowserState } from './helpers/browser-auth';
 
@@ -25,6 +25,8 @@ type StartedFactoryRealm = {
   /** The host app URL served by the compat proxy (for QUnit live-test pages). */
   hostAppUrl: string;
   ownerBearerToken: string;
+  /** Realm server JWT for _run-command and other server-level endpoints. */
+  serverToken: string;
   ports: {
     publicPort: number;
     realmServerPort: number;
@@ -389,6 +391,7 @@ async function startRealmProcess(
     realmServerURL: new URL(metadata.realmServerURL),
     hostAppUrl: `http://localhost:${metadata.ports.publicPort}`,
     ownerBearerToken: metadata.ownerBearerToken,
+    serverToken: buildServerToken(),
     ports: metadata.ports,
     cardURL(path: string) {
       return new URL(path, metadata.realmURL).href;

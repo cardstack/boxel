@@ -392,7 +392,16 @@ export async function createTestPgAdapter(options?: {
 }
 
 export async function closeServer(server: Server) {
-  await new Promise<void>((r) => (server ? server.close(() => r()) : r()));
+  if (!server) {
+    return;
+  }
+  // Force-close idle keep-alive sockets so server.close() resolves promptly.
+  // Without this, a lingering connection from the host page (puppeteer fetching
+  // from the realm server) can hold the port bound long after the test moves
+  // on, causing EADDRINUSE when the next test tries to re-bind.
+  server.closeIdleConnections?.();
+  server.closeAllConnections?.();
+  await new Promise<void>((r) => server.close(() => r()));
 }
 
 function trackServer(server: Server): Server {
@@ -935,7 +944,19 @@ export async function runTestRealmServer({
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   trackServer(testRealmHttpServer);
-  await testRealmServer.start();
+  try {
+    await testRealmServer.start();
+  } catch (err) {
+    // Close the http listener so the port is released — otherwise a throw
+    // from start() leaves the listener bound, causing EADDRINUSE on the next
+    // retry.
+    try {
+      await closeServer(testRealmHttpServer);
+    } catch {
+      // best-effort cleanup
+    }
+    throw err;
+  }
   return {
     testRealmDir,
     testRealm,

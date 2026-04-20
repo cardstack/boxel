@@ -57,7 +57,10 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
   }
 
   <template>
-    <div class={{cn 'default-card-template' @format}}>
+    <div
+      class={{cn 'default-card-template' @format}}
+      data-test-base-template={{@format}}
+    >
       <Header @hasBottomBorder={{true}} class='card-info-header'>
         {{#if (eq @format 'isolated')}}
           <CardInfoTemplates.view

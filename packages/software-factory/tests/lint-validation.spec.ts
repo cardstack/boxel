@@ -2,14 +2,9 @@ import { resolve } from 'node:path';
 
 import { expect, test } from './fixtures';
 
-import {
-  lintFile,
-  readFile,
-  writeFile,
-  waitForRealmFile,
-} from '../src/realm-operations';
 import { LintValidationStep } from '../src/validators/lint-step';
 import type { LintValidationDetails } from '../src/validators/lint-step';
+import { buildTestClient } from './helpers/test-client';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -32,61 +27,85 @@ test.use({ realmDir: fixtureRealmDir });
 test.use({ realmServerMode: 'isolated' });
 
 test.describe('lint-validation e2e', () => {
-  test('lintFile() realm API: clean file returns no errors', async ({
-    realm,
-  }) => {
+  test('client.lint: clean file returns no errors', async ({ realm }) => {
     let realmUrl = realm.realmURL.href;
     let authorization = realm.authorizationHeaders()['Authorization'];
+    let serverToken = `Bearer ${realm.serverToken}`;
 
-    // Read the existing hello.gts from the fixture realm
-    let readResult = await readFile(realmUrl, 'hello.gts', { authorization });
-    expect(readResult.ok).toBe(true);
-    expect(readResult.content).toBeTruthy();
-
-    let lintResult = await lintFile(
+    let { client, cleanup } = buildTestClient({
       realmUrl,
-      readResult.content!,
-      'hello.gts',
-      { authorization },
-    );
+      realmToken: authorization,
+      realmServerUrl: realm.realmServerURL.href,
+      realmServerToken: serverToken,
+    });
 
-    // The fixture's hello.gts should be clean
-    let errors = lintResult.messages.filter((m) => m.severity === 2);
-    expect(errors).toEqual([]);
+    try {
+      // Read the existing hello.gts from the fixture realm
+      let readResult = await client.read(realmUrl, 'hello.gts');
+      expect(readResult.ok).toBe(true);
+      expect(readResult.content).toBeTruthy();
+
+      let lintResult = await client.lint(
+        realmUrl,
+        readResult.content!,
+        'hello.gts',
+      );
+
+      // The fixture's hello.gts should be clean
+      let errors = lintResult.messages.filter((m) => m.severity === 2);
+      expect(errors).toEqual([]);
+    } finally {
+      cleanup();
+    }
   });
 
-  test('lintFile() realm API: file with violations returns lint messages', async ({
+  test('client.lint: file with violations returns lint messages', async ({
     realm,
   }) => {
     let realmUrl = realm.realmURL.href;
     let authorization = realm.authorizationHeaders()['Authorization'];
+    let serverToken = `Bearer ${realm.serverToken}`;
 
-    // Write a file with lint issues
-    let writeResult = await writeFile(realmUrl, 'bad-lint.gts', BAD_LINT_GTS, {
-      authorization,
-    });
-    expect(writeResult.ok).toBe(true);
-
-    let indexed = await waitForRealmFile(realmUrl, 'bad-lint.gts', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
-    });
-    expect(indexed).toBe(true);
-
-    let lintResult = await lintFile(realmUrl, BAD_LINT_GTS, 'bad-lint.gts', {
-      authorization,
+    let { client, cleanup } = buildTestClient({
+      realmUrl,
+      realmToken: authorization,
+      realmServerUrl: realm.realmServerURL.href,
+      realmServerToken: serverToken,
     });
 
-    // Should have at least one error (unused variable)
-    let errors = lintResult.messages.filter((m) => m.severity === 2);
-    expect(errors.length).toBeGreaterThan(0);
+    try {
+      // Write a file with lint issues
+      let writeResult = await client.write(
+        realmUrl,
+        'bad-lint.gts',
+        BAD_LINT_GTS,
+      );
+      expect(writeResult.ok).toBe(true);
 
-    // Verify the message shape
-    let firstError = errors[0];
-    expect(firstError.message).toBeTruthy();
-    expect(firstError.line).toBeGreaterThan(0);
-    expect(typeof firstError.severity).toBe('number');
+      let indexed = await client.waitForFile(realmUrl, 'bad-lint.gts', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
+      expect(indexed).toBe(true);
+
+      let lintResult = await client.lint(
+        realmUrl,
+        BAD_LINT_GTS,
+        'bad-lint.gts',
+      );
+
+      // Should have at least one error (unused variable)
+      let errors = lintResult.messages.filter((m) => m.severity === 2);
+      expect(errors.length).toBeGreaterThan(0);
+
+      // Verify the message shape
+      let firstError = errors[0];
+      expect(firstError.message).toBeTruthy();
+      expect(firstError.line).toBeGreaterThan(0);
+      expect(typeof firstError.severity).toBe('number');
+    } finally {
+      cleanup();
+    }
   });
 
   test('LintValidationStep e2e: runs lint against realm and returns structured result', async ({
@@ -95,40 +114,53 @@ test.describe('lint-validation e2e', () => {
     let realmUrl = realm.realmURL.href;
     let realmServerUrl = realm.realmServerURL.href;
     let authorization = realm.authorizationHeaders()['Authorization'];
+    let serverToken = `Bearer ${realm.serverToken}`;
     let lintResultsModuleUrl = `${realmServerUrl}software-factory/lint-result`;
 
-    let step = new LintValidationStep({
-      authorization,
-      fetch: globalThis.fetch,
+    let { client, cleanup } = buildTestClient({
+      realmUrl,
+      realmToken: authorization,
       realmServerUrl,
-      lintResultsModuleUrl,
-      issueId: 'Issues/lint-e2e',
+      realmServerToken: serverToken,
     });
 
-    let result = await step.run(realmUrl);
+    try {
+      let step = new LintValidationStep({
+        client,
+        realmServerUrl,
+        lintResultsModuleUrl,
+        issueId: 'Issues/lint-e2e',
+      });
 
-    // The fixture realm has hello.gts and hello.test.gts — both lintable.
-    // hello.gts should be clean; result should reflect that.
-    expect(result.step).toBe('lint');
-    expect(result.files).toBeTruthy();
-    expect(result.files!.length).toBeGreaterThan(0);
+      let result = await step.run(realmUrl);
 
-    // Verify we get the details shape
-    let details = result.details as unknown as LintValidationDetails;
-    expect(details).toBeTruthy();
-    expect(details.lintResultId).toContain('Validations/lint_lint-e2e');
-    expect(details.filesChecked).toBeGreaterThan(0);
+      // The fixture realm has hello.gts and hello.test.gts — both lintable.
+      // hello.gts should be clean; result should reflect that.
+      expect(result.step).toBe('lint');
+      expect(result.files).toBeTruthy();
+      expect(result.files!.length).toBeGreaterThan(0);
 
-    // Read back the LintResult card from the realm to verify it was persisted
-    let cardRead = await readFile(realmUrl, details.lintResultId, {
-      authorization,
-    });
-    expect(cardRead.ok).toBe(true);
+      // Verify we get the details shape
+      let details = result.details as unknown as LintValidationDetails;
+      expect(details).toBeTruthy();
+      expect(details.lintResultId).toContain('Validations/lint_lint-e2e');
+      expect(details.filesChecked).toBeGreaterThan(0);
 
-    let attrs = cardRead.document?.data.attributes;
-    expect(attrs).toBeTruthy();
-    expect(['passed', 'failed']).toContain(attrs?.status);
-    expect(attrs?.sequenceNumber).toBe(1);
-    expect(attrs?.completedAt).toBeTruthy();
+      // Read back the LintResult card from the realm to verify it was persisted
+      let cardRead = await client.read(realmUrl, details.lintResultId);
+      expect(cardRead.ok).toBe(true);
+
+      let attrs = (
+        cardRead.document as unknown as {
+          data?: { attributes?: Record<string, unknown> };
+        }
+      )?.data?.attributes;
+      expect(attrs).toBeTruthy();
+      expect(['passed', 'failed']).toContain(attrs?.status);
+      expect(attrs?.sequenceNumber).toBe(1);
+      expect(attrs?.completedAt).toBeTruthy();
+    } finally {
+      cleanup();
+    }
   });
 });

@@ -402,6 +402,17 @@ export function notFound(
   );
 }
 
+export function notAcceptable(
+  request: Request,
+  requestContext: RequestContext,
+  message = `No representation available for ${request.url} that matches accept header ${request.headers.get('accept')}`,
+): Response {
+  return responseWithError(
+    new CardError(message, { status: 406, id: request.url }),
+    requestContext,
+  );
+}
+
 export function badRequest({
   message,
   requestContext,

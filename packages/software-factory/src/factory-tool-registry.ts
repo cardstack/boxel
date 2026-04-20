@@ -63,21 +63,6 @@ const SCRIPT_TOOLS: ToolManifest[] = [
     ],
   },
   {
-    name: 'get-session',
-    description:
-      'Generate authenticated browser session tokens for realm access.',
-    category: 'script',
-    outputFormat: 'json',
-    args: [
-      {
-        name: 'realm',
-        type: 'string',
-        required: false,
-        description: 'Specific realm URL to include (repeatable)',
-      },
-    ],
-  },
-  {
     name: 'run-realm-tests',
     description:
       'Execute Playwright tests in an isolated scratch realm with fixture setup and teardown.',
@@ -411,43 +396,6 @@ const REALM_API_TOOLS: ToolManifest[] = [
         required: false,
         description:
           'Background image URL for the realm. Defaults to a random background image.',
-      },
-    ],
-  },
-  {
-    name: 'realm-server-session',
-    description:
-      'Obtain a realm server JWT for management operations. Returns the JWT in the output. Auth: OpenID token from Matrix.',
-    category: 'realm-api',
-    outputFormat: 'json',
-    args: [
-      {
-        name: 'realm-server-url',
-        type: 'string',
-        required: true,
-        description: 'Realm server base URL',
-      },
-      {
-        name: 'openid-token',
-        type: 'string',
-        required: true,
-        description:
-          'OpenID access_token obtained from the Matrix server via /openid/request_token',
-      },
-    ],
-  },
-  {
-    name: 'realm-auth',
-    description:
-      'Get per-realm JWTs for all realms accessible to the authenticated user. Auth: realm server token.',
-    category: 'realm-api',
-    outputFormat: 'json',
-    args: [
-      {
-        name: 'realm-server-url',
-        type: 'string',
-        required: true,
-        description: 'Realm server base URL',
       },
     ],
   },

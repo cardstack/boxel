@@ -6,7 +6,6 @@ import {
   isUrlLike,
   logger,
   IndexWriter,
-  registerCardReferencePrefix,
   type StatusArgs,
   type IndexingProgressEvent,
 } from '@cardstack/runtime-common';
@@ -107,8 +106,7 @@ for (let i = 0; i < fromUrls.length; i++) {
   if (isUrlLike(from)) {
     virtualNetwork.addURLMapping(new URL(from), to);
   } else {
-    registerCardReferencePrefix(from, to.href);
-    virtualNetwork.addImportMap(from, (rest) => new URL(rest, to).href);
+    virtualNetwork.addRealmMapping(from, to.href);
   }
 }
 let autoMigrate = migrateDB || undefined;

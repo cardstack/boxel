@@ -102,33 +102,43 @@ export default function handlePrerenderProxy({
     let prerenderResponse;
 
     try {
-      prerenderResponse =
-        kind === 'card'
-          ? await prerenderer.prerenderCard({
-              affinityType: 'realm',
-              affinityValue: attrs.realm,
-              realm: attrs.realm,
-              url: attrs.url,
-              auth,
-              renderOptions: attrs.renderOptions,
-            })
-          : kind === 'module'
-            ? await prerenderer.prerenderModule({
-                affinityType: 'realm',
-                affinityValue: attrs.realm,
-                realm: attrs.realm,
-                url: attrs.url,
-                auth,
-                renderOptions: attrs.renderOptions,
-              })
-            : await prerenderer.prerenderFileExtract({
-                affinityType: 'realm',
-                affinityValue: attrs.realm,
-                realm: attrs.realm,
-                url: attrs.url,
-                auth,
-                renderOptions: attrs.renderOptions,
-              });
+      if (kind === 'module') {
+        prerenderResponse = await prerenderer.prerenderModule({
+          affinityType: 'realm',
+          affinityValue: attrs.realm,
+          realm: attrs.realm,
+          url: attrs.url,
+          auth,
+          renderOptions: attrs.renderOptions,
+        });
+      } else {
+        let passFlag =
+          kind === 'card'
+            ? { cardRender: true as const }
+            : { fileExtract: true as const };
+        let visitResponse = await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: attrs.realm,
+          realm: attrs.realm,
+          url: attrs.url,
+          auth,
+          renderOptions: {
+            ...(attrs.renderOptions ?? {}),
+            ...passFlag,
+          },
+        });
+        prerenderResponse =
+          kind === 'card' ? visitResponse.card : visitResponse.fileExtract;
+        if (!prerenderResponse) {
+          throw new Error(
+            `Prerender visit returned no ${kind} payload${
+              visitResponse.pageUnusableError?.error?.message
+                ? `: ${visitResponse.pageUnusableError.error.message}`
+                : ''
+            }`,
+          );
+        }
+      }
     } catch (err) {
       await sendResponseForSystemError(
         ctxt,

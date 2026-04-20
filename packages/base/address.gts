@@ -3,6 +3,7 @@ import StringField from './string';
 import CountryField from './country';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
 import { EntityDisplayWithIcon } from '@cardstack/boxel-ui/components';
+import { markdownEscape } from '@cardstack/boxel-ui/helpers';
 
 function getAddressRows(
   addressLine1: string | undefined,
@@ -92,4 +93,29 @@ export default class AddressField extends FieldDef {
   };
 
   static atom = Atom;
+
+  // CS-10786: emit the address as a CommonMark hard-break-delimited block so
+  // downstream consumers preserve line structure. Each logical row is
+  // markdown-escaped individually so e.g. a `#` in an apartment label
+  // doesn't become a heading.
+  static markdown = class Markdown extends Component<typeof AddressField> {
+    get text() {
+      let rows = getAddressRows(
+        this.args.model?.addressLine1,
+        this.args.model?.addressLine2,
+        this.args.model?.city,
+        this.args.model?.state,
+        this.args.model?.postalCode,
+        this.args.model?.country?.name,
+        this.args.model?.poBoxNumber,
+      );
+      if (rows.length === 0) {
+        return '';
+      }
+      // Two-space-then-newline = CommonMark hard break, matching the
+      // TextAreaField markdown convention.
+      return rows.map((r) => markdownEscape(r)).join('  \n');
+    }
+    <template>{{this.text}}</template>
+  };
 }

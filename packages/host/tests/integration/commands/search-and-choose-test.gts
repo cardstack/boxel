@@ -56,7 +56,7 @@ module('Integration | commands | search-and-choose', function (hooks) {
               choices: [
                 {
                   message: {
-                    content: JSON.stringify([`${testRealmURL}Choice/alpha`]),
+                    content: JSON.stringify([1]),
                   },
                 },
               ],
@@ -146,7 +146,7 @@ export class ContextCard extends CardDef {
     );
   });
 
-  test('uses sourceContextCodeRef source instead of the searched type source', async function (assert) {
+  test('LLM index selection uses sourceContextCodeRef as context', async function (assert) {
     let result = await searchAndChooseCommand.execute({
       candidateTypeCodeRef: {
         module: `${testRealmURL}choice.gts`,
@@ -176,6 +176,58 @@ export class ContextCard extends CardDef {
     assert.false(
       userMessage.includes('choice-source-marker'),
       'LLM request does not include the searched type source',
+    );
+  });
+
+  test('parseIndicesFromLlmOutput accepts numeric literals', function (assert) {
+    const result =
+      searchAndChooseCommand['parseIndicesFromLlmOutput']('[1, 2, 3]');
+    assert.deepEqual(result, [1, 2, 3]);
+  });
+
+  test('parseIndicesFromLlmOutput accepts quoted numeric strings', function (assert) {
+    const result =
+      searchAndChooseCommand['parseIndicesFromLlmOutput']('["1", "2", "3"]');
+    assert.deepEqual(result, [1, 2, 3]);
+  });
+
+  test('parseIndicesFromLlmOutput handles mixed numeric and quoted strings', function (assert) {
+    const result =
+      searchAndChooseCommand['parseIndicesFromLlmOutput']('[1, "2", 3]');
+    assert.deepEqual(result, [1, 2, 3]);
+  });
+
+  test('parseIndicesFromLlmOutput rejects non-numeric strings', function (assert) {
+    const result =
+      searchAndChooseCommand['parseIndicesFromLlmOutput']('["abc", "1.5", ""]');
+    assert.deepEqual(result, []);
+  });
+
+  test('parseIndicesFromLlmOutput rejects zero and negative numbers', function (assert) {
+    const result =
+      searchAndChooseCommand['parseIndicesFromLlmOutput']('[0, -1, 1]');
+    assert.deepEqual(result, [1]);
+  });
+
+  test('parseIndicesFromLlmOutput handles code block formatting', function (assert) {
+    const result = searchAndChooseCommand['parseIndicesFromLlmOutput'](
+      '```json\n["1", "2"]\n```',
+    );
+    assert.deepEqual(result, [1, 2]);
+  });
+
+  test('parseIndicesFromLlmOutput returns empty array for empty input', function (assert) {
+    assert.deepEqual(
+      searchAndChooseCommand['parseIndicesFromLlmOutput'](''),
+      [],
+    );
+    assert.deepEqual(
+      searchAndChooseCommand['parseIndicesFromLlmOutput']('[]'),
+      [],
+    );
+    assert.deepEqual(
+      searchAndChooseCommand['parseIndicesFromLlmOutput']('invalid json'),
+      [],
     );
   });
 });

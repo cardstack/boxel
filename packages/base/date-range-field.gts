@@ -13,6 +13,7 @@ import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 import { cn } from '@cardstack/boxel-ui/helpers';
+import { formatDateRangeForMarkdown } from './markdown-helpers';
 
 const Format = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
@@ -182,6 +183,18 @@ export default class DateRangeField extends FieldDef {
     <template>
       <@fields.start /> - <@fields.end />
     </template>
+  };
+
+  // CS-10786: consistent markdown-escaped range output. Uses the shared
+  // helper so formatting matches DateField/DateTimeField.
+  static markdown = class Markdown extends Component<typeof this> {
+    get formatted() {
+      return formatDateRangeForMarkdown(
+        this.args.model.start,
+        this.args.model.end,
+      );
+    }
+    <template>{{this.formatted}}</template>
   };
 }
 

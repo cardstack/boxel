@@ -1,0 +1,32 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Category",
+        "module": "../catalog-app/listing/category"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Gaming",
+      "cardInfo": {
+        "name": "Gaming",
+        "notes": null,
+        "summary": "Game trackers, scoreboards, walkthroughs, gaming communities, achievement logs, and game collection management.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/play"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

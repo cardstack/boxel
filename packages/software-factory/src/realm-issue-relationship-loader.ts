@@ -2,8 +2,11 @@
  * Concrete IssueRelationshipLoader that reads related cards from the realm.
  *
  * Traverses an issue's `project` and `relatedKnowledge` relationship links
- * to load the Project card and KnowledgeArticle cards via readFile().
+ * to load the Project card and KnowledgeArticle cards via BoxelCLIClient.read.
  */
+
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import type {
   IssueData,
@@ -14,7 +17,6 @@ import type {
 import type { IssueRelationshipLoader } from './factory-context-builder';
 
 import { logger } from './logger';
-import { readFile, type RealmFetchOptions } from './realm-operations';
 
 let log = logger('realm-issue-loader');
 
@@ -24,7 +26,7 @@ let log = logger('realm-issue-loader');
 
 export interface RealmIssueRelationshipLoaderConfig {
   realmUrl: string;
-  options?: RealmFetchOptions;
+  client: BoxelCLIClient;
 }
 
 // ---------------------------------------------------------------------------
@@ -33,11 +35,11 @@ export interface RealmIssueRelationshipLoaderConfig {
 
 export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
   private realmUrl: string;
-  private options: RealmFetchOptions | undefined;
+  private client: BoxelCLIClient;
 
   constructor(config: RealmIssueRelationshipLoaderConfig) {
     this.realmUrl = config.realmUrl;
-    this.options = config.options;
+    this.client = config.client;
   }
 
   /**
@@ -58,7 +60,7 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
     }
 
     let cardId = resolveRelativeLink(projectLink);
-    let result = await readFile(this.realmUrl, cardId, this.options);
+    let result = await this.client.read(this.realmUrl, cardId);
 
     if (!result.ok || !result.document) {
       log.warn(
@@ -67,13 +69,14 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
       return undefined;
     }
 
+    let document = result.document as unknown as LooseSingleCardDocument;
     return {
       id: cardId,
-      ...result.document.data.attributes,
-      ...(result.document.data.relationships
-        ? { relationships: result.document.data.relationships }
+      ...document.data.attributes,
+      ...(document.data.relationships
+        ? { relationships: document.data.relationships }
         : {}),
-      meta: result.document.data.meta,
+      meta: document.data.meta,
     } as ProjectData;
   }
 
@@ -96,12 +99,13 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
     for (let link of knowledgeLinks) {
       let cardId = resolveRelativeLink(link);
       try {
-        let result = await readFile(this.realmUrl, cardId, this.options);
+        let result = await this.client.read(this.realmUrl, cardId);
         if (result.ok && result.document) {
+          let document = result.document as unknown as LooseSingleCardDocument;
           articles.push({
             id: cardId,
-            ...result.document.data.attributes,
-            meta: result.document.data.meta,
+            ...document.data.attributes,
+            meta: document.data.meta,
           } as KnowledgeArticleData);
         } else {
           log.warn(
@@ -126,7 +130,7 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
   private async fetchFullIssue(
     issueId: string,
   ): Promise<Record<string, unknown> | undefined> {
-    let result = await readFile(this.realmUrl, issueId, this.options);
+    let result = await this.client.read(this.realmUrl, issueId);
     if (!result.ok || !result.document) {
       log.warn(
         `Could not fetch full issue "${issueId}" (status ${result.status ?? 'N/A'}): ${result.error ?? 'not found'}`,
@@ -134,13 +138,14 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
       return undefined;
     }
 
+    let document = result.document as unknown as LooseSingleCardDocument;
     return {
       id: issueId,
-      ...result.document.data.attributes,
-      ...(result.document.data.relationships
-        ? { relationships: result.document.data.relationships }
+      ...document.data.attributes,
+      ...(document.data.relationships
+        ? { relationships: document.data.relationships }
         : {}),
-      meta: result.document.data.meta,
+      meta: document.data.meta,
     };
   }
 }

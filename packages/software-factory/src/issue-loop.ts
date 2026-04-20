@@ -39,7 +39,10 @@ let log = logger('issue-loop');
  * See ValidationPipeline for the real implementation.
  */
 export interface Validator {
-  validate(targetRealmUrl: string): Promise<ValidationResults>;
+  validate(
+    targetRealmUrl: string,
+    iteration: number,
+  ): Promise<ValidationResults>;
   /** Format validation results for LLM context and issue descriptions. */
   formatForContext(results: ValidationResults): string;
 }
@@ -105,7 +108,7 @@ export interface IssueLoopConfig {
   createValidator: (issueId: string) => Validator;
   targetRealmUrl: string;
   briefUrl?: string;
-  /** Maximum inner-loop iterations per issue. Default: 5. */
+  /** Maximum inner-loop iterations per issue. Default: 8. */
   maxIterationsPerIssue?: number;
   /** Maximum outer-loop cycles (safety guard). Default: 50. */
   maxOuterCycles?: number;
@@ -135,7 +138,7 @@ export interface IssueLoopResult {
 // Defaults
 // ---------------------------------------------------------------------------
 
-const DEFAULT_MAX_ITERATIONS_PER_ISSUE = 5;
+const DEFAULT_MAX_ITERATIONS_PER_ISSUE = 8;
 const DEFAULT_MAX_OUTER_CYCLES = 50;
 
 // ---------------------------------------------------------------------------
@@ -300,8 +303,10 @@ export async function runIssueLoop(
 
       log.info(`  Agent returned ${result.toolCalls.length} tool call(s)`);
 
-      // Validation — runs after every agent turn
-      validationResults = await validator.validate(targetRealmUrl);
+      // Validation — runs after every agent turn.
+      // Pass the iteration number so all steps use it as the sequence
+      // number in artifact filenames (parse_slug-1, lint_slug-1, etc.)
+      validationResults = await validator.validate(targetRealmUrl, iteration);
       validationContext =
         validationResults && !validationResults.passed
           ? validator.formatForContext(validationResults)

@@ -467,6 +467,18 @@ export class MarkdownDef extends FileDef {
   static atom: BaseDefComponent = Atom;
   static head: BaseDefComponent = Head;
 
+  // CS-10787: markdown files already are markdown, so pass the content
+  // through verbatim rather than wrapping in a fenced block that would
+  // double-render when consumed.
+  static markdown: BaseDefComponent = class Markdown extends Component<
+    typeof MarkdownDef
+  > {
+    get text() {
+      return this.args.model?.content ?? '';
+    }
+    <template>{{this.text}}</template>
+  };
+
   static async extractAttributes(
     url: string,
     getStream: () => Promise<ByteStream>,

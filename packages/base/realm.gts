@@ -1,5 +1,6 @@
 import { Component } from './card-api';
 import StringField from './string';
+import { markdownLink } from './markdown-helpers';
 import {
   BoxelDropdown,
   BoxelInput,
@@ -167,4 +168,17 @@ export default class RealmField extends StringField {
   static displayName = 'Realm';
   static icon = World;
   static edit = EditComponent;
+
+  // CS-10787: emit the realm URL as a markdown link (self-linked, since we
+  // don't have the realm's name accessible from just the primitive URL).
+  static markdown = class Markdown extends Component<typeof RealmField> {
+    get text() {
+      let url = this.args.model;
+      if (!url) {
+        return '';
+      }
+      return markdownLink(url, url);
+    }
+    <template>{{this.text}}</template>
+  };
 }

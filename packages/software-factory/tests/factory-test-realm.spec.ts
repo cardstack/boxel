@@ -7,7 +7,8 @@ import {
   executeTestRunFromRealm,
   type TestRunRealmOptions,
 } from '../src/factory-test-realm';
-import { readFile, waitForRealmFile, writeFile } from '../src/realm-operations';
+import { buildTestClient } from './helpers/test-client';
+import { createMockClient } from './helpers/mock-client';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -74,71 +75,81 @@ test.describe('factory-test-realm e2e', () => {
     let authHeaders = realm.authorizationHeaders();
     let authorization = authHeaders['Authorization'];
 
-    // Write the QUnit test to the realm via API — same path as the live system.
-    let writeResult = await writeFile(
+    let { client, cleanup } = buildTestClient({
       realmUrl,
-      'hello.test.gts',
-      PASSING_TEST_GTS,
-      { authorization },
-    );
-    expect(writeResult.ok).toBe(true);
-
-    // Wait for the realm to index the file before running tests
-    let indexed = await waitForRealmFile(realmUrl, 'hello.test.gts', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
-    });
-    expect(indexed).toBe(true);
-
-    // Verify the realm resolves the dotted filename: a request for
-    // "hello.test" (without .gts) must find "hello.test.gts" on disk.
-    let moduleUrl = `${realmUrl}hello.test`;
-    let moduleResponse = await fetch(moduleUrl, {
-      headers: { Accept: '*/*', Authorization: authorization },
-    });
-    expect(moduleResponse.status).toBe(200);
-
-    let handle = await executeTestRunFromRealm({
-      targetRealmUrl: realmUrl,
-      testResultsModuleUrl,
+      realmToken: authorization,
       realmServerUrl: realm.realmServerURL.href,
-      slug: 'hello-e2e',
-      testNames: [],
-      authorization,
-      fetch: globalThis.fetch,
-      hostAppUrl: realm.hostAppUrl,
+      realmServerToken: `Bearer ${realm.serverToken}`,
     });
 
-    // Handle assertions
-    expect(handle.testRunId).toContain('Validations/test_hello-e2e');
-    expect(handle.status).toBe('passed');
-    expect(handle.errorMessage).toBeUndefined();
+    try {
+      // Write the QUnit test to the realm via API — same path as the live system.
+      let writeResult = await client.write(
+        realmUrl,
+        'hello.test.gts',
+        PASSING_TEST_GTS,
+      );
+      expect(writeResult.ok).toBe(true);
 
-    // Read the TestRun card back and verify its persisted state
-    let testRunCard = await readFile(realmUrl, handle.testRunId, {
-      authorization,
-    });
-    expect(testRunCard.ok).toBe(true);
-    let attrs = testRunCard.document?.data.attributes;
-    expect(attrs?.status).toBe('passed');
-    expect(attrs?.sequenceNumber).toBe(1);
-    expect(attrs?.completedAt).toBeTruthy();
-    expect(attrs?.durationMs).toBeGreaterThan(0);
+      // Wait for the realm to index the file before running tests
+      let indexed = await client.waitForFile(realmUrl, 'hello.test.gts', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
+      expect(indexed).toBe(true);
 
-    // Verify moduleResults contain the passing test
-    let moduleResults = attrs?.moduleResults as
-      | {
-          moduleRef?: { module?: string };
-          results?: { testName?: string; status?: string }[];
-        }[]
-      | undefined;
-    expect(moduleResults).toBeTruthy();
-    expect(moduleResults!.length).toBeGreaterThan(0);
+      // Verify the realm resolves the dotted filename: a request for
+      // "hello.test" (without .gts) must find "hello.test.gts" on disk.
+      let moduleUrl = `${realmUrl}hello.test`;
+      let moduleResponse = await client.authedFetch(moduleUrl, {
+        headers: { Accept: '*/*' },
+      });
+      expect(moduleResponse.status).toBe(200);
 
-    let allResults = moduleResults!.flatMap((mr) => mr.results ?? []);
-    expect(allResults.length).toBeGreaterThan(0);
-    expect(allResults.every((r) => r.status === 'passed')).toBe(true);
+      let handle = await executeTestRunFromRealm({
+        targetRealmUrl: realmUrl,
+        testResultsModuleUrl,
+        realmServerUrl: realm.realmServerURL.href,
+        slug: 'hello-e2e',
+        testNames: [],
+        client,
+        hostAppUrl: realm.hostAppUrl,
+      });
+
+      // Handle assertions
+      expect(handle.testRunId).toContain('Validations/test_hello-e2e');
+      expect(handle.status).toBe('passed');
+      expect(handle.errorMessage).toBeUndefined();
+
+      // Read the TestRun card back and verify its persisted state
+      let testRunCard = await client.read(realmUrl, handle.testRunId);
+      expect(testRunCard.ok).toBe(true);
+      let attrs = (
+        testRunCard.document as unknown as {
+          data?: { attributes?: Record<string, unknown> };
+        }
+      )?.data?.attributes;
+      expect(attrs?.status).toBe('passed');
+      expect(attrs?.sequenceNumber).toBe(1);
+      expect(attrs?.completedAt).toBeTruthy();
+      expect(attrs?.durationMs).toBeGreaterThan(0);
+
+      // Verify moduleResults contain the passing test
+      let moduleResults = attrs?.moduleResults as
+        | {
+            moduleRef?: { module?: string };
+            results?: { testName?: string; status?: string }[];
+          }[]
+        | undefined;
+      expect(moduleResults).toBeTruthy();
+      expect(moduleResults!.length).toBeGreaterThan(0);
+
+      let allResults = moduleResults!.flatMap((mr) => mr.results ?? []);
+      expect(allResults.length).toBeGreaterThan(0);
+      expect(allResults.every((r) => r.status === 'passed')).toBe(true);
+    } finally {
+      cleanup();
+    }
   });
 
   test('failure path: deliberately failing QUnit test produces status: failed with details', async ({
@@ -149,71 +160,89 @@ test.describe('factory-test-realm e2e', () => {
     let authHeaders = realm.authorizationHeaders();
     let authorization = authHeaders['Authorization'];
 
-    // Write the deliberately failing QUnit test via API.
-    let writeResult = await writeFile(
+    let { client, cleanup } = buildTestClient({
       realmUrl,
-      'hello-fail.test.gts',
-      FAILING_TEST_GTS,
-      { authorization },
-    );
-    expect(writeResult.ok).toBe(true);
-
-    // Wait for the realm to index the file before running tests
-    let indexed = await waitForRealmFile(realmUrl, 'hello-fail.test.gts', {
-      authorization,
-      pollMs: 300,
-      timeoutMs: 30_000,
-    });
-    expect(indexed).toBe(true);
-
-    let handle = await executeTestRunFromRealm({
-      targetRealmUrl: realmUrl,
-      testResultsModuleUrl,
+      realmToken: authorization,
       realmServerUrl: realm.realmServerURL.href,
-      slug: 'hello-fail',
-      testNames: [],
-      authorization,
-      fetch: globalThis.fetch,
-      hostAppUrl: realm.hostAppUrl,
+      realmServerToken: `Bearer ${realm.serverToken}`,
     });
 
-    // Handle assertions
-    expect(handle.testRunId).toContain('Validations/test_hello-fail');
-    expect(handle.status).toBe('failed');
+    try {
+      // Write the deliberately failing QUnit test via API.
+      let writeResult = await client.write(
+        realmUrl,
+        'hello-fail.test.gts',
+        FAILING_TEST_GTS,
+      );
+      expect(writeResult.ok).toBe(true);
 
-    // Read the TestRun card back and verify its persisted state
-    let testRunCard = await readFile(realmUrl, handle.testRunId, {
-      authorization,
-    });
-    expect(testRunCard.ok).toBe(true);
-    let attrs = testRunCard.document?.data.attributes;
-    expect(attrs?.status).toBe('failed');
-    expect(attrs?.sequenceNumber).toBe(1);
-    expect(attrs?.completedAt).toBeTruthy();
-    expect(attrs?.durationMs).toBeGreaterThan(0);
+      // Wait for the realm to index the file before running tests
+      let indexed = await client.waitForFile(realmUrl, 'hello-fail.test.gts', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
+      expect(indexed).toBe(true);
 
-    // Verify moduleResults contain the failing test with error details
-    let moduleResults = attrs?.moduleResults as
-      | {
-          moduleRef?: { module?: string };
-          results?: { testName?: string; status?: string; message?: string }[];
-        }[]
-      | undefined;
-    expect(moduleResults).toBeTruthy();
-    expect(moduleResults!.length).toBeGreaterThan(0);
+      let handle = await executeTestRunFromRealm({
+        targetRealmUrl: realmUrl,
+        testResultsModuleUrl,
+        realmServerUrl: realm.realmServerURL.href,
+        slug: 'hello-fail',
+        testNames: [],
+        client,
+        hostAppUrl: realm.hostAppUrl,
+      });
 
-    let failedResults = moduleResults!
-      .flatMap((mr) => mr.results ?? [])
-      .filter((r) => r.status === 'failed');
-    expect(failedResults.length).toBeGreaterThan(0);
-    expect(failedResults[0].message).toBeTruthy();
+      // Handle assertions
+      expect(handle.testRunId).toContain('Validations/test_hello-fail');
+      expect(handle.status).toBe('failed');
+
+      // Read the TestRun card back and verify its persisted state
+      let testRunCard = await client.read(realmUrl, handle.testRunId);
+      expect(testRunCard.ok).toBe(true);
+      let attrs = (
+        testRunCard.document as unknown as {
+          data?: { attributes?: Record<string, unknown> };
+        }
+      )?.data?.attributes;
+      expect(attrs?.status).toBe('failed');
+      expect(attrs?.sequenceNumber).toBe(1);
+      expect(attrs?.completedAt).toBeTruthy();
+      expect(attrs?.durationMs).toBeGreaterThan(0);
+
+      // Verify moduleResults contain the failing test with error details
+      let moduleResults = attrs?.moduleResults as
+        | {
+            moduleRef?: { module?: string };
+            results?: {
+              testName?: string;
+              status?: string;
+              message?: string;
+            }[];
+          }[]
+        | undefined;
+      expect(moduleResults).toBeTruthy();
+      expect(moduleResults!.length).toBeGreaterThan(0);
+
+      let failedResults = moduleResults!
+        .flatMap((mr) => mr.results ?? [])
+        .filter((r) => r.status === 'failed');
+      expect(failedResults.length).toBeGreaterThan(0);
+      expect(failedResults[0].message).toBeTruthy();
+    } finally {
+      cleanup();
+    }
   });
 
   test('error path: unreachable realm returns error immediately', async () => {
     let options: TestRunRealmOptions = {
       targetRealmUrl: 'http://localhost:1/',
       testResultsModuleUrl: 'http://localhost:1/software-factory/test-results',
-      fetch: globalThis.fetch,
+      client: createMockClient({
+        fetch: async () => {
+          throw new Error('ECONNREFUSED');
+        },
+      }),
     };
 
     let result = await createTestRun('error-test', ['test A'], options);

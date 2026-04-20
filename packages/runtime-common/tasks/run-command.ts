@@ -4,6 +4,7 @@ import type { Task } from './index';
 
 import {
   fetchRealmPermissions,
+  fetchUserPermissions,
   jobIdentity,
   type RunCommandResponse,
   ensureFullMatrixUserId,
@@ -58,9 +59,15 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
       };
     }
 
-    let auth = createPrerenderAuth(runAsUserId, {
-      [normalizedRealmURL]: userPermissions,
+    // Include JWTs for all realms the user has access to
+    // Cross-realm card references (e.g. linksToMany to cards in other realms)
+    // require auth when the Loader fetches modules.
+    let allUserPermissions = await fetchUserPermissions(dbAdapter, {
+      userId: runAsUserId,
     });
+    allUserPermissions[normalizedRealmURL] = userPermissions;
+    let auth = createPrerenderAuth(runAsUserId, allUserPermissions);
+    let accessibleRealms = Object.keys(allUserPermissions);
 
     let normalizedCommand = normalizeCommandSpecifier(
       command,
@@ -76,11 +83,15 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
       };
     }
 
+    let augmentedCommandInput = commandInput
+      ? { ...commandInput, accessibleRealms }
+      : undefined;
+
     let result = await prerenderer.runCommand({
       userId: runAsUserId,
       auth,
       command: normalizedCommand,
-      commandInput: commandInput ?? undefined,
+      commandInput: augmentedCommandInput,
     });
 
     reportStatus(jobInfo, 'finish');

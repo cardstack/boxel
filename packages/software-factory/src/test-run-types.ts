@@ -1,3 +1,4 @@
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 
 // ---------------------------------------------------------------------------
@@ -34,8 +35,7 @@ export interface TestRunRealmOptions {
   targetRealmUrl: string;
   /** URL to the test-results module in the source realm. Required, never inferred. */
   testResultsModuleUrl: string;
-  authorization?: string;
-  fetch?: typeof globalThis.fetch;
+  client: BoxelCLIClient;
 }
 
 /** Additional options for creating a new TestRun card. */
@@ -129,8 +129,7 @@ export interface ExecuteTestRunOptions {
   testResultsModuleUrl: string;
   slug: string;
   testNames: string[];
-  authorization?: string;
-  fetch?: typeof globalThis.fetch;
+  client: BoxelCLIClient;
   forceNew?: boolean;
   issueURL?: string;
   /** URL to the Project card — used for TestRun relationship. */
@@ -150,4 +149,10 @@ export interface ExecuteTestRunOptions {
    * number here guarantees the new TestRun gets at least lastSequenceNumber + 1.
    */
   lastSequenceNumber?: number;
+  /**
+   * When provided, use this value directly as the sequence number instead of
+   * computing one via getNextValidationSequenceNumber. Used by the validation
+   * pipeline to ensure all steps in an iteration share the same sequence number.
+   */
+  iteration?: number;
 }

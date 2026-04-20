@@ -65,6 +65,7 @@ export async function startTestRealmServer(
           embeddedHTML: {},
           fittedHTML: {},
           iconHTML: null,
+          markdown: null,
         };
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ data: { attributes: payload } }));

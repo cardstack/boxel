@@ -1,20 +1,90 @@
 // This should be first
 import '../src/setup-logger';
 
-import {
-  fieldPairs,
-  forceArray,
-  getAccessibleRealmTokens,
-  matrixLogin,
-  parseArgs,
-  printJson,
-  searchRealm,
-  type SearchQuery,
-  type SearchSort,
-} from '../src/boxel';
+import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
 import { logger } from '../src/logger';
 
 let log = logger('boxel-search');
+
+type SearchSort = {
+  by: string;
+  direction: string;
+  on?: {
+    module: string;
+    name: string;
+  };
+};
+
+type SearchQuery = {
+  filter?: Record<string, unknown>;
+  sort?: SearchSort[];
+  page?: {
+    size?: number;
+    number?: number;
+  };
+};
+
+type ParsedArgValue = string | boolean | string[];
+type ParsedArgs = Record<string, ParsedArgValue | undefined> & {
+  _: string[];
+};
+
+function parseArgs(argv: string[]): ParsedArgs {
+  let args: ParsedArgs = { _: [] };
+
+  for (let index = 0; index < argv.length; index++) {
+    let token = argv[index];
+    if (!token.startsWith('--')) {
+      args._.push(token);
+      continue;
+    }
+
+    let key = token.slice(2);
+    let next = argv[index + 1];
+    if (!next || next.startsWith('--')) {
+      args[key] = true;
+      continue;
+    }
+
+    let existingValue = args[key];
+    if (existingValue === undefined) {
+      args[key] = next;
+    } else if (Array.isArray(existingValue)) {
+      existingValue.push(next);
+    } else if (typeof existingValue === 'string') {
+      args[key] = [existingValue, next];
+    } else {
+      args[key] = next;
+    }
+    index++;
+  }
+
+  return args;
+}
+
+function forceArray<T>(value: T | T[] | undefined): T[] {
+  if (value === undefined) {
+    return [];
+  }
+  return Array.isArray(value) ? value : [value];
+}
+
+function fieldPairs(
+  values: string | string[] | undefined,
+): Record<string, string> {
+  let result: Record<string, string> = {};
+  for (let entry of forceArray(values)) {
+    let index = entry.indexOf('=');
+    if (index === -1) {
+      throw new Error(
+        `Expected field pair in the form field=value, received: ${entry}`,
+      );
+    }
+    result[entry.slice(0, index)] = entry.slice(index + 1);
+  }
+  return result;
+}
 
 async function main(): Promise<void> {
   let args = parseArgs(process.argv.slice(2));
@@ -24,10 +94,8 @@ async function main(): Promise<void> {
     );
   }
 
-  let matrixAuth = await matrixLogin();
-  let realmTokens = await getAccessibleRealmTokens(matrixAuth);
   let realmUrl = args.realm;
-  let jwt = realmTokens[realmUrl.endsWith('/') ? realmUrl : `${realmUrl}/`];
+  let client = new BoxelCLIClient();
 
   let query: SearchQuery = {};
   let filter: Record<string, unknown> = {};
@@ -88,8 +156,8 @@ async function main(): Promise<void> {
     }
   }
 
-  let results = await searchRealm({ realmUrl, jwt, query });
-  printJson(results);
+  let result = await client.search(realmUrl, query as Record<string, unknown>);
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
 main().catch((error: unknown) => {

@@ -12,8 +12,6 @@ import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type
 
 const MAX_TOOL_USE_TURNS = 50;
 
-import { createBoxelRealmFetch } from './realm-auth';
-
 import type {
   AgentContext,
   FactoryAgentConfig,
@@ -86,7 +84,7 @@ interface OpenRouterChatResponse {
 
 export class ToolUseFactoryAgent implements LoopAgent {
   private config: FactoryAgentConfig;
-  private fetchImpl: typeof globalThis.fetch;
+  private directFetchImpl: typeof globalThis.fetch | undefined;
   private promptLoader: PromptLoader;
   readonly useDirectApi: boolean;
 
@@ -102,17 +100,16 @@ export class ToolUseFactoryAgent implements LoopAgent {
 
     if (this.useDirectApi) {
       let directApiKey = apiKey!;
-      this.fetchImpl = ((input: RequestInfo | URL, init?: RequestInit) => {
+      this.directFetchImpl = ((
+        input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => {
         let headers = new Headers(init?.headers);
         if (!headers.has('Authorization')) {
           headers.set('Authorization', `Bearer ${directApiKey}`);
         }
         return globalThis.fetch(input, { ...init, headers });
       }) as typeof globalThis.fetch;
-    } else {
-      this.fetchImpl = createBoxelRealmFetch(config.realmServerUrl, {
-        authorization: config.authorization?.trim() || undefined,
-      });
     }
   }
 
@@ -363,7 +360,7 @@ export class ToolUseFactoryAgent implements LoopAgent {
     let response: Response;
 
     if (this.useDirectApi) {
-      response = await this.fetchImpl(OPENROUTER_CHAT_URL, {
+      response = await this.directFetchImpl!(OPENROUTER_CHAT_URL, {
         method: 'POST',
         headers: {
           Accept: SupportedMimeType.JSON,
@@ -377,7 +374,7 @@ export class ToolUseFactoryAgent implements LoopAgent {
         this.config.realmServerUrl,
       ).toString();
 
-      response = await this.fetchImpl(proxyUrl, {
+      response = await this.config.client.authedServerFetch(proxyUrl, {
         method: 'POST',
         headers: {
           Accept: SupportedMimeType.JSON,

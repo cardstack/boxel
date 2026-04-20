@@ -9,10 +9,16 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import WithKnownRealmsLoaded from '../with-known-realms-loaded';
 
+export interface RealmFilter {
+  selected: URL[];
+  onChange: (selected: URL[]) => void;
+  /** Resolved realm URL strings (handles select-all → all available realms) */
+  selectedURLs: string[];
+}
+
 interface Signature {
   Args: {
-    selected: PickerOption[];
-    onChange: (selected: PickerOption[]) => void;
+    filter: RealmFilter;
     label?: string;
     placeholder?: string;
     destination?: string;
@@ -39,10 +45,18 @@ export default class RealmPicker extends Component<Signature> {
     };
   }
 
-  get selected(): PickerOption[] {
-    return this.args.selected.length > 0
-      ? this.args.selected
-      : [this.selectAllOption];
+  private get pickerSelected(): PickerOption[] {
+    const selected = this.args.filter.selected;
+    if (selected.length === 0) {
+      return [this.selectAllOption];
+    }
+    return selected.map((url) => {
+      let realmURL = url.href;
+      let info = this.realm.info(realmURL);
+      let label = info?.name ?? this.realmDisplayNameFromURL(realmURL);
+      let icon = info?.iconURL ?? undefined;
+      return { id: realmURL, icon, label, type: 'option' as const };
+    });
   }
 
   get realmOptions(): PickerOption[] {
@@ -61,6 +75,13 @@ export default class RealmPicker extends Component<Signature> {
     }
     return options;
   }
+
+  private onChange = (selected: PickerOption[]) => {
+    const urls = selected
+      .filter((opt) => opt.type !== 'select-all')
+      .map((opt) => new URL(opt.id));
+    this.args.filter.onChange(urls);
+  };
 
   private realmDisplayNameFromURL(realmURL: string): string {
     try {
@@ -81,8 +102,8 @@ export default class RealmPicker extends Component<Signature> {
         <Picker
           @label={{if @label @label 'Realm'}}
           @options={{this.realmOptions}}
-          @selected={{this.selected}}
-          @onChange={{@onChange}}
+          @selected={{this.pickerSelected}}
+          @onChange={{this.onChange}}
           @placeholder={{@placeholder}}
           @searchPlaceholder='Search for a realm'
           @maxSelectedDisplay={{3}}

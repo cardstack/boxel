@@ -1,6 +1,8 @@
 // This should be first
 import '../setup-logger';
 
+import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
 import {
   FactoryEntrypointUsageError,
   getFactoryEntrypointUsage,
@@ -21,6 +23,11 @@ async function main(): Promise<void> {
     }
 
     let options = parseFactoryEntrypointArgs(process.argv.slice(2));
+
+    await BoxelCLIClient.ensureProfile({
+      realmServerUrl: options.realmServerUrl ?? undefined,
+    });
+
     log.info(`brief=${options.briefUrl}`);
     log.info('Starting seed issue + issue-driven loop...');
 

@@ -86,7 +86,7 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
 
     // Run room creation and module loading in parallel
     const [roomResult, commandModule] = await Promise.all([
-      await matrixService.createRoom({
+      matrixService.createRoom({
         preset: matrixService.privateChatPreset,
         invite: [aiBotFullId],
         name: input.name,
@@ -134,7 +134,7 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
           },
         ],
       }),
-      await this.loadCommandModule(),
+      this.loadCommandModule(),
     ]);
 
     const { room_id: roomId } = roomResult;

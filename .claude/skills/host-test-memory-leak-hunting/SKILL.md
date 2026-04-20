@@ -30,6 +30,7 @@ Three diagnostic scripts in `packages/host/scripts/` (only used during a hunt):
 - `snapshot-diff.js` — top-N constructor counts/retained-sizes that grew between two snapshots.
 - `snapshot-retainers.js` — backward BFS from target nodes to GC roots. Flags: `--type=<native|object|closure|string>`, `--min-size=N`, `--strong` (skips `weak`/`shortcut` AND WeakMap "part of key" internal edges; use this — it's the difference between a misleading WeakMap path and the real strong retainer).
 - `snapshot-by-class.js` — like snapshot-diff but truncates long names so output is scannable.
+- `snapshot-diff-stream.js` / `snapshot-retainers-stream.js` — **use these when a snapshot file is >500 MB.** Same flags and output as the non-streaming versions; they use `stream-json` to avoid `fs.readFileSync('utf8')` (which throws `ERR_STRING_TOO_LONG` above V8's ~512 MB cap). The retainers-stream variant also buffers nodes/edges into a growable `Float64Array` so huge snapshots don't hit `Invalid array length` around 100M+ items. Just swap the script name; all arguments are identical.
 
 See [`packages/host/scripts/HEAP_PROBE.md`](../../../packages/host/scripts/HEAP_PROBE.md) for invocation reference.
 

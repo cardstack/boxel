@@ -43,6 +43,7 @@ export default class Monaco extends Modifier<Signature> {
   private lastCursorPosition: MonacoSDK.Position | undefined;
   private waiterManager = createMonacoWaiterManager();
   private onDispose: (() => void) | undefined;
+  private disposables: MonacoSDK.IDisposable[] = [];
   @service declare private monacoService: MonacoService;
 
   modify(
@@ -157,6 +158,15 @@ export default class Monaco extends Modifier<Signature> {
       this.model = undefined;
       let editor = this.editor;
       this.editor = undefined;
+      for (let d of this.disposables) {
+        try {
+          d.dispose();
+        } catch {
+          // listener disposal during teardown races with Monaco's own dispose;
+          // ignore so one bad listener doesn't block the rest
+        }
+      }
+      this.disposables.length = 0;
       if (editor) {
         this.disposeEditorAfterInitialLayout(editor, model);
       }
@@ -164,23 +174,25 @@ export default class Monaco extends Modifier<Signature> {
 
     this.model = this.editor.getModel()!;
 
-    this.model.onDidChangeContent(() =>
-      this.onContentChanged.perform(contentChanged),
-    );
-    this.editor.onDidChangeCursorSelection((event) => {
-      if (
-        this.editor &&
-        event.source !== 'model' &&
-        event.selection.startLineNumber === event.selection.endLineNumber &&
-        event.selection.startColumn === event.selection.endColumn
-      ) {
-        let position = this.editor.getPosition();
-        if (position) {
-          onCursorPositionChange?.(position);
-          this.lastCursorPosition = position;
+    this.disposables.push(
+      this.model.onDidChangeContent(() =>
+        this.onContentChanged.perform(contentChanged),
+      ),
+      this.editor.onDidChangeCursorSelection((event) => {
+        if (
+          this.editor &&
+          event.source !== 'model' &&
+          event.selection.startLineNumber === event.selection.endLineNumber &&
+          event.selection.startColumn === event.selection.endColumn
+        ) {
+          let position = this.editor.getPosition();
+          if (position) {
+            onCursorPositionChange?.(position);
+            this.lastCursorPosition = position;
+          }
         }
-      }
-    });
+      }),
+    );
   }
 
   private onContentChanged = restartableTask(
@@ -221,12 +233,25 @@ export default class Monaco extends Modifier<Signature> {
     // Monaco can still be instantiating editor contributions in the same turn
     // that Glimmer tears the modifier down. Disposing on the next paint avoids
     // tearing down the instantiation service mid-bootstrap without introducing
-    // an arbitrary timer.
-    requestAnimationFrame(() => {
-      editor.dispose();
+    // an arbitrary timer. In tests, rAF may never fire between teardown and
+    // the next test — dispose synchronously there so Monaco's
+    // _codeEditors/_diffEditors registry releases its reference and internal
+    // DOMTimers stop retaining the owner.
+    let dispose = () => {
+      try {
+        editor.dispose();
+      } catch {
+        // partially-instantiated editor — best-effort cleanup
+      }
       if (model && !model.isDisposed() && !model.isAttachedToEditor()) {
         model.dispose();
       }
-    });
+    };
+    if (isTesting()) {
+      dispose();
+    } else {
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- Monaco dispose must wait for paint to avoid bootstrap race
+      requestAnimationFrame(dispose);
+    }
   }
 }

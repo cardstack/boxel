@@ -37,6 +37,7 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
     // Power-select moves focus after choose; if this row is the one that
     // owned focus (e.g. a summary row activated via Enter), restore it.
     if (el.hasAttribute('tabindex')) {
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- DOM focus only, no tracked state
       requestAnimationFrame(() => el.focus());
     }
   }

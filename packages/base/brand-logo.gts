@@ -1,6 +1,7 @@
 import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
 import {
   entriesToCssRuleMap,
+  markdownEscape,
   type CssRuleMap,
 } from '@cardstack/boxel-ui/helpers';
 
@@ -14,6 +15,7 @@ import {
   getFieldDescription,
 } from './card-api';
 import { buildCssVariableName } from '@cardstack/boxel-ui/helpers';
+import { markdownLink } from './markdown-helpers';
 import {
   type CssVariableField,
   type CssVariableFieldEntry,
@@ -308,6 +310,26 @@ export class MarkField extends URLField {
       </style>
     </template>
   };
+
+  // CS-10787: render the mark as a markdown image — the URL is the asset,
+  // and the alt text is empty (callers set alt via context).
+  static markdown = class Markdown extends Component<typeof MarkField> {
+    get text() {
+      let url = this.args.model;
+      if (!url) {
+        return '';
+      }
+      let encoded: string;
+      try {
+        encoded = encodeURI(url);
+      } catch {
+        encoded = url;
+      }
+      encoded = encoded.replace(/\(/g, '%28').replace(/\)/g, '%29');
+      return `![](${encoded})`;
+    }
+    <template>{{this.text}}</template>
+  };
 }
 
 export default class BrandLogo extends FieldDef {
@@ -388,4 +410,46 @@ export default class BrandLogo extends FieldDef {
   }
 
   static embedded = Embedded;
+
+  // CS-10787: emit a bulleted list of the logo URLs that are actually
+  // populated. Skips empty slots so the output stays compact.
+  static markdown = class Markdown extends Component<typeof BrandLogo> {
+    get text() {
+      let model = this.args.model;
+      if (!model) {
+        return '';
+      }
+      let rows: { label: string; url: string }[] = [];
+      let pairs: { key: keyof typeof model; label: string }[] = [
+        { key: 'primaryMark1', label: 'Primary mark (light)' },
+        { key: 'primaryMark2', label: 'Primary mark (dark)' },
+        { key: 'primaryMarkGreyscale1', label: 'Primary mark greyscale (light)' },
+        { key: 'primaryMarkGreyscale2', label: 'Primary mark greyscale (dark)' },
+        { key: 'secondaryMark1', label: 'Secondary mark (light)' },
+        { key: 'secondaryMark2', label: 'Secondary mark (dark)' },
+        {
+          key: 'secondaryMarkGreyscale1',
+          label: 'Secondary mark greyscale (light)',
+        },
+        {
+          key: 'secondaryMarkGreyscale2',
+          label: 'Secondary mark greyscale (dark)',
+        },
+        { key: 'socialMediaProfileIcon', label: 'Social media icon' },
+      ];
+      for (let { key, label } of pairs) {
+        let url = model[key] as string | undefined;
+        if (url) {
+          rows.push({ label, url });
+        }
+      }
+      if (!rows.length) {
+        return '';
+      }
+      return rows
+        .map(({ label, url }) => `- ${markdownEscape(label)}: ${markdownLink(url, url)}`)
+        .join('\n');
+    }
+    <template>{{this.text}}</template>
+  };
 }

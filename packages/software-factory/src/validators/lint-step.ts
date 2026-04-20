@@ -7,17 +7,12 @@
  * persists a LintResult card as the validation artifact.
  */
 
+import type { BoxelCLIClient, LintResult } from '@cardstack/boxel-cli/api';
+
 import type { ValidationStepResult } from '../factory-agent';
 import { deriveIssueSlug } from '../factory-agent-types';
 
-import {
-  fetchRealmFilenames,
-  getNextValidationSequenceNumber,
-  lintFile,
-  readFile,
-  type LintFileResponse,
-  type RealmFetchOptions,
-} from '../realm-operations';
+import { getNextValidationSequenceNumber } from '../realm-operations';
 import {
   createLintResult,
   completeLintResult,
@@ -35,28 +30,24 @@ let log = logger('lint-validation-step');
 // ---------------------------------------------------------------------------
 
 export interface LintValidationStepConfig {
-  authorization?: string;
-  fetch?: typeof globalThis.fetch;
+  client: BoxelCLIClient;
   realmServerUrl: string;
   lintResultsModuleUrl: string;
   issueId?: string;
-  /** Injected for testing — defaults to fetchRealmFilenames. */
+  /** Injected for testing — defaults to client.listFiles. */
   fetchFilenames?: (
     realmUrl: string,
-    options?: RealmFetchOptions,
   ) => Promise<{ filenames: string[]; error?: string }>;
-  /** Injected for testing — defaults to lintFile from realm-operations. */
+  /** Injected for testing — defaults to client.lint. */
   lintFileFn?: (
     realmUrl: string,
     source: string,
     filename: string,
-    options?: RealmFetchOptions,
-  ) => Promise<LintFileResponse>;
-  /** Injected for testing — defaults to readFile from realm-operations. */
+  ) => Promise<LintResult>;
+  /** Injected for testing — defaults to client.read (content only). */
   readFileFn?: (
     realmUrl: string,
     path: string,
-    options?: RealmFetchOptions,
   ) => Promise<{ ok: boolean; content?: string; error?: string }>;
   /** Injected for testing — defaults to getNextValidationSequenceNumber. */
   getNextSequenceNumber?: (
@@ -88,18 +79,15 @@ export class LintValidationStep implements ValidationStepRunner {
 
   private fetchFilenamesFn: (
     realmUrl: string,
-    options?: RealmFetchOptions,
   ) => Promise<{ filenames: string[]; error?: string }>;
   private lintFileFn: (
     realmUrl: string,
     source: string,
     filename: string,
-    options?: RealmFetchOptions,
-  ) => Promise<LintFileResponse>;
+  ) => Promise<LintResult>;
   private readFileFn: (
     realmUrl: string,
     path: string,
-    options?: RealmFetchOptions,
   ) => Promise<{ ok: boolean; content?: string; error?: string }>;
   private getNextSeqFn: (
     slug: string,
@@ -108,26 +96,42 @@ export class LintValidationStep implements ValidationStepRunner {
 
   constructor(config: LintValidationStepConfig) {
     this.config = config;
-    this.fetchFilenamesFn = config.fetchFilenames ?? fetchRealmFilenames;
-    this.lintFileFn = config.lintFileFn ?? lintFile;
-    this.readFileFn = config.readFileFn ?? readFile;
+    this.fetchFilenamesFn =
+      config.fetchFilenames ??
+      ((realmUrl: string) => config.client.listFiles(realmUrl));
+    this.lintFileFn =
+      config.lintFileFn ??
+      ((realmUrl: string, source: string, filename: string) =>
+        config.client.lint(realmUrl, source, filename));
+    this.readFileFn =
+      config.readFileFn ??
+      (async (realmUrl: string, path: string) => {
+        let result = await config.client.read(realmUrl, path);
+        return {
+          ok: result.ok,
+          content:
+            result.content ??
+            (result.document ? JSON.stringify(result.document) : undefined),
+          error: result.error,
+        };
+      });
     this.getNextSeqFn =
       config.getNextSequenceNumber ??
       ((slug: string, targetRealmUrl: string) =>
         getNextValidationSequenceNumber(
+          config.client,
           slug,
           'Validations/lint_',
           config.lintResultsModuleUrl,
           'LintResult',
-          {
-            targetRealmUrl,
-            authorization: config.authorization,
-            fetch: config.fetch,
-          },
+          targetRealmUrl,
         ));
   }
 
-  async run(targetRealmUrl: string): Promise<ValidationStepResult> {
+  async run(
+    targetRealmUrl: string,
+    iteration?: number,
+  ): Promise<ValidationStepResult> {
     // Step 1: Discover lintable files
     let lintableFiles: string[];
     try {
@@ -163,17 +167,21 @@ export class LintValidationStep implements ValidationStepRunner {
       : undefined;
 
     let seq: number;
-    try {
-      let realmSeq = await this.getNextSeqFn(slug, targetRealmUrl);
-      // Use the higher of realm state vs in-memory floor. The realm index
-      // may be stale if the prior lint run just completed (lint is fast),
-      // so the floor prevents sequence reuse / artifact overwrite.
-      seq = Math.max(realmSeq, this.lastSequenceNumber + 1);
-    } catch (err) {
-      log.warn(
-        `Failed to resolve sequence number, using floor: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      seq = this.lastSequenceNumber + 1;
+    if (iteration != null) {
+      seq = iteration;
+    } else {
+      try {
+        let realmSeq = await this.getNextSeqFn(slug, targetRealmUrl);
+        // Use the higher of realm state vs in-memory floor. The realm index
+        // may be stale if the prior lint run just completed (lint is fast),
+        // so the floor prevents sequence reuse / artifact overwrite.
+        seq = Math.max(realmSeq, this.lastSequenceNumber + 1);
+      } catch (err) {
+        log.warn(
+          `Failed to resolve sequence number, using floor: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        seq = this.lastSequenceNumber + 1;
+      }
     }
 
     let lintResultId: string;
@@ -184,8 +192,7 @@ export class LintValidationStep implements ValidationStepRunner {
         this.config.lintResultsModuleUrl,
         {
           targetRealmUrl,
-          authorization: this.config.authorization,
-          fetch: this.config.fetch,
+          client: this.config.client,
           sequenceNumber: seq,
           issueURL,
         },
@@ -210,14 +217,10 @@ export class LintValidationStep implements ValidationStepRunner {
     let startedAt = Date.now();
     let allFileResults: LintFileResultData[] = [];
     let allViolations: LintValidationDetails['violations'] = [];
-    let fetchOpts: RealmFetchOptions = {
-      authorization: this.config.authorization,
-      fetch: this.config.fetch,
-    };
 
     for (let file of lintableFiles) {
       try {
-        let readResult = await this.readFileFn(targetRealmUrl, file, fetchOpts);
+        let readResult = await this.readFileFn(targetRealmUrl, file);
         if (!readResult.ok) {
           let message = `Could not read ${file}: ${readResult.error ?? 'read failed'}`;
           log.warn(message);
@@ -261,7 +264,6 @@ export class LintValidationStep implements ValidationStepRunner {
           targetRealmUrl,
           readResult.content,
           file,
-          fetchOpts,
         );
 
         let violations: LintViolationData[] = lintResponse.messages.map(
@@ -322,8 +324,7 @@ export class LintValidationStep implements ValidationStepRunner {
         },
         {
           targetRealmUrl,
-          authorization: this.config.authorization,
-          fetch: this.config.fetch,
+          client: this.config.client,
         },
       );
       if (!completeResult.updated) {
@@ -398,10 +399,7 @@ export class LintValidationStep implements ValidationStepRunner {
   private async discoverLintableFiles(
     targetRealmUrl: string,
   ): Promise<string[]> {
-    let result = await this.fetchFilenamesFn(targetRealmUrl, {
-      authorization: this.config.authorization,
-      fetch: this.config.fetch,
-    });
+    let result = await this.fetchFilenamesFn(targetRealmUrl);
 
     if (result.error) {
       log.warn(`Failed to fetch realm filenames: ${result.error}`);

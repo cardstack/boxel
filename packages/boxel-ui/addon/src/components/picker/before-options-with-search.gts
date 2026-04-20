@@ -1,6 +1,7 @@
 import { autoFocus } from '@cardstack/boxel-ui/modifiers';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { scheduleOnce } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { Select } from 'ember-power-select/components/power-select';
@@ -35,7 +36,7 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
   constructor(owner: any, args: BeforeOptionsWithSearchSignature['Args']) {
     super(owner, args);
     // Highlight the first navigable item on open (select-all, first summary, or first main)
-    requestAnimationFrame(() => this.activateFirstItem());
+    scheduleOnce('afterRender', this, this.activateFirstItem);
   }
 
   private activateFirstItem() {
@@ -112,7 +113,7 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
 
   private scrollSummaryItemIntoView(id: string) {
     const el = document.querySelector(
-      `.picker-before-options__option[data-test-boxel-picker-summary-item="${id}"]`,
+      `[data-boxel-picker-summary-item="${id}"]`,
     );
     if (el instanceof HTMLElement) {
       el.scrollIntoView({ block: 'nearest' });
@@ -206,7 +207,12 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
           let indextoActivate = select.selected
             ? currentIdx + 1
             : currentIdx - 1;
-          requestAnimationFrame(() => this.activateAtIndex(indextoActivate));
+          scheduleOnce(
+            'afterRender',
+            this,
+            this.activateAtIndex,
+            indextoActivate,
+          );
         }
         break;
       }
@@ -257,6 +263,7 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
             @isHighlighted={{eq this.summaryHighlightId item.id}}
             @select={{@select}}
             class='picker-before-options__option'
+            data-boxel-picker-summary-item={{item.id}}
             data-test-boxel-picker-summary-item={{item.id}}
           />
         {{/each}}

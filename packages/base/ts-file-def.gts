@@ -14,6 +14,7 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
+import { fencedCodeBlock } from './markdown-helpers';
 import { highlightTs } from './ts-highlight';
 export { highlightTs } from './ts-highlight';
 
@@ -430,6 +431,10 @@ export class TsFileDef extends FileDef {
   static icon = FileCodeIcon;
   static acceptTypes = '.ts';
   static validExtensions = new Set(['.ts']);
+  // CS-10787: language tag written into fenced code blocks in the markdown
+  // representation. Subclasses (e.g. GtsFileDef) override this to identify
+  // themselves to markdown renderers.
+  static markdownLanguage = 'ts';
 
   @field title = contains(StringField);
   @field excerpt = contains(StringField);
@@ -440,6 +445,24 @@ export class TsFileDef extends FileDef {
   static fitted: BaseDefComponent = Fitted;
   static atom: BaseDefComponent = Atom;
   static head: BaseDefComponent = Head;
+
+  // CS-10787: emit the source as a fenced code block labeled with the
+  // subclass's `markdownLanguage` (overridden by GtsFileDef). Empty content
+  // produces an empty string.
+  static markdown: BaseDefComponent = class Markdown extends Component<
+    typeof TsFileDef
+  > {
+    get text() {
+      let content = this.args.model?.content;
+      if (!content) {
+        return '';
+      }
+      let ctor = this.args.model?.constructor as typeof TsFileDef | undefined;
+      let lang = ctor?.markdownLanguage ?? TsFileDef.markdownLanguage;
+      return fencedCodeBlock(content, lang);
+    }
+    <template>{{this.text}}</template>
+  };
 
   static async extractAttributes(
     this: typeof TsFileDef,

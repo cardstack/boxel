@@ -1,0 +1,32 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Category",
+        "module": "../catalog-app/listing/category"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Food & Cooking",
+      "cardInfo": {
+        "name": "Food & Cooking",
+        "notes": null,
+        "summary": "Recipes, meal planning, grocery lists, restaurant tracking, cooking guides, nutrition tracking, and food discovery.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/life"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

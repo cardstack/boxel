@@ -4,6 +4,8 @@ import Component from '@glimmer/component';
 import { provide } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
 
+import { eq } from '@cardstack/boxel-ui/helpers';
+
 import {
   type getCard as GetCardType,
   GetCardContextName,
@@ -59,7 +61,26 @@ class RenderHtmlTemplate extends Component<Signature> {
     };
   }
 
-  <template><@model.Component @format={{@model.format}} /></template>
+  <template>
+    {{! Whitespace-preserving container for markdown-format renders (CS-10781).
+        `white-space: pre` keeps newlines and indentation authored in the
+        `<template>` body intact. The dedicated `data-markdown-render-container`
+        attribute gives the prerender extraction a tight target so surrounding
+        route-template whitespace does not leak into the captured markdown.
+        Only applies when format === 'markdown'; other formats are unaffected. }}
+    {{#if (eq @model.format 'markdown')}}
+      <div data-markdown-render-container class='markdown-render-container'>
+        <@model.Component @format={{@model.format}} />
+      </div>
+    {{else}}
+      <@model.Component @format={{@model.format}} />
+    {{/if}}
+    <style scoped>
+      .markdown-render-container {
+        white-space: pre;
+      }
+    </style>
+  </template>
 }
 
 export default RouteTemplate(RenderHtmlTemplate);

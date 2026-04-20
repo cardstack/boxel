@@ -13,6 +13,7 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
+import { fencedCodeBlock } from './markdown-helpers';
 
 const TEXT_EXTENSIONS = new Set(['.txt', '.text']);
 const EXCERPT_MAX_LENGTH = 500;
@@ -359,6 +360,22 @@ export class TextFileDef extends FileDef {
   static fitted: BaseDefComponent = Fitted;
   static atom: BaseDefComponent = Atom;
   static head: BaseDefComponent = Head;
+
+  // CS-10787: plain-text files emit as an unlabeled fenced code block so
+  // arbitrary content (including markdown-looking text) doesn't get re-
+  // interpreted as formatting by downstream consumers.
+  static markdown: BaseDefComponent = class Markdown extends Component<
+    typeof TextFileDef
+  > {
+    get text() {
+      let content = this.args.model?.content;
+      if (!content) {
+        return '';
+      }
+      return fencedCodeBlock(content);
+    }
+    <template>{{this.text}}</template>
+  };
 
   static async extractAttributes(
     url: string,

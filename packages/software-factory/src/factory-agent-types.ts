@@ -52,7 +52,8 @@ export type ActionRealm = (typeof VALID_REALMS)[number];
 export interface FactoryAgentConfig {
   model: string;
   realmServerUrl: string;
-  authorization?: string;
+  /** Boxel CLI client used to forward OpenRouter requests through the realm server. */
+  client: import('@cardstack/boxel-cli/api').BoxelCLIClient;
   maxSkillTokens?: number;
   /** Call OpenRouter directly with this API key instead of going through the
    *  realm server _request-forward proxy. Useful for local dev / CI. */

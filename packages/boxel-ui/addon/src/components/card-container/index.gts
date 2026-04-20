@@ -25,6 +25,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
         boxel-card-container--boundaries=@displayBoundaries
         boxel-card-container--themed=@isThemed
       }}
+      data-boxel-card-container
       data-test-boxel-card-container
       ...attributes
     >

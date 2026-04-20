@@ -40,6 +40,7 @@ export default config as {
   resolvedExternalCatalogRealmURL: string | undefined;
   resolvedSkillsRealmURL: string;
   resolvedOpenRouterRealmURL: string | undefined;
+  useExternalCatalog: boolean;
   hostsOwnAssets: boolean;
   realmsServed?: string[];
   logLevels: string;

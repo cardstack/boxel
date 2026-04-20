@@ -5,6 +5,7 @@ import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type
 
 import { ToolExecutor } from '../src/factory-tool-executor';
 import { ToolRegistry } from '../src/factory-tool-registry';
+import { buildTestClient } from './helpers/test-client';
 
 // ---------------------------------------------------------------------------
 // Test server helpers
@@ -84,13 +85,20 @@ module('factory-tool-executor integration > realm-api requests', function () {
       respond(200, { data: { id: 'Card/hello', type: 'card' } });
     });
 
+    let realmUrl = `${origin}/user/target/`;
+    let { client, cleanup } = buildTestClient({
+      realmUrl,
+      realmToken: 'Bearer realm-jwt-for-user',
+      realmServerUrl: `${origin}/`,
+      realmServerToken: 'Bearer realm-server-jwt',
+    });
+
     try {
       let registry = new ToolRegistry();
-      let realmUrl = `${origin}/user/target/`;
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: realmUrl,
-        authorization: 'Bearer realm-jwt-for-user',
+        client,
       });
 
       let result = await executor.execute('realm-read', {
@@ -110,6 +118,7 @@ module('factory-tool-executor integration > realm-api requests', function () {
         SupportedMimeType.CardSource,
       );
     } finally {
+      cleanup();
       await stopServer(server);
     }
   });
@@ -122,13 +131,20 @@ module('factory-tool-executor integration > realm-api requests', function () {
       respond(200, { ok: true });
     });
 
+    let realmUrl = `${origin}/user/target/`;
+    let { client, cleanup } = buildTestClient({
+      realmUrl,
+      realmToken: 'Bearer realm-jwt-for-user',
+      realmServerUrl: `${origin}/`,
+      realmServerToken: 'Bearer realm-server-jwt',
+    });
+
     try {
       let registry = new ToolRegistry();
-      let realmUrl = `${origin}/user/target/`;
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: realmUrl,
-        authorization: 'Bearer realm-jwt-for-user',
+        client,
       });
 
       let result = await executor.execute('realm-write', {
@@ -153,6 +169,7 @@ module('factory-tool-executor integration > realm-api requests', function () {
         'export class MyCard extends CardDef {}',
       );
     } finally {
+      cleanup();
       await stopServer(server);
     }
   });
@@ -165,13 +182,20 @@ module('factory-tool-executor integration > realm-api requests', function () {
       respond(204, null);
     });
 
+    let realmUrl = `${origin}/user/target/`;
+    let { client, cleanup } = buildTestClient({
+      realmUrl,
+      realmToken: 'Bearer realm-jwt-for-user',
+      realmServerUrl: `${origin}/`,
+      realmServerToken: 'Bearer realm-server-jwt',
+    });
+
     try {
       let registry = new ToolRegistry();
-      let realmUrl = `${origin}/user/target/`;
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: realmUrl,
-        authorization: 'Bearer realm-jwt-for-user',
+        client,
       });
 
       let result = await executor.execute('realm-delete', {
@@ -187,6 +211,7 @@ module('factory-tool-executor integration > realm-api requests', function () {
         'Bearer realm-jwt-for-user',
       );
     } finally {
+      cleanup();
       await stopServer(server);
     }
   });
@@ -199,13 +224,20 @@ module('factory-tool-executor integration > realm-api requests', function () {
       respond(200, { data: [] });
     });
 
+    let realmUrl = `${origin}/user/target/`;
+    let { client, cleanup } = buildTestClient({
+      realmUrl,
+      realmToken: 'Bearer realm-jwt-for-user',
+      realmServerUrl: `${origin}/`,
+      realmServerToken: 'Bearer realm-server-jwt',
+    });
+
     try {
       let registry = new ToolRegistry();
-      let realmUrl = `${origin}/user/target/`;
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: realmUrl,
-        authorization: 'Bearer realm-jwt-for-user',
+        client,
       });
 
       let query = JSON.stringify({
@@ -233,207 +265,7 @@ module('factory-tool-executor integration > realm-api requests', function () {
       );
       assert.strictEqual(captured!.body, query);
     } finally {
-      await stopServer(server);
-    }
-  });
-
-  test('realm-auth sends correct POST to _realm-auth with Authorization header', async function (assert) {
-    let captured: CapturedRequest | undefined;
-
-    let { server, origin } = await startTestServer((req, respond) => {
-      captured = req;
-      respond(200, { ok: true });
-    });
-
-    try {
-      let registry = new ToolRegistry();
-      let executor = new ToolExecutor(registry, {
-        packageRoot: '/fake',
-        targetRealmUrl: `${origin}/user/target/`,
-        authorization: 'Bearer realm-server-jwt-xyz',
-      });
-
-      let result = await executor.execute('realm-auth', {
-        'realm-server-url': `${origin}/user/target/`,
-      });
-
-      assert.strictEqual(result.exitCode, 0);
-      assert.strictEqual(captured!.method, 'POST');
-      assert.strictEqual(captured!.url, '/user/target/_realm-auth');
-      assert.strictEqual(
-        captured!.headers.authorization,
-        'Bearer realm-server-jwt-xyz',
-      );
-    } finally {
-      await stopServer(server);
-    }
-  });
-
-  test('realm-create sends correct JSON:API POST to _create-realm with realm-server JWT', async function (assert) {
-    let captured: CapturedRequest | undefined;
-
-    let { server, origin } = await startTestServer((req, respond) => {
-      captured = req;
-      respond(201, {
-        data: { type: 'realm', id: `${origin}/user/new-realm/` },
-      });
-    });
-
-    try {
-      let registry = new ToolRegistry();
-      let executor = new ToolExecutor(registry, {
-        packageRoot: '/fake',
-        targetRealmUrl: `${origin}/user/target/`,
-        authorization: 'Bearer realm-server-jwt-minted',
-      });
-
-      let result = await executor.execute('realm-create', {
-        'realm-server-url': `${origin}/user/target/`,
-        name: 'New Realm',
-        endpoint: 'user/new-realm',
-      });
-
-      assert.strictEqual(result.exitCode, 0);
-      assert.strictEqual(captured!.method, 'POST');
-      assert.strictEqual(captured!.url, '/user/target/_create-realm');
-      assert.strictEqual(
-        captured!.headers.authorization,
-        'Bearer realm-server-jwt-minted',
-      );
-      assert.strictEqual(captured!.headers.accept, SupportedMimeType.JSONAPI);
-      assert.strictEqual(
-        captured!.headers['content-type'],
-        SupportedMimeType.JSONAPI,
-      );
-
-      let body = JSON.parse(captured!.body);
-      assert.strictEqual(body.data.type, 'realm');
-      assert.strictEqual(body.data.attributes.name, 'New Realm');
-      assert.strictEqual(body.data.attributes.endpoint, 'user/new-realm');
-      assert.ok(body.data.attributes.iconURL, 'body includes iconURL');
-      assert.ok(
-        body.data.attributes.backgroundURL,
-        'body includes backgroundURL',
-      );
-    } finally {
-      await stopServer(server);
-    }
-  });
-
-  test('realm-server-session sends OpenID token and returns JWT from Authorization header', async function (assert) {
-    let captured: CapturedRequest | undefined;
-
-    let { server, origin } = await startTestServer((req, respond) => {
-      captured = req;
-      respond(201, null, {
-        Authorization: 'Bearer freshly-minted-jwt',
-      });
-    });
-
-    try {
-      let registry = new ToolRegistry();
-      let executor = new ToolExecutor(registry, {
-        packageRoot: '/fake',
-        targetRealmUrl: `${origin}/user/target/`,
-      });
-
-      let result = await executor.execute('realm-server-session', {
-        'realm-server-url': `${origin}/user/target/`,
-        'openid-token': 'matrix-openid-access-token',
-      });
-
-      assert.strictEqual(result.exitCode, 0);
-      assert.strictEqual(captured!.method, 'POST');
-      assert.strictEqual(captured!.url, '/user/target/_server-session');
-      assert.strictEqual(
-        captured!.headers['content-type'],
-        SupportedMimeType.JSON,
-      );
-
-      let body = JSON.parse(captured!.body);
-      assert.strictEqual(
-        body.access_token,
-        'matrix-openid-access-token',
-        'sends OpenID token in request body',
-      );
-
-      assert.deepEqual(
-        result.output,
-        { token: 'Bearer freshly-minted-jwt' },
-        'captures JWT from Authorization response header',
-      );
-    } finally {
-      await stopServer(server);
-    }
-  });
-
-  test('end-to-end: realm-server-session → realm-create flow', async function (assert) {
-    let requests: CapturedRequest[] = [];
-
-    let { server, origin } = await startTestServer((req, respond) => {
-      requests.push(req);
-
-      if (req.url?.endsWith('_server-session')) {
-        respond(201, null, {
-          Authorization: 'Bearer e2e-realm-server-jwt',
-        });
-      } else if (req.url?.endsWith('_create-realm')) {
-        respond(201, {
-          data: { type: 'realm', id: `${origin}/user/e2e-scratch/` },
-        });
-      } else {
-        respond(404, { error: 'not found' });
-      }
-    });
-
-    try {
-      let registry = new ToolRegistry();
-      let serverUrl = `${origin}/user/target/`;
-
-      // Step 1: Obtain realm-server JWT
-      let sessionExecutor = new ToolExecutor(registry, {
-        packageRoot: '/fake',
-        targetRealmUrl: serverUrl,
-      });
-
-      let sessionResult = await sessionExecutor.execute(
-        'realm-server-session',
-        {
-          'realm-server-url': serverUrl,
-          'openid-token': 'e2e-openid-token',
-        },
-      );
-
-      assert.strictEqual(sessionResult.exitCode, 0);
-      let jwt = (sessionResult.output as { token: string }).token;
-      assert.strictEqual(jwt, 'Bearer e2e-realm-server-jwt');
-
-      // Step 2: Use JWT to create a realm
-      let createExecutor = new ToolExecutor(registry, {
-        packageRoot: '/fake',
-        targetRealmUrl: serverUrl,
-        authorization: jwt,
-      });
-
-      let createResult = await createExecutor.execute('realm-create', {
-        'realm-server-url': serverUrl,
-        name: 'E2E Scratch',
-        endpoint: 'user/e2e-scratch',
-      });
-
-      assert.strictEqual(createResult.exitCode, 0);
-      assert.strictEqual(requests.length, 2, 'two requests made');
-
-      // Verify the create request used the minted JWT
-      let createReq = requests[1];
-      assert.strictEqual(createReq.method, 'POST');
-      assert.strictEqual(createReq.url, '/user/target/_create-realm');
-      assert.strictEqual(
-        createReq.headers.authorization,
-        'Bearer e2e-realm-server-jwt',
-        'create request uses the JWT from session',
-      );
-    } finally {
+      cleanup();
       await stopServer(server);
     }
   });
@@ -452,11 +284,19 @@ module('factory-tool-executor integration > safety constraints', function () {
       respond(200, {});
     });
 
+    let { client, cleanup } = buildTestClient({
+      realmUrl: `${origin}/user/target/`,
+      realmToken: 'Bearer realm-jwt',
+      realmServerUrl: `${origin}/`,
+      realmServerToken: 'Bearer realm-server-jwt',
+    });
+
     try {
       let registry = new ToolRegistry();
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: `${origin}/user/target/`,
+        client,
       });
 
       try {
@@ -473,6 +313,7 @@ module('factory-tool-executor integration > safety constraints', function () {
 
       assert.strictEqual(requestCount, 0, 'server received zero requests');
     } finally {
+      cleanup();
       await stopServer(server);
     }
   });
@@ -485,6 +326,13 @@ module('factory-tool-executor integration > safety constraints', function () {
       respond(200, {});
     });
 
+    let { client, cleanup } = buildTestClient({
+      realmUrl: `${origin}/user/target/`,
+      realmToken: 'Bearer realm-jwt',
+      realmServerUrl: `${origin}/`,
+      realmServerToken: 'Bearer realm-server-jwt',
+    });
+
     try {
       let registry = new ToolRegistry();
       let sourceUrl = `${origin}/user/source/`;
@@ -492,6 +340,7 @@ module('factory-tool-executor integration > safety constraints', function () {
         packageRoot: '/fake',
         targetRealmUrl: `${origin}/user/target/`,
         sourceRealmUrl: sourceUrl,
+        client,
       });
 
       try {
@@ -508,6 +357,7 @@ module('factory-tool-executor integration > safety constraints', function () {
 
       assert.strictEqual(requestCount, 0, 'server received zero requests');
     } finally {
+      cleanup();
       await stopServer(server);
     }
   });
@@ -520,11 +370,19 @@ module('factory-tool-executor integration > safety constraints', function () {
       respond(200, {});
     });
 
+    let { client, cleanup } = buildTestClient({
+      realmUrl: `${origin}/user/target/`,
+      realmToken: 'Bearer realm-jwt',
+      realmServerUrl: `${origin}/`,
+      realmServerToken: 'Bearer realm-server-jwt',
+    });
+
     try {
       let registry = new ToolRegistry();
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: `${origin}/user/target/`,
+        client,
       });
 
       try {
@@ -542,6 +400,7 @@ module('factory-tool-executor integration > safety constraints', function () {
 
       assert.strictEqual(requestCount, 0, 'server received zero requests');
     } finally {
+      cleanup();
       await stopServer(server);
     }
   });

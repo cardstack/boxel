@@ -2,6 +2,7 @@ import { GridContainer, Swatch } from '@cardstack/boxel-ui/components';
 import {
   buildCssVariableName,
   entriesToCssRuleMap,
+  markdownEscape,
 } from '@cardstack/boxel-ui/helpers';
 
 import { field, contains, Component, getFields, FieldDef } from './card-api';
@@ -94,4 +95,33 @@ export default class BrandFunctionalPalette extends FieldDef {
     }
     return entriesToCssRuleMap(this.cssVariableFields);
   }
+
+  // CS-10787: emit a bulleted list of the palette entries with their CSS
+  // color values in inline code. Skips empty slots so the output stays
+  // compact.
+  static markdown = class Markdown extends Component<
+    typeof BrandFunctionalPalette
+  > {
+    get text() {
+      let model = this.args.model;
+      if (!model) {
+        return '';
+      }
+      let rows: string[] = [];
+      let pairs: { key: keyof typeof model; label: string }[] = [
+        { key: 'primary', label: 'Primary' },
+        { key: 'secondary', label: 'Secondary' },
+        { key: 'accent', label: 'Accent' },
+        { key: 'light', label: 'Light' },
+        { key: 'dark', label: 'Dark' },
+      ];
+      for (let { key, label } of pairs) {
+        let value = model[key] as string | undefined;
+        if (!value) continue;
+        rows.push(`- ${markdownEscape(label)}: \`${value}\``);
+      }
+      return rows.join('\n');
+    }
+    <template>{{this.text}}</template>
+  };
 }

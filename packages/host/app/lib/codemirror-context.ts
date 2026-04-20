@@ -810,6 +810,7 @@ function createCardTargetNotifier(
         if (this.rafId) {
           cancelAnimationFrame(this.rafId);
         }
+        // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- throttled DOM measurement after paint
         this.rafId = requestAnimationFrame(() => {
           this.rafId = 0;
           if (this.destroyed) return;

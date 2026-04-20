@@ -219,7 +219,7 @@ module(basename(__filename), function (hooks) {
       let attempts = 0;
       let server = createServer((req, res) => {
         attempts++;
-        if (req.url?.endsWith('/prerender-card') && attempts < 3) {
+        if (req.url?.endsWith('/prerender-visit') && attempts < 3) {
           res.statusCode = PRERENDER_SERVER_DRAINING_STATUS_CODE;
           res.setHeader(
             PRERENDER_SERVER_STATUS_HEADER,
@@ -239,7 +239,7 @@ module(basename(__filename), function (hooks) {
       let url = `http://127.0.0.1:${(server.address() as any).port}`;
       let prerenderer = createRemotePrerenderer(url);
 
-      let result = await prerenderer.prerenderCard({
+      let result = await prerenderer.prerenderVisit({
         affinityType: 'realm',
         affinityValue: 'realm',
         realm: 'realm',
@@ -263,7 +263,7 @@ module(basename(__filename), function (hooks) {
       let prerenderer = createRemotePrerenderer(url);
 
       try {
-        await prerenderer.prerenderCard({
+        await prerenderer.prerenderVisit({
           affinityType: 'realm',
           affinityValue: 'realm',
           realm: 'realm',
@@ -310,7 +310,7 @@ module(basename(__filename), function (hooks) {
         let url = `http://127.0.0.1:${(server.address() as any).port}`;
         let prerenderer = createRemotePrerenderer(url);
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderer.prerenderVisit({
           affinityType: 'realm',
           affinityValue: 'realm',
           realm: 'realm',
@@ -346,7 +346,7 @@ module(basename(__filename), function () {
         let prerenderer = createRemotePrerenderer(url);
 
         await assert.rejects(
-          prerenderer.prerenderCard({
+          prerenderer.prerenderVisit({
             affinityType: 'realm',
             affinityValue: 'realm',
             realm: 'realm',

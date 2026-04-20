@@ -10,7 +10,13 @@ import { timeout } from 'ember-concurrency';
 import window from 'ember-window-mock';
 
 import { isCardInstance } from '@cardstack/runtime-common';
-import type { LLMMode } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_LLM_MODE,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  DEFAULT_LLM,
+  type LLMMode,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import type * as CommandModule from 'https://cardstack.com/base/command';
@@ -22,7 +28,7 @@ import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
 
 import SummarizeSessionCommand from '../commands/summarize-session';
 import { Submodes } from '../components/submode-switcher';
-import { eventDebounceMs, isMatrixError } from '../lib/matrix-utils';
+import { isMatrixError } from '../lib/matrix-utils';
 import { importResource } from '../resources/import';
 import { NewSessionIdPersistenceKey } from '../utils/local-storage-keys';
 
@@ -60,6 +66,10 @@ export default class AiAssistantPanelService extends Service {
 
   @tracked displayRoomError = false;
   @tracked isShowingPastSessions = false;
+  // Rooms the user has explicitly deleted this session. Used to filter
+  // aiSessionRooms because sync events can re-add deleted rooms to the
+  // cache before the leave event propagates through the room state.
+  private deletedRoomIds = new Set<string>();
   @tracked roomToRename: SessionRoomData | undefined = undefined;
   @tracked roomToDelete: { id: string; name: string } | undefined = undefined;
   @tracked roomDeleteError: string | undefined = undefined;
@@ -79,6 +89,7 @@ export default class AiAssistantPanelService extends Service {
     this.roomToRename = undefined;
     this.roomToDelete = undefined;
     this.roomDeleteError = undefined;
+    this.deletedRoomIds.clear();
     window.localStorage.removeItem(NewSessionIdPersistenceKey);
     this.loadRoomsTask.cancelAll();
     this.doCreateRoom.cancelAll();
@@ -236,6 +247,7 @@ export default class AiAssistantPanelService extends Service {
       addSameSkills: boolean;
       shouldCopyFileHistory: boolean;
       shouldSummarizeSession: boolean;
+      deferDefaultSkills?: boolean;
     } = {
       addSameSkills: false,
       shouldCopyFileHistory: false,
@@ -393,46 +405,65 @@ export default class AiAssistantPanelService extends Service {
         addSameSkills: boolean;
         shouldCopyFileHistory: boolean;
         shouldSummarizeSession: boolean;
+        deferDefaultSkills?: boolean;
       },
     ) => {
-      let { addSameSkills, shouldCopyFileHistory, shouldSummarizeSession } =
-        opts;
+      let {
+        addSameSkills,
+        shouldCopyFileHistory,
+        shouldSummarizeSession,
+        deferDefaultSkills,
+      } = opts;
       try {
-        let createRoomCommand = new CreateAiAssistantRoomCommand(
-          this.commandService.commandContext,
-        );
-
-        let input: any = { name };
-        let llmMode = this.getPreferredLLMMode();
-        if (llmMode) {
-          input.llmMode = llmMode;
-        }
-        let enabledSkills: SkillCard[] = [];
-        let disabledSkills: SkillCard[] = [];
-
-        if (addSameSkills) {
-          const extractedSkills = await this.extractSkillsFromCurrentRoom();
-          enabledSkills = extractedSkills.enabledSkills;
-          disabledSkills = extractedSkills.disabledSkills;
-        }
-
-        if (enabledSkills.length || disabledSkills.length) {
-          input.enabledSkills = enabledSkills;
-          input.disabledSkills = disabledSkills;
-        } else {
-          // Use default skills
-          input.enabledSkills = await this.matrixService.loadDefaultSkills(
-            this.operatorModeStateService.state.submode,
-          );
-        }
-
+        let roomId: string;
         let oldRoomId = this.matrixService.currentRoomId;
-        let { roomId } = await createRoomCommand.execute(input);
+
+        if (deferDefaultSkills) {
+          // Fast path: create room directly without going through the
+          // command system (which loads a JS module from the realm server
+          // that can hang on 404s). Skills are applied in the background.
+          roomId = await this.createFallbackRoom(name);
+        } else {
+          let createRoomCommand = new CreateAiAssistantRoomCommand(
+            this.commandService.commandContext,
+          );
+
+          let input: any = { name };
+          let llmMode = this.getPreferredLLMMode();
+          if (llmMode) {
+            input.llmMode = llmMode;
+          }
+          let enabledSkills: SkillCard[] = [];
+          let disabledSkills: SkillCard[] = [];
+
+          if (addSameSkills) {
+            const extractedSkills = await this.extractSkillsFromCurrentRoom();
+            enabledSkills = extractedSkills.enabledSkills;
+            disabledSkills = extractedSkills.disabledSkills;
+          }
+
+          if (enabledSkills.length || disabledSkills.length) {
+            input.enabledSkills = enabledSkills;
+            input.disabledSkills = disabledSkills;
+          } else {
+            // Use default skills
+            input.enabledSkills = await this.matrixService.loadDefaultSkills(
+              this.operatorModeStateService.state.submode,
+            );
+          }
+
+          ({ roomId } = await createRoomCommand.execute(input));
+        }
 
         window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
 
         // Enter room immediately
         this.enterRoom(roomId);
+
+        // Load default skills in the background after room creation
+        if (deferDefaultSkills) {
+          this.applyDefaultSkillsToRoom(roomId);
+        }
 
         // Start background tasks for session preparation
         if (oldRoomId && (shouldSummarizeSession || shouldCopyFileHistory)) {
@@ -449,6 +480,90 @@ export default class AiAssistantPanelService extends Service {
       return undefined;
     },
   );
+
+  private async createFallbackRoom(name: string): Promise<string> {
+    let userId = this.matrixService.userId;
+    if (!userId) {
+      throw new Error('Requires userId to create a fallback room');
+    }
+    let aiBotFullId = this.matrixService.aiBotUserId;
+    let llmMode = this.getPreferredLLMMode();
+    let systemCard = this.matrixService.systemCard;
+    let configuration =
+      systemCard?.defaultModelConfiguration ??
+      systemCard?.modelConfigurations?.[0];
+
+    let roomPromise = this.matrixService.createRoom({
+      preset: this.matrixService.privateChatPreset,
+      invite: [aiBotFullId],
+      name,
+      room_alias_name: encodeURIComponent(
+        `${name} - ${new Date().toISOString()} - ${userId}`,
+      ),
+      power_level_content_override: {
+        users: {
+          [userId]: 100,
+          [aiBotFullId]: this.matrixService.aiBotPowerLevel,
+        },
+      },
+      initial_state: [
+        {
+          type: APP_BOXEL_ACTIVE_LLM,
+          content: {
+            model: configuration?.modelId ?? DEFAULT_LLM,
+            toolsSupported: Boolean(configuration?.toolsSupported),
+            reasoningEffort: configuration?.reasoningEffort ?? undefined,
+          },
+        },
+        {
+          type: APP_BOXEL_LLM_MODE,
+          content: { mode: llmMode || 'ask' },
+        },
+        {
+          type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+          content: {
+            enabledSkillCards: [],
+            disabledSkillCards: [],
+            commandDefinitions: [],
+          },
+        },
+      ],
+    });
+    let timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('Room creation timed out waiting for sync')),
+        30_000,
+      ),
+    );
+    let { room_id: roomId } = await Promise.race([roomPromise, timeoutPromise]);
+    return roomId;
+  }
+
+  private async applyDefaultSkillsToRoom(roomId: string) {
+    try {
+      let skills = await this.matrixService.loadDefaultSkills(
+        this.operatorModeStateService.state.submode,
+      );
+      if (!skills.length) {
+        return;
+      }
+      let enabledSkillFileDefs = await this.matrixService.uploadCards(skills);
+      let commandDefinitions = skills.flatMap((skill) => skill.commands);
+      let commandFileDefs =
+        await this.matrixService.uploadCommandDefinitions(commandDefinitions);
+      await this.matrixService.sendStateEvent(
+        roomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        {
+          enabledSkillCards: enabledSkillFileDefs.map((fd) => fd.serialize()),
+          disabledSkillCards: [],
+          commandDefinitions: commandFileDefs.map((fd) => fd.serialize()),
+        },
+      );
+    } catch (e) {
+      console.error('Failed to apply default skills to room:', e);
+    }
+  }
 
   // Background tasks for session preparation
   private summarizeSessionTask = restartableTask(
@@ -612,6 +727,18 @@ export default class AiAssistantPanelService extends Service {
       ) {
         continue;
       }
+      // Skip rooms the user has deleted this session, or rooms whose state
+      // shows the user has left. Sync events can re-add deleted rooms to
+      // the cache with stale state before the leave event propagates.
+      if (resource.roomId && this.deletedRoomIds.has(resource.roomId)) {
+        continue;
+      }
+      if (
+        this.matrixService.userId &&
+        !resource.matrixRoom.hasActiveMember(this.matrixService.userId)
+      ) {
+        continue;
+      }
       if (resource.name && resource.roomId) {
         sessions.push({
           roomId: resource.roomId,
@@ -677,12 +804,10 @@ export default class AiAssistantPanelService extends Service {
 
   private doLeaveRoom = restartableTask(async (roomId: string) => {
     try {
-      await this.matrixService.leave(roomId);
-      await this.matrixService.forget(roomId);
-      await timeout(eventDebounceMs); // this makes it feel a bit more responsive
+      this.deletedRoomIds.add(roomId);
       this.matrixService.roomResourcesCache.delete(roomId);
 
-      if (this.newSessionId === roomId) {
+      if (window.localStorage.getItem(NewSessionIdPersistenceKey) === roomId) {
         window.localStorage.removeItem(NewSessionIdPersistenceKey);
       }
 
@@ -691,11 +816,22 @@ export default class AiAssistantPanelService extends Service {
         if (this.latestRoom) {
           this.enterRoom(this.latestRoom.roomId, false);
         } else {
-          this.createNewSession();
+          await this.createNewSession({
+            addSameSkills: false,
+            shouldCopyFileHistory: false,
+            shouldSummarizeSession: false,
+            deferDefaultSkills: true,
+          });
         }
       }
       this.roomToDelete = undefined;
+
+      await this.matrixService.leave(roomId);
+      await this.matrixService.forget(roomId);
     } catch (e) {
+      // Roll back local deletion state so the room reappears in the
+      // session list — the user still belongs to it on the server.
+      this.deletedRoomIds.delete(roomId);
       console.error(e);
       this.roomDeleteError = 'Error deleting room';
       if (isMatrixError(e)) {

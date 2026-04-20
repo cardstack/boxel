@@ -342,6 +342,9 @@ test.describe('Room creation', () => {
   test('it opens latest room available (or creates new) when current room is deleted', async ({
     page,
   }) => {
+    // This test creates 3 rooms, sends messages, deletes all 3, then waits
+    // for auto-creation — needs more than the default 60s timeout.
+    test.setTimeout(120_000);
     await login(page, firstUser.username, firstUser.password, { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
     let room1 = await getRoomId(page);
@@ -363,10 +366,20 @@ test.describe('Room creation', () => {
     await deleteRoom(page, room2); // current room is deleted
     await page.locator('[data-test-ai-assistant-panel]').click();
     let newRoom: string | undefined;
+    // Poll without using getRoomId — it blocks on waitFor('[data-test-room-settled]')
+    // which can consume the entire waitUntil budget in a single attempt.
     await waitUntil(async () => {
       try {
-        let roomId = await getRoomId(page);
-        if (roomId !== room1 && roomId !== room2 && roomId !== room3) {
+        if ((await page.locator('[data-test-room-error]').count()) > 0) {
+          await page
+            .locator('[data-test-room-error] button:has-text("Try Again")')
+            .click();
+          return false;
+        }
+        let roomEl = page.locator('[data-test-room]');
+        if ((await roomEl.count()) === 0) return false;
+        let roomId = await roomEl.getAttribute('data-test-room');
+        if (roomId && roomId !== room1 && roomId !== room2 && roomId !== room3) {
           newRoom = roomId;
           return true;
         }
@@ -374,7 +387,7 @@ test.describe('Room creation', () => {
       } catch {
         return false;
       }
-    }, 30000);
+    }, 60_000);
     if (!newRoom) {
       throw new Error('expected to enter a newly-created room after deletion');
     }

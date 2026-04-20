@@ -39,19 +39,17 @@ The orchestrator (`runIssueLoop`) is a thin scheduler that picks the next unbloc
 
 - Docker running
 - `mise run dev-all` (starts realm server, host app, icons server, Postgres, Synapse)
-- Matrix credentials (username/password) for realm creation and auth
+- Active Boxel CLI profile (`boxel profile add`)
 - An [OpenRouter API key](https://openrouter.ai/keys) for the LLM agent (when running the full factory)
 
 ## Running the Factory
 
 Make sure the prerequisites above are met, and that you have a brief card published in the software-factory realm (e.g., `http://localhost:4201/software-factory/Wiki/sticky-note`).
 
-Set up credentials first (these persist in your shell session):
+Set up your profile and API key first:
 
 ```bash
-export MATRIX_URL=http://localhost:8008/
-export MATRIX_USERNAME=your-username
-read -s 'MATRIX_PASSWORD?Matrix password: ' && export MATRIX_PASSWORD
+boxel profile add     # Interactive wizard — choose your environment, enter credentials
 export OPENROUTER_API_KEY=sk-or-v1-your-key-here
 ```
 

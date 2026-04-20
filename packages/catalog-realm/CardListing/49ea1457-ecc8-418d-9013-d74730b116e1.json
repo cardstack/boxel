@@ -29,12 +29,12 @@
       },
       "tags.0": {
         "links": {
-          "self": "../Tag/140feda8-625b-4a24-9ddb-6f4da891aef2"
+          "self": "../Tag/bundled"
         }
       },
       "tags.1": {
         "links": {
-          "self": "../Tag/4d0f9ae2-048e-4ce0-b263-7006602ce6a4"
+          "self": "../Tag/user-contributed"
         }
       },
       "license": {

@@ -167,7 +167,7 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
         url: 'https://openrouter.ai/api/v1/chat/completions',
         method: 'POST',
         requestBody: JSON.stringify({
-          model: input.llmModel || 'anthropic/claude-3-haiku',
+          model: input.llmModel || 'anthropic/claude-haiku-4.5',
           messages: generationMessages,
           stream: false,
         }),
@@ -180,11 +180,6 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
       }
 
       const responseData = await result.response.json();
-      oneShotLogger.debug('raw llm response meta', {
-        status: result.response.status,
-        model: input.llmModel || 'anthropic/claude-3-haiku',
-        usage: responseData.usage || null,
-      });
       const output = responseData.choices?.[0]?.message?.content || null;
       oneShotLogger.debug('llm request complete', output);
 

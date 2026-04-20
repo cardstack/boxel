@@ -9,6 +9,7 @@ import {
   DatetimeSerializer,
   isValidDate,
 } from '@cardstack/runtime-common';
+import { formatDateTimeForMarkdown } from './markdown-helpers';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
 // it in the application route at app startup.
@@ -46,6 +47,14 @@ export default class DateTimeField extends FieldDef {
 
   static embedded = View;
   static atom = View;
+
+  // CS-10786: consistent markdown-escaped date+time output.
+  static markdown = class Markdown extends Component<typeof this> {
+    get formatted() {
+      return formatDateTimeForMarkdown(this.args.model);
+    }
+    <template>{{this.formatted}}</template>
+  };
 
   static edit = class Edit extends Component<typeof this> {
     <template>

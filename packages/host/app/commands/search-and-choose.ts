@@ -6,8 +6,6 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import { prettifyPrompts } from '../utils/prettify-prompts';
-
 import OneShotLlmRequestCommand from './one-shot-llm-request';
 import { SearchCardsByTypeAndTitleCommand } from './search-cards';
 
@@ -49,6 +47,8 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
       throw new Error('max must be at least 1');
     }
 
+    const { SearchAndChooseResult } = await this.loadCommandModule();
+
     // 1. Gather candidates via existing search command
     const search = new SearchCardsByTypeAndTitleCommand(this.commandContext);
     const searchResult = await search.execute({ type: candidateTypeCodeRef });
@@ -58,55 +58,63 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
       log.debug('No instances found for type', {
         type: candidateTypeCodeRef.name,
       });
-      const { SearchAndChooseResult } = await this.loadCommandModule();
       return new SearchAndChooseResult({ selectedIds: [], selectedCards: [] });
     }
 
     // 2. Prepare prompt content
-    const summaries = this.formatCandidatesForPrompt(instances);
-    let systemPrompt =
-      max === 1
-        ? `Select the single most relevant id representing ${candidateTypeCodeRef.name}. Output ONLY a JSON array with exactly 1 id string. No commentary.`
-        : `Select the most relevant 1 to ${max} ids representing ${candidateTypeCodeRef.name}. Output ONLY a JSON array of unique id strings. No commentary.`;
+    // Use numbered indices instead of raw IDs to prevent the LLM from
+    // hallucinating IDs it knows from training data. Options are numbered starting
+    // from 1 in the prompt, then mapped back to 0-based indices when selecting.
+    const numberedCandidates = this.formatCandidatesAsNumberedList(instances);
+    const isMaxOne = max === 1;
+
+    let contextSection = '';
     if (selectionContextCodeRef) {
-      systemPrompt += ` Use the attached module source for "${selectionContextCodeRef.name}" (${selectionContextCodeRef.module}) as selection context.`;
+      contextSection = `Selection context: "${selectionContextCodeRef.name}" (${selectionContextCodeRef.module})`;
     }
     if (additionalSystemPrompt && additionalSystemPrompt.trim()) {
-      systemPrompt += ` ${additionalSystemPrompt.trim()}`;
+      contextSection += `${contextSection ? '\n' : ''}${additionalSystemPrompt.trim()}`;
     }
-    const userPrompt =
-      max === 1
-        ? `Options (id :: title):\n${summaries}\n\nRules:\n- Return a JSON array with exactly 1 id.\n- Only use ids from the list.\n- If nothing is relevant return [].`
-        : `Options (id :: title):\n${summaries}\n\nRules:\n- Return a JSON array with 1 to ${max} ids.\n- No duplicates.\n- Only use ids from the list.\n- If nothing is relevant return [].`;
+    const systemPrompt =
+      'You are a selection assistant. Return only what is asked with no commentary.';
+    const userPrompt = [
+      `Choose the most relevant ${
+        isMaxOne ? '1 option' : `1 to ${max} options`
+      } for "${candidateTypeCodeRef.name}" from the numbered list below.`,
+      contextSection,
+      `Options:\n${numberedCandidates}`,
+      isMaxOne
+        ? `Return a JSON array containing exactly 1 number (the option number). If nothing is relevant return [].`
+        : `Return a JSON array of numbers (the option numbers, no duplicates, up to ${max}). If nothing is relevant return [].`,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
 
     // 3. LLM selection
     const oneShot = new OneShotLlmRequestCommand(this.commandContext);
 
-    // Unified prompt logging via reusable utility
-    log.debug(
-      prettifyPrompts({
-        scope: `SearchAndChoose:${candidateTypeCodeRef.name}`,
-        systemPrompt,
-        userPrompt,
-      }),
-    );
-    const r = await oneShot.execute({
+    const res = await oneShot.execute({
       systemPrompt,
       userPrompt,
-      llmModel: llmModel || 'anthropic/claude-3-haiku',
+      llmModel,
       codeRef: selectionContextCodeRef ?? candidateTypeCodeRef,
     });
 
-    const selectedIds = this.parseIdsFromLlmOutput(r.output || '[]').slice(
-      0,
-      max,
-    );
-    const selectedCards = instances.filter((inst: any) =>
-      selectedIds.some(
-        (id) => typeof inst.id === 'string' && inst.id.includes(id),
-      ),
-    );
-    const { SearchAndChooseResult } = await this.loadCommandModule();
+    const validInstances = instances.filter((c: any) => c && c.id);
+    const rawIndices = this.parseIndicesFromLlmOutput(res.output || '[]');
+    const selectedIndices = Array.from(new Set(rawIndices)).slice(0, max);
+    const selectedCards = selectedIndices
+      .map((i) => validInstances[i - 1])
+      .filter(Boolean);
+    const selectedIds = selectedCards.map((c: any) => c.id);
+
+    // Log a warning if the LLM output could not be parsed into valid selections, to aid debugging
+    if (selectedCards.length === 0) {
+      console.warn(
+        `[SearchAndChoose:${candidateTypeCodeRef.name}] LLM could not find a relevant option from ${validInstances.length} available cards. LLM output: "${res.output}" (Parsed indices: ${selectedIndices})`,
+      );
+    }
+
     return new SearchAndChooseResult({
       selectedIds,
       selectedCards,
@@ -126,7 +134,7 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
     return codeRef;
   }
 
-  private parseIdsFromLlmOutput(output: string): string[] {
+  private parseIndicesFromLlmOutput(output: string): number[] {
     let text = output.trim();
     if (!text) return [];
     if (text.startsWith('```')) {
@@ -138,21 +146,34 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
     try {
       const parsed = JSON.parse(text);
       if (!Array.isArray(parsed)) return [];
-      return parsed.filter((v) => typeof v === 'string');
+      return parsed
+        .map((v) => {
+          // Accept either a number or a string representation of a positive integer
+          if (typeof v === 'number' && Number.isInteger(v) && v > 0) {
+            return v;
+          }
+          if (typeof v === 'string') {
+            const num = parseInt(v, 10);
+            // Verify the entire string was consumed (no partial parsing like "1.5" -> 1)
+            if (Number.isInteger(num) && num > 0 && String(num) === v.trim()) {
+              return num;
+            }
+          }
+          return null;
+        })
+        .filter((v): v is number => v !== null);
     } catch {
       return [];
     }
   }
 
-  private formatCandidatesForPrompt(instances: any[]): string {
+  private formatCandidatesAsNumberedList(instances: any[]): string {
     return instances
       .filter((c) => c && c.id)
-      .map((c) => {
-        const title = c.title || '';
+      .map((c, i) => {
+        const name = c.cardTitle || c.name || '';
         const summary = c.cardInfo?.summary || '';
-        return summary
-          ? `${c.id} :: ${title} — ${summary}`.trim()
-          : `${c.id} :: ${title}`.trim();
+        return summary ? `${i + 1}. ${name} — ${summary}` : `${i + 1}. ${name}`;
       })
       .join('\n');
   }

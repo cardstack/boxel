@@ -28,6 +28,10 @@ import {
 } from '@cardstack/runtime-common';
 
 import type RealmServerService from '@cardstack/host/services/realm-server';
+import {
+  isURLSearchKey,
+  resolveSearchKeyAsURL,
+} from '@cardstack/host/utils/card-search/url';
 
 import SearchPanel from '../card-search/panel';
 
@@ -82,7 +86,7 @@ const BASE_FILTER: Filter = {
 
 export default class SearchSheet extends Component<Signature> {
   @tracked private searchKey = '';
-  @tracked private initialSelectedType: ResolvedCodeRef | undefined;
+  @tracked private initialSelectedTypes: ResolvedCodeRef[] | undefined;
 
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
@@ -124,12 +128,7 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   private get searchKeyIsURL() {
-    try {
-      new URL(this.searchKey);
-      return true;
-    } catch (_e) {
-      return false;
-    }
+    return isURLSearchKey(this.searchKey);
   }
 
   @action
@@ -157,12 +156,12 @@ export default class SearchSheet extends Component<Signature> {
   @action
   private doExternallyTriggeredSearch(term: string, typeRef?: ResolvedCodeRef) {
     this.searchKey = term;
-    this.initialSelectedType = typeRef;
+    this.initialSelectedTypes = typeRef ? [typeRef] : undefined;
   }
 
   private resetState() {
     this.searchKey = '';
-    this.initialSelectedType = undefined;
+    this.initialSelectedTypes = undefined;
   }
 
   @action private debouncedSetSearchKey(searchKey: string) {
@@ -173,6 +172,14 @@ export default class SearchSheet extends Component<Signature> {
   private setSearchKey(searchKey: string) {
     this.searchKey = searchKey;
     this.args.onSearch?.(searchKey);
+  }
+
+  @action private handleRealmChange(_selectedRealms: URL[]) {
+    this.args.onFilterChange?.();
+  }
+
+  @action private handleTypeChange(_selectedTypes: ResolvedCodeRef[]) {
+    this.args.onFilterChange?.();
   }
 
   @action private onSearchInputKeyDown(e: Event) {
@@ -188,15 +195,10 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   private get searchKeyAsURL() {
-    if (!this.searchKeyIsURL) {
-      return undefined;
-    }
-    let cardURL = this.searchKey;
-
-    let maybeIndexCardURL = this.realmServer.availableRealmURLs.find(
-      (u) => u === cardURL + '/',
+    return resolveSearchKeyAsURL(
+      this.searchKey,
+      this.realmServer.availableRealmURLs,
     );
-    return maybeIndexCardURL ?? cardURL;
   }
 
   // note that this is a card that is eligible for garbage collection
@@ -263,13 +265,13 @@ export default class SearchSheet extends Component<Signature> {
         <SearchPanel
           @searchKey={{this.searchKey}}
           @baseFilter={{BASE_FILTER}}
-          @initialSelectedType={{this.initialSelectedType}}
-          @onFilterChange={{@onFilterChange}}
-          as |Bar Content joinedRealmURLs|
+          @initialSelectedTypes={{this.initialSelectedTypes}}
+          @onRealmChange={{this.handleRealmChange}}
+          @onTypeChange={{this.handleTypeChange}}
+          as |Bar Content|
         >
           <Bar
             class='search-sheet__search-input-group'
-            @value={{this.searchKey}}
             @placeholder={{this.placeholderText}}
             @state={{this.inputValidationState}}
             @bottomTreatment={{this.inputBottomTreatment}}
@@ -278,7 +280,6 @@ export default class SearchSheet extends Component<Signature> {
             @onKeyDown={{this.onSearchInputKeyDown}}
             @onInputInsertion={{@onInputInsertion}}
             @autocomplete='off'
-            data-test-search-realms={{joinedRealmURLs}}
           />
           <Content
             class='search-sheet__content'

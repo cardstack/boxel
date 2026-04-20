@@ -8,10 +8,7 @@ import {
   type AffinityType,
   logger,
   type RenderRouteOptions,
-  type RenderResponse,
   type ModuleRenderResponse,
-  type FileExtractResponse,
-  type FileRenderResponse,
   type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import {
@@ -389,29 +386,6 @@ export function buildPrerenderApp(options: {
     });
   }
 
-  registerPrerenderRoute('/prerender-card', {
-    requestDescription: 'prerender request',
-    responseType: 'prerender-result',
-    infoLabel: 'prerendered',
-    warnTimeoutMessage: (url) => `render of ${url} timed out`,
-    errorContext: '/prerender-card',
-    parseAttributes: parseDefaultPrerenderAttributes,
-    execute: (args) => prerenderer.prerenderCard(args),
-    drainingPromise: options.drainingPromise,
-    afterResponse: (url, response) => {
-      const cardResponse = response as RenderResponse;
-      if (cardResponse.error) {
-        log.debug(
-          `render of ${url} resulted in error doc:\n${JSON.stringify(cardResponse.error, null, 2)}`,
-        );
-      } else {
-        log.debug(
-          `render of ${url} resulted in search doc:\n${JSON.stringify(cardResponse.searchDoc, null, 2)}`,
-        );
-      }
-    },
-  });
-
   registerPrerenderRoute('/prerender-module', {
     requestDescription: 'module prerender request',
     responseType: 'prerender-module-result',
@@ -426,25 +400,6 @@ export function buildPrerenderApp(options: {
       if (moduleResponse.status === 'error' && moduleResponse.error) {
         log.debug(
           `module render of ${url} resulted in error doc:\n${JSON.stringify(moduleResponse.error, null, 2)}`,
-        );
-      }
-    },
-  });
-
-  registerPrerenderRoute('/prerender-file-extract', {
-    requestDescription: 'file extract prerender request',
-    responseType: 'prerender-file-extract-result',
-    infoLabel: 'file extract prerendered',
-    warnTimeoutMessage: (url) => `file extract render of ${url} timed out`,
-    errorContext: '/prerender-file-extract',
-    parseAttributes: parseDefaultPrerenderAttributes,
-    execute: (args) => prerenderer.prerenderFileExtract(args),
-    drainingPromise: options.drainingPromise,
-    afterResponse: (url, response) => {
-      const fileResponse = response as FileExtractResponse;
-      if (fileResponse.status === 'error' && fileResponse.error) {
-        log.debug(
-          `file extract of ${url} resulted in error doc:\n${JSON.stringify(fileResponse.error, null, 2)}`,
         );
       }
     },
@@ -471,9 +426,9 @@ export function buildPrerenderApp(options: {
     },
   );
 
-  // File render route needs additional attributes (fileData, types)
-  // beyond what registerPrerenderRoute handles, so we register it directly.
-  router.post('/prerender-file-render', async (ctxt: Koa.Context) => {
+  // Composite visit prerender: runs a caller-selected subset of
+  // {fileExtract, cardRender, fileRender} on a single page acquisition.
+  router.post('/prerender-visit', async (ctxt: Koa.Context) => {
     try {
       let request = await fetchRequestFromContext(ctxt);
       let raw = await request.text();
@@ -519,15 +474,40 @@ export function buildPrerenderApp(options: {
         .filter(({ value }) => !isNonEmptyString(value))
         .map(({ name }) => name);
 
-      if (!fileData) {
-        missing.push('fileData');
+      // At least one pass must be requested
+      if (
+        !renderOptions.fileExtract &&
+        !renderOptions.cardRender &&
+        !renderOptions.fileRender
+      ) {
+        missing.push('renderOptions.{fileExtract|cardRender|fileRender}');
       }
-      if (!Array.isArray(types)) {
-        missing.push('types');
+
+      // If fileRender is requested without fileData, we need fileExtract so
+      // the composite can chain the extract's resource into render. When
+      // fileExtract isn't requested AND fileData isn't supplied, reject —
+      // the host route model hook requires fileData to populate its model.
+      if (renderOptions.fileRender && !fileData && !renderOptions.fileExtract) {
+        missing.push(
+          'fileData (required when fileRender pass is requested without fileExtract)',
+        );
+      }
+      // Chaining fileExtract → fileRender also needs fileDefCodeRef so the
+      // renderer can resolve the file definition for the extracted resource.
+      // Catch this at the HTTP boundary rather than failing mid-render.
+      if (
+        renderOptions.fileRender &&
+        !fileData &&
+        renderOptions.fileExtract &&
+        !renderOptions.fileDefCodeRef
+      ) {
+        missing.push(
+          'renderOptions.fileDefCodeRef (required when fileRender chains off fileExtract)',
+        );
       }
 
       log.debug(
-        `received file render prerender request ${rawUrl}: affinityType=${rawAffinityType} affinityValue=${rawAffinityValue} realm=${rawRealm}`,
+        `received visit prerender request ${rawUrl}: affinityType=${rawAffinityType} affinityValue=${rawAffinityValue} realm=${rawRealm} options=${JSON.stringify(renderOptions)}`,
       );
       if (missing.length > 0) {
         ctxt.status = 400;
@@ -550,15 +530,15 @@ export function buildPrerenderApp(options: {
 
       let start = Date.now();
       let execPromise = prerenderer
-        .prerenderFileRender({
+        .prerenderVisit({
           affinityType,
           affinityValue,
           realm,
           url,
           auth,
-          fileData,
-          types,
           renderOptions,
+          ...(fileData ? { fileData } : {}),
+          ...(Array.isArray(types) ? { types } : {}),
         })
         .then((result) => ({ result }));
       let drainPromise = options.drainingPromise
@@ -570,7 +550,7 @@ export function buildPrerenderApp(options: {
       if ('draining' in raceResult) {
         execPromise.catch((e) =>
           log.debug(
-            'file render prerender execute settled after drain (ignored):',
+            'visit prerender execute settled after drain (ignored):',
             e,
           ),
         );
@@ -601,7 +581,7 @@ export function buildPrerenderApp(options: {
         .join(', ');
       let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
       log.info(
-        'file render prerendered %s total=%dms launch=%dms render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+        'visit prerendered %s total=%dms launch=%dms render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
         url,
         totalMs,
         timings.launchMs,
@@ -615,7 +595,7 @@ export function buildPrerenderApp(options: {
       ctxt.set('Content-Type', 'application/vnd.api+json');
       ctxt.body = {
         data: {
-          type: 'prerender-file-render-result',
+          type: 'prerender-visit-result',
           id: url,
           attributes: response,
         },
@@ -629,17 +609,16 @@ export function buildPrerenderApp(options: {
         },
       };
       if (pool.timedOut) {
-        log.warn(`file render of ${url} timed out`);
+        log.warn(`visit render of ${url} timed out`);
       }
-      const fileResponse = response as FileRenderResponse;
-      if (fileResponse.error) {
+      if (response.pageUnusableError) {
         log.debug(
-          `file render of ${url} resulted in error doc:\n${JSON.stringify(fileResponse.error, null, 2)}`,
+          `visit of ${url} hit pageUnusableError:\n${JSON.stringify(response.pageUnusableError, null, 2)}`,
         );
       }
     } catch (err: any) {
       Sentry.captureException(err);
-      log.error('Unhandled error in /prerender-file-render:', err);
+      log.error('Unhandled error in /prerender-visit:', err);
       ctxt.status = 500;
       ctxt.body = {
         errors: [

@@ -3,7 +3,7 @@ import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked, cached } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import HistoryIcon from '@cardstack/boxel-icons/history';
 
@@ -407,14 +407,9 @@ export default class AiAssistantPanel extends Component<Signature> {
       });
   }
 
-  @cached
-  private get roomResources() {
-    return this.matrixService.roomResources;
-  }
-
   private get roomResource() {
     return this.matrixService.currentRoomId
-      ? this.roomResources.get(this.matrixService.currentRoomId)
+      ? this.matrixService.roomResources.get(this.matrixService.currentRoomId)
       : undefined;
   }
 

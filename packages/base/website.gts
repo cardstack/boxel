@@ -2,6 +2,8 @@ import WorldWwwIcon from '@cardstack/boxel-icons/world-www';
 import UrlField from './url';
 import { Component } from './card-api';
 import { EntityDisplayWithIcon } from '@cardstack/boxel-ui/components';
+import { markdownEscape } from '@cardstack/boxel-ui/helpers';
+import { markdownLink } from './markdown-helpers';
 
 const domainWithPath = (urlString: string | null) => {
   if (!urlString) {
@@ -63,6 +65,23 @@ export default class WebsiteField extends UrlField {
         }
       </style>
     </template>
+  };
+
+  // CS-10786: show `[domain/path](full-url)` for valid URLs — the atom/
+  // embedded templates hide the scheme for readability, and we preserve that
+  // choice for markdown output too. Invalid URLs fall back to escaped text.
+  static markdown = class Markdown extends Component<typeof WebsiteField> {
+    get text() {
+      let value = this.args.model;
+      if (value == null || value === '') {
+        return '';
+      }
+      if (isValidUrl(value)) {
+        return markdownLink(domainWithPath(value), value);
+      }
+      return markdownEscape(value);
+    }
+    <template>{{this.text}}</template>
   };
 }
 

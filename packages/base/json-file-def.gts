@@ -14,6 +14,7 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
+import { fencedCodeBlock } from './markdown-helpers';
 
 const EXCERPT_MAX_LENGTH = 500;
 
@@ -497,6 +498,21 @@ export class JsonFileDef extends FileDef {
   static fitted: BaseDefComponent = Fitted;
   static atom: BaseDefComponent = Atom;
   static head: BaseDefComponent = Head;
+
+  // CS-10787: emit the JSON source as a fenced `json` code block. Empty
+  // content produces an empty string.
+  static markdown: BaseDefComponent = class Markdown extends Component<
+    typeof JsonFileDef
+  > {
+    get text() {
+      let content = this.args.model?.content;
+      if (!content) {
+        return '';
+      }
+      return fencedCodeBlock(content, 'json');
+    }
+    <template>{{this.text}}</template>
+  };
 
   static async extractAttributes(
     url: string,

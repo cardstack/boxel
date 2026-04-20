@@ -216,4 +216,5 @@ export function shimModulesForLiveTests(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/host/tests/helpers/base-realm', {});
   virtualNetwork.shimModule('@universal-ember/test-support', {});
   virtualNetwork.shimModule('@ember/owner', {});
+  virtualNetwork.shimModule('@cardstack/host/config/environment', {});
 }

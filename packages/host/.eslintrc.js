@@ -49,6 +49,7 @@ const sharedBrowserConfig = {
       'error',
       { invokables: MISSING_INVOKABLES_CONFIG.invokables },
     ],
+    '@cardstack/boxel/no-raf-for-state': 'error',
   },
 };
 
@@ -138,7 +139,7 @@ module.exports = {
       },
     },
     {
-      // don’t enforce import order on blueprint files
+      // don't enforce import order on blueprint files
       files: ['app/**', 'tests/**'],
       excludedFiles: ['app/app.ts', 'app/router.ts', 'tests/test-helper.js'],
       extends: ['plugin:import/recommended', 'plugin:import/typescript'],

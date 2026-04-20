@@ -4,7 +4,7 @@ import {
   Swatch,
   ColorPicker,
 } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { markdownEscape, not } from '@cardstack/boxel-ui/helpers';
 import PaintBucket from '@cardstack/boxel-icons/paint-bucket';
 
 // TypeScript configuration interface
@@ -55,4 +55,14 @@ export default class ColorField extends StringField {
   static atom = View;
   static fitted = View;
   static edit = EditView;
+
+  // CS-10786: escape the hex string. A leading `#` at line start would be
+  // interpreted as an ATX heading by CommonMark; `markdownEscape` emits
+  // `\#` to prevent that.
+  static markdown = class Markdown extends Component<typeof this> {
+    get text() {
+      return markdownEscape(this.args.model);
+    }
+    <template>{{this.text}}</template>
+  };
 }

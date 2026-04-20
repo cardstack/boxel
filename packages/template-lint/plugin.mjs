@@ -1,10 +1,12 @@
 import requireScopedStyle from './lib/require-scoped-style.mjs';
+import noDataTestSelector from './lib/no-data-test-selector.mjs';
 
 export default {
   name: '@cardstack/template-lint',
 
   rules: {
     'require-scoped-style': requireScopedStyle,
+    'no-data-test-selector': noDataTestSelector,
   },
 
   configurations: {
@@ -12,6 +14,7 @@ export default {
       extends: 'recommended',
       rules: {
         'require-scoped-style': true,
+        'no-data-test-selector': true,
 
         'require-button-type': false,
         'no-negated-condition': false,

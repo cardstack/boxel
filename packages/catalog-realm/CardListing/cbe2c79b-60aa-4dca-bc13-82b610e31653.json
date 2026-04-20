@@ -25,7 +25,7 @@
     "relationships": {
       "tags.0": {
         "links": {
-          "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
+          "self": "../Tag/ai"
         }
       },
       "license": {

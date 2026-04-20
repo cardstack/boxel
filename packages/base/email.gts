@@ -9,6 +9,7 @@ import {
   type EmailFormatValidationError,
 } from '@cardstack/boxel-ui/helpers';
 import { fieldSerializer } from '@cardstack/runtime-common';
+import { markdownLink } from './markdown-helpers';
 
 import MailIcon from '@cardstack/boxel-icons/mail';
 
@@ -66,5 +67,19 @@ export default class EmailField extends StringField {
         }
       </style>
     </template>
+  };
+
+  // CS-10786: emit a markdown `mailto:` link. Text and href are escaped /
+  // URL-encoded by `markdownLink` to keep special characters in the local
+  // part (e.g. `+`, `.`, unlikely-but-possible `[`) from breaking parsing.
+  static markdown = class Markdown extends Component<typeof EmailField> {
+    get text() {
+      let value = this.args.model;
+      if (value == null || value === '') {
+        return '';
+      }
+      return markdownLink(value, `mailto:${value}`);
+    }
+    <template>{{this.text}}</template>
   };
 }

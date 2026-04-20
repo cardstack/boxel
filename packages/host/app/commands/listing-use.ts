@@ -1,12 +1,9 @@
-import { service } from '@ember/service';
-
 import {
   cardIdToURL,
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
   loadCardDef,
   generateInstallFolderName,
-  RealmPaths,
 } from '@cardstack/runtime-common';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -18,15 +15,13 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import CopyCardToRealmCommand from './copy-card';
 import SaveCardCommand from './save-card';
+import ValidateRealmCommand from './validate-realm';
 
-import type RealmServerService from '../services/realm-server';
 import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class ListingUseCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput
 > {
-  @service declare private realmServer: RealmServerService;
-
   description = 'Catalog listing use command';
 
   async getInputType() {
@@ -40,17 +35,13 @@ export default class ListingUseCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.ListingInstallInput,
   ): Promise<undefined> {
-    let realmUrls = this.realmServer.availableRealmURLs;
     let { realm, listing: listingInput } = input;
 
     const listing = listingInput as Listing;
 
-    let realmUrl = new RealmPaths(new URL(realm)).url;
-
-    // Make sure realm is valid
-    if (!realmUrls.includes(realmUrl)) {
-      throw new Error(`Invalid realm: ${realmUrl}`);
-    }
+    let { realmUrl } = await new ValidateRealmCommand(
+      this.commandContext,
+    ).execute({ realmUrl: realm });
 
     const specsToCopy = listing.specs ?? [];
     const specsWithoutFields = specsToCopy.filter(

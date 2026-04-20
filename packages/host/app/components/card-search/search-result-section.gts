@@ -15,17 +15,18 @@ import type { CodeRef } from '@cardstack/runtime-common';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type RealmService from '@cardstack/host/services/realm';
 
-import { SECTION_SHOW_MORE_INCREMENT } from './constants';
-import ItemButton from './item-button';
-import SearchSheetSectionHeader from './section-header';
-
 import type {
   RealmSection,
   RecentsSection,
   SearchSheetSection,
   UrlSection,
-} from './search-content';
-import type { NewCardArgs } from './utils';
+} from '@cardstack/host/utils/card-search/sections';
+
+import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
+
+import { SECTION_SHOW_MORE_INCREMENT } from './constants';
+import ItemButton from './item-button';
+import SearchSheetSectionHeader from './section-header';
 
 interface Signature {
   Element: HTMLElement;

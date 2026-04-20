@@ -7,14 +7,14 @@
  * are always derived from the actual card definitions.
  */
 
-import { logger } from './logger';
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type {
   ResolvedCodeRef,
   LooseSingleCardDocument,
   Relationship,
 } from '@cardstack/runtime-common';
 
-import { runRealmCommand, type RunCommandOptions } from './realm-operations';
+import { logger } from './logger';
 
 // ---------------------------------------------------------------------------
 // Runtime schema fetching
@@ -41,10 +41,10 @@ const schemaCache = new Map<
  * (attributes + relationships) or undefined on failure.
  */
 export async function fetchCardTypeSchema(
+  client: BoxelCLIClient,
   realmServerUrl: string,
   realmUrl: string,
   codeRef: ResolvedCodeRef,
-  options: RunCommandOptions,
 ): Promise<
   | {
       attributes: Record<string, unknown>;
@@ -58,12 +58,11 @@ export async function fetchCardTypeSchema(
     return cached;
   }
 
-  let response = await runRealmCommand(
+  let response = await client.runCommand(
     realmServerUrl,
     realmUrl,
     GET_CARD_TYPE_SCHEMA_COMMAND,
     { codeRef },
-    options,
   );
 
   if (response.status !== 'ready' || !response.result) {

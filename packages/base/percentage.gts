@@ -1,5 +1,6 @@
 import { Component } from './card-api';
 import NumberField from './number';
+import { markdownEscape } from '@cardstack/boxel-ui/helpers';
 
 import PercentageIcon from '@cardstack/boxel-icons/square-percentage';
 
@@ -39,5 +40,17 @@ export default class PercentageField extends NumberField {
         {{displayPercentage @model}}
       {{/if}}
     </template>
+  };
+
+  // CS-10786: emit `NN%` escaped — a leading negative would look like a
+  // bullet marker at line start, and `markdownEscape` handles that.
+  static markdown = class Markdown extends Component<typeof PercentageField> {
+    get text() {
+      if (this.args.model == null) {
+        return '';
+      }
+      return markdownEscape(displayPercentage(this.args.model));
+    }
+    <template>{{this.text}}</template>
   };
 }

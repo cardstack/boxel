@@ -12,6 +12,7 @@ import {
   generateCssVariables,
   parseCssGroups,
   extractCssVariables,
+  markdownEscape,
   sanitizeHtmlSafe,
   type CssRuleMap,
 } from '@cardstack/boxel-ui/helpers';
@@ -309,6 +310,56 @@ export default class StructuredTheme extends Theme {
   };
 
   static isolated: BaseDefComponent = Isolated;
+
+  // CS-10787: emit a compact structured summary of the theme — title,
+  // description, version, and the sub-field renderings for typography and
+  // root variables. Avoids the noisy HTML-to-markdown fallback output
+  // produced by the dashboard isolated template.
+  static markdown: BaseDefComponent = class Markdown extends Component<
+    typeof StructuredTheme
+  > {
+    get text() {
+      let model = this.args.model;
+      if (!model) {
+        return '';
+      }
+      let parts: string[] = [];
+      let title = model.cardTitle;
+      if (title) {
+        parts.push(`# ${markdownEscape(title)}`);
+      }
+      if (model.cardDescription) {
+        parts.push(markdownEscape(model.cardDescription));
+      }
+      if (model.version) {
+        parts.push(`Version: \`${model.version}\``);
+      }
+      let typographyEntries = model.typography?.cssVariableFields ?? [];
+      if (typographyEntries.length) {
+        parts.push('## Typography');
+        let rows: string[] = [];
+        for (let { name, value } of typographyEntries) {
+          if (!value) continue;
+          rows.push(`- ${markdownEscape(name ?? '')}: \`${value}\``);
+        }
+        if (rows.length) {
+          parts.push(rows.join('\n'));
+        }
+      }
+      let rootEntries = model.rootVariables?.cssVariableFields ?? [];
+      let rootRows: string[] = [];
+      for (let { name, value } of rootEntries) {
+        if (!value) continue;
+        rootRows.push(`- ${markdownEscape(name ?? '')}: \`${value}\``);
+      }
+      if (rootRows.length) {
+        parts.push('## Root Variables');
+        parts.push(rootRows.join('\n'));
+      }
+      return parts.join('\n\n');
+    }
+    <template>{{this.text}}</template>
+  };
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>

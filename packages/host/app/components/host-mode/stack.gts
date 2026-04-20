@@ -30,7 +30,7 @@ export default class HostModeStack extends Component<Signature> {
           class='stack-items'
           {{onClickOutside
             this.closeTopCard
-            exceptSelector='[data-test-host-mode-breadcrumbs]'
+            exceptSelector='[data-host-mode-breadcrumbs]'
           }}
           data-test-host-mode-stack-items
         >

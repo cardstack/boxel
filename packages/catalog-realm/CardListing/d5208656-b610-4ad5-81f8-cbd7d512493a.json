@@ -30,12 +30,12 @@
       },
       "tags.0": {
         "links": {
-          "self": "../Tag/4d0f9ae2-048e-4ce0-b263-7006602ce6a4"
+          "self": "../Tag/user-contributed"
         }
       },
       "tags.1": {
         "links": {
-          "self": "../Tag/ed5a1a3f-0dbf-47b5-b2a6-d88b0d2a7642"
+          "self": "../Tag/official"
         }
       },
       "license": {

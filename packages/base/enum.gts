@@ -4,7 +4,7 @@ import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { getField } from '@cardstack/runtime-common';
 import { resolveFieldConfiguration } from './field-support';
 import type { FieldDefConstructor } from './card-api';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { markdownEscape, not } from '@cardstack/boxel-ui/helpers';
 
 // enumField factory moved out of card-api: creates a FieldDef subclass with
 // editor/atom wired to read options via configuration.enum.*
@@ -179,6 +179,26 @@ function enumField<BaseT extends FieldDefConstructor>(
           {{/let}}
         {{/if}}
       </template>
+    };
+
+    // CS-10787: render the matching option's label (not its raw value), so
+    // enum fields read naturally in markdown output. Falls back to the
+    // string form of the model when no option matches.
+    static markdown = class Markdown extends GlimmerComponent<any> {
+      get text() {
+        let v = this.args.model as any;
+        if (v == null) {
+          return '';
+        }
+        let cfg = this.args.configuration as
+          | { enum?: { options?: any[] } }
+          | undefined;
+        let opts = normalizeEnumOptions(cfg?.enum?.options ?? []);
+        let match = opts.find((o) => isEqual(o.value, v));
+        let display = match?.label ?? String(v);
+        return markdownEscape(display);
+      }
+      <template>{{this.text}}</template>
     };
 
     static edit = class Edit extends GlimmerComponent<any> {

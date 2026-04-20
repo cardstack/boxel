@@ -5,7 +5,6 @@ import {
   VirtualNetwork,
   authorizationMiddleware,
   baseRealm,
-  registerCardReferencePrefix,
   fetcher,
 } from '@cardstack/runtime-common';
 
@@ -54,33 +53,33 @@ export default class NetworkService extends Service {
     let resolvedBaseRealmURL = new URL(
       withTrailingSlash(config.resolvedBaseRealmURL),
     );
+    // URL mapping kept for the fake https://cardstack.com/base/ → real URL.
+    // addRealmMapping registers the @cardstack/base/ scoped prefix.
     virtualNetwork.addURLMapping(new URL(baseRealm.url), resolvedBaseRealmURL);
+    virtualNetwork.addRealmMapping(
+      '@cardstack/base/',
+      resolvedBaseRealmURL.href,
+    );
     shimExternals(virtualNetwork);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;
     });
     if (config.resolvedCatalogRealmURL) {
-      let catalogURL = withTrailingSlash(config.resolvedCatalogRealmURL);
-      registerCardReferencePrefix('@cardstack/catalog/', catalogURL);
-      virtualNetwork.addImportMap(
+      virtualNetwork.addRealmMapping(
         '@cardstack/catalog/',
-        (rest) => new URL(rest, catalogURL).href,
+        config.resolvedCatalogRealmURL,
       );
     }
     if (config.resolvedSkillsRealmURL) {
-      let skillsURL = withTrailingSlash(config.resolvedSkillsRealmURL);
-      registerCardReferencePrefix('@cardstack/skills/', skillsURL);
-      virtualNetwork.addImportMap(
+      virtualNetwork.addRealmMapping(
         '@cardstack/skills/',
-        (rest) => new URL(rest, skillsURL).href,
+        config.resolvedSkillsRealmURL,
       );
     }
     if (config.resolvedOpenRouterRealmURL) {
-      let openRouterURL = withTrailingSlash(config.resolvedOpenRouterRealmURL);
-      registerCardReferencePrefix('@cardstack/openrouter/', openRouterURL);
-      virtualNetwork.addImportMap(
+      virtualNetwork.addRealmMapping(
         '@cardstack/openrouter/',
-        (rest) => new URL(rest, openRouterURL).href,
+        config.resolvedOpenRouterRealmURL,
       );
     }
     return virtualNetwork;

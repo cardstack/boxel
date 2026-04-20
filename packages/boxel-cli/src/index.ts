@@ -3,7 +3,9 @@ import { Command } from 'commander';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { profileCommand } from './commands/profile';
+import { registerReadTranspiledCommand } from './commands/read-transpiled';
 import { registerRealmCommand } from './commands/realm/index';
+import { registerRunCommand } from './commands/run-command';
 
 const pkg = JSON.parse(
   readFileSync(resolve(__dirname, '../package.json'), 'utf-8'),
@@ -41,5 +43,7 @@ program
   );
 
 registerRealmCommand(program);
+registerRunCommand(program);
+registerReadTranspiledCommand(program);
 
 program.parse();

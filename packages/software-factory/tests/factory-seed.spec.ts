@@ -6,7 +6,7 @@ import { createSeedIssue } from '../src/factory-seed';
 import type { FactoryBrief } from '../src/factory-brief';
 import { RealmIssueStore } from '../src/issue-scheduler';
 import { expect, test } from './fixtures';
-import { buildAuthenticatedFetch } from './helpers/matrix-auth';
+import { buildTestClient } from './helpers/test-client';
 
 const bootstrapTargetDir = resolve(
   process.cwd(),
@@ -41,101 +41,117 @@ const stickyNoteBrief: FactoryBrief = {
 test.use({ realmDir: bootstrapTargetDir });
 test.use({ realmServerMode: 'isolated' });
 
-function buildSeedContext(realm: { realmURL: URL; ownerBearerToken: string }) {
+function buildSeedContext(realm: {
+  realmURL: URL;
+  realmServerURL: URL;
+  ownerBearerToken: string;
+  serverToken: string;
+}) {
   let darkfactoryModuleUrl = new URL(
     '../software-factory/darkfactory',
     realm.realmURL,
   ).href;
-  let authenticatedFetch = buildAuthenticatedFetch(
-    realm.ownerBearerToken,
-    fetch,
-  );
+  let { client, cleanup } = buildTestClient({
+    realmUrl: realm.realmURL.href,
+    realmToken: `Bearer ${realm.ownerBearerToken}`,
+    realmServerUrl: realm.realmServerURL.href,
+    realmServerToken: `Bearer ${realm.serverToken}`,
+  });
 
   return {
-    authenticatedFetch,
+    client,
+    cleanup,
     darkfactoryModuleUrl,
-    seedOptions: { fetch: authenticatedFetch, darkfactoryModuleUrl },
+    seedOptions: { client, darkfactoryModuleUrl },
   };
 }
 
 test('creates bootstrap seed issue in a live realm', async ({ realm }) => {
-  let { authenticatedFetch, darkfactoryModuleUrl, seedOptions } =
+  let { client, cleanup, darkfactoryModuleUrl, seedOptions } =
     buildSeedContext(realm);
 
-  let result = await createSeedIssue(
-    stickyNoteBrief,
-    realm.realmURL.href,
-    seedOptions,
-  );
+  try {
+    let result = await createSeedIssue(
+      stickyNoteBrief,
+      realm.realmURL.href,
+      seedOptions,
+    );
 
-  expect(result.issueId).toBe('Issues/bootstrap-seed');
-  expect(result.status).toBe('created');
+    expect(result.issueId).toBe('Issues/bootstrap-seed');
+    expect(result.status).toBe('created');
 
-  // Verify the card is readable with correct fields
-  let issueResponse = await authenticatedFetch(
-    realm.cardURL('Issues/bootstrap-seed'),
-    { headers: { Accept: SupportedMimeType.CardSource } },
-  );
-  expect(issueResponse.ok).toBe(true);
+    // Verify the card is readable with correct fields
+    let issueResponse = await client.authedFetch(
+      realm.cardURL('Issues/bootstrap-seed'),
+      { headers: { Accept: SupportedMimeType.CardSource } },
+    );
+    expect(issueResponse.ok).toBe(true);
 
-  let issueJson = (await issueResponse.json()) as {
-    data: {
-      attributes: {
-        issueId: string;
-        issueType: string;
-        status: string;
-        priority: string;
-        order: number;
-        summary: string;
-        description: string;
+    let issueJson = (await issueResponse.json()) as {
+      data: {
+        attributes: {
+          issueId: string;
+          issueType: string;
+          status: string;
+          priority: string;
+          order: number;
+          summary: string;
+          description: string;
+        };
+        meta: { adoptsFrom: { module: string; name: string } };
       };
-      meta: { adoptsFrom: { module: string; name: string } };
     };
-  };
 
-  expect(issueJson.data.attributes.issueType).toBe('bootstrap');
-  expect(issueJson.data.attributes.status).toBe('backlog');
-  expect(issueJson.data.attributes.priority).toBe('critical');
-  expect(issueJson.data.attributes.order).toBe(0);
-  expect(issueJson.data.attributes.summary).toContain(
-    'Process brief and create project artifacts',
-  );
-  expect(issueJson.data.attributes.description).toContain(
-    stickyNoteBrief.sourceUrl,
-  );
-  expect(issueJson.data.attributes.description).toContain('Sticky Note');
-  expect(issueJson.data.meta.adoptsFrom.module).toBe(darkfactoryModuleUrl);
-  expect(issueJson.data.meta.adoptsFrom.name).toBe('Issue');
+    expect(issueJson.data.attributes.issueType).toBe('bootstrap');
+    expect(issueJson.data.attributes.status).toBe('backlog');
+    expect(issueJson.data.attributes.priority).toBe('critical');
+    expect(issueJson.data.attributes.order).toBe(0);
+    expect(issueJson.data.attributes.summary).toContain(
+      'Process brief and create project artifacts',
+    );
+    expect(issueJson.data.attributes.description).toContain(
+      stickyNoteBrief.sourceUrl,
+    );
+    expect(issueJson.data.attributes.description).toContain('Sticky Note');
+    expect(issueJson.data.meta.adoptsFrom.module).toBe(darkfactoryModuleUrl);
+    expect(issueJson.data.meta.adoptsFrom.name).toBe('Issue');
 
-  // Verify RealmIssueStore can find the seed issue
-  let issueStore = new RealmIssueStore({
-    realmUrl: realm.realmURL.href,
-    darkfactoryModuleUrl,
-    options: { fetch: authenticatedFetch },
-  });
+    // Verify RealmIssueStore can find the seed issue
+    let issueStore = new RealmIssueStore({
+      realmUrl: realm.realmURL.href,
+      darkfactoryModuleUrl,
+      client,
+    });
 
-  let issues = await issueStore.listIssues();
-  let seedIssue = issues.find((i) => i.id.includes('Issues/bootstrap-seed'));
-  expect(seedIssue).toBeDefined();
-  expect(seedIssue!.status).toBe('backlog');
-  expect(seedIssue!.priority).toBe('critical');
+    let issues = await issueStore.listIssues();
+    let seedIssue = issues.find((i) => i.id.includes('Issues/bootstrap-seed'));
+    expect(seedIssue).toBeDefined();
+    expect(seedIssue!.status).toBe('backlog');
+    expect(seedIssue!.priority).toBe('critical');
+  } finally {
+    cleanup();
+  }
 });
 
 test('seed issue creation is idempotent', async ({ realm }) => {
-  let { seedOptions } = buildSeedContext(realm);
+  let { cleanup, seedOptions } = buildSeedContext(realm);
 
-  let result1 = await createSeedIssue(
-    stickyNoteBrief,
-    realm.realmURL.href,
-    seedOptions,
-  );
-  expect(result1.status).toBe('created');
+  try {
+    let result1 = await createSeedIssue(
+      stickyNoteBrief,
+      realm.realmURL.href,
+      seedOptions,
+    );
+    expect(result1.status).toBe('created');
 
-  let result2 = await createSeedIssue(
-    stickyNoteBrief,
-    realm.realmURL.href,
-    seedOptions,
-  );
-  expect(result2.status).toBe('existing');
-  expect(result2.issueId).toBe(result1.issueId);
+    let result2 = await createSeedIssue(
+      stickyNoteBrief,
+      realm.realmURL.href,
+      seedOptions,
+    );
+    expect(result2.status).toBe('existing');
+    expect(result2.issueId).toBe(result1.issueId);
+  } finally {
+    cleanup();
+  }
 });

@@ -135,55 +135,53 @@ module(basename(__filename), function () {
       };
       let auth = testCreatePrerenderAuth(testUserId, permissions);
       let res = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/json')
         .send({
           data: {
-            type: 'prerender-request',
+            type: 'prerender-visit-request',
             attributes: {
               url,
               auth,
               realm: realmURL.href,
               affinityType: 'realm',
               affinityValue: realmURL.href,
+              renderOptions: { cardRender: true },
             },
           },
         });
 
       assert.strictEqual(res.status, 201, 'HTTP 201');
-      assert.strictEqual(res.body.data.type, 'prerender-result', 'type ok');
+      assert.strictEqual(
+        res.body.data.type,
+        'prerender-visit-result',
+        'type ok',
+      );
       assert.strictEqual(res.body.data.id, url, 'id is url');
-      assert.deepEqual(
-        res.body.data.attributes.displayNames,
-        ['Pet', 'Card'],
-        'displayNames ok',
-      );
+      let card = res.body.data.attributes.card;
+      assert.deepEqual(card.displayNames, ['Pet', 'Card'], 'displayNames ok');
+      assert.strictEqual(card.searchDoc?.name, 'Maple', 'searchDoc.name ok');
       assert.strictEqual(
-        res.body.data.attributes.searchDoc?.name,
-        'Maple',
-        'searchDoc.name ok',
-      );
-      assert.strictEqual(
-        res.body.data.attributes.searchDoc?._cardType,
+        card.searchDoc?._cardType,
         'Pet',
         'searchDoc._cardType ok',
       );
       assert.ok(
-        /Maple/.test(res.body.data.attributes.isolatedHTML ?? ''),
+        /Maple/.test(card.isolatedHTML ?? ''),
         'isolatedHTML contains the instance title',
       );
       // spot check a few deps, as the whole list is overwhelming...
       assert.ok(
-        res.body.data.attributes.deps?.includes(baseCardRef.module),
+        card.deps?.includes(baseCardRef.module),
         `${baseCardRef.module} is a dep`,
       );
       assert.ok(
-        res.body.data.attributes.deps?.includes(`${realmURL.href}pet`),
+        card.deps?.includes(`${realmURL.href}pet`),
         `${realmURL.href}pet is a dep`,
       );
       assert.ok(
-        (res.body.data.attributes.deps as string[]).find((d) =>
+        (card.deps as string[]).find((d) =>
           d.match(
             /^https:\/\/cardstack.com\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
           ),
@@ -471,18 +469,19 @@ module(basename(__filename), function () {
         { [realmURL.href]: ['read', 'write', 'realm-owner'] };
       let auth = testCreatePrerenderAuth(testUserId, permissions);
       let res = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/json')
         .send({
           data: {
-            type: 'prerender-request',
+            type: 'prerender-visit-request',
             attributes: {
               url: `${realmURL.href}drain`,
               auth,
               realm: realmURL.href,
               affinityType: 'realm',
               affinityValue: realmURL.href,
+              renderOptions: { cardRender: true },
             },
           },
         });
@@ -523,18 +522,19 @@ module(basename(__filename), function () {
         { [realmURL.href]: ['read', 'write', 'realm-owner'] };
       let auth = testCreatePrerenderAuth(testUserId, permissions);
       await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/json')
         .send({
           data: {
-            type: 'prerender-request',
+            type: 'prerender-visit-request',
             attributes: {
               url,
               auth,
               realm: realmURL.href,
               affinityType: 'realm',
               affinityValue: realmURL.href,
+              renderOptions: { cardRender: true },
             },
           },
         });
@@ -588,18 +588,19 @@ module(basename(__filename), function () {
       };
       let auth = testCreatePrerenderAuth(testUserId, permissions);
       let resPromise = localRequest
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/json')
         .send({
           data: {
-            type: 'prerender-request',
+            type: 'prerender-visit-request',
             attributes: {
               url: `${realmURL.href}drain-midflight`,
               auth,
               realm: realmURL.href,
               affinityType: 'realm',
               affinityValue: realmURL.href,
+              renderOptions: { cardRender: true },
             },
           },
         });
@@ -648,18 +649,19 @@ module(basename(__filename), function () {
           { [realmURL.href]: ['read', 'write', 'realm-owner'] };
         let auth = testCreatePrerenderAuth(testUserId, permissions);
         let res = await localRequest
-          .post('/prerender-card')
+          .post('/prerender-visit')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
           .send({
             data: {
-              type: 'prerender-request',
+              type: 'prerender-visit-request',
               attributes: {
                 url: `${realmURL.href}drain-unhandled`,
                 auth,
                 realm: realmURL.href,
                 affinityType: 'realm',
                 affinityValue: realmURL.href,
+                renderOptions: { cardRender: true },
               },
             },
           });

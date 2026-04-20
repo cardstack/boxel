@@ -1,7 +1,7 @@
 import { primitive, Component, useIndexBasedKey, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { markdownEscape, not } from '@cardstack/boxel-ui/helpers';
 import CurrencyEthereum from '@cardstack/boxel-icons/currency-ethereum';
 import {
   fieldSerializer,
@@ -52,4 +52,14 @@ export default class EthereumAddressField extends FieldDef {
   static embedded = View;
   static atom = View;
   static edit = Edit;
+
+  // CS-10786: addresses are hex strings (`0x...`) — no metacharacters in the
+  // typical output, but pass through `markdownEscape` defensively so an
+  // invalid or future-format value can't escape into surrounding markdown.
+  static markdown = class Markdown extends Component<typeof this> {
+    get text() {
+      return markdownEscape(this.args.model);
+    }
+    <template>{{this.text}}</template>
+  };
 }
