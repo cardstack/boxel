@@ -20,7 +20,7 @@ import type {
   ValidationStepResult,
 } from './factory-agent';
 
-import type { LoopAgent } from './factory-agent-types';
+import type { LoopAgent } from './factory-agent';
 import type { FactoryTool, ToolCallEntry } from './factory-tool-builder';
 import type { IssueStore } from './issue-scheduler';
 
