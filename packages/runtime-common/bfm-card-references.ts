@@ -67,10 +67,9 @@ export function parseBfmSizeSpec(specifier: string): BfmSizeSpec | null {
     return { format: 'fitted' };
   }
 
-  // Strip optional `fitted ` prefix; everything below already implies fitted.
-  let body = trimmed.startsWith('fitted ')
-    ? trimmed.slice('fitted '.length).trimStart()
-    : trimmed;
+  // Strip optional `fitted` prefix followed by any whitespace;
+  // everything below already implies fitted.
+  let body = trimmed.replace(/^fitted\s+/, '');
 
   // Named size constant
   let constant = SIZE_CONSTANTS.get(body);
