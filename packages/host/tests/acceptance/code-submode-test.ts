@@ -1371,6 +1371,14 @@ module('Acceptance | code submode tests', function (_hooks) {
         )
         .exists();
 
+      await click('[data-test-format-chooser="markdown"]');
+      assert.dom('[data-test-format-chooser="markdown"]').hasClass('active');
+      assert
+        .dom(
+          '[data-test-code-mode-card-renderer-body] .field-component-card.markdown-format',
+        )
+        .exists();
+
       // Only preview is shown in the right column when viewing an instance, no schema editor
       assert.dom('[data-test-card-schema]').doesNotExist();
     });
@@ -1402,6 +1410,8 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-format-chooser="embedded"]').exists();
       assert.dom('[data-test-format-chooser="fitted"]').exists();
       assert.dom('[data-test-format-chooser="atom"]').exists();
+      assert.dom('[data-test-format-chooser="head"]').exists();
+      assert.dom('[data-test-format-chooser="markdown"]').exists();
     });
 
     test('clicking "metadata" format for a non-card file shows metadata panel with JSON-API content', async function (assert) {

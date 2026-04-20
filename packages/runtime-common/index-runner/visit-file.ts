@@ -179,6 +179,7 @@ export async function visitFileForIndexingFused({
         embeddedHTML: null,
         fittedHTML: null,
         iconHTML: null,
+        markdown: null,
         error: visitResponse.pageUnusableError ?? {
           type: 'instance-error',
           error: {

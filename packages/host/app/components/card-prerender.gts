@@ -338,6 +338,7 @@ export default class CardPrerender extends Component {
         let iconHTML: string | null = null;
         let embeddedHTML: Record<string, string> | null = null;
         let fittedHTML: Record<string, string> | null = null;
+        let markdown: string | null = null;
         let meta: PrerenderMeta = {
           serialized: null,
           searchDoc: null,
@@ -370,6 +371,12 @@ export default class CardPrerender extends Component {
           );
           iconHTML = await this.renderIcon.perform(
             url,
+            subsequentRenderOptions,
+          );
+          markdown = await this.renderHTML.perform(
+            url,
+            'markdown',
+            0,
             subsequentRenderOptions,
           );
           if (meta?.types) {
@@ -419,6 +426,7 @@ export default class CardPrerender extends Component {
           embeddedHTML,
           fittedHTML,
           iconHTML,
+          markdown,
           ...(cardError ? { error: cardError } : {}),
         };
       }
@@ -444,6 +452,7 @@ export default class CardPrerender extends Component {
             embeddedHTML: null,
             fittedHTML: null,
             iconHTML: null,
+            markdown: null,
             error: {
               type: 'file-error',
               error: {
@@ -468,6 +477,7 @@ export default class CardPrerender extends Component {
           let iconHTML: string | null = null;
           let embeddedHTML: Record<string, string> | null = null;
           let fittedHTML: Record<string, string> | null = null;
+          let markdown: string | null = null;
 
           try {
             let subsequentRenderOptions =
@@ -492,6 +502,12 @@ export default class CardPrerender extends Component {
             );
             iconHTML = await this.renderIcon.perform(
               url,
+              subsequentRenderOptions,
+            );
+            markdown = await this.renderHTML.perform(
+              url,
+              'markdown',
+              0,
               subsequentRenderOptions,
             );
             if (effectiveTypes?.length) {
@@ -535,6 +551,7 @@ export default class CardPrerender extends Component {
             embeddedHTML,
             fittedHTML,
             iconHTML,
+            markdown,
             ...(fileError ? { error: fileError } : {}),
           };
         }

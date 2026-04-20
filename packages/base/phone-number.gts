@@ -19,10 +19,12 @@ import {
   RadioInput,
 } from '@cardstack/boxel-ui/components';
 import {
+  markdownEscape,
   not,
   type NormalizePhoneFormatResult,
 } from '@cardstack/boxel-ui/helpers';
 import { fieldSerializer, PhoneSerializer } from '@cardstack/runtime-common';
+import { markdownLink } from './markdown-helpers';
 
 import PhoneIcon from '@cardstack/boxel-icons/phone';
 
@@ -151,6 +153,27 @@ export default class PhoneNumberField extends FieldDef {
       let parsed = parseForDisplay(this.args.model);
       return parsed?.number?.international ?? null;
     }
+  };
+
+  // CS-10786: emit a markdown link `[formatted number](tel:+E164)` when the
+  // value parses, otherwise escape the raw text. `markdownLink` handles text
+  // escaping and URL-encoding for us.
+  static markdown = class Markdown extends Component<typeof this> {
+    get text() {
+      let value = this.args.model;
+      if (value == null || value === '') {
+        return '';
+      }
+      let parsed = parseForDisplay(value);
+      if (parsed?.number?.international && parsed?.number?.rfc3966) {
+        return markdownLink(
+          parsed.number.international,
+          parsed.number.rfc3966,
+        );
+      }
+      return markdownEscape(value);
+    }
+    <template>{{this.text}}</template>
   };
 }
 

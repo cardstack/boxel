@@ -3,6 +3,7 @@ import StringField from './string';
 import World from '@cardstack/boxel-icons/world';
 import MapPinned from '@cardstack/boxel-icons/map-pinned';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import { markdownEscape } from '@cardstack/boxel-ui/helpers';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { restartableTask } from 'ember-concurrency';
@@ -118,6 +119,16 @@ export default class CountryField extends FieldDef {
     <template>
       {{@model.name}}
     </template>
+  };
+
+  // CS-10786: the country's display name, markdown-escaped. The ISO code is
+  // omitted — downstream markdown consumers care about the human-readable
+  // label; the code is available programmatically on the field.
+  static markdown = class Markdown extends Component<typeof this> {
+    get text() {
+      return markdownEscape(this.args.model?.name);
+    }
+    <template>{{this.text}}</template>
   };
 }
 

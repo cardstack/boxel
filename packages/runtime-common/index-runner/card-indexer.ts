@@ -192,6 +192,7 @@ export async function performCardIndexing({
     embeddedHTML,
     fittedHTML,
     iconHTML,
+    markdown,
   } = renderResult;
 
   let deps = new Set(runtimeDeps ?? []);
@@ -227,6 +228,7 @@ export async function performCardIndexing({
     embeddedHtml: embeddedHTML ?? undefined,
     fittedHtml: fittedHTML ?? undefined,
     iconHTML: iconHTML ?? undefined,
+    markdown: markdown ?? undefined,
     lastModified,
     resourceCreatedAt,
     types: types!,

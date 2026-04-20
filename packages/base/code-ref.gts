@@ -98,6 +98,36 @@ export default class CodeRefField extends FieldDef {
   static [fieldSerializer] = 'code-ref';
   static embedded = class Embedded extends BaseView {};
   static edit = EditView;
+
+  // CS-10786: emit the code reference as an inline code span — `module/name`
+  // is the canonical serialization. Wrapping in backticks avoids having to
+  // escape any module-path characters.
+  static markdown = class Markdown extends Component<typeof CodeRefField> {
+    get text() {
+      let model = this.args.model;
+      if (!model?.module || !model?.name) {
+        return '';
+      }
+      // Combine module + name into the same string the edit input shows,
+      // then wrap in a fence of sufficient width to contain any backticks
+      // in the module path.
+      let raw = `${model.module}/${model.name}`;
+      let longestRun = 0;
+      let match = raw.match(/`+/g);
+      if (match) {
+        for (let run of match) {
+          if (run.length > longestRun) longestRun = run.length;
+        }
+      }
+      let fence = '`'.repeat(Math.max(1, longestRun + 1));
+      // Pad with spaces when the content starts/ends with a backtick so the
+      // inline-code-span parser doesn't consume the delimiter.
+      let needsPad =
+        raw.startsWith('`') || raw.endsWith('`') || /^\s|\s$/.test(raw);
+      return needsPad ? `${fence} ${raw} ${fence}` : `${fence}${raw}${fence}`;
+    }
+    <template>{{this.text}}</template>
+  };
 }
 
 export class AbsoluteCodeRefField extends CodeRefField {

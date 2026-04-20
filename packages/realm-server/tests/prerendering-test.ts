@@ -3769,6 +3769,7 @@ module(basename(__filename), function () {
             headHTML: null,
             iconHTML: null,
             isolatedHTML: null,
+            markdown: null,
           });
         });
 
@@ -5142,6 +5143,7 @@ module(basename(__filename), function () {
             atomHTML: null,
             embeddedHTML: null,
             fittedHTML: null,
+            markdown: null,
           };
           let card: RenderResponse =
             attemptCount === 1

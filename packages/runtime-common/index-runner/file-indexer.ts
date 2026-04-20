@@ -195,6 +195,7 @@ export async function performFileIndexing({
     embeddedHtml: renderResult?.embeddedHTML ?? undefined,
     fittedHtml: renderResult?.fittedHTML ?? undefined,
     iconHTML: renderResult?.iconHTML ?? undefined,
+    markdown: renderResult?.markdown ?? undefined,
   });
 
   return 'indexed';

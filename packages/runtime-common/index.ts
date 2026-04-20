@@ -59,6 +59,7 @@ export interface RenderResponse extends PrerenderMeta {
   embeddedHTML: Record<string, string> | null;
   fittedHTML: Record<string, string> | null;
   iconHTML: string | null;
+  markdown: string | null;
   error?: RenderError;
 }
 
@@ -93,6 +94,7 @@ export interface FileRenderResponse {
   embeddedHTML: Record<string, string> | null;
   fittedHTML: Record<string, string> | null;
   iconHTML: string | null;
+  markdown: string | null;
   error?: RenderError;
 }
 

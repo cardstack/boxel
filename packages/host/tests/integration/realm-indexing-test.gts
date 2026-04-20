@@ -1812,6 +1812,8 @@ module(`Integration | realm indexing`, function (hooks) {
           data-boxel-card-container
           data-test-boxel-card-container
           style
+          data-boxel-card-id="http://test-realm/test/germaine"
+          data-boxel-card-format="embedded"
           data-test-card="http://test-realm/test/germaine"
           data-test-card-format="embedded"
           data-test-field-component-card> <h1> Fancy Person Embedded Card: Germaine - hot pink </h1> </div>`,
@@ -1839,6 +1841,8 @@ module(`Integration | realm indexing`, function (hooks) {
         data-boxel-card-container
         data-test-boxel-card-container
         style
+        data-boxel-card-id="http://test-realm/test/germaine"
+        data-boxel-card-format="embedded"
         data-test-card="http://test-realm/test/germaine"
         data-test-card-format="embedded"
         data-test-field-component-card> <h1> Person Embedded Card: Germaine </h1> </div>`),
@@ -1856,6 +1860,8 @@ module(`Integration | realm indexing`, function (hooks) {
         data-boxel-card-container
         data-test-boxel-card-container
         style
+        data-boxel-card-id="http://test-realm/test/germaine"
+        data-boxel-card-format="embedded"
         data-test-card="http://test-realm/test/germaine"
         data-test-card-format="embedded"
         data-test-field-component-card>
@@ -1951,6 +1957,8 @@ module(`Integration | realm indexing`, function (hooks) {
           data-boxel-card-container
           data-test-boxel-card-container
           style
+          data-boxel-card-id="http://test-realm/test/germaine"
+          data-boxel-card-format="fitted"
           data-test-card="http://test-realm/test/germaine"
           data-test-card-format="fitted"
           data-test-field-component-card> <h1> Fancy Person Fitted Card: Germaine - hot pink </h1> </div>`,
@@ -1978,6 +1986,8 @@ module(`Integration | realm indexing`, function (hooks) {
       data-boxel-card-container
       data-test-boxel-card-container
       style
+      data-boxel-card-id="http://test-realm/test/germaine"
+      data-boxel-card-format="fitted"
       data-test-card="http://test-realm/test/germaine"
       data-test-card-format="fitted"
       data-test-field-component-card> <h1> Person Fitted Card: Germaine </h1> </div>`),
@@ -1995,6 +2005,8 @@ module(`Integration | realm indexing`, function (hooks) {
       data-boxel-card-container
       data-test-boxel-card-container
       style
+      data-boxel-card-id="http://test-realm/test/germaine"
+      data-boxel-card-format="embedded"
       data-test-card="http://test-realm/test/germaine"
       data-test-card-format="embedded"
       data-test-field-component-card>
@@ -4484,6 +4496,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-left',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/arrow-left',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/captions',
+        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/clipboard-copy',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/code',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/eye',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/file',
@@ -4517,6 +4530,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/default-templates/image-def-isolated',
         'https://cardstack.com/base/default-templates/isolated-and-edit',
         'https://cardstack.com/base/default-templates/markdown',
+        'https://cardstack.com/base/default-templates/markdown-fallback',
         'https://cardstack.com/base/default-templates/missing-template',
         'https://cardstack.com/base/field-component',
         'https://cardstack.com/base/field-support',
@@ -4525,6 +4539,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/helpers/set-background-image',
         'https://cardstack.com/base/links-to-editor',
         'https://cardstack.com/base/links-to-many-component',
+        'https://cardstack.com/base/markdown-helpers',
         'https://cardstack.com/base/menu-items',
         'https://cardstack.com/base/number',
         'https://cardstack.com/base/query-field-support',
@@ -4534,6 +4549,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/watched-array',
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
+        'https://packages/@cardstack/boxel-host/commands/copy-card-as-markdown',
         'https://packages/@cardstack/boxel-host/commands/copy-file-to-realm',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
         'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
@@ -4624,6 +4640,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/book-open-text',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/box-model',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/captions',
+        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/clipboard-copy',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/code',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/eye',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/file',
@@ -4664,6 +4681,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/default-templates/image-def-isolated',
         'https://cardstack.com/base/default-templates/isolated-and-edit',
         'https://cardstack.com/base/default-templates/markdown',
+        'https://cardstack.com/base/default-templates/markdown-fallback',
         'https://cardstack.com/base/default-templates/missing-template',
         'https://cardstack.com/base/field-component',
         'https://cardstack.com/base/field-support',
@@ -4673,6 +4691,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/links-to-editor',
         'https://cardstack.com/base/links-to-many-component',
         'https://cardstack.com/base/markdown',
+        'https://cardstack.com/base/markdown-helpers',
         'https://cardstack.com/base/menu-items',
         'https://cardstack.com/base/number',
         'https://cardstack.com/base/query-field-support',
@@ -4683,6 +4702,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/watched-array',
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
+        'https://packages/@cardstack/boxel-host/commands/copy-card-as-markdown',
         'https://packages/@cardstack/boxel-host/commands/copy-file-to-realm',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
         'https://packages/@cardstack/boxel-host/commands/generate-example-cards',

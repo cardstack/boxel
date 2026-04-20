@@ -77,6 +77,7 @@ module(basename(__filename), function () {
               embeddedHTML: {},
               fittedHTML: {},
               iconHTML: null,
+              markdown: null,
             };
           }
           if (args.renderOptions?.fileExtract) {
@@ -96,6 +97,7 @@ module(basename(__filename), function () {
               embeddedHTML: null,
               fittedHTML: null,
               iconHTML: null,
+              markdown: null,
             };
           }
           return response;
@@ -172,6 +174,7 @@ module(basename(__filename), function () {
               embeddedHTML: {},
               fittedHTML: {},
               iconHTML: null,
+              markdown: null,
             },
           },
         },

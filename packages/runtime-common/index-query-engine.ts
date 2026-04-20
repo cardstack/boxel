@@ -82,6 +82,7 @@ export interface IndexedFile {
   embeddedHtml: { [refURL: string]: string } | null;
   fittedHtml: { [refURL: string]: string } | null;
   atomHtml: string | null;
+  markdown: string | null;
   realmVersion: number;
   realmURL: string;
   indexedAt: number | null;
@@ -98,6 +99,7 @@ export interface IndexedInstance {
   embeddedHtml: { [refURL: string]: string } | null;
   fittedHtml: { [refURL: string]: string } | null;
   atomHtml: string | null;
+  markdown: string | null;
   searchDoc: Record<string, any> | null;
   types: string[] | null;
   deps: string[] | null;
@@ -219,6 +221,7 @@ export class IndexQueryEngine {
       atom_html: atomHtml,
       embedded_html: embeddedHtml,
       fitted_html: fittedHtml,
+      markdown,
       search_doc: searchDoc,
       realm_version: realmVersion,
       realm_url: realmURL,
@@ -237,6 +240,7 @@ export class IndexQueryEngine {
       embeddedHtml,
       fittedHtml,
       atomHtml,
+      markdown,
       searchDoc,
       types,
       indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
@@ -308,6 +312,7 @@ export class IndexQueryEngine {
       embedded_html: embeddedHtml,
       fitted_html: fittedHtml,
       atom_html: atomHtml,
+      markdown,
       realm_version: realmVersion,
       realm_url: realmURL,
       indexed_at: indexedAt,
@@ -334,6 +339,7 @@ export class IndexQueryEngine {
       embeddedHtml,
       fittedHtml,
       atomHtml,
+      markdown,
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt:
         resourceCreatedAt != null ? parseInt(resourceCreatedAt) : null,
@@ -523,7 +529,7 @@ export class IndexQueryEngine {
       { filter, sort, page },
       opts,
       [
-        'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(search_doc) AS search_doc, ANY_VALUE(types) AS types, ANY_VALUE(display_names) AS display_names, ANY_VALUE(deps) AS deps, ANY_VALUE(last_modified) AS last_modified, ANY_VALUE(resource_created_at) AS resource_created_at, ANY_VALUE(isolated_html) AS isolated_html, ANY_VALUE(head_html) AS head_html, ANY_VALUE(embedded_html) AS embedded_html, ANY_VALUE(fitted_html) AS fitted_html, ANY_VALUE(atom_html) AS atom_html, ANY_VALUE(realm_version) AS realm_version, ANY_VALUE(realm_url) AS realm_url, ANY_VALUE(indexed_at) AS indexed_at',
+        'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(search_doc) AS search_doc, ANY_VALUE(types) AS types, ANY_VALUE(display_names) AS display_names, ANY_VALUE(deps) AS deps, ANY_VALUE(last_modified) AS last_modified, ANY_VALUE(resource_created_at) AS resource_created_at, ANY_VALUE(isolated_html) AS isolated_html, ANY_VALUE(head_html) AS head_html, ANY_VALUE(embedded_html) AS embedded_html, ANY_VALUE(fitted_html) AS fitted_html, ANY_VALUE(atom_html) AS atom_html, ANY_VALUE(markdown) AS markdown, ANY_VALUE(realm_version) AS realm_version, ANY_VALUE(realm_url) AS realm_url, ANY_VALUE(indexed_at) AS indexed_at',
       ],
       'file',
     );
@@ -564,6 +570,7 @@ export class IndexQueryEngine {
       fittedHtml:
         (result.fitted_html as { [refURL: string]: string } | null) ?? null,
       atomHtml: result.atom_html ?? null,
+      markdown: result.markdown ?? null,
       lastModified,
       resourceCreatedAt,
       realmVersion: result.realm_version ?? 0,
