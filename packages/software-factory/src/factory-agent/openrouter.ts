@@ -1,54 +1,40 @@
 /**
- * Tool-use factory agent — implements LoopAgent with native tool-use protocol.
+ * OpenRouter-backed factory agent — implements `LoopAgent` by driving a
+ * remote LLM through OpenRouter's OpenAI-compatible tool-use protocol.
  *
- * This agent sends tool definitions to the LLM via the API's tools parameter.
- * The LLM calls tools during its turn, the agent executes them via
- * FactoryTool.execute(), and returns results to the LLM. The conversation
- * continues until the LLM calls signal_done/request_clarification or stops
- * making tool calls.
+ * Sibling backends live in `factory-agent-claude-code.ts` (Claude Agent SDK)
+ * and eventually `factory-agent-codex-cli.ts` (Codex CLI, tracked in
+ * CS-10594). The three implementations stay isolated: one file per
+ * backend, all conforming to the same `LoopAgent` interface, selected
+ * by `createLoopAgent()` in `factory-issue-loop-wiring.ts`.
+ *
+ * Flow: this agent sends tool definitions to the LLM via the API's
+ * `tools` parameter. The LLM emits `tool_calls[]`, we dispatch each
+ * through `FactoryTool.execute()`, feed the result back as a `role: "tool"`
+ * message, and iterate until the LLM calls `signal_done` /
+ * `request_clarification` or stops making tool calls.
  */
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 const MAX_TOOL_USE_TURNS = 50;
 
-/**
- * Upper bound on output tokens per OpenRouter completion.
- *
- * Not setting this lets the proxy pick its own default, which in an
- * observed e2e run truncated a `write_file` tool call mid-arguments
- * (`completion=4` tokens, `content` field dropped entirely). The model
- * then tried to write to the realm with missing content and the factory
- * stuck in a retry loop.
- *
- * 32K matches Claude Opus 4's native output-token ceiling. Picking the
- * model's real max is the safe default because callers only pay for
- * tokens actually emitted — an unused cap is free. Setting anything
- * lower just invites the same truncation bug on larger bursts (e.g.,
- * the agent writing a card definition + tests + spec in a single turn).
- */
-const OPENROUTER_MAX_OUTPUT_TOKENS = 32_000;
-
-import type {
-  AgentContext,
-  FactoryAgentConfig,
-  ResolvedSkill,
-} from './factory-agent-types';
-import { OPENROUTER_CHAT_URL } from './factory-agent-types';
-import type { LoopAgent, AgentRunResult } from './factory-agent-types';
+import type { AgentContext, FactoryAgentConfig, ResolvedSkill } from './types';
+import { OPENROUTER_CHAT_URL } from './types';
+import type { LoopAgent, AgentRunResult } from './types';
 import {
   assembleBootstrapPrompt,
   assembleImplementPrompt,
   assembleIteratePrompt,
   FilePromptLoader,
   type PromptLoader,
-} from './factory-prompt-loader';
+} from '../factory-prompt-loader';
 import {
   DONE_SIGNAL,
   CLARIFICATION_SIGNAL,
   type FactoryTool,
   type ToolCallEntry,
-} from './factory-tool-builder';
+} from '../factory-tool-builder';
 
 // ---------------------------------------------------------------------------
 // Tool-use message types (for OpenRouter/OpenAI tool-use protocol)
@@ -96,13 +82,14 @@ interface OpenRouterChatResponse {
 }
 
 // ---------------------------------------------------------------------------
-// ToolUseFactoryAgent
+// OpenRouterFactoryAgent
 // ---------------------------------------------------------------------------
 
-export class ToolUseFactoryAgent implements LoopAgent {
+export class OpenRouterFactoryAgent implements LoopAgent {
   private config: FactoryAgentConfig;
   private directFetchImpl: typeof globalThis.fetch | undefined;
   private promptLoader: PromptLoader;
+  /** True when an OpenRouter API key is available; false means proxy path. */
   readonly useDirectApi: boolean;
 
   constructor(config: FactoryAgentConfig, promptLoader?: PromptLoader) {
@@ -158,6 +145,9 @@ export class ToolUseFactoryAgent implements LoopAgent {
       if (this.config.debug) {
         this.debugLog(`=== LLM response (turn ${turn + 1}) ===`);
         this.debugLog(JSON.stringify(choice?.message ?? {}, null, 2));
+        if (choice?.finish_reason) {
+          this.debugLog(`finish_reason: ${choice.finish_reason}`);
+        }
         if (response.usage) {
           this.debugLog(
             `tokens: prompt=${response.usage.prompt_tokens} completion=${response.usage.completion_tokens} total=${response.usage.total_tokens}`,
@@ -368,7 +358,6 @@ export class ToolUseFactoryAgent implements LoopAgent {
       model: this.config.model,
       messages,
       stream: false,
-      max_tokens: OPENROUTER_MAX_OUTPUT_TOKENS,
     };
 
     if (tools.length > 0) {

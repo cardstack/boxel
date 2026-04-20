@@ -7,7 +7,7 @@
  * - RealmIssueRelationshipLoader for context building
  * - ContextBuilder with issue-aware mode
  * - ToolRegistry, ToolExecutor, FactoryTool[] via buildFactoryTools
- * - ToolUseFactoryAgent as the LoopAgent
+ * - OpenRouterFactoryAgent as the LoopAgent
  * - ValidationPipeline as the Validator
  * - runIssueLoop() invocation
  */
@@ -21,14 +21,12 @@ import { logger } from './logger';
 
 import {
   ClaudeCodeFactoryAgent,
-  ToolUseFactoryAgent,
-  type FactoryAgentConfig,
-} from './factory-agent';
-import {
+  OpenRouterFactoryAgent,
   FACTORY_DEFAULT_OPENROUTER_MODEL,
+  type FactoryAgentConfig,
   type FactoryAgentProvider,
   type LoopAgent,
-} from './factory-agent-types';
+} from './factory-agent';
 import { ContextBuilder } from './factory-context-builder';
 import { inferDarkfactoryModuleUrl } from './factory-seed';
 import { DefaultSkillResolver, SkillLoader } from './factory-skill-loader';
@@ -300,7 +298,7 @@ export function createLoopAgentWithLabel(config: CreateLoopAgentConfig): {
           ? config.openRouterModel.trim()
           : FACTORY_DEFAULT_OPENROUTER_MODEL;
       return {
-        agent: new ToolUseFactoryAgent({
+        agent: new OpenRouterFactoryAgent({
           model,
           realmServerUrl: config.realmServerUrl,
           client: config.client,

@@ -8,7 +8,7 @@
  * early and surfaces the corresponding AgentRunResult. Otherwise the query
  * runs to normal completion (maxTurns or no-more-tool-calls).
  *
- * Relationship to ToolUseFactoryAgent:
+ * Relationship to OpenRouterFactoryAgent:
  *   - Same prompt assembly (FilePromptLoader + assemble*Prompt helpers)
  *   - Same tool catalog (FactoryTool[])
  *   - Same exit signals (DONE_SIGNAL / CLARIFICATION_SIGNAL)
@@ -34,22 +34,22 @@ import type {
   ClaudeCodeAgentConfig,
   LoopAgent,
   ResolvedSkill,
-} from './factory-agent-types';
+} from './types';
 import {
   assembleBootstrapPrompt,
   assembleImplementPrompt,
   assembleIteratePrompt,
   FilePromptLoader,
   type PromptLoader,
-} from './factory-prompt-loader';
+} from '../factory-prompt-loader';
 import {
   CLARIFICATION_SIGNAL,
   DONE_SIGNAL,
   type FactoryTool,
   type ToolCallEntry,
-} from './factory-tool-builder';
-import { jsonSchemaToZodShape } from './factory-tool-schema-adapter';
-import { logger } from './logger';
+} from '../factory-tool-builder';
+import { jsonSchemaToZodShape } from '../factory-tool-schema-adapter';
+import { logger } from '../logger';
 
 const MCP_SERVER_NAME = 'factory';
 const MAX_TOOL_USE_TURNS = 50;
@@ -177,7 +177,7 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       };
     }
 
-    // Stream ended without an explicit signal. Mirror ToolUseFactoryAgent:
+    // Stream ended without an explicit signal. Mirror OpenRouterFactoryAgent:
     // if the agent called at least one tool, treat as done; otherwise
     // needs_iteration so the orchestrator feeds validation failures back.
     return {

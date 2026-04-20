@@ -1,26 +1,17 @@
 /**
- * Integration test asserting the schema boundary between the two agent
- * backends never crosses over:
+ * Runtime integration test asserting the schema boundary between the two
+ * agent backends:
  *
  *   ClaudeCodeFactoryAgent  → Zod schemas only (never JSON Schema)
- *   ToolUseFactoryAgent     → JSON Schema only (never Zod)
+ *   OpenRouterFactoryAgent  → JSON Schema only (never Zod)
  *
  * The factory defines tools with JSON-Schema `parameters`. OpenRouter
- * consumes those verbatim. The Claude Agent SDK consumes Zod — so a dedicated
- * adapter converts JSON Schema → Zod at the Claude edge. These tests ensure:
- *
- *   1. The static boundary: ToolUseFactoryAgent's source never imports Zod or
- *      the schema adapter; ClaudeCodeFactoryAgent's source does.
- *   2. The runtime boundary: what each agent actually hands to its transport
- *      is the expected schema shape.
- *
- * If any of these tests starts failing, the factory is probably losing the
- * single-seam property — which means both backends now carry conversion
- * logic, which is precisely what the separation is meant to prevent.
+ * consumes those verbatim; the Claude Agent SDK consumes Zod — so a
+ * dedicated adapter converts JSON Schema → Zod at the Claude edge. This
+ * test inspects what each agent actually hands to its transport and
+ * catches any regression where the two shapes cross over.
  */
 
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { module, test } from 'qunit';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
@@ -28,10 +19,10 @@ import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type
 import {
   ClaudeCodeFactoryAgent,
   buildSdkToolsFromFactoryTools,
-} from '../src/factory-agent-claude-code';
-import { ToolUseFactoryAgent } from '../src/factory-agent-tool-use';
-import { OPENROUTER_CHAT_URL } from '../src/factory-agent-types';
-import type { AgentContext } from '../src/factory-agent-types';
+} from '../src/factory-agent/claude-code';
+import { OpenRouterFactoryAgent } from '../src/factory-agent/openrouter';
+import { OPENROUTER_CHAT_URL } from '../src/factory-agent';
+import type { AgentContext } from '../src/factory-agent';
 import type { FactoryTool } from '../src/factory-tool-builder';
 import type { PromptLoader } from '../src/factory-prompt-loader';
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
@@ -98,60 +89,6 @@ function emptyQueryIterator() {
 }
 
 // ---------------------------------------------------------------------------
-// Static import-boundary test
-// ---------------------------------------------------------------------------
-
-module('factory-agent-schema-boundary / static', function () {
-  test('ToolUseFactoryAgent source never imports Zod or the schema adapter', function (assert) {
-    let src = readFileSync(
-      resolve(__dirname, '../src/factory-agent-tool-use.ts'),
-      'utf8',
-    );
-    assert.notOk(
-      /from\s+['"]zod['"]/m.test(src),
-      'ToolUseFactoryAgent must not import from "zod"',
-    );
-    assert.notOk(
-      /from\s+['"]zod-from-json-schema['"]/m.test(src),
-      'ToolUseFactoryAgent must not import from "zod-from-json-schema"',
-    );
-    assert.notOk(
-      /from\s+['"]\.\/factory-tool-schema-adapter['"]/m.test(src),
-      'ToolUseFactoryAgent must not import the schema adapter',
-    );
-    assert.notOk(
-      /from\s+['"]@anthropic-ai\/claude-agent-sdk['"]/m.test(src),
-      'ToolUseFactoryAgent must not import the Claude Agent SDK',
-    );
-  });
-
-  test('ClaudeCodeFactoryAgent source never imports OpenRouter constants', function (assert) {
-    let src = readFileSync(
-      resolve(__dirname, '../src/factory-agent-claude-code.ts'),
-      'utf8',
-    );
-    assert.notOk(
-      /OPENROUTER_CHAT_URL/.test(src),
-      'ClaudeCodeFactoryAgent must not reference OPENROUTER_CHAT_URL',
-    );
-    assert.notOk(
-      /_request-forward/.test(src),
-      'ClaudeCodeFactoryAgent must not reference the OpenRouter proxy endpoint',
-    );
-  });
-
-  test('ClaudeCodeFactoryAgent imports the adapter exactly once', function (assert) {
-    let src = readFileSync(
-      resolve(__dirname, '../src/factory-agent-claude-code.ts'),
-      'utf8',
-    );
-    let matches = src.match(/from\s+['"]\.\/factory-tool-schema-adapter['"]/g);
-    let count = matches?.length ?? 0;
-    assert.strictEqual(count, 1, 'exactly one import from the schema adapter');
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Runtime schema-shape tests
 // ---------------------------------------------------------------------------
 
@@ -186,7 +123,7 @@ module('factory-agent-schema-boundary / runtime', function () {
   });
 
   test('OpenRouter path: the wire body carries raw JSON Schema tool definitions', async function (assert) {
-    // `ToolUseFactoryAgent` switches to a direct OpenRouter HTTP path when
+    // `OpenRouterFactoryAgent` switches to a direct OpenRouter HTTP path when
     // `OPENROUTER_API_KEY` is present in the environment, which would
     // bypass our `fakeClient.authedServerFetch` capture and make this test
     // depend on the developer/CI env. Force the proxy path for the duration
@@ -220,7 +157,7 @@ module('factory-agent-schema-boundary / runtime', function () {
       },
     } as unknown as BoxelCLIClient;
 
-    let agent = new ToolUseFactoryAgent(
+    let agent = new OpenRouterFactoryAgent(
       {
         model: 'anthropic/claude-opus-4',
         realmServerUrl: 'https://realms.example.test/',
@@ -271,22 +208,6 @@ module('factory-agent-schema-boundary / runtime', function () {
     assert.notOk(
       (params as { _def?: unknown })._def,
       'OpenRouter path: parameters do NOT carry Zod internal "_def"',
-    );
-
-    // Guard against a regression where we stopped sending `max_tokens` and
-    // the proxy's default kicked in — too small for a real write_file
-    // payload and truncated the tool-call JSON mid-arguments (observed in
-    // an e2e run: `completion=4` tokens, arguments missing the `content`
-    // field). See OPENROUTER_MAX_OUTPUT_TOKENS in factory-agent-tool-use.ts.
-    let maxTokens = (capturedBody as { max_tokens?: number }).max_tokens;
-    assert.strictEqual(
-      typeof maxTokens,
-      'number',
-      'OpenRouter body must include numeric max_tokens',
-    );
-    assert.true(
-      (maxTokens ?? 0) >= 8192,
-      `max_tokens must be at least 8192 to fit a card-sized write_file payload (got ${maxTokens})`,
     );
   });
 

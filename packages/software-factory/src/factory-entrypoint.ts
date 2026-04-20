@@ -3,10 +3,7 @@ import { parseArgs as parseNodeArgs } from 'node:util';
 import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
 import { inferDarkfactoryModuleUrl } from './factory-seed';
-import {
-  parseAgentFlag,
-  type FactoryAgentProvider,
-} from './factory-agent-types';
+import { parseAgentFlag, type FactoryAgentProvider } from './factory-agent';
 import { loadFactoryBrief, type FactoryBrief } from './factory-brief';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 import {

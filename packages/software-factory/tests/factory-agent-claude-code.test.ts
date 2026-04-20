@@ -6,8 +6,8 @@ import type { Options } from '@anthropic-ai/claude-agent-sdk';
 import {
   ClaudeCodeFactoryAgent,
   buildSdkToolsFromFactoryTools,
-} from '../src/factory-agent-claude-code';
-import type { AgentContext } from '../src/factory-agent-types';
+} from '../src/factory-agent/claude-code';
+import type { AgentContext } from '../src/factory-agent';
 import {
   CLARIFICATION_SIGNAL,
   DONE_SIGNAL,
