@@ -1,10 +1,9 @@
 import { getOwner } from '@ember/owner';
+import Service from '@ember/service';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
-
-import Service from '@ember/service';
 
 import GetAvailableRealmUrlsCommand from '@cardstack/host/commands/get-available-realm-urls';
 import RealmService from '@cardstack/host/services/realm';
@@ -31,7 +30,10 @@ class StubRealmService extends RealmService {
 }
 
 class StubRealmServerService extends Service {
-  availableRealmURLs = ['https://example.com/realm-a/', 'https://example.com/realm-b/'];
+  availableRealmURLs = [
+    'https://example.com/realm-a/',
+    'https://example.com/realm-b/',
+  ];
   async fetchCatalogRealms() {}
   setClient() {}
 }

@@ -1,10 +1,9 @@
 import { getOwner } from '@ember/owner';
+import Service from '@ember/service';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
-
-import Service from '@ember/service';
 
 import GetCatalogRealmUrlsCommand from '@cardstack/host/commands/get-catalog-realm-urls';
 import RealmService from '@cardstack/host/services/realm';
