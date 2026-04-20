@@ -53,7 +53,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
         (if @variant (concat 'variant-' @variant) 'variant-default')
         (if
           (and (bool @size) (not (eq @size 'auto')))
-          (concat 'pill-size--' @size)
+          (concat 'boxel-ellipsize pill-size--' @size)
         )
       }}
       type={{if (eq @kind 'button') 'button'}}

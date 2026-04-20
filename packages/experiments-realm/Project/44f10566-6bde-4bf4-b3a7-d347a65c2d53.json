@@ -10,53 +10,49 @@
     "attributes": {
       "dueDate": null,
       "cardInfo": {
-        "name": "Project 1",
+        "name": null,
         "notes": null,
         "summary": null,
         "cardThumbnailURL": null
       },
       "description": null,
-      "projectCode": "PCS",
-      "projectName": "Project 1",
+      "projectCode": "PTD",
+      "projectName": "Personal To Do",
       "projectStatus": null,
       "issueTypeOptions": [
         {
-          "value": "feature",
-          "label": "Feature"
+          "value": "house-chores",
+          "label": "House Chores"
         },
         {
-          "value": "bug",
-          "label": "Bug"
+          "value": "online",
+          "label": "Online"
         },
         {
-          "value": "task",
-          "label": "Task"
+          "value": "outdoor-chores",
+          "label": "Outdoor Chores"
         },
         {
-          "value": "research",
-          "label": "Research"
-        },
-        {
-          "value": "infrastructure",
-          "label": "Infrastructure"
+          "value": "other",
+          "label": "Other"
         }
       ],
       "issueStatusOptions": [
         {
-          "value": "backlog",
-          "label": "Backlog"
+          "value": "planned",
+          "label": "Planned"
         },
         {
           "value": "in_progress",
           "label": "In Progress"
         },
         {
-          "value": "review",
-          "label": "In Review"
-        },
-        {
           "value": "done",
           "label": "Done"
+        },
+        {
+          "value": "canceled",
+          "label": "Canceled"
         }
       ],
       "issuePriorityOptions": [
@@ -69,16 +65,26 @@
           "label": "High"
         },
         {
-          "value": "critical",
-          "label": "Critical"
+          "value": "urgent",
+          "label": "Urgent"
         },
         {
-          "value": "low",
-          "label": "Low"
+          "value": "no-rush",
+          "label": "No Rush"
         }
       ]
     },
     "relationships": {
+      "issues": {
+        "links": {
+          "self": null
+        }
+      },
+      "kanbanBoards": {
+        "links": {
+          "self": null
+        }
+      },
       "cardInfo.theme": {
         "links": {
           "self": "../BrandGuide/1fc32354-8201-4f79-b400-c7c94b507174"

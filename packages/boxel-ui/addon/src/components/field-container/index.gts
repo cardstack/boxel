@@ -10,6 +10,7 @@ export interface Signature {
   Args: {
     centeredDisplay?: boolean;
     fieldId?: string;
+    hideLabel?: boolean;
     horizontalLabelSize?: string;
     icon?: Icon;
     iconHeight?: string;
@@ -41,7 +42,7 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       data-test-boxel-field-id={{@fieldId}}
       ...attributes
     >
-      <div class='label-container'>
+      <div class={{cn 'label-container' boxel-sr-only=@hideLabel}}>
         {{#if @icon}}
           <@icon
             class='boxel-field__icon'

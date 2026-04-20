@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "title": "To Do",
+      "title": "To Do Board",
       "groupBy": "ticketType",
       "cardInfo": {
         "name": null,
@@ -63,7 +63,7 @@
         {
           "key": "done",
           "label": null,
-          "color": null,
+          "color": "#19e2e6",
           "wipLimit": null,
           "collapsed": false,
           "sortOrder": 0
@@ -79,7 +79,7 @@
         {
           "key": "in_progress",
           "label": null,
-          "color": null,
+          "color": "#0a9922",
           "wipLimit": null,
           "collapsed": false,
           "sortOrder": 2
@@ -91,6 +91,14 @@
           "wipLimit": null,
           "collapsed": false,
           "sortOrder": 1
+        },
+        {
+          "key": "canceled",
+          "label": null,
+          "color": "#403370",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
         }
       ],
       "priorityColumnConfig": [
@@ -105,7 +113,15 @@
         {
           "key": "high",
           "label": null,
-          "color": "#f91f06",
+          "color": "#fbf413",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        },
+        {
+          "key": "urgent",
+          "label": null,
+          "color": "#f70808",
           "wipLimit": null,
           "collapsed": false,
           "sortOrder": null

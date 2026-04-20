@@ -25,6 +25,7 @@ export default class FieldUsage extends Component {
   @tracked labelFontSize?: BoxelLabelFontSize;
   @tracked icon = Profile;
   @tracked tag?: keyof HTMLElementTagNameMap;
+  @tracked hideLabel?: boolean;
 
   @tracked vertical2 = false;
   @tracked horizontalLabelSize2 = 'default';
@@ -46,6 +47,7 @@ export default class FieldUsage extends Component {
           @labelFontSize={{this.labelFontSize}}
           @centeredDisplay={{this.centeredDisplay}}
           @icon={{this.icon}}
+          @hideLabel={{this.hideLabel}}
           style={{cssVars
             boxel-field-label-align=this.boxelFieldLabelAlign.value
             boxel-field-label-justify-content=this.boxelFieldLabelJustifyContent.value
@@ -74,6 +76,12 @@ export default class FieldUsage extends Component {
           @description='field label'
           @value={{this.label}}
           @onInput={{fn (mut this.label)}}
+        />
+        <Args.Bool
+          @name='hideLabel'
+          @description='option to hide the label'
+          @value={{this.hideLabel}}
+          @onInput={{fn (mut this.hideLabel)}}
         />
         <Args.Component
           @name='icon'

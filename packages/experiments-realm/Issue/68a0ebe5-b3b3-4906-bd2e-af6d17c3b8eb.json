@@ -8,21 +8,22 @@
     },
     "type": "card",
     "attributes": {
-      "title": null,
-      "status": "review",
+      "status": null,
+      "issueId": "PTD-3",
+      "summary": "Vacuum",
       "cardInfo": {
-        "name": "Issue 5",
+        "name": null,
         "notes": null,
         "summary": null,
         "cardThumbnailURL": null
       },
-      "priority": null,
-      "ticketId": "cs-5",
-      "ticketType": null,
+      "comments": [],
+      "priority": "no-rush",
+      "issueType": null,
       "description": null,
-      "statusBoardOrder": 2,
-      "priorityBoardOrder": 2,
-      "ticketTypeBoardOrder": 5
+      "statusBoardOrder": null,
+      "priorityBoardOrder": 1,
+      "issueTypeBoardOrder": null
     },
     "relationships": {
       "project": {

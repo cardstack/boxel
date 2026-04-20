@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "status": "blocked",
+      "status": "review",
       "issueId": null,
       "summary": "Bug",
       "cardInfo": {
@@ -17,10 +17,11 @@
         "summary": null,
         "cardThumbnailURL": null
       },
+      "comments": [],
       "priority": "critical",
       "issueType": "bug",
       "description": null,
-      "statusBoardOrder": 1,
+      "statusBoardOrder": 2,
       "priorityBoardOrder": 1,
       "issueTypeBoardOrder": null
     },

@@ -282,11 +282,11 @@ export class Issue extends CardDef {
           </div>
         </div>
 
-        <FieldContainer @label='Title' @vertical={{true}}>
+        <FieldContainer @tag='label' @label='Title' @vertical={{true}}>
           <@fields.summary />
         </FieldContainer>
 
-        <FieldContainer @label='Description' @vertical={{true}}>
+        <FieldContainer @tag='label' @label='Description' @vertical={{true}}>
           <@fields.description />
         </FieldContainer>
 
@@ -306,7 +306,7 @@ export class Issue extends CardDef {
                   Controls the current workflow state for this issue.
                 </p>
               </div>
-              <FieldContainer @label='Status' @vertical={{true}}>
+              <FieldContainer @tag='label' @label='Status' @hideLabel={{true}}>
                 <@fields.status />
               </FieldContainer>
             </div>
@@ -317,7 +317,7 @@ export class Issue extends CardDef {
                   Classifies the issue as work like feature, bug, or research.
                 </p>
               </div>
-              <FieldContainer @label='Type' @vertical={{true}}>
+              <FieldContainer @tag='label' @label='Type' @hideLabel={{true}}>
                 <@fields.issueType />
               </FieldContainer>
             </div>
@@ -328,7 +328,11 @@ export class Issue extends CardDef {
                   Indicates the urgency or importance of this issue.
                 </p>
               </div>
-              <FieldContainer @label='Priority' @vertical={{true}}>
+              <FieldContainer
+                @tag='label'
+                @label='Priority'
+                @hideLabel={{true}}
+              >
                 <@fields.priority />
               </FieldContainer>
             </div>

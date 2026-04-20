@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "status": "in_progress",
+      "status": "review",
       "issueId": "DF-3",
       "summary": "Seed new issue cards with usable defaults",
       "cardInfo": {
@@ -17,10 +17,11 @@
         "summary": null,
         "cardThumbnailURL": null
       },
+      "comments": [],
       "priority": "medium",
       "issueType": "task",
       "description": "Make newly created issues land on the board with complete metadata so follow-up editing starts from a valid title, type, priority, and status configuration.",
-      "statusBoardOrder": 2,
+      "statusBoardOrder": 1,
       "priorityBoardOrder": 2,
       "issueTypeBoardOrder": 1
     },

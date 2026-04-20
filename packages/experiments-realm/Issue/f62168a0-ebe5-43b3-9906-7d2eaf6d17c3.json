@@ -8,20 +8,21 @@
     },
     "type": "card",
     "attributes": {
-      "status": "review",
-      "issueId": null,
-      "summary": null,
+      "status": null,
+      "issueId": "PTD-2",
+      "summary": "Laundry",
       "cardInfo": {
-        "name": "Issue 4",
+        "name": null,
         "notes": null,
         "summary": null,
         "cardThumbnailURL": null
       },
-      "priority": "medium",
-      "issueType": "research",
+      "comments": [],
+      "priority": "high",
+      "issueType": "house-chores",
       "description": null,
-      "statusBoardOrder": 3,
-      "priorityBoardOrder": 2,
+      "statusBoardOrder": null,
+      "priorityBoardOrder": null,
       "issueTypeBoardOrder": null
     },
     "relationships": {

@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "status": "review",
+      "status": "in_progress",
       "issueId": "DF-2",
       "summary": "Improve adopted tracker authoring flow",
       "cardInfo": {
@@ -17,10 +17,11 @@
         "summary": null,
         "cardThumbnailURL": null
       },
+      "comments": [],
       "priority": "medium",
       "issueType": "feature",
       "description": "Polish the adopted tracker experience by using stable option IDs, exposing option editing controls, and aligning kanban actions with shared Boxel components.",
-      "statusBoardOrder": 2,
+      "statusBoardOrder": 1,
       "priorityBoardOrder": 2,
       "issueTypeBoardOrder": 2
     },
