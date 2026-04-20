@@ -337,6 +337,103 @@ module('Integration | Store', function (hooks) {
     assert.strictEqual(file, undefined, 'delete() removes the remote card');
   });
 
+  test('createFromSerialized normalizes prefix-form ids consistently for relationships and included resources', async function (assert) {
+    registerCardReferencePrefix('@test-prefix/', testRealmURL);
+
+    let doc = {
+      data: {
+        type: 'card',
+        id: '@test-prefix/Person/hassan',
+        attributes: {
+          name: 'Hassan',
+        },
+        relationships: {
+          bestFriend: {
+            data: { type: 'card', id: '@test-prefix/Person/jade' },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: '@test-prefix/person',
+            name: 'Person',
+          },
+        },
+      },
+      included: [
+        {
+          type: 'card',
+          id: '@test-prefix/Person/jade',
+          attributes: {
+            name: 'Jade',
+          },
+          meta: {
+            adoptsFrom: {
+              module: '@test-prefix/person',
+              name: 'Person',
+            },
+          },
+        },
+      ],
+    } as LooseSingleCardDocument;
+
+    let card = (await (storeService as any).__dangerousCreateFromSerialized(
+      doc.data,
+      doc,
+      new URL(testRealmURL),
+    )) as CardDefType;
+
+    assert.strictEqual(
+      card.id,
+      `${testRealmURL}Person/hassan`,
+      'primary resource id is normalized to absolute url',
+    );
+    assert.strictEqual(
+      (card as any).bestFriend?.id,
+      `${testRealmURL}Person/jade`,
+      'relationship identifier stays consistent with normalized included id',
+    );
+    assert.strictEqual(
+      (card as any).bestFriend.name,
+      'Jade',
+      'included related resource is resolved via side-loading after normalization',
+    );
+  });
+
+  test('add() handles prefix-form save response ids and assigns absolute id to new cards', async function (assert) {
+    registerCardReferencePrefix('@test-prefix/', testRealmURL);
+
+    let originalSaveCardDocument = (storeService as any).saveCardDocument;
+    (storeService as any).saveCardDocument = async () =>
+      ({
+        data: {
+          type: 'card',
+          id: '@test-prefix/Person/andrea',
+          attributes: {
+            name: 'Andrea',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      }) as SingleCardDocument;
+
+    try {
+      let instance = new PersonDef({ name: 'Andrea' });
+      await storeService.add(instance);
+
+      assert.strictEqual(
+        instance.id,
+        `${testRealmURL}Person/andrea`,
+        'new instance id is normalized from prefix-form save response',
+      );
+    } finally {
+      (storeService as any).saveCardDocument = originalSaveCardDocument;
+    }
+  });
+
   test('peekError returns the server state error when a stale instance exists', async function (assert) {
     storeService.addReference(`${testRealmURL}Person/hassan`);
     await storeService.flush();

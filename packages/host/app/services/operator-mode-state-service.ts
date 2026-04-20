@@ -985,6 +985,19 @@ export default class OperatorModeStateService extends Service {
   // Deserialize a stringified JSON version of OperatorModeState into a Glimmer tracked object
   // so that templates can react to changes in stacks and their items
   deserialize(rawState: SerializedState): OperatorModeState {
+    // Trail items are card IDs persisted in URL hash / localStorage.
+    // They may be prefix-form (e.g. "@cardstack/catalog/...") if saved before
+    // the prefix normalization fix. Resolve to absolute URL, drop invalid entries.
+    let normalizeTrailItem = (item: string | undefined): string | undefined => {
+      if (!item || isLocalId(item)) {
+        return undefined;
+      }
+      try {
+        return cardIdToURL(item).href.replace(/\.json$/, '');
+      } catch (_e) {
+        return undefined;
+      }
+    };
     let openDirs = new TrackedMap<string, string[]>(
       Object.entries(rawState.openDirs ?? {}).map(([realmURL, dirs]) => [
         realmURL,
@@ -996,11 +1009,12 @@ export default class OperatorModeStateService extends Service {
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submodes.Interact,
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
-      hostModePrimaryCard: rawState.trail?.[0]?.replace(/\.json$/, '') ?? null,
+      hostModePrimaryCard: normalizeTrailItem(rawState.trail?.[0]) ?? null,
       hostModeStack: new TrackedArray(
         rawState.trail
           ?.slice(1, rawState.trail?.length)
-          .map((item) => item.replace(/\.json$/, '')) ?? [],
+          .map((item) => normalizeTrailItem(item))
+          .filter((item): item is string => Boolean(item)) ?? [],
       ),
       fileView: rawState.fileView ?? 'inspector',
       openDirs,

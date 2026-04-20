@@ -663,31 +663,43 @@ export default class InteractSubmode extends Component {
     }
 
     let items: { name: string; icon: Icon; ref: ResolvedCodeRef }[] = [];
+    let seenTypeKeys = new Set<string>();
     const excludedCardIds = this.realmServer.availableRealmIndexCardIds;
 
-    recentCards
-      .filter((card) => !excludedCardIds.includes(card.id)) // filter out realm index cards
-      .map((card) => {
-        let ref = identifyCard(card.constructor);
-        let name = cardTypeDisplayName(card);
-        if (isResolvedCodeRef(ref)) {
-          if (items.find((item) => item.ref === ref && item.name === name)) {
-            // do not add duplicate of the same card type
-            return;
-          }
-          items.push({
-            name,
-            icon: cardTypeIcon(card) as Icon,
-            ref,
-          });
-        }
+    for (let card of recentCards) {
+      if (excludedCardIds.includes(card.id)) {
+        // filter out realm index cards
+        continue;
+      }
+
+      let ref = identifyCard(card.constructor);
+      if (!isResolvedCodeRef(ref)) {
+        continue;
+      }
+
+      let typeKey = `${ref.module}::${ref.name}`;
+      if (seenTypeKeys.has(typeKey)) {
+        // do not add duplicates of the same card type
+        continue;
+      }
+
+      let name = cardTypeDisplayName(card);
+      seenTypeKeys.add(typeKey);
+      items.push({
+        name,
+        icon: cardTypeIcon(card) as Icon,
+        ref,
       });
 
-    let cardTypes = [...new Set(items)].slice(0, 2); // need only the 2 most-recent
+      if (items.length === 2) {
+        // need only the 2 most-recent
+        break;
+      }
+    }
 
     let menuItems: (MenuItem | MenuDivider)[] = [];
-    if (cardTypes.length) {
-      cardTypes.map(({ name, icon, ref }) => {
+    if (items.length) {
+      items.map(({ name, icon, ref }) => {
         menuItems.push(
           new MenuItem({
             label: name,

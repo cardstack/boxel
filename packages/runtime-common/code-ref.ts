@@ -22,7 +22,10 @@ import { CardError } from './error';
 import { cardIdToURL } from './card-reference-resolver';
 import type { LooseCardResource, FileMetaResource } from './index';
 import { trimExecutableExtension } from './index';
-import { resolveCardReference } from './card-reference-resolver';
+import {
+  resolveCardReference,
+  isRegisteredPrefix,
+} from './card-reference-resolver';
 import type { RuntimeDependencyTrackingContext } from './dependency-tracker';
 
 export type ResolvedCodeRef = {
@@ -245,9 +248,17 @@ export function identifyCard(
 
   let ref = Loader.identify(card);
   if (ref) {
+    // Loader stores module paths as prefix form internally (e.g.
+    // "@cardstack/catalog/piano") for portability. Only resolve to absolute
+    // URL when the module path is a registered prefix — relative paths and
+    // bare specifiers are left untouched so identifyCard() never throws.
+    let resolvedModule = isRegisteredPrefix(ref.module)
+      ? resolveCardReference(ref.module, undefined)
+      : ref.module;
+    let resolvedRef = { ...ref, module: resolvedModule };
     return maybeRelativeURL
-      ? { ...ref, module: maybeRelativeURL(ref.module) }
-      : ref;
+      ? { ...resolvedRef, module: maybeRelativeURL(resolvedRef.module) }
+      : resolvedRef;
   }
 
   let local = localIdentities.get(card);

@@ -30,6 +30,7 @@ import {
   SupportedMimeType,
   getFieldDefinitions,
   CardError,
+  cardIdToURL,
   unixTime,
   type RenderRouteOptions,
 } from '@cardstack/runtime-common';
@@ -200,7 +201,7 @@ export async function buildModuleModel(
   context: ModuleModelContext,
 ): Promise<Model> {
   let parsedOptions = renderOptions ?? {};
-  let moduleURL = trimExecutableExtension(new URL(id));
+  let moduleURL = trimExecutableExtension(cardIdToURL(id));
   registerBoxelTransitionTo(context.router, context.owner);
 
   if (parsedOptions.clearCache) {
