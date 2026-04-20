@@ -189,10 +189,7 @@ export type RunCommandResponse = {
 };
 
 export interface Prerenderer {
-  prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
-  prerenderFileExtract(args: ModulePrerenderArgs): Promise<FileExtractResponse>;
-  prerenderFileRender(args: FileRenderArgs): Promise<FileRenderResponse>;
   prerenderVisit(args: PrerenderVisitArgs): Promise<RenderVisitResponse>;
   runCommand(args: RunCommandArgs): Promise<RunCommandResponse>;
 }

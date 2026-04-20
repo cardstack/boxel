@@ -329,7 +329,22 @@ export class IndexRunner {
 
   private async tryToVisit(url: URL) {
     try {
-      await this.visitFile(url);
+      await visitFileForIndexingFused({
+        url,
+        realmURL: this.#realmURL,
+        ignoreMap: this.ignoreMap,
+        realmPaths: this.#realmPaths,
+        reader: this.#reader,
+        batch: this.batch,
+        jobInfo: this.#jobInfo,
+        auth: this.#auth,
+        prerenderer: this.#prerenderer,
+        consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+        logDebug: (message) => this.#log.debug(message),
+        logWarn: (message) => this.#log.warn(message),
+        indexCardWithResult: async (args) => await this.indexCard(args),
+        indexFileWithResults: async (args) => await this.indexFile(args),
+      });
     } catch (err: any) {
       if (isCardError(err) && err.status === 404) {
         this.#log.info(
@@ -441,25 +456,6 @@ export class IndexRunner {
       jobInfo: this.#jobInfo,
       logDebug: (message) => this.#log.debug(message),
       perfDebug: (message) => this.#perfLog.debug(message),
-    });
-  }
-
-  private async visitFile(url: URL): Promise<void> {
-    await visitFileForIndexingFused({
-      url,
-      realmURL: this.#realmURL,
-      ignoreMap: this.ignoreMap,
-      realmPaths: this.#realmPaths,
-      reader: this.#reader,
-      batch: this.batch,
-      jobInfo: this.#jobInfo,
-      auth: this.#auth,
-      prerenderer: this.#prerenderer,
-      consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
-      logDebug: (message) => this.#log.debug(message),
-      logWarn: (message) => this.#log.warn(message),
-      indexCardWithResult: async (args) => await this.indexCard(args),
-      indexFileWithResults: async (args) => await this.indexFile(args),
     });
   }
 

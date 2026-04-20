@@ -1,11 +1,7 @@
 import {
   type Prerenderer,
   type AffinityType,
-  type RenderResponse,
   type ModuleRenderResponse,
-  type FileExtractResponse,
-  type FileRenderResponse,
-  type FileRenderArgs,
   type PrerenderVisitArgs,
   type RenderVisitResponse,
   type RenderRouteOptions,
@@ -166,20 +162,6 @@ export function createRemotePrerenderer(
   }
 
   return {
-    async prerenderCard({ realm, url, auth, renderOptions }) {
-      return await requestWithRetry<RenderResponse>(
-        'prerender-card',
-        'prerender-request',
-        {
-          affinityType: 'realm',
-          affinityValue: realm,
-          realm,
-          url,
-          auth,
-          renderOptions: renderOptions ?? {},
-        },
-      );
-    },
     async prerenderModule({ realm, url, auth, renderOptions }) {
       return await requestWithRetry<ModuleRenderResponse>(
         'prerender-module',
@@ -190,43 +172,6 @@ export function createRemotePrerenderer(
           realm,
           url,
           auth,
-          renderOptions: renderOptions ?? {},
-        },
-      );
-    },
-    async prerenderFileExtract({ realm, url, auth, renderOptions }) {
-      return await requestWithRetry<FileExtractResponse>(
-        'prerender-file-extract',
-        'prerender-file-extract-request',
-        {
-          affinityType: 'realm',
-          affinityValue: realm,
-          realm,
-          url,
-          auth,
-          renderOptions: renderOptions ?? {},
-        },
-      );
-    },
-    async prerenderFileRender({
-      realm,
-      url,
-      auth,
-      fileData,
-      types,
-      renderOptions,
-    }: FileRenderArgs) {
-      return await requestWithRetry<FileRenderResponse>(
-        'prerender-file-render',
-        'prerender-file-render-request',
-        {
-          affinityType: 'realm',
-          affinityValue: realm,
-          realm,
-          url,
-          auth,
-          fileData,
-          types,
           renderOptions: renderOptions ?? {},
         },
       );

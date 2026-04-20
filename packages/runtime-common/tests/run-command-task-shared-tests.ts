@@ -47,16 +47,7 @@ function makeTaskArgs({
   onReportStatus?: (status: 'start' | 'finish') => void;
 }): TaskArgs {
   let prerenderer: Prerenderer = {
-    prerenderCard: async () => {
-      throw new Error('not used');
-    },
     prerenderModule: async () => {
-      throw new Error('not used');
-    },
-    prerenderFileExtract: async () => {
-      throw new Error('not used');
-    },
-    prerenderFileRender: async () => {
       throw new Error('not used');
     },
     prerenderVisit: async () => {

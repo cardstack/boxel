@@ -18,12 +18,9 @@ import {
   SupportedMimeType,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
-  type RenderResponse,
   type RenderError,
   type ModuleRenderResponse,
   type FileExtractResponse,
-  type FileRenderResponse,
-  type FileRenderArgs,
   type PrerenderVisitArgs,
   type RenderVisitResponse,
   type Prerenderer,
@@ -97,10 +94,7 @@ export default class CardPrerender extends Component {
     super(owner, args);
     this.#moduleAuthGuard.register();
     this.#prerendererDelegate = {
-      prerenderCard: this.prerender.bind(this),
       prerenderModule: this.prerenderModule.bind(this),
-      prerenderFileExtract: this.prerenderFileExtract.bind(this),
-      prerenderFileRender: this.prerenderFileRenderPublic.bind(this),
       prerenderVisit: this.prerenderVisitPublic.bind(this),
       runCommand: this.runCommand.bind(this),
     };
@@ -117,39 +111,6 @@ export default class CardPrerender extends Component {
       this.#moduleLastStoreResetKey = undefined;
       this.#currentContext = undefined;
       this.#moduleAuthGuard.unregister();
-    });
-  }
-
-  private async prerender({
-    url,
-    realm,
-    auth,
-    renderOptions,
-  }: {
-    realm: string;
-    url: string;
-    auth: string;
-    renderOptions?: RenderRouteOptions;
-  }): Promise<RenderResponse> {
-    return await withRenderContext(async () => {
-      try {
-        let run = () =>
-          this.prerenderTask.perform({
-            url,
-            realm,
-            auth,
-            renderOptions,
-          });
-        let results = isTesting() ? await run() : await withTimersBlocked(run);
-        return results;
-      } catch (e: any) {
-        if (!didCancel(e)) {
-          throw e;
-        }
-      }
-      throw new Error(
-        `card-prerender component is missing or being destroyed before prerender of url ${url} was completed`,
-      );
     });
   }
 
@@ -185,56 +146,6 @@ export default class CardPrerender extends Component {
     });
   }
 
-  private async prerenderFileExtract({
-    url,
-    realm,
-    auth,
-    renderOptions,
-  }: {
-    realm: string;
-    url: string;
-    auth: string;
-    renderOptions?: RenderRouteOptions;
-  }): Promise<FileExtractResponse> {
-    return await withRenderContext(async () => {
-      try {
-        let run = () =>
-          this.fileExtractPrerenderTask.perform({
-            url,
-            realm,
-            auth,
-            renderOptions,
-          });
-        return isTesting() ? await run() : await withTimersBlocked(run);
-      } catch (e: any) {
-        if (!didCancel(e)) {
-          throw e;
-        }
-      }
-      throw new Error(
-        `card-prerender component is missing or being destroyed before file extract prerender of url ${url} was completed`,
-      );
-    });
-  }
-
-  private async prerenderFileRenderPublic(
-    args: FileRenderArgs,
-  ): Promise<FileRenderResponse> {
-    return await withRenderContext(async () => {
-      try {
-        let run = () => this.fileRenderPrerenderTask.perform(args);
-        return isTesting() ? await run() : await withTimersBlocked(run);
-      } catch (e: any) {
-        if (!didCancel(e)) {
-          throw e;
-        }
-      }
-      throw new Error(
-        `card-prerender component is missing or being destroyed before file render prerender of url ${args.url} was completed`,
-      );
-    });
-  }
-
   private async prerenderVisitPublic(
     args: PrerenderVisitArgs,
   ): Promise<RenderVisitResponse> {
@@ -259,137 +170,6 @@ export default class CardPrerender extends Component {
       error: 'runCommand is not supported by the card-prerender delegate',
     };
   }
-
-  // This emulates the job of the Prerenderer that runs in the server
-  private prerenderTask = enqueueTask(
-    async ({
-      url,
-      renderOptions,
-    }: {
-      realm: string;
-      url: string;
-      auth: string;
-      renderOptions?: RenderRouteOptions;
-    }): Promise<RenderResponse> => {
-      this.#nonce++;
-      let context: CardRenderContext = {
-        cardId: url.replace(/\.json$/, ''),
-        nonce: String(this.#nonce),
-      };
-      this.#currentContext = context;
-      this.localIndexer.renderError = undefined;
-      this.localIndexer.prerenderStatus = 'loading';
-      let shouldClearCache = this.#consumeClearCacheForRender(
-        Boolean(renderOptions?.clearCache),
-      );
-      let initialRenderOptions: RenderRouteOptions = {
-        ...(renderOptions ?? {}),
-      };
-      if (shouldClearCache) {
-        initialRenderOptions.clearCache = true;
-        this.loaderService.resetLoader({
-          clearFetchCache: true,
-          reason: 'card-prerender clearCache',
-        });
-        this.store.resetCache();
-      } else {
-        delete initialRenderOptions.clearCache;
-      }
-
-      try {
-        await this.#primeCardType(url, context);
-        let error: RenderError | undefined;
-        let isolatedHTML: string | null = null;
-        let headHTML: string | null = null;
-        let meta: PrerenderMeta = {
-          serialized: null,
-          searchDoc: null,
-          displayNames: null,
-          deps: null,
-          types: null,
-        };
-        let atomHTML = null;
-        let iconHTML = null;
-        let embeddedHTML: Record<string, string> | null = null;
-        let fittedHTML: Record<string, string> | null = null;
-        try {
-          let subsequentRenderOptions =
-            omitOneTimeOptions(initialRenderOptions);
-          isolatedHTML = await this.renderHTML.perform(
-            url,
-            'isolated',
-            0,
-            initialRenderOptions,
-          );
-          meta = await this.renderMeta.perform(url, subsequentRenderOptions);
-          headHTML = await this.renderHTML.perform(
-            url,
-            'head',
-            0,
-            subsequentRenderOptions,
-          );
-          atomHTML = await this.renderHTML.perform(
-            url,
-            'atom',
-            0,
-            subsequentRenderOptions,
-          );
-          iconHTML = await this.renderIcon.perform(
-            url,
-            subsequentRenderOptions,
-          );
-          if (meta?.types) {
-            embeddedHTML = await this.renderAncestors.perform(
-              url,
-              'embedded',
-              meta.types,
-              subsequentRenderOptions,
-            );
-            fittedHTML = await this.renderAncestors.perform(
-              url,
-              'fitted',
-              meta.types,
-              subsequentRenderOptions,
-            );
-          }
-        } catch (e: any) {
-          try {
-            error = { ...JSON.parse(e.message), type: 'instance-error' };
-          } catch (err) {
-            let cardErr = new CardError(e.message);
-            cardErr.stack = e.stack;
-            error = {
-              error: {
-                ...cardErr.toJSON(),
-                deps: [url.replace(/\.json$/, '')],
-                additionalErrors: null,
-              },
-              type: 'instance-error',
-            };
-          }
-          this.store.resetCache();
-        }
-        if (this.localIndexer.prerenderStatus === 'loading') {
-          this.localIndexer.prerenderStatus = 'ready';
-        }
-        return {
-          ...meta,
-          isolatedHTML,
-          headHTML,
-          atomHTML,
-          embeddedHTML,
-          fittedHTML,
-          iconHTML,
-          ...(error ? { error } : {}),
-        };
-      } finally {
-        this.#cardTypeTracker.set(context, undefined);
-        if (this.#currentContext === context) {
-          this.#currentContext = undefined;
-        }
-      }
-    },
-  );
 
   private modulePrerenderTask = enqueueTask(
     async ({
@@ -423,146 +203,6 @@ export default class CardPrerender extends Component {
         this.#moduleModelContext(),
       );
       return result as ModuleRenderResponse;
-    },
-  );
-
-  private fileExtractPrerenderTask = enqueueTask(
-    async ({
-      url,
-      renderOptions,
-    }: {
-      realm: string;
-      url: string;
-      auth: string;
-      renderOptions?: RenderRouteOptions;
-    }): Promise<FileExtractResponse> => {
-      this.#nonce++;
-      let shouldClearCache = this.#consumeClearCacheForRender(
-        Boolean(renderOptions?.clearCache),
-      );
-      let initialRenderOptions: RenderRouteOptions = {
-        ...(renderOptions ?? {}),
-        fileExtract: true,
-      };
-      if (shouldClearCache) {
-        initialRenderOptions.clearCache = true;
-      } else {
-        delete initialRenderOptions.clearCache;
-      }
-
-      let routeInfo = await this.router.recognizeAndLoad(
-        `${this.#renderBasePath(url, initialRenderOptions)}/file-extract`,
-      );
-      if (this.localIndexer.renderError) {
-        throw new Error(this.localIndexer.renderError);
-      }
-      await this.#ensureRenderReady(routeInfo);
-      return routeInfo.attributes as FileExtractResponse;
-    },
-  );
-
-  private fileRenderPrerenderTask = enqueueTask(
-    async ({
-      url,
-      fileData,
-      types,
-      renderOptions,
-    }: FileRenderArgs): Promise<FileRenderResponse> => {
-      this.#nonce++;
-      let shouldClearCache = this.#consumeClearCacheForRender(
-        Boolean(renderOptions?.clearCache),
-      );
-      let initialRenderOptions: RenderRouteOptions = {
-        ...(renderOptions ?? {}),
-        fileRender: true,
-        fileDefCodeRef: fileData.fileDefCodeRef,
-      };
-      if (shouldClearCache) {
-        initialRenderOptions.clearCache = true;
-        this.loaderService.resetLoader({
-          clearFetchCache: true,
-          reason: 'card-prerender file render clearCache',
-        });
-        this.store.resetCache();
-      } else {
-        delete initialRenderOptions.clearCache;
-      }
-
-      // Stash file data for the render route to consume
-      (globalThis as any).__boxelFileRenderData = fileData;
-
-      let error: RenderError | undefined;
-      let isolatedHTML: string | null = null;
-      let headHTML: string | null = null;
-      let atomHTML: string | null = null;
-      let iconHTML: string | null = null;
-      let embeddedHTML: Record<string, string> | null = null;
-      let fittedHTML: Record<string, string> | null = null;
-
-      try {
-        let subsequentRenderOptions = omitOneTimeOptions(initialRenderOptions);
-        isolatedHTML = await this.renderHTML.perform(
-          url,
-          'isolated',
-          0,
-          initialRenderOptions,
-        );
-        headHTML = await this.renderHTML.perform(
-          url,
-          'head',
-          0,
-          subsequentRenderOptions,
-        );
-        atomHTML = await this.renderHTML.perform(
-          url,
-          'atom',
-          0,
-          subsequentRenderOptions,
-        );
-        iconHTML = await this.renderIcon.perform(url, subsequentRenderOptions);
-        if (types?.length) {
-          embeddedHTML = await this.renderAncestors.perform(
-            url,
-            'embedded',
-            types,
-            subsequentRenderOptions,
-          );
-          fittedHTML = await this.renderAncestors.perform(
-            url,
-            'fitted',
-            types,
-            subsequentRenderOptions,
-          );
-        }
-      } catch (e: any) {
-        try {
-          error = { ...JSON.parse(e.message), type: 'file-error' };
-        } catch (_err) {
-          let cardErr = new CardError(e.message);
-          cardErr.stack = e.stack;
-          error = {
-            error: {
-              ...cardErr.toJSON(),
-              deps: [url],
-              additionalErrors: null,
-            },
-            type: 'file-error',
-          };
-        }
-        this.store.resetCache();
-      } finally {
-        delete (globalThis as any).__boxelFileRenderData;
-      }
-
-      return {
-        isolatedHTML,
-        headHTML,
-        atomHTML,
-        embeddedHTML,
-        fittedHTML,
-        iconHTML,
-        ...(error ? { error } : {}),
-      };
     },
   );
 

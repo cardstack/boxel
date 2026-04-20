@@ -22,6 +22,7 @@ import {
   testCreatePrerenderAuth,
   getPrerendererForTesting,
 } from './helpers';
+import { prerenderCard, prerenderFileExtract } from './helpers/prerender';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import {
   baseCardRef,
@@ -258,7 +259,7 @@ module(basename(__filename), function () {
     test('reuses pooled page and picks up updated instance', async function (assert) {
       const cardURL = `${realmURL}1`;
 
-      let first = await prerenderer.prerenderCard({
+      let first = await prerenderCard(prerenderer, {
         affinityType: 'realm',
         affinityValue: realmURL,
         realm: realmURL,
@@ -298,7 +299,7 @@ module(basename(__filename), function () {
       await realm.realmIndexUpdater.fullIndex();
       realm.__testOnlyClearCaches();
 
-      let second = await prerenderer.prerenderCard({
+      let second = await prerenderCard(prerenderer, {
         affinityType: 'realm',
         affinityValue: realmURL,
         realm: realmURL,
@@ -428,7 +429,7 @@ module(basename(__filename), function () {
       await realmAdapter.write('broken-file.mismatch', 'broken mismatch file');
       realm.__testOnlyClearCaches();
 
-      let result = await prerenderer.prerenderFileExtract({
+      let result = await prerenderFileExtract(prerenderer, {
         affinityType: 'realm',
         affinityValue: realmURL,
         realm: realmURL,
@@ -996,7 +997,7 @@ module(basename(__filename), function () {
       test('card prerender hoists module transpile errors', async function (assert) {
         let brokenCard = `${realmURL}broken.json`;
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1044,7 +1045,7 @@ module(basename(__filename), function () {
       test('card prerender surfaces actionable error for bad icon import', async function (assert) {
         let cardURL = `${realmURL}bad-icon-import.json`;
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1069,7 +1070,7 @@ module(basename(__filename), function () {
       test('card prerender surfaces empty render container', async function (assert) {
         let cardURL = `${realmURL}no-icon.json`;
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1111,7 +1112,7 @@ module(basename(__filename), function () {
       test('card prerender surfaces runtime render errors without timing out', async function (assert) {
         let cardURL = `${realmURL}throws.json`;
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1142,7 +1143,7 @@ module(basename(__filename), function () {
       test('card prerender includes console errors when render fails', async function (assert) {
         let cardURL = `${realmURL}console-error.json`;
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1169,7 +1170,7 @@ module(basename(__filename), function () {
       test('card prerender ignores console errors on success', async function (assert) {
         let cardURL = `${realmURL}console-no-error.json`;
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1183,7 +1184,7 @@ module(basename(__filename), function () {
       test('card prerender surfaces unhandled promise rejection without timing out', async function (assert) {
         let cardURL = `${realmURL}rejects.json`;
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1214,7 +1215,7 @@ module(basename(__filename), function () {
       test('card prerender surfaces RSVP rejection without timing out', async function (assert) {
         let cardURL = `${realmURL}rsvp-rejects.json`;
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1301,7 +1302,7 @@ module(basename(__filename), function () {
             return { ...pageInfo, page };
           };
 
-          let result = await prerenderer.prerenderCard({
+          let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL,
             realm: realmURL,
@@ -1351,7 +1352,7 @@ module(basename(__filename), function () {
           installRealmServerAssertOwnRealmServerBypassPatch();
         let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(150);
         try {
-          let result = await prerenderer.prerenderCard({
+          let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL,
             realm: realmURL,
@@ -1503,7 +1504,7 @@ module(basename(__filename), function () {
       test('file prerender returns extracted metadata', async function (assert) {
         const fileURL = `${realmURL}notes.txt`;
 
-        let result = await prerenderer.prerenderFileExtract({
+        let result = await prerenderFileExtract(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1674,7 +1675,7 @@ module(basename(__filename), function () {
       });
 
       test('resets runtime deps between consecutive prerenders', async function (assert) {
-        let first = await prerenderer.prerenderCard({
+        let first = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1687,7 +1688,7 @@ module(basename(__filename), function () {
           'first prerender includes first relationship target',
         );
 
-        let second = await prerenderer.prerenderCard({
+        let second = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -2040,7 +2041,7 @@ module(basename(__filename), function () {
             `<div data-test-stale-card-html>${sentinel}</div>`,
           );
 
-          let result = await prerenderer.prerenderCard({
+          let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL,
             realm: realmURL,
@@ -2094,7 +2095,7 @@ module(basename(__filename), function () {
             `<article data-test-stale-file-html>${sentinel}</article>`,
           );
 
-          let result = await prerenderer.prerenderCard({
+          let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL,
             realm: realmURL,
@@ -2318,7 +2319,7 @@ module(basename(__filename), function () {
     test('file prerender surfaces auth error without timing out', async function (assert) {
       const fileURL = `${providerRealmURL}secret.txt`;
 
-      let result = await prerenderer.prerenderFileExtract({
+      let result = await prerenderFileExtract(prerenderer, {
         affinityType: 'realm',
         affinityValue: providerRealmURL,
         realm: providerRealmURL,
@@ -2351,7 +2352,7 @@ module(basename(__filename), function () {
     test('card prerender surfaces auth error without timing out', async function (assert) {
       const cardURL = `${consumerRealmURL}auth-proxy-1`;
 
-      let result = await prerenderer.prerenderCard({
+      let result = await prerenderCard(prerenderer, {
         affinityType: 'realm',
         affinityValue: consumerRealmURL,
         realm: consumerRealmURL,
@@ -2383,7 +2384,7 @@ module(basename(__filename), function () {
     test('card prerender surfaces auth error from linked fetch', async function (assert) {
       const cardURL = `${consumerRealmURL}auth-proxy-1`;
 
-      let result = await prerenderer.prerenderCard({
+      let result = await prerenderCard(prerenderer, {
         affinityType: 'realm',
         affinityValue: consumerRealmURL,
         realm: consumerRealmURL,
@@ -2570,7 +2571,7 @@ module(basename(__filename), function () {
         installRealmServerAssertOwnRealmServerBypassPatch();
       let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(150);
       try {
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: publicRealmURL,
           realm: publicRealmURL,
@@ -2766,7 +2767,7 @@ module(basename(__filename), function () {
         let searchRequestObserverPatch = installSearchRequestObserverPatch();
         let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(150);
         try {
-          let result = await prerenderer.prerenderCard({
+          let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: privateRealmURL,
             realm: privateRealmURL,
@@ -3405,7 +3406,7 @@ module(basename(__filename), function () {
 
         hooks.before(async () => {
           const testCardURL = `${realmURL2}1`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3527,7 +3528,7 @@ module(basename(__filename), function () {
 
         test('isUsed field includes a field in search doc that is not rendered in template', async function (assert) {
           const testCardURL = `${realmURL2}is-used`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3552,7 +3553,7 @@ module(basename(__filename), function () {
 
         test('isUsed linksToMany field includes links in search doc that are not rendered in template', async function (assert) {
           const testCardURL = `${realmURL2}is-used-many`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3582,7 +3583,7 @@ module(basename(__filename), function () {
 
         test('isUsed compound field includes nested linksTo relationship in search doc', async function (assert) {
           const testCardURL = `${realmURL2}is-used-field-def`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3607,7 +3608,7 @@ module(basename(__filename), function () {
 
         test('isUsed compound field includes nested linksToMany relationships in search doc', async function (assert) {
           const testCardURL = `${realmURL2}is-used-field-def`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3637,7 +3638,7 @@ module(basename(__filename), function () {
 
         test('non-isolated formats render linked fields and those links appear in search doc', async function (assert) {
           const testCardURL = `${realmURL2}non-isolated-links`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3736,7 +3737,7 @@ module(basename(__filename), function () {
         hooks.beforeEach(disposeAllRealms);
         test('error during render', async function (assert) {
           const testCardURL = `${realmURL2}2`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3773,7 +3774,7 @@ module(basename(__filename), function () {
 
         test('error includes blocked timer summary when timers fire', async function (assert) {
           const testCardURL = `${realmURL2}timer-error`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3812,14 +3813,14 @@ module(basename(__filename), function () {
 
         test('timeout includes blocked timer summary in stack', async function (assert) {
           const testCardURL = `${realmURL2}timer-timeout`;
-          await prerenderer.prerenderCard({
+          await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
           });
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3850,7 +3851,7 @@ module(basename(__filename), function () {
 
         test('missing link surfaces 404 without eviction', async function (assert) {
           const testCardURL = `${realmURL2}missing-link`;
-          let result = await prerenderer.prerenderCard({
+          let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3877,7 +3878,7 @@ module(basename(__filename), function () {
 
         test('fetch failed surfaces error without eviction', async function (assert) {
           const testCardURL = `${realmURL2}fetch-failed`;
-          let result = await prerenderer.prerenderCard({
+          let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3904,7 +3905,7 @@ module(basename(__filename), function () {
 
         test('embedded error markup triggers render error', async function (assert) {
           const testCardURL = `${realmURL2}4`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3924,7 +3925,7 @@ module(basename(__filename), function () {
         test('unusable triggers eviction and short-circuit', async function (assert) {
           // Render the card that forces unusable
           const unusableURL = `${realmURL2}3`;
-          let unusable = await prerenderer.prerenderCard({
+          let unusable = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3993,7 +3994,7 @@ module(basename(__filename), function () {
 
           // After unusable, the realm should be evicted; a subsequent render should not reuse
           const healthyURL = `${realmURL2}1`;
-          let next = await prerenderer.prerenderCard({
+          let next = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4009,7 +4010,7 @@ module(basename(__filename), function () {
 
         test('prerender surfaces module syntax errors without timing out', async function (assert) {
           const cardURL = `${realmURL2}broken`;
-          let broken = await prerenderer.prerenderCard({
+          let broken = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4034,7 +4035,7 @@ module(basename(__filename), function () {
         test('evicts on timeout and does not reuse', async function (assert) {
           const testCardURL = `${realmURL2}1`;
           // First render to initialize pool
-          let first = await prerenderer.prerenderCard({
+          let first = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4044,7 +4045,7 @@ module(basename(__filename), function () {
           assert.false(first.pool.reused, 'first call not reused');
 
           // Now trigger a timeout; this should evict the realm
-          let timeoutRun = await prerenderer.prerenderCard({
+          let timeoutRun = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4066,7 +4067,7 @@ module(basename(__filename), function () {
           );
 
           // A subsequent render should not reuse the previously pooled page
-          let afterTimeout = await prerenderer.prerenderCard({
+          let afterTimeout = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4083,14 +4084,14 @@ module(basename(__filename), function () {
 
         test('reuses the same page within a realm', async function (assert) {
           const testCardURL = `${realmURL2}1`;
-          let first = await prerenderer.prerenderCard({
+          let first = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
           });
-          let second = await prerenderer.prerenderCard({
+          let second = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4121,14 +4122,14 @@ module(basename(__filename), function () {
         test('reuses the same page within a user affinity', async function (assert) {
           const testCardURL = `${realmURL2}1`;
           const userAffinityValue = testUserId;
-          let first = await prerenderer.prerenderCard({
+          let first = await prerenderCard(prerenderer, {
             affinityType: 'user',
             affinityValue: userAffinityValue,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
           });
-          let second = await prerenderer.prerenderCard({
+          let second = await prerenderCard(prerenderer, {
             affinityType: 'user',
             affinityValue: userAffinityValue,
             realm: realmURL2,
@@ -4160,21 +4161,21 @@ module(basename(__filename), function () {
           const testCardURL = `${realmURL2}1`;
           const sharedAffinityValue = 'shared-affinity-value';
 
-          let firstRealm = await prerenderer.prerenderCard({
+          let firstRealm = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: sharedAffinityValue,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
           });
-          let firstUser = await prerenderer.prerenderCard({
+          let firstUser = await prerenderCard(prerenderer, {
             affinityType: 'user',
             affinityValue: sharedAffinityValue,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
           });
-          let secondRealm = await prerenderer.prerenderCard({
+          let secondRealm = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: sharedAffinityValue,
             realm: realmURL2,
@@ -4212,14 +4213,14 @@ module(basename(__filename), function () {
             [realmURL1]: ['read', 'write', 'realm-owner'], // introduce a different token set
           });
 
-          let first = await prerenderer.prerenderCard({
+          let first = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: authA,
           });
-          let second = await prerenderer.prerenderCard({
+          let second = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4247,14 +4248,14 @@ module(basename(__filename), function () {
         test('does not reuse across different realms', async function (assert) {
           const testCardURL1 = `${realmURL1}1`;
           const testCardURL2 = `${realmURL2}1`;
-          let r1 = await prerenderer.prerenderCard({
+          let r1 = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL1,
             realm: realmURL1,
             url: testCardURL1,
             auth: auth(),
           });
-          let r2 = await prerenderer.prerenderCard({
+          let r2 = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4275,7 +4276,7 @@ module(basename(__filename), function () {
           const cardB = `${realmURL2}1`;
           const cardC = `${realmURL3}1`;
 
-          let firstA = await prerenderer.prerenderCard({
+          let firstA = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL1,
             realm: realmURL1,
@@ -4284,7 +4285,7 @@ module(basename(__filename), function () {
           });
           assert.false(firstA.pool.reused, 'first A not reused');
 
-          let firstB = await prerenderer.prerenderCard({
+          let firstB = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4294,7 +4295,7 @@ module(basename(__filename), function () {
           assert.false(firstB.pool.reused, 'first B not reused');
 
           // Now adding C should evict the LRU (A), since maxPages=2
-          let firstC = await prerenderer.prerenderCard({
+          let firstC = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL3,
             realm: realmURL3,
@@ -4304,7 +4305,7 @@ module(basename(__filename), function () {
           assert.false(firstC.pool.reused, 'first C not reused');
 
           // Returning to A should not reuse because it was evicted
-          let secondA = await prerenderer.prerenderCard({
+          let secondA = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL1,
             realm: realmURL1,
@@ -5013,7 +5014,7 @@ module(basename(__filename), function () {
 
   module('prerender - file retries', function () {
     test('file prerender retries with clear cache on retry signature', async function (assert) {
-      let originalAttempt = RenderRunner.prototype.prerenderFileExtractAttempt;
+      let originalAttempt = RenderRunner.prototype.prerenderVisitAttempt;
       let prerenderer: Prerenderer | undefined;
       let attempts: Array<RenderRouteOptions | undefined> = [];
       let retryRealm = 'https://file-retry.example/';
@@ -5021,13 +5022,13 @@ module(basename(__filename), function () {
 
       try {
         let attemptCount = 0;
-        RenderRunner.prototype.prerenderFileExtractAttempt = async function (
-          args: Parameters<RenderRunner['prerenderFileExtractAttempt']>[0],
+        RenderRunner.prototype.prerenderVisitAttempt = async function (
+          args: Parameters<RenderRunner['prerenderVisitAttempt']>[0],
         ) {
           let { affinityType, affinityValue, url, renderOptions } = args;
           attempts.push(renderOptions);
           attemptCount++;
-          let response: FileExtractResponse =
+          let fileExtract: FileExtractResponse =
             attemptCount === 1
               ? {
                   id: url,
@@ -5055,7 +5056,7 @@ module(basename(__filename), function () {
                 };
 
           return {
-            response,
+            response: { fileExtract },
             timings: { launchMs: 0, renderMs: 1 },
             pool: {
               pageId: `page-${attemptCount}`,
@@ -5073,13 +5074,12 @@ module(basename(__filename), function () {
           serverURL: 'http://127.0.0.1:4225',
         });
 
-        let result = await prerenderer.prerenderFileExtract({
+        let result = await prerenderFileExtract(prerenderer, {
           affinityType: 'realm',
           affinityValue: retryRealm,
           realm: retryRealm,
           url: fileURL,
           auth: 'test-auth',
-          renderOptions: { fileExtract: true },
         });
 
         assert.strictEqual(
@@ -5103,7 +5103,7 @@ module(basename(__filename), function () {
           'successful response returned after retry',
         );
       } finally {
-        RenderRunner.prototype.prerenderFileExtractAttempt = originalAttempt;
+        RenderRunner.prototype.prerenderVisitAttempt = originalAttempt;
         await prerenderer?.stop();
       }
     });
@@ -5111,7 +5111,7 @@ module(basename(__filename), function () {
 
   module('prerender - card retries', function () {
     test('card prerender retries with clear cache on retry signature', async function (assert) {
-      let originalAttempt = RenderRunner.prototype.prerenderCardAttempt;
+      let originalAttempt = RenderRunner.prototype.prerenderVisitAttempt;
       let prerenderer: Prerenderer | undefined;
       let attempts: Array<RenderRouteOptions | undefined> = [];
       let retryRealm = 'https://card-retry.example/';
@@ -5119,8 +5119,8 @@ module(basename(__filename), function () {
 
       try {
         let attemptCount = 0;
-        RenderRunner.prototype.prerenderCardAttempt = async function (
-          args: Parameters<RenderRunner['prerenderCardAttempt']>[0],
+        RenderRunner.prototype.prerenderVisitAttempt = async function (
+          args: Parameters<RenderRunner['prerenderVisitAttempt']>[0],
         ) {
           let {
             affinityType,
@@ -5143,7 +5143,7 @@ module(basename(__filename), function () {
             embeddedHTML: null,
             fittedHTML: null,
           };
-          let response: RenderResponse =
+          let card: RenderResponse =
             attemptCount === 1
               ? {
                   ...baseResponse,
@@ -5161,7 +5161,7 @@ module(basename(__filename), function () {
               : baseResponse;
 
           return {
-            response,
+            response: { card },
             timings: { launchMs: 0, renderMs: 1 },
             pool: {
               pageId: `page-${attemptCount}`,
@@ -5179,7 +5179,7 @@ module(basename(__filename), function () {
           serverURL: 'http://127.0.0.1:4225',
         });
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: retryRealm,
           realm: retryRealm,
@@ -5192,14 +5192,14 @@ module(basename(__filename), function () {
           2,
           'prerender retries once with clearCache',
         );
-        assert.strictEqual(
+        assert.deepEqual(
           attempts[0],
-          undefined,
-          'first attempt uses provided render options',
+          { cardRender: true },
+          'first attempt uses cardRender pass flag',
         );
         assert.deepEqual(
           attempts[1],
-          { clearCache: true },
+          { cardRender: true, clearCache: true },
           'second attempt enables clearCache',
         );
         assert.notOk(result.response.error, 'successful response returned');
@@ -5209,7 +5209,7 @@ module(basename(__filename), function () {
           'final response came from retry attempt',
         );
       } finally {
-        RenderRunner.prototype.prerenderCardAttempt = originalAttempt;
+        RenderRunner.prototype.prerenderVisitAttempt = originalAttempt;
         await prerenderer?.stop();
       }
     });
@@ -5393,7 +5393,7 @@ module(basename(__filename), function () {
           let cardURL = `${parentRealmURL}parent`;
 
           let startMs = Date.now();
-          let result = await prerenderer.prerenderCard({
+          let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: parentRealmURL,
             realm: parentRealmURL,

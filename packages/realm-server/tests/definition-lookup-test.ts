@@ -100,9 +100,6 @@ module(basename(__filename), function () {
     hooks.before(async () => {
       virtualNetwork = createVirtualNetwork();
       mockRemotePrerenderer = {
-        async prerenderCard() {
-          throw new Error('Not implemented in mock');
-        },
         async prerenderModule(args: ModulePrerenderArgs) {
           prerenderModuleCalls++;
           let moduleURL = new URL(args.url);
@@ -143,12 +140,6 @@ module(basename(__filename), function () {
               },
             },
           });
-        },
-        async prerenderFileExtract() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileRender() {
-          throw new Error('Not implemented in mock');
         },
         async prerenderVisit() {
           throw new Error('Not implemented in mock');
@@ -326,15 +317,6 @@ module(basename(__filename), function () {
       let calls = 0;
 
       let prerenderer: Prerenderer = {
-        async prerenderCard() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileExtract() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileRender() {
-          throw new Error('Not implemented in mock');
-        },
         async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },
@@ -422,15 +404,6 @@ module(basename(__filename), function () {
       let calls = 0;
 
       let prerenderer: Prerenderer = {
-        async prerenderCard() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileExtract() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileRender() {
-          throw new Error('Not implemented in mock');
-        },
         async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },
@@ -505,15 +478,6 @@ module(basename(__filename), function () {
       let calls = new Map<string, number>();
 
       let prerenderer: Prerenderer = {
-        async prerenderCard() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileExtract() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileRender() {
-          throw new Error('Not implemented in mock');
-        },
         async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },
@@ -657,15 +621,6 @@ module(basename(__filename), function () {
 
       let calls = new Map<string, number>();
       let prerenderer: Prerenderer = {
-        async prerenderCard() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileExtract() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileRender() {
-          throw new Error('Not implemented in mock');
-        },
         async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },
@@ -818,15 +773,6 @@ module(basename(__filename), function () {
       };
 
       let prerenderer: Prerenderer = {
-        async prerenderCard() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileExtract() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileRender() {
-          throw new Error('Not implemented in mock');
-        },
         async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },
@@ -1199,15 +1145,6 @@ module(basename(__filename), function () {
       let shouldError = true;
 
       let prerenderer: Prerenderer = {
-        async prerenderCard() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileExtract() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileRender() {
-          throw new Error('Not implemented in mock');
-        },
         async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },

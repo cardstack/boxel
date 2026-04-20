@@ -8,10 +8,7 @@ import {
   type AffinityType,
   logger,
   type RenderRouteOptions,
-  type RenderResponse,
   type ModuleRenderResponse,
-  type FileExtractResponse,
-  type FileRenderResponse,
   type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import {
@@ -389,29 +386,6 @@ export function buildPrerenderApp(options: {
     });
   }
 
-  registerPrerenderRoute('/prerender-card', {
-    requestDescription: 'prerender request',
-    responseType: 'prerender-result',
-    infoLabel: 'prerendered',
-    warnTimeoutMessage: (url) => `render of ${url} timed out`,
-    errorContext: '/prerender-card',
-    parseAttributes: parseDefaultPrerenderAttributes,
-    execute: (args) => prerenderer.prerenderCard(args),
-    drainingPromise: options.drainingPromise,
-    afterResponse: (url, response) => {
-      const cardResponse = response as RenderResponse;
-      if (cardResponse.error) {
-        log.debug(
-          `render of ${url} resulted in error doc:\n${JSON.stringify(cardResponse.error, null, 2)}`,
-        );
-      } else {
-        log.debug(
-          `render of ${url} resulted in search doc:\n${JSON.stringify(cardResponse.searchDoc, null, 2)}`,
-        );
-      }
-    },
-  });
-
   registerPrerenderRoute('/prerender-module', {
     requestDescription: 'module prerender request',
     responseType: 'prerender-module-result',
@@ -426,25 +400,6 @@ export function buildPrerenderApp(options: {
       if (moduleResponse.status === 'error' && moduleResponse.error) {
         log.debug(
           `module render of ${url} resulted in error doc:\n${JSON.stringify(moduleResponse.error, null, 2)}`,
-        );
-      }
-    },
-  });
-
-  registerPrerenderRoute('/prerender-file-extract', {
-    requestDescription: 'file extract prerender request',
-    responseType: 'prerender-file-extract-result',
-    infoLabel: 'file extract prerendered',
-    warnTimeoutMessage: (url) => `file extract render of ${url} timed out`,
-    errorContext: '/prerender-file-extract',
-    parseAttributes: parseDefaultPrerenderAttributes,
-    execute: (args) => prerenderer.prerenderFileExtract(args),
-    drainingPromise: options.drainingPromise,
-    afterResponse: (url, response) => {
-      const fileResponse = response as FileExtractResponse;
-      if (fileResponse.status === 'error' && fileResponse.error) {
-        log.debug(
-          `file extract of ${url} resulted in error doc:\n${JSON.stringify(fileResponse.error, null, 2)}`,
         );
       }
     },
@@ -470,187 +425,6 @@ export function buildPrerenderApp(options: {
       drainingPromise: options.drainingPromise,
     },
   );
-
-  // File render route needs additional attributes (fileData, types)
-  // beyond what registerPrerenderRoute handles, so we register it directly.
-  router.post('/prerender-file-render', async (ctxt: Koa.Context) => {
-    try {
-      let request = await fetchRequestFromContext(ctxt);
-      let raw = await request.text();
-      let body: any;
-      try {
-        body = raw ? JSON.parse(raw) : {};
-      } catch (e) {
-        ctxt.status = 400;
-        ctxt.body = {
-          errors: [{ status: 400, message: 'Invalid JSON body' }],
-        };
-        return;
-      }
-
-      let attrs = body?.data?.attributes ?? {};
-      let rawUrl = attrs.url;
-      let rawAuth = attrs.auth;
-      let rawRealm = attrs.realm;
-      let rawAffinityType = attrs.affinityType;
-      let rawAffinityValue = attrs.affinityValue;
-      let renderOptions: RenderRouteOptions =
-        attrs.renderOptions &&
-        typeof attrs.renderOptions === 'object' &&
-        !Array.isArray(attrs.renderOptions)
-          ? (attrs.renderOptions as RenderRouteOptions)
-          : {};
-      let fileData = attrs.fileData;
-      let types = attrs.types;
-
-      let isNonEmptyString = (value: unknown): value is string =>
-        typeof value === 'string' && value.trim().length > 0;
-
-      let missing = [
-        { value: rawUrl, name: 'url' },
-        { value: rawRealm, name: 'realm' },
-        { value: rawAuth, name: 'auth' },
-        {
-          value: rawAffinityType === 'realm' ? rawAffinityType : undefined,
-          name: 'affinityType',
-        },
-        { value: rawAffinityValue, name: 'affinityValue' },
-      ]
-        .filter(({ value }) => !isNonEmptyString(value))
-        .map(({ name }) => name);
-
-      if (!fileData) {
-        missing.push('fileData');
-      }
-      if (!Array.isArray(types)) {
-        missing.push('types');
-      }
-
-      log.debug(
-        `received file render prerender request ${rawUrl}: affinityType=${rawAffinityType} affinityValue=${rawAffinityValue} realm=${rawRealm}`,
-      );
-      if (missing.length > 0) {
-        ctxt.status = 400;
-        ctxt.body = {
-          errors: [
-            {
-              status: 400,
-              message: `Missing or invalid required attributes: ${missing.join(', ')}`,
-            },
-          ],
-        };
-        return;
-      }
-
-      let realm = rawRealm as string;
-      let affinityType = rawAffinityType as AffinityType;
-      let affinityValue = rawAffinityValue as string;
-      let url = rawUrl as string;
-      let auth = rawAuth as string;
-
-      let start = Date.now();
-      let execPromise = prerenderer
-        .prerenderFileRender({
-          affinityType,
-          affinityValue,
-          realm,
-          url,
-          auth,
-          fileData,
-          types,
-          renderOptions,
-        })
-        .then((result) => ({ result }));
-      let drainPromise = options.drainingPromise
-        ? options.drainingPromise.then(() => ({ draining: true as const }))
-        : null;
-      let raceResult = drainPromise
-        ? await Promise.race([execPromise, drainPromise])
-        : await execPromise;
-      if ('draining' in raceResult) {
-        execPromise.catch((e) =>
-          log.debug(
-            'file render prerender execute settled after drain (ignored):',
-            e,
-          ),
-        );
-        ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
-        ctxt.set(
-          PRERENDER_SERVER_STATUS_HEADER,
-          PRERENDER_SERVER_STATUS_DRAINING,
-        );
-        ctxt.body = {
-          errors: [
-            {
-              status: PRERENDER_SERVER_DRAINING_STATUS_CODE,
-              message: 'Prerender server draining',
-            },
-          ],
-        };
-        return;
-      }
-      let { response, timings, pool } = raceResult.result;
-      let totalMs = Date.now() - start;
-      let poolFlags = Object.entries({
-        reused: pool.reused,
-        evicted: pool.evicted,
-        timedOut: pool.timedOut,
-      })
-        .filter(([, value]) => value === true)
-        .map(([key]) => key)
-        .join(', ');
-      let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
-      log.info(
-        'file render prerendered %s total=%dms launch=%dms render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
-        url,
-        totalMs,
-        timings.launchMs,
-        timings.renderMs,
-        pool.pageId,
-        pool.affinityType,
-        pool.affinityValue,
-        poolFlagSuffix,
-      );
-      ctxt.status = 201;
-      ctxt.set('Content-Type', 'application/vnd.api+json');
-      ctxt.body = {
-        data: {
-          type: 'prerender-file-render-result',
-          id: url,
-          attributes: response,
-        },
-        meta: {
-          timing: {
-            launchMs: timings.launchMs,
-            renderMs: timings.renderMs,
-            totalMs,
-          },
-          pool,
-        },
-      };
-      if (pool.timedOut) {
-        log.warn(`file render of ${url} timed out`);
-      }
-      const fileResponse = response as FileRenderResponse;
-      if (fileResponse.error) {
-        log.debug(
-          `file render of ${url} resulted in error doc:\n${JSON.stringify(fileResponse.error, null, 2)}`,
-        );
-      }
-    } catch (err: any) {
-      Sentry.captureException(err);
-      log.error('Unhandled error in /prerender-file-render:', err);
-      ctxt.status = 500;
-      ctxt.body = {
-        errors: [
-          {
-            status: 500,
-            message: err?.message ?? 'Unknown error',
-          },
-        ],
-      };
-    }
-  });
 
   // Composite visit prerender: runs a caller-selected subset of
   // {fileExtract, cardRender, fileRender} on a single page acquisition.
