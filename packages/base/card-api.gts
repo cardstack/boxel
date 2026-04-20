@@ -2887,6 +2887,11 @@ export class CardDef extends BaseDef {
       return this.cardInfo.cardThumbnailURL;
     },
   });
+  @field cardTheme: Theme | null = linksTo(() => Theme, {
+    computeVia: function (this: CardDef) {
+      return this.cardInfo.theme;
+    },
+  });
   static displayName = 'Card';
   static isCardDef = true;
   static icon = CaptionsIcon;

@@ -9,8 +9,7 @@ import {
   containsMany,
   linksTo,
   linksToMany,
-  CSSField,
-  CssImportField,
+  Theme,
   realmURL,
 } from '../card-api';
 import {
@@ -819,22 +818,9 @@ export class KanbanBoard extends CardDef {
       );
     },
   });
-  // TODO: better way to inherit project theme
-  @field cssVariables = contains(CSSField, {
+  @field cardTheme = linksTo(() => Theme, {
     computeVia: function (this: Issue) {
-      return (
-        this.cardInfo.theme?.cssVariables ??
-        this.project?.cardInfo?.theme?.cssVariables
-      );
-    },
-  });
-  @field cssImports = containsMany(CssImportField, {
-    computeVia: function (this: Issue) {
-      return (
-        this.cardInfo.theme?.cssImports ??
-        this.project?.cardInfo?.theme?.cssImports ??
-        []
-      );
+      return this.cardInfo.theme ?? this.project?.cardTheme;
     },
   });
 
