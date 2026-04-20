@@ -54,6 +54,15 @@ const DEFAULT_CARD_TYPE_SCHEMAS = new Map<
       },
     },
   ],
+  [
+    'Spec',
+    {
+      attributes: {
+        type: 'object',
+        properties: { cardTitle: { type: 'string' } },
+      },
+    },
+  ],
 ]);
 
 function makeConfig(
@@ -279,6 +288,201 @@ module('factory-tool-builder > write_file', function () {
     assert.strictEqual(requests[0].method, 'POST');
     // writeFile sends raw content as-is
     assert.strictEqual(requests[0].body, cardJson);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Argument validation (guards against malformed LLM tool calls)
+// ---------------------------------------------------------------------------
+
+/**
+ * The OpenRouter tool-use protocol treats `required` on parameter schemas
+ * as advisory: models can still emit `tool_call` with an empty args blob
+ * (`write_file({})`). Without runtime validation, the factory would
+ * silently write to `<realm>/undefined` because `path` stringifies to the
+ * literal "undefined" further down the call chain.
+ *
+ * These tests assert that every path-taking tool rejects
+ * missing/empty/non-string path with a clear error — one the agent can
+ * self-correct on during the next inner-loop iteration — and that the
+ * realm never sees an HTTP request for the malformed call.
+ */
+module('factory-tool-builder > path-arg validation', function () {
+  async function expectPathError(
+    invoke: () => Promise<unknown>,
+    toolName: string,
+    assert: Assert,
+  ) {
+    let err: Error | undefined;
+    try {
+      await invoke();
+    } catch (e) {
+      err = e as Error;
+    }
+    assert.ok(err, 'tool must throw for missing/empty path');
+    assert.true(
+      /non-empty string "path"/.test(err?.message ?? ''),
+      `error mentions the missing path arg (got: ${err?.message})`,
+    );
+    assert.true(
+      err!.message.includes(toolName),
+      `error mentions the tool name "${toolName}"`,
+    );
+  }
+
+  test('write_file({}) throws and does NOT hit the realm', async function (assert) {
+    let { fetch: mockFetch, requests } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let writeTool = findTool(tools, 'write_file');
+
+    await expectPathError(() => writeTool.execute({}), 'write_file', assert);
+    assert.strictEqual(
+      requests.length,
+      0,
+      'no realm HTTP request was made for an empty write_file call',
+    );
+  });
+
+  test('write_file with empty-string path throws', async function (assert) {
+    let { fetch: mockFetch } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let writeTool = findTool(tools, 'write_file');
+
+    await expectPathError(
+      () => writeTool.execute({ path: '   ', content: 'x' }),
+      'write_file',
+      assert,
+    );
+  });
+
+  test('write_file with missing content throws (required arg)', async function (assert) {
+    let { fetch: mockFetch, requests } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let writeTool = findTool(tools, 'write_file');
+
+    let err: Error | undefined;
+    try {
+      await writeTool.execute({ path: 'card.gts' });
+    } catch (e) {
+      err = e as Error;
+    }
+    assert.ok(err);
+    assert.true(/non-empty string "content"/.test(err?.message ?? ''));
+    assert.strictEqual(requests.length, 0, 'no write request was made');
+  });
+
+  test('read_file({}) throws and does NOT hit the realm', async function (assert) {
+    let { fetch: mockFetch, requests } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let readTool = findTool(tools, 'read_file');
+
+    await expectPathError(() => readTool.execute({}), 'read_file', assert);
+    assert.strictEqual(requests.length, 0);
+  });
+
+  test('fetch_transpiled_module({}) throws', async function (assert) {
+    let { fetch: mockFetch } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let fetchTool = findTool(tools, 'fetch_transpiled_module');
+
+    await expectPathError(
+      () => fetchTool.execute({}),
+      'fetch_transpiled_module',
+      assert,
+    );
+  });
+
+  test('update_project({}) throws', async function (assert) {
+    let { fetch: mockFetch, requests } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'update_project');
+
+    await expectPathError(() => tool.execute({}), 'update_project', assert);
+    assert.strictEqual(requests.length, 0);
+  });
+
+  test('update_issue({}) throws', async function (assert) {
+    let { fetch: mockFetch } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'update_issue');
+
+    await expectPathError(() => tool.execute({}), 'update_issue', assert);
+  });
+
+  test('add_comment({}) throws', async function (assert) {
+    let { fetch: mockFetch } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'add_comment');
+
+    await expectPathError(() => tool.execute({}), 'add_comment', assert);
+  });
+
+  test('add_comment rejects empty body / author too', async function (assert) {
+    let { fetch: mockFetch } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'add_comment');
+
+    let err: Error | undefined;
+    try {
+      await tool.execute({ path: 'Issues/1.json', body: '', author: '' });
+    } catch (e) {
+      err = e as Error;
+    }
+    assert.ok(err);
+    assert.true(/non-empty string "body"/.test(err?.message ?? ''));
+  });
+
+  test('create_knowledge({}) throws', async function (assert) {
+    let { fetch: mockFetch } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'create_knowledge');
+
+    await expectPathError(() => tool.execute({}), 'create_knowledge', assert);
+  });
+
+  test('create_catalog_spec({}) throws', async function (assert) {
+    let { fetch: mockFetch } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'create_catalog_spec');
+
+    await expectPathError(
+      () => tool.execute({}),
+      'create_catalog_spec',
+      assert,
+    );
   });
 });
 
