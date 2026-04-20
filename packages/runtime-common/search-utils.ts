@@ -72,7 +72,7 @@ function normalizeRenderType(
   ) {
     let { module, name } = value as { module?: unknown; name?: unknown };
     if (typeof module === 'string' && typeof name === 'string') {
-      return { module, name };
+      return { module: module as RealmResourceIdentifier, name };
     }
   }
   return undefined;
