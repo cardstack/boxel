@@ -249,7 +249,10 @@ export function identifyCard(
     // "@cardstack/catalog/piano") for portability. Resolve to absolute URL
     // here so all callers get a usable module path — otherwise any caller
     // doing new URL(codeRef.module) would crash with "Invalid URL".
-    let resolvedRef = { ...ref, module: resolveCardReference(ref.module, undefined) };
+    let resolvedRef = {
+      ...ref,
+      module: resolveCardReference(ref.module, undefined),
+    };
     return maybeRelativeURL
       ? { ...resolvedRef, module: maybeRelativeURL(resolvedRef.module) }
       : resolvedRef;
