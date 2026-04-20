@@ -272,6 +272,22 @@ module('factory-agent-schema-boundary / runtime', function () {
       (params as { _def?: unknown })._def,
       'OpenRouter path: parameters do NOT carry Zod internal "_def"',
     );
+
+    // Guard against a regression where we stopped sending `max_tokens` and
+    // the proxy's default kicked in — too small for a real write_file
+    // payload and truncated the tool-call JSON mid-arguments (observed in
+    // an e2e run: `completion=4` tokens, arguments missing the `content`
+    // field). See OPENROUTER_MAX_OUTPUT_TOKENS in factory-agent-tool-use.ts.
+    let maxTokens = (capturedBody as { max_tokens?: number }).max_tokens;
+    assert.strictEqual(
+      typeof maxTokens,
+      'number',
+      'OpenRouter body must include numeric max_tokens',
+    );
+    assert.true(
+      (maxTokens ?? 0) >= 8192,
+      `max_tokens must be at least 8192 to fit a card-sized write_file payload (got ${maxTokens})`,
+    );
   });
 
   test('Claude path: run() does not touch OPENROUTER_CHAT_URL', async function (assert) {

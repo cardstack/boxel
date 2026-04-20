@@ -12,6 +12,23 @@ import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type
 
 const MAX_TOOL_USE_TURNS = 50;
 
+/**
+ * Upper bound on output tokens per OpenRouter completion.
+ *
+ * Not setting this lets the proxy pick its own default, which in an
+ * observed e2e run truncated a `write_file` tool call mid-arguments
+ * (`completion=4` tokens, `content` field dropped entirely). The model
+ * then tried to write to the realm with missing content and the factory
+ * stuck in a retry loop.
+ *
+ * 32K matches Claude Opus 4's native output-token ceiling. Picking the
+ * model's real max is the safe default because callers only pay for
+ * tokens actually emitted — an unused cap is free. Setting anything
+ * lower just invites the same truncation bug on larger bursts (e.g.,
+ * the agent writing a card definition + tests + spec in a single turn).
+ */
+const OPENROUTER_MAX_OUTPUT_TOKENS = 32_000;
+
 import type {
   AgentContext,
   FactoryAgentConfig,
@@ -351,6 +368,7 @@ export class ToolUseFactoryAgent implements LoopAgent {
       model: this.config.model,
       messages,
       stream: false,
+      max_tokens: OPENROUTER_MAX_OUTPUT_TOKENS,
     };
 
     if (tools.length > 0) {
