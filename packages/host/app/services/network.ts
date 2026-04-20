@@ -67,19 +67,19 @@ export default class NetworkService extends Service {
     if (config.resolvedCatalogRealmURL) {
       virtualNetwork.addRealmMapping(
         '@cardstack/catalog/',
-        withTrailingSlash(config.resolvedCatalogRealmURL),
+        config.resolvedCatalogRealmURL,
       );
     }
     if (config.resolvedSkillsRealmURL) {
       virtualNetwork.addRealmMapping(
         '@cardstack/skills/',
-        withTrailingSlash(config.resolvedSkillsRealmURL),
+        config.resolvedSkillsRealmURL,
       );
     }
     if (config.resolvedOpenRouterRealmURL) {
       virtualNetwork.addRealmMapping(
         '@cardstack/openrouter/',
-        withTrailingSlash(config.resolvedOpenRouterRealmURL),
+        config.resolvedOpenRouterRealmURL,
       );
     }
     return virtualNetwork;
