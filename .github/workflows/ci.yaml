@@ -1,14 +1,12 @@
 name: CI
 
 on:
-  # TEMPORARY (vite branch / PR #4019): pull_request trigger is disabled so CI
-  # PR runs only exercise ci-host.yaml's 20-shard host suite while the vite
-  # migration is in progress. Revert this block before merging to main.
   push:
     branches:
       - main
       - ci-bisect
       - ci-bisect-**
+  pull_request:
   workflow_dispatch:
 
 permissions:

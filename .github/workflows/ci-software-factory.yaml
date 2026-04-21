@@ -1,14 +1,24 @@
 name: CI Software Factory
 
 on:
-  # TEMPORARY (vite branch / PR #4019): pull_request trigger is disabled so CI
-  # PR runs only exercise ci-host.yaml's host suite while the vite migration is
-  # in progress. Revert this block before merging to main.
   push:
     branches:
       - main
       - ci-bisect
       - ci-bisect-**
+  pull_request:
+    paths:
+      - ".github/workflows/ci-software-factory.yaml"
+      - "packages/runtime-common/**"
+      - "packages/base/**"
+      - "packages/boxel-icons/**"
+      - "packages/host/**"
+      - "packages/matrix/**"
+      - "packages/postgres/**"
+      - "packages/realm-server/**"
+      - "packages/software-factory/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
   workflow_dispatch:
 
 concurrency:
