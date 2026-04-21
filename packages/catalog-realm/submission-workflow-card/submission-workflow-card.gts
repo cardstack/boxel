@@ -13,6 +13,7 @@ import NumberField from 'https://cardstack.com/base/number';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import { eq } from '@cardstack/boxel-ui/helpers';
+import SourceCode from '@cardstack/boxel-icons/source-code';
 
 import { Listing } from '../catalog-app/listing/listing';
 import { PrCard } from '../pr-card/pr-card';
@@ -513,6 +514,13 @@ export class SubmissionWorkflowCard extends CardDef {
       }
     }
 
+    get isSourceListing(): boolean {
+      return (
+        !!this.args.model.listing &&
+        !this.args.model.listing[realmURL]?.pathname?.includes('/catalog/')
+      );
+    }
+
     <template>
       <div class='sw-layout'>
 
@@ -599,7 +607,13 @@ export class SubmissionWorkflowCard extends CardDef {
                   {{! ── Step detail cards ── }}
                   {{#if (eq step.key 'choose-listing')}}
                     {{#if @model.listing}}
-                      <div class='sw-step-detail sw-fitted-card-container'>
+                      <div class='sw-fitted-card-container'>
+                        {{#if this.isSourceListing}}
+                          <span class='sw-source-badge'>
+                            <SourceCode class='sw-source-icon' />
+                            Source Listing
+                          </span>
+                        {{/if}}
                         <@fields.listing @format='fitted' />
                       </div>
                     {{/if}}
@@ -749,6 +763,12 @@ export class SubmissionWorkflowCard extends CardDef {
             <div class='sw-sidebar-heading'>Linked Cards</div>
             {{#if @model.listing}}
               <div class='sw-sidebar-fitted-card'>
+                {{#if this.isSourceListing}}
+                  <span class='sw-source-badge'>
+                    <SourceCode class='sw-source-icon' />
+                    Source Listing
+                  </span>
+                {{/if}}
                 <@fields.listing @format='fitted' />
               </div>
             {{/if}}
@@ -779,6 +799,8 @@ export class SubmissionWorkflowCard extends CardDef {
           --c-danger: #ef4444;
           --c-active: #6366f1;
           --c-neutral: #94a3b8;
+          --c-warning: #f5e00b;
+          --c-warning-text: #92400e;
           --font:
             ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
@@ -1028,12 +1050,47 @@ export class SubmissionWorkflowCard extends CardDef {
         }
 
         .sw-fitted-card-container {
+          position: relative;
           max-width: 360px;
           height: 180px;
           border-radius: 10px;
-          overflow: hidden;
           border: 1px solid var(--c-border);
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+          margin-top: 15px;
+          overflow: visible;
+        }
+
+        .sw-fitted-card-container > :not(.sw-source-badge) {
+          border-radius: inherit;
+          overflow: hidden;
+        }
+
+        .sw-source-badge {
+          position: absolute;
+          top: -10px;
+          right: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 3px;
+          background-color: var(--c-warning);
+          color: var(--c-warning-text);
+          font: 600 var(--boxel-font-sm);
+          padding: 3px 10px;
+          border-radius: 4px;
+          z-index: 15;
+          white-space: nowrap;
+          letter-spacing: 0.1px;
+          text-transform: uppercase;
+          font-size: 10px;
+          box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+          border: none;
+        }
+
+        .sw-source-icon {
+          width: 10px;
+          height: 10px;
+          flex-shrink: 0;
         }
 
         .sw-embedded-card-container {
@@ -1258,11 +1315,17 @@ export class SubmissionWorkflowCard extends CardDef {
 
         /* ── Sidebar linked cards ── */
         .sw-sidebar-fitted-card {
-          height: 100px;
+          position: relative;
+          height: 70px;
           border-radius: 8px;
-          overflow: hidden;
           border: 1px solid var(--c-border);
           margin-bottom: 6px;
+          overflow: visible;
+        }
+
+        .sw-sidebar-fitted-card > :not(.sw-source-badge) {
+          border-radius: inherit;
+          overflow: hidden;
         }
         .sw-sidebar-empty {
           font-size: 12px;
