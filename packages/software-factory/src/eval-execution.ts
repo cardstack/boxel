@@ -26,7 +26,24 @@ let log = logger('eval-execution');
 /** File extensions that can be loaded as ESM modules via the prerenderer. */
 export const EVALUABLE_EXTENSIONS = ['.gts', '.gjs', '.ts', '.js'];
 
-const TEST_FILE_PATTERN = /\.test\.(gts|gjs|ts|js)$/;
+/**
+ * Test-runner source files — QUnit (`.test.*`) and Playwright (`.spec.*`).
+ * These import test-runner APIs (qunit, @playwright/test) and Node-only
+ * modules that the prerender sandbox can't resolve, so they must be
+ * skipped even though their extension is in EVALUABLE_EXTENSIONS.
+ */
+const TEST_FILE_PATTERN = /\.(test|spec)\.(gts|gjs|ts|js)$/;
+
+/** TypeScript ambient declaration files — not importable as ESM modules. */
+const AMBIENT_DECLARATION_PATTERN = /\.d\.ts$/;
+
+/**
+ * Precedence used when multiple discovered files collapse to the same
+ * extension-less module URL (e.g. `foo.gts` and `foo.js`). Boxel source
+ * realms are `.gts`-first, so that wins; the rest follow the order Boxel's
+ * Loader resolves extensions.
+ */
+const EXTENSION_PRECEDENCE = ['.gts', '.gjs', '.ts', '.js'];
 
 const EVALUATE_MODULE_COMMAND =
   '@cardstack/boxel-host/commands/evaluate-module/default';
@@ -59,9 +76,9 @@ export interface EvaluateRealmModulesOptions {
 }
 
 export interface EvaluateRealmModulesOutput {
-  /** Per-module results for every evaluated file (pass or fail). */
+  /** Per-module records for every evaluated file (pass or fail). */
   moduleResults: EvalModuleRecord[];
-  /** Subset of moduleResults with `passed === false`. */
+  /** Records for modules that failed to evaluate. */
   failedModules: EvalModuleRecord[];
   durationMs: number;
 }
@@ -120,8 +137,11 @@ export interface RunEvaluateResult {
 
 /**
  * Discover evaluable files in the target realm — `.gts`, `.gjs`, `.ts`,
- * `.js`, minus any `.test.*` variants. Returns an alphabetically-sorted
- * list.
+ * `.js`, minus `.test.*` / `.spec.*` test-runner sources and `.d.ts`
+ * ambient declarations. When multiple files collapse to the same
+ * extension-less module URL (e.g. `foo.gts` and `foo.js`), keeps only the
+ * one with the highest-precedence extension. Returns an
+ * alphabetically-sorted list.
  */
 export async function discoverEvaluableFiles(
   options: DiscoverEvaluableFilesOptions,
@@ -136,13 +156,27 @@ export async function discoverEvaluableFiles(
     throw new Error(result.error);
   }
 
-  return (result.filenames ?? [])
-    .filter(
-      (f) =>
-        EVALUABLE_EXTENSIONS.some((ext) => f.endsWith(ext)) &&
-        !TEST_FILE_PATTERN.test(f),
-    )
-    .sort((a, b) => a.localeCompare(b));
+  let candidates = (result.filenames ?? []).filter(
+    (f) =>
+      EVALUABLE_EXTENSIONS.some((ext) => f.endsWith(ext)) &&
+      !TEST_FILE_PATTERN.test(f) &&
+      !AMBIENT_DECLARATION_PATTERN.test(f),
+  );
+
+  // Dedupe by extension-less module URL, keeping the highest-precedence
+  // extension per basename. The prerender Loader resolves extension-less
+  // URLs, so two source files collapsing to the same URL would otherwise
+  // double-count or misattribute failures.
+  let byBasename = new Map<string, string>();
+  for (let file of candidates) {
+    let basename = stripEsmExtension(file);
+    let existing = byBasename.get(basename);
+    if (!existing || hasHigherPrecedence(file, existing)) {
+      byBasename.set(basename, file);
+    }
+  }
+
+  return Array.from(byBasename.values()).sort((a, b) => a.localeCompare(b));
 }
 
 /**
@@ -218,9 +252,18 @@ export async function runEvaluateInMemory(
   let evaluableFiles: string[];
   if (options.path) {
     let path = options.path;
+    let pathError = validateRealmRelativePath(path);
+    if (pathError) {
+      return emptyErrorResult(pathError);
+    }
     if (!EVALUABLE_EXTENSIONS.some((ext) => path.endsWith(ext))) {
       return emptyErrorResult(
         `Path "${path}" is not evaluable — must end with one of ${EVALUABLE_EXTENSIONS.join(', ')}`,
+      );
+    }
+    if (AMBIENT_DECLARATION_PATTERN.test(path)) {
+      return emptyErrorResult(
+        `Path "${path}" is a TypeScript ambient declaration — run_evaluate only evaluates importable ESM modules.`,
       );
     }
     if (TEST_FILE_PATTERN.test(path)) {
@@ -297,9 +340,51 @@ export async function runEvaluateInMemory(
 
 function toModuleUrl(file: string, realmUrl: string): string {
   // Strip any ESM extension — the prerenderer's Loader resolves extensionless
-  // URLs to whichever source file exists (.gts, .gjs, .ts, or .js).
-  let withoutExt = file.replace(/\.(gts|gjs|ts|js)$/, '');
+  // URLs to whichever source file exists (.gts, .gjs, .ts, or .js). Discovery
+  // dedupes collisions by EXTENSION_PRECEDENCE before we get here, so one
+  // basename → one evaluation.
+  let withoutExt = stripEsmExtension(file);
   return new URL(withoutExt, ensureTrailingSlash(realmUrl)).href;
+}
+
+function stripEsmExtension(file: string): string {
+  return file.replace(/\.(gts|gjs|ts|js)$/, '');
+}
+
+function hasHigherPrecedence(candidate: string, existing: string): boolean {
+  return getExtensionRank(candidate) < getExtensionRank(existing);
+}
+
+function getExtensionRank(file: string): number {
+  for (let i = 0; i < EXTENSION_PRECEDENCE.length; i++) {
+    if (file.endsWith(EXTENSION_PRECEDENCE[i])) {
+      return i;
+    }
+  }
+  return EXTENSION_PRECEDENCE.length;
+}
+
+/**
+ * Validate that the agent-supplied `path` is a safe realm-relative path —
+ * no absolute paths, no `..` traversal, and no URL scheme. Returns an
+ * error message if rejected, or null if the path is acceptable. The
+ * realm-server's `_run-command` is realm-scoped, but rejecting these
+ * cases up-front keeps the tool's contract explicit and prevents an
+ * agent-produced absolute URL or traversal segment from silently
+ * evaluating a module outside the target realm.
+ */
+function validateRealmRelativePath(path: string): string | null {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(path)) {
+    return `Path "${path}" must be realm-relative — absolute URLs (with a scheme) are not accepted.`;
+  }
+  if (path.startsWith('/')) {
+    return `Path "${path}" must be realm-relative — paths starting with "/" are not accepted.`;
+  }
+  let segments = path.split('/');
+  if (segments.some((seg) => seg === '..')) {
+    return `Path "${path}" must not contain ".." segments — the path must stay inside the target realm.`;
+  }
+  return null;
 }
 
 async function defaultEvaluateModule(
