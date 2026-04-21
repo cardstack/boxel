@@ -7,12 +7,12 @@ import {
   type Sort,
 } from '@cardstack/runtime-common';
 
+import type { SortOption } from '@cardstack/host/components/card-search/constants';
+
 import {
   buildSearchQuery,
   shouldSkipSearchQuery,
 } from '@cardstack/host/utils/card-search/query-builder';
-
-import type { SortOption } from '@cardstack/host/components/card-search/constants';
 
 const SORT_AZ: SortOption = {
   displayName: 'A-Z',
