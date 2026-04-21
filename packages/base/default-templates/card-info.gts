@@ -13,7 +13,7 @@ import type { CardOrFieldTypeIcon, CardDef, FieldsTypeFor } from '../card-api';
 import setBackgroundImage from '../helpers/set-background-image';
 
 import { FieldContainer, Button } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { and, cn, eq } from '@cardstack/boxel-ui/helpers';
 import { ChevronRight } from '@cardstack/boxel-ui/icons';
 
 import { startCase } from 'lodash';
@@ -160,7 +160,13 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
                 {{#if item.value}}
                   <Field @format='embedded' />
                 {{else}}
-                  <em class='null-preview'>None</em>
+                  <em class='null-preview'>
+                    {{#if (and (eq item.key 'cardTheme') @hideThemeChooser)}}
+                      (Self)
+                    {{else}}
+                      None
+                    {{/if}}
+                  </em>
                 {{/if}}
               </FieldContainer>
             {{/let}}
@@ -227,7 +233,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
           </FieldContainer>
           <FieldContainer
             class='card-info-field'
-            @label='Card Thumbnail URL'
+            @label='Thumbnail URL'
             @tag='label'
             @icon={{LinkIcon}}
             data-test-field='cardInfo-thumbnailURL'
