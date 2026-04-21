@@ -81,10 +81,13 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
   );
 
   try {
-    // The factory always runs the issue loop after seed creation. Without
-    // OPENROUTER_API_KEY the loop will fail when it tries to invoke the LLM
-    // agent, so we expect a non-zero exit. The seed issue is still created
-    // before the loop starts — we verify that below by reading it from the realm.
+    // The factory always runs the issue loop after seed creation. We
+    // force the OpenRouter path here so the loop fails deterministically
+    // on the missing OPENROUTER_API_KEY — this test is only validating
+    // seed-issue creation and target-realm bootstrap, not the agent loop.
+    // Without the explicit `--agent openrouter`, the default `claude`
+    // backend would try to use the Claude Agent SDK, with less
+    // predictable failure modes in the test harness.
     let result = await runCommand(
       'node',
       [
@@ -99,6 +102,8 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         '--realm-server-url',
         realmServerURL,
         '--no-retry-blocked',
+        '--agent',
+        'openrouter',
       ],
       {
         cwd: packageRoot,

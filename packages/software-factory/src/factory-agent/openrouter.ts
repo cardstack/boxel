@@ -1,37 +1,40 @@
 /**
- * Tool-use factory agent — implements LoopAgent with native tool-use protocol.
+ * OpenRouter-backed factory agent — implements `LoopAgent` by driving a
+ * remote LLM through OpenRouter's OpenAI-compatible tool-use protocol.
  *
- * This agent sends tool definitions to the LLM via the API's tools parameter.
- * The LLM calls tools during its turn, the agent executes them via
- * FactoryTool.execute(), and returns results to the LLM. The conversation
- * continues until the LLM calls signal_done/request_clarification or stops
- * making tool calls.
+ * Sibling backends live in `factory-agent-claude-code.ts` (Claude Agent SDK)
+ * and eventually `factory-agent-codex-cli.ts` (Codex CLI, tracked in
+ * CS-10594). The three implementations stay isolated: one file per
+ * backend, all conforming to the same `LoopAgent` interface, selected
+ * by `createLoopAgent()` in `factory-issue-loop-wiring.ts`.
+ *
+ * Flow: this agent sends tool definitions to the LLM via the API's
+ * `tools` parameter. The LLM emits `tool_calls[]`, we dispatch each
+ * through `FactoryTool.execute()`, feed the result back as a `role: "tool"`
+ * message, and iterate until the LLM calls `signal_done` /
+ * `request_clarification` or stops making tool calls.
  */
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 const MAX_TOOL_USE_TURNS = 50;
 
-import type {
-  AgentContext,
-  FactoryAgentConfig,
-  ResolvedSkill,
-} from './factory-agent-types';
-import { OPENROUTER_CHAT_URL } from './factory-agent-types';
-import type { LoopAgent, AgentRunResult } from './factory-agent-types';
+import type { AgentContext, FactoryAgentConfig, ResolvedSkill } from './types';
+import { OPENROUTER_CHAT_URL } from './types';
+import type { LoopAgent, AgentRunResult } from './types';
 import {
   assembleBootstrapPrompt,
   assembleImplementPrompt,
   assembleIteratePrompt,
   FilePromptLoader,
   type PromptLoader,
-} from './factory-prompt-loader';
+} from '../factory-prompt-loader';
 import {
   DONE_SIGNAL,
   CLARIFICATION_SIGNAL,
   type FactoryTool,
   type ToolCallEntry,
-} from './factory-tool-builder';
+} from '../factory-tool-builder';
 
 // ---------------------------------------------------------------------------
 // Tool-use message types (for OpenRouter/OpenAI tool-use protocol)
@@ -79,13 +82,14 @@ interface OpenRouterChatResponse {
 }
 
 // ---------------------------------------------------------------------------
-// ToolUseFactoryAgent
+// OpenRouterFactoryAgent
 // ---------------------------------------------------------------------------
 
-export class ToolUseFactoryAgent implements LoopAgent {
+export class OpenRouterFactoryAgent implements LoopAgent {
   private config: FactoryAgentConfig;
   private directFetchImpl: typeof globalThis.fetch | undefined;
   private promptLoader: PromptLoader;
+  /** True when an OpenRouter API key is available; false means proxy path. */
   readonly useDirectApi: boolean;
 
   constructor(config: FactoryAgentConfig, promptLoader?: PromptLoader) {
@@ -141,6 +145,9 @@ export class ToolUseFactoryAgent implements LoopAgent {
       if (this.config.debug) {
         this.debugLog(`=== LLM response (turn ${turn + 1}) ===`);
         this.debugLog(JSON.stringify(choice?.message ?? {}, null, 2));
+        if (choice?.finish_reason) {
+          this.debugLog(`finish_reason: ${choice.finish_reason}`);
+        }
         if (response.usage) {
           this.debugLog(
             `tokens: prompt=${response.usage.prompt_tokens} completion=${response.usage.completion_tokens} total=${response.usage.total_tokens}`,

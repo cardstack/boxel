@@ -6,13 +6,9 @@
  * without calling a real LLM.
  */
 
-import type {
-  AgentAction,
-  AgentContext,
-  FactoryAgent,
-} from './factory-agent-types';
-import type { LoopAgent, AgentRunResult } from './factory-agent-types';
-import type { FactoryTool } from './factory-tool-builder';
+import type { AgentAction, AgentContext, FactoryAgent } from './types';
+import type { LoopAgent, AgentRunResult } from './types';
+import type { FactoryTool } from '../factory-tool-builder';
 
 // ---------------------------------------------------------------------------
 // MockFactoryAgent — deterministic FactoryAgent for declarative model tests

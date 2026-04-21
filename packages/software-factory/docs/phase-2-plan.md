@@ -611,8 +611,9 @@ The boxel-cli integration work is tracked in a dedicated Linear project: **"Inco
 - **CS-10670** — boxel-cli publishes tool definitions for factory consumption (tool delegation)
 - **CS-10666** — Create `boxel-api` skill (federated search, realm creation, auth model)
 - **CS-10667** — Create `boxel-command` skill (host commands via prerenderer)
-- **CS-10593** — Claude Code native LLM support (ClaudeCodeFactoryAgent)
-- **CS-10594** — Codex CLI native support
+- **CS-10518** — `--agent claude | codex | openrouter[=<model>]` selection (landed). Default is `claude`. No env vars; no host-environment auto-detection.
+- **CS-10593** — Claude Code native LLM support (`ClaudeCodeFactoryAgent`, built on `@anthropic-ai/claude-agent-sdk`). Tools register as in-process callbacks via `createSdkMcpServer` + `tool(name, desc, zodShape, execute)`; JSON-Schema → Zod conversion is confined to `factory-tool-schema-adapter.ts`. **Landed.**
+- **CS-10594** — Codex CLI native support (stub only as of CS-10518; `--agent codex` currently throws "not yet implemented"). Future implementation uses `@openai/codex-sdk` + an in-process MCP stdio server bridging `FactoryTool[]`, `codex exec --json`, and an ephemeral `CODEX_HOME`. See the CS-10594 Linear comment for the full design.
 
 ### Architectural Principle: boxel-cli Owns the Entire Boxel API Surface
 

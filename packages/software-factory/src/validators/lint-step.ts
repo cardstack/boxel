@@ -10,7 +10,7 @@
 import type { BoxelCLIClient, LintResult } from '@cardstack/boxel-cli/api';
 
 import type { ValidationStepResult } from '../factory-agent';
-import { deriveIssueSlug } from '../factory-agent-types';
+import { deriveIssueSlug } from '../factory-agent';
 
 import { getNextValidationSequenceNumber } from '../realm-operations';
 import {

@@ -386,6 +386,68 @@ module('Unit | bfm-card-references', function () {
       );
     });
 
+    test('block ref with embedded format', function (assert) {
+      let markdown = '::card[https://example.com/cards/1 | embedded]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-format="embedded"'),
+        'has embedded format',
+      );
+      assert.false(
+        html.includes('data-boxel-bfm-width'),
+        'no width for embedded',
+      );
+      assert.false(
+        html.includes('data-boxel-bfm-height'),
+        'no height for embedded',
+      );
+    });
+
+    test('block ref with bare fitted format (no size override)', function (assert) {
+      let markdown = '::card[https://example.com/cards/1 | fitted]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-format="fitted"'),
+        'has fitted format',
+      );
+      assert.false(
+        html.includes('data-boxel-bfm-width'),
+        'no width when no size override',
+      );
+      assert.false(
+        html.includes('data-boxel-bfm-height'),
+        'no height when no size override',
+      );
+    });
+
+    test('block ref with "fitted <named>" prefix', function (assert) {
+      let markdown = '::card[https://example.com/cards/1 | fitted strip]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-format="fitted"'),
+        'has fitted format',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-width="250"'),
+        'width from strip constant',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-height="40"'),
+        'height from strip constant',
+      );
+    });
+
+    test('block ref with "fitted <WxH>" prefix', function (assert) {
+      let markdown = '::card[https://example.com/cards/1 | fitted 400x200]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-format="fitted"'),
+        'has fitted format',
+      );
+      assert.true(html.includes('data-boxel-bfm-width="400"'), 'width=400');
+      assert.true(html.includes('data-boxel-bfm-height="200"'), 'height=200');
+    });
+
     test('block ref without pipe has no format/size attributes', function (assert) {
       let markdown = '::card[https://example.com/cards/1]\n';
       let html = markdownToHtml(markdown);
@@ -427,6 +489,51 @@ module('Unit | bfm-card-references', function () {
     test('parses isolated keyword case-insensitively', function (assert) {
       let result = parseBfmSizeSpec('Isolated');
       assert.deepEqual(result, { format: 'isolated' });
+    });
+
+    test('parses embedded keyword', function (assert) {
+      let result = parseBfmSizeSpec('embedded');
+      assert.deepEqual(result, { format: 'embedded' });
+    });
+
+    test('parses embedded keyword case-insensitively', function (assert) {
+      let result = parseBfmSizeSpec('Embedded');
+      assert.deepEqual(result, { format: 'embedded' });
+    });
+
+    test('parses bare fitted keyword with no size', function (assert) {
+      let result = parseBfmSizeSpec('fitted');
+      assert.deepEqual(result, { format: 'fitted' });
+    });
+
+    test('parses bare fitted keyword case-insensitively', function (assert) {
+      let result = parseBfmSizeSpec('Fitted');
+      assert.deepEqual(result, { format: 'fitted' });
+    });
+
+    test('parses fitted prefix with named constant', function (assert) {
+      let result = parseBfmSizeSpec('fitted strip');
+      assert.deepEqual(result, { format: 'fitted', width: 250, height: 40 });
+    });
+
+    test('parses fitted prefix with canonical named constant', function (assert) {
+      let result = parseBfmSizeSpec('fitted compact-card');
+      assert.deepEqual(result, { format: 'fitted', width: 400, height: 170 });
+    });
+
+    test('parses fitted prefix with WxH', function (assert) {
+      let result = parseBfmSizeSpec('fitted 400x200');
+      assert.deepEqual(result, { format: 'fitted', width: 400, height: 200 });
+    });
+
+    test('parses fitted prefix with WxH with spaces', function (assert) {
+      let result = parseBfmSizeSpec('fitted 400 x 200');
+      assert.deepEqual(result, { format: 'fitted', width: 400, height: 200 });
+    });
+
+    test('parses fitted prefix case-insensitively', function (assert) {
+      let result = parseBfmSizeSpec('Fitted Strip');
+      assert.deepEqual(result, { format: 'fitted', width: 250, height: 40 });
     });
 
     // Named size constants — Badges

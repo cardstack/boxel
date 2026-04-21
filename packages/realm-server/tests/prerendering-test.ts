@@ -15,6 +15,7 @@ import {
 import type { Prerenderer } from '../prerender/index';
 import { PagePool } from '../prerender/page-pool';
 import { RenderRunner } from '../prerender/render-runner';
+import { BrowserManager } from '../prerender/browser-manager';
 
 import {
   setupPermissionedRealmsCached,
@@ -5212,6 +5213,89 @@ module(basename(__filename), function () {
         );
       } finally {
         RenderRunner.prototype.prerenderVisitAttempt = originalAttempt;
+        await prerenderer?.stop();
+      }
+    });
+  });
+
+  module('prerender - concurrent restart coalescing', function () {
+    test('concurrent failures trigger a single browser restart', async function (assert) {
+      // Regression guard for the race where two visits failing in the same
+      // tick each called #restartBrowser, both closeAll'd the pool
+      // concurrently, and the second caller hit "Failed to find context with
+      // id <X>" as its BrowserContext.close() landed after the first already
+      // disposed the context.
+      let originalAttempt = RenderRunner.prototype.prerenderVisitAttempt;
+      let originalRestart = BrowserManager.prototype.restartBrowser;
+      let prerenderer: Prerenderer | undefined;
+      let restartCount = 0;
+      let retryRealm = 'https://concurrent-restart.example/';
+      let cardURL = `${retryRealm}card`;
+
+      try {
+        // Force every visit attempt to throw an unrecoverable error so the
+        // prerenderer catch block calls #restartBrowser for each caller.
+        RenderRunner.prototype.prerenderVisitAttempt = async function () {
+          throw new Error('simulated unrecoverable prerender failure');
+        };
+        // Introduce a small delay inside restartBrowser so concurrent
+        // callers actually overlap in time — without this the fast
+        // synchronous-ish no-op restart would serialize naturally.
+        BrowserManager.prototype.restartBrowser = async function (
+          this: BrowserManager,
+        ) {
+          restartCount++;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return await originalRestart.call(this);
+        };
+
+        prerenderer = getPrerendererForTesting({
+          maxPages: 2,
+          serverURL: 'http://127.0.0.1:4225',
+        });
+
+        // Fire three visits concurrently. Each will fail on its first
+        // attempt, trigger #restartBrowser, and then retry once more (per
+        // the prerenderVisit wrapper in prerenderer.ts). With the mutex
+        // in place, all three callers coalesce onto a single in-flight
+        // restart.
+        let results = await Promise.allSettled([
+          prerenderCard(prerenderer, {
+            affinityType: 'realm',
+            affinityValue: retryRealm,
+            realm: retryRealm,
+            url: cardURL,
+            auth: 'test-auth',
+          }),
+          prerenderCard(prerenderer, {
+            affinityType: 'realm',
+            affinityValue: retryRealm,
+            realm: retryRealm,
+            url: `${cardURL}-2`,
+            auth: 'test-auth',
+          }),
+          prerenderCard(prerenderer, {
+            affinityType: 'realm',
+            affinityValue: retryRealm,
+            realm: retryRealm,
+            url: `${cardURL}-3`,
+            auth: 'test-auth',
+          }),
+        ]);
+
+        assert.strictEqual(
+          results.filter((r) => r.status === 'rejected').length,
+          3,
+          'all three visits fail (no working render path available)',
+        );
+        assert.strictEqual(
+          restartCount,
+          1,
+          'three concurrent failing visits coalesce into a single browser restart',
+        );
+      } finally {
+        RenderRunner.prototype.prerenderVisitAttempt = originalAttempt;
+        BrowserManager.prototype.restartBrowser = originalRestart;
         await prerenderer?.stop();
       }
     });

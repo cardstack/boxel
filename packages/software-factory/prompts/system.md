@@ -9,7 +9,7 @@ state before making changes — do not guess.
 
 # Rules
 
-- Every ticket must include at least one QUnit test file (.test.gts co-located with the card definition).
+- Every ticket must include at least one QUnit test file (.test.gts co-located with the card definition). Every `test(...)` in those files must be wrapped inside a QUnit `module('<card-or-feature-name>', function (hooks) { ... })` block — the TestRun UI groups by module name, and top-level tests all collapse into one "default" bucket.
 - For each top-level card defined in the brief, create a Catalog Spec card
   in the target realm's Spec/ folder (adoptsFrom https://cardstack.com/base/spec#Spec)
   and at least one sample card instance linked via linkedExamples.

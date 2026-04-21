@@ -13,7 +13,8 @@
  * Prerequisites:
  *   - Docker running, `mise run dev-all` (realm server, host app, Synapse, etc.)
  *   - Active Boxel profile (`boxel profile add`)
- *   - OPENROUTER_API_KEY for the LLM agent
+ *   - LLM backend credentials matching --agent (default: `claude login` or
+ *     ANTHROPIC_API_KEY; `--agent openrouter` needs OPENROUTER_API_KEY)
  *
  * Usage:
  *   pnpm smoke:factory-scenarios --scenario 1 [--debug]
@@ -672,10 +673,10 @@ async function main(): Promise<void> {
 
   let username = active.matrixId.replace(/^@/, '').replace(/:.*$/, '');
 
-  if (!process.env.OPENROUTER_API_KEY) {
-    log.error('OPENROUTER_API_KEY is required for the LLM agent.');
-    process.exit(1);
-  }
+  // No upfront API-key gate here — the factory itself validates credentials
+  // for the chosen `--agent`. The default Claude path works with either a
+  // `claude login` session or ANTHROPIC_API_KEY; `--agent openrouter` still
+  // needs OPENROUTER_API_KEY.
 
   let realmServerUrl = active.realmServerUrl;
   if (!realmServerUrl.endsWith('/')) {

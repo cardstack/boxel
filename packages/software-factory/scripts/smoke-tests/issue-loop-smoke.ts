@@ -25,7 +25,7 @@ import type {
   ToolCallEntry,
 } from '../../src/factory-tool-builder';
 
-import type { AgentRunResult, LoopAgent } from '../../src/factory-agent-types';
+import type { AgentRunResult, LoopAgent } from '../../src/factory-agent';
 import type { IssueStore } from '../../src/issue-scheduler';
 
 import {

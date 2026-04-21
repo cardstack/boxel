@@ -14,7 +14,7 @@ import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import type { ValidationStepResult } from '../factory-agent';
-import { deriveIssueSlug } from '../factory-agent-types';
+import { deriveIssueSlug } from '../factory-agent';
 import { executeTestRunFromRealm } from '../test-run-execution';
 import type { ExecuteTestRunOptions, TestRunHandle } from '../test-run-types';
 import { logger } from '../logger';

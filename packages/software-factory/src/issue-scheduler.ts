@@ -13,7 +13,7 @@ import type {
   IssueStatus,
   IssuePriority,
   SchedulableIssue,
-} from './factory-agent-types';
+} from './factory-agent';
 
 import { ensureJsonExtension, addCommentToIssue } from './realm-operations';
 import { logger } from './logger';
