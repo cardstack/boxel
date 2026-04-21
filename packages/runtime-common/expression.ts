@@ -28,12 +28,16 @@ export interface Param {
   kind: 'param';
 }
 
-// pg/sqlite may be either a raw SQL fragment (PgPrimitive) or an inline
-// Expression, which lets adapter-specific branches thread parameters through
-// without concatenating user input into SQL text.
+// pg/sqlite carries either a raw SQL fragment (scalar) or an inline
+// Expression array, which lets adapter-specific branches thread parameters
+// through without concatenating user input into SQL text. The scalar type
+// deliberately excludes JSON arrays/objects — both to avoid rendering them
+// as SQL text (never a valid use case) and to make the Array.isArray()
+// branch in expressionToSql() unambiguously mean "inline Expression".
+type DBSpecificScalar = string | number | boolean | null;
 export interface DBSpecificExpression {
-  pg?: PgPrimitive | Expression;
-  sqlite?: PgPrimitive | Expression;
+  pg?: DBSpecificScalar | Expression;
+  sqlite?: DBSpecificScalar | Expression;
   kind: 'db-specific-expression';
 }
 
@@ -140,8 +144,8 @@ export function dbExpression({
   pg,
   sqlite,
 }: {
-  pg?: PgPrimitive | Expression;
-  sqlite?: PgPrimitive | Expression;
+  pg?: DBSpecificScalar | Expression;
+  sqlite?: DBSpecificScalar | Expression;
 }): DBSpecificExpression {
   return { pg, sqlite, kind: 'db-specific-expression' };
 }
@@ -412,7 +416,9 @@ export function expressionToSql(
       if (Array.isArray(value)) {
         return (value as Expression).map(renderElement).join(' ');
       }
-      return (value as PgPrimitive | undefined) == null ? '' : String(value);
+      return (value as DBSpecificScalar | undefined) == null
+        ? ''
+        : String(value);
     } else if (isParam(element)) {
       let value = element[dbAdapterKind] ?? element.param ?? null;
       values.push(

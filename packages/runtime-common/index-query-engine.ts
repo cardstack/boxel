@@ -929,31 +929,38 @@ export class IndexQueryEngine {
 
   // Full-text matches predicate. Postgres uses tsvector/tsquery on the
   // indexed markdown column; SQLite falls back to a case-insensitive
-  // substring LIKE with `%`/`_`/`\` escaped in JS before binding.
+  // substring LIKE with `%`/`_`/`\` escaped in JS before binding. An
+  // empty/whitespace-only query short-circuits to FALSE so SQLite doesn't
+  // match every non-null row (PG's websearch_to_tsquery already yields an
+  // empty tsquery that matches nothing — we match that behavior here).
   private matchesCondition(
     filter: MatchesFilter,
     _on: CodeRef,
     typeConditionRef?: CodeRef,
   ): CardExpression {
     let typeRef = typeConditionRef;
+    let predicate: CardExpression =
+      filter.matches.trim() === ''
+        ? ['FALSE']
+        : [
+            dbExpression({
+              pg: [
+                `to_tsvector('english', coalesce(i.markdown, ''))`,
+                '@@',
+                `websearch_to_tsquery('english',`,
+                param(filter.matches),
+                `)`,
+              ],
+              sqlite: [
+                `LOWER(i.markdown) LIKE LOWER(`,
+                param(`%${escapeSqliteLikePattern(filter.matches)}%`),
+                `) ESCAPE '\\'`,
+              ],
+            }),
+          ];
     return every([
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
-      [
-        dbExpression({
-          pg: [
-            `to_tsvector('english', coalesce(i.markdown, ''))`,
-            '@@',
-            `websearch_to_tsquery('english',`,
-            param(filter.matches),
-            `)`,
-          ],
-          sqlite: [
-            `LOWER(i.markdown) LIKE LOWER(`,
-            param(`%${escapeSqliteLikePattern(filter.matches)}%`),
-            `) ESCAPE '\\'`,
-          ],
-        }),
-      ],
+      predicate,
     ]);
   }
 

@@ -68,7 +68,7 @@ async function seedRow(
     `,`,
     param(false),
     `,`,
-    param(String(Date.now())),
+    param(Date.now()),
     `,`,
     param(markdown),
     `)`,
@@ -183,13 +183,36 @@ module(basename(__filename), function () {
     });
 
     test('null markdown does not match', async function (assert) {
+      // Query a term that hits exactly one seeded row. If the null-markdown
+      // row were accidentally included, total would be >1.
       let { meta } = await engine.searchCards(new URL(testRealmURL), {
-        filter: { matches: 'anything' },
+        filter: { matches: 'mango' },
       });
       assert.strictEqual(
         meta.page.total,
+        1,
+        'only the mango row matches; the null-markdown row is excluded',
+      );
+    });
+
+    test('empty query matches nothing', async function (assert) {
+      let { meta: emptyMeta } = await engine.searchCards(
+        new URL(testRealmURL),
+        { filter: { matches: '' } },
+      );
+      assert.strictEqual(
+        emptyMeta.page.total,
         0,
-        'no row has "anything" in its markdown',
+        'empty query does not match every row',
+      );
+
+      let { meta: wsMeta } = await engine.searchCards(new URL(testRealmURL), {
+        filter: { matches: '   ' },
+      });
+      assert.strictEqual(
+        wsMeta.page.total,
+        0,
+        'whitespace-only query does not match every row',
       );
     });
 

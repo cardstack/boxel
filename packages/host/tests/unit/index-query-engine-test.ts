@@ -2848,13 +2848,52 @@ module('Unit | query', function (hooks) {
   });
 
   test(`'matches' does not match rows whose markdown is null`, async function (assert) {
-    let { mango } = testCards;
-    await setupIndex(dbAdapter, [{ card: mango, data: { markdown: null } }]);
+    // Include a non-null row that matches the query so the null-only case
+    // is distinguishable from "query hits no rows at all".
+    let { mango, vangogh } = testCards;
+    await setupIndex(dbAdapter, [
+      { card: mango, data: { markdown: 'Mango likes fetch.' } },
+      { card: vangogh, data: { markdown: null } },
+    ]);
 
-    let { meta } = await indexQueryEngine.searchCards(new URL(testRealmURL), {
-      filter: { matches: 'anything' },
-    });
-    assert.strictEqual(meta.page.total, 0, 'null markdown does not match');
+    let { meta, cards } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      { filter: { matches: 'mango' } },
+    );
+    assert.strictEqual(
+      meta.page.total,
+      1,
+      'only the non-null row matching "mango" is returned',
+    );
+    assert.deepEqual(getIds(cards), [mango.id]);
+  });
+
+  test(`'matches' empty query matches nothing`, async function (assert) {
+    let { mango, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      { card: mango, data: { markdown: 'Mango likes fetch.' } },
+      { card: ringo, data: { markdown: 'Ringo likes drums.' } },
+    ]);
+
+    let { meta: emptyMeta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      { filter: { matches: '' } },
+    );
+    assert.strictEqual(
+      emptyMeta.page.total,
+      0,
+      'empty query does not match every row',
+    );
+
+    let { meta: wsMeta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      { filter: { matches: '   ' } },
+    );
+    assert.strictEqual(
+      wsMeta.page.total,
+      0,
+      'whitespace-only query does not match every row',
+    );
   });
 
   test(`'matches' parameterizes the query safely (injection attempt)`, async function (assert) {
