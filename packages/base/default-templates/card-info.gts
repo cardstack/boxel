@@ -158,7 +158,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
                 data-test-edit-preview={{item.key}}
               >
                 {{#if item.value}}
-                  <Field @format='embedded' />
+                  <Field @format='atom' />
                 {{else}}
                   <em class='null-preview'>
                     {{#if (and (eq item.key 'cardTheme') @hideThemeChooser)}}
