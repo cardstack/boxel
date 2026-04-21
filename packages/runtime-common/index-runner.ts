@@ -1,5 +1,8 @@
 import ignore, { type Ignore } from 'ignore';
-import { randomUUID } from 'crypto';
+// Isomorphic UUID — works in both Node and the browser (host tests
+// instantiate IndexRunner inside a Chrome tab, so Node's built-in
+// `crypto.randomUUID` is not available).
+import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import { Memoize } from 'typescript-memoize';
 
@@ -116,7 +119,7 @@ export class IndexRunner {
     this.#realmURL = realmURL;
     this.#ignoreData = ignoreData;
     this.#jobInfo = jobInfo ?? { jobId: -1, reservationId: -1 };
-    this.#batchId = `${this.#jobInfo.jobId}-${randomUUID().slice(0, 8)}`;
+    this.#batchId = `${this.#jobInfo.jobId}-${uuidv4().slice(0, 8)}`;
     this.#reportStatus = reportStatus;
     this.#onProgress = onProgress;
     this.#prerenderer = prerenderer;
