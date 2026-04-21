@@ -22,6 +22,11 @@ import {
 import type { ToolExecutor } from './factory-tool-executor';
 import type { ToolRegistry } from './factory-tool-registry';
 import {
+  runInstantiateInMemory,
+  type RunInstantiateInMemoryOptions,
+  type RunInstantiateResult,
+} from './instantiate-execution';
+import {
   runLintInMemory,
   type RunLintInMemoryOptions,
   type RunLintResult,
@@ -78,6 +83,10 @@ export interface ToolBuilderConfig {
   runEvaluateInMemory?: (
     options: RunEvaluateInMemoryOptions,
   ) => Promise<RunEvaluateResult>;
+  /** Injected for testing — defaults to runInstantiateInMemory. */
+  runInstantiateInMemory?: (
+    options: RunInstantiateInMemoryOptions,
+  ) => Promise<RunInstantiateResult>;
 }
 
 export interface ToolCallEntry {
@@ -125,6 +134,7 @@ export function buildFactoryTools(
     buildRunLintTool(config),
     buildRunTestsTool(config),
     buildRunEvaluateTool(config),
+    buildRunInstantiateTool(config),
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
@@ -690,6 +700,56 @@ function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
           type: 'string',
           description:
             'Optional realm-relative path to a single .gts / .gjs / .ts / .js file to evaluate. Omit to evaluate every non-test evaluable module in the target realm. Test files (*.test.*) are rejected — the test runner validates those.',
+        },
+      },
+    },
+    execute: async (args) => {
+      let rawPath = args.path;
+      let path =
+        typeof rawPath === 'string' && rawPath.trim() !== ''
+          ? rawPath.trim()
+          : undefined;
+      return execute({
+        targetRealmUrl: config.targetRealmUrl,
+        realmServerUrl: config.realmServerUrl,
+        client: config.client,
+        ...(path ? { path } : {}),
+      });
+    },
+  };
+}
+
+function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
+  let execute = config.runInstantiateInMemory ?? runInstantiateInMemory;
+  return {
+    name: 'run_instantiate',
+    description:
+      'Instantiate card example instances in the target realm via the ' +
+      'prerenderer sandbox and return an in-memory result (status, instance ' +
+      'counts, per-failure error + stackTrace). Without "path", searches the ' +
+      'realm for Spec cards and instantiates every linkedExample on every ' +
+      'card/app Spec; specs with no linkedExamples still get a bare ' +
+      'instantiation to exercise the card class. With "path", instantiates ' +
+      'only that single realm-relative `.json` example file — its ' +
+      '`meta.adoptsFrom` supplies the module + card name, and spec discovery ' +
+      'is skipped entirely so the agent can self-check one instance in ' +
+      'isolation. The path must end in `.json`. Safe to call repeatedly for ' +
+      'mid-turn self-validation — this tool does NOT create an ' +
+      'InstantiateResult card or any other realm artifact. The orchestrator ' +
+      'still runs the full validation pipeline (which writes an ' +
+      'InstantiateResult card) automatically after signal_done, so calling ' +
+      'this is optional. When a failure reports a line/column, those numbers ' +
+      'refer to the transpiled module — use `fetch_transpiled_module` to ' +
+      'locate the offending source construct, then fix the .gts source ' +
+      '(never copy transpiled patterns back into source). Auth: realm server ' +
+      'token.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Optional realm-relative path to a single `.json` example instance to instantiate. Omit to instantiate every linkedExample on every Spec card in the target realm. The path must end in `.json` — other extensions are rejected.',
         },
       },
     },

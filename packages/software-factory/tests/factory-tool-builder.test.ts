@@ -1755,3 +1755,192 @@ module('buildFactoryTools — run_evaluate', function () {
     assert.strictEqual(result.failures[0].path, 'broken.gts');
   });
 });
+
+// ---------------------------------------------------------------------------
+// run_instantiate tool (in-memory validation — CS-10823)
+// ---------------------------------------------------------------------------
+
+module('buildFactoryTools — run_instantiate', function () {
+  test('registers run_instantiate with an optional path parameter', function (assert) {
+    let config = makeConfig();
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runInstantiate = tools.find((t) => t.name === 'run_instantiate');
+    assert.ok(runInstantiate, 'run_instantiate tool is registered');
+    let params = runInstantiate!.parameters as {
+      type: string;
+      properties: Record<string, { type: string }>;
+      required?: string[];
+    };
+    assert.strictEqual(params.type, 'object');
+    assert.strictEqual(params.properties.path?.type, 'string');
+    assert.strictEqual(params.required, undefined, 'path is optional');
+  });
+
+  test('delegates to injected runInstantiateInMemory and forwards realm config', async function (assert) {
+    let capturedOptions:
+      | {
+          targetRealmUrl: string;
+          realmServerUrl: string;
+          hasClient: boolean;
+          path: string | undefined;
+        }
+      | undefined;
+    let stubResult = {
+      status: 'passed' as const,
+      instancesChecked: 2,
+      instancesWithErrors: 0,
+      durationMs: 55,
+      instanceFiles: ['Card/a.json', 'Card/b.json'],
+      failures: [],
+    };
+
+    let config = makeConfig({
+      runInstantiateInMemory: async (options) => {
+        capturedOptions = {
+          targetRealmUrl: options.targetRealmUrl,
+          realmServerUrl: options.realmServerUrl,
+          hasClient: Boolean(options.client),
+          path: options.path,
+        };
+        return stubResult;
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runInstantiate = tools.find((t) => t.name === 'run_instantiate');
+    assert.ok(runInstantiate, 'run_instantiate tool is registered');
+
+    let result = await runInstantiate!.execute({});
+
+    assert.deepEqual(result, stubResult, 'tool returns the in-memory result');
+    assert.strictEqual(
+      capturedOptions?.targetRealmUrl,
+      TARGET_REALM,
+      'forwards targetRealmUrl from config',
+    );
+    assert.strictEqual(
+      capturedOptions?.realmServerUrl,
+      'https://realms.example.test/',
+      'forwards realmServerUrl from config',
+    );
+    assert.true(
+      capturedOptions?.hasClient,
+      'forwards the configured BoxelCLIClient',
+    );
+    assert.strictEqual(
+      capturedOptions?.path,
+      undefined,
+      'path is omitted when not provided',
+    );
+  });
+
+  test('forwards path when provided to single-instance instantiate', async function (assert) {
+    let capturedPath: string | undefined;
+    let stubResult = {
+      status: 'failed' as const,
+      instancesChecked: 1,
+      instancesWithErrors: 1,
+      durationMs: 90,
+      instanceFiles: ['TagsCard/bad.json'],
+      failures: [
+        {
+          path: 'TagsCard/bad.json',
+          cardName: 'TagsCard',
+          error: 'Expected array for field value tags',
+          stackTrace: 'at Loader.load (loader.ts:42:5)',
+        },
+      ],
+    };
+
+    let config = makeConfig({
+      runInstantiateInMemory: async (options) => {
+        capturedPath = options.path;
+        return stubResult;
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runInstantiate = tools.find((t) => t.name === 'run_instantiate');
+    assert.ok(runInstantiate, 'run_instantiate tool is registered');
+
+    let result = (await runInstantiate!.execute({
+      path: 'TagsCard/bad.json',
+    })) as typeof stubResult;
+
+    assert.strictEqual(
+      capturedPath,
+      'TagsCard/bad.json',
+      'path is forwarded to the engine',
+    );
+    assert.strictEqual(result.status, 'failed');
+    assert.deepEqual(result.instanceFiles, ['TagsCard/bad.json']);
+    assert.strictEqual(result.failures[0].path, 'TagsCard/bad.json');
+    assert.strictEqual(result.failures[0].cardName, 'TagsCard');
+    assert.strictEqual(
+      result.failures[0].stackTrace,
+      'at Loader.load (loader.ts:42:5)',
+    );
+  });
+
+  test('whitespace-only path is treated as "no path" (whole-realm instantiate)', async function (assert) {
+    let capturedPath: string | undefined;
+    let config = makeConfig({
+      runInstantiateInMemory: async (options) => {
+        capturedPath = options.path;
+        return {
+          status: 'passed' as const,
+          instancesChecked: 0,
+          instancesWithErrors: 0,
+          durationMs: 0,
+          instanceFiles: [],
+          failures: [],
+        };
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runInstantiate = tools.find((t) => t.name === 'run_instantiate');
+    assert.ok(runInstantiate, 'run_instantiate tool is registered');
+
+    await runInstantiate!.execute({ path: '   ' });
+
+    assert.strictEqual(
+      capturedPath,
+      undefined,
+      'whitespace-only path falls back to whole-realm instantiate',
+    );
+  });
+
+  test('propagates failed instantiate results unchanged', async function (assert) {
+    let stubResult = {
+      status: 'failed' as const,
+      instancesChecked: 3,
+      instancesWithErrors: 1,
+      durationMs: 120,
+      instanceFiles: ['A/1.json', 'A/2.json', 'B/1.json'],
+      failures: [
+        {
+          path: 'B/1.json',
+          cardName: 'BadCard',
+          error: 'Cannot read properties of undefined',
+        },
+      ],
+    };
+    let config = makeConfig({
+      runInstantiateInMemory: async () => stubResult,
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runInstantiate = tools.find((t) => t.name === 'run_instantiate');
+    assert.ok(runInstantiate, 'run_instantiate tool is registered');
+
+    let result = (await runInstantiate!.execute({})) as typeof stubResult;
+
+    assert.strictEqual(result.status, 'failed');
+    assert.strictEqual(result.instancesWithErrors, 1);
+    assert.strictEqual(result.failures.length, 1);
+    assert.strictEqual(result.failures[0].path, 'B/1.json');
+    assert.strictEqual(result.failures[0].cardName, 'BadCard');
+  });
+});
