@@ -548,18 +548,32 @@ export function buildPrerenderManagerApp(options?: {
   );
 
   // Score a usable, non-excluded server for the requested affinity. Lower
-  // score wins. The primary dimension is the warm-vacancy priority bucket
-  // (CS-10758):
+  // score wins.
   //
-  //   0 = warm + idle  — the ideal: a warm tab ready to serve now.
-  //   1 = cold + idle  — pay a cold load once; subsequent visits reuse.
-  //   2 = warm + busy  — queue behind an existing tab. Last resort.
-  //   (cold + busy is dropped — callers fall through to pressure-mode.)
+  // CS-10758 priority chart — the primary scoring dimension is the
+  // warm-vacancy bucket, evaluated per requested affinity:
   //
-  // Ties within a bucket break by (1) whether the server is already in the
-  // affinity's assigned list (soft stickiness — prefer continuity when all
-  // else is equal), (2) load (fewest active affinities wins), then (3) oldest
-  // lastAssignedAt (coarse round-robin across equally-loaded servers).
+  //   ┌────────┬────────────────┬──────────────────────────────────────────┐
+  //   │ bucket │ state          │ meaning                                  │
+  //   ├────────┼────────────────┼──────────────────────────────────────────┤
+  //   │   0    │ warm + idle    │ ideal — a warm tab ready to serve now    │
+  //   │   1    │ cold + idle    │ pay a cold load once; subsequent reuse   │
+  //   │   2    │ warm + busy    │ queue behind existing tab — last resort  │
+  //   │   —    │ cold + busy    │ dropped; caller falls through to         │
+  //   │        │                │ pressure-mode eviction below             │
+  //   └────────┴────────────────┴──────────────────────────────────────────┘
+  //
+  // A lower bucket always wins over a higher one, regardless of other
+  // signals: warm+idle beats cold+idle, cold+idle beats warm+busy. So a
+  // warm+idle server *elsewhere* wins over a warm+busy server that's
+  // currently assigned — stickiness does not override bucket priority.
+  //
+  // Ties *within* a bucket break by, in order:
+  //   1. assignedPref — server already in the affinity's assigned list
+  //      wins (soft stickiness; keeps continuity when all else is equal)
+  //   2. load         — fewer active affinities wins (spread load)
+  //   3. age          — oldest lastAssignedAt wins (coarse round-robin
+  //                     across equally-loaded servers)
   //
   // Warmth is read from the per-server `affinityVacancy` map that the
   // prerender heartbeat populates (added in CS-10758 step 1). Servers that
@@ -585,12 +599,18 @@ export function buildPrerenderManagerApp(options?: {
     let warm = !!vacancy && vacancy.tabCount >= 1;
     let idle = vacancy?.idle === true;
     let bucket: 0 | 1 | 2;
+    // Order matters: a warm-but-busy tab for the requested affinity must
+    // classify as bucket 2 even when the server still has overall capacity
+    // for other affinities. Checking `hasCapacity` first would collapse
+    // warm+busy-with-capacity into bucket 1 alongside cold+idle and break
+    // the cold+idle > warm+busy invariant that keeps us from queueing behind
+    // a busy warm tab when an idle cold one is available elsewhere.
     if (warm && idle) {
       bucket = 0;
-    } else if (hasCapacity(info)) {
-      bucket = 1;
     } else if (warm && !idle) {
       bucket = 2;
+    } else if (hasCapacity(info)) {
+      bucket = 1;
     } else {
       return undefined; // cold + busy
     }

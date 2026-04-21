@@ -1219,6 +1219,53 @@ module(basename(__filename), function () {
       );
     });
 
+    test('warm+busy with spare capacity does not collapse into cold+idle', async function (assert) {
+      // Regression guard: in scoreCandidate the warm+busy branch must be
+      // evaluated before the hasCapacity(info) branch. A server whose tab
+      // for the requested affinity is busy but which still has overall
+      // capacity for other affinities otherwise registers as bucket 1
+      // (cold+idle), which would break the cold+idle > warm+busy invariant
+      // — we'd pick the warm+busy tab and queue behind it even though
+      // another server was genuinely cold+idle.
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/warm-busy-spare-capacity';
+
+      // Server A: warm for realm but the tab is busy. Capacity=4 with only
+      // the realm affinity claimed, so hasCapacity(info) is true — this is
+      // the bucket-ordering trap.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 4,
+            url: serverUrlA,
+            affinityVacancy: {
+              [realmAffinityKey(realm)]: { idle: false, tabCount: 1 },
+            },
+          },
+        },
+      });
+      // Server B: plain cold+idle.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 4, url: serverUrlB },
+        },
+      });
+
+      let response = await request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/1`));
+      assert.strictEqual(response.status, 201, 'proxy ok');
+      assert.strictEqual(
+        response.headers['x-boxel-prerender-target'],
+        serverUrlB,
+        'cold+idle B wins over warm+busy-with-capacity A (bucket classification order)',
+      );
+    });
+
     test('warm+idle elsewhere beats warm+busy on an already-assigned server', async function (assert) {
       // CS-10758: stickiness is soft. At multiplex=1 a previously-assigned
       // server that is warm+busy should still lose to a warm+idle server
