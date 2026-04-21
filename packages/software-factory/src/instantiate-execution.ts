@@ -21,6 +21,7 @@ import { specRef } from '@cardstack/runtime-common/constants';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { logger } from './logger';
+import { validateRealmRelativePath } from './realm-relative-path';
 
 let log = logger('instantiate-execution');
 
@@ -111,7 +112,11 @@ export interface RunInstantiateInMemoryOptions {
 }
 
 export interface RunInstantiateFailure {
-  /** Realm-relative example path, or empty string for an empty-data fallback. */
+  /**
+   * Realm-relative example path, or empty string for a bare-instantiation
+   * fallback (a spec with no linkedExamples). When empty, use `cardName`
+   * to identify which spec failed — do not pass `''` back into `path`.
+   */
   path: string;
   cardName: string;
   error: string;
@@ -123,7 +128,11 @@ export interface RunInstantiateResult {
   instancesChecked: number;
   instancesWithErrors: number;
   durationMs: number;
-  /** Realm-relative example paths attempted. Empty string entries mean empty-data fallback. */
+  /**
+   * Realm-relative `.json` example paths attempted. Always real file paths
+   * (empty-string bare-instantiation entries are filtered out) — any entry
+   * in this list can be fed back into `path` verbatim.
+   */
   instanceFiles: string[];
   failures: RunInstantiateFailure[];
   /** Set only when `status === 'error'`. */
@@ -220,8 +229,12 @@ export async function instantiateRealmSpecs(
     for (let i = 0; i < settled.length; i++) {
       let outcome = settled[i];
       let exampleUrl = exampleInstances[i].url;
+      // `instanceId` is the extensionless card resource URL — matches both
+      // the canonical Boxel card id and what `prepareExampleInstance` sets
+      // on `document.data.id`. Stripping `.json` keeps the id consistent
+      // between the spec-discovered and single-path entrypoints.
       let instanceId = exampleUrl
-        ? new URL(exampleUrl, normalizedRealmUrl).href
+        ? new URL(exampleUrl, normalizedRealmUrl).href.replace(/\.json$/, '')
         : '';
       let codeRef = { module: spec.moduleUrl, name: spec.cardName };
 
@@ -434,7 +447,27 @@ async function prepareExampleInstance(
     };
   }
 
-  let document = rawRead.document as unknown as LooseSingleCardDocument;
+  // A readable `.json` file isn't guaranteed to be a card document — a
+  // malformed fixture or a raw JSON payload could be missing `data` or
+  // `data.meta` entirely. Shape-check before touching nested properties
+  // so the tool surfaces a clean `status: 'error'` instead of throwing.
+  let rawDocument = rawRead.document as unknown;
+  if (
+    !rawDocument ||
+    typeof rawDocument !== 'object' ||
+    !('data' in rawDocument) ||
+    !(rawDocument as { data?: unknown }).data ||
+    typeof (rawDocument as { data: unknown }).data !== 'object' ||
+    !('meta' in (rawDocument as { data: Record<string, unknown> }).data) ||
+    !(rawDocument as { data: { meta?: unknown } }).data.meta ||
+    typeof (rawDocument as { data: { meta: unknown } }).data.meta !== 'object'
+  ) {
+    return {
+      error: `Example "${exampleUrl}" is malformed: expected a card document with object "data" and "data.meta" properties.`,
+    };
+  }
+
+  let document = rawDocument as LooseSingleCardDocument;
   // Boxel card IDs are extensionless — the `id` is the resource URL, not
   // the .json file path. Strip any trailing `.json` so the id matches what
   // the prerender sandbox expects (and what the pre-refactor validation
@@ -507,39 +540,21 @@ function summarizeRecords(
     }
   }
 
+  // `instanceFiles` is a list of realm-relative paths the agent can feed
+  // back into `path`. Bare-instantiation records (spec with no
+  // linkedExamples) carry an empty `exampleUrl` sentinel — filter those
+  // out here so the published list always contains real `.json` paths.
+  // Bare instantiations still count in `instancesChecked` and, if they
+  // fail, surface in `failures` with `path: ''` and a populated
+  // `cardName` so the agent can identify them.
   return {
     status: failures.length === 0 ? 'passed' : 'failed',
     instancesChecked: records.length,
     instancesWithErrors: failures.length,
     durationMs,
-    instanceFiles: records.map((r) => r.exampleUrl),
+    instanceFiles: records.map((r) => r.exampleUrl).filter((f) => f !== ''),
     failures,
   };
-}
-
-/**
- * Validate that the agent-supplied `path` is a safe realm-relative path —
- * no absolute paths, no `..` traversal, and no URL scheme. The
- * realm-server's `_run-command` is realm-scoped, but rejecting these cases
- * up front keeps the tool's contract explicit and prevents an
- * agent-produced absolute URL or traversal segment from silently
- * instantiating a card outside the target realm.
- */
-function validateRealmRelativePath(path: string): string | null {
-  if (path.trim() === '') {
-    return `Path must be a non-empty realm-relative file path.`;
-  }
-  if (/^[a-z][a-z0-9+.-]*:/i.test(path)) {
-    return `Path "${path}" must be realm-relative — absolute URLs (with a scheme) are not accepted.`;
-  }
-  if (path.startsWith('/')) {
-    return `Path "${path}" must be realm-relative — paths starting with "/" are not accepted.`;
-  }
-  let segments = path.split('/');
-  if (segments.some((seg) => seg === '..')) {
-    return `Path "${path}" must not contain ".." segments — the path must stay inside the target realm.`;
-  }
-  return null;
 }
 
 function emptyErrorResult(errorMessage: string): RunInstantiateResult {
@@ -698,8 +713,11 @@ async function defaultInstantiateCard(
     commandInput,
   );
 
+  // Log status/error metadata only. The serialized `response.result` can
+  // contain card attributes (user data) and bloats logs when the tool is
+  // called repeatedly mid-turn, so it stays out of the default log stream.
   log.info(
-    `run-command response for ${cardName}: status=${response.status}, error=${response.error}, result=${response.result?.slice(0, 300)}`,
+    `run-command response for ${cardName}: status=${response.status}, error=${response.error}`,
   );
 
   if (response.status !== 'ready') {
