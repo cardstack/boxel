@@ -42,6 +42,8 @@ const SOFT_ABSOLUTE_MB = baseline.threshold?.absolute_mb ?? 5;
 const HARD_RELATIVE = 1.0; // 2x = 100% increase
 const HARD_ABSOLUTE_MB = 50;
 
+const escapeMd = (s) => String(s).replace(/\|/g, '\\|');
+
 const warnings = [];
 const failures = [];
 const newModules = [];
@@ -106,7 +108,7 @@ if (failures.length > 0) {
   lines.push('|--------|----------|---------|--------|');
   for (const f of failures.sort((a, b) => b.diff - a.diff)) {
     lines.push(
-      `| ${f.mod} | ${f.baseline.toFixed(1)} MB | ${f.current.toFixed(1)} MB | +${f.diff.toFixed(1)} MB (+${f.pct}%) |`,
+      `| ${escapeMd(f.mod)} | ${f.baseline.toFixed(1)} MB | ${f.current.toFixed(1)} MB | +${f.diff.toFixed(1)} MB (+${f.pct}%) |`,
     );
   }
   lines.push('');
@@ -118,7 +120,7 @@ if (warnings.length > 0) {
   lines.push('|--------|----------|---------|--------|');
   for (const w of warnings.sort((a, b) => b.diff - a.diff)) {
     lines.push(
-      `| ${w.mod} | ${w.baseline.toFixed(1)} MB | ${w.current.toFixed(1)} MB | +${w.diff.toFixed(1)} MB (+${w.pct}%) |`,
+      `| ${escapeMd(w.mod)} | ${w.baseline.toFixed(1)} MB | ${w.current.toFixed(1)} MB | +${w.diff.toFixed(1)} MB (+${w.pct}%) |`,
     );
   }
   lines.push('');
@@ -129,7 +131,7 @@ if (newModules.length > 0) {
     `<details><summary>${newModules.length} new module(s) not in baseline</summary>\n`,
   );
   for (const n of newModules.sort((a, b) => b.delta - a.delta)) {
-    lines.push(`- **${n.mod}**: ${n.delta.toFixed(1)} MB`);
+    lines.push(`- **${escapeMd(n.mod)}**: ${n.delta.toFixed(1)} MB`);
   }
   lines.push('</details>\n');
 }
