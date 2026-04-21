@@ -40,10 +40,6 @@ The agent has these tools during the execution loop. Use them by name — they a
 
 - `run_command({ command, commandInput? })` — Execute a host command on the realm server via the prerenderer. Commands run in browser context with full card runtime access (Loader, CardAPI, services). Use the specifier format `@cardstack/boxel-host/commands/<name>/default`.
 
-### Self-Validation (optional, no side effects)
-
-- `run_parse({ path? })` — Parse and type-check files in the target realm and return an in-memory `RunParseResult` with `status`, `filesChecked`, `filesWithErrors`, `errorCount`, `durationMs`, `parseableFiles`, and per-error `{ file, line, column, message }`. Without `path`, runs glint (ember-tsc) over every `.gts` / `.gjs` / `.ts` file in the realm AND validates every `.json` file listed as a Spec `linkedExample` (same discovery as the parse validation step). With `path` (realm-relative file path), parses **only that one file** — `.gts` / `.gjs` / `.ts` runs through glint; `.json` is parsed and checked for card document structure. Prefer the single-file form right after writing or editing one file. **Does not write a `ParseResult` card** — safe to call repeatedly mid-turn. The orchestrator still runs the full parse validation (which writes the durable `ParseResult`) automatically after `signal_done`, so calling this is optional.
-
 **Example — generate JSON schema for a card type:**
 
 ```
@@ -59,6 +55,11 @@ run_command({
 ```
 
 Returns `{ status: "ready", result: "<serialized JsonCard with schema>" }`. Parse `result` as JSON to get the schema with `attributes` and `relationships` properties.
+
+### Self-Validation (optional, no side effects)
+
+- `run_tests()` — Run the realm's QUnit suite and receive an in-memory result object `{ status, passedCount, failedCount, skippedCount, durationMs, testFiles, failures, errorMessage? }`. Safe to call repeatedly to check your work. Does **not** persist a `TestRun` card — the orchestrator writes that automatically after `signal_done`. Calling this is optional; use it when you want feedback before signalling done.
+- `run_parse({ path? })` — Parse and type-check files in the target realm and return an in-memory `RunParseResult` with `status`, `filesChecked`, `filesWithErrors`, `errorCount`, `durationMs`, `parseableFiles`, and per-error `{ file, line, column, message }`. Without `path`, runs glint (ember-tsc) over every `.gts` / `.gjs` / `.ts` file in the realm AND validates every `.json` file listed as a Spec `linkedExample` (same discovery as the parse validation step). With `path` (realm-relative file path), parses **only that one file** — `.gts` / `.gjs` / `.ts` runs through glint; `.json` is parsed and checked for card document structure. Prefer the single-file form right after writing or editing one file. **Does not write a `ParseResult` card** — safe to call repeatedly mid-turn. The orchestrator still runs the full parse validation (which writes the durable `ParseResult`) automatically after `signal_done`, so calling this is optional.
 
 ### Control Flow
 
@@ -76,9 +77,10 @@ Returns `{ status: "ready", result: "<serialized JsonCard with schema>" }`. Pars
 3. **Write `.test.gts` test files** co-located with card definitions via `write_file` to the target realm. Every issue must have at least one test file. **Write tests immediately after the card definition, before any instances or catalog specs.**
 4. **Write card instances** (`.json`) via `write_file` to the target realm.
 5. **Write a Catalog Spec card** (`Spec/<card-name>.json`) for each top-level card defined in the brief. Link sample instances via `linkedExamples`.
-6. **Call `signal_done()`** when all implementation and test files are written. The orchestrator runs the validation pipeline (including test execution) automatically after this.
-7. **If tests fail**, the orchestrator feeds failure details back. Use `read_file` to inspect current state, then `write_file` to fix implementation or test files. Call `signal_done()` again.
-8. **Record progress** via `add_comment` — append notes, blocked reasons, or context to the issue. Never modify the issue description.
+6. **(Optional) Call `run_tests()`** to self-validate before signalling done. This returns test results in-memory without writing any realm artifacts. Iterating on your own work with `run_tests` is faster than round-tripping through the orchestrator pipeline.
+7. **Call `signal_done()`** when all implementation and test files are written. The orchestrator runs the full validation pipeline (which persists a `TestRun` card, among other artifacts) automatically after this.
+8. **If tests fail**, the orchestrator feeds failure details back. Use `read_file` to inspect current state, then `write_file` to fix implementation or test files. Call `signal_done()` again.
+9. **Record progress** via `add_comment` — append notes, blocked reasons, or context to the issue. Never modify the issue description.
 
 ## Target Realm Artifact Structure
 

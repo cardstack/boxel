@@ -149,7 +149,9 @@ test.describe('runParseInMemory e2e', () => {
       // JSON example discovery resolves linkedExamples without extension —
       // card IDs are fileless, so the path is `ParseTestCard/example-1`.
       expect(
-        result.parseableFiles.some((f) => f.includes('ParseTestCard/example-1')),
+        result.parseableFiles.some((f) =>
+          f.includes('ParseTestCard/example-1'),
+        ),
       ).toBe(true);
       expect(result.errors).toEqual([]);
       expect(result.errorMessage).toBeUndefined();

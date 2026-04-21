@@ -230,7 +230,7 @@ If the brief describes only one entry-point card, there will be one implementati
 
 Each implementation issue must carry `project` and `relatedKnowledge` relationships pointing to the Project and KnowledgeArticle cards created during bootstrap. This is how `ContextBuilder.buildForIssue()` loads project scope and brief context for the agent when working on these issues.
 
-The agent does **not** need to create "run tests" issues. Test execution happens automatically as part of the validation phase after every inner-loop iteration.
+The agent does **not** need to create "run tests" issues. Test execution happens automatically as part of the validation phase after every inner-loop iteration. The agent may also call the `run_tests` tool mid-turn for in-memory self-validation (see "run_tests Tool: In-Memory Validation" below) — that call is optional and never replaces the orchestrator's post-turn pipeline.
 
 ### Validation Behavior for Bootstrap Issues
 
@@ -535,9 +535,17 @@ When the loop outcome is `all_issues_done`, the orchestrator automatically sets 
 
 The `update_issue`, `update_project`, and `create_knowledge` tools perform a **read-patch-write** cycle: they read the existing card source, merge the agent-provided attributes on top, and write back the merged document. This preserves attributes the agent didn't include in its update call. Earlier versions used a full-document write via `buildCardDocument()` which would clobber existing attributes — this was identified as a critical bug during e2e testing (bootstrap-seed issue was reduced to just `status` and `updatedAt` after an update).
 
-### run_tests Tool Removed from Agent
+### run_tests Tool: In-Memory Validation (CS-10777)
 
-The `run_tests` tool is **not exposed** to the agent. The validation pipeline runs tests automatically after every agent turn (after `signal_done`). Giving the agent the tool caused it to waste iterations running tests manually, sometimes before writing test files, and creating duplicate TestRun instances. The system prompt and skills inform the agent that the orchestrator handles test execution.
+The `run_tests` tool **is exposed** to the agent, but as an **in-memory** validator rather than a realm-writing one. This is the first member of the `CS-10775` in-memory validation tool family (with in-memory `lint`, `parse`, and `evaluate` counterparts coming as sibling issues).
+
+Behavior:
+
+- The tool discovers `*.test.gts` files in the target realm, drives QUnit via Playwright/Chromium (through the shared `runQunitInBrowser()` engine), and returns a flat `RunTestsResult` object — `{ status, passedCount, failedCount, skippedCount, durationMs, testFiles, failures, errorMessage? }`.
+- It does **not** create a `TestRun` card or any other realm artifact. The orchestrator's post-`signal_done` validation pipeline still writes the durable `TestRun` artifact.
+- It takes no arguments — it always runs the full `*.test.gts` set in the target realm.
+
+Rationale for reintroduction: the original `run_tests` tool was removed because it ran through `executeTestRunFromRealm()`, which meant the agent could create duplicate `TestRun` instances and confuse sequence-number ordering. The in-memory variant sidesteps that problem entirely — no card is ever written — so letting the agent call it mid-turn to check its own work is safe. The pipeline remains the source of truth for the persistent `TestRun` artifact.
 
 The `run_command` tool description explicitly states it is for Boxel host commands only (format: `@cardstack/boxel-host/commands/<name>/default`), not shell commands or scripts.
 
