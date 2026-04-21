@@ -12,11 +12,22 @@ import {
 import { fromAffinityKey, toAffinityKey } from './affinity';
 import type { AffinityType } from '@cardstack/runtime-common';
 
+// Per-affinity vacancy reported by a prerender server in its heartbeat.
+// Consumed by warm-vacancy-first routing (CS-10758): `idle: true` means
+// every tab for this affinity has an empty render queue; `tabCount`
+// tracks the affinity's claimed tabs.
+export type AffinityVacancy = { idle: boolean; tabCount: number };
+
 type ServerInfo = {
   url: string;
   capacity: number;
   activeAffinities: Set<string>;
   warmedAffinities: Set<string>;
+  // Populated from the `affinityVacancy` field of the server's heartbeat.
+  // Older servers that predate CS-10758 won't include this field; in that
+  // case the Map stays empty and callers should fall back to inferring
+  // warmth from `warmedAffinities` without vacancy information.
+  affinityVacancy: Map<string, AffinityVacancy>;
   status: 'active' | 'draining';
   registeredAt: number;
   lastSeenAt: number;
@@ -204,17 +215,22 @@ export function buildPrerenderManagerApp(options?: {
     capacity,
     status,
     warmedAffinities,
+    affinityVacancy,
   }: {
     url: string;
     capacity?: number;
     status?: 'active' | 'draining';
     warmedAffinities?: string[];
+    affinityVacancy?: Record<string, AffinityVacancy>;
   }) {
     log.debug(
       `received heartbeat from ${url} status=${status} capacity=${capacity} warmedAffinities=${warmedAffinities ? warmedAffinities.join() : 'none'}`,
     );
     let existing = registry.servers.get(url);
     let changed = false;
+    let vacancyMap = affinityVacancy
+      ? new Map<string, AffinityVacancy>(Object.entries(affinityVacancy))
+      : undefined;
     if (existing) {
       let warmSet = new Set(warmedAffinities ?? []);
       existing.lastSeenAt = now();
@@ -234,6 +250,11 @@ export function buildPrerenderManagerApp(options?: {
         existing.warmedAffinities = warmSet;
         changed = true;
       }
+      // Always refresh vacancy — treat a missing `affinityVacancy` attribute
+      // on this heartbeat as an explicit empty snapshot so a rollback to a
+      // legacy server (or a server that temporarily stops reporting) can't
+      // leave stale data cached in the registry.
+      existing.affinityVacancy = vacancyMap ?? new Map();
       if (warmSet.size === 0) {
         // server restarted; clear tracked active affinities and mappings
         for (let affinityKey of [...existing.activeAffinities]) {
@@ -280,6 +301,7 @@ export function buildPrerenderManagerApp(options?: {
       capacity: capacity || 4,
       activeAffinities: new Set(),
       warmedAffinities: new Set(warmedAffinities ?? []),
+      affinityVacancy: vacancyMap ?? new Map(),
       status: status ?? 'active',
       registeredAt: now(),
       lastSeenAt: now(),
@@ -347,6 +369,7 @@ export function buildPrerenderManagerApp(options?: {
           lastSeenAt: formatTimestampWithTimezone(serverInfo.lastSeenAt),
           status: serverInfo.status,
           warmedAffinities: Array.from(serverInfo.warmedAffinities.values()),
+          affinityVacancy: Object.fromEntries(serverInfo.affinityVacancy),
           affinities,
         },
       });
@@ -390,6 +413,39 @@ export function buildPrerenderManagerApp(options?: {
           (v: unknown): v is string => Boolean(v && typeof v === 'string'),
         );
       }
+      let affinityVacancy: Record<string, AffinityVacancy> | undefined;
+      if (
+        attrs.affinityVacancy &&
+        typeof attrs.affinityVacancy === 'object' &&
+        !Array.isArray(attrs.affinityVacancy)
+      ) {
+        // Null-prototype target + explicit forbidden-key guard so an
+        // untrusted heartbeat payload can't pollute Object.prototype via
+        // keys like `__proto__` / `constructor` / `prototype`.
+        let parsed: Record<string, AffinityVacancy> = Object.create(null);
+        for (let [key, value] of Object.entries(attrs.affinityVacancy)) {
+          if (
+            key === '__proto__' ||
+            key === 'constructor' ||
+            key === 'prototype'
+          ) {
+            continue;
+          }
+          if (
+            value &&
+            typeof value === 'object' &&
+            typeof (value as AffinityVacancy).idle === 'boolean' &&
+            Number.isInteger((value as AffinityVacancy).tabCount) &&
+            (value as AffinityVacancy).tabCount >= 0
+          ) {
+            parsed[key] = {
+              idle: (value as AffinityVacancy).idle,
+              tabCount: (value as AffinityVacancy).tabCount,
+            };
+          }
+        }
+        affinityVacancy = parsed;
+      }
       if (!url) {
         log.warn('Heartbeat rejected: prerender server URL not provided');
         ctxt.status = 400;
@@ -400,7 +456,13 @@ export function buildPrerenderManagerApp(options?: {
       }
       url = normalizeURL(url);
 
-      recordHeartbeat({ url, capacity, status, warmedAffinities });
+      recordHeartbeat({
+        url,
+        capacity,
+        status,
+        warmedAffinities,
+        affinityVacancy,
+      });
       ctxt.status = 204;
       ctxt.set('X-Prerender-Server-Id', url);
     } catch (e) {
@@ -485,37 +547,108 @@ export function buildPrerenderManagerApp(options?: {
     },
   );
 
-  function leastRecentlyUsedServerWithCapacity(
+  // Score a usable, non-excluded server for the requested affinity. Lower
+  // score wins.
+  //
+  // CS-10758 priority chart — the primary scoring dimension is the
+  // warm-vacancy bucket, evaluated per requested affinity:
+  //
+  //   ┌────────┬────────────────┬──────────────────────────────────────────┐
+  //   │ bucket │ state          │ meaning                                  │
+  //   ├────────┼────────────────┼──────────────────────────────────────────┤
+  //   │   0    │ warm + idle    │ ideal — a warm tab ready to serve now    │
+  //   │   1    │ cold + idle    │ pay a cold load once; subsequent reuse   │
+  //   │   2    │ warm + busy    │ queue behind existing tab — last resort  │
+  //   │   —    │ cold + busy    │ dropped; caller falls through to         │
+  //   │        │                │ pressure-mode eviction below             │
+  //   └────────┴────────────────┴──────────────────────────────────────────┘
+  //
+  // A lower bucket always wins over a higher one, regardless of other
+  // signals: warm+idle beats cold+idle, cold+idle beats warm+busy. So a
+  // warm+idle server *elsewhere* wins over a warm+busy server that's
+  // currently assigned — stickiness does not override bucket priority.
+  //
+  // Ties *within* a bucket break by, in order:
+  //   1. assignedPref — server already in the affinity's assigned list
+  //      wins (soft stickiness; keeps continuity when all else is equal)
+  //   2. load         — fewer active affinities wins (spread load)
+  //   3. age          — oldest lastAssignedAt wins (coarse round-robin
+  //                     across equally-loaded servers)
+  //
+  // Warmth is read from the per-server `affinityVacancy` map that the
+  // prerender heartbeat populates (added in CS-10758 step 1). Servers that
+  // predate that change send no `affinityVacancy`, so their map stays empty
+  // and every affinity on them registers as cold — safe during a rolling
+  // deploy: worst case the first visit to a legacy server re-warms its tab.
+  type Candidate = {
+    url: string;
+    info: ServerInfo;
+    bucket: 0 | 1 | 2;
+    assignedPref: 0 | 1;
+    load: number;
+    age: number;
+  };
+
+  function scoreCandidate(
+    url: string,
+    info: ServerInfo,
     affinityKey: string,
-    options?: {
-      exclude?: Iterable<string>;
-    },
+    assignedSet: Set<string>,
+  ): Candidate | undefined {
+    let vacancy = info.affinityVacancy.get(affinityKey);
+    let warm = !!vacancy && vacancy.tabCount >= 1;
+    let idle = vacancy?.idle === true;
+    let bucket: 0 | 1 | 2;
+    // Order matters: a warm-but-busy tab for the requested affinity must
+    // classify as bucket 2 even when the server still has overall capacity
+    // for other affinities. Checking `hasCapacity` first would collapse
+    // warm+busy-with-capacity into bucket 1 alongside cold+idle and break
+    // the cold+idle > warm+busy invariant that keeps us from queueing behind
+    // a busy warm tab when an idle cold one is available elsewhere.
+    if (warm && idle) {
+      bucket = 0;
+    } else if (warm && !idle) {
+      bucket = 2;
+    } else if (hasCapacity(info)) {
+      bucket = 1;
+    } else {
+      return undefined; // cold + busy
+    }
+    return {
+      url,
+      info,
+      bucket,
+      assignedPref: assignedSet.has(url) ? 0 : 1,
+      load: info.activeAffinities.size,
+      age: info.lastAssignedAt,
+    };
+  }
+
+  function pickByVacancy(
+    affinityKey: string,
+    excludeSet: Set<string>,
+    assigned: readonly string[],
   ): string | undefined {
-    let excludeSet = new Set(options?.exclude ? [...options.exclude] : []);
-    let bestWarm: { url: string; info: ServerInfo } | undefined;
-    let best: { url: string; info: ServerInfo } | undefined;
+    let assignedSet = new Set(assigned);
+    let best: Candidate | undefined;
     for (let [url, info] of registry.servers) {
-      if (excludeSet.has(url)) {
-        continue;
-      }
-      if (!isServerUsable(info) || !hasCapacity(info)) {
-        continue;
-      }
-      if (info.warmedAffinities.has(affinityKey)) {
-        if (!bestWarm || info.lastAssignedAt < bestWarm.info.lastAssignedAt) {
-          bestWarm = { url, info };
-        }
-        continue;
-      }
-      if (!best) {
-        best = { url, info };
-        continue;
-      }
-      if (info.lastAssignedAt < best.info.lastAssignedAt) {
-        best = { url, info };
+      if (excludeSet.has(url)) continue;
+      if (!isServerUsable(info)) continue;
+      let candidate = scoreCandidate(url, info, affinityKey, assignedSet);
+      if (!candidate) continue;
+      if (!best || isBetter(candidate, best)) {
+        best = candidate;
       }
     }
-    return bestWarm?.url ?? best?.url;
+    return best?.url;
+  }
+
+  function isBetter(a: Candidate, b: Candidate): boolean {
+    if (a.bucket !== b.bucket) return a.bucket < b.bucket;
+    if (a.assignedPref !== b.assignedPref)
+      return a.assignedPref < b.assignedPref;
+    if (a.load !== b.load) return a.load < b.load;
+    return a.age < b.age;
   }
 
   // helper: choose server for affinity
@@ -530,63 +663,15 @@ export function buildPrerenderManagerApp(options?: {
     let assigned = (registry.affinities.get(affinityKey) || []).filter(
       (url) => !exclude.has(url),
     );
-    // If we have room to add another server for this affinity, try to expand the
-    // assignment set before choosing among existing ones.
-    if (assigned.length < multiplex) {
-      let candidate = leastRecentlyUsedServerWithCapacity(affinityKey, {
-        exclude: new Set([...assigned, ...exclude]),
-      });
-      if (candidate) {
-        assigned.push(candidate);
-        if (assigned.length > multiplex) {
-          assigned.splice(0, assigned.length - multiplex);
-        }
-        registry.affinities.set(affinityKey, assigned);
-        let info = registry.servers.get(candidate);
-        if (info) {
-          info.activeAffinities.add(affinityKey);
-          info.lastAssignedAt = now();
-        }
-        return candidate;
-      }
-    }
-    if (assigned.length > 0) {
-      // prefer warmed entries in assigned set
-      let warmed = assigned.find((url) => {
-        let info = registry.servers.get(url);
-        return info && isServerUsable(info) && hasCapacity(info);
-      });
-      let warmedPreferred = assigned.find((url) => {
-        let info = registry.servers.get(url);
-        return (
-          info &&
-          isServerUsable(info) &&
-          hasCapacity(info) &&
-          info.warmedAffinities.has(affinityKey)
-        );
-      });
-      let next = warmedPreferred ?? warmed;
-      if (next) {
-        assigned = assigned.filter((url) => url !== next);
-        assigned.push(next);
-        if (assigned.length > multiplex) {
-          assigned.splice(0, assigned.length - multiplex);
-        }
-        registry.affinities.set(affinityKey, assigned);
-        let info = registry.servers.get(next);
-        if (info) {
-          info.lastAssignedAt = now();
-          info.activeAffinities.add(affinityKey);
-        }
-        return next;
-      }
-    }
-    // pick server with available capacity, prefer warmed
-    let candidate = leastRecentlyUsedServerWithCapacity(affinityKey, {
-      exclude,
-    });
+    // Full-fleet scan by vacancy priority. Stickiness to already-assigned
+    // servers is a tie-breaker within a priority bucket, not a hard gate —
+    // a warm+idle server elsewhere still beats a warm+busy assigned server,
+    // even at multiplex=1. The multiplex cap is enforced by trimming the
+    // assigned list after the pick, which may quietly shift assignment to
+    // the better-scoring server.
+    let candidate = pickByVacancy(affinityKey, exclude, assigned);
     if (candidate) {
-      let list = registry.affinities.get(affinityKey) || [];
+      let list = [...assigned];
       if (!list.includes(candidate)) list.push(candidate);
       if (list.length > multiplex) list = list.slice(-multiplex);
       registry.affinities.set(affinityKey, list);

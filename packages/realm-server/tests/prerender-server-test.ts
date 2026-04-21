@@ -4,10 +4,14 @@ import supertest from 'supertest';
 import { basename } from 'path';
 
 import {
+  closeServer,
   setupPermissionedRealmCached,
   testCreatePrerenderAuth,
 } from './helpers';
-import { buildPrerenderApp } from '../prerender/prerender-app';
+import {
+  buildPrerenderApp,
+  createPrerenderHttpServer,
+} from '../prerender/prerender-app';
 import type { Prerenderer } from '../prerender';
 import { baseCardRef } from '@cardstack/runtime-common';
 import {
@@ -554,6 +558,46 @@ module(basename(__filename), function () {
       );
     });
 
+    test('reports per-affinity vacancy for warm-vacancy-first routing', async function (assert) {
+      let url = `${realmURL.href}1`;
+      let permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> = {
+        [realmURL.href]: ['read', 'write', 'realm-owner'],
+      };
+      let auth = testCreatePrerenderAuth(testUserId, permissions);
+      // Warm the affinity with a visit.
+      await request
+        .post('/prerender-visit')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'prerender-visit-request',
+            attributes: {
+              url,
+              auth,
+              realm: realmURL.href,
+              affinityType: 'realm',
+              affinityValue: realmURL.href,
+              renderOptions: { cardRender: true },
+            },
+          },
+        });
+
+      let affinityKey = toAffinityKey({
+        affinityType: 'realm',
+        affinityValue: realmURL.href,
+      });
+      let snapshot = prerenderer.getVacancySnapshot();
+      let entry = snapshot[affinityKey];
+      assert.ok(entry, `vacancy snapshot includes ${affinityKey}`);
+      assert.true(entry.idle, 'affinity is idle after the visit completes');
+      assert.strictEqual(
+        entry.tabCount,
+        1,
+        'affinity owns exactly one tab after a single visit',
+      );
+    });
+
     test('responds draining immediately when shutdown begins during an in-flight prerender', async function (assert) {
       let localDraining = false;
       let drainingDeferred = new Deferred<void>();
@@ -680,6 +724,73 @@ module(basename(__filename), function () {
         await built.prerenderer.stop();
       } finally {
         process.off('unhandledRejection', onUnhandled);
+      }
+    });
+  });
+
+  // Regression guard for CS-10813: default handlers would exit the qunit
+  // process before teardown hooks ran, leaving hardcoded test ports bound.
+  module('createPrerenderHttpServer fatal handler gating', function () {
+    test('fatalExitOnUncaught=false does not register process-wide fatal handlers', async function (assert) {
+      let baselineUncaught = process.listenerCount('uncaughtException');
+      let baselineRejection = process.listenerCount('unhandledRejection');
+      let server = createPrerenderHttpServer({
+        maxPages: 1,
+        fatalExitOnUncaught: false,
+      });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.once('error', reject);
+          server.listen(0, '127.0.0.1', () => resolve());
+        });
+        assert.strictEqual(
+          process.listenerCount('uncaughtException'),
+          baselineUncaught,
+          'no new uncaughtException listener registered',
+        );
+        assert.strictEqual(
+          process.listenerCount('unhandledRejection'),
+          baselineRejection,
+          'no new unhandledRejection listener registered',
+        );
+      } finally {
+        await closeServer(server);
+      }
+    });
+
+    test('fatalExitOnUncaught default registers process-wide fatal handlers', async function (assert) {
+      let baselineUncaught = process.listenerCount('uncaughtException');
+      let baselineRejection = process.listenerCount('unhandledRejection');
+      let server = createPrerenderHttpServer({ maxPages: 1 });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.once('error', reject);
+          server.listen(0, '127.0.0.1', () => resolve());
+        });
+        assert.strictEqual(
+          process.listenerCount('uncaughtException') - baselineUncaught,
+          1,
+          'one new uncaughtException listener registered',
+        );
+        assert.strictEqual(
+          process.listenerCount('unhandledRejection') - baselineRejection,
+          1,
+          'one new unhandledRejection listener registered',
+        );
+      } finally {
+        await closeServer(server);
+        // server.on('close') removes the handlers; confirm they're gone so a
+        // regression here doesn't leak handlers across tests.
+        assert.strictEqual(
+          process.listenerCount('uncaughtException'),
+          baselineUncaught,
+          'uncaughtException listener removed on close',
+        );
+        assert.strictEqual(
+          process.listenerCount('unhandledRejection'),
+          baselineRejection,
+          'unhandledRejection listener removed on close',
+        );
       }
     });
   });

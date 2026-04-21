@@ -29,7 +29,7 @@ module('Unit | query field schema', function (hooks) {
       filter: {
         eq: { size: '$this.size' },
       },
-      realm: '$thisRealm',
+      realm: '$REALM',
     };
 
     class Person extends CardDef {
@@ -65,7 +65,7 @@ module('Unit | query field schema', function (hooks) {
       filter: {
         eq: { size: '$this.size' },
       },
-      realm: '$thisRealm',
+      realm: '$REALM',
     };
 
     class FavoriteField extends FieldDef {
