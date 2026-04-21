@@ -579,6 +579,7 @@ async function startTestPrerenderServer(): Promise<string> {
   }
   let server = createPrerenderHttpServer({
     maxPages: 1,
+    fatalExitOnUncaught: false, // tests share the qunit process; see CS-10813
   });
   prerenderServer = server;
   trackServer(server);
