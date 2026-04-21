@@ -84,6 +84,18 @@ function buildTypeFilter(
   return { any: codeRefs.map((ref) => ({ type: ref })) };
 }
 
+// OR-combine full-text markdown search with a cardTitle substring match so
+// short prefixes (e.g. "ma" → "mango", "mark") still find cards by title
+// while longer/natural-language queries tap markdown content via `matches`.
+function buildSearchTermFilter(searchTerm: string): Filter {
+  return {
+    any: [
+      { matches: searchTerm },
+      { contains: { cardTitle: searchTerm } },
+    ],
+  };
+}
+
 export function buildSearchQuery(
   searchKey: string,
   activeSort: SortOption,
@@ -103,13 +115,13 @@ export function buildSearchQuery(
     filters = [
       ...(effectiveBaseFilter ? [effectiveBaseFilter] : []),
       ...(typeFilter ? [typeFilter] : []),
-      ...(searchTerm ? [{ matches: searchTerm }] : []),
+      ...(searchTerm ? [buildSearchTermFilter(searchTerm)] : []),
     ];
   } else {
     filters = [
       { not: { type: specRef } },
       ...(typeFilter ? [typeFilter] : []),
-      ...(searchTerm ? [{ matches: searchTerm }] : []),
+      ...(searchTerm ? [buildSearchTermFilter(searchTerm)] : []),
     ];
   }
   return {

@@ -29,11 +29,19 @@ module('Unit | card-search/query-builder', function () {
       });
     });
 
-    test('non-empty search key with no baseFilter produces a matches filter (not contains/cardTitle)', function (assert) {
+    test('non-empty search key with no baseFilter OR-combines matches with cardTitle substring', function (assert) {
       let query = buildSearchQuery('xylophone', SORT_AZ);
       assert.deepEqual(query, {
         filter: {
-          every: [{ not: { type: specRef } }, { matches: 'xylophone' }],
+          every: [
+            { not: { type: specRef } },
+            {
+              any: [
+                { matches: 'xylophone' },
+                { contains: { cardTitle: 'xylophone' } },
+              ],
+            },
+          ],
         },
         sort: SORT_AZ.sort,
       });
@@ -56,18 +64,26 @@ module('Unit | card-search/query-builder', function () {
       });
     });
 
-    test('baseFilter with non-empty search wraps in every and adds matches (not title contains)', function (assert) {
+    test('baseFilter with non-empty search wraps in every and OR-combines matches + cardTitle', function (assert) {
       let baseFilter: Filter = { type: baseCardRef };
       let query = buildSearchQuery('puppy', SORT_AZ, baseFilter);
       assert.deepEqual(query, {
         filter: {
-          every: [baseFilter, { matches: 'puppy' }],
+          every: [
+            baseFilter,
+            {
+              any: [
+                { matches: 'puppy' },
+                { contains: { cardTitle: 'puppy' } },
+              ],
+            },
+          ],
         },
         sort: SORT_AZ.sort,
       });
     });
 
-    test('search with a selected type produces a type filter alongside matches', function (assert) {
+    test('search with a selected type produces a type filter alongside the search-term filter', function (assert) {
       let authorRef = {
         module: 'http://test-realm/test/author',
         name: 'Author',
@@ -79,7 +95,12 @@ module('Unit | card-search/query-builder', function () {
           every: [
             { not: { type: specRef } },
             { type: authorRef },
-            { matches: 'droid' },
+            {
+              any: [
+                { matches: 'droid' },
+                { contains: { cardTitle: 'droid' } },
+              ],
+            },
           ],
         },
         sort: SORT_AZ.sort,
