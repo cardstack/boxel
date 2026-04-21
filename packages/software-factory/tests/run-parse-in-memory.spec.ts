@@ -146,13 +146,10 @@ test.describe('runParseInMemory e2e', () => {
       expect(result.filesWithErrors).toBe(0);
       expect(result.filesChecked).toBeGreaterThan(0);
       expect(result.parseableFiles).toContain('parse-test-card.gts');
-      // JSON example discovery resolves linkedExamples without extension —
-      // card IDs are fileless, so the path is `ParseTestCard/example-1`.
-      expect(
-        result.parseableFiles.some((f) =>
-          f.includes('ParseTestCard/example-1'),
-        ),
-      ).toBe(true);
+      // Discovered JSON examples are normalized to include `.json` so the
+      // agent can round-trip any `parseableFiles` entry back through
+      // single-file `path` mode.
+      expect(result.parseableFiles).toContain('ParseTestCard/example-1.json');
       expect(result.errors).toEqual([]);
       expect(result.errorMessage).toBeUndefined();
 
@@ -441,18 +438,6 @@ test.describe('runParseInMemory e2e', () => {
       expect(
         brokenOnly.errors.some((e) => e.message.includes('adoptsFrom')),
       ).toBe(true);
-
-      // Extensionless JSON card ID (the form whole-realm discovery emits
-      // from Spec linkedExamples) must also round-trip through path mode.
-      let extensionless = await runParseInMemory({
-        targetRealmUrl: realmUrl,
-        client,
-        path: 'ParseTestCard/example-1',
-      });
-      expect(extensionless.status).toBe('passed');
-      expect(extensionless.parseableFiles).toEqual(['ParseTestCard/example-1']);
-      expect(extensionless.filesChecked).toBe(1);
-      expect(extensionless.errorCount).toBe(0);
     } finally {
       cleanup();
     }
@@ -487,5 +472,33 @@ test.describe('runParseInMemory e2e', () => {
     expect(result.errors).toEqual([]);
     expect(listFilesCalls).toBe(0);
     expect(searchCalls).toBe(0);
+  });
+
+  test('path option: extensionless path is rejected (extension is required)', async () => {
+    let reads = 0;
+    let stubClient: BoxelCLIClient = {
+      listFiles: async () => {
+        throw new Error('should not be called');
+      },
+      search: async () => {
+        throw new Error('should not be called');
+      },
+      read: async () => {
+        reads += 1;
+        throw new Error('should not be called for extensionless path');
+      },
+    } as unknown as BoxelCLIClient;
+
+    let result = await runParseInMemory({
+      targetRealmUrl: 'http://localhost:1/',
+      client: stubClient,
+      path: 'ParseTestCard/example-1',
+    });
+
+    expect(result.status).toBe('error');
+    expect(result.errorMessage).toContain('not parseable');
+    expect(result.parseableFiles).toEqual([]);
+    expect(result.errors).toEqual([]);
+    expect(reads).toBe(0);
   });
 });

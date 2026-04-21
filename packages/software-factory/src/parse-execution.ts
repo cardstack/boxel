@@ -220,8 +220,16 @@ export async function discoverJsonExampleFiles(
   let urls: string[] = [];
   for (let spec of result.specs) {
     for (let url of spec.exampleUrls) {
-      if (!urls.includes(url)) {
-        urls.push(url);
+      // Spec `linkedExamples` are normalized to fileless card IDs (no
+      // extension). Append `.json` so the discovered list aligns with the
+      // extension enforcement in single-file `path` mode — an agent can
+      // take any entry from `parseableFiles` and feed it back into
+      // `run_parse({ path })` verbatim.
+      let normalized = url.endsWith(PARSEABLE_JSON_EXTENSION)
+        ? url
+        : `${url}${PARSEABLE_JSON_EXTENSION}`;
+      if (!urls.includes(normalized)) {
+        urls.push(normalized);
       }
     }
   }
@@ -410,16 +418,11 @@ export async function runParseInMemory(
     let path = options.path;
     if (PARSEABLE_GTS_EXTENSIONS.some((ext) => path.endsWith(ext))) {
       gtsFiles = [path];
-    } else if (path.endsWith(PARSEABLE_JSON_EXTENSION) || !hasExtension(path)) {
-      // Extensionless paths are treated as JSON card IDs — that's the form
-      // `discoverJsonExampleFiles` emits (Spec `linkedExamples` are
-      // normalized to `Card/id` without `.json`), so a caller reusing an
-      // entry from a prior `parseableFiles` / `errors.file` round-trips
-      // cleanly through single-file `path` mode.
+    } else if (path.endsWith(PARSEABLE_JSON_EXTENSION)) {
       jsonFiles = [path];
     } else {
       return emptyErrorResult(
-        `Path "${path}" is not parseable — must end with one of ${PARSEABLE_GTS_EXTENSIONS.join(', ')}, end with ${PARSEABLE_JSON_EXTENSION}, or be an extensionless JSON card ID`,
+        `Path "${path}" is not parseable — must end with one of ${PARSEABLE_GTS_EXTENSIONS.join(', ')}, or ${PARSEABLE_JSON_EXTENSION}`,
       );
     }
   } else {
@@ -893,17 +896,6 @@ function emptyErrorResult(errorMessage: string): RunParseResult {
 
 function ensureTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
-}
-
-/**
- * True when the final path segment contains a `.` — e.g. `foo.json`, `a/b.md`.
- * Card IDs like `ParseTestCard/example-1` have no extension in the final
- * segment and are routed through the JSON parse path.
- */
-function hasExtension(path: string): boolean {
-  let lastSlash = path.lastIndexOf('/');
-  let lastSegment = lastSlash === -1 ? path : path.slice(lastSlash + 1);
-  return lastSegment.includes('.');
 }
 
 /**

@@ -674,10 +674,12 @@ function buildRunParseTool(config: ToolBuilderConfig): FactoryTool {
       '.gjs / .ts file in the realm AND validates every .json file listed ' +
       'as a Spec linkedExample (same discovery as the parse validation ' +
       'step). With "path", parses only that single realm-relative file — ' +
-      '.gts / .gjs / .ts files are type-checked via glint; .json files ' +
-      'and extensionless JSON card IDs (the form returned by whole-realm ' +
-      'discovery, e.g. "ParseTestCard/example-1") are parsed and checked ' +
-      'for card document structure. Safe to call ' +
+      '.gts / .gjs / .ts files are type-checked via glint, .json files ' +
+      'are parsed and checked for card document structure. The extension ' +
+      'is required (paths without one are rejected) — whole-realm ' +
+      'discovery already normalizes Spec linkedExamples to include .json, ' +
+      'so the "parseableFiles" entries returned by a prior whole-realm ' +
+      'run can be fed straight back into "path" verbatim. Safe to call ' +
       'repeatedly for mid-turn self-validation — this tool does NOT ' +
       'create a ParseResult card or any other realm artifact. The ' +
       'orchestrator still runs the full validation pipeline (which writes ' +
@@ -689,7 +691,7 @@ function buildRunParseTool(config: ToolBuilderConfig): FactoryTool {
         path: {
           type: 'string',
           description:
-            'Optional realm-relative path to a single file to parse. Accepts .gts / .gjs / .ts / .json, as well as extensionless JSON card IDs (e.g. "ParseTestCard/example-1" — the form returned by whole-realm discovery). Omit to parse every parseable file (GTS modules + Spec-linked JSON examples) in the target realm.',
+            'Optional realm-relative path to a single file to parse. Must end in .gts / .gjs / .ts / .json (paths without an extension are rejected). Omit to parse every parseable file (GTS modules + Spec-linked JSON examples) in the target realm.',
         },
       },
     },
