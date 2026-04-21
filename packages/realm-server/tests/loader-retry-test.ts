@@ -36,5 +36,17 @@ module(basename(__filename), function () {
     test('honors custom backoff delays and passes them to onRetry', async function (assert) {
       await runSharedTest(loaderRetryTests, assert, {});
     });
+
+    test('disposes each discarded response before retrying', async function (assert) {
+      await runSharedTest(loaderRetryTests, assert, {});
+    });
+
+    test('does not call dispose when no retry happens', async function (assert) {
+      await runSharedTest(loaderRetryTests, assert, {});
+    });
+
+    test('dispose errors do not mask the retry path', async function (assert) {
+      await runSharedTest(loaderRetryTests, assert, {});
+    });
   });
 });

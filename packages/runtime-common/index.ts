@@ -321,7 +321,7 @@ export { makeLogDefinitions, logger } from './log';
 export { Loader };
 export {
   fetchWithTransientRetry,
-  RETRYABLE_STATUS_CODES,
+  isRetryableStatus,
   DEFAULT_TRANSIENT_RETRY_DELAYS_MS,
 } from './loader';
 export {

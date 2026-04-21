@@ -101,19 +101,37 @@ type Fetch = typeof fetch;
 
 // Transient upstream statuses that we briefly retry on module-source fetches
 // (e.g. nginx returning 502/503/504 while the single-writer realm server is
-// momentarily stalled under reindex load — see CS-10820).
-export const RETRYABLE_STATUS_CODES = new Set([502, 503, 504]);
+// momentarily stalled under reindex load — see CS-10820). Kept private so
+// the retry policy can't be mutated at runtime; consumers test membership
+// via `isRetryableStatus`.
+const RETRYABLE_STATUS_CODES: ReadonlySet<number> = new Set([502, 503, 504]);
+
+export function isRetryableStatus(status: number): boolean {
+  return RETRYABLE_STATUS_CODES.has(status);
+}
+
 // Backoff ladder (ms). The first attempt has no delay; subsequent retry
 // attempts wait DEFAULT_TRANSIENT_RETRY_DELAYS_MS[i - 1] before firing. The
 // array length determines the total attempt budget (initial + retries).
 // Worst-case added latency on persistent 5xx: ~1.3s (100 + 300 + 900 ms).
-export const DEFAULT_TRANSIENT_RETRY_DELAYS_MS = [100, 300, 900];
+export const DEFAULT_TRANSIENT_RETRY_DELAYS_MS: readonly number[] = [
+  100, 300, 900,
+] as const;
 
 // Retry a fetch-like call on transient upstream 5xx responses with a short
-// backoff. Non-retryable statuses (including 500), 2xx responses, and thrown
-// errors all surface immediately — only the status codes in
-// RETRYABLE_STATUS_CODES trigger a retry. Exported for testing; also consumed
-// by Loader.load below.
+// backoff. Non-retryable statuses (including 500) and 2xx responses surface
+// immediately; only the status codes in RETRYABLE_STATUS_CODES trigger a
+// retry. Note on thrown errors: Loader's own `_fetch` converts network
+// failures into a synthetic 500 Response (see _fetch below), so in practice
+// network failures arrive here as non-retryable 500 responses rather than
+// as thrown exceptions. A thrown error from `doFetch` still propagates
+// without retry, but that path is only hit by alternate callers.
+//
+// The `dispose` option lets the caller release resources (e.g. cancel an
+// unread Response body) on each response that's about to be discarded due
+// to retry. Without it, `fetch` implementations that require body disposal
+// for connection reuse (notably Node's undici) can accumulate unread bodies
+// under repeated transient failures and tie up sockets.
 export async function fetchWithTransientRetry<R extends { status: number }>(
   doFetch: () => Promise<R>,
   options: {
@@ -125,6 +143,7 @@ export async function fetchWithTransientRetry<R extends { status: number }>(
       status: number;
       delayMs: number;
     }) => void;
+    dispose?: (response: R) => void | Promise<void>;
   } = {},
 ): Promise<R> {
   let delaysMs = options.delaysMs ?? DEFAULT_TRANSIENT_RETRY_DELAYS_MS;
@@ -133,10 +152,7 @@ export async function fetchWithTransientRetry<R extends { status: number }>(
   let response: R | undefined;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     response = await doFetch();
-    if (
-      !RETRYABLE_STATUS_CODES.has(response.status) ||
-      attempt === maxAttempts
-    ) {
+    if (!isRetryableStatus(response.status) || attempt === maxAttempts) {
       return response;
     }
     let delayMs = delaysMs[attempt - 1];
@@ -146,6 +162,14 @@ export async function fetchWithTransientRetry<R extends { status: number }>(
       status: response.status,
       delayMs,
     });
+    if (options.dispose) {
+      try {
+        await options.dispose(response);
+      } catch {
+        // Best-effort: never let a disposal failure mask the underlying
+        // transient error we were about to retry past.
+      }
+    }
     await sleep(delayMs);
   }
   // Unreachable: the loop either returns inside on a non-retryable status or
@@ -901,14 +925,25 @@ export class Loader {
     let response: MaybeCachedResponse;
     try {
       // Retry transient upstream 5xx responses (502/503/504) with short
-      // backoff before surfacing as an error — see CS-10820. Thrown errors
-      // from _fetch are preserved through the existing catch below (the
-      // helper only retries on response statuses, never on thrown errors).
+      // backoff before surfacing as an error — see CS-10820. Note that
+      // _fetch converts network failures into synthetic 500 Responses
+      // (see _fetch above), so those failures are non-retryable at this
+      // layer and surface below as a CardError rather than reaching this
+      // catch as thrown exceptions. The catch here is defensive for any
+      // other unexpected throw from the fetch helper itself.
       response = await fetchWithTransientRetry(() => this._fetch(moduleURL), {
         onRetry: ({ attempt, maxAttempts, status, delayMs }) => {
           this.log.debug(
             `retrying module fetch for ${moduleURL.href} after status ${status} (attempt ${attempt} of ${maxAttempts}, waiting ${delayMs}ms)`,
           );
+        },
+        dispose: (discarded) => {
+          // Release the unread body so Node's undici (and any fetch impl
+          // that gates socket reuse on body consumption) can free the
+          // connection before we sleep + retry.
+          discarded.body?.cancel?.().catch(() => {
+            // best-effort; don't let disposal failures mask the retry path
+          });
         },
       });
     } catch (err) {

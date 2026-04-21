@@ -1,5 +1,5 @@
 import type { SharedTests } from '../helpers';
-import { fetchWithTransientRetry, RETRYABLE_STATUS_CODES } from '../loader';
+import { fetchWithTransientRetry, isRetryableStatus } from '../loader';
 
 // Synchronous-completing "sleep" stub so tests don't wait on real timers.
 // fetchWithTransientRetry takes any (ms) => Promise<void>, so resolving
@@ -91,7 +91,7 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       'fetch invoked exactly once — 500 is not in the retryable set',
     );
     assert.false(
-      RETRYABLE_STATUS_CODES.has(500),
+      isRetryableStatus(500),
       '500 is not a retryable status (guards against accidental widening)',
     );
   },
@@ -137,6 +137,66 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       [11, 22],
       'onRetry sees the first two configured delays',
     );
+  },
+
+  'disposes each discarded response before retrying': async (assert) => {
+    // Fake response carrying an id + a cancel() stub so we can assert that
+    // each retried response got its body released before the next attempt.
+    let nextId = 0;
+    let canceled: number[] = [];
+    let makeFakeResponse = (status: number) => {
+      let id = ++nextId;
+      return {
+        status,
+        id,
+        body: {
+          cancel: async () => {
+            canceled.push(id);
+          },
+        },
+      };
+    };
+    let statuses = [502, 503, 200];
+    let i = 0;
+    let fetch = async () => makeFakeResponse(statuses[i++]);
+    let final = await fetchWithTransientRetry(fetch, {
+      sleep: noSleep,
+      dispose: async (r) => r.body?.cancel(),
+    });
+    assert.strictEqual(final.status, 200, 'final response surfaced');
+    assert.deepEqual(
+      canceled,
+      [1, 2],
+      'dispose called for each discarded retry response, in order, but not for the final one',
+    );
+  },
+
+  'does not call dispose when no retry happens': async (assert) => {
+    let disposeCalls = 0;
+    let { fetch } = queued([200]);
+    await fetchWithTransientRetry(fetch, {
+      sleep: noSleep,
+      dispose: () => {
+        disposeCalls++;
+      },
+    });
+    assert.strictEqual(disposeCalls, 0, 'first-try success skips dispose');
+  },
+
+  'dispose errors do not mask the retry path': async (assert) => {
+    let { fetch, calls } = queued([502, 200]);
+    let response = await fetchWithTransientRetry(fetch, {
+      sleep: noSleep,
+      dispose: () => {
+        throw new Error('boom');
+      },
+    });
+    assert.strictEqual(
+      response.status,
+      200,
+      'retry still succeeded despite dispose throwing',
+    );
+    assert.strictEqual(calls(), 2, 'fetch still invoked twice');
   },
 });
 
