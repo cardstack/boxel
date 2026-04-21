@@ -3,8 +3,12 @@ import type { CardDef, FieldsTypeFor, Format } from '../card-api';
 import { FieldContainer, Header } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { startCase } from 'lodash';
-import { getFieldIcon, getField } from '@cardstack/runtime-common';
-import CardInfoTemplates, { cardInfoFields } from './card-info';
+import {
+  getFieldIcon,
+  getField,
+  cardDefComputedFields,
+} from '@cardstack/runtime-common';
+import CardInfoTemplates from './card-info';
 
 export default class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
@@ -13,18 +17,18 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
     format: Format;
   };
 }> {
-  private cardInfoFields = cardInfoFields;
+  private standardComputedFields = cardDefComputedFields;
   private excludedFields: string[] = [
     'id',
     'cardInfo',
-    ...this.cardInfoFields,
+    ...this.standardComputedFields,
     'theme',
   ];
 
-  // Logic: If cardInfo field is NOT computed,
+  // Logic: If standardComputedFields is NOT computed due to user override,
   // then display its edit format alongside other top-level fields.
   private get cardInfoFieldDisplayNames(): string[] | undefined {
-    let fieldNames = this.cardInfoFields.filter((fieldName) => {
+    let fieldNames = this.standardComputedFields.filter((fieldName) => {
       const field = getField(this.args.model.constructor, fieldName);
       return field?.computeVia == undefined;
     });

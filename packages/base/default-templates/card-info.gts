@@ -18,14 +18,7 @@ import { ChevronRight } from '@cardstack/boxel-ui/icons';
 
 import { startCase } from 'lodash';
 
-import { getFieldIcon } from '@cardstack/runtime-common';
-
-export const cardInfoFields: string[] = [
-  'cardTitle',
-  'cardDescription',
-  'cardThumbnailURL',
-  'cardTheme',
-];
+import { getFieldIcon, cardDefComputedFields } from '@cardstack/runtime-common';
 
 class CardInfoImageContainer extends GlimmerComponent<{
   Args: {
@@ -358,7 +351,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
   };
 
   private get previewFields() {
-    return cardInfoFields.map((key) => ({
+    return cardDefComputedFields.map((key) => ({
       key,
       label: startCase(key),
       value: (this.args.model as any)?.[key],

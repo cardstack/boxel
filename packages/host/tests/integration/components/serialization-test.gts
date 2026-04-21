@@ -5612,11 +5612,6 @@ module('Integration | serialization', function (hooks) {
               self: null,
             },
           },
-          cardTheme: {
-            links: {
-              self: null,
-            },
-          },
         },
         meta: {
           adoptsFrom: {
@@ -5645,6 +5640,11 @@ module('Integration | serialization', function (hooks) {
         },
         relationships: {
           'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
+          cardTheme: {
             links: {
               self: null,
             },
