@@ -744,6 +744,8 @@ export class SubmissionWorkflowCard extends CardDef {
           --c-danger: #ef4444;
           --c-active: #6366f1;
           --c-neutral: #94a3b8;
+          --c-warning: #f5e00b;
+          --c-warning-text: #92400e;
           --font:
             ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
@@ -1016,9 +1018,9 @@ export class SubmissionWorkflowCard extends CardDef {
           align-items: center;
           justify-content: center;
           gap: 3px;
-          background-color: var(--boxel-dark);
-          color: white;
-          font: 600 var(--boxel-font-4xs);
+          background-color: var(--c-warning);
+          color: var(--c-warning-text);
+          font: 600 var(--boxel-font-sm);
           padding: 3px 10px;
           border-radius: 4px;
           z-index: 15;
@@ -1026,7 +1028,7 @@ export class SubmissionWorkflowCard extends CardDef {
           letter-spacing: 0.1px;
           text-transform: uppercase;
           font-size: 10px;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+          box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
           border: none;
         }
 
