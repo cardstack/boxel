@@ -72,10 +72,7 @@ module('Unit | card-search/query-builder', function () {
           every: [
             baseFilter,
             {
-              any: [
-                { matches: 'puppy' },
-                { contains: { cardTitle: 'puppy' } },
-              ],
+              any: [{ matches: 'puppy' }, { contains: { cardTitle: 'puppy' } }],
             },
           ],
         },
@@ -96,10 +93,7 @@ module('Unit | card-search/query-builder', function () {
             { not: { type: specRef } },
             { type: authorRef },
             {
-              any: [
-                { matches: 'droid' },
-                { contains: { cardTitle: 'droid' } },
-              ],
+              any: [{ matches: 'droid' }, { contains: { cardTitle: 'droid' } }],
             },
           ],
         },

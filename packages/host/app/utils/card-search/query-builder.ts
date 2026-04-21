@@ -89,10 +89,7 @@ function buildTypeFilter(
 // while longer/natural-language queries tap markdown content via `matches`.
 function buildSearchTermFilter(searchTerm: string): Filter {
   return {
-    any: [
-      { matches: searchTerm },
-      { contains: { cardTitle: searchTerm } },
-    ],
+    any: [{ matches: searchTerm }, { contains: { cardTitle: searchTerm } }],
   };
 }
 
