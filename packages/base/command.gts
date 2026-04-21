@@ -177,6 +177,7 @@ export class GenerateThumbnailInput extends CardDef {
   @field targetRealmUrl = contains(StringField);
   @field targetPath = contains(StringField); // optional: subfolder within realm, e.g. "thumbnails"
   @field targetCardId = contains(StringField);
+  @field cardName = contains(StringField); // card name for filename generation
   @field llmModel = contains(StringField);
 }
 

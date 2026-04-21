@@ -1,3 +1,5 @@
+import { v4 as uuidv4 } from 'uuid';
+
 import { DEFAULT_IMAGE_GENERATION_LLM } from '@cardstack/runtime-common/matrix-constants';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -44,8 +46,26 @@ function mimeTypeToExtension(mimeType: string): string {
   return map[mimeType] ?? 'png';
 }
 
-function uuidSlug(): string {
-  return Math.random().toString(36).slice(2, 10);
+function generateFilenameFromCardName(cardName: string | undefined): string {
+  const uniqueId = uuidv4().split('-')[0]; // Use first segment of UUID for brevity
+
+  if (!cardName || !cardName.trim()) {
+    return `thumbnail-${uniqueId}`;
+  }
+
+  // Take first two words and slugify
+  const words = cardName
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word.toLowerCase().replace(/[^a-z0-9]/g, ''))
+    .filter((word) => word.length > 0);
+
+  if (words.length === 0) {
+    return `thumbnail-${uniqueId}`;
+  }
+
+  return `${words.join('-')}-${uniqueId}`;
 }
 
 export default class GenerateThumbnailCommand extends HostBaseCommand<
@@ -67,7 +87,7 @@ export default class GenerateThumbnailCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.GenerateThumbnailInput,
   ): Promise<BaseCommandModule.GenerateThumbnailOutput> {
-    const { prompt, sourceImageUrl, targetRealmUrl, targetPath, targetCardId } =
+    const { prompt, sourceImageUrl, targetRealmUrl, targetPath, targetCardId, cardName } =
       input;
 
     let promptText = prompt?.trim();
@@ -173,7 +193,7 @@ export default class GenerateThumbnailCommand extends HostBaseCommand<
     const mimeType = mimeMatch[1];
     const extension = mimeTypeToExtension(mimeType);
 
-    const filename = `thumbnail-${uuidSlug()}.${extension}`;
+    const filename = `${generateFilenameFromCardName(cardName)}.${extension}`;
     const filePath = targetPath?.trim()
       ? `${targetPath.trim().replace(/\/$/, '')}/${filename}`
       : filename;
