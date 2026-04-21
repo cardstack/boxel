@@ -243,26 +243,13 @@ async function ensureHostReady(): Promise<{
       assertUsableHostDist(hostPackageDir);
       let port = await findAvailablePort();
       let hostURL = `http://localhost:${port}/`;
-      let hostDistDir = join(hostPackageDir, 'dist');
-      let serveConfigPath = join(hostPackageDir, 'tests', 'serve.json');
       supportLog.debug(
         `serving built host dist from ${hostPackageDir} at ${hostURL}`,
       );
 
       let child = spawn(
         'npx',
-        [
-          'serve',
-          '--config',
-          serveConfigPath,
-          '--single',
-          '--cors',
-          '--no-request-logging',
-          '--no-etag',
-          '--listen',
-          String(port),
-          hostDistDir,
-        ],
+        ['vite', 'preview', '--port', String(port), '--strictPort'],
         {
           cwd: hostPackageDir,
           detached: true,
