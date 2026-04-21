@@ -16,13 +16,35 @@ import { generateScopedCSSPlugin } from 'glimmer-scoped-css/ast-transform';
 import decoratorTransforms from 'decorator-transforms';
 
 //@ts-ignore no upstream types
-import * as compiler from 'ember-source/ember-template-compiler/index.js';
+import * as emberCompiler from 'ember-source/ember-template-compiler/index.js';
 
 import * as ContentTag from 'content-tag';
+
+import { md5 } from 'super-fast-md5';
 
 const scopedCSSTransform = generateScopedCSSPlugin({
   noGlobal: true,
 }) as ExtendedPluginBuilder;
+
+// ember-source's defaultId hashes the template source via node's crypto
+// module, looked up through `module.require` / `globalThis.require`. Under
+// the ESM compiler entry neither is defined, so defaultId falls back to
+// `() => null` and the emitted template JSON contains `"id": null`. Wrap
+// precompile with a deterministic id derived from super-fast-md5, which
+// works identically in node and the browser.
+function templateId(src: string) {
+  return md5(src).substring(0, 8);
+}
+
+const compiler = {
+  ...emberCompiler,
+  precompile(template: string, options: Record<string, unknown> = {}) {
+    return (emberCompiler as { precompile: Function }).precompile(template, {
+      ...options,
+      id: options.id || templateId,
+    });
+  },
+};
 
 export async function transpileJS(
   content: string,
