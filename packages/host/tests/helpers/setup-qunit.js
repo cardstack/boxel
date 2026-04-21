@@ -13,6 +13,57 @@ export function setupQUnit() {
   setup(QUnit.assert);
   QUnit.config.autostart = false;
 
+  // Per-module memory delta probe — log each test file's contribution to
+  // retained memory, independent of where it falls in shard order. We GC
+  // at module boundaries so the start/end snapshots compare like-for-like.
+  // QUnit module name is normally 1:1 with the test file. We only probe
+  // top-level modules (fullName.length === 1) so nested modules don't
+  // create overlapping start/end pairs.
+  let usedAtModuleStart = null;
+  let inTopLevelModule = false;
+  QUnit.on('suiteStart', (details) => {
+    let depth = Array.isArray(details.fullName) ? details.fullName.length : 1;
+    if (depth !== 1) return;
+    inTopLevelModule = true;
+    if (typeof globalThis.gc === 'function') {
+      globalThis.gc();
+      globalThis.gc();
+    }
+    try {
+      let pm = performance && performance.memory;
+      usedAtModuleStart = pm ? pm.usedJSHeapSize : null;
+    } catch (_) {
+      usedAtModuleStart = null;
+    }
+  });
+  QUnit.on('suiteEnd', (details) => {
+    let depth = Array.isArray(details.fullName) ? details.fullName.length : 1;
+    if (depth !== 1 || !inTopLevelModule) return;
+    inTopLevelModule = false;
+    if (typeof globalThis.gc === 'function') {
+      globalThis.gc();
+      globalThis.gc();
+    }
+    try {
+      let pm = performance && performance.memory;
+      if (pm) {
+        let used = pm.usedJSHeapSize;
+        let usedMB = (used / 1048576).toFixed(1);
+        let totalMB = (pm.totalJSHeapSize / 1048576).toFixed(1);
+        let deltaMB =
+          usedAtModuleStart != null
+            ? ((used - usedAtModuleStart) / 1048576).toFixed(1)
+            : 'na';
+        let tests = details.tests ? details.tests.length : 0;
+        console.log(
+          `MEMPROBE_FILE module=${JSON.stringify(details.name)} tests=${tests} used=${usedMB}MB total=${totalMB}MB delta=${deltaMB}MB`,
+        );
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  });
+
   // After each test, force GC (via --expose-gc) so V8 can release
   // per-test allocations before the next test starts. Without this, V8's
   // opportunistic GC can't keep up and the heap drifts toward the 4GB

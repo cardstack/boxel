@@ -2,6 +2,7 @@ import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import UrlField from 'https://cardstack.com/base/url';
 import { Command } from '@cardstack/runtime-common';
+import { DEFAULT_IMAGE_GENERATION_LLM } from '@cardstack/runtime-common/matrix-constants';
 import SendRequestViaProxyCommand from '@cardstack/boxel-host/commands/send-request-via-proxy';
 import UploadImageCommand from './upload-image';
 
@@ -114,7 +115,7 @@ export class GenerateImageCommand extends Command<
       url: 'https://openrouter.ai/api/v1/chat/completions',
       method: 'POST',
       requestBody: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image-preview',
+        model: DEFAULT_IMAGE_GENERATION_LLM,
         messages,
       }),
     });

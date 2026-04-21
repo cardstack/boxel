@@ -4103,7 +4103,7 @@ module(basename(__filename), function () {
               export class FavoriteLookup extends CardDef {
                 @field favorite = linksTo(Person, {
                   query: {
-                    realm: '$thisRealm',
+                    realm: '$REALM',
                     page: { size: 1 },
                   },
                 });

@@ -9,59 +9,17 @@ import {
 } from '../src/factory-test-realm';
 import { buildTestClient } from './helpers/test-client';
 import { createMockClient } from './helpers/mock-client';
+import {
+  FAILING_TEST_GTS,
+  PASSING_TEST_GTS,
+  writeAndAwaitIndex,
+} from './helpers/qunit-test-fixtures';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
   'test-fixtures',
   'test-realm-runner',
 );
-
-// QUnit test content written to the realm via the API — same path as the live system.
-// Uses import.meta.url to resolve the co-located hello.gts card definition,
-// making the tests portable across realms.
-const PASSING_TEST_GTS = `import { module, test } from 'qunit';
-import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { renderCard } from '@cardstack/host/tests/helpers/render-component';
-import { getService } from '@universal-ember/test-support';
-
-let cardModuleUrl = new URL('./hello', import.meta.url).href;
-
-export function runTests() {
-  module('HelloCard', function (hooks) {
-    setupCardTest(hooks);
-
-    test('greeting renders in isolated view', async function (assert) {
-      let loader = getService('loader-service').loader;
-      let { HelloCard } = await loader.import(cardModuleUrl);
-      let card = new HelloCard({ greeting: 'Hello from smoke test' });
-      await renderCard(loader, card, 'isolated');
-      assert.dom('[data-test-greeting]').hasText('Hello from smoke test');
-    });
-  });
-}
-`;
-
-const FAILING_TEST_GTS = `import { module, test } from 'qunit';
-import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { renderCard } from '@cardstack/host/tests/helpers/render-component';
-import { getService } from '@universal-ember/test-support';
-
-let cardModuleUrl = new URL('./hello', import.meta.url).href;
-
-export function runTests() {
-  module('HelloCard Fail', function (hooks) {
-    setupCardTest(hooks);
-
-    test('deliberately fails - wrong greeting text', async function (assert) {
-      let loader = getService('loader-service').loader;
-      let { HelloCard } = await loader.import(cardModuleUrl);
-      let card = new HelloCard({ greeting: 'Hello from smoke test' });
-      await renderCard(loader, card, 'isolated');
-      assert.dom('[data-test-greeting]').hasText('THIS TEXT DOES NOT EXIST');
-    });
-  });
-}
-`;
 
 test.use({ realmDir: fixtureRealmDir });
 test.use({ realmServerMode: 'isolated' });
@@ -83,20 +41,12 @@ test.describe('factory-test-realm e2e', () => {
     });
 
     try {
-      // Write the QUnit test to the realm via API — same path as the live system.
-      let writeResult = await client.write(
+      await writeAndAwaitIndex(
+        client,
         realmUrl,
         'hello.test.gts',
         PASSING_TEST_GTS,
       );
-      expect(writeResult.ok).toBe(true);
-
-      // Wait for the realm to index the file before running tests
-      let indexed = await client.waitForFile(realmUrl, 'hello.test.gts', {
-        pollMs: 300,
-        timeoutMs: 30_000,
-      });
-      expect(indexed).toBe(true);
 
       // Verify the realm resolves the dotted filename: a request for
       // "hello.test" (without .gts) must find "hello.test.gts" on disk.
@@ -168,20 +118,12 @@ test.describe('factory-test-realm e2e', () => {
     });
 
     try {
-      // Write the deliberately failing QUnit test via API.
-      let writeResult = await client.write(
+      await writeAndAwaitIndex(
+        client,
         realmUrl,
         'hello-fail.test.gts',
         FAILING_TEST_GTS,
       );
-      expect(writeResult.ok).toBe(true);
-
-      // Wait for the realm to index the file before running tests
-      let indexed = await client.waitForFile(realmUrl, 'hello-fail.test.gts', {
-        pollMs: 300,
-        timeoutMs: 30_000,
-      });
-      expect(indexed).toBe(true);
 
       let handle = await executeTestRunFromRealm({
         targetRealmUrl: realmUrl,

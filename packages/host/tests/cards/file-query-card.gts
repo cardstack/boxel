@@ -11,7 +11,7 @@ const fileSearchQuery = {
   filter: {
     type: { module: 'https://cardstack.com/base/card-api', name: 'FileDef' },
   },
-  realm: '$thisRealm',
+  realm: '$REALM',
 };
 
 export class FileQueryCard extends CardDef {

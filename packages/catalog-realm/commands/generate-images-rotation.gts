@@ -6,9 +6,10 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 
 import { Command } from '@cardstack/runtime-common';
+import { DEFAULT_IMAGE_GENERATION_LLM } from '@cardstack/runtime-common/matrix-constants';
 import SendRequestViaProxyCommand from '@cardstack/boxel-host/commands/send-request-via-proxy';
 
-export const DEFAULT_IMAGE_MODEL = 'google/gemini-2.5-flash-image-preview';
+export const DEFAULT_IMAGE_MODEL = DEFAULT_IMAGE_GENERATION_LLM;
 
 class GenerateImagesRotationInput extends CardDef {
   @field productImages = containsMany(StringField, {

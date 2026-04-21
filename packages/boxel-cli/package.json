@@ -74,6 +74,7 @@
     "publish:dry": "npm publish --dry-run"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   }
 }

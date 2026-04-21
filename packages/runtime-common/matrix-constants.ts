@@ -39,6 +39,7 @@ export type LLMMode = 'ask' | 'act';
 export const DEFAULT_LLM = 'anthropic/claude-sonnet-4.6';
 export const DEFAULT_CODING_LLM = 'anthropic/claude-sonnet-4.6';
 export const DEFAULT_REMIX_LLM = 'openai/gpt-5-nano';
+export const DEFAULT_IMAGE_GENERATION_LLM = 'google/gemini-2.5-flash-image';
 
 export const DEFAULT_LLM_ID_TO_NAME: Record<string, string> = {
   'anthropic/claude-3.5-sonnet': 'Anthropic: Claude 3.5 Sonnet',

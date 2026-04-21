@@ -4,6 +4,7 @@ import { expect, test } from './fixtures';
 
 import { LintValidationStep } from '../src/validators/lint-step';
 import type { LintValidationDetails } from '../src/validators/lint-step';
+import { BAD_LINT_GTS } from './helpers/lint-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
 
 const fixtureRealmDir = resolve(
@@ -11,17 +12,6 @@ const fixtureRealmDir = resolve(
   'test-fixtures',
   'test-realm-runner',
 );
-
-// A .gts file with a lint violation that can't be auto-fixed.
-// The `no-unused-vars` rule flags `unusedVar` and auto-fix cannot remove it.
-const BAD_LINT_GTS = `import {
-  CardDef,
-} from 'https://cardstack.com/base/card-api';
-
-let unusedVar = 42;
-
-export class BadCard extends CardDef {}
-`;
 
 test.use({ realmDir: fixtureRealmDir });
 test.use({ realmServerMode: 'isolated' });

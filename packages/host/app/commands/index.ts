@@ -28,6 +28,7 @@ import * as FullReindexRealmCommandModule from './full-reindex-realm';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
 import * as GenerateThemeExampleCommandModule from './generate-theme-example';
+import * as GenerateThumbnailCommandModule from './generate-thumbnail';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetAvailableRealmUrlsCommandModule from './get-available-realm-urls';
 import * as GetCardCommandModule from './get-card';
@@ -90,6 +91,7 @@ import * as UpdatePlaygroundSelectionCommandModule from './update-playground-sel
 import * as UpdateRoomSkillsCommandModule from './update-room-skills';
 import * as CommandUtilsModule from './utils';
 import * as ValidateRealmCommandModule from './validate-realm';
+import * as WriteBinaryFileCommandModule from './write-binary-file';
 import * as WriteTextFileCommandModule from './write-text-file';
 
 import type HostBaseCommand from '../lib/host-base-command';
@@ -384,6 +386,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     CommandUtilsModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/write-binary-file',
+    WriteBinaryFileCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/write-text-file',
     WriteTextFileCommandModule,
   );
@@ -398,6 +404,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/generate-readme-spec',
     GenerateReadmeSpecCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/generate-thumbnail',
+    GenerateThumbnailCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-card',
@@ -486,6 +496,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   FullReindexRealmCommandModule.default,
   GenerateExampleCardsCommandModule.default,
   GenerateReadmeSpecCommandModule.default,
+  GenerateThumbnailCommandModule.default,
   GetAllRealmMetasCommandModule.default,
   GetAvailableRealmUrlsCommandModule.default,
   GetDefaultWritableRealmCommandModule.default,
@@ -556,5 +567,6 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   UpdateRoomSkillsCommandModule.default,
   UseAiAssistantCommandModule.default,
   ValidateRealmCommandModule.default,
+  WriteBinaryFileCommandModule.default,
   WriteTextFileCommandModule.default,
 ];

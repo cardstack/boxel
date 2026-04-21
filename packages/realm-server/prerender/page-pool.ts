@@ -149,6 +149,21 @@ export class PagePool {
     return [...this.#affinityPages.keys()];
   }
 
+  // Per-affinity vacancy snapshot consumed by the prerender manager for
+  // warm-vacancy-first routing (CS-10758). `idle: true` means every tab
+  // currently owned by this affinity has an empty render queue — the next
+  // visit can run without waiting. `tabCount` tracks how many pages the
+  // affinity has claimed (bounded by PRERENDER_AFFINITY_TAB_MAX).
+  getVacancySnapshot(): Record<string, { idle: boolean; tabCount: number }> {
+    let snapshot: Record<string, { idle: boolean; tabCount: number }> = {};
+    for (let [affinityKey, entries] of this.#affinityPages) {
+      let tabCount = entries.size;
+      let idle = [...entries].every((entry) => entry.queue.pendingCount === 0);
+      snapshot[affinityKey] = { idle, tabCount };
+    }
+    return snapshot;
+  }
+
   resetConsoleErrors(pageId: string): void {
     this.#consoleErrorsByPageId.set(pageId, new Map());
   }

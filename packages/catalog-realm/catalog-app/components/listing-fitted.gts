@@ -268,7 +268,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
         }
         .display-section {
           width: 100%;
-          height: 68cqmax;
+          height: 60cqmax;
         }
         .info-section {
           flex-direction: column;

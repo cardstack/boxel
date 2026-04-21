@@ -2462,7 +2462,7 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="cardInfo-summary"] input')
         .hasValue('The latest novel from John Doe');
-      assert.dom('[data-test-thumbnail-icon]').exists();
+      assert.dom('[data-test-thumbnail-icon]').doesNotExist();
       await click('[data-test-toggle-thumbnail-editor]');
       assert
         .dom('[data-test-thumbnail-placeholder]')

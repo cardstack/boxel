@@ -159,6 +159,32 @@ export class WriteTextFileInput extends CardDef {
   @field useNonConflictingFilename = contains(BooleanField);
 }
 
+export class WriteBinaryFileInput extends CardDef {
+  @field path = contains(StringField);
+  @field realm = contains(StringField);
+  @field base64Content = contains(StringField);
+  @field contentType = contains(StringField);
+  @field useNonConflictingFilename = contains(BooleanField);
+}
+
+export class WriteBinaryFileResult extends CardDef {
+  @field fileUrl = contains(StringField);
+}
+
+export class GenerateThumbnailInput extends CardDef {
+  @field prompt = contains(StringField);
+  @field sourceImageUrl = contains(StringField);
+  @field targetRealmUrl = contains(StringField);
+  @field targetPath = contains(StringField); // optional: subfolder within realm, e.g. "thumbnails"
+  @field targetCardId = contains(StringField);
+  @field cardName = contains(StringField); // card name for filename generation
+  @field llmModel = contains(StringField);
+}
+
+export class GenerateThumbnailOutput extends CardDef {
+  @field imageDefUrl = contains(StringField);
+}
+
 export class CreateInstanceInput extends CardDef {
   @field codeRef = contains(CodeRefField);
   @field realm = contains(StringField);
@@ -231,7 +257,9 @@ export class LintAndFixInput extends CardDef {
 
 export class LintAndFixResult extends CardDef {
   @field output = contains(StringField);
-  @field lintIssues = containsMany(StringField);
+  @field lintIssues = containsMany(StringField); // all remaining issues (errors + warnings)
+  @field lintErrors = containsMany(StringField); // severity 2 only (unfixable errors)
+  @field lintWarnings = containsMany(StringField); // severity 1 only
 }
 
 export class PatchCodeResultField extends FieldDef {
