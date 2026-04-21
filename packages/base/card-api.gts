@@ -2914,6 +2914,11 @@ export class CardDef extends BaseDef {
       return this.cardInfo.summary;
     },
   });
+  @field cardTheme: Theme | null = linksTo(() => Theme, {
+    computeVia: function (this: CardDef) {
+      return this.cardInfo.theme;
+    },
+  });
   // TODO: this will probably be an image or image url field card when we have it
   // UPDATE: we now have a Base64ImageField card. we can probably refactor this
   // to use it directly now (or wait until a better image field comes along)

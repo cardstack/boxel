@@ -433,7 +433,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     assert
       .dom('[data-test-card-schema="Card"] [data-test-total-fields]')
-      .containsText('+ 4 Fields');
+      .containsText('+ 5 Fields');
     assert
       .dom(
         `[data-test-card-schema="Card"] [data-test-field-name="cardTitle"] [data-test-overridden-field-link]`,
@@ -453,6 +453,11 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert
       .dom(
         `[data-test-card-schema="Card"] [data-test-field-name="cardThumbnailURL"] [data-test-card-display-name="String"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-card-schema="Card"] [data-test-field-name="cardTheme"] [data-test-card-display-name="Theme"]`,
       )
       .exists();
 

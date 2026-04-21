@@ -86,6 +86,7 @@ import {
   ReadOnlyField,
   instanceOf,
   CardInfoField,
+  Theme,
 } from '../../helpers/base-realm';
 import { mango } from '../../helpers/image-fixture';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -2343,33 +2344,51 @@ module('Integration | card-basics', function (hooks) {
     });
 
     test('render card-def instance with cardInfo overrides', async function (assert) {
+      class Team extends CardDef {}
       class Person extends CardDef {
         static displayName = 'Person';
         @field firstName = contains(StringField);
         @field lastName = contains(StringField);
         @field profilePic = contains(StringField);
+        @field team = linksTo(Team);
         @field cardTitle = contains(StringField, {
           computeVia: function (this: Person) {
             return [this.firstName, this.lastName].filter(Boolean).join(' ');
           },
         });
+        @field cardTheme: InstanceType<typeof Theme> | null = linksTo(
+          () => Theme,
+          {
+            computeVia: function (this: Person) {
+              return this.cardInfo.theme ?? this.team?.cardTheme;
+            },
+          },
+        );
         @field cardThumbnailURL = contains(StringField, {
           computeVia: function (this: Person) {
             return this.profilePic;
           },
         });
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Person });
+      let localTheme = new Theme({ cardTitle: 'Local Theme' });
+      let linkedTheme = new Theme({ cardTitle: 'Volley Blue' });
+      let team = new Team({
+        cardInfo: new CardInfoField({
+          theme: linkedTheme,
+        }),
+      });
 
       let instance = new Person({
         cardInfo: new CardInfoField({
           name: 'Johnny',
           summary: 'Volleyball player',
           cardThumbnailURL: 'http://pic/of/volleyball',
+          theme: localTheme,
         }),
         firstName: 'John',
         lastName: 'Doe',
         profilePic: 'http://john/pic.jpg',
+        team,
       });
       await renderCard(loader, instance, 'isolated');
       assert.dom('[data-test-thumbnail-icon]').doesNotExist();
@@ -2380,6 +2399,9 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="cardInfo-summary"]')
         .hasText('Volleyball player');
+      assert
+        .dom('[data-test-field="cardTheme"]')
+        .containsText('Local Theme');
 
       await renderCard(loader, instance, 'edit');
       assert.dom('[data-test-field="cardInfo-name"] input').hasValue('Johnny');
@@ -2393,6 +2415,17 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-field="cardInfo-thumbnailURL"] input')
         .hasValue('http://pic/of/volleyball');
       assert.dom('[data-test-links-to-editor="theme"]').exists();
+      assert
+        .dom('[data-test-field="cardInfo-theme"]')
+        .containsText('Local Theme');
+      assert
+        .dom('[data-test-field="cardTheme"]')
+        .containsText('Local Theme');
+      assert
+        .dom(
+          '[data-test-field="cardTheme"] [data-test-links-to-editor="cardTheme"]',
+        )
+        .doesNotExist();
       assert.dom('[data-test-field="cardInfo-notes"] textarea').exists();
       assert.dom('[data-test-field="firstName"] input').hasValue('John');
       assert
@@ -2416,11 +2449,13 @@ module('Integration | card-basics', function (hooks) {
     });
 
     test('render card-def instance with cardInfo overrides variation', async function (assert) {
+      class Collection extends CardDef {}
       class Book extends CardDef {
         static displayName = 'Book';
         @field bookTitle = contains(StringField);
         @field blurb = contains(StringField);
         @field bookCoverImage = contains(StringField);
+        @field collection = linksTo(Collection);
         @field cardTitle = contains(StringField, {
           computeVia: function (this: Book) {
             return this.bookTitle ?? this.cardInfo.name ?? 'Untitled Book';
@@ -2436,8 +2471,21 @@ module('Integration | card-basics', function (hooks) {
             return this.bookCoverImage;
           },
         });
+        @field cardTheme: InstanceType<typeof Theme> | null = linksTo(
+          () => Theme,
+          {
+            computeVia: function (this: Book) {
+              return this.cardInfo.theme ?? this.collection?.cardTheme;
+            },
+          },
+        );
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Book });
+      let linkedTheme = new Theme({ cardTitle: 'Night Library' });
+      let collection = new Collection({
+        cardInfo: new CardInfoField({
+          theme: linkedTheme,
+        }),
+      });
 
       let instance = new Book({
         cardInfo: new CardInfoField({
@@ -2446,6 +2494,7 @@ module('Integration | card-basics', function (hooks) {
         bookTitle: 'Insomniac',
         blurb: 'This book will keep you up at night',
         bookCoverImage: 'http://book/pic.jpg',
+        collection,
       });
       await renderCard(loader, instance, 'isolated');
       assert.dom('[data-test-thumbnail-icon]').doesNotExist();
@@ -2456,6 +2505,7 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="cardInfo-summary"]')
         .hasText('This book will keep you up at night');
+      assert.dom('[data-test-field="cardTheme"]').containsText('Night Library');
 
       await renderCard(loader, instance, 'edit');
       assert.dom('[data-test-field="cardInfo-name"] input').hasNoValue();
@@ -2469,6 +2519,15 @@ module('Integration | card-basics', function (hooks) {
         .hasText('http://book/pic.jpg');
       assert.dom('[data-test-thumbnail-input] input').hasNoValue();
       await click('[data-test-toggle-thumbnail-editor]');
+      assert
+        .dom('[data-test-field="cardInfo-theme"]')
+        .doesNotContainText('Night Library');
+      assert.dom('[data-test-field="cardTheme"]').containsText('Night Library');
+      assert
+        .dom(
+          '[data-test-field="cardTheme"] [data-test-links-to-editor="cardTheme"]',
+        )
+        .doesNotExist();
       assert
         .dom('[data-test-field="bookCoverImage"] input')
         .hasValue('http://book/pic.jpg');
@@ -2488,20 +2547,39 @@ module('Integration | card-basics', function (hooks) {
     });
 
     test('render card-def instance with cardInfo overrides (not computed)', async function (assert) {
+      class Shelf extends CardDef {}
       class Book extends CardDef {
         static displayName = 'Book';
         @field cardTitle = contains(StringField);
         @field cardDescription = contains(StringField);
         @field cardThumbnailURL = contains(StringField);
+        @field shelf = linksTo(Shelf);
+        @field cardTheme: InstanceType<typeof Theme> | null = linksTo(
+          () => Theme,
+          {
+            computeVia: function (this: Book) {
+              return this.cardInfo.theme ?? this.shelf?.cardTheme;
+            },
+          },
+        );
       }
 
+      let localTheme = new Theme({ cardTitle: 'Local Theme' });
+      let linkedTheme = new Theme({ cardTitle: 'Sleepless Pages' });
+      let shelf = new Shelf({
+        cardInfo: new CardInfoField({
+          theme: linkedTheme,
+        }),
+      });
       let insomniac = new Book({
         cardTitle: 'Insomniac',
         cardDescription: 'This book will keep you up at night',
         cardThumbnailURL: 'http://book/pic.jpg',
         cardInfo: new CardInfoField({
           summary: 'The latest novel from John Doe',
+          theme: localTheme,
         }),
+        shelf,
       });
       await renderCard(loader, insomniac, 'isolated');
       assert.dom('[data-test-field="cardInfo-name"]').hasText('Insomniac');
@@ -2521,6 +2599,9 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="cardThumbnailURL"]')
         .hasText('Card Thumbnail URL http://book/pic.jpg');
+      assert
+        .dom('[data-test-field="cardTheme"]')
+        .containsText('Local Theme');
 
       await renderCard(loader, insomniac, 'edit');
       assert.dom('[data-test-field="cardInfo-name"] input').hasNoValue();
@@ -2540,6 +2621,17 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="cardThumbnailURL"] input')
         .hasValue('http://book/pic.jpg');
+      assert
+        .dom('[data-test-field="cardInfo-theme"]')
+        .containsText('Local Theme');
+      assert
+        .dom('[data-test-field="cardTheme"]')
+        .containsText('Local Theme');
+      assert
+        .dom(
+          '[data-test-field="cardTheme"] [data-test-links-to-editor="cardTheme"]',
+        )
+        .doesNotExist();
 
       // default preview (on edit template)
       await click('[data-test-toggle-preview]');
@@ -2556,6 +2648,7 @@ module('Integration | card-basics', function (hooks) {
     });
 
     test('render card-def instance with cardInfo overrides (complex)', async function (assert) {
+      class TravelProfile extends CardDef {}
       class FlightBooking extends CardDef {
         static displayName = 'Flight Booking';
         static icon = Plane;
@@ -2563,6 +2656,7 @@ module('Integration | card-basics', function (hooks) {
         @field destination = contains(StringField);
         @field date = contains(DateTimeField);
         @field flightNumber = contains(StringField);
+        @field travelProfile = linksTo(TravelProfile);
 
         @field cardTitle = contains(StringField, {
           computeVia: function (this: FlightBooking) {
@@ -2589,8 +2683,22 @@ module('Integration | card-basics', function (hooks) {
               .join(' - ');
           },
         });
+        @field cardTheme: InstanceType<typeof Theme> | null = linksTo(
+          () => Theme,
+          {
+            computeVia: function (this: FlightBooking) {
+              return this.cardInfo.theme ?? this.travelProfile?.cardTheme;
+            },
+          },
+        );
       }
 
+      let linkedTheme = new Theme({ cardTitle: 'Holiday Departure' });
+      let travelProfile = new TravelProfile({
+        cardInfo: new CardInfoField({
+          theme: linkedTheme,
+        }),
+      });
       let instance = new FlightBooking({
         date: new Date('2025-12-25T21:06:00.000Z'),
         origin: 'JFK',
@@ -2602,6 +2710,7 @@ module('Integration | card-basics', function (hooks) {
         }),
         destination: 'LAX',
         flightNumber: '101',
+        travelProfile,
       });
       await renderCard(loader, instance, 'isolated');
       assert
@@ -2616,6 +2725,9 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="flightNumber"]')
         .hasText('Flight Number 101');
+      assert
+        .dom('[data-test-field="cardTheme"]')
+        .containsText('Holiday Departure');
 
       await renderCard(loader, instance, 'edit');
       assert
@@ -2630,6 +2742,17 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-field="cardInfo-thumbnailURL"] input')
         .hasNoValue();
       await click('[data-test-toggle-thumbnail-editor]');
+      assert
+        .dom('[data-test-field="cardInfo-theme"]')
+        .doesNotContainText('Holiday Departure');
+      assert
+        .dom('[data-test-field="cardTheme"]')
+        .containsText('Holiday Departure');
+      assert
+        .dom(
+          '[data-test-field="cardTheme"] [data-test-links-to-editor="cardTheme"]',
+        )
+        .doesNotExist();
       assert.dom('[data-test-field="destination"] input').hasValue('LAX');
 
       // default preview (in edit mode)
