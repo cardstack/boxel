@@ -35,26 +35,15 @@ export function installRealmServerAssertOwnRealmServerBypassPatch(): {
             if ((globalThis as any).__boxelAssertOwnRealmServerPatched) {
               return;
             }
-            // Resolve the Ember module registry from whichever loader shape
-            // exists in this runtime build.
-            let entries =
-              (window as any).requirejs?.entries ??
-              (window as any).require?.entries ??
-              (window as any)._eak_seen;
-            // Find the compiled realm-server service module and patch only the
-            // one assertion method we need to bypass.
-            let realmServerModuleName =
-              entries &&
-              Object.keys(entries).find((name) =>
-                name.endsWith('/services/realm-server'),
-              );
-            if (!realmServerModuleName) {
-              return;
-            }
-            let realmServerModule = (window as any).require(
-              realmServerModuleName,
-            );
-            let RealmServerClass = realmServerModule?.default;
+            // Vite builds the host as pure ESM — there is no classic AMD
+            // module registry (window.requirejs.entries / _eak_seen) to walk.
+            // The export-application-global instance-initializer stashes the
+            // Ember ApplicationInstance on window['@cardstack/host'], so we
+            // reach service classes through Ember's owner.factoryFor instead.
+            let appInstance = (window as any)['@cardstack/host'];
+            let RealmServerClass = appInstance?.factoryFor?.(
+              'service:realm-server',
+            )?.class;
             if (!RealmServerClass?.prototype) {
               return;
             }
@@ -88,28 +77,17 @@ export function installRealmServerAssertOwnRealmServerBypassPatch(): {
           // evaluate functions behind on pooled pages that survive this test.
           page.evaluate = originalEvaluate;
           await originalEvaluate(() => {
-            // Cleanup mirrors setup above: locate the same service module and
-            // restore the original assertOwnRealmServer implementation.
-            let entries =
-              (window as any).requirejs?.entries ??
-              (window as any).require?.entries ??
-              (window as any)._eak_seen;
-            let realmServerModuleName =
-              entries &&
-              Object.keys(entries).find((name) =>
-                name.endsWith('/services/realm-server'),
-              );
+            // Cleanup mirrors setup above: locate the same service class via
+            // the Ember ApplicationInstance's factoryFor, then restore.
+            let appInstance = (window as any)['@cardstack/host'];
+            let RealmServerClass = appInstance?.factoryFor?.(
+              'service:realm-server',
+            )?.class;
             let originalAssertOwnRealmServer = (globalThis as any)
               .__boxelOriginalAssertOwnRealmServer;
-            if (realmServerModuleName && originalAssertOwnRealmServer) {
-              let realmServerModule = (window as any).require(
-                realmServerModuleName,
-              );
-              let RealmServerClass = realmServerModule?.default;
-              if (RealmServerClass?.prototype) {
-                RealmServerClass.prototype.assertOwnRealmServer =
-                  originalAssertOwnRealmServer;
-              }
+            if (RealmServerClass?.prototype && originalAssertOwnRealmServer) {
+              RealmServerClass.prototype.assertOwnRealmServer =
+                originalAssertOwnRealmServer;
             }
             // Remove page globals used by this patch to keep runtime clean.
             delete (globalThis as any).__boxelOriginalAssertOwnRealmServer;

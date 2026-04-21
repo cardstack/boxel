@@ -1519,24 +1519,13 @@ module(basename(__filename), function () {
                 if (!injected) {
                   injected = true;
                   await originalEvaluate(() => {
-                    let entries =
-                      (window as any).requirejs?.entries ??
-                      (window as any).require?.entries ??
-                      (window as any)._eak_seen;
-                    let renderModuleName =
-                      entries &&
-                      Object.keys(entries).find((name) =>
-                        name.endsWith('/routes/render'),
-                      );
-                    if (!renderModuleName) {
-                      throw new Error(
-                        'render route module not found for injection',
-                      );
-                    }
-                    let renderRouteModule = (window as any).require(
-                      renderModuleName,
-                    );
-                    let RenderRouteClass = renderRouteModule?.default;
+                    // Vite builds the host as pure ESM with no AMD registry;
+                    // reach the render route class via the Ember
+                    // ApplicationInstance exposed by the
+                    // export-application-global instance-initializer.
+                    let appInstance = (window as any)['@cardstack/host'];
+                    let RenderRouteClass =
+                      appInstance?.factoryFor?.('route:render')?.class;
                     if (!RenderRouteClass?.prototype) {
                       throw new Error(
                         'render route class not found for injection',
