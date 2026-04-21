@@ -56,7 +56,11 @@ for search_dir in "$@"; do
         echo "    $line"
       done
     else
-      sed -i.bak "s|\\${FIND_STR}|\\${REPLACEMENT}|g" "$file"
+      if ! sed -i.bak "s|\\${FIND_STR}|\\${REPLACEMENT}|g" "$file"; then
+        echo "  Error updating $file" >&2
+        rm -f "$file.bak"
+        exit 1
+      fi
       rm -f "$file.bak"
       echo "  Updated: $file"
     fi
