@@ -531,6 +531,14 @@ The `update_issue`, `update_project`, and `create_knowledge` tools perform a **r
 
 The `run_tests` tool is **not exposed** to the agent. The validation pipeline runs tests automatically after every agent turn (after `signal_done`). Giving the agent the tool caused it to waste iterations running tests manually, sometimes before writing test files, and creating duplicate TestRun instances. The system prompt and skills inform the agent that the orchestrator handles test execution.
 
+### run_evaluate: In-Memory Self-Validation (CS-10779)
+
+The `run_evaluate` tool lets the agent evaluate one (or every non-test) ESM module in the target realm via the prerenderer sandbox and get back a flat `RunEvaluateResult` (`status`, `modulesChecked`, `modulesWithErrors`, `durationMs`, `evaluableFiles`, `failures: { path, error, stackTrace? }[]`). Unlike the pipeline's `EvalValidationStep`, it does NOT write an `EvalResult` card — so the agent can call it mid-turn as many times as it likes without creating realm artifacts. The orchestrator still runs the full validation pipeline (which writes the durable `EvalResult` card) after `signal_done`, so calling this tool is optional.
+
+Discovery (all non-test `.gts` / `.gjs` / `.ts` / `.js` files, alphabetical) and per-module evaluation now live in the shared `src/eval-execution.ts` engine, used by both `EvalValidationStep` (card-writing path) and `runEvaluateInMemory` (tool path). The `path` parameter accepts a single realm-relative file; non-evaluable extensions and test files (`*.test.*`) short-circuit to `status: 'error'` without calling the realm.
+
+Failure line/column numbers still reference the transpiled module — the tool description points the agent at `fetch_transpiled_module` for debugging while making explicit that transpiled output is read-only scratch and must never be copied into source.
+
 The `run_command` tool description explicitly states it is for Boxel host commands only (format: `@cardstack/boxel-host/commands/<name>/default`), not shell commands or scripts.
 
 ### Playwright waitForFunction Timeout

@@ -14,6 +14,11 @@ import type {
 } from '@cardstack/runtime-common';
 
 import { buildCardDocument } from './darkfactory-schemas';
+import {
+  runEvaluateInMemory,
+  type RunEvaluateInMemoryOptions,
+  type RunEvaluateResult,
+} from './eval-execution';
 import type { ToolExecutor } from './factory-tool-executor';
 import type { ToolRegistry } from './factory-tool-registry';
 import { logger } from './logger';
@@ -56,6 +61,10 @@ export interface ToolBuilderConfig {
       relationships?: Record<string, unknown>;
     }
   >;
+  /** Injected for testing — defaults to runEvaluateInMemory. */
+  runEvaluateInMemory?: (
+    options: RunEvaluateInMemoryOptions,
+  ) => Promise<RunEvaluateResult>;
 }
 
 export interface ToolCallEntry {
@@ -100,6 +109,7 @@ export function buildFactoryTools(
     buildFetchTranspiledModuleTool(config),
     buildSearchRealmTool(config),
     buildRunCommandTool(config),
+    buildRunEvaluateTool(config),
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
@@ -576,6 +586,52 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
 
 // Note: buildRunTestsTool was removed — the validation pipeline runs tests
 // automatically via executeTestRunFromRealm after each agent turn.
+
+function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
+  let execute = config.runEvaluateInMemory ?? runEvaluateInMemory;
+  return {
+    name: 'run_evaluate',
+    description:
+      'Evaluate ESM modules (.gts / .gjs / .ts / .js) in the target realm ' +
+      'via the prerenderer sandbox and return an in-memory result (status, ' +
+      'module counts, per-failure error + stackTrace). Without "path", ' +
+      'evaluates every non-test evaluable module in the realm. With ' +
+      '"path", evaluates only that single realm-relative file — handy ' +
+      'for a quick self-check right after writing one module. Safe to ' +
+      'call repeatedly for mid-turn self-validation — this tool does NOT ' +
+      'create an EvalResult card or any other realm artifact. The ' +
+      'orchestrator still runs the full validation pipeline (which writes ' +
+      'an EvalResult card) automatically after signal_done, so calling ' +
+      'this is optional. When a failure reports a line/column, those ' +
+      'numbers refer to the transpiled module — use `fetch_transpiled_module` ' +
+      'to locate the offending source construct, then fix the .gts source ' +
+      '(never copy transpiled patterns back into source). Auth: realm ' +
+      'server token.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Optional realm-relative path to a single .gts / .gjs / .ts / .js file to evaluate. Omit to evaluate every non-test evaluable module in the target realm. Test files (*.test.*) are rejected — the test runner validates those.',
+        },
+      },
+    },
+    execute: async (args) => {
+      let rawPath = args.path;
+      let path =
+        typeof rawPath === 'string' && rawPath.trim() !== ''
+          ? rawPath.trim()
+          : undefined;
+      return execute({
+        targetRealmUrl: config.targetRealmUrl,
+        realmServerUrl: config.realmServerUrl,
+        client: config.client,
+        ...(path ? { path } : {}),
+      });
+    },
+  };
+}
 
 function buildSignalDoneTool(): FactoryTool {
   return {
