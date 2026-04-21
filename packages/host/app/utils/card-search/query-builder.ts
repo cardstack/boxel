@@ -102,7 +102,7 @@ export function buildSearchQuery(
     const filters: Filter[] = [
       ...(effectiveBaseFilter ? [effectiveBaseFilter] : []),
       ...(typeFilter ? [typeFilter] : []),
-      ...(searchTerm ? [{ contains: { cardTitle: searchTerm } }] : []),
+      ...(searchTerm ? [{ matches: searchTerm }] : []),
     ];
     return {
       filter: filters.length === 1 ? filters[0] : { every: filters },
@@ -115,7 +115,7 @@ export function buildSearchQuery(
       every: [
         { not: { type: specRef } },
         ...(typeFilter ? [typeFilter] : []),
-        ...(searchTerm ? [{ contains: { cardTitle: searchTerm } }] : []),
+        ...(searchTerm ? [{ matches: searchTerm }] : []),
       ],
     },
     sort: activeSort.sort,
