@@ -274,5 +274,35 @@ module(basename(__filename), function () {
         'special characters do not throw; no rows match',
       );
     });
+
+    test('planner uses boxel_index_markdown_fts_idx for matches queries', async function (assert) {
+      // The filter emits `to_tsvector('english', coalesce(i.markdown, ''))`
+      // which must match the GIN index expression exactly. With only a handful
+      // of seeded rows PG will ordinarily prefer a seqscan; disabling seqscan
+      // forces the planner to reveal whether the GIN index is a viable
+      // candidate at all — which is the property we actually care about.
+      //
+      // SET LOCAL is bound to a transaction, so we run SET/EXPLAIN/COMMIT on
+      // the same pooled connection via withConnection. Each inner query is
+      // its own round-trip, so EXPLAIN's result is returned cleanly.
+      let plan = await dbAdapter.withConnection(async (run) => {
+        await run(['BEGIN']);
+        await run(['SET LOCAL enable_seqscan = OFF']);
+        let rows = await run([
+          `EXPLAIN (FORMAT JSON)
+           SELECT url FROM boxel_index
+           WHERE to_tsvector('english', coalesce(markdown, ''))
+                 @@ websearch_to_tsquery('english', 'mango')`,
+        ]);
+        await run(['COMMIT']);
+        return rows;
+      });
+
+      let planText = JSON.stringify(plan);
+      assert.ok(
+        planText.includes('boxel_index_markdown_fts_idx'),
+        `plan should reference the GIN index; got: ${planText}`,
+      );
+    });
   });
 });
