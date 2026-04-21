@@ -2802,7 +2802,11 @@ module('Unit | query', function (hooks) {
     let upper = await indexQueryEngine.searchCards(new URL(testRealmURL), {
       filter: { matches: 'MANGO' },
     });
-    assert.strictEqual(upper.meta.page.total, 1, 'upper-case query still matches');
+    assert.strictEqual(
+      upper.meta.page.total,
+      1,
+      'upper-case query still matches',
+    );
 
     let none = await indexQueryEngine.searchCards(new URL(testRealmURL), {
       filter: { matches: 'xylophone' },
@@ -2845,9 +2849,7 @@ module('Unit | query', function (hooks) {
 
   test(`'matches' does not match rows whose markdown is null`, async function (assert) {
     let { mango } = testCards;
-    await setupIndex(dbAdapter, [
-      { card: mango, data: { markdown: null } },
-    ]);
+    await setupIndex(dbAdapter, [{ card: mango, data: { markdown: null } }]);
 
     let { meta } = await indexQueryEngine.searchCards(new URL(testRealmURL), {
       filter: { matches: 'anything' },
