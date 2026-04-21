@@ -227,6 +227,7 @@ import './command-parsing-utils-test';
 import './query-matches-filter-test';
 import './matches-filter-integration-test';
 import './matches-rank-order-integration-test';
+import './matches-result-meta-integration-test';
 import './delete-boxel-claimed-domain-test';
 import './realm-auth-test';
 import './queries-test';

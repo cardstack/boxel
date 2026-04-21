@@ -70,7 +70,84 @@ import {
   type DefinitionLookup,
 } from './definition-lookup';
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
-import type { FileMetaResource } from './resource-types';
+import type { FileMetaResource, MatchesMeta } from './resource-types';
+
+// Centralized ts_headline options so snippet length/markup stays tunable in
+// one place. Kept as plain text because it lives in the PG select-list
+// unchanged per-query.
+const TS_HEADLINE_OPTIONS =
+  'StartSel=<b>, StopSel=</b>, MaxWords=35, MinWords=15, ShortWord=3, HighlightAll=false';
+
+// Window the SQLite synthesized snippet around the first hit. ~80 chars
+// before/after lines up visually with the PG MaxWords default above.
+const SQLITE_SNIPPET_WINDOW = 80;
+
+// English stop-words dropped from matchedTerms so the array matches PG's
+// stemming-aware behavior (which excludes them via the `english` config).
+const ENGLISH_STOP_WORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'are',
+  'as',
+  'at',
+  'be',
+  'been',
+  'being',
+  'but',
+  'by',
+  'do',
+  'does',
+  'did',
+  'for',
+  'from',
+  'had',
+  'has',
+  'have',
+  'he',
+  'her',
+  'him',
+  'his',
+  'i',
+  'if',
+  'in',
+  'is',
+  'it',
+  'its',
+  'me',
+  'my',
+  'no',
+  'not',
+  'of',
+  'on',
+  'or',
+  'our',
+  'she',
+  'so',
+  'that',
+  'the',
+  'their',
+  'them',
+  'then',
+  'there',
+  'these',
+  'they',
+  'this',
+  'those',
+  'to',
+  'us',
+  'was',
+  'we',
+  'were',
+  'what',
+  'which',
+  'who',
+  'will',
+  'with',
+  'would',
+  'you',
+  'your',
+]);
 
 export interface IndexedFile {
   type: 'file';
@@ -422,6 +499,7 @@ export class IndexQueryEngine {
   ): Promise<{
     meta: QueryResultsMeta;
     results: Partial<BoxelIndexTable>[];
+    resultMetas: (MatchesMeta | undefined)[];
   }> {
     try {
       let conditions: CardExpression[] = [
@@ -457,9 +535,39 @@ export class IndexQueryEngine {
         conditions.push(this.filterCondition(filter, baseCardRef));
       }
 
+      // When the filter tree contains a matches node with a non-empty
+      // query, we tack extra columns onto the caller's SELECT so every
+      // row carries the raw material for per-row MatchesMeta. PG computes
+      // rank/snippet server-side via ts_rank_cd / ts_headline; SQLite
+      // synthesizes both in JS from the markdown column (below).
+      let matchesTerm = filter ? findFirstMatchesFilter(filter) : undefined;
+      let matchesQuery =
+        matchesTerm && matchesTerm.matches.trim() !== ''
+          ? matchesTerm.matches
+          : undefined;
+      let augmentedSelect: CardExpression = matchesQuery
+        ? [
+            ...selectClauseExpression,
+            ',',
+            dbExpression({
+              pg: [
+                `ANY_VALUE(ts_rank_cd(to_tsvector('english', coalesce(i.markdown, '')), websearch_to_tsquery('english',`,
+                param(matchesQuery),
+                `))) AS __rank, ANY_VALUE(ts_headline('english', coalesce(i.markdown, ''), websearch_to_tsquery('english',`,
+                param(matchesQuery),
+                `),`,
+                param(TS_HEADLINE_OPTIONS),
+                `)) AS __snippet`,
+              ],
+              sqlite: [`NULL AS __rank, NULL AS __snippet`],
+            }),
+            ', ANY_VALUE(i.markdown) AS __markdown',
+          ]
+        : selectClauseExpression;
+
       let everyCondition = every(conditions);
       let query = [
-        ...selectClauseExpression,
+        ...augmentedSelect,
         `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
         'WHERE',
         ...everyCondition,
@@ -481,8 +589,15 @@ export class IndexQueryEngine {
         this.#queryCards(queryCount),
       ]);
 
+      let resultMetas: (MatchesMeta | undefined)[] = matchesQuery
+        ? results.map((row) =>
+            buildMatchesMeta(matchesQuery, row as MatchesMetaSource),
+          )
+        : new Array(results.length).fill(undefined);
+
       return {
         results,
+        resultMetas,
         meta: {
           page: { total: Number(totalResults[0].total) },
         },
@@ -491,6 +606,7 @@ export class IndexQueryEngine {
       if (isFilterRefersToNonexistentTypeError(error)) {
         return {
           results: [],
+          resultMetas: [],
           meta: {
             page: { total: 0 },
           },
@@ -507,7 +623,7 @@ export class IndexQueryEngine {
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
   ): Promise<{ cards: CardResource[]; meta: QueryResultsMeta }> {
-    let { results, meta } = await this._search(
+    let { results, resultMetas, meta } = await this._search(
       realmURL,
       { filter, sort, page },
       opts,
@@ -517,9 +633,22 @@ export class IndexQueryEngine {
       'instance',
     );
 
-    let cards = results
-      .map((r) => r.pristine_doc)
-      .filter(Boolean) as CardResource[];
+    let cards: CardResource[] = [];
+    results.forEach((row, i) => {
+      let pristine = row.pristine_doc;
+      if (!pristine) return;
+      let searchMeta = resultMetas[i];
+      if (searchMeta) {
+        // Merge per-row search meta into the card's meta without mutating
+        // the pristine_doc JSON stored in the index (which is shared).
+        cards.push({
+          ...(pristine as CardResource),
+          meta: { ...(pristine as CardResource).meta, ...searchMeta },
+        });
+      } else {
+        cards.push(pristine as CardResource);
+      }
+    });
 
     return { cards, meta };
   }
@@ -602,9 +731,9 @@ export class IndexQueryEngine {
     // full-text hits lead. Empty/whitespace-only match strings are
     // normalized to FALSE in matchesCondition and contribute nothing to
     // ranking — skip the rank clause in that case. PG emits
-    // ts_rank_cd(tsvector, tsquery) DESC; SQLite has no native rank, so
-    // the branch is empty and URL ordering takes over (M2 adds a synthetic
-    // rank — out of scope here).
+    // ts_rank_cd(tsvector, tsquery) DESC; SQLite synthesizes a hit-count
+    // via LENGTH-minus-REPLACE of the query substring (case-insensitive),
+    // which is monotonic with the synthetic rank JS computes for meta.
     if (!sort) {
       let rankedMatch = filter ? findFirstMatchesFilter(filter) : undefined;
       if (rankedMatch && rankedMatch.matches.trim() !== '') {
@@ -612,11 +741,15 @@ export class IndexQueryEngine {
           'ORDER BY',
           dbExpression({
             pg: [
-              `ts_rank_cd(to_tsvector('english', coalesce(i.markdown, '')), websearch_to_tsquery('english',`,
+              `ANY_VALUE(ts_rank_cd(to_tsvector('english', coalesce(i.markdown, '')), websearch_to_tsquery('english',`,
               param(rankedMatch.matches),
-              `)) DESC,`,
+              `))) DESC,`,
             ],
-            sqlite: '',
+            sqlite: [
+              `(LENGTH(LOWER(COALESCE(i.markdown, ''))) - LENGTH(REPLACE(LOWER(COALESCE(i.markdown, '')), LOWER(`,
+              param(rankedMatch.matches),
+              `), ''))) DESC,`,
+            ],
           }),
           'url COLLATE "POSIX"',
         ];
@@ -689,6 +822,7 @@ export class IndexQueryEngine {
         html: string | null;
         used_render_type: string | null;
       })[];
+      resultMetas: (MatchesMeta | undefined)[];
     };
 
     // We need a way to get scoped css urls even from cards linked from foreign realms.These are saved in the deps column of instances and modules.
@@ -1507,6 +1641,101 @@ function tableFromOpts(opts: WIPOptions | undefined) {
 // char itself) with a backslash before binding.
 function escapeSqliteLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+// Shape of a row coming back from _search with match-meta columns tacked
+// on. PG populates __rank/__snippet directly from ts_rank_cd/ts_headline;
+// SQLite returns null for those and relies on JS synthesis from
+// __markdown below.
+type MatchesMetaSource = {
+  __rank?: number | string | null;
+  __snippet?: string | null;
+  __markdown?: string | null;
+};
+
+// Builds the per-row MatchesMeta for a single result. PG columns win when
+// populated (they already reflect stemming + proper ts_headline markup);
+// otherwise we synthesize a substring-based approximation in JS. Either
+// way matchedTerms is computed in JS from the raw query + markdown so the
+// stop-word filtering and tokenization stay consistent across adapters.
+function buildMatchesMeta(
+  rawQuery: string,
+  row: MatchesMetaSource,
+): MatchesMeta {
+  let markdown = row.__markdown ?? null;
+  let pgRank = row.__rank;
+  let rank: number;
+  if (typeof pgRank === 'number') {
+    rank = pgRank;
+  } else if (typeof pgRank === 'string') {
+    let parsed = Number(pgRank);
+    rank = Number.isFinite(parsed)
+      ? parsed
+      : synthesizeRank(rawQuery, markdown);
+  } else {
+    rank = synthesizeRank(rawQuery, markdown);
+  }
+  let snippet =
+    typeof row.__snippet === 'string' && row.__snippet.length > 0
+      ? row.__snippet
+      : synthesizeSnippet(rawQuery, markdown);
+  let matchedTerms = computeMatchedTerms(rawQuery, markdown);
+  return { rank, snippet, matchedTerms };
+}
+
+function synthesizeRank(query: string, markdown: string | null): number {
+  if (!markdown) return 0;
+  let q = query.toLowerCase();
+  let trimmed = q.trim();
+  if (!trimmed) return 0;
+  let haystack = markdown.toLowerCase();
+  let count = 0;
+  let idx = 0;
+  while (idx <= haystack.length) {
+    let found = haystack.indexOf(trimmed, idx);
+    if (found < 0) break;
+    count++;
+    idx = found + trimmed.length;
+  }
+  return count;
+}
+
+function synthesizeSnippet(query: string, markdown: string | null): string {
+  if (!markdown) return '';
+  let trimmed = query.toLowerCase().trim();
+  if (!trimmed) return '';
+  let haystack = markdown.toLowerCase();
+  let idx = haystack.indexOf(trimmed);
+  if (idx < 0) return '';
+  let start = Math.max(0, idx - SQLITE_SNIPPET_WINDOW);
+  let end = Math.min(
+    markdown.length,
+    idx + trimmed.length + SQLITE_SNIPPET_WINDOW,
+  );
+  let before = markdown.slice(start, idx);
+  let hit = markdown.slice(idx, idx + trimmed.length);
+  let after = markdown.slice(idx + trimmed.length, end);
+  let prefix = start > 0 ? '…' : '';
+  let suffix = end < markdown.length ? '…' : '';
+  return `${prefix}${before}<b>${hit}</b>${after}${suffix}`;
+}
+
+function computeMatchedTerms(query: string, markdown: string | null): string[] {
+  if (!markdown) return [];
+  let haystack = markdown.toLowerCase();
+  let out: string[] = [];
+  let seen = new Set<string>();
+  for (let raw of query.split(/\s+/)) {
+    let token = raw.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (!token) continue;
+    if (ENGLISH_STOP_WORDS.has(token)) continue;
+    if (seen.has(token)) continue;
+    seen.add(token);
+    if (haystack.includes(token)) {
+      out.push(token);
+    }
+  }
+  return out;
 }
 
 // Deterministic pre-order walk: recurses into any/every/not and returns the

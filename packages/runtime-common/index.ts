@@ -383,6 +383,7 @@ export type {
   FileMetaResource,
   ModuleResource,
   CardResourceMeta,
+  MatchesMeta,
   ResourceID,
   Meta,
   Saved,

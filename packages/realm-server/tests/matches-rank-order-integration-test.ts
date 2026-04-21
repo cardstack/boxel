@@ -43,6 +43,12 @@ async function seedRow(
   dbAdapter: PgAdapter,
   { url, markdown }: { url: string; markdown: string | null },
 ) {
+  let doc = {
+    id: url,
+    type: 'card',
+    attributes: {},
+    meta: { adoptsFrom: { module: 'test/card', name: 'TestCard' } },
+  } as Record<string, any>;
   await query(dbAdapter, [
     `INSERT INTO boxel_index (url, file_alias, realm_url, realm_version, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at, markdown)`,
     `VALUES (`,
@@ -56,7 +62,7 @@ async function seedRow(
     `,`,
     param('instance'),
     `,`,
-    `'{}'::jsonb`,
+    param(doc as any),
     `,`,
     `'{}'::jsonb`,
     `,`,

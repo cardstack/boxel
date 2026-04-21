@@ -65,12 +65,23 @@ export type Relationship = {
   meta?: Record<string, any>;
 };
 
+// Per-row meta synthesized by the index query engine when the query's
+// filter tree contains a `matches` node. Shape is adapter-agnostic —
+// Postgres emits rank/snippet directly (ts_rank_cd / ts_headline) while
+// SQLite synthesizes the same fields in JS from the raw markdown + query
+// string so consumers don't branch on the backend.
+export interface MatchesMeta {
+  rank: number;
+  snippet: string;
+  matchedTerms: string[];
+}
+
 export type CardResourceMeta = Meta & {
   lastModified?: number;
   resourceCreatedAt?: number;
   realmInfo?: RealmInfo;
   realmURL?: string;
-};
+} & Partial<MatchesMeta>;
 
 export type FileMetaResourceResourceMeta = Meta & {
   realmInfo?: RealmInfo;

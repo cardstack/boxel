@@ -3085,6 +3085,172 @@ module('Unit | query', function (hooks) {
     );
   });
 
+  test(`'matches' synthesizes rank, snippet, matchedTerms on meta (SQLite parity with PG)`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          markdown:
+            'Mango is a puppy. A playful puppy. Such a sweet puppy indeed.',
+        },
+      },
+      {
+        card: vangogh,
+        data: { markdown: 'Van Gogh is a puppy with a painterly coat.' },
+      },
+      {
+        card: ringo,
+        data: { markdown: 'Ringo plays the drums and enjoys long naps.' },
+      },
+    ]);
+
+    let { cards } = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      filter: { matches: 'puppy' },
+    });
+    assert.strictEqual(cards.length, 2, 'mango and vangogh match');
+    for (let card of cards) {
+      assert.strictEqual(
+        typeof card.meta.rank,
+        'number',
+        `${card.id} has numeric rank`,
+      );
+      assert.ok(Number.isFinite(card.meta.rank!), `${card.id} rank is finite`);
+      assert.strictEqual(
+        typeof card.meta.snippet,
+        'string',
+        `${card.id} has string snippet`,
+      );
+      assert.ok(
+        Array.isArray(card.meta.matchedTerms),
+        `${card.id} has array matchedTerms`,
+      );
+    }
+    // ringo was excluded by the filter, so it should not be in results at all.
+    assert.notOk(
+      cards.some((c) => c.id === ringo.id),
+      'ringo is excluded by the filter',
+    );
+  });
+
+  test(`'matches' synthetic rank defaults to rank-desc on SQLite`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          markdown:
+            'Mango is a puppy. A playful puppy. Such a sweet puppy indeed.',
+        },
+      },
+      {
+        card: ringo,
+        data: { markdown: 'Ringo plays the drums and enjoys long naps.' },
+      },
+      {
+        card: vangogh,
+        data: { markdown: 'Van Gogh is a puppy with a painterly coat.' },
+      },
+    ]);
+
+    // No explicit sort → synthetic hit-count DESC should fire, pushing the
+    // densest "puppy" row (mango) above the sparser one (vangogh). URL
+    // ordering alone would put mango first anyway (alphabetical), so to
+    // prove the synthetic rank is firing we also verify that a 3-hit row
+    // outranks a 1-hit row by rank value.
+    let { cards } = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      filter: { matches: 'puppy' },
+    });
+    assert.deepEqual(
+      getIds(cards),
+      [mango.id, vangogh.id],
+      'mango (3 hits) ranks above vangogh (1 hit)',
+    );
+    assert.ok(
+      cards[0].meta.rank! > cards[1].meta.rank!,
+      `mango rank ${cards[0].meta.rank} should exceed vangogh rank ${cards[1].meta.rank}`,
+    );
+  });
+
+  test(`'matches' synthetic snippet wraps the hit in <b>…</b>`, async function (assert) {
+    let { mango } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          markdown:
+            'The quick brown fox jumps over the lazy puppy in the afternoon sun.',
+        },
+      },
+    ]);
+
+    let { cards } = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      filter: { matches: 'puppy' },
+    });
+    let snippet = cards[0].meta.snippet!;
+    assert.ok(snippet.includes('<b>'), `snippet contains <b>; got: ${snippet}`);
+    assert.ok(
+      snippet.includes('</b>'),
+      `snippet contains </b>; got: ${snippet}`,
+    );
+    assert.ok(
+      /<b>[^<]*puppy[^<]*<\/b>/i.test(snippet),
+      `snippet wraps the hit in <b>…</b>; got: ${snippet}`,
+    );
+  });
+
+  test(`'matches' matchedTerms returns only present tokens and drops stop-words`, async function (assert) {
+    let { vangogh } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: vangogh,
+        data: { markdown: 'Van Gogh is a puppy with a painterly coat.' },
+      },
+    ]);
+
+    let { cards } = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      // "the" is a stop-word; "unicorn" is absent from the markdown; "puppy"
+      // and "painterly" are both present.
+      filter: { matches: 'puppy painterly unicorn the' },
+    });
+    assert.deepEqual(
+      [...cards[0].meta.matchedTerms!].sort(),
+      ['painterly', 'puppy'],
+      'matchedTerms drops stop-words and absent tokens',
+    );
+  });
+
+  test(`no meta fields are set on cards when filter has no matches node`, async function (assert) {
+    let { mango, vangogh } = testCards;
+    await setupIndex(dbAdapter, [
+      { card: mango, data: { markdown: 'Mango likes fetch.' } },
+      { card: vangogh, data: { markdown: 'Van Gogh likes naps.' } },
+    ]);
+
+    let { cards } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {},
+    );
+    assert.ok(cards.length > 0, 'got some cards back');
+    for (let card of cards) {
+      assert.strictEqual(
+        card.meta.rank,
+        undefined,
+        `${card.id} has no rank when filter has no matches`,
+      );
+      assert.strictEqual(
+        card.meta.snippet,
+        undefined,
+        `${card.id} has no snippet when filter has no matches`,
+      );
+      assert.strictEqual(
+        card.meta.matchedTerms,
+        undefined,
+        `${card.id} has no matchedTerms when filter has no matches`,
+      );
+    }
+  });
+
   test('can sort using a general field that is not an attribute of a card', async function (assert) {
     await setupIndex(dbAdapter, [
       {
