@@ -25,6 +25,10 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: publish-boxel-cli
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: Build and publish @cardstack/boxel-cli
@@ -42,8 +46,16 @@ jobs:
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
 
-      - name: Upgrade npm for trusted publishing
-        run: npm install -g npm@latest
+      - name: Install pinned npm for trusted publishing
+        run: npm install -g npm@10.8.2
+
+      - name: Run unit tests
+        working-directory: packages/boxel-cli
+        run: pnpm test:unit
+
+      - name: Run integration tests
+        working-directory: packages/boxel-cli
+        run: pnpm test:integration
 
       - name: Bump version
         id: version
@@ -58,6 +70,14 @@ jobs:
         run: pnpm build
         working-directory: packages/boxel-cli
 
+      - name: Commit version bump and tag
+        run: |
+          TAG="boxel-cli-v${{ steps.version.outputs.version }}"
+          git add packages/boxel-cli/package.json
+          git commit -m "Release @cardstack/boxel-cli v${{ steps.version.outputs.version }}"
+          git tag "$TAG"
+          git push origin main --tags
+
       - name: Publish to npm
         working-directory: packages/boxel-cli
         run: |
@@ -67,31 +87,24 @@ jobs:
             npm publish --access public --provenance --tag beta
           fi
 
-      - name: Commit version bump and tag
-        run: |
-          TAG="boxel-cli-v${{ steps.version.outputs.version }}"
-          git add packages/boxel-cli/package.json
-          git commit -m "Release @cardstack/boxel-cli v${{ steps.version.outputs.version }}"
-          git tag "$TAG"
-          git push origin main --tags
-
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="boxel-cli-v${{ steps.version.outputs.version }}"
 
-          # Find previous boxel-cli tag for changelog scope
-          PREV_TAG=$(git tag --list 'boxel-cli-v*' --sort=-version:refname | grep -v "$TAG" | head -n 1)
+          PREV_TAG=$(git tag --list 'boxel-cli-v*' --sort=-version:refname | grep -vxF "$TAG" | head -n 1)
 
-          RELEASE_ARGS="--title \"@cardstack/boxel-cli v${{ steps.version.outputs.version }}\" --generate-notes"
+          ARGS=()
+          ARGS+=(--title "@cardstack/boxel-cli v${{ steps.version.outputs.version }}")
+          ARGS+=(--generate-notes)
 
           if [ -n "$PREV_TAG" ]; then
-            RELEASE_ARGS="$RELEASE_ARGS --notes-start-tag $PREV_TAG"
+            ARGS+=(--notes-start-tag "$PREV_TAG")
           fi
 
           if [ "${{ inputs.environment }}" = "staging" ]; then
-            RELEASE_ARGS="$RELEASE_ARGS --prerelease"
+            ARGS+=(--prerelease)
           fi
 
-          eval gh release create "$TAG" $RELEASE_ARGS
+          gh release create "$TAG" "${ARGS[@]}"
