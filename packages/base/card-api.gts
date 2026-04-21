@@ -2884,7 +2884,7 @@ export class CardDef extends BaseDef {
   // to use it directly now (or wait until a better image field comes along)
   @field cardThumbnailURL = contains(MaybeBase64Field, {
     computeVia: function (this: CardDef) {
-      return this.cardInfo.cardThumbnail?.url ?? this.cardInfo.cardThumbnailURL;
+      return this.cardInfo.cardThumbnailURL;
     },
   });
   static displayName = 'Card';
