@@ -151,6 +151,14 @@ The lint validation step (`src/validators/lint-step.ts`) uses the realm's existi
 
 The `LintResult` card definition (`realm/lint-result.gts`) mirrors the `TestRun` card structure with fitted/embedded/isolated templates, a running state, and links to Issue/Project. Card CRUD is in `src/lint-result-cards.ts`.
 
+**Shared engine.** The per-file discovery and lint loop live in `src/lint-execution.ts` (`discoverLintableFiles` + `lintRealmFiles`). Both the validation pipeline's `LintValidationStep` (which owns `LintResult` artifact lifecycle) and the in-memory `run_lint` agent tool (see below) consume the same engine, so rule coverage and read/lint semantics stay identical.
+
+### In-Memory `run_lint` Agent Tool (CS-10776)
+
+The agent also has a `run_lint` tool exposed on the factory tool set. It runs the same discovery + `_lint` engine as the validation step and returns a flat, JSON-friendly `RunLintResult` (`status`, `filesChecked`, `filesWithErrors`, `errorCount`, `warningCount`, `durationMs`, `lintableFiles`, `violations[{ rule, file, line, column, message, severity }]`). Unlike `LintValidationStep`, it **does not create a `LintResult` card** — no realm artifact is written, so it's safe to call repeatedly for mid-turn self-validation before `signal_done`. The orchestrator's post-`signal_done` lint validation still writes the durable `LintResult`.
+
+The tool accepts an optional `path` argument. When omitted, every lintable file in the realm is linted (matching the validation step's behavior). When supplied, the tool skips discovery and lints only that one realm-relative file — handy for a fast self-check right after writing or editing a single file. Paths with non-lintable extensions (`.json`, etc.) short-circuit to `status: 'error'` without calling the realm.
+
 ### Eval Step Details (CS-10715)
 
 The eval validation step (`src/validators/eval-step.ts`) verifies that `.gts` modules load and evaluate without runtime errors. Module evaluation must happen in a sandbox — the prerenderer's headless Chrome — never directly in the factory's Node process. The step chains through three layers: `_run-command` → `evaluate-module` host command (`packages/host/app/commands/evaluate-module.ts`) → `/_prerender-module` endpoint. The prerenderer returns a `ModuleRenderResponse` with `status: 'ready' | 'error'` and structured error details including message and stack trace.
