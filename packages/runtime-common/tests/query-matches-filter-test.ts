@@ -23,7 +23,9 @@ const tests = Object.freeze({
     assert.true(isMatchesFilter(filter));
   },
 
-  'isMatchesFilter returns true for a MatchesFilter with on': async (assert) => {
+  'isMatchesFilter returns true for a MatchesFilter with on': async (
+    assert,
+  ) => {
     let filter: Filter = { on: sampleRef, matches: 'hello' };
     assert.true(isMatchesFilter(filter));
   },
@@ -44,7 +46,9 @@ const tests = Object.freeze({
     assert.false(isMatchesFilter({ range: { age: { gt: 1 } } } as Filter));
   },
 
-  'isMatchesFilter does not confuse matches with other guards': async (assert) => {
+  'isMatchesFilter does not confuse matches with other guards': async (
+    assert,
+  ) => {
     let filter: Filter = { matches: 'hello' };
     assert.false(isCardTypeFilter(filter));
     assert.false(isNotFilter(filter));
@@ -63,9 +67,7 @@ const tests = Object.freeze({
     }
   },
 
-  'assertQuery accepts MatchesFilter composed inside every': async (
-    assert,
-  ) => {
+  'assertQuery accepts MatchesFilter composed inside every': async (assert) => {
     try {
       assertQuery({
         filter: {

@@ -214,28 +214,22 @@ module(basename(__filename), function () {
     });
 
     test('composes with every at the top level', async function (assert) {
-      let { meta: bothMeta } = await engine.searchCards(
-        new URL(testRealmURL),
-        {
-          filter: {
-            every: [{ matches: 'friendly' }, { matches: 'puppy' }],
-          },
+      let { meta: bothMeta } = await engine.searchCards(new URL(testRealmURL), {
+        filter: {
+          every: [{ matches: 'friendly' }, { matches: 'puppy' }],
         },
-      );
+      });
       assert.strictEqual(
         bothMeta.page.total,
         1,
         'intersection picks the one row containing both terms',
       );
 
-      let { meta: noneMeta } = await engine.searchCards(
-        new URL(testRealmURL),
-        {
-          filter: {
-            every: [{ matches: 'friendly' }, { matches: 'drums' }],
-          },
+      let { meta: noneMeta } = await engine.searchCards(new URL(testRealmURL), {
+        filter: {
+          every: [{ matches: 'friendly' }, { matches: 'drums' }],
         },
-      );
+      });
       assert.strictEqual(
         noneMeta.page.total,
         0,

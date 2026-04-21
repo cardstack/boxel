@@ -412,9 +412,7 @@ export function expressionToSql(
       if (Array.isArray(value)) {
         return (value as Expression).map(renderElement).join(' ');
       }
-      return (value as PgPrimitive | undefined) == null
-        ? ''
-        : String(value);
+      return (value as PgPrimitive | undefined) == null ? '' : String(value);
     } else if (isParam(element)) {
       let value = element[dbAdapterKind] ?? element.param ?? null;
       values.push(
