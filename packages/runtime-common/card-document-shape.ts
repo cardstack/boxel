@@ -29,11 +29,19 @@ import type {
   Relationship,
   Saved,
 } from './resource-types';
-import { CardResourceType, FileMetaResourceType } from './resource-types';
 import type {
   CardCollectionDocument,
   SingleCardDocument,
 } from './document-types';
+
+// Inlined — reading these via a runtime `import` from `resource-types.ts`
+// would pull in `code-ref.ts` → `loader.ts`, which is exactly the
+// decorator chain this module is meant to bypass. The constants are
+// string literals; keep them type-checked against the original
+// declarations in `resource-types.ts` via the `CardResource['type']` /
+// `FileMetaResource['type']` field types.
+const CardResourceType: CardResource['type'] = 'card';
+const FileMetaResourceType: FileMetaResource['type'] = 'file-meta';
 
 // ---------------------------------------------------------------------------
 // Code refs
