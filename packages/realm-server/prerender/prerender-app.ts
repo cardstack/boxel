@@ -702,13 +702,17 @@ async function unregisterWithManager(serverURL: string) {
 export function createPrerenderHttpServer(options?: {
   maxPages?: number;
   port?: number;
+  // Default true. In tests pass false: the fatal handler calls process.exit(1),
+  // which tears down the qunit runner before teardown hooks can release
+  // hardcoded test ports (CS-10813).
+  fatalExitOnUncaught?: boolean;
 }): Server {
   let draining = false;
   let drainingResolved = false;
   let drainingDeferred = new Deferred<void>();
   let heartbeatTimer: NodeJS.Timeout | undefined;
   let isClosing = false;
-  let fatalExitInProgress = false;
+  let fatalExitOnUncaught = options?.fatalExitOnUncaught ?? true;
   let serverURL = resolvePrerenderServerURL(options?.port);
   let { app, prerenderer } = buildPrerenderApp({
     maxPages: options?.maxPages,
@@ -848,37 +852,46 @@ export function createPrerenderHttpServer(options?: {
   process.on('SIGTERM', shutdownHandler);
   process.on('SIGINT', shutdownHandler);
 
-  async function handleFatal(
-    type: 'uncaughtException' | 'unhandledRejection',
-    err: any,
-  ) {
-    if (fatalExitInProgress) return;
-    fatalExitInProgress = true;
-    log.error(`Fatal ${type}; shutting down prerenderer`, err);
-    try {
-      await prerenderer.stop();
-    } catch (e: any) {
-      log.warn('Error stopping prerenderer during fatal shutdown:', e);
-    }
-    try {
-      server.close();
-    } catch (e: any) {
-      log.warn('Error closing server during fatal shutdown:', e);
-    }
-    setTimeout(() => process.exit(1), 100);
-  }
+  let uncaughtExceptionHandler: ((err: unknown) => void) | undefined;
+  let unhandledRejectionHandler: ((err: unknown) => void) | undefined;
+  if (fatalExitOnUncaught) {
+    let fatalExitInProgress = false;
+    const handleFatal = async (
+      type: 'uncaughtException' | 'unhandledRejection',
+      err: any,
+    ) => {
+      if (fatalExitInProgress) return;
+      fatalExitInProgress = true;
+      log.error(`Fatal ${type}; shutting down prerenderer`, err);
+      try {
+        await prerenderer.stop();
+      } catch (e: any) {
+        log.warn('Error stopping prerenderer during fatal shutdown:', e);
+      }
+      try {
+        server.close();
+      } catch (e: any) {
+        log.warn('Error closing server during fatal shutdown:', e);
+      }
+      setTimeout(() => process.exit(1), 100);
+    };
 
-  const uncaughtExceptionHandler = (err: unknown) =>
-    handleFatal('uncaughtException', err);
-  const unhandledRejectionHandler = (err: unknown) =>
-    handleFatal('unhandledRejection', err);
-  process.on('uncaughtException', uncaughtExceptionHandler);
-  process.on('unhandledRejection', unhandledRejectionHandler);
+    uncaughtExceptionHandler = (err: unknown) =>
+      handleFatal('uncaughtException', err);
+    unhandledRejectionHandler = (err: unknown) =>
+      handleFatal('unhandledRejection', err);
+    process.on('uncaughtException', uncaughtExceptionHandler);
+    process.on('unhandledRejection', unhandledRejectionHandler);
+  }
   server.on('close', () => {
     process.off('SIGTERM', shutdownHandler);
     process.off('SIGINT', shutdownHandler);
-    process.off('uncaughtException', uncaughtExceptionHandler);
-    process.off('unhandledRejection', unhandledRejectionHandler);
+    if (uncaughtExceptionHandler) {
+      process.off('uncaughtException', uncaughtExceptionHandler);
+    }
+    if (unhandledRejectionHandler) {
+      process.off('unhandledRejection', unhandledRejectionHandler);
+    }
   });
   return server;
 }
