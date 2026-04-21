@@ -1071,6 +1071,17 @@ export function buildPrerenderManagerApp(options?: {
       await Promise.all(
         targets.map(async (target) => {
           let targetURL = `${normalizeURL(target)}/release-batch`;
+          // Each target gets its own abort — a single stuck upstream
+          // must not block the broadcast from resolving. The indexer's
+          // IndexRunner.finally awaits this broadcast, so an unbounded
+          // fetch here would leave indexing jobs hung after useful work
+          // is done. Use the same timeout family the proxy route uses
+          // (resolvePrerenderServerProxyTimeoutMs, default 150s) so the
+          // upper bound on a release-batch matches the upper bound on a
+          // regular prerender request.
+          let ac = new AbortController();
+          let timer = setTimeout(() => ac.abort(), proxyTimeoutMs);
+          (timer as any).unref?.();
           try {
             let res = await fetch(targetURL, {
               method: 'POST',
@@ -1079,6 +1090,7 @@ export function buildPrerenderManagerApp(options?: {
                 Accept: 'application/vnd.api+json',
               },
               body: raw,
+              signal: ac.signal,
             });
             if (!res.ok) {
               log.warn(
@@ -1086,10 +1098,18 @@ export function buildPrerenderManagerApp(options?: {
               );
             }
           } catch (err) {
-            log.warn(
-              `release-batch on ${target} for ${affinityKey} network error:`,
-              err,
-            );
+            if ((err as { name?: string })?.name === 'AbortError') {
+              log.warn(
+                `release-batch on ${target} for ${affinityKey} timed out after ${proxyTimeoutMs}ms`,
+              );
+            } else {
+              log.warn(
+                `release-batch on ${target} for ${affinityKey} network error:`,
+                err,
+              );
+            }
+          } finally {
+            clearTimeout(timer);
           }
         }),
       );

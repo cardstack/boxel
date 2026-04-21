@@ -222,15 +222,16 @@ module(basename(__filename), function () {
         );
       });
 
-      test('no batchId + no clearCache + no owner: pass-through', function (assert) {
-        let decision = computeBatchClearCacheGate(
-          args({ affinityValue: REALM }),
-          undefined,
-          NOW,
+      test('no batchId + no clearCache + no owner: pass-through returns the same args instance', function (assert) {
+        let visitArgs = args({ affinityValue: REALM });
+        let decision = computeBatchClearCacheGate(visitArgs, undefined, NOW);
+        assert.strictEqual(
+          decision.gatedArgs,
+          visitArgs,
+          'gated args are the exact input instance (no clone when nothing to gate)',
         );
-        assert.strictEqual(decision.gatedArgs, decision.gatedArgs);
-        assert.notOk(decision.newOwner);
-        assert.notOk(decision.log);
+        assert.notOk(decision.newOwner, 'no owner mutation');
+        assert.notOk(decision.log, 'no log emitted on a pure pass-through');
       });
 
       test('strip preserves non-clearCache renderOptions fields', function (assert) {

@@ -219,9 +219,14 @@ export function createRemotePrerenderer(
     // currently assigned this affinity (any of which could hold local
     // ownership from a prior visit). Best-effort: a network-level failure
     // is logged but not rethrown — the owner expires implicitly on
-    // successor replacement or affinity disposal.
+    // successor replacement or affinity disposal. Bounded by an abort
+    // timer so a hung manager can't block IndexRunner's `finally` and
+    // stall queue progress after useful indexing work is done.
     async releaseBatch({ batchId, affinityType, affinityValue }) {
       let endpoint = new URL('release-batch', prerenderURL);
+      let ac = new AbortController();
+      let timer = setTimeout(() => ac.abort(), requestTimeoutMs);
+      (timer as any).unref?.();
       try {
         let response = await fetch(endpoint, {
           method: 'POST',
@@ -232,6 +237,7 @@ export function createRemotePrerenderer(
               attributes: { batchId, affinityType, affinityValue },
             },
           }),
+          signal: ac.signal,
         });
         if (!response.ok) {
           log.warn(
@@ -239,10 +245,18 @@ export function createRemotePrerenderer(
           );
         }
       } catch (e) {
-        log.warn(
-          `releaseBatch for ${affinityType}:${affinityValue} (batch ${batchId}) network error:`,
-          e,
-        );
+        if ((e as { name?: string })?.name === 'AbortError') {
+          log.warn(
+            `releaseBatch for ${affinityType}:${affinityValue} (batch ${batchId}) timed out after ${requestTimeoutMs}ms`,
+          );
+        } else {
+          log.warn(
+            `releaseBatch for ${affinityType}:${affinityValue} (batch ${batchId}) network error:`,
+            e,
+          );
+        }
+      } finally {
+        clearTimeout(timer);
       }
     },
   };
