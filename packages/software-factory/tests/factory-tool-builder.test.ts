@@ -1013,6 +1013,113 @@ module(
 // removed and is no longer part of buildFactoryTools.
 
 // ---------------------------------------------------------------------------
+// run_lint tool (in-memory validation — CS-10776)
+// ---------------------------------------------------------------------------
+
+module('buildFactoryTools — run_lint', function () {
+  test('registers run_lint with empty parameters', function (assert) {
+    let config = makeConfig();
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runLint = tools.find((t) => t.name === 'run_lint')!;
+    assert.ok(runLint, 'run_lint tool is registered');
+    assert.deepEqual(
+      runLint.parameters,
+      { type: 'object', properties: {} },
+      'run_lint takes no arguments',
+    );
+  });
+
+  test('delegates to injected runLintInMemory and forwards realm config', async function (assert) {
+    let capturedOptions:
+      | {
+          targetRealmUrl: string;
+          hasClient: boolean;
+        }
+      | undefined;
+    let stubResult = {
+      status: 'passed' as const,
+      filesChecked: 2,
+      filesWithErrors: 0,
+      errorCount: 0,
+      warningCount: 0,
+      durationMs: 17,
+      lintableFiles: ['a.gts', 'b.gts'],
+      violations: [],
+    };
+
+    let config = makeConfig({
+      runLintInMemory: async (options) => {
+        capturedOptions = {
+          targetRealmUrl: options.targetRealmUrl,
+          hasClient: Boolean(options.client),
+        };
+        return stubResult;
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runLint = tools.find((t) => t.name === 'run_lint')!;
+
+    let result = await runLint.execute({});
+
+    assert.deepEqual(result, stubResult, 'tool returns the in-memory result');
+    assert.strictEqual(
+      capturedOptions?.targetRealmUrl,
+      TARGET_REALM,
+      'forwards targetRealmUrl from config',
+    );
+    assert.true(
+      capturedOptions?.hasClient,
+      'forwards the configured BoxelCLIClient',
+    );
+  });
+
+  test('propagates failed lint results unchanged', async function (assert) {
+    let stubResult = {
+      status: 'failed' as const,
+      filesChecked: 1,
+      filesWithErrors: 1,
+      errorCount: 2,
+      warningCount: 0,
+      durationMs: 12,
+      lintableFiles: ['bad.gts'],
+      violations: [
+        {
+          rule: 'no-unused-vars',
+          file: 'bad.gts',
+          line: 4,
+          column: 5,
+          message: "'unusedVar' is assigned a value but never used.",
+          severity: 'error' as const,
+        },
+        {
+          rule: 'prettier/prettier',
+          file: 'bad.gts',
+          line: 7,
+          column: 1,
+          message: 'Insert `;`',
+          severity: 'error' as const,
+        },
+      ],
+    };
+    let config = makeConfig({
+      runLintInMemory: async () => stubResult,
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runLint = tools.find((t) => t.name === 'run_lint')!;
+
+    let result = (await runLint.execute({})) as typeof stubResult;
+
+    assert.strictEqual(result.status, 'failed');
+    assert.strictEqual(result.errorCount, 2);
+    assert.strictEqual(result.violations.length, 2);
+    assert.strictEqual(result.violations[0].rule, 'no-unused-vars');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // add_comment tool
 // ---------------------------------------------------------------------------
 

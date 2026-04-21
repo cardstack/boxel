@@ -16,6 +16,11 @@ import type {
 import { buildCardDocument } from './darkfactory-schemas';
 import type { ToolExecutor } from './factory-tool-executor';
 import type { ToolRegistry } from './factory-tool-registry';
+import {
+  runLintInMemory,
+  type RunLintInMemoryOptions,
+  type RunLintResult,
+} from './lint-execution';
 import { logger } from './logger';
 import { ensureJsonExtension, addCommentToIssue } from './realm-operations';
 
@@ -56,6 +61,8 @@ export interface ToolBuilderConfig {
       relationships?: Record<string, unknown>;
     }
   >;
+  /** Injected for testing — defaults to runLintInMemory. */
+  runLintInMemory?: (options: RunLintInMemoryOptions) => Promise<RunLintResult>;
 }
 
 export interface ToolCallEntry {
@@ -100,6 +107,7 @@ export function buildFactoryTools(
     buildFetchTranspiledModuleTool(config),
     buildSearchRealmTool(config),
     buildRunCommandTool(config),
+    buildRunLintTool(config),
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
@@ -576,6 +584,29 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
 
 // Note: buildRunTestsTool was removed — the validation pipeline runs tests
 // automatically via executeTestRunFromRealm after each agent turn.
+
+function buildRunLintTool(config: ToolBuilderConfig): FactoryTool {
+  let execute = config.runLintInMemory ?? runLintInMemory;
+  return {
+    name: 'run_lint',
+    description:
+      'Run ESLint + Prettier (with @cardstack/boxel rules) against every ' +
+      '.gts / .gjs / .ts / .js file in the target realm and return an ' +
+      'in-memory result (status, error/warning counts, per-violation ' +
+      'details). Safe to call repeatedly for mid-turn self-validation — ' +
+      'this tool does NOT create a LintResult card or any other realm ' +
+      'artifact. The orchestrator still runs the full validation pipeline ' +
+      '(which writes a LintResult card) automatically after signal_done, ' +
+      'so calling this is optional. Takes no arguments. Auth: per-realm JWT.',
+    parameters: { type: 'object', properties: {} },
+    execute: async () => {
+      return execute({
+        targetRealmUrl: config.targetRealmUrl,
+        client: config.client,
+      });
+    },
+  };
+}
 
 function buildSignalDoneTool(): FactoryTool {
   return {

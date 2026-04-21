@@ -40,6 +40,10 @@ The agent has these tools during the execution loop. Use them by name — they a
 
 - `run_command({ command, commandInput? })` — Execute a host command on the realm server via the prerenderer. Commands run in browser context with full card runtime access (Loader, CardAPI, services). Use the specifier format `@cardstack/boxel-host/commands/<name>/default`.
 
+### Self-Validation (optional, no side effects)
+
+- `run_lint()` — Run ESLint + Prettier (with `@cardstack/boxel` rules) against every `.gts` / `.gjs` / `.ts` / `.js` file in the target realm and return an in-memory result: `status`, `filesChecked`, `errorCount`, `warningCount`, and per-violation `{ rule, file, line, column, message, severity }`. **Does not write a `LintResult` card** — safe to call repeatedly mid-turn to self-check the source you just wrote. The orchestrator still runs the full lint validation (which writes the durable `LintResult`) automatically after `signal_done`, so calling this is optional.
+
 **Example — generate JSON schema for a card type:**
 
 ```
