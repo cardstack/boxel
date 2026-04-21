@@ -78,13 +78,17 @@ export default defineConfig({
   // `Class.name` in user-visible places — validation errors ("references
   // unknown path X on Person"), displayName fallbacks, the
   // query-field-schema checks — so mangled names break both tests and
-  // production error messages. The esbuild option covers dep-optimizer
-  // transforms; the rolldown output option is what actually preserves
-  // names through Vite 8's production minifier (oxc-minifier), including
-  // classes declared inside function bodies.
-  esbuild: {
-    keepNames: true,
-  },
+  // production error messages. The rolldown output option preserves names
+  // through Vite 8's production minifier (oxc-minifier), including classes
+  // declared inside function bodies.
+  //
+  // We DO NOT enable esbuild here. With `esbuild: { keepNames: true }`,
+  // vite routes .ts files through esbuild before rollup's babel plugin,
+  // and esbuild converts class fields (`x = foo()`) into constructor
+  // `__publicField(this, "x", foo())` calls. That breaks ember-concurrency's
+  // async-arrow-task-transform, which only matches ClassProperty nodes.
+  // Letting babel do all TypeScript handling keeps class fields intact
+  // through the async-arrow transform.
   build: {
     rolldownOptions: {
       output: {
