@@ -143,10 +143,15 @@ export class PagePool {
   // affinity share one BrowserContext so Chrome's HTTP cache + localStorage
   // survive individual page disposals. An entry stays alive with
   // `pageCount === 0` (orphan) across page churn; it's closed by
-  // disposeAffinity, auth-rotation-driven disposal, shutdown, or LRU
-  // eviction of orphans over the cap.
+  // disposeAffinity, auth-rotation-driven disposal, shutdown, or when the
+  // total shared-context count exceeds `#sharedContextCap` (LRU among
+  // orphans only — active contexts are never forcibly evicted).
   #sharedContexts = new Map<string, SharedContext>();
-  #orphanContextCap: number;
+  // Caps the TOTAL number of shared BrowserContexts retained. When the
+  // count grows past this, oldest orphans (pageCount === 0) are closed
+  // to release the excess. Active contexts (pageCount > 0) are not
+  // eligible for eviction — they belong to live traffic.
+  #sharedContextCap: number;
 
   constructor(options: {
     maxPages: number;
@@ -157,7 +162,7 @@ export class PagePool {
     renderSemaphore?: RenderSemaphore;
     disableStandbyRefill?: boolean;
     onAffinityDisposed?: (affinityKey: string) => void;
-    orphanContextCap?: number;
+    sharedContextCap?: number;
   }) {
     this.#maxPages = options.maxPages;
     let envTabMax = Number(process.env.PRERENDER_AFFINITY_TAB_MAX ?? 4);
@@ -172,14 +177,12 @@ export class PagePool {
     this.#renderSemaphore = options.renderSemaphore;
     this.#disableStandbyRefill = options.disableStandbyRefill ?? false;
     this.#onAffinityDisposed = options.onAffinityDisposed;
-    let envOrphanCap = Number(
-      process.env.PRERENDER_ORPHAN_CONTEXT_CAP ??
-        options.orphanContextCap ??
+    let envCap = Number(
+      process.env.PRERENDER_SHARED_CONTEXT_CAP ??
+        options.sharedContextCap ??
         16,
     );
-    this.#orphanContextCap = Number.isFinite(envOrphanCap)
-      ? Math.max(0, envOrphanCap)
-      : 16;
+    this.#sharedContextCap = Number.isFinite(envCap) ? Math.max(0, envCap) : 16;
   }
 
   set serverURL(url: string) {
@@ -328,6 +331,18 @@ export class PagePool {
       await this.#closeSharedContext(affinityKey);
       await this.#notifyManagerAffinityEvicted(affinityKey);
     } else {
+      // CS-10817: detach the shared context from `#sharedContexts`
+      // immediately so any concurrent getPage() call can't attach a
+      // replacement page to the context we're about to close. The
+      // detached reference is closed in the background once all the old
+      // entries' page.close() calls settle. A parallel acquire for this
+      // affinity during this window will create a FRESH context, which
+      // is the correct outcome — the affinity is being torn down.
+      let detached = this.#sharedContexts.get(affinityKey);
+      if (detached) {
+        detached.closing = true;
+        this.#sharedContexts.delete(affinityKey);
+      }
       let closePromises: Promise<void>[] = [];
       if (entries) {
         for (let entry of entries) {
@@ -346,11 +361,22 @@ export class PagePool {
           closePromises.push(closePromise);
         }
       }
-      // Close the shared context after all pages have been released so
-      // we don't race a pending render against context teardown.
-      void Promise.allSettled(closePromises).then(() =>
-        this.#closeSharedContext(affinityKey),
-      );
+      // Close the detached context after all pages have been released.
+      // Because it's already removed from the cache, this closes only
+      // the pre-disposal context — newly-attached pages (in a fresh
+      // context) are unaffected.
+      if (detached) {
+        void Promise.allSettled(closePromises).then(async () => {
+          try {
+            await detached.context.close();
+          } catch (e) {
+            log.warn(
+              `Error closing detached shared context for ${affinityKey}:`,
+              e,
+            );
+          }
+        });
+      }
       void this.#notifyManagerAffinityEvicted(affinityKey);
     }
     // Notify subscribers (e.g. Prerenderer's batch-ownership tracker) that
@@ -768,21 +794,52 @@ export class PagePool {
       );
     }
     this.#consoleErrorsByPageId.delete(standby.pageId);
+    return await this.#spawnPoolEntryInSharedContext(affinityKey);
+  }
+
+  // CS-10817: fresh pool entry attached to an affinity's shared context.
+  // The new page has no realm-specific state yet (auth is set by
+  // render-runner on first use), but it DOES need the host app booted
+  // via /_standby so render-runner can invoke `globalThis.boxelTransitionTo`
+  // later. Without this bootstrap, first use of the replacement page
+  // fails at `transitionTo()` / `page.evaluate()`.
+  async #spawnPoolEntryInSharedContext(
+    affinityKey: string,
+  ): Promise<PoolEntry> {
     let { context } = await this.#acquireSharedContext(affinityKey);
-    let page = await context.newPage();
-    let pageId = uuidv4();
-    let entry: PoolEntry = {
-      type: 'pool',
-      affinityKey,
-      context,
-      page,
-      pageId,
-      lastUsedAt: Date.now(),
-      queue: new TabQueue(),
-    };
-    this.#attachPageConsole(page, affinityKey, pageId);
-    this.#addAffinityEntry(affinityKey, entry);
-    return entry;
+    let page: Page | undefined;
+    try {
+      page = await context.newPage();
+      let pageId = uuidv4();
+      this.#attachPageConsole(page, affinityKey, pageId);
+      await this.#loadStandbyPage(page, pageId);
+      let entry: PoolEntry = {
+        type: 'pool',
+        affinityKey,
+        context,
+        page,
+        pageId,
+        lastUsedAt: Date.now(),
+        queue: new TabQueue(),
+      };
+      this.#addAffinityEntry(affinityKey, entry);
+      return entry;
+    } catch (e) {
+      // Roll back the pageCount bump from #acquireSharedContext and
+      // close the half-initialized page so we don't leak a Chrome tab.
+      if (page) {
+        try {
+          await page.close();
+        } catch (closeErr) {
+          log.debug(
+            `Error closing page after failed shared-context attach for ${affinityKey}:`,
+            closeErr,
+          );
+        }
+      }
+      this.#releaseSharedContext(affinityKey);
+      throw e;
+    }
   }
 
   // CS-10817: reassign an idle page from one affinity to another. Under
@@ -822,22 +879,11 @@ export class PagePool {
       this.#releaseSharedContext(oldAffinityKey);
     }
     this.#consoleErrorsByPageId.delete(oldEntry.pageId);
-    let { context } = await this.#acquireSharedContext(affinityKey);
-    let page = await context.newPage();
-    let pageId = uuidv4();
-    let queue = new TabQueue();
-    let releaseTab = await queue.acquire();
-    let entry: PoolEntry = {
-      type: 'pool',
-      affinityKey,
-      context,
-      page,
-      pageId,
-      lastUsedAt: Date.now(),
-      queue,
-    };
-    this.#attachPageConsole(page, affinityKey, pageId);
-    this.#addAffinityEntry(affinityKey, entry);
+    // Spawn the replacement in the destination affinity's shared context,
+    // including the /_standby bootstrap so RenderRunner's transitionTo /
+    // page.evaluate calls work on first use.
+    let entry = await this.#spawnPoolEntryInSharedContext(affinityKey);
+    let releaseTab = await entry.queue.acquire();
     return { entry, releaseTab };
   }
 
@@ -900,6 +946,11 @@ export class PagePool {
       lastUsedAt: Date.now(),
     };
     this.#sharedContexts.set(affinityKey, shared);
+    // Creating a new shared context is also a trigger for LRU eviction:
+    // we just grew the total count, and orphans may need to be shed to
+    // stay within the cap. Fire-and-forget — the eviction itself is a
+    // best-effort cleanup path.
+    void this.#maybeEvictOrphanContexts();
     return { context, shared };
   }
 
@@ -950,19 +1001,22 @@ export class PagePool {
     }
   }
 
-  // LRU-evict orphaned shared contexts (pageCount === 0) when the total
-  // count exceeds the cap. Keeps Chrome's per-context memory bounded in
-  // long-running prerender servers where realms come and go.
+  // When the total shared-context count exceeds `#sharedContextCap`, evict
+  // the oldest-lastUsedAt orphans (pageCount === 0) until we're back under
+  // the cap — or until we run out of orphans, whichever comes first. Active
+  // contexts (pageCount > 0) are never evicted; they belong to live traffic.
+  // Keeps Chrome's per-context memory bounded in long-running prerender
+  // servers where realms come and go.
   async #maybeEvictOrphanContexts(): Promise<void> {
+    if (this.#sharedContexts.size <= this.#sharedContextCap) return;
     let orphans: SharedContext[] = [];
     for (let shared of this.#sharedContexts.values()) {
       if (shared.pageCount === 0 && !shared.closing) {
         orphans.push(shared);
       }
     }
-    if (this.#sharedContexts.size <= this.#orphanContextCap) return;
-    let excess = this.#sharedContexts.size - this.#orphanContextCap;
-    if (excess <= 0) return;
+    if (orphans.length === 0) return;
+    let excess = this.#sharedContexts.size - this.#sharedContextCap;
     orphans.sort((a, b) => a.lastUsedAt - b.lastUsedAt);
     let toEvict = orphans.slice(0, excess);
     for (let shared of toEvict) {
@@ -975,29 +1029,33 @@ export class PagePool {
 
   async #closeEntry(entry: Entry, retainConsoleErrors = false): Promise<void> {
     let release: (() => void) | undefined;
+    entry.closing = true;
     try {
-      entry.closing = true;
       release = await entry.queue.acquire();
       if (entry.type === 'standby') {
         // Standbys own their BrowserContext entirely — no one else
         // references it. Close the full context.
-        await entry.context.close();
+        try {
+          await entry.context.close();
+        } catch (e) {
+          log.warn(`Error closing standby context:`, e);
+        }
       } else {
         // CS-10817: the context is shared across pages for this
         // affinity. Close only the page; release the context, which may
         // survive as an orphan for the next attach or be LRU-evicted.
-        await entry.page.close();
-        if (entry.affinityKey) {
-          this.#releaseSharedContext(entry.affinityKey);
+        // Release the shared context in a `finally` so a page.close()
+        // throw doesn't leak pageCount on the shared context.
+        try {
+          await entry.page.close();
+        } catch (e) {
+          log.warn(`Error closing pool page for ${entry.affinityKey}:`, e);
+        } finally {
+          if (entry.affinityKey) {
+            this.#releaseSharedContext(entry.affinityKey);
+          }
         }
       }
-    } catch (e) {
-      log.warn(
-        `Error closing entry for ${
-          entry.type === 'pool' ? entry.affinityKey : 'standby'
-        }:`,
-        e,
-      );
     } finally {
       release?.();
     }
