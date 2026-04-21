@@ -8,7 +8,7 @@ import {
 import { SprintTaskStatusField, Project } from './sprint-task';
 import LayoutKanbanIcon from '@cardstack/boxel-icons/layout-kanban';
 import { TaskPlanner, TaskCard } from './components/base-task-planner';
-import { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { LooseSingleCardDocument, type RealmResourceIdentifier } from '@cardstack/runtime-common';
 import {
   AnyFilter,
   CardTypeFilter,
@@ -46,7 +46,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
       ? {
           filter: {
             on: {
-              module: this.config.taskSource.module,
+              module: this.config.taskSource.module as RealmResourceIdentifier,
               name: this.config.taskSource.name,
             },
             every: everyArr,
@@ -55,7 +55,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
       : {
           filter: {
             type: {
-              module: this.config.taskSource.module,
+              module: this.config.taskSource.module as RealmResourceIdentifier,
               name: this.config.taskSource.name,
             },
           },
