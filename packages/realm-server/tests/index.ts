@@ -175,6 +175,7 @@ import './prerendering-test';
 import './prerender-server-test';
 import './prerender-manager-test';
 import './prerender-batch-ownership-test';
+import './prerender-shared-context-test';
 import './prerender-proxy-test';
 import './queue-test';
 import './run-command-task-test';

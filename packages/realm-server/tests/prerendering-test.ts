@@ -131,6 +131,13 @@ function makeStubPagePool(
                 (globalThis as any).localStorage = originalLocalStorage;
               }
             },
+            async close() {
+              // CS-10817: PagePool now closes individual pages (without
+              // closing the shared context) on entry disposal. No-op in
+              // the mock — bookkeeping happens via the context-level
+              // onContextClosed hook.
+              return;
+            },
             browserContext() {
               return context;
             },
