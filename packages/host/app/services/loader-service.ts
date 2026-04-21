@@ -30,6 +30,12 @@ import type ResetService from './reset';
 
 const log = logger('loader-service');
 
+// DELIBERATE LEAK — exists only to exercise the per-module MEMPROBE_FILE
+// probe in CI. Every LoaderService owner (one per test) pushes a 256KB
+// buffer into this module-level array, which never gets released, so the
+// per-module `delta=` grows with the test count. Revert before landing.
+const __memprobeLeak: Uint8Array[] = [];
+
 export default class LoaderService extends Service {
   @service declare private realmInfoService: RealmInfoService;
   @service declare private realm: RealmService;
@@ -47,6 +53,9 @@ export default class LoaderService extends Service {
       this.resetState();
     }
     registerDestructor(this, () => this.resetState());
+    let buf = new Uint8Array(256 * 1024);
+    buf.fill(0xab);
+    __memprobeLeak.push(buf);
   }
 
   public resetState() {
