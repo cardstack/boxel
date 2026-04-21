@@ -35,8 +35,15 @@ export async function transpileJS(
   }
 
   const processor = new ContentTag.Preprocessor();
+  // content-tag surfaces this filename in user-facing "Parse Error at ..."
+  // messages. The caller passes an absolute path (e.g. "/broken.gts") so
+  // babel's moduleName resolution is deterministic, but for error messages
+  // we want the cleaner relative form.
+  let contentTagFilename = debugFilename.startsWith('/')
+    ? debugFilename.slice(1)
+    : debugFilename;
   content = processor.process(content, {
-    filename: debugFilename,
+    filename: contentTagFilename,
     inline_source_map: true,
   }).code;
 
