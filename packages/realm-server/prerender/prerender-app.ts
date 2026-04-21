@@ -702,9 +702,10 @@ async function unregisterWithManager(serverURL: string) {
 export function createPrerenderHttpServer(options?: {
   maxPages?: number;
   port?: number;
-  // Default true. In tests pass false: the fatal handler calls process.exit(1),
-  // which tears down the qunit runner before teardown hooks can release
-  // hardcoded test ports (CS-10813).
+  // Default true. Gates the process-wide uncaughtException AND
+  // unhandledRejection handlers, both of which call process.exit(1). In tests
+  // pass false so the qunit runner isn't torn down before teardown hooks can
+  // release hardcoded test ports (CS-10813).
   fatalExitOnUncaught?: boolean;
 }): Server {
   let draining = false;
