@@ -4206,7 +4206,7 @@ module('Integration | serialization', function (hooks) {
       @field cardTitle = contains(StringField);
       @field favorite = linksTo(Person, {
         query: {
-          realm: '$thisRealm',
+          realm: '$REALM',
           filter: {
             eq: { cardTitle: '$this.cardTitle' },
           },
@@ -4214,7 +4214,7 @@ module('Integration | serialization', function (hooks) {
       });
       @field matches = linksToMany(Person, {
         query: {
-          realm: '$thisRealm',
+          realm: '$REALM',
           filter: {
             eq: { cardTitle: '$this.cardTitle' },
           },
@@ -4224,7 +4224,7 @@ module('Integration | serialization', function (hooks) {
       });
       @field emptyMatches = linksToMany(Person, {
         query: {
-          realm: '$thisRealm',
+          realm: '$REALM',
           filter: {
             eq: { cardTitle: 'Missing' },
           },

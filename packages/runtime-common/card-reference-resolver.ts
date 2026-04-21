@@ -115,7 +115,7 @@ export function cardIdToURL(id: string): URL {
  * Resolution rules:
  * - Absolute URL or registered prefix → return as-is
  * - Relative (`./`, `../`, bare name) → resolve against `relativeTo`
- * - `$thisRealm/` → resolve against the realm root of `relativeTo`
+ * - `$REALM/` → resolve against the realm root of `relativeTo`
  * - `/` or `~/` prefixed → throw (not valid RRI forms)
  */
 export function resolveRRI(
@@ -146,9 +146,9 @@ export function resolveRRI(
   let isUrlRelativeTo =
     relativeTo.startsWith('http://') || relativeTo.startsWith('https://');
 
-  // $thisRealm/ — resolve against the realm root
-  if (reference.startsWith('$thisRealm/')) {
-    let path = reference.slice('$thisRealm/'.length);
+  // $REALM/ — resolve against the realm root
+  if (reference.startsWith('$REALM/')) {
+    let path = reference.slice('$REALM/'.length);
     if (isUrlRelativeTo) {
       for (let [, target] of prefixMappings) {
         if (relativeTo.startsWith(target)) {
@@ -156,7 +156,7 @@ export function resolveRRI(
         }
       }
       throw new Error(
-        `Cannot resolve "$thisRealm/" — no realm root found for "${relativeTo}"`,
+        `Cannot resolve "$REALM/" — no realm root found for "${relativeTo}"`,
       );
     }
     for (let [prefix] of prefixMappings) {

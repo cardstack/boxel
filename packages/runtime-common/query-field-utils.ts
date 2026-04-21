@@ -29,7 +29,7 @@ const EMPTY_PREDICATE_KEYS = new Set([
 ]);
 
 export const THIS_INTERPOLATION_PREFIX = '$this.';
-export const THIS_REALM_TOKEN = '$thisRealm';
+export const THIS_REALM_TOKEN = '$REALM';
 
 export interface NormalizeQueryDefinitionParams {
   fieldDefinition: FieldDefinition;
