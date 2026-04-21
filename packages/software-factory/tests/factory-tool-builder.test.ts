@@ -1017,17 +1017,20 @@ module(
 // ---------------------------------------------------------------------------
 
 module('buildFactoryTools — run_lint', function () {
-  test('registers run_lint with empty parameters', function (assert) {
+  test('registers run_lint with an optional path parameter', function (assert) {
     let config = makeConfig();
     let { executor } = createMockToolExecutor(new Map());
     let tools = buildFactoryTools(config, executor, new ToolRegistry());
     let runLint = tools.find((t) => t.name === 'run_lint')!;
     assert.ok(runLint, 'run_lint tool is registered');
-    assert.deepEqual(
-      runLint.parameters,
-      { type: 'object', properties: {} },
-      'run_lint takes no arguments',
-    );
+    let params = runLint.parameters as {
+      type: string;
+      properties: Record<string, { type: string }>;
+      required?: string[];
+    };
+    assert.strictEqual(params.type, 'object');
+    assert.strictEqual(params.properties.path.type, 'string');
+    assert.strictEqual(params.required, undefined, 'path is optional');
   });
 
   test('delegates to injected runLintInMemory and forwards realm config', async function (assert) {
@@ -1035,6 +1038,7 @@ module('buildFactoryTools — run_lint', function () {
       | {
           targetRealmUrl: string;
           hasClient: boolean;
+          path: string | undefined;
         }
       | undefined;
     let stubResult = {
@@ -1053,6 +1057,7 @@ module('buildFactoryTools — run_lint', function () {
         capturedOptions = {
           targetRealmUrl: options.targetRealmUrl,
           hasClient: Boolean(options.client),
+          path: options.path,
         };
         return stubResult;
       },
@@ -1072,6 +1077,86 @@ module('buildFactoryTools — run_lint', function () {
     assert.true(
       capturedOptions?.hasClient,
       'forwards the configured BoxelCLIClient',
+    );
+    assert.strictEqual(
+      capturedOptions?.path,
+      undefined,
+      'path is omitted when not provided',
+    );
+  });
+
+  test('forwards path when provided to single-file lint', async function (assert) {
+    let capturedPath: string | undefined;
+    let stubResult = {
+      status: 'failed' as const,
+      filesChecked: 1,
+      filesWithErrors: 1,
+      errorCount: 1,
+      warningCount: 0,
+      durationMs: 8,
+      lintableFiles: ['my-card.gts'],
+      violations: [
+        {
+          rule: 'no-unused-vars',
+          file: 'my-card.gts',
+          line: 3,
+          column: 5,
+          message: "'unusedVar' is assigned a value but never used.",
+          severity: 'error' as const,
+        },
+      ],
+    };
+
+    let config = makeConfig({
+      runLintInMemory: async (options) => {
+        capturedPath = options.path;
+        return stubResult;
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runLint = tools.find((t) => t.name === 'run_lint')!;
+
+    let result = (await runLint.execute({
+      path: 'my-card.gts',
+    })) as typeof stubResult;
+
+    assert.strictEqual(
+      capturedPath,
+      'my-card.gts',
+      'path is forwarded to the engine',
+    );
+    assert.strictEqual(result.status, 'failed');
+    assert.deepEqual(result.lintableFiles, ['my-card.gts']);
+  });
+
+  test('empty-string path is treated as "no path" (whole-realm lint)', async function (assert) {
+    let capturedPath: string | undefined;
+    let config = makeConfig({
+      runLintInMemory: async (options) => {
+        capturedPath = options.path;
+        return {
+          status: 'passed' as const,
+          filesChecked: 0,
+          filesWithErrors: 0,
+          errorCount: 0,
+          warningCount: 0,
+          durationMs: 0,
+          lintableFiles: [],
+          violations: [],
+        };
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runLint = tools.find((t) => t.name === 'run_lint')!;
+
+    await runLint.execute({ path: '   ' });
+
+    assert.strictEqual(
+      capturedPath,
+      undefined,
+      'whitespace-only path falls back to whole-realm lint',
     );
   });
 

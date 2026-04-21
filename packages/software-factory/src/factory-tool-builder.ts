@@ -590,19 +590,36 @@ function buildRunLintTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'run_lint',
     description:
-      'Run ESLint + Prettier (with @cardstack/boxel rules) against every ' +
-      '.gts / .gjs / .ts / .js file in the target realm and return an ' +
+      'Run ESLint + Prettier (with @cardstack/boxel rules) and return an ' +
       'in-memory result (status, error/warning counts, per-violation ' +
-      'details). Safe to call repeatedly for mid-turn self-validation — ' +
+      'details). Without "path", lints every .gts / .gjs / .ts / .js file ' +
+      'in the target realm. With "path", lints only that single realm-' +
+      'relative file — handy for a quick self-check right after writing ' +
+      'one file. Safe to call repeatedly for mid-turn self-validation — ' +
       'this tool does NOT create a LintResult card or any other realm ' +
       'artifact. The orchestrator still runs the full validation pipeline ' +
       '(which writes a LintResult card) automatically after signal_done, ' +
-      'so calling this is optional. Takes no arguments. Auth: per-realm JWT.',
-    parameters: { type: 'object', properties: {} },
-    execute: async () => {
+      'so calling this is optional. Auth: per-realm JWT.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Optional realm-relative path to a single .gts / .gjs / .ts / .js file to lint. Omit to lint every lintable file in the target realm.',
+        },
+      },
+    },
+    execute: async (args) => {
+      let rawPath = args.path;
+      let path =
+        typeof rawPath === 'string' && rawPath.trim() !== ''
+          ? rawPath.trim()
+          : undefined;
       return execute({
         targetRealmUrl: config.targetRealmUrl,
         client: config.client,
+        ...(path ? { path } : {}),
       });
     },
   };

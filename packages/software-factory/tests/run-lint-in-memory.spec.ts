@@ -179,4 +179,92 @@ test.describe('runLintInMemory e2e', () => {
     expect(result.lintableFiles).toEqual([]);
     expect(result.violations).toEqual([]);
   });
+
+  test('path option: lints only the named file and skips the rest of the realm', async ({
+    realm,
+  }) => {
+    let realmUrl = realm.realmURL.href;
+    let authorization = realm.authorizationHeaders()['Authorization'];
+    let serverToken = `Bearer ${realm.serverToken}`;
+
+    let { client, cleanup } = buildTestClient({
+      realmUrl,
+      realmToken: authorization,
+      realmServerUrl: realm.realmServerURL.href,
+      realmServerToken: serverToken,
+    });
+
+    try {
+      // Seed a dirty file alongside the fixture's clean hello.gts.
+      let writeResult = await client.write(
+        realmUrl,
+        'bad-lint.gts',
+        BAD_LINT_GTS,
+      );
+      expect(writeResult.ok).toBe(true);
+      let indexed = await client.waitForFile(realmUrl, 'bad-lint.gts', {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
+      expect(indexed).toBe(true);
+
+      // Lint only the clean file — should pass even though bad-lint.gts is dirty.
+      let cleanOnly = await runLintInMemory({
+        targetRealmUrl: realmUrl,
+        client,
+        path: 'hello.gts',
+      });
+      expect(cleanOnly.status).toBe('passed');
+      expect(cleanOnly.lintableFiles).toEqual(['hello.gts']);
+      expect(cleanOnly.filesChecked).toBe(1);
+      expect(cleanOnly.errorCount).toBe(0);
+
+      // Lint only the dirty file — should fail and mention only that file.
+      let dirtyOnly = await runLintInMemory({
+        targetRealmUrl: realmUrl,
+        client,
+        path: 'bad-lint.gts',
+      });
+      expect(dirtyOnly.status).toBe('failed');
+      expect(dirtyOnly.lintableFiles).toEqual(['bad-lint.gts']);
+      expect(dirtyOnly.filesChecked).toBe(1);
+      expect(dirtyOnly.errorCount).toBeGreaterThan(0);
+      let fileSet = new Set(dirtyOnly.violations.map((v) => v.file));
+      expect(Array.from(fileSet)).toEqual(['bad-lint.gts']);
+
+      // Still no realm artifact written.
+      let listing = await client.listFiles(realmUrl);
+      let validationArtifacts = (listing.filenames ?? []).filter((f) =>
+        f.startsWith('Validations/lint_'),
+      );
+      expect(validationArtifacts).toEqual([]);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('path option: non-lintable extension returns status: error without a realm call', async () => {
+    let listFilesCalls = 0;
+    let stubClient: BoxelCLIClient = {
+      listFiles: async () => {
+        listFilesCalls += 1;
+        return { filenames: [] };
+      },
+      lint: async () => {
+        throw new Error('should not be called for non-lintable path');
+      },
+    } as unknown as BoxelCLIClient;
+
+    let result = await runLintInMemory({
+      targetRealmUrl: 'http://localhost:1/',
+      client: stubClient,
+      path: 'Spec/sticky-note.json',
+    });
+
+    expect(result.status).toBe('error');
+    expect(result.errorMessage).toContain('not lintable');
+    expect(result.lintableFiles).toEqual([]);
+    expect(result.violations).toEqual([]);
+    expect(listFilesCalls).toBe(0);
+  });
 });

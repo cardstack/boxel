@@ -42,7 +42,7 @@ The agent has these tools during the execution loop. Use them by name — they a
 
 ### Self-Validation (optional, no side effects)
 
-- `run_lint()` — Run ESLint + Prettier (with `@cardstack/boxel` rules) against every `.gts` / `.gjs` / `.ts` / `.js` file in the target realm and return an in-memory result: `status`, `filesChecked`, `errorCount`, `warningCount`, and per-violation `{ rule, file, line, column, message, severity }`. **Does not write a `LintResult` card** — safe to call repeatedly mid-turn to self-check the source you just wrote. The orchestrator still runs the full lint validation (which writes the durable `LintResult`) automatically after `signal_done`, so calling this is optional.
+- `run_lint({ path? })` — Run ESLint + Prettier (with `@cardstack/boxel` rules) and return an in-memory `RunLintResult` with `status`, `filesChecked`, `filesWithErrors`, `errorCount`, `warningCount`, `durationMs`, `lintableFiles`, and per-violation `{ rule, file, line, column, message, severity }`. Without `path`, lints every `.gts` / `.gjs` / `.ts` / `.js` file in the target realm. With `path` (realm-relative file path), lints **only that one file** — prefer this right after writing or editing a single file. **Does not write a `LintResult` card** — safe to call repeatedly mid-turn. The orchestrator still runs the full lint validation (which writes the durable `LintResult`) automatically after `signal_done`, so calling this is optional.
 
 **Example — generate JSON schema for a card type:**
 

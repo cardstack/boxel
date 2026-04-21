@@ -57,7 +57,6 @@ export interface LintRealmFilesOptions {
 }
 
 export interface LintRealmFilesOutput {
-  lintableFiles: string[];
   fileResults: LintFileResultData[];
   /** Error-severity violations, flattened across files. */
   errorViolations: LintErrorViolation[];
@@ -71,6 +70,14 @@ export interface LintRealmFilesOutput {
 export interface RunLintInMemoryOptions {
   targetRealmUrl: string;
   client: BoxelCLIClient;
+  /**
+   * When set, lint only this realm-relative file instead of discovering
+   * all lintable files. Useful for mid-turn self-validation right after
+   * writing a single file. The extension must be one of `.gts`, `.gjs`,
+   * `.ts`, or `.js` — other paths return `status: 'error'` without
+   * calling the realm.
+   */
+  path?: string;
 }
 
 export interface RunLintViolation {
@@ -135,7 +142,7 @@ export async function discoverLintableFiles(
 export async function lintRealmFiles(
   options: LintRealmFilesOptions,
   files: string[],
-): Promise<Omit<LintRealmFilesOutput, 'lintableFiles'>> {
+): Promise<LintRealmFilesOutput> {
   let lintFileFn =
     options.lintFileFn ??
     ((realmUrl: string, source: string, filename: string) =>
@@ -232,15 +239,24 @@ export async function runLintInMemory(
   options: RunLintInMemoryOptions,
 ): Promise<RunLintResult> {
   let lintableFiles: string[];
-  try {
-    lintableFiles = await discoverLintableFiles({
-      targetRealmUrl: options.targetRealmUrl,
-      client: options.client,
-    });
-  } catch (err) {
-    return emptyErrorResult(
-      `Failed to discover lintable files: ${err instanceof Error ? err.message : String(err)}`,
-    );
+  if (options.path) {
+    if (!LINTABLE_EXTENSIONS.some((ext) => options.path!.endsWith(ext))) {
+      return emptyErrorResult(
+        `Path "${options.path}" is not lintable — must end with one of ${LINTABLE_EXTENSIONS.join(', ')}`,
+      );
+    }
+    lintableFiles = [options.path];
+  } else {
+    try {
+      lintableFiles = await discoverLintableFiles({
+        targetRealmUrl: options.targetRealmUrl,
+        client: options.client,
+      });
+    } catch (err) {
+      return emptyErrorResult(
+        `Failed to discover lintable files: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   if (lintableFiles.length === 0) {
