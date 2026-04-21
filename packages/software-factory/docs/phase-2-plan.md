@@ -138,6 +138,14 @@ When `readFile` returns a parsed `document` (as the realm API does for `.json` f
 
 **Performance:** The tsconfig content is cached in memory (it never changes between runs). The `node_modules` symlink avoids copying hundreds of megabytes of dependencies.
 
+**Shared engine.** The discovery, glint invocation, and per-file parse loop live in `src/parse-execution.ts` (`discoverParseableGtsFiles` + `discoverJsonExampleFiles` + `parseRealmFiles`, plus the glint runner and JSON validators). Both the validation pipeline's `ParseValidationStep` (which owns `ParseResult` artifact lifecycle) and the in-memory `run_parse` agent tool (see below) consume the same engine, so parse coverage stays identical.
+
+### In-Memory `run_parse` Agent Tool (CS-10778)
+
+The agent also has a `run_parse` tool exposed on the factory tool set. It runs the same discovery + glint / JSON engine as the validation step and returns a flat, JSON-friendly `RunParseResult` (`status`, `filesChecked`, `filesWithErrors`, `errorCount`, `durationMs`, `parseableFiles`, `errors[{ file, line, column, message }]`). Unlike `ParseValidationStep`, it **does not create a `ParseResult` card** — no realm artifact is written, so it's safe to call repeatedly for mid-turn self-validation before `signal_done`. The orchestrator's post-`signal_done` parse validation still writes the durable `ParseResult`.
+
+The tool accepts an optional `path` argument. When omitted, every `.gts` / `.gjs` / `.ts` file in the realm is type-checked AND every `.json` file listed as a Spec `linkedExample` is validated (matching the validation step's behavior). When supplied, the tool skips discovery and parses only that one realm-relative file — `.gts` / `.gjs` / `.ts` runs through glint; `.json` is parsed and checked for card document structure. Paths with non-parseable extensions (`.md`, etc.) short-circuit to `status: 'error'` without calling the realm.
+
 The `ParseResult` card definition (`realm/parse-result.gts`) and CRUD (`src/parse-result-cards.ts`) follow the same patterns as `LintResult` and `EvalResult` — fitted/embedded/isolated templates, a running state, `ParseFileResult` field def with nested `ParseError` entries, and links to Issue/Project.
 
 ### Lint Step Details (CS-10714)
@@ -552,6 +560,14 @@ Rationale for reintroduction: the original `run_tests` tool was removed because 
 The `run_evaluate` tool lets the agent evaluate one (or every non-test) ESM module in the target realm via the prerenderer sandbox and get back a flat `RunEvaluateResult` (`status`, `modulesChecked`, `modulesWithErrors`, `durationMs`, `evaluableFiles`, `failures: { path, error, stackTrace? }[]`). Unlike the pipeline's `EvalValidationStep`, it does NOT write an `EvalResult` card — so the agent can call it mid-turn as many times as it likes without creating realm artifacts. The orchestrator still runs the full validation pipeline (which writes the durable `EvalResult` card) after `signal_done`, so calling this tool is optional.
 
 Discovery (all non-test `.gts` / `.gjs` / `.ts` / `.js` files, alphabetical) and per-module evaluation now live in the shared `src/eval-execution.ts` engine, used by both `EvalValidationStep` (card-writing path) and `runEvaluateInMemory` (tool path). The `path` parameter accepts a single realm-relative file; non-evaluable extensions and test files (`*.test.*`) short-circuit to `status: 'error'` without calling the realm.
+
+Failure line/column numbers still reference the transpiled module — the tool description points the agent at `fetch_transpiled_module` for debugging while making explicit that transpiled output is read-only scratch and must never be copied into source.
+
+### run_instantiate: In-Memory Self-Validation (CS-10823)
+
+The `run_instantiate` tool lets the agent instantiate example card instances in the target realm via the prerenderer sandbox and get back a flat `RunInstantiateResult` (`status`, `instancesChecked`, `instancesWithErrors`, `durationMs`, `instanceFiles`, `failures: { path, cardName, error, stackTrace? }[]`). Unlike the pipeline's `InstantiateValidationStep`, it does NOT write an `InstantiateResult` card — so the agent can call it mid-turn as many times as it likes without creating realm artifacts. The orchestrator still runs the full validation pipeline (which writes the durable `InstantiateResult` card) after `signal_done`, so calling this tool is optional.
+
+Discovery (every Spec card in the realm, every `linkedExample` on every card/app Spec — same spec-based discovery the validation step uses) and per-instance instantiation now live in the shared `src/instantiate-execution.ts` engine, used by both `InstantiateValidationStep` (card-writing path) and `runInstantiateInMemory` (tool path). Spec-discovered example paths are normalized to `.json`-suffixed realm-relative form (Boxel relationship `self` links are extensionless) so the tool's `instanceFiles` list has the same shape whether the tool was called with or without `path`. The `path` parameter accepts a single realm-relative `.json` file and skips spec discovery entirely — the example's `meta.adoptsFrom` supplies the module + card name. Non-`.json` paths short-circuit to `status: 'error'` without calling the realm.
 
 Failure line/column numbers still reference the transpiled module — the tool description points the agent at `fetch_transpiled_module` for debugging while making explicit that transpiled output is read-only scratch and must never be copied into source.
 
