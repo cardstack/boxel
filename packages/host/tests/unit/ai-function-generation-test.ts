@@ -436,7 +436,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
 
     class NewField extends FieldDef {
       static displayName = 'NewField';
-      static [primitive]: number;
+      static [primitive] = undefined as unknown as number;
     }
 
     class TestCard extends CardDef {
