@@ -7,7 +7,7 @@
  * - RealmIssueRelationshipLoader for context building
  * - ContextBuilder with issue-aware mode
  * - ToolRegistry, ToolExecutor, FactoryTool[] via buildFactoryTools
- * - ToolUseFactoryAgent as the LoopAgent
+ * - OpenRouterFactoryAgent as the LoopAgent
  * - ValidationPipeline as the Validator
  * - runIssueLoop() invocation
  */
@@ -21,11 +21,13 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { logger } from './logger';
 
 import {
-  resolveFactoryModel,
-  ToolUseFactoryAgent,
+  ClaudeCodeFactoryAgent,
+  OpenRouterFactoryAgent,
+  FACTORY_DEFAULT_OPENROUTER_MODEL,
   type FactoryAgentConfig,
+  type FactoryAgentProvider,
+  type LoopAgent,
 } from './factory-agent';
-import type { LoopAgent } from './factory-agent-types';
 import { ContextBuilder } from './factory-context-builder';
 import { inferDarkfactoryModuleUrl } from './factory-seed';
 import { DefaultSkillResolver, SkillLoader } from './factory-skill-loader';
@@ -65,10 +67,13 @@ export interface IssueLoopWiringConfig {
   ownerUsername: string;
   /** Boxel CLI client — owns all realm auth and API calls. */
   client: BoxelCLIClient;
-  model?: string;
+  /** Which LLM backend to use. Defaults to 'claude'. */
+  agent?: FactoryAgentProvider;
+  /** Explicit OpenRouter model id; only honoured when agent === 'openrouter'. */
+  openRouterModel?: string;
   debug?: boolean;
-  /** Override the agent (injectable for testing). */
-  agent?: LoopAgent;
+  /** Inject a pre-built LoopAgent instance (tests only). Wins over `agent`. */
+  agentOverride?: LoopAgent;
   /** Host app URL for QUnit live-test page. */
   hostAppUrl?: string;
   /** Max inner-loop iterations per issue. Default: 5. */
@@ -171,15 +176,28 @@ export async function runFactoryIssueLoop(
   );
 
   // 4. Agent
-  let model = resolveFactoryModel(config.model);
-  let agent: LoopAgent =
-    config.agent ??
-    new ToolUseFactoryAgent({
-      model,
+  let provider: FactoryAgentProvider = config.agent ?? 'claude';
+  let agent: LoopAgent;
+  if (config.agentOverride) {
+    agent = config.agentOverride;
+    log.info(`Agent backend: override (${agent.constructor.name})`);
+  } else {
+    let built = createLoopAgentWithLabel({
+      provider,
+      openRouterModel: config.openRouterModel,
       realmServerUrl,
       client,
       debug: config.debug,
-    } satisfies FactoryAgentConfig);
+    });
+    agent = built.agent;
+    // For the claude backend, the specific model is only known after the
+    // Agent SDK's first `init` event — `ClaudeCodeFactoryAgent` logs a
+    // single `Agent backend: claude (model=<id>)` line there to avoid a
+    // redundant "backend without model" line here.
+    if (provider !== 'claude') {
+      log.info(`Agent backend: ${built.label}`);
+    }
+  }
 
   // 5. Validator factory
   let createValidator = (issueId: string) =>
@@ -197,9 +215,7 @@ export async function runFactoryIssueLoop(
     });
 
   // 6. Run issue loop
-  log.info(
-    `Starting issue loop: targetRealm=${targetRealmUrl}, model=${model}`,
-  );
+  log.info(`Starting issue loop: targetRealm=${targetRealmUrl}`);
 
   let issueLoopConfig: IssueLoopConfig = {
     agent,
@@ -214,6 +230,85 @@ export async function runFactoryIssueLoop(
   };
 
   return runIssueLoop(issueLoopConfig);
+}
+
+// ---------------------------------------------------------------------------
+// Agent backend dispatcher
+// ---------------------------------------------------------------------------
+
+export interface CreateLoopAgentConfig {
+  provider: FactoryAgentProvider;
+  /** Only used when provider === 'openrouter'. */
+  openRouterModel?: string;
+  realmServerUrl: string;
+  client: BoxelCLIClient;
+  debug?: boolean;
+}
+
+/**
+ * Fail fast when a `--agent` provider is recognized but not yet implemented.
+ *
+ * Call this before doing any work that has observable side effects (brief
+ * fetch, realm bootstrap, seed-issue creation) so an unsupported backend
+ * doesn't leave half-created state behind. It is also called defensively
+ * inside `createLoopAgent()` so a caller that skips the early check still
+ * errors out before the agent is used.
+ */
+export function assertAgentProviderImplemented(
+  provider: FactoryAgentProvider,
+): void {
+  if (provider === 'codex') {
+    throw new Error(
+      'Codex CLI native agent is not yet implemented. ' +
+        'Re-run with --agent openrouter (tracked in CS-10594).',
+    );
+  }
+}
+
+export function createLoopAgent(config: CreateLoopAgentConfig): LoopAgent {
+  return createLoopAgentWithLabel(config).agent;
+}
+
+/**
+ * Variant of `createLoopAgent` that also returns a human-readable label for
+ * logging (e.g., `"openrouter (model=anthropic/claude-opus-4)"`). The wiring
+ * logs the label so operators can tell at a glance which backend — and, for
+ * OpenRouter, which model — is driving the run.
+ */
+export function createLoopAgentWithLabel(config: CreateLoopAgentConfig): {
+  agent: LoopAgent;
+  label: string;
+} {
+  assertAgentProviderImplemented(config.provider);
+  switch (config.provider) {
+    case 'claude':
+      return {
+        agent: new ClaudeCodeFactoryAgent({ debug: config.debug }),
+        label: 'claude',
+      };
+
+    case 'codex':
+      // Unreachable — assertAgentProviderImplemented() threw above. The
+      // case remains so exhaustiveness checks on FactoryAgentProvider stay
+      // meaningful if a future provider reuses this pattern.
+      throw new Error('unreachable');
+
+    case 'openrouter': {
+      let model =
+        config.openRouterModel && config.openRouterModel.trim() !== ''
+          ? config.openRouterModel.trim()
+          : FACTORY_DEFAULT_OPENROUTER_MODEL;
+      return {
+        agent: new OpenRouterFactoryAgent({
+          model,
+          realmServerUrl: config.realmServerUrl,
+          client: config.client,
+          debug: config.debug,
+        } satisfies FactoryAgentConfig),
+        label: `openrouter (model=${model})`,
+      };
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

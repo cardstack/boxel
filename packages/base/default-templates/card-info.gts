@@ -173,7 +173,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
           <div class='cardInfo-thumbnail-container'>
             <CardInfoImageContainer
               class='cardInfo-thumbnail-preview'
-              @cardThumbnailURL={{@model.cardInfo.cardThumbnailURL}}
+              @cardThumbnailURL={{@model.cardThumbnailURL}}
               @icon={{@model.constructor.icon}}
               data-test-thumbnail-image
             />

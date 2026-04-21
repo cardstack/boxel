@@ -49,6 +49,32 @@ pnpm build
 pnpm start
 ```
 
+### Local Development with `npm link`
+
+To use your locally-built `boxel-cli` instead of the npm-installed version:
+
+```bash
+# 1. Build the CLI
+cd packages/boxel-cli
+pnpm build
+
+# 2. Create a global symlink from the package directory
+npm link
+
+# 3. Verify the global `boxel` command now points to your local build
+which boxel
+boxel --version
+```
+
+To revert to the npm-installed version:
+
+```bash
+npm unlink -g @cardstack/boxel-cli
+npm install -g @cardstack/boxel-cli
+```
+
+**Note:** After making source changes, re-run `pnpm build` in `packages/boxel-cli` for the linked command to reflect updates. Alternatively, use `pnpm start` during development to run directly from TypeScript source without rebuilding.
+
 ### Code Quality
 
 ```bash

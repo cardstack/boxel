@@ -25,6 +25,7 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import AuthedFetchCommand from './authed-fetch';
 import CreateSpecCommand from './create-specs';
+import GenerateThumbnailCommand from './generate-thumbnail';
 import GetCardCommand from './get-card';
 import GetCatalogRealmUrlsCommand from './get-catalog-realm-urls';
 import GetRealmOfUrlCommand from './get-realm-of-url';
@@ -174,6 +175,11 @@ export default class ListingCreateCommand extends HostBaseCommand<
           );
         }
       });
+    });
+
+    // Fire-and-forget thumbnail generation (external API call, should not block modal)
+    this.autoGenerateThumbnail(listingCard, codeRef, targetRealm).catch((e) => {
+      console.warn('Failed to auto-generate thumbnail:', e);
     });
 
     const { ListingCreateResult } = commandModule;
@@ -545,6 +551,25 @@ export default class ListingCreateCommand extends HostBaseCommand<
       },
     );
     (listing as any).categories = selected;
+  }
+
+  private async autoGenerateThumbnail(
+    listing: CardAPI.CardDef,
+    codeRef: ResolvedCodeRef,
+    targetRealm: string,
+  ) {
+    if (!listing.id) {
+      return;
+    }
+    const prompt = `Create a square thumbnail for "${codeRef.name}". Top 70%: large centered flat icon (simple, bold, minimal, slightly angled/layered if needed). Bottom 30%: "${codeRef.name}" in big, bold, uppercase sans-serif text. Style: flat vector, solid vivid background, 2–3 colors max. Icon should be white or light-colored, clean geometric shapes, highly recognizable. No gradients, no shadows, no borders, no clutter. Must be clear at small sizes.`;
+
+    await new GenerateThumbnailCommand(this.commandContext).execute({
+      prompt,
+      targetRealmUrl: targetRealm,
+      targetPath: 'ListingThumbnails', // Wrap all thumbnails in a "ListingThumbnails" folder to keep the realm tidy
+      targetCardId: listing.id,
+      cardName: codeRef.name,
+    });
   }
 
   private async getStringPatch(opts: {
