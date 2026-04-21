@@ -15,6 +15,16 @@ import {
   type BotTriggerEventContent,
 } from './create-listing-pr-handler';
 import type { GitHubClient } from './github';
+import {
+  runLintOnSubmissionFiles,
+  type LintOutcome,
+  type SubmissionFile,
+} from '@cardstack/runtime-common/lint/submission-lint';
+
+export type LintSubmissionFilesFn = (
+  files: SubmissionFile[],
+  opts: { roomId: string; listingId: string },
+) => Promise<LintOutcome>;
 
 const log = logger('bot-runner');
 const COLLECT_SUBMISSION_FILES_COMMAND =
@@ -26,14 +36,17 @@ const PATCH_CARD_INSTANCE_COMMAND =
 
 export class CommandRunner {
   private createListingPRHandler: CreateListingPRHandler;
+  private lintSubmissionFiles: LintSubmissionFilesFn;
 
   constructor(
     private submissionBotUserId: string,
     private dbAdapter: DBAdapter,
     private queuePublisher: QueuePublisher,
     githubClient: GitHubClient,
+    lintSubmissionFiles: LintSubmissionFilesFn = runLintOnSubmissionFiles,
   ) {
     this.createListingPRHandler = new CreateListingPRHandler(githubClient);
+    this.lintSubmissionFiles = lintSubmissionFiles;
   }
 
   async maybeEnqueueCommand(
@@ -140,6 +153,108 @@ export class CommandRunner {
           fileCount: allFileContents.length,
         });
 
+        // Step 1.5: Lint & auto-fix collected files
+        if (workflowCardUrl) {
+          await this.enqueueRunCommand({
+            runAs,
+            realmURL: effectiveWorkflowRealm,
+            command: PATCH_CARD_INSTANCE_COMMAND,
+            commandInput: {
+              cardId: workflowCardUrl,
+              patch: {
+                attributes: {
+                  lintStatus: 'in-progress',
+                },
+              },
+            },
+          });
+        }
+
+        log.info('pr-listing-create: linting files', {
+          fileCount: allFileContents.length,
+        });
+        let lintOutcome;
+        try {
+          lintOutcome = await this.lintSubmissionFiles(allFileContents, {
+            roomId,
+            listingId,
+          });
+        } catch (lintError: any) {
+          let errorMessage = lintError?.message ?? 'lint runner crashed';
+          log.error('pr-listing-create: lint runner crashed', {
+            error: errorMessage,
+          });
+          if (workflowCardUrl) {
+            await this.enqueueRunCommand({
+              runAs,
+              realmURL: effectiveWorkflowRealm,
+              command: PATCH_CARD_INSTANCE_COMMAND,
+              commandInput: {
+                cardId: workflowCardUrl,
+                patch: {
+                  attributes: {
+                    lintStatus: 'failed',
+                    lintErrors: [errorMessage],
+                  },
+                },
+              },
+            });
+          }
+          throw new Error(errorMessage);
+        }
+
+        let lintErrors = lintOutcome.lintErrors;
+        let fixedFileCount = lintOutcome.fixedFileCount;
+
+        if (!lintOutcome.passed) {
+          log.error('pr-listing-create: lint found unfixable errors', {
+            errorCount: lintErrors.length,
+          });
+          if (workflowCardUrl) {
+            await this.enqueueRunCommand({
+              runAs,
+              realmURL: effectiveWorkflowRealm,
+              command: PATCH_CARD_INSTANCE_COMMAND,
+              commandInput: {
+                cardId: workflowCardUrl,
+                patch: {
+                  attributes: {
+                    lintStatus: 'failed',
+                    lintErrors,
+                  },
+                },
+              },
+            });
+          }
+          throw new Error(
+            `Lint failed with ${lintErrors.length} unfixable error(s):\n${lintErrors.join('\n')}`,
+          );
+        }
+
+        if (fixedFileCount > 0) {
+          allFileContents = lintOutcome.fixedFiles;
+        }
+
+        log.info('pr-listing-create: lint passed', {
+          fixedFileCount,
+        });
+        if (workflowCardUrl) {
+          await this.enqueueRunCommand({
+            runAs,
+            realmURL: effectiveWorkflowRealm,
+            command: PATCH_CARD_INSTANCE_COMMAND,
+            commandInput: {
+              cardId: workflowCardUrl,
+              patch: {
+                attributes: {
+                  lintStatus: 'passed',
+                  lintFixedCount: fixedFileCount,
+                },
+              },
+            },
+          });
+        }
+
         // Build PR summary from available info
         let listingSummary =
           typeof input.listingSummary === 'string'
@@ -157,81 +272,113 @@ export class CommandRunner {
             : []),
         ].join('\n');
 
-        // Step 2: Create PrCard — runs as SUBMISSION BOT in the SUBMISSIONS realm
-        let prCardResult = await this.enqueueRunCommand({
-          runAs: this.submissionBotUserId,
-          realmURL: submissionRealm,
-          command: CREATE_PR_CARD_COMMAND,
-          commandInput: {
-            realm: submissionRealm,
-            branchName,
-            submittedBy: runAs,
-            prSummary,
-            allFileContents,
-          },
-        });
-
-        if (prCardResult.status !== 'ready') {
-          let errorMessage =
-            prCardResult.error && prCardResult.error.trim()
-              ? prCardResult.error
-              : `create-pr-card returned status "${prCardResult.status}"`;
-          log.error('pr-listing-create: create-pr-card failed', {
-            runAs,
-            submissionBotUserId: this.submissionBotUserId,
-            submissionRealm,
-            branchName,
-            status: prCardResult.status,
-            error: prCardResult.error,
-            cardResultString: prCardResult.cardResultString ?? null,
-            fileCount: allFileContents.length,
-            inputPayloadSize: JSON.stringify(allFileContents).length,
-          });
-          throw new Error(errorMessage);
-        }
-
-        let prCardUrl = getCardUrl(prCardResult.cardResultString);
-        log.info('pr-listing-create: PrCard created', { prCardUrl });
-
-        // Step 3: Create the GitHub PR using file contents from the PrCard
-        await this.createListingPRHandler.ensureCreateListingBranch(
-          eventContent,
-        );
-        await this.createListingPRHandler.addContentsToCommit(
-          eventContent,
-          prCardResult,
-        );
-        let prResult = await this.createListingPRHandler.openCreateListingPR(
-          eventContent,
-          runAs,
-          prCardResult,
-          workflowCardUrl,
-        );
-
-        log.info('pr-listing-create: PR created', {
-          prNumber: prResult?.prNumber,
-          prUrl: prResult?.prUrl,
-        });
-
-        // Step 3: Link PrCard to workflow card
-        if (workflowCardUrl && prCardUrl) {
-          await this.enqueueRunCommand({
-            runAs,
-            realmURL: effectiveWorkflowRealm,
-            command: PATCH_CARD_INSTANCE_COMMAND,
+        // Everything from here through the prCard-link patch must either all
+        // succeed, or we must patch the workflow card back to a failed state.
+        let prCardResult: RunCommandResponse;
+        let prCardUrl: string | null;
+        try {
+          // Step 2: Create PrCard — runs as SUBMISSION BOT in the SUBMISSIONS realm
+          prCardResult = await this.enqueueRunCommand({
+            runAs: this.submissionBotUserId,
+            realmURL: submissionRealm,
+            command: CREATE_PR_CARD_COMMAND,
             commandInput: {
-              cardId: workflowCardUrl,
-              patch: {
-                relationships: {
-                  prCard: {
-                    links: {
-                      self: prCardUrl,
+              realm: submissionRealm,
+              branchName,
+              submittedBy: runAs,
+              prSummary,
+              allFileContents,
+            },
+          });
+
+          if (prCardResult.status !== 'ready') {
+            let errorMessage =
+              prCardResult.error && prCardResult.error.trim()
+                ? prCardResult.error
+                : `create-pr-card returned status "${prCardResult.status}"`;
+            log.error('pr-listing-create: create-pr-card failed', {
+              runAs,
+              submissionBotUserId: this.submissionBotUserId,
+              submissionRealm,
+              branchName,
+              status: prCardResult.status,
+              error: prCardResult.error,
+              cardResultString: prCardResult.cardResultString ?? null,
+              fileCount: allFileContents.length,
+              inputPayloadSize: JSON.stringify(allFileContents).length,
+            });
+            throw new Error(errorMessage);
+          }
+
+          prCardUrl = getCardUrl(prCardResult.cardResultString);
+          log.info('pr-listing-create: PrCard created', { prCardUrl });
+
+          // Step 3: Create the GitHub PR using file contents from the PrCard
+          await this.createListingPRHandler.ensureCreateListingBranch(
+            eventContent,
+          );
+          await this.createListingPRHandler.addContentsToCommit(
+            eventContent,
+            prCardResult,
+          );
+          let prResult = await this.createListingPRHandler.openCreateListingPR(
+            eventContent,
+            runAs,
+            prCardResult,
+            workflowCardUrl,
+          );
+
+          log.info('pr-listing-create: PR created', {
+            prNumber: prResult?.prNumber,
+            prUrl: prResult?.prUrl,
+          });
+
+          // Step 3: Link PrCard to workflow card
+          if (workflowCardUrl && prCardUrl) {
+            await this.enqueueRunCommand({
+              runAs,
+              realmURL: effectiveWorkflowRealm,
+              command: PATCH_CARD_INSTANCE_COMMAND,
+              commandInput: {
+                cardId: workflowCardUrl,
+                patch: {
+                  relationships: {
+                    prCard: {
+                      links: {
+                        self: prCardUrl,
+                      },
                     },
                   },
                 },
               },
-            },
-          });
+            });
+          }
+        } catch (prCreationError: any) {
+          let errorMessage =
+            prCreationError?.message ?? 'unknown PR creation error';
+          if (workflowCardUrl) {
+            try {
+              await this.enqueueRunCommand({
+                runAs,
+                realmURL: effectiveWorkflowRealm,
+                command: PATCH_CARD_INSTANCE_COMMAND,
+                commandInput: {
+                  cardId: workflowCardUrl,
+                  patch: {
+                    attributes: {
+                      prCreationError: `PR creation failed: ${errorMessage}`,
+                    },
+                  },
+                },
+              });
+            } catch (patchError: any) {
+              log.error(
+                'pr-listing-create: failed to patch workflow card after PR creation failure',
+                { patchError: patchError?.message ?? patchError },
+              );
+            }
+          }
+          throw prCreationError;
         }
 
         return prCardResult;

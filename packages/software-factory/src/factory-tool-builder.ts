@@ -23,6 +23,8 @@ import {
 } from './lint-execution';
 import { logger } from './logger';
 import { ensureJsonExtension, addCommentToIssue } from './realm-operations';
+import { runTestsInMemory } from './test-run-execution';
+import type { RunTestsInMemoryOptions, RunTestsResult } from './test-run-types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -63,6 +65,10 @@ export interface ToolBuilderConfig {
   >;
   /** Injected for testing — defaults to runLintInMemory. */
   runLintInMemory?: (options: RunLintInMemoryOptions) => Promise<RunLintResult>;
+  /** Injected for testing — defaults to runTestsInMemory. */
+  runTestsInMemory?: (
+    options: RunTestsInMemoryOptions,
+  ) => Promise<RunTestsResult>;
 }
 
 export interface ToolCallEntry {
@@ -108,6 +114,7 @@ export function buildFactoryTools(
     buildSearchRealmTool(config),
     buildRunCommandTool(config),
     buildRunLintTool(config),
+    buildRunTestsTool(config),
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
@@ -582,8 +589,29 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
   };
 }
 
-// Note: buildRunTestsTool was removed — the validation pipeline runs tests
-// automatically via executeTestRunFromRealm after each agent turn.
+function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
+  let execute = config.runTestsInMemory ?? runTestsInMemory;
+  return {
+    name: 'run_tests',
+    description:
+      "Run the realm's QUnit tests against the target realm and return an " +
+      'in-memory result object (status, pass/fail counts, failure details). ' +
+      'Safe to call repeatedly for mid-turn self-validation — this tool does ' +
+      'NOT create a TestRun card or any other realm artifact. The ' +
+      'orchestrator still runs the full validation pipeline (which writes a ' +
+      'TestRun card) automatically after signal_done, so calling this is ' +
+      'optional. Takes no arguments — runs all *.test.gts files in the ' +
+      'target realm. Auth: per-realm JWT.',
+    parameters: { type: 'object', properties: {} },
+    execute: async () => {
+      return execute({
+        targetRealmUrl: config.targetRealmUrl,
+        client: config.client,
+        hostAppUrl: config.hostAppUrl ?? config.realmServerUrl,
+      });
+    },
+  };
+}
 
 function buildRunLintTool(config: ToolBuilderConfig): FactoryTool {
   let execute = config.runLintInMemory ?? runLintInMemory;

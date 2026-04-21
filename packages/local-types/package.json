@@ -1,6 +1,7 @@
 {
   "private": true,
   "name": "@cardstack/local-types",
+  "version": "0.0.0",
   "description": "Type declarations for use within this monorepo",
   "types": "index.d.ts",
   "devDependencies": {

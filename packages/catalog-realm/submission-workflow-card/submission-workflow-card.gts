@@ -9,9 +9,11 @@ import {
   realmURL,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
+import NumberField from 'https://cardstack.com/base/number';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import { eq } from '@cardstack/boxel-ui/helpers';
+import SourceCode from '@cardstack/boxel-icons/source-code';
 
 import { Listing } from '../catalog-app/listing/listing';
 import { PrCard } from '../pr-card/pr-card';
@@ -63,8 +65,9 @@ const STEP_DEFINITIONS = [
   },
   {
     key: 'create-pr',
-    label: 'Create PR & PR Card',
-    description: 'Create a GitHub pull request with the listing files',
+    label: 'Lint & Create PR',
+    description:
+      'Lint files, auto-fix issues, and create a GitHub pull request',
   },
   {
     key: 'ci-checks',
@@ -96,6 +99,9 @@ function resolveSubmissionWorkflowState(
   reviewState: string | null,
   isMerged: boolean,
   isClosed: boolean,
+  lintStatus: string | null,
+  lintErrors: string[],
+  prCreationError: string | null,
 ): WorkflowState {
   let steps: ResolvedStep[] = [];
   let firstIncomplete = -1;
@@ -113,6 +119,19 @@ function resolveSubmissionWorkflowState(
         break;
       case 'create-pr':
         completed = hasPr;
+        if (!hasPr && lintStatus === 'in-progress') {
+          inProgress = true;
+          statusDetail = 'Linting files...';
+        } else if (!hasPr && lintStatus === 'failed') {
+          blocked = true;
+          statusDetail = `${lintErrors.length} unfixable lint error${lintErrors.length === 1 ? '' : 's'}`;
+        } else if (!hasPr && prCreationError) {
+          blocked = true;
+          statusDetail = 'PR creation failed';
+        } else if (!hasPr && lintStatus === 'passed') {
+          inProgress = true;
+          statusDetail = 'Creating PR...';
+        }
         break;
       case 'ci-checks':
         completed = hasPr && ciAllPassed;
@@ -259,6 +278,13 @@ export class SubmissionWorkflowCard extends CardDef {
   // ── Links to real cards ──
   @field listing = linksTo(() => Listing);
   @field prCard = linksTo(() => PrCard);
+
+  // ── Lint status ──
+  @field lintStatus = contains(StringField); // 'pending' | 'in-progress' | 'passed' | 'failed'
+  @field lintErrors = containsMany(StringField);
+  @field lintFixedCount = contains(NumberField);
+
+  @field prCreationError = contains(StringField);
 
   // ── Participants ──
   @field participants = containsMany(SubmissionParticipantField);
@@ -422,9 +448,10 @@ export class SubmissionWorkflowCard extends CardDef {
 
     get ciIsLoading() {
       return (
-        this.checkRunEventData?.isLoading ||
-        this.checkSuiteEventData?.isLoading
-      ) ?? false;
+        (this.checkRunEventData?.isLoading ||
+          this.checkSuiteEventData?.isLoading) ??
+        false
+      );
     }
 
     // ── Review state ──
@@ -451,6 +478,9 @@ export class SubmissionWorkflowCard extends CardDef {
         this.reviewState,
         this.isMerged,
         this.isClosed,
+        this.args.model.lintStatus ?? null,
+        this.args.model.lintErrors ?? [],
+        this.args.model.prCreationError ?? null,
       );
     }
 
@@ -484,6 +514,13 @@ export class SubmissionWorkflowCard extends CardDef {
       }
     }
 
+    get isSourceListing(): boolean {
+      return (
+        !!this.args.model.listing &&
+        !this.args.model.listing[realmURL]?.pathname?.includes('/catalog/')
+      );
+    }
+
     <template>
       <div class='sw-layout'>
 
@@ -503,7 +540,7 @@ export class SubmissionWorkflowCard extends CardDef {
 
           {{! ── Step tracker ── }}
           <div class='sw-steps'>
-            {{#each this.workflowState.steps key="key" as |step idx|}}
+            {{#each this.workflowState.steps key='key' as |step idx|}}
               <div class={{concat 'sw-step ' step.status}}>
                 <div class='sw-step-indicator'>
                   {{#if (eq step.status 'completed')}}
@@ -570,13 +607,46 @@ export class SubmissionWorkflowCard extends CardDef {
                   {{! ── Step detail cards ── }}
                   {{#if (eq step.key 'choose-listing')}}
                     {{#if @model.listing}}
-                      <div class='sw-step-detail sw-fitted-card-container'>
+                      <div class='sw-fitted-card-container'>
+                        {{#if this.isSourceListing}}
+                          <span class='sw-source-badge'>
+                            <SourceCode class='sw-source-icon' />
+                            Source Listing
+                          </span>
+                        {{/if}}
                         <@fields.listing @format='fitted' />
                       </div>
                     {{/if}}
                   {{/if}}
 
                   {{#if (eq step.key 'create-pr')}}
+                    {{#if (eq @model.lintStatus 'failed')}}
+                      <div class='sw-step-detail sw-lint-errors'>
+                        <div class='sw-lint-header'>Unfixable Lint Errors</div>
+                        {{#each @model.lintErrors as |err|}}
+                          <div class='sw-lint-error-line'>{{err}}</div>
+                        {{/each}}
+                      </div>
+                    {{/if}}
+                    {{#if @model.prCreationError}}
+                      <div class='sw-step-detail sw-lint-errors'>
+                        <div class='sw-lint-header'>PR Creation Failed</div>
+                        <div class='sw-lint-error-line'>
+                          {{@model.prCreationError}}
+                        </div>
+                      </div>
+                    {{/if}}
+                    {{#if (eq @model.lintStatus 'passed')}}
+                      {{#if @model.lintFixedCount}}
+                        <div class='sw-step-detail sw-lint-info'>
+                          Auto-fixed
+                          {{@model.lintFixedCount}}
+                          file{{#if
+                            (eq @model.lintFixedCount 1)
+                          }}{{else}}s{{/if}}
+                        </div>
+                      {{/if}}
+                    {{/if}}
                     {{#if @model.prCard}}
                       <div class='sw-step-detail sw-embedded-card-container'>
                         <@fields.prCard @format='embedded' />
@@ -611,7 +681,9 @@ export class SubmissionWorkflowCard extends CardDef {
           <div class='sw-progress-section'>
             <div
               class={{concat 'sw-donut ' this.overallStatusTone}}
-              style={{htmlSafe (concat '--pct:' this.workflowState.progressPercent ';')}}
+              style={{htmlSafe
+                (concat '--pct:' this.workflowState.progressPercent ';')
+              }}
             >
               <span
                 class='sw-donut-pct'
@@ -623,7 +695,7 @@ export class SubmissionWorkflowCard extends CardDef {
           {{! Step summary }}
           <div class='sw-sidebar-section'>
             <div class='sw-sidebar-heading'>Steps</div>
-            {{#each this.workflowState.steps key="key" as |step|}}
+            {{#each this.workflowState.steps key='key' as |step|}}
               <div class={{concat 'sw-sidebar-step ' step.status}}>
                 {{#if (eq step.status 'completed')}}
                   <span class='sw-sidebar-icon completed'>
@@ -691,6 +763,12 @@ export class SubmissionWorkflowCard extends CardDef {
             <div class='sw-sidebar-heading'>Linked Cards</div>
             {{#if @model.listing}}
               <div class='sw-sidebar-fitted-card'>
+                {{#if this.isSourceListing}}
+                  <span class='sw-source-badge'>
+                    <SourceCode class='sw-source-icon' />
+                    Source Listing
+                  </span>
+                {{/if}}
                 <@fields.listing @format='fitted' />
               </div>
             {{/if}}
@@ -721,6 +799,8 @@ export class SubmissionWorkflowCard extends CardDef {
           --c-danger: #ef4444;
           --c-active: #6366f1;
           --c-neutral: #94a3b8;
+          --c-warning: #f5e00b;
+          --c-warning-text: #92400e;
           --font:
             ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
@@ -970,12 +1050,47 @@ export class SubmissionWorkflowCard extends CardDef {
         }
 
         .sw-fitted-card-container {
+          position: relative;
           max-width: 360px;
           height: 180px;
           border-radius: 10px;
-          overflow: hidden;
           border: 1px solid var(--c-border);
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+          margin-top: 15px;
+          overflow: visible;
+        }
+
+        .sw-fitted-card-container > :not(.sw-source-badge) {
+          border-radius: inherit;
+          overflow: hidden;
+        }
+
+        .sw-source-badge {
+          position: absolute;
+          top: -10px;
+          right: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 3px;
+          background-color: var(--c-warning);
+          color: var(--c-warning-text);
+          font: 600 var(--boxel-font-sm);
+          padding: 3px 10px;
+          border-radius: 4px;
+          z-index: 15;
+          white-space: nowrap;
+          letter-spacing: 0.1px;
+          text-transform: uppercase;
+          font-size: 10px;
+          box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+          border: none;
+        }
+
+        .sw-source-icon {
+          width: 10px;
+          height: 10px;
+          flex-shrink: 0;
         }
 
         .sw-embedded-card-container {
@@ -984,6 +1099,34 @@ export class SubmissionWorkflowCard extends CardDef {
           overflow: hidden;
           border: 1px solid var(--c-border);
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
+        .sw-lint-errors {
+          background: rgba(239, 68, 68, 0.06);
+          border: 1px solid rgba(239, 68, 68, 0.2);
+          border-radius: 8px;
+          padding: 10px 12px;
+        }
+        .sw-lint-header {
+          font-size: 11px;
+          font-weight: 700;
+          color: var(--c-danger);
+          margin-bottom: 6px;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+        .sw-lint-error-line {
+          font-size: 12px;
+          font-family: ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
+          color: var(--c-text);
+          line-height: 1.5;
+          padding: 2px 0;
+          word-break: break-word;
+        }
+        .sw-lint-info {
+          font-size: 12px;
+          color: var(--c-success);
+          font-weight: 600;
         }
 
         /* ── Sidebar ── */
@@ -1172,11 +1315,17 @@ export class SubmissionWorkflowCard extends CardDef {
 
         /* ── Sidebar linked cards ── */
         .sw-sidebar-fitted-card {
-          height: 100px;
+          position: relative;
+          height: 70px;
           border-radius: 8px;
-          overflow: hidden;
           border: 1px solid var(--c-border);
           margin-bottom: 6px;
+          overflow: visible;
+        }
+
+        .sw-sidebar-fitted-card > :not(.sw-source-badge) {
+          border-radius: inherit;
+          overflow: hidden;
         }
         .sw-sidebar-empty {
           font-size: 12px;
