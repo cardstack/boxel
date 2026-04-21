@@ -441,9 +441,13 @@ module(basename(__filename), function () {
             warmedAffinities: [goodKey],
             affinityVacancy: {
               [goodKey]: { idle: true, tabCount: 1 },
-              badShape1: { idle: 'yes', tabCount: 1 }, // wrong type
+              badShape1: { idle: 'yes', tabCount: 1 }, // wrong idle type
               badShape2: { idle: true }, // missing tabCount
               badShape3: null, // not an object
+              badTabCountNaN: { idle: true, tabCount: NaN },
+              badTabCountInf: { idle: true, tabCount: Infinity },
+              badTabCountNegative: { idle: true, tabCount: -1 },
+              badTabCountFractional: { idle: true, tabCount: 1.5 },
             },
           },
         },
@@ -456,7 +460,113 @@ module(basename(__filename), function () {
       assert.deepEqual(
         server.attributes.affinityVacancy,
         { [goodKey]: { idle: true, tabCount: 1 } },
-        'only well-formed entries are recorded',
+        'only well-formed entries are recorded (tabCount must be a finite non-negative integer)',
+      );
+    });
+
+    test('heartbeat affinityVacancy rejects prototype-pollution keys', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      let goodKey = realmAffinityKey('https://realm.example/A');
+
+      // Build the payload via JSON.parse so `__proto__` is encoded as a
+      // literal property key in the wire payload rather than being treated
+      // as the object-literal prototype-setter shortcut (which would leave
+      // it out of Object.keys entirely).
+      let maliciousPayload = JSON.parse(
+        JSON.stringify({
+          [goodKey]: { idle: true, tabCount: 1 },
+        }).replace(
+          '}',
+          `,"__proto__":{"idle":true,"tabCount":999},"constructor":{"idle":true,"tabCount":999},"prototype":{"idle":true,"tabCount":999}}`,
+        ),
+      );
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            status: 'active',
+            warmedAffinities: [goodKey],
+            affinityVacancy: maliciousPayload,
+          },
+        },
+      });
+
+      // Object.prototype itself must not have been polluted.
+      assert.strictEqual(
+        ({} as any).tabCount,
+        undefined,
+        'Object.prototype.tabCount unchanged — __proto__ payload ignored',
+      );
+
+      let health = await request.get('/');
+      let server = (health.body.included as any[]).find(
+        (s) => s.id === serverUrlA,
+      );
+      assert.deepEqual(
+        Object.keys(server.attributes.affinityVacancy),
+        [goodKey],
+        'only the legitimate key is recorded; prototype-pollution keys are dropped',
+      );
+    });
+
+    test('heartbeat without affinityVacancy clears previously-reported snapshot (rollback safe)', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      let key = realmAffinityKey('https://realm.example/A');
+
+      // First heartbeat: reports vacancy.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            status: 'active',
+            warmedAffinities: [key],
+            affinityVacancy: { [key]: { idle: true, tabCount: 1 } },
+          },
+        },
+      });
+
+      let health1 = await request.get('/');
+      let server1 = (health1.body.included as any[]).find(
+        (s) => s.id === serverUrlA,
+      );
+      assert.deepEqual(
+        server1.attributes.affinityVacancy,
+        { [key]: { idle: true, tabCount: 1 } },
+        'vacancy recorded on the first heartbeat',
+      );
+
+      // Simulate a rollback: same server, next heartbeat omits
+      // affinityVacancy. Stale data must not persist.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            status: 'active',
+            warmedAffinities: [key],
+            // affinityVacancy intentionally omitted
+          },
+        },
+      });
+
+      let health2 = await request.get('/');
+      let server2 = (health2.body.included as any[]).find(
+        (s) => s.id === serverUrlA,
+      );
+      assert.deepEqual(
+        server2.attributes.affinityVacancy,
+        {},
+        'vacancy snapshot is cleared when a subsequent heartbeat omits the field',
       );
     });
 

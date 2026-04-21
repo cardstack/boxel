@@ -250,9 +250,11 @@ export function buildPrerenderManagerApp(options?: {
         existing.warmedAffinities = warmSet;
         changed = true;
       }
-      if (vacancyMap) {
-        existing.affinityVacancy = vacancyMap;
-      }
+      // Always refresh vacancy — treat a missing `affinityVacancy` attribute
+      // on this heartbeat as an explicit empty snapshot so a rollback to a
+      // legacy server (or a server that temporarily stops reporting) can't
+      // leave stale data cached in the registry.
+      existing.affinityVacancy = vacancyMap ?? new Map();
       if (warmSet.size === 0) {
         // server restarted; clear tracked active affinities and mappings
         for (let affinityKey of [...existing.activeAffinities]) {
@@ -417,13 +419,24 @@ export function buildPrerenderManagerApp(options?: {
         typeof attrs.affinityVacancy === 'object' &&
         !Array.isArray(attrs.affinityVacancy)
       ) {
-        let parsed: Record<string, AffinityVacancy> = {};
+        // Null-prototype target + explicit forbidden-key guard so an
+        // untrusted heartbeat payload can't pollute Object.prototype via
+        // keys like `__proto__` / `constructor` / `prototype`.
+        let parsed: Record<string, AffinityVacancy> = Object.create(null);
         for (let [key, value] of Object.entries(attrs.affinityVacancy)) {
+          if (
+            key === '__proto__' ||
+            key === 'constructor' ||
+            key === 'prototype'
+          ) {
+            continue;
+          }
           if (
             value &&
             typeof value === 'object' &&
             typeof (value as AffinityVacancy).idle === 'boolean' &&
-            typeof (value as AffinityVacancy).tabCount === 'number'
+            Number.isInteger((value as AffinityVacancy).tabCount) &&
+            (value as AffinityVacancy).tabCount >= 0
           ) {
             parsed[key] = {
               idle: (value as AffinityVacancy).idle,
