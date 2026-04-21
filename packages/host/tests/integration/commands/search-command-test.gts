@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, type Query } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -44,6 +44,25 @@ module('Integration | commands | search', function (hooks) {
     activeRealms: [testRealmURL],
     autostart: true,
   });
+
+  function runTypeTitleSearch(input: {
+    cardType: string | undefined;
+    cardTitle: string | undefined;
+  }) {
+    let commandService = getService('command-service');
+    let searchCommand = new SearchCardsByTypeAndTitleCommand(
+      commandService.commandContext,
+    );
+    return searchCommand.execute(input);
+  }
+
+  function runQuerySearch(query: Query) {
+    let commandService = getService('command-service');
+    let searchCommand = new SearchCardsByQueryCommand(
+      commandService.commandContext,
+    );
+    return searchCommand.execute({ query });
+  }
 
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
@@ -88,11 +107,7 @@ module('Integration | commands | search', function (hooks) {
   });
 
   test('search for a title', async function (assert) {
-    let commandService = getService('command-service');
-    let searchCommand = new SearchCardsByTypeAndTitleCommand(
-      commandService.commandContext,
-    );
-    let result = await searchCommand.execute({
+    let result = await runTypeTitleSearch({
       cardTitle: 'Mark Jackson',
       cardType: undefined,
     });
@@ -101,11 +116,7 @@ module('Integration | commands | search', function (hooks) {
   });
 
   test('search for a card type', async function (assert) {
-    let commandService = getService('command-service');
-    let searchCommand = new SearchCardsByTypeAndTitleCommand(
-      commandService.commandContext,
-    );
-    let result = await searchCommand.execute({
+    let result = await runTypeTitleSearch({
       cardType: 'Author',
       cardTitle: undefined,
     });
@@ -117,16 +128,10 @@ module('Integration | commands | search', function (hooks) {
   });
 
   test('search with a query', async function (assert) {
-    let commandService = getService('command-service');
-    let searchCommand = new SearchCardsByQueryCommand(
-      commandService.commandContext,
-    );
-    let result = await searchCommand.execute({
-      query: {
-        filter: {
-          eq: { firstName: 'R2-D2' },
-          on: { module: 'http://test-realm/test/author', name: 'Author' },
-        },
+    let result = await runQuerySearch({
+      filter: {
+        eq: { firstName: 'R2-D2' },
+        on: { module: 'http://test-realm/test/author', name: 'Author' },
       },
     });
     assert.strictEqual(result.cardIds.length, 1);
@@ -134,14 +139,8 @@ module('Integration | commands | search', function (hooks) {
   });
 
   test('search with a matches filter', async function (assert) {
-    let commandService = getService('command-service');
-    let searchCommand = new SearchCardsByQueryCommand(
-      commandService.commandContext,
-    );
-    let result = await searchCommand.execute({
-      query: {
-        filter: { matches: 'xylophone' },
-      },
+    let result = await runQuerySearch({
+      filter: { matches: 'xylophone' },
     });
     assert.strictEqual(
       result.cardIds.length,
@@ -152,16 +151,10 @@ module('Integration | commands | search', function (hooks) {
   });
 
   test('search with matches composed inside every + eq', async function (assert) {
-    let commandService = getService('command-service');
-    let searchCommand = new SearchCardsByQueryCommand(
-      commandService.commandContext,
-    );
-    let result = await searchCommand.execute({
-      query: {
-        filter: {
-          on: { module: 'http://test-realm/test/author', name: 'Author' },
-          every: [{ matches: 'droid' }, { eq: { firstName: 'R2-D2' } }],
-        },
+    let result = await runQuerySearch({
+      filter: {
+        on: { module: 'http://test-realm/test/author', name: 'Author' },
+        every: [{ matches: 'droid' }, { eq: { firstName: 'R2-D2' } }],
       },
     });
     assert.strictEqual(
