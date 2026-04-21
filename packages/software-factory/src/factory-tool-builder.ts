@@ -17,6 +17,11 @@ import { buildCardDocument } from './darkfactory-schemas';
 import type { ToolExecutor } from './factory-tool-executor';
 import type { ToolRegistry } from './factory-tool-registry';
 import { logger } from './logger';
+import {
+  runParseInMemory,
+  type RunParseInMemoryOptions,
+  type RunParseResult,
+} from './parse-execution';
 import { ensureJsonExtension, addCommentToIssue } from './realm-operations';
 
 // ---------------------------------------------------------------------------
@@ -56,6 +61,10 @@ export interface ToolBuilderConfig {
       relationships?: Record<string, unknown>;
     }
   >;
+  /** Injected for testing — defaults to runParseInMemory. */
+  runParseInMemory?: (
+    options: RunParseInMemoryOptions,
+  ) => Promise<RunParseResult>;
 }
 
 export interface ToolCallEntry {
@@ -100,6 +109,7 @@ export function buildFactoryTools(
     buildFetchTranspiledModuleTool(config),
     buildSearchRealmTool(config),
     buildRunCommandTool(config),
+    buildRunParseTool(config),
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
@@ -576,6 +586,49 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
 
 // Note: buildRunTestsTool was removed — the validation pipeline runs tests
 // automatically via executeTestRunFromRealm after each agent turn.
+
+function buildRunParseTool(config: ToolBuilderConfig): FactoryTool {
+  let execute = config.runParseInMemory ?? runParseInMemory;
+  return {
+    name: 'run_parse',
+    description:
+      'Parse and type-check files in the target realm and return an ' +
+      'in-memory result (status, error counts, per-error file/line/column/' +
+      'message). Without "path", runs glint (ember-tsc) over every .gts / ' +
+      '.gjs / .ts file in the realm AND validates every .json file listed ' +
+      'as a Spec linkedExample (same discovery as the parse validation ' +
+      'step). With "path", parses only that single realm-relative file — ' +
+      '.gts / .gjs / .ts files are type-checked via glint, .json files ' +
+      'are parsed and checked for card document structure. Safe to call ' +
+      'repeatedly for mid-turn self-validation — this tool does NOT ' +
+      'create a ParseResult card or any other realm artifact. The ' +
+      'orchestrator still runs the full validation pipeline (which writes ' +
+      'a ParseResult card) automatically after signal_done, so calling ' +
+      'this is optional. Auth: per-realm JWT.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Optional realm-relative path to a single .gts / .gjs / .ts / .json file to parse. Omit to parse every parseable file (GTS modules + Spec-linked JSON examples) in the target realm.',
+        },
+      },
+    },
+    execute: async (args) => {
+      let rawPath = args.path;
+      let path =
+        typeof rawPath === 'string' && rawPath.trim() !== ''
+          ? rawPath.trim()
+          : undefined;
+      return execute({
+        targetRealmUrl: config.targetRealmUrl,
+        client: config.client,
+        ...(path ? { path } : {}),
+      });
+    },
+  };
+}
 
 function buildSignalDoneTool(): FactoryTool {
   return {

@@ -40,6 +40,10 @@ The agent has these tools during the execution loop. Use them by name — they a
 
 - `run_command({ command, commandInput? })` — Execute a host command on the realm server via the prerenderer. Commands run in browser context with full card runtime access (Loader, CardAPI, services). Use the specifier format `@cardstack/boxel-host/commands/<name>/default`.
 
+### Self-Validation (optional, no side effects)
+
+- `run_parse({ path? })` — Parse and type-check files in the target realm and return an in-memory `RunParseResult` with `status`, `filesChecked`, `filesWithErrors`, `errorCount`, `durationMs`, `parseableFiles`, and per-error `{ file, line, column, message }`. Without `path`, runs glint (ember-tsc) over every `.gts` / `.gjs` / `.ts` file in the realm AND validates every `.json` file listed as a Spec `linkedExample` (same discovery as the parse validation step). With `path` (realm-relative file path), parses **only that one file** — `.gts` / `.gjs` / `.ts` runs through glint; `.json` is parsed and checked for card document structure. Prefer the single-file form right after writing or editing one file. **Does not write a `ParseResult` card** — safe to call repeatedly mid-turn. The orchestrator still runs the full parse validation (which writes the durable `ParseResult`) automatically after `signal_done`, so calling this is optional.
+
 **Example — generate JSON schema for a card type:**
 
 ```
