@@ -1,8 +1,9 @@
 import { StringField, Component, field, CardDef, contains } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { markdownEscape, not } from '@cardstack/boxel-ui/helpers';
 
 import ExternalLink from '@cardstack/boxel-icons/external-link';
+import { markdownLink } from './markdown-helpers';
 
 export default class UrlField extends StringField {
   static icon = ExternalLink;
@@ -45,6 +46,22 @@ export default class UrlField extends StringField {
         }
       </style>
     </template>
+  };
+
+  // CS-10786: emit a markdown link when the URL parses; otherwise fall back
+  // to an escaped plain string so invalid values still render safely.
+  static markdown = class Markdown extends Component<typeof UrlField> {
+    get text() {
+      let value = this.args.model;
+      if (value == null || value === '') {
+        return '';
+      }
+      if (isValidUrl(value)) {
+        return markdownLink(value, value);
+      }
+      return markdownEscape(value);
+    }
+    <template>{{this.text}}</template>
   };
 }
 

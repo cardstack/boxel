@@ -6,6 +6,7 @@ import {
   resolveCardReference,
   resolveRRI,
   RealmPaths,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import type {
   SingleCardDocument,
@@ -616,6 +617,135 @@ module(basename(__filename), function () {
           /local\(\) requires a URL-based RealmPaths/,
         );
       });
+    });
+  });
+
+  module('VirtualNetwork.addRealmMapping', function (hooks) {
+    let vn: VirtualNetwork;
+    let prefix = '@test/realm/';
+    let target = 'http://localhost:9000/realm/';
+
+    hooks.beforeEach(function () {
+      vn = new VirtualNetwork();
+      vn.addRealmMapping(prefix, target);
+    });
+
+    hooks.afterEach(function () {
+      unregisterCardReferencePrefix(prefix);
+    });
+
+    test('populates importMap so resolveImport works', function (assert) {
+      let result = vn.resolveImport('@test/realm/card-api');
+      assert.strictEqual(result, 'http://localhost:9000/realm/card-api');
+    });
+
+    test('populates global prefixMappings so resolveCardReference works', function (assert) {
+      let result = resolveCardReference('@test/realm/Foo', undefined);
+      assert.strictEqual(result, 'http://localhost:9000/realm/Foo');
+    });
+
+    test('normalizes trailing slashes', function (assert) {
+      unregisterCardReferencePrefix(prefix);
+      let vn2 = new VirtualNetwork();
+      // No trailing slashes
+      vn2.addRealmMapping('@test/other', 'http://localhost:9000/other');
+      let result = vn2.resolveImport('@test/other/card');
+      assert.strictEqual(result, 'http://localhost:9000/other/card');
+      unregisterCardReferencePrefix('@test/other/');
+    });
+
+    test('overwrites cleanly when called twice with same prefix', function (assert) {
+      let newTarget = 'http://localhost:8000/realm/';
+      vn.addRealmMapping(prefix, newTarget);
+      let result = vn.resolveImport('@test/realm/card-api');
+      assert.strictEqual(result, 'http://localhost:8000/realm/card-api');
+    });
+
+    test('knownRealms returns registered realm identifiers', function (assert) {
+      let realms = vn.knownRealms();
+      assert.true(
+        realms.includes('@test/realm/' as RealmIdentifier),
+        'contains the registered realm',
+      );
+    });
+
+    test('knownRealms reflects multiple registrations', function (assert) {
+      vn.addRealmMapping('@test/other/', 'http://localhost:9000/other/');
+      let realms = vn.knownRealms();
+      assert.strictEqual(realms.length, 2);
+      assert.true(realms.includes('@test/realm/' as RealmIdentifier));
+      assert.true(realms.includes('@test/other/' as RealmIdentifier));
+      unregisterCardReferencePrefix('@test/other/');
+    });
+  });
+
+  module('VirtualNetwork.fetch with RRI', function (hooks) {
+    let vn: VirtualNetwork;
+    let prefix = '@test/fetch-realm/';
+    let target = 'http://localhost:9000/fetch-realm/';
+
+    hooks.beforeEach(function () {
+      vn = new VirtualNetwork();
+      vn.addRealmMapping(prefix, target);
+    });
+
+    hooks.afterEach(function () {
+      unregisterCardReferencePrefix(prefix);
+    });
+
+    test('resolves scoped RRI to real URL and fetches', async function (assert) {
+      let interceptedUrl: string | undefined;
+      vn.mount(async (req: Request) => {
+        interceptedUrl = req.url;
+        return new Response('ok', { status: 200 });
+      });
+
+      let response = await vn.fetch('@test/fetch-realm/card-api');
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(
+        interceptedUrl,
+        'http://localhost:9000/fetch-realm/card-api',
+      );
+    });
+
+    test('passes through normal URLs unchanged', async function (assert) {
+      let interceptedUrl: string | undefined;
+      vn.mount(async (req: Request) => {
+        interceptedUrl = req.url;
+        return new Response('ok', { status: 200 });
+      });
+
+      await vn.fetch('http://localhost:9000/fetch-realm/card-api');
+      assert.strictEqual(
+        interceptedUrl,
+        'http://localhost:9000/fetch-realm/card-api',
+      );
+    });
+
+    test('passes RequestInit through when fetching with RRI', async function (assert) {
+      let interceptedMethod: string | undefined;
+      vn.mount(async (req: Request) => {
+        interceptedMethod = req.method;
+        return new Response('ok', { status: 200 });
+      });
+
+      await vn.fetch('@test/fetch-realm/card-api', { method: 'POST' });
+      assert.strictEqual(interceptedMethod, 'POST');
+    });
+
+    test('@cardstack/base/card-api resolves through full fetch chain', async function (assert) {
+      let baseVN = new VirtualNetwork();
+      baseVN.addRealmMapping('@cardstack/base/', 'http://localhost:4201/base/');
+      let interceptedUrl: string | undefined;
+      baseVN.mount(async (req: Request) => {
+        interceptedUrl = req.url;
+        return new Response('ok', { status: 200 });
+      });
+
+      let response = await baseVN.fetch('@cardstack/base/card-api');
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(interceptedUrl, 'http://localhost:4201/base/card-api');
+      unregisterCardReferencePrefix('@cardstack/base/');
     });
   });
 });

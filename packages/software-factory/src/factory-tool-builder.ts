@@ -97,6 +97,7 @@ export function buildFactoryTools(
   let tools: FactoryTool[] = [
     buildWriteFileTool(config),
     buildReadFileTool(config),
+    buildFetchTranspiledModuleTool(config),
     buildSearchRealmTool(config),
     buildRunCommandTool(config),
     buildSignalDoneTool(),
@@ -140,6 +141,35 @@ export function buildFactoryTools(
 }
 
 // ---------------------------------------------------------------------------
+// Argument validation helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Enforce that a required string argument is present and non-empty. Returns
+ * the trimmed value or throws a clear error that propagates back to the
+ * model as a tool-call result. This is the only runtime guardrail against
+ * an LLM emitting a malformed tool call like `write_file({})` — the JSON
+ * Schema `required` declaration is advisory for OpenRouter's tool-use and
+ * the model can still send empty args. Without this check, path strings
+ * like `"undefined"` would end up at the realm's root (e.g., a file named
+ * `<realm>/undefined`).
+ */
+export function requireStringArg(
+  args: Record<string, unknown>,
+  name: string,
+  toolName: string,
+): string {
+  let raw = args[name];
+  if (typeof raw !== 'string' || raw.trim() === '') {
+    throw new Error(
+      `Tool "${toolName}" requires a non-empty string "${name}" argument; received ${JSON.stringify(raw)}. ` +
+        `Re-send the tool call with every required argument filled in.`,
+    );
+  }
+  return raw;
+}
+
+// ---------------------------------------------------------------------------
 // Factory-level tools
 // ---------------------------------------------------------------------------
 
@@ -166,8 +196,8 @@ function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
       required: ['path', 'content'],
     },
     execute: async (args) => {
-      let path = args.path as string;
-      let content = args.content as string;
+      let path = requireStringArg(args, 'path', 'write_file');
+      let content = requireStringArg(args, 'content', 'write_file');
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
       return config.client.write(realmUrl, path, content);
     },
@@ -195,9 +225,40 @@ function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
       required: ['path'],
     },
     execute: async (args) => {
-      let path = args.path as string;
+      let path = requireStringArg(args, 'path', 'read_file');
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
       return config.client.read(realmUrl, path);
+    },
+  };
+}
+
+function buildFetchTranspiledModuleTool(
+  config: ToolBuilderConfig,
+): FactoryTool {
+  return {
+    name: 'fetch_transpiled_module',
+    description:
+      "Debugging tool ONLY for investigating runtime errors in .gts modules you've written. Use when an eval or instantiate validation error reports a line/column number — those line numbers refer to the transpiled output, not your .gts source, so fetching the transpiled output is how you locate the offending source construct. Never use the transpiled output as a reference for how to write code. Do NOT copy its patterns (setComponentTemplate, precompileTemplate, wire-format templates, base64 CSS imports) into source — always write idiomatic Ember / <template>-tag / CardDef source. Editing: only edit the .gts source (the transpiled output is regenerated on the next write). Auth: per-realm JWT.",
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Realm-relative module path. The .gts extension is optional — the realm accepts either form.',
+        },
+        realm: {
+          type: 'string',
+          enum: ['target'],
+          description: 'Which realm to read from (default: target)',
+        },
+      },
+      required: ['path'],
+    },
+    execute: async (args) => {
+      let path = requireStringArg(args, 'path', 'fetch_transpiled_module');
+      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
+      return config.client.readTranspiled(realmUrl, path);
     },
   };
 }
@@ -322,7 +383,9 @@ function buildUpdateProjectTool(config: ToolBuilderConfig): FactoryTool {
       schema,
     ),
     execute: async (args) => {
-      let path = ensureJsonExtension(args.path as string);
+      let path = ensureJsonExtension(
+        requireStringArg(args, 'path', 'update_project'),
+      );
       let attributes = args.attributes as Record<string, unknown>;
       let relationships = args.relationships as
         | Record<string, unknown>
@@ -355,7 +418,9 @@ function buildUpdateIssueTool(config: ToolBuilderConfig): FactoryTool {
       schema,
     ),
     execute: async (args) => {
-      let path = ensureJsonExtension(args.path as string);
+      let path = ensureJsonExtension(
+        requireStringArg(args, 'path', 'update_issue'),
+      );
       // Copy to avoid mutating the caller's args object
       let attributes = { ...(args.attributes as Record<string, unknown>) };
       // The loop owns issue status transitions (backlog → in_progress → done).
@@ -417,9 +482,9 @@ function buildAddCommentTool(config: ToolBuilderConfig): FactoryTool {
       required: ['path', 'body', 'author'],
     },
     execute: async (args) => {
-      let path = args.path as string;
-      let body = args.body as string;
-      let author = args.author as string;
+      let path = requireStringArg(args, 'path', 'add_comment');
+      let body = requireStringArg(args, 'body', 'add_comment');
+      let author = requireStringArg(args, 'author', 'add_comment');
 
       let realmUrl = config.targetRealmUrl;
 
@@ -442,7 +507,9 @@ function buildCreateKnowledgeTool(config: ToolBuilderConfig): FactoryTool {
       schema,
     ),
     execute: async (args) => {
-      let path = ensureJsonExtension(args.path as string);
+      let path = ensureJsonExtension(
+        requireStringArg(args, 'path', 'create_knowledge'),
+      );
       let attributes = args.attributes as Record<string, unknown>;
       let relationships = args.relationships as
         | Record<string, unknown>
@@ -476,7 +543,9 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
       schema,
     ),
     execute: async (args) => {
-      let path = ensureJsonExtension(args.path as string);
+      let path = ensureJsonExtension(
+        requireStringArg(args, 'path', 'create_catalog_spec'),
+      );
       let attributes = args.attributes as Record<string, unknown>;
       let relationships = args.relationships as
         | Record<string, unknown>

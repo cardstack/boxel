@@ -1,18 +1,55 @@
 {
   "data": {
-    "type": "card",
-    "attributes": {
-      "cardTitle": "Rating Summary Field",
-      "specType": "field",
-      "ref": {
-        "module": "../../ratings-summary",
-        "name": "RatingsSummary"
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../../ratings-summary",
+              "name": "RatingsSummary"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
       }
     },
-    "meta": {
-      "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
-        "name": "Spec"
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "RatingsSummary",
+        "module": "../../ratings-summary"
+      },
+      "readMe": null,
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "specType": "field",
+      "cardTitle": "Rating Summary Field",
+      "cardDescription": null,
+      "containedExamples": [
+        {
+          "average": 4.4,
+          "count": 57,
+          "isEditable": false
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

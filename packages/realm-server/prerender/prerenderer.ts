@@ -1,11 +1,9 @@
 import {
   type AffinityType,
   type RenderRouteOptions,
-  type RenderResponse,
   type ModuleRenderResponse,
-  type FileExtractResponse,
-  type FileRenderResponse,
-  type FileRenderArgs,
+  type PrerenderVisitArgs,
+  type RenderVisitResponse,
   logger,
   type RunCommandResponse,
 } from '@cardstack/runtime-common';
@@ -67,6 +65,7 @@ export class Prerenderer {
   #cleanupInterval: NodeJS.Timeout | undefined;
   #affinityIdleEvictMs: number;
   #semaphore: AsyncSemaphore;
+  #restartInFlight: Promise<void> | null = null;
 
   constructor(options: { serverURL: string; maxPages?: number }) {
     let maxPages = options.maxPages ?? 4;
@@ -125,119 +124,6 @@ export class Prerenderer {
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     this.#renderRunner.clearAuthCache(affinityKey);
     await this.#pagePool.disposeAffinity(affinityKey);
-  }
-
-  async prerenderCard({
-    affinityType,
-    affinityValue,
-    realm,
-    url,
-    auth,
-    opts,
-    renderOptions,
-  }: {
-    affinityType: AffinityType;
-    affinityValue: string;
-    realm: string;
-    url: string;
-    auth: string;
-    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
-    renderOptions?: RenderRouteOptions;
-  }): Promise<{
-    response: RenderResponse;
-    timings: { launchMs: number; renderMs: number };
-    pool: PoolMeta;
-  }> {
-    if (this.#stopped) {
-      throw new Error('Prerenderer has been stopped and cannot be used');
-    }
-    let attemptOptions = renderOptions;
-    let lastResult:
-      | {
-          response: RenderResponse;
-          timings: { launchMs: number; renderMs: number };
-          pool: PoolMeta;
-        }
-      | undefined;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      let result: {
-        response: RenderResponse;
-        timings: { launchMs: number; renderMs: number };
-        pool: PoolMeta;
-      };
-      try {
-        result = await this.#renderRunner.prerenderCardAttempt({
-          affinityType,
-          affinityValue,
-          realm,
-          url,
-          auth,
-          opts,
-          renderOptions: attemptOptions,
-        });
-      } catch (e) {
-        log.error(
-          `prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
-          e,
-        );
-        await this.#restartBrowser();
-        try {
-          result = await this.#renderRunner.prerenderCardAttempt({
-            affinityType,
-            affinityValue,
-            realm,
-            url,
-            auth,
-            opts,
-            renderOptions: attemptOptions,
-          });
-        } catch (e2) {
-          log.error(
-            `prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
-            e2,
-          );
-          throw e2;
-        }
-      }
-      lastResult = result;
-
-      let retrySignature = this.#renderRunner.shouldRetryWithClearCache(
-        result.response,
-      );
-      let isClearCacheAttempt = attemptOptions?.clearCache === true;
-
-      if (!isClearCacheAttempt && retrySignature) {
-        log.warn(
-          `retrying prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
-            ' | ',
-          )}`,
-        );
-        attemptOptions = {
-          ...(attemptOptions ?? {}),
-          clearCache: true,
-        };
-        continue;
-      }
-
-      if (isClearCacheAttempt && retrySignature && result.response.error) {
-        log.warn(
-          `prerender retry with clearCache did not resolve error signature ${retrySignature.join(
-            ' | ',
-          )} for ${url}`,
-        );
-      }
-
-      return result;
-    }
-    if (lastResult) {
-      if (lastResult.response.error) {
-        log.error(
-          `prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
-        );
-      }
-      return lastResult;
-    }
-    throw new Error(`prerender attempts exhausted for ${url}`);
   }
 
   async prerenderModule({
@@ -388,141 +274,20 @@ export class Prerenderer {
     }
   }
 
-  async prerenderFileExtract({
+  async prerenderVisit({
     affinityType,
     affinityValue,
     realm,
     url,
     auth,
-    opts,
     renderOptions,
-  }: {
-    affinityType: AffinityType;
-    affinityValue: string;
-    realm: string;
-    url: string;
-    auth: string;
-    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
-    renderOptions?: RenderRouteOptions;
-  }): Promise<{
-    response: FileExtractResponse;
-    timings: { launchMs: number; renderMs: number };
-    pool: PoolMeta;
-  }> {
-    if (this.#stopped) {
-      throw new Error('Prerenderer has been stopped and cannot be used');
-    }
-    let attemptOptions = renderOptions;
-    let lastResult:
-      | {
-          response: FileExtractResponse;
-          timings: { launchMs: number; renderMs: number };
-          pool: PoolMeta;
-        }
-      | undefined;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      let result: {
-        response: FileExtractResponse;
-        timings: { launchMs: number; renderMs: number };
-        pool: PoolMeta;
-      };
-      try {
-        result = await this.#renderRunner.prerenderFileExtractAttempt({
-          affinityType,
-          affinityValue,
-          realm,
-          url,
-          auth,
-          opts,
-          renderOptions: attemptOptions,
-        });
-      } catch (e) {
-        log.error(
-          `file extract prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
-          e,
-        );
-        await this.#restartBrowser();
-        try {
-          result = await this.#renderRunner.prerenderFileExtractAttempt({
-            affinityType,
-            affinityValue,
-            realm,
-            url,
-            auth,
-            opts,
-            renderOptions: attemptOptions,
-          });
-        } catch (e2) {
-          log.error(
-            `file extract prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
-            e2,
-          );
-          throw e2;
-        }
-      }
-      lastResult = result;
-
-      let retrySignature = this.#renderRunner.shouldRetryWithClearCache(
-        result.response,
-      );
-      let isClearCacheAttempt = attemptOptions?.clearCache === true;
-
-      if (!isClearCacheAttempt && retrySignature) {
-        log.warn(
-          `retrying file extract prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
-            ' | ',
-          )}`,
-        );
-        attemptOptions = {
-          ...(attemptOptions ?? {}),
-          clearCache: true,
-        };
-        continue;
-      }
-
-      if (isClearCacheAttempt && retrySignature && result.response.error) {
-        log.warn(
-          `file extract prerender retry with clearCache did not resolve error signature ${retrySignature.join(
-            ' | ',
-          )} for ${url}`,
-        );
-      }
-
-      return result;
-    }
-    if (lastResult) {
-      if (lastResult.response.error) {
-        log.error(
-          `file extract prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
-        );
-      }
-      return lastResult;
-    }
-    throw new Error(`file extract prerender attempts exhausted for ${url}`);
-  }
-
-  async prerenderFileRender({
-    affinityType,
-    affinityValue,
-    realm,
-    url,
-    auth,
     fileData,
     types,
     opts,
-    renderOptions,
-  }: {
-    affinityType: AffinityType;
-    affinityValue: string;
-    realm: string;
-    url: string;
-    auth: string;
-    fileData: FileRenderArgs['fileData'];
-    types: string[];
+  }: PrerenderVisitArgs & {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
-    renderOptions?: RenderRouteOptions;
   }): Promise<{
-    response: FileRenderResponse;
+    response: RenderVisitResponse;
     timings: { launchMs: number; renderMs: number };
     pool: PoolMeta;
   }> {
@@ -532,50 +297,50 @@ export class Prerenderer {
     let attemptOptions = renderOptions;
     let lastResult:
       | {
-          response: FileRenderResponse;
+          response: RenderVisitResponse;
           timings: { launchMs: number; renderMs: number };
           pool: PoolMeta;
         }
       | undefined;
     for (let attempt = 0; attempt < 3; attempt++) {
       let result: {
-        response: FileRenderResponse;
+        response: RenderVisitResponse;
         timings: { launchMs: number; renderMs: number };
         pool: PoolMeta;
       };
       try {
-        result = await this.#renderRunner.prerenderFileRenderAttempt({
+        result = await this.#renderRunner.prerenderVisitAttempt({
           affinityType,
           affinityValue,
           realm,
           url,
           auth,
-          fileData,
-          types,
           opts,
           renderOptions: attemptOptions,
+          fileData,
+          types,
         });
       } catch (e) {
         log.error(
-          `file render prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
+          `visit prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
           e,
         );
         await this.#restartBrowser();
         try {
-          result = await this.#renderRunner.prerenderFileRenderAttempt({
+          result = await this.#renderRunner.prerenderVisitAttempt({
             affinityType,
             affinityValue,
             realm,
             url,
             auth,
-            fileData,
-            types,
             opts,
             renderOptions: attemptOptions,
+            fileData,
+            types,
           });
         } catch (e2) {
           log.error(
-            `file render prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
+            `visit prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
             e2,
           );
           throw e2;
@@ -583,14 +348,14 @@ export class Prerenderer {
       }
       lastResult = result;
 
-      let retrySignature = this.#renderRunner.shouldRetryWithClearCache(
-        result.response,
-      );
+      // Retry with clearCache if any sub-pass produced a retry-worthy
+      // signature. The retry re-runs all requested passes — matches the
+      // existing per-call retry semantics.
+      let retrySignature = this.#visitRetrySignature(result.response);
       let isClearCacheAttempt = attemptOptions?.clearCache === true;
-
       if (!isClearCacheAttempt && retrySignature) {
         log.warn(
-          `retrying file render prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
+          `retrying visit prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
             ' | ',
           )}`,
         );
@@ -600,29 +365,56 @@ export class Prerenderer {
         };
         continue;
       }
-
-      if (isClearCacheAttempt && retrySignature && result.response.error) {
+      if (isClearCacheAttempt && retrySignature) {
         log.warn(
-          `file render prerender retry with clearCache did not resolve error signature ${retrySignature.join(
+          `visit prerender retry with clearCache did not resolve error signature ${retrySignature.join(
             ' | ',
           )} for ${url}`,
         );
       }
-
       return result;
     }
     if (lastResult) {
-      if (lastResult.response.error) {
-        log.error(
-          `file render prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
-        );
-      }
       return lastResult;
     }
-    throw new Error(`file render prerender attempts exhausted for ${url}`);
+    throw new Error(`visit prerender attempts exhausted for ${url}`);
+  }
+
+  #visitRetrySignature(
+    response: RenderVisitResponse,
+  ): readonly string[] | undefined {
+    // Consider any sub-response's error signature when deciding whether to
+    // retry the whole visit with clearCache.
+    for (let sub of [
+      response.card,
+      response.fileExtract,
+      response.fileRender,
+    ]) {
+      if (!sub) continue;
+      let signature = this.#renderRunner.shouldRetryWithClearCache(sub);
+      if (signature) return signature;
+    }
+    return undefined;
   }
 
   async #restartBrowser(): Promise<void> {
+    // Coalesce concurrent callers onto a single in-flight restart. Without
+    // this, multiple failing visits in the same tick each trigger their own
+    // closeAll + browser.close, which race on the same BrowserContexts and
+    // produce "Failed to find context with id <X>" CDP errors as the second
+    // caller tries to dispose contexts the first already disposed. Sharing
+    // the promise also avoids redundantly tearing down + re-warming the
+    // standby pool.
+    if (this.#restartInFlight) {
+      return this.#restartInFlight;
+    }
+    this.#restartInFlight = this.#runRestart().finally(() => {
+      this.#restartInFlight = null;
+    });
+    return this.#restartInFlight;
+  }
+
+  async #runRestart(): Promise<void> {
     log.warn('Restarting prerender browser');
     await this.#pagePool.closeAll();
     await this.#browserManager.restartBrowser();
