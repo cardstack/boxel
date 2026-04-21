@@ -223,6 +223,7 @@ import './get-boxel-claimed-domain-test';
 import './claim-boxel-domain-test';
 import './card-reference-resolver-test';
 import './bfm-card-references-test';
+import './loader-retry-test';
 import './command-parsing-utils-test';
 import './delete-boxel-claimed-domain-test';
 import './realm-auth-test';
