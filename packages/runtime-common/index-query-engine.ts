@@ -927,10 +927,9 @@ export class IndexQueryEngine {
     ]);
   }
 
-  // Full-text matches predicate. Postgres translates to a tsvector/tsquery
-  // match against the indexed markdown column, threading the user-supplied
-  // query string as a parameterized value. SQLite lands in a follow-up issue
-  // and currently returns no rows.
+  // Full-text matches predicate. Postgres uses tsvector/tsquery on the
+  // indexed markdown column; SQLite falls back to a case-insensitive
+  // substring LIKE with `%`/`_`/`\` escaped in JS before binding.
   private matchesCondition(
     filter: MatchesFilter,
     _on: CodeRef,
@@ -948,7 +947,11 @@ export class IndexQueryEngine {
             param(filter.matches),
             `)`,
           ],
-          sqlite: '/* matches placeholder */ FALSE',
+          sqlite: [
+            `LOWER(i.markdown) LIKE LOWER(`,
+            param(`%${escapeSqliteLikePattern(filter.matches)}%`),
+            `) ESCAPE '\\'`,
+          ],
         }),
       ],
     ]);
@@ -1460,6 +1463,13 @@ function assertIndexEntry<T>(obj: T): Omit<
 
 function tableFromOpts(opts: WIPOptions | undefined) {
   return opts?.useWorkInProgressIndex ? 'boxel_index_working' : 'boxel_index';
+}
+
+// SQLite LIKE treats `%` and `_` as wildcards. With `ESCAPE '\'` we can
+// neutralize user-supplied wildcards by prefixing them (and the escape
+// char itself) with a backslash before binding.
+function escapeSqliteLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
 function assertNever(value: never) {
