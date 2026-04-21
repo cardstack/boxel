@@ -13,10 +13,11 @@
  */
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
-import type {
-  LooseSingleCardDocument,
-  ResolvedCodeRef,
-} from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  isResolvedCodeRef,
+  isSingleCardDocument,
+} from '@cardstack/runtime-common/card-document-shape';
 import { specRef } from '@cardstack/runtime-common/constants';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
@@ -448,26 +449,26 @@ async function prepareExampleInstance(
   }
 
   // A readable `.json` file isn't guaranteed to be a card document — a
-  // malformed fixture or a raw JSON payload could be missing `data` or
-  // `data.meta` entirely. Shape-check before touching nested properties
-  // so the tool surfaces a clean `status: 'error'` instead of throwing.
-  let rawDocument = rawRead.document as unknown;
-  if (
-    !rawDocument ||
-    typeof rawDocument !== 'object' ||
-    !('data' in rawDocument) ||
-    !(rawDocument as { data?: unknown }).data ||
-    typeof (rawDocument as { data: unknown }).data !== 'object' ||
-    !('meta' in (rawDocument as { data: Record<string, unknown> }).data) ||
-    !(rawDocument as { data: { meta?: unknown } }).data.meta ||
-    typeof (rawDocument as { data: { meta: unknown } }).data.meta !== 'object'
-  ) {
+  // malformed fixture or a raw JSON payload could be missing `data`,
+  // `data.meta`, or `data.meta.adoptsFrom` entirely. `isSingleCardDocument`
+  // from `runtime-common/card-document-shape` is the canonical shape
+  // check: it validates the document is `{ data: CardResource }`, that
+  // `data.meta.adoptsFrom` is present, and that `adoptsFrom` is a valid
+  // `CodeRef`. Running it first means the nested accesses below cannot
+  // throw.
+  //
+  // NB: we import from the decorator-free `/card-document-shape` subpath
+  // (not the `/document-types` barrel entry that re-exports it) because
+  // this module is exercised by the software-factory Playwright harness,
+  // which can't compile the `@Memoize()` decorators reachable through
+  // the heavier runtime-common entry points.
+  if (!isSingleCardDocument(rawRead.document)) {
     return {
-      error: `Example "${exampleUrl}" is malformed: expected a card document with object "data" and "data.meta" properties.`,
+      error: `Example "${exampleUrl}" is not a valid card document (missing or malformed "data" / "data.meta.adoptsFrom").`,
     };
   }
 
-  let document = rawDocument as LooseSingleCardDocument;
+  let document = rawRead.document as unknown as LooseSingleCardDocument;
   // Boxel card IDs are extensionless — the `id` is the resource URL, not
   // the .json file path. Strip any trailing `.json` so the id matches what
   // the prerender sandbox expects (and what the pre-refactor validation
@@ -477,16 +478,14 @@ async function prepareExampleInstance(
     ensureTrailingSlash(targetRealmUrl),
   ).href;
 
-  let adoptsFrom = document.data.meta?.adoptsFrom as
-    | ResolvedCodeRef
-    | undefined;
-  if (
-    !adoptsFrom ||
-    typeof adoptsFrom.module !== 'string' ||
-    !adoptsFrom.name
-  ) {
+  // `isSingleCardDocument` has already confirmed `adoptsFrom` is a
+  // `CodeRef`, but that union also includes unresolved forms like
+  // `{ type: 'ancestorOf', card }` — the prerender sandbox needs a
+  // resolved `{ module, name }`, so guard for that explicitly.
+  let adoptsFrom = document.data.meta?.adoptsFrom;
+  if (!isResolvedCodeRef(adoptsFrom)) {
     return {
-      error: `Example "${exampleUrl}" is missing a valid meta.adoptsFrom { module, name } — cannot instantiate.`,
+      error: `Example "${exampleUrl}" has a non-resolved meta.adoptsFrom — expected { module, name }, cannot instantiate.`,
     };
   }
 
