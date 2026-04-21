@@ -231,7 +231,9 @@ export class LintAndFixInput extends CardDef {
 
 export class LintAndFixResult extends CardDef {
   @field output = contains(StringField);
-  @field lintIssues = containsMany(StringField);
+  @field lintIssues = containsMany(StringField); // all remaining issues (errors + warnings)
+  @field lintErrors = containsMany(StringField); // severity 2 only (unfixable errors)
+  @field lintWarnings = containsMany(StringField); // severity 1 only
 }
 
 export class PatchCodeResultField extends FieldDef {
