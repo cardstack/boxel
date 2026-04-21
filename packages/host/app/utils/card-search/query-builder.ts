@@ -91,33 +91,29 @@ export function buildSearchQuery(
   selectedTypeIds?: string[],
 ): Query {
   const typeFilter = buildTypeFilter(selectedTypeIds);
+  const searchTerm = searchKey?.trim() || undefined;
+  let filters: Filter[];
   if (baseFilter) {
-    const searchTerm = searchKey?.trim() || undefined;
     // When typeFilter is present, strip the baseFilter's type constraint
     // to avoid SQL conflict where two type conditions share one cross-join alias.
     // This is safe because the type picker only offers subtypes of the baseFilter type.
     const effectiveBaseFilter = typeFilter
       ? stripTypeFromFilter(baseFilter)
       : baseFilter;
-    const filters: Filter[] = [
+    filters = [
       ...(effectiveBaseFilter ? [effectiveBaseFilter] : []),
       ...(typeFilter ? [typeFilter] : []),
       ...(searchTerm ? [{ matches: searchTerm }] : []),
     ];
-    return {
-      filter: filters.length === 1 ? filters[0] : { every: filters },
-      sort: activeSort.sort,
-    };
+  } else {
+    filters = [
+      { not: { type: specRef } },
+      ...(typeFilter ? [typeFilter] : []),
+      ...(searchTerm ? [{ matches: searchTerm }] : []),
+    ];
   }
-  const searchTerm = searchKey?.trim() || undefined;
   return {
-    filter: {
-      every: [
-        { not: { type: specRef } },
-        ...(typeFilter ? [typeFilter] : []),
-        ...(searchTerm ? [{ matches: searchTerm }] : []),
-      ],
-    },
+    filter: filters.length === 1 ? filters[0] : { every: filters },
     sort: activeSort.sort,
   };
 }

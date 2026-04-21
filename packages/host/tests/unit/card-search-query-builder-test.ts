@@ -21,10 +21,10 @@ const SORT_AZ: SortOption = {
 
 module('Unit | card-search/query-builder', function () {
   module('buildSearchQuery', function () {
-    test('empty search key with no baseFilter produces matches-less every filter', function (assert) {
+    test('empty search key with no baseFilter collapses to the single not-spec filter', function (assert) {
       let query = buildSearchQuery('', SORT_AZ);
       assert.deepEqual(query, {
-        filter: { every: [{ not: { type: specRef } }] },
+        filter: { not: { type: specRef } },
         sort: SORT_AZ.sort,
       });
     });
@@ -42,7 +42,7 @@ module('Unit | card-search/query-builder', function () {
     test('whitespace-only search key is treated as empty', function (assert) {
       let query = buildSearchQuery('   ', SORT_AZ);
       assert.deepEqual(query, {
-        filter: { every: [{ not: { type: specRef } }] },
+        filter: { not: { type: specRef } },
         sort: SORT_AZ.sort,
       });
     });
