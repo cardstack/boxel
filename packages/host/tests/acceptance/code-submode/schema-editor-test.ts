@@ -27,6 +27,7 @@ import {
   setupUserSubscription,
   type TestContextWithSave,
   withCachedRealmSetup,
+  cardDefFieldCount,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -47,6 +48,7 @@ const indexCardSource = `
   }
 `;
 
+const personCardFieldCount = `${cardDefFieldCount + 5}`;
 const personCardSource = `
   import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
   import { Friend } from './friend';
@@ -373,7 +375,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitFor('[data-test-card-schema]');
 
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
-    assert.dom('[data-test-total-fields]').containsText('9');
+    assert.dom('[data-test-total-fields]').containsText(personCardFieldCount);
 
     assert
       .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
@@ -529,7 +531,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click(`button[data-test-clickable-definition-container`);
     await waitFor('[data-test-card-schema]');
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
-    assert.dom('[data-test-total-fields]').containsText('9');
+    assert.dom('[data-test-total-fields]').containsText(personCardFieldCount);
   });
 
   test('shows displayName of CardResource when field refers to itself', async function (assert) {
