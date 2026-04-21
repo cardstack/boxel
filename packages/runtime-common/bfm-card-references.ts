@@ -22,7 +22,7 @@ function resolveUrl(ref: string, baseUrl: string | undefined): string | null {
 // ── BFM size spec parsing ──
 
 export interface BfmSizeSpec {
-  format: 'fitted' | 'isolated';
+  format: 'fitted' | 'isolated' | 'embedded';
   width?: number | string; // number = px, string = e.g. "50%"
   height?: number;
 }
@@ -43,10 +43,14 @@ SIZE_CONSTANTS.set('grid-tile', SIZE_CONSTANTS.get('cardsgrid-tile')!);
  * Parses a BFM size specifier (the part after `|` in `::card[url | spec]`).
  *
  * Supported forms:
- *  - Named constant: `strip`, `tile`, `compact-card`, etc.
- *  - WxH:           `400x200`
- *  - Explicit keys:  `w:400 h:200`, `h:300`, `w:50%`
- *  - Isolated:       `isolated`
+ *  - `isolated`                          — isolated format
+ *  - `embedded`                          — embedded format (explicit)
+ *  - `fitted`                            — fitted at the container's natural size
+ *  - Named constant: `strip`, `tile`, `compact-card`, etc. (fitted implied)
+ *  - `fitted <named-constant>`           — e.g. `fitted strip` (same as `strip`)
+ *  - WxH: `400x200` (fitted implied)
+ *  - `fitted <WxH>`                      — e.g. `fitted 400x200` (same as `400x200`)
+ *  - Explicit keys: `w:400 h:200`, `h:300`, `w:50%` (fitted implied)
  */
 export function parseBfmSizeSpec(specifier: string): BfmSizeSpec | null {
   let trimmed = specifier.trim().toLowerCase();
@@ -55,14 +59,26 @@ export function parseBfmSizeSpec(specifier: string): BfmSizeSpec | null {
     return { format: 'isolated' };
   }
 
+  if (trimmed === 'embedded') {
+    return { format: 'embedded' };
+  }
+
+  if (trimmed === 'fitted') {
+    return { format: 'fitted' };
+  }
+
+  // Strip optional `fitted` prefix followed by any whitespace;
+  // everything below already implies fitted.
+  let body = trimmed.replace(/^fitted\s+/, '');
+
   // Named size constant
-  let constant = SIZE_CONSTANTS.get(trimmed);
+  let constant = SIZE_CONSTANTS.get(body);
   if (constant) {
     return { format: 'fitted', width: constant.width, height: constant.height };
   }
 
   // WxH (e.g. "400x200")
-  let wxhMatch = trimmed.match(/^(\d+)\s*x\s*(\d+)$/);
+  let wxhMatch = body.match(/^(\d+)\s*x\s*(\d+)$/);
   if (wxhMatch) {
     return {
       format: 'fitted',
@@ -72,8 +88,8 @@ export function parseBfmSizeSpec(specifier: string): BfmSizeSpec | null {
   }
 
   // Explicit key syntax: w:N, h:N, w:N%
-  let wMatch = trimmed.match(/\bw:(\d+)(%?)/);
-  let hMatch = trimmed.match(/\bh:(\d+)\b/);
+  let wMatch = body.match(/\bw:(\d+)(%?)/);
+  let hMatch = body.match(/\bh:(\d+)\b/);
 
   if (wMatch || hMatch) {
     let spec: BfmSizeSpec = { format: 'fitted' };

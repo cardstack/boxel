@@ -14,7 +14,7 @@ import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import type { ValidationStepResult } from '../factory-agent';
-import { deriveIssueSlug } from '../factory-agent-types';
+import { deriveIssueSlug } from '../factory-agent';
 import { getNextValidationSequenceNumber } from '../realm-operations';
 import {
   createEvalResult,

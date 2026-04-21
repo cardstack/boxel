@@ -35,3 +35,23 @@ export function formatLintIssues(
   }
   return messages.map((message) => formatLintIssue(message)).filter(Boolean);
 }
+
+export function formatLintIssuesBySeverity(
+  messages: LintResult['messages'] | undefined,
+): { errors: string[]; warnings: string[] } {
+  if (!Array.isArray(messages)) {
+    return { errors: [], warnings: [] };
+  }
+  let errors: string[] = [];
+  let warnings: string[] = [];
+  for (let message of messages) {
+    let formatted = formatLintIssue(message);
+    if (!formatted) continue;
+    if (message.severity === 2) {
+      errors.push(formatted);
+    } else {
+      warnings.push(formatted);
+    }
+  }
+  return { errors, warnings };
+}

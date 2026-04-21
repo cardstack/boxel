@@ -65,6 +65,7 @@ export class Prerenderer {
   #cleanupInterval: NodeJS.Timeout | undefined;
   #affinityIdleEvictMs: number;
   #semaphore: AsyncSemaphore;
+  #restartInFlight: Promise<void> | null = null;
 
   constructor(options: { serverURL: string; maxPages?: number }) {
     let maxPages = options.maxPages ?? 4;
@@ -401,6 +402,23 @@ export class Prerenderer {
   }
 
   async #restartBrowser(): Promise<void> {
+    // Coalesce concurrent callers onto a single in-flight restart. Without
+    // this, multiple failing visits in the same tick each trigger their own
+    // closeAll + browser.close, which race on the same BrowserContexts and
+    // produce "Failed to find context with id <X>" CDP errors as the second
+    // caller tries to dispose contexts the first already disposed. Sharing
+    // the promise also avoids redundantly tearing down + re-warming the
+    // standby pool.
+    if (this.#restartInFlight) {
+      return this.#restartInFlight;
+    }
+    this.#restartInFlight = this.#runRestart().finally(() => {
+      this.#restartInFlight = null;
+    });
+    return this.#restartInFlight;
+  }
+
+  async #runRestart(): Promise<void> {
     log.warn('Restarting prerender browser');
     await this.#pagePool.closeAll();
     await this.#browserManager.restartBrowser();

@@ -54,6 +54,15 @@ const DEFAULT_CARD_TYPE_SCHEMAS = new Map<
       },
     },
   ],
+  [
+    'Spec',
+    {
+      attributes: {
+        type: 'object',
+        properties: { cardTitle: { type: 'string' } },
+      },
+    },
+  ],
 ]);
 
 function makeConfig(
@@ -279,6 +288,201 @@ module('factory-tool-builder > write_file', function () {
     assert.strictEqual(requests[0].method, 'POST');
     // writeFile sends raw content as-is
     assert.strictEqual(requests[0].body, cardJson);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Argument validation (guards against malformed LLM tool calls)
+// ---------------------------------------------------------------------------
+
+/**
+ * The OpenRouter tool-use protocol treats `required` on parameter schemas
+ * as advisory: models can still emit `tool_call` with an empty args blob
+ * (`write_file({})`). Without runtime validation, the factory would
+ * silently write to `<realm>/undefined` because `path` stringifies to the
+ * literal "undefined" further down the call chain.
+ *
+ * These tests assert that every path-taking tool rejects
+ * missing/empty/non-string path with a clear error — one the agent can
+ * self-correct on during the next inner-loop iteration — and that the
+ * realm never sees an HTTP request for the malformed call.
+ */
+module('factory-tool-builder > path-arg validation', function () {
+  async function expectPathError(
+    invoke: () => Promise<unknown>,
+    toolName: string,
+    assert: Assert,
+  ) {
+    let err: Error | undefined;
+    try {
+      await invoke();
+    } catch (e) {
+      err = e as Error;
+    }
+    assert.ok(err, 'tool must throw for missing/empty path');
+    assert.true(
+      /non-empty string "path"/.test(err?.message ?? ''),
+      `error mentions the missing path arg (got: ${err?.message})`,
+    );
+    assert.true(
+      err!.message.includes(toolName),
+      `error mentions the tool name "${toolName}"`,
+    );
+  }
+
+  test('write_file({}) throws and does NOT hit the realm', async function (assert) {
+    let { fetch: mockFetch, requests } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let writeTool = findTool(tools, 'write_file');
+
+    await expectPathError(() => writeTool.execute({}), 'write_file', assert);
+    assert.strictEqual(
+      requests.length,
+      0,
+      'no realm HTTP request was made for an empty write_file call',
+    );
+  });
+
+  test('write_file with empty-string path throws', async function (assert) {
+    let { fetch: mockFetch } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let writeTool = findTool(tools, 'write_file');
+
+    await expectPathError(
+      () => writeTool.execute({ path: '   ', content: 'x' }),
+      'write_file',
+      assert,
+    );
+  });
+
+  test('write_file with missing content throws (required arg)', async function (assert) {
+    let { fetch: mockFetch, requests } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let writeTool = findTool(tools, 'write_file');
+
+    let err: Error | undefined;
+    try {
+      await writeTool.execute({ path: 'card.gts' });
+    } catch (e) {
+      err = e as Error;
+    }
+    assert.ok(err);
+    assert.true(/non-empty string "content"/.test(err?.message ?? ''));
+    assert.strictEqual(requests.length, 0, 'no write request was made');
+  });
+
+  test('read_file({}) throws and does NOT hit the realm', async function (assert) {
+    let { fetch: mockFetch, requests } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let readTool = findTool(tools, 'read_file');
+
+    await expectPathError(() => readTool.execute({}), 'read_file', assert);
+    assert.strictEqual(requests.length, 0);
+  });
+
+  test('fetch_transpiled_module({}) throws', async function (assert) {
+    let { fetch: mockFetch } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let fetchTool = findTool(tools, 'fetch_transpiled_module');
+
+    await expectPathError(
+      () => fetchTool.execute({}),
+      'fetch_transpiled_module',
+      assert,
+    );
+  });
+
+  test('update_project({}) throws', async function (assert) {
+    let { fetch: mockFetch, requests } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'update_project');
+
+    await expectPathError(() => tool.execute({}), 'update_project', assert);
+    assert.strictEqual(requests.length, 0);
+  });
+
+  test('update_issue({}) throws', async function (assert) {
+    let { fetch: mockFetch } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'update_issue');
+
+    await expectPathError(() => tool.execute({}), 'update_issue', assert);
+  });
+
+  test('add_comment({}) throws', async function (assert) {
+    let { fetch: mockFetch } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'add_comment');
+
+    await expectPathError(() => tool.execute({}), 'add_comment', assert);
+  });
+
+  test('add_comment rejects empty body / author too', async function (assert) {
+    let { fetch: mockFetch } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'add_comment');
+
+    let err: Error | undefined;
+    try {
+      await tool.execute({ path: 'Issues/1.json', body: '', author: '' });
+    } catch (e) {
+      err = e as Error;
+    }
+    assert.ok(err);
+    assert.true(/non-empty string "body"/.test(err?.message ?? ''));
+  });
+
+  test('create_knowledge({}) throws', async function (assert) {
+    let { fetch: mockFetch } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'create_knowledge');
+
+    await expectPathError(() => tool.execute({}), 'create_knowledge', assert);
+  });
+
+  test('create_catalog_spec({}) throws', async function (assert) {
+    let { fetch: mockFetch } = createMockFetch(200, {});
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'create_catalog_spec');
+
+    await expectPathError(
+      () => tool.execute({}),
+      'create_catalog_spec',
+      assert,
+    );
   });
 });
 
@@ -803,10 +1007,293 @@ module(
   },
 );
 
-// Note: run_tests is no longer exposed as an agent tool — the validation
-// pipeline runs tests automatically via executeTestRunFromRealm after
-// each agent turn. The former buildRunTestsTool implementation has been
-// removed and is no longer part of buildFactoryTools.
+// ---------------------------------------------------------------------------
+// run_tests tool (in-memory validation — CS-10777)
+// ---------------------------------------------------------------------------
+
+module('buildFactoryTools — run_tests', function () {
+  test('registers run_tests with empty parameters', function (assert) {
+    let config = makeConfig();
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runTests = tools.find((t) => t.name === 'run_tests');
+    assert.ok(runTests, 'run_tests tool is registered');
+    assert.deepEqual(
+      runTests?.parameters,
+      { type: 'object', properties: {} },
+      'run_tests takes no arguments',
+    );
+  });
+
+  test('delegates to injected runTestsInMemory and forwards realm config', async function (assert) {
+    let capturedOptions:
+      | {
+          targetRealmUrl: string;
+          hostAppUrl: string;
+        }
+      | undefined;
+    let stubResult = {
+      status: 'passed' as const,
+      passedCount: 3,
+      failedCount: 0,
+      skippedCount: 0,
+      durationMs: 42,
+      testFiles: ['foo.test.gts'],
+      failures: [],
+    };
+
+    let config = makeConfig({
+      hostAppUrl: 'https://host.example.test/',
+      runTestsInMemory: async (options) => {
+        capturedOptions = {
+          targetRealmUrl: options.targetRealmUrl,
+          hostAppUrl: options.hostAppUrl,
+        };
+        return stubResult;
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runTests = tools.find((t) => t.name === 'run_tests');
+    assert.ok(runTests, 'run_tests tool is registered');
+
+    let result = await runTests?.execute({});
+
+    assert.deepEqual(result, stubResult, 'tool returns the in-memory result');
+    assert.strictEqual(
+      capturedOptions?.targetRealmUrl,
+      TARGET_REALM,
+      'forwards targetRealmUrl from config',
+    );
+    assert.strictEqual(
+      capturedOptions?.hostAppUrl,
+      'https://host.example.test/',
+      'forwards hostAppUrl from config',
+    );
+  });
+
+  test('falls back to realmServerUrl when hostAppUrl is not configured', async function (assert) {
+    let capturedHost: string | undefined;
+    let config = makeConfig({
+      runTestsInMemory: async (options) => {
+        capturedHost = options.hostAppUrl;
+        return {
+          status: 'passed' as const,
+          passedCount: 0,
+          failedCount: 0,
+          skippedCount: 0,
+          durationMs: 0,
+          testFiles: [],
+          failures: [],
+        };
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runTests = tools.find((t) => t.name === 'run_tests');
+    assert.ok(runTests, 'run_tests tool is registered');
+
+    await runTests?.execute({});
+
+    assert.strictEqual(
+      capturedHost,
+      'https://realms.example.test/',
+      'hostAppUrl defaults to realmServerUrl',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// run_lint tool (in-memory validation — CS-10776)
+// ---------------------------------------------------------------------------
+
+module('buildFactoryTools — run_lint', function () {
+  test('registers run_lint with an optional path parameter', function (assert) {
+    let config = makeConfig();
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runLint = tools.find((t) => t.name === 'run_lint')!;
+    assert.ok(runLint, 'run_lint tool is registered');
+    let params = runLint.parameters as {
+      type: string;
+      properties: Record<string, { type: string }>;
+      required?: string[];
+    };
+    assert.strictEqual(params.type, 'object');
+    assert.strictEqual(params.properties.path.type, 'string');
+    assert.strictEqual(params.required, undefined, 'path is optional');
+  });
+
+  test('delegates to injected runLintInMemory and forwards realm config', async function (assert) {
+    let capturedOptions:
+      | {
+          targetRealmUrl: string;
+          hasClient: boolean;
+          path: string | undefined;
+        }
+      | undefined;
+    let stubResult = {
+      status: 'passed' as const,
+      filesChecked: 2,
+      filesWithErrors: 0,
+      errorCount: 0,
+      warningCount: 0,
+      durationMs: 17,
+      lintableFiles: ['a.gts', 'b.gts'],
+      violations: [],
+    };
+
+    let config = makeConfig({
+      runLintInMemory: async (options) => {
+        capturedOptions = {
+          targetRealmUrl: options.targetRealmUrl,
+          hasClient: Boolean(options.client),
+          path: options.path,
+        };
+        return stubResult;
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runLint = tools.find((t) => t.name === 'run_lint')!;
+
+    let result = await runLint.execute({});
+
+    assert.deepEqual(result, stubResult, 'tool returns the in-memory result');
+    assert.strictEqual(
+      capturedOptions?.targetRealmUrl,
+      TARGET_REALM,
+      'forwards targetRealmUrl from config',
+    );
+    assert.true(
+      capturedOptions?.hasClient,
+      'forwards the configured BoxelCLIClient',
+    );
+    assert.strictEqual(
+      capturedOptions?.path,
+      undefined,
+      'path is omitted when not provided',
+    );
+  });
+
+  test('forwards path when provided to single-file lint', async function (assert) {
+    let capturedPath: string | undefined;
+    let stubResult = {
+      status: 'failed' as const,
+      filesChecked: 1,
+      filesWithErrors: 1,
+      errorCount: 1,
+      warningCount: 0,
+      durationMs: 8,
+      lintableFiles: ['my-card.gts'],
+      violations: [
+        {
+          rule: 'no-unused-vars',
+          file: 'my-card.gts',
+          line: 3,
+          column: 5,
+          message: "'unusedVar' is assigned a value but never used.",
+          severity: 'error' as const,
+        },
+      ],
+    };
+
+    let config = makeConfig({
+      runLintInMemory: async (options) => {
+        capturedPath = options.path;
+        return stubResult;
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runLint = tools.find((t) => t.name === 'run_lint')!;
+
+    let result = (await runLint.execute({
+      path: 'my-card.gts',
+    })) as typeof stubResult;
+
+    assert.strictEqual(
+      capturedPath,
+      'my-card.gts',
+      'path is forwarded to the engine',
+    );
+    assert.strictEqual(result.status, 'failed');
+    assert.deepEqual(result.lintableFiles, ['my-card.gts']);
+  });
+
+  test('empty-string path is treated as "no path" (whole-realm lint)', async function (assert) {
+    let capturedPath: string | undefined;
+    let config = makeConfig({
+      runLintInMemory: async (options) => {
+        capturedPath = options.path;
+        return {
+          status: 'passed' as const,
+          filesChecked: 0,
+          filesWithErrors: 0,
+          errorCount: 0,
+          warningCount: 0,
+          durationMs: 0,
+          lintableFiles: [],
+          violations: [],
+        };
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runLint = tools.find((t) => t.name === 'run_lint')!;
+
+    await runLint.execute({ path: '   ' });
+
+    assert.strictEqual(
+      capturedPath,
+      undefined,
+      'whitespace-only path falls back to whole-realm lint',
+    );
+  });
+
+  test('propagates failed lint results unchanged', async function (assert) {
+    let stubResult = {
+      status: 'failed' as const,
+      filesChecked: 1,
+      filesWithErrors: 1,
+      errorCount: 2,
+      warningCount: 0,
+      durationMs: 12,
+      lintableFiles: ['bad.gts'],
+      violations: [
+        {
+          rule: 'no-unused-vars',
+          file: 'bad.gts',
+          line: 4,
+          column: 5,
+          message: "'unusedVar' is assigned a value but never used.",
+          severity: 'error' as const,
+        },
+        {
+          rule: 'prettier/prettier',
+          file: 'bad.gts',
+          line: 7,
+          column: 1,
+          message: 'Insert `;`',
+          severity: 'error' as const,
+        },
+      ],
+    };
+    let config = makeConfig({
+      runLintInMemory: async () => stubResult,
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runLint = tools.find((t) => t.name === 'run_lint')!;
+
+    let result = (await runLint.execute({})) as typeof stubResult;
+
+    assert.strictEqual(result.status, 'failed');
+    assert.strictEqual(result.errorCount, 2);
+    assert.strictEqual(result.violations.length, 2);
+    assert.strictEqual(result.violations[0].rule, 'no-unused-vars');
+  });
+});
 
 // ---------------------------------------------------------------------------
 // add_comment tool

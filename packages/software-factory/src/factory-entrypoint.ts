@@ -3,9 +3,11 @@ import { parseArgs as parseNodeArgs } from 'node:util';
 import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
 import { inferDarkfactoryModuleUrl } from './factory-seed';
+import { parseAgentFlag, type FactoryAgentProvider } from './factory-agent';
 import { loadFactoryBrief, type FactoryBrief } from './factory-brief';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 import {
+  assertAgentProviderImplemented,
   runFactoryIssueLoop,
   type IssueLoopWiringConfig,
 } from './factory-issue-loop-wiring';
@@ -23,7 +25,9 @@ export interface FactoryEntrypointOptions {
   briefUrl: string;
   targetRealmUrl: string | null;
   realmServerUrl: string | null;
-  model?: string;
+  agent: FactoryAgentProvider;
+  /** Only set when agent === 'openrouter' and the flag carried a `=<id>` suffix. */
+  openRouterModel?: string;
   debug?: boolean;
   retryBlocked?: boolean;
 }
@@ -102,7 +106,11 @@ export function getFactoryEntrypointUsage(): string {
     'Options:',
     '  --realm-server-url <url>   Realm server URL (default: from active Boxel profile)',
     '  --no-retry-blocked          Skip retrying blocked issues (by default, blocked issues are reset to backlog)',
-    '  --model <model>             OpenRouter model ID (e.g., anthropic/claude-sonnet-4)',
+    '  --agent <provider>          LLM backend: "claude" (default, uses Claude Code Agent SDK),',
+    '                              "codex" (not yet implemented — tracked in CS-10594),',
+    '                              "openrouter" (defaults to anthropic/claude-opus-4),',
+    '                              or "openrouter=<model-id>" to pick a specific OpenRouter model',
+    '                              (e.g., "openrouter=anthropic/claude-sonnet-4").',
     '  --debug                     Log LLM prompts and responses to stderr',
     '  --help                      Show this usage information',
     '',
@@ -143,7 +151,7 @@ export function parseFactoryEntrypointArgs(
         'no-retry-blocked': {
           type: 'boolean',
         },
-        model: {
+        agent: {
           type: 'string',
         },
         debug: {
@@ -171,16 +179,24 @@ export function parseFactoryEntrypointArgs(
     typeof parsed.values['realm-server-url'] === 'string'
       ? normalizeUrl(parsed.values['realm-server-url'], '--realm-server-url')
       : null;
-  let model =
-    typeof parsed.values.model === 'string'
-      ? parsed.values.model.trim() || undefined
-      : undefined;
+
+  let agentRaw =
+    typeof parsed.values.agent === 'string' ? parsed.values.agent : undefined;
+  let parsedAgent;
+  try {
+    parsedAgent = parseAgentFlag(agentRaw);
+  } catch (error) {
+    throw new FactoryEntrypointUsageError(
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 
   return {
     briefUrl: normalizeUrl(briefUrl, '--brief-url'),
     targetRealmUrl: normalizeUrl(targetRealmUrl, '--target-realm-url'),
     realmServerUrl,
-    model,
+    agent: parsedAgent.provider,
+    openRouterModel: parsedAgent.openRouterModel,
     debug: parsed.values.debug === true ? true : undefined,
     retryBlocked: parsed.values['no-retry-blocked'] === true ? false : true,
   };
@@ -195,6 +211,12 @@ export async function runFactoryEntrypoint(
   options: FactoryEntrypointOptions,
   dependencies?: RunFactoryEntrypointDependencies,
 ): Promise<FactoryEntrypointSummary> {
+  // Reject unsupported agent backends before any realm/brief side effects
+  // run — otherwise `--agent codex` would create a seed issue and mutate
+  // the target realm only to fail later when the loop tries to build the
+  // (unimplemented) agent.
+  assertAgentProviderImplemented(options.agent);
+
   let targetRealmResolution = (
     dependencies?.resolveTargetRealm ?? resolveFactoryTargetRealm
   )({
@@ -237,7 +259,8 @@ export async function runFactoryEntrypoint(
     realmServerUrl: targetRealm.serverUrl,
     ownerUsername: targetRealm.ownerUsername,
     client,
-    model: options.model,
+    agent: options.agent,
+    openRouterModel: options.openRouterModel,
     debug: options.debug,
     retryBlocked: options.retryBlocked,
   });

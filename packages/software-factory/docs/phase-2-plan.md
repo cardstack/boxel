@@ -151,6 +151,14 @@ The lint validation step (`src/validators/lint-step.ts`) uses the realm's existi
 
 The `LintResult` card definition (`realm/lint-result.gts`) mirrors the `TestRun` card structure with fitted/embedded/isolated templates, a running state, and links to Issue/Project. Card CRUD is in `src/lint-result-cards.ts`.
 
+**Shared engine.** The per-file discovery and lint loop live in `src/lint-execution.ts` (`discoverLintableFiles` + `lintRealmFiles`). Both the validation pipeline's `LintValidationStep` (which owns `LintResult` artifact lifecycle) and the in-memory `run_lint` agent tool (see below) consume the same engine, so rule coverage and read/lint semantics stay identical.
+
+### In-Memory `run_lint` Agent Tool (CS-10776)
+
+The agent also has a `run_lint` tool exposed on the factory tool set. It runs the same discovery + `_lint` engine as the validation step and returns a flat, JSON-friendly `RunLintResult` (`status`, `filesChecked`, `filesWithErrors`, `errorCount`, `warningCount`, `durationMs`, `lintableFiles`, `violations[{ rule, file, line, column, message, severity }]`). Unlike `LintValidationStep`, it **does not create a `LintResult` card** — no realm artifact is written, so it's safe to call repeatedly for mid-turn self-validation before `signal_done`. The orchestrator's post-`signal_done` lint validation still writes the durable `LintResult`.
+
+The tool accepts an optional `path` argument. When omitted, every lintable file in the realm is linted (matching the validation step's behavior). When supplied, the tool skips discovery and lints only that one realm-relative file — handy for a fast self-check right after writing or editing a single file. Paths with non-lintable extensions (`.json`, etc.) short-circuit to `status: 'error'` without calling the realm.
+
 ### Eval Step Details (CS-10715)
 
 The eval validation step (`src/validators/eval-step.ts`) verifies that `.gts` modules load and evaluate without runtime errors. Module evaluation must happen in a sandbox — the prerenderer's headless Chrome — never directly in the factory's Node process. The step chains through three layers: `_run-command` → `evaluate-module` host command (`packages/host/app/commands/evaluate-module.ts`) → `/_prerender-module` endpoint. The prerenderer returns a `ModuleRenderResponse` with `status: 'ready' | 'error'` and structured error details including message and stack trace.
@@ -222,7 +230,7 @@ If the brief describes only one entry-point card, there will be one implementati
 
 Each implementation issue must carry `project` and `relatedKnowledge` relationships pointing to the Project and KnowledgeArticle cards created during bootstrap. This is how `ContextBuilder.buildForIssue()` loads project scope and brief context for the agent when working on these issues.
 
-The agent does **not** need to create "run tests" issues. Test execution happens automatically as part of the validation phase after every inner-loop iteration.
+The agent does **not** need to create "run tests" issues. Test execution happens automatically as part of the validation phase after every inner-loop iteration. The agent may also call the `run_tests` tool mid-turn for in-memory self-validation (see "run_tests Tool: In-Memory Validation" below) — that call is optional and never replaces the orchestrator's post-turn pipeline.
 
 ### Validation Behavior for Bootstrap Issues
 
@@ -527,9 +535,17 @@ When the loop outcome is `all_issues_done`, the orchestrator automatically sets 
 
 The `update_issue`, `update_project`, and `create_knowledge` tools perform a **read-patch-write** cycle: they read the existing card source, merge the agent-provided attributes on top, and write back the merged document. This preserves attributes the agent didn't include in its update call. Earlier versions used a full-document write via `buildCardDocument()` which would clobber existing attributes — this was identified as a critical bug during e2e testing (bootstrap-seed issue was reduced to just `status` and `updatedAt` after an update).
 
-### run_tests Tool Removed from Agent
+### run_tests Tool: In-Memory Validation (CS-10777)
 
-The `run_tests` tool is **not exposed** to the agent. The validation pipeline runs tests automatically after every agent turn (after `signal_done`). Giving the agent the tool caused it to waste iterations running tests manually, sometimes before writing test files, and creating duplicate TestRun instances. The system prompt and skills inform the agent that the orchestrator handles test execution.
+The `run_tests` tool **is exposed** to the agent, but as an **in-memory** validator rather than a realm-writing one. This is the first member of the `CS-10775` in-memory validation tool family (with in-memory `lint`, `parse`, and `evaluate` counterparts coming as sibling issues).
+
+Behavior:
+
+- The tool discovers `*.test.gts` files in the target realm, drives QUnit via Playwright/Chromium (through the shared `runQunitInBrowser()` engine), and returns a flat `RunTestsResult` object — `{ status, passedCount, failedCount, skippedCount, durationMs, testFiles, failures, errorMessage? }`.
+- It does **not** create a `TestRun` card or any other realm artifact. The orchestrator's post-`signal_done` validation pipeline still writes the durable `TestRun` artifact.
+- It takes no arguments — it always runs the full `*.test.gts` set in the target realm.
+
+Rationale for reintroduction: the original `run_tests` tool was removed because it ran through `executeTestRunFromRealm()`, which meant the agent could create duplicate `TestRun` instances and confuse sequence-number ordering. The in-memory variant sidesteps that problem entirely — no card is ever written — so letting the agent call it mid-turn to check its own work is safe. The pipeline remains the source of truth for the persistent `TestRun` artifact.
 
 The `run_command` tool description explicitly states it is for Boxel host commands only (format: `@cardstack/boxel-host/commands/<name>/default`), not shell commands or scripts.
 
@@ -611,8 +627,9 @@ The boxel-cli integration work is tracked in a dedicated Linear project: **"Inco
 - **CS-10670** — boxel-cli publishes tool definitions for factory consumption (tool delegation)
 - **CS-10666** — Create `boxel-api` skill (federated search, realm creation, auth model)
 - **CS-10667** — Create `boxel-command` skill (host commands via prerenderer)
-- **CS-10593** — Claude Code native LLM support (ClaudeCodeFactoryAgent)
-- **CS-10594** — Codex CLI native support
+- **CS-10518** — `--agent claude | codex | openrouter[=<model>]` selection (landed). Default is `claude`. No env vars; no host-environment auto-detection.
+- **CS-10593** — Claude Code native LLM support (`ClaudeCodeFactoryAgent`, built on `@anthropic-ai/claude-agent-sdk`). Tools register as in-process callbacks via `createSdkMcpServer` + `tool(name, desc, zodShape, execute)`; JSON-Schema → Zod conversion is confined to `factory-tool-schema-adapter.ts`. **Landed.**
+- **CS-10594** — Codex CLI native support (stub only as of CS-10518; `--agent codex` currently throws "not yet implemented"). Future implementation uses `@openai/codex-sdk` + an in-process MCP stdio server bridging `FactoryTool[]`, `codex exec --json`, and an ephemeral `CODEX_HOME`. See the CS-10594 Linear comment for the full design.
 
 ### Architectural Principle: boxel-cli Owns the Entire Boxel API Surface
 
