@@ -1,6 +1,9 @@
 import { service } from '@ember/service';
 
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  SupportedMimeType,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -132,7 +135,7 @@ function buildCardJson(model: OpenRouterApiModel) {
       },
       meta: {
         adoptsFrom: {
-          module: '../openrouter-model',
+          module: '../openrouter-model' as RealmResourceIdentifier,
           name: 'OpenRouterModel',
         },
       },
@@ -224,7 +227,7 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
             },
             meta: {
               adoptsFrom: {
-                module: '../openrouter-model',
+                module: '../openrouter-model' as RealmResourceIdentifier,
                 name: 'OpenRouterModel',
               },
             },
