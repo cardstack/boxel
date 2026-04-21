@@ -36,6 +36,10 @@ The agent has these tools during the execution loop. Use them by name — they a
 - `create_knowledge({ path, attributes, relationships? })` — Create or update a KnowledgeArticle card. Same structured interface with dynamic field schema in the tool parameters.
 - `create_catalog_spec({ path, attributes, relationships? })` — Create a Catalog Spec card in the target realm's `Spec/` folder. Makes a card definition discoverable in the Boxel catalog. Same structured interface with dynamic field schema. The tool auto-constructs the document with `adoptsFrom` pointing to `https://cardstack.com/base/spec#Spec`.
 
+### Self-Validation (in-memory)
+
+- `run_evaluate({ path? })` — Evaluate ESM modules (`.gts` / `.gjs` / `.ts` / `.js`) in the target realm via the prerenderer sandbox and return a `RunEvaluateResult` (status, module counts, per-failure `{ path, error, stackTrace? }`). Without `path`, evaluates every non-test evaluable module. With `path`, evaluates only that single realm-relative file — handy for a quick self-check right after writing one module. Test files (`*.test.*`) are rejected — the test runner validates those. Safe to call repeatedly mid-turn — this tool does NOT create an `EvalResult` card or any other realm artifact. The orchestrator still runs the full validation pipeline (which writes an `EvalResult` card) automatically after `signal_done`, so calling this is optional. When a failure reports a line/column, those numbers refer to the transpiled module — pair with `fetch_transpiled_module` to locate the offending source construct, then fix the `.gts` source (never copy transpiled patterns back into source).
+
 ### Running Host Commands
 
 - `run_command({ command, commandInput? })` — Execute a host command on the realm server via the prerenderer. Commands run in browser context with full card runtime access (Loader, CardAPI, services). Use the specifier format `@cardstack/boxel-host/commands/<name>/default`.

@@ -1570,3 +1570,188 @@ module('factory-tool-builder > add_comment', function () {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// run_evaluate tool (in-memory validation — CS-10779)
+// ---------------------------------------------------------------------------
+
+module('buildFactoryTools — run_evaluate', function () {
+  test('registers run_evaluate with an optional path parameter', function (assert) {
+    let config = makeConfig();
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runEvaluate = tools.find((t) => t.name === 'run_evaluate');
+    assert.ok(runEvaluate, 'run_evaluate tool is registered');
+    let params = runEvaluate!.parameters as {
+      type: string;
+      properties: Record<string, { type: string }>;
+      required?: string[];
+    };
+    assert.strictEqual(params.type, 'object');
+    assert.strictEqual(params.properties.path?.type, 'string');
+    assert.strictEqual(params.required, undefined, 'path is optional');
+  });
+
+  test('delegates to injected runEvaluateInMemory and forwards realm config', async function (assert) {
+    let capturedOptions:
+      | {
+          targetRealmUrl: string;
+          realmServerUrl: string;
+          hasClient: boolean;
+          path: string | undefined;
+        }
+      | undefined;
+    let stubResult = {
+      status: 'passed' as const,
+      modulesChecked: 2,
+      modulesWithErrors: 0,
+      durationMs: 42,
+      evaluableFiles: ['a.gts', 'b.gts'],
+      failures: [],
+    };
+
+    let config = makeConfig({
+      runEvaluateInMemory: async (options) => {
+        capturedOptions = {
+          targetRealmUrl: options.targetRealmUrl,
+          realmServerUrl: options.realmServerUrl,
+          hasClient: Boolean(options.client),
+          path: options.path,
+        };
+        return stubResult;
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runEvaluate = tools.find((t) => t.name === 'run_evaluate');
+    assert.ok(runEvaluate, 'run_evaluate tool is registered');
+
+    let result = await runEvaluate!.execute({});
+
+    assert.deepEqual(result, stubResult, 'tool returns the in-memory result');
+    assert.strictEqual(
+      capturedOptions?.targetRealmUrl,
+      TARGET_REALM,
+      'forwards targetRealmUrl from config',
+    );
+    assert.strictEqual(
+      capturedOptions?.realmServerUrl,
+      'https://realms.example.test/',
+      'forwards realmServerUrl from config',
+    );
+    assert.true(
+      capturedOptions?.hasClient,
+      'forwards the configured BoxelCLIClient',
+    );
+    assert.strictEqual(
+      capturedOptions?.path,
+      undefined,
+      'path is omitted when not provided',
+    );
+  });
+
+  test('forwards path when provided to single-file evaluate', async function (assert) {
+    let capturedPath: string | undefined;
+    let stubResult = {
+      status: 'failed' as const,
+      modulesChecked: 1,
+      modulesWithErrors: 1,
+      durationMs: 120,
+      evaluableFiles: ['my-card.gts'],
+      failures: [
+        {
+          path: 'my-card.gts',
+          error: 'Cannot find module ./does-not-exist',
+          stackTrace: 'at Loader.load (loader.ts:42:5)',
+        },
+      ],
+    };
+
+    let config = makeConfig({
+      runEvaluateInMemory: async (options) => {
+        capturedPath = options.path;
+        return stubResult;
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runEvaluate = tools.find((t) => t.name === 'run_evaluate');
+    assert.ok(runEvaluate, 'run_evaluate tool is registered');
+
+    let result = (await runEvaluate!.execute({
+      path: 'my-card.gts',
+    })) as typeof stubResult;
+
+    assert.strictEqual(
+      capturedPath,
+      'my-card.gts',
+      'path is forwarded to the engine',
+    );
+    assert.strictEqual(result.status, 'failed');
+    assert.deepEqual(result.evaluableFiles, ['my-card.gts']);
+    assert.strictEqual(result.failures[0].path, 'my-card.gts');
+    assert.strictEqual(
+      result.failures[0].stackTrace,
+      'at Loader.load (loader.ts:42:5)',
+    );
+  });
+
+  test('whitespace-only path is treated as "no path" (whole-realm evaluate)', async function (assert) {
+    let capturedPath: string | undefined;
+    let config = makeConfig({
+      runEvaluateInMemory: async (options) => {
+        capturedPath = options.path;
+        return {
+          status: 'passed' as const,
+          modulesChecked: 0,
+          modulesWithErrors: 0,
+          durationMs: 0,
+          evaluableFiles: [],
+          failures: [],
+        };
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runEvaluate = tools.find((t) => t.name === 'run_evaluate');
+    assert.ok(runEvaluate, 'run_evaluate tool is registered');
+
+    await runEvaluate!.execute({ path: '   ' });
+
+    assert.strictEqual(
+      capturedPath,
+      undefined,
+      'whitespace-only path falls back to whole-realm evaluate',
+    );
+  });
+
+  test('propagates failed evaluate results unchanged', async function (assert) {
+    let stubResult = {
+      status: 'failed' as const,
+      modulesChecked: 2,
+      modulesWithErrors: 1,
+      durationMs: 85,
+      evaluableFiles: ['broken.gts', 'good.gts'],
+      failures: [
+        {
+          path: 'broken.gts',
+          error: 'ReferenceError: nonExistentHelper is not defined',
+        },
+      ],
+    };
+    let config = makeConfig({
+      runEvaluateInMemory: async () => stubResult,
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runEvaluate = tools.find((t) => t.name === 'run_evaluate');
+    assert.ok(runEvaluate, 'run_evaluate tool is registered');
+
+    let result = (await runEvaluate!.execute({})) as typeof stubResult;
+
+    assert.strictEqual(result.status, 'failed');
+    assert.strictEqual(result.modulesWithErrors, 1);
+    assert.strictEqual(result.failures.length, 1);
+    assert.strictEqual(result.failures[0].path, 'broken.gts');
+  });
+});

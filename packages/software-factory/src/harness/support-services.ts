@@ -417,25 +417,67 @@ export async function startHarnessPrerenderServer(options: {
     },
   );
 
+  // Ring-buffer the child's stdio so a startup crash surfaces the actual
+  // error (EADDRINUSE, missing dep, puppeteer launch failure, …) instead of
+  // just "exited before it became ready".
+  const STDIO_BUFFER_BYTES = 4096;
+  let recentStdout = '';
+  let recentStderr = '';
+  let appendBounded = (buf: string, chunk: string): string => {
+    let combined = buf + chunk;
+    return combined.length > STDIO_BUFFER_BYTES
+      ? combined.slice(-STDIO_BUFFER_BYTES)
+      : combined;
+  };
+
   child.stdout?.on('data', (data: Buffer) => {
-    log.info(`prerender: ${data.toString()}`);
+    let text = data.toString();
+    recentStdout = appendBounded(recentStdout, text);
+    log.info(`prerender: ${text}`);
   });
   child.stderr?.on('data', (data: Buffer) => {
-    log.error(`prerender: ${data.toString()}`);
+    let text = data.toString();
+    recentStderr = appendBounded(recentStderr, text);
+    log.error(`prerender: ${text}`);
   });
 
+  let exitListener:
+    | ((code: number | null, signal: NodeJS.Signals | null) => void)
+    | undefined;
+  let errorListener: ((err: Error) => void) | undefined;
   let exitPromise = new Promise<never>((_, reject) => {
-    child.once('exit', (code, signal) => {
-      reject(
-        new Error(
-          `prerender server exited before it became ready (code: ${code}, signal: ${signal})`,
-        ),
-      );
-    });
-    child.once('error', reject);
+    exitListener = (code, signal) => {
+      // Give any buffered stdio a final tick to flush before we build the
+      // error message — 'exit' can fire before the last 'data' event.
+      setImmediate(() => {
+        let diagnostic = buildChildExitDiagnostic({
+          recentStdout,
+          recentStderr,
+        });
+        reject(
+          new Error(
+            `prerender server exited before it became ready (code: ${code}, signal: ${signal})${diagnostic}`,
+          ),
+        );
+      });
+    };
+    errorListener = reject;
+    child.once('exit', exitListener);
+    child.once('error', errorListener);
   });
 
-  await Promise.race([waitForHttpReady(url), exitPromise]);
+  try {
+    await Promise.race([waitForHttpReady(url), exitPromise]);
+  } finally {
+    // Detach the startup listeners so a later intentional exit (during
+    // test teardown) doesn't surface as an unhandled rejection on
+    // exitPromise.
+    if (exitListener) child.off('exit', exitListener);
+    if (errorListener) child.off('error', errorListener);
+    // Swallow the now-orphaned rejection if the race was won by
+    // waitForHttpReady but 'exit' still fires later.
+    exitPromise.catch(() => {});
+  }
 
   return {
     url,
@@ -443,6 +485,25 @@ export async function startHarnessPrerenderServer(options: {
       await stopChildProcess(child);
     },
   };
+}
+
+function buildChildExitDiagnostic(buffers: {
+  recentStdout: string;
+  recentStderr: string;
+}): string {
+  let parts: string[] = [];
+  let stderr = buffers.recentStderr.trim();
+  if (stderr) {
+    parts.push(`stderr tail:\n${stderr}`);
+  }
+  let stdout = buffers.recentStdout.trim();
+  if (stdout) {
+    parts.push(`stdout tail:\n${stdout}`);
+  }
+  if (parts.length === 0) {
+    return ' (child produced no stdio before exit)';
+  }
+  return `\n${parts.join('\n\n')}`;
 }
 
 /**
