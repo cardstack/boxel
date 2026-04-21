@@ -60,6 +60,7 @@ module('Integration | commands | search', function (hooks) {
       static displayName = 'Author';
       @field firstName = contains(StringField);
       @field lastName = contains(StringField);
+      @field bio = contains(StringField);
       @field cardTitle = contains(StringField, {
         computeVia: function (this: Author) {
           return [this.firstName, this.lastName].filter(Boolean).join(' ');
@@ -71,10 +72,14 @@ module('Integration | commands | search', function (hooks) {
         mockMatrixUtils,
         contents: {
           'author.gts': { Author },
-          'Author/r2.json': new Author({ firstName: 'R2-D2' }),
+          'Author/r2.json': new Author({
+            firstName: 'R2-D2',
+            bio: 'Astromech droid who communicates in beeps and whistles.',
+          }),
           'Author/mark.json': new Author({
             firstName: 'Mark',
             lastName: 'Jackson',
+            bio: 'Novelist specializing in xylophone-themed mystery fiction.',
           }),
           '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
         },
@@ -125,6 +130,45 @@ module('Integration | commands | search', function (hooks) {
       },
     });
     assert.strictEqual(result.cardIds.length, 1);
+    assert.strictEqual(result.cardIds[0], 'http://test-realm/test/Author/r2');
+  });
+
+  test('search with a matches filter', async function (assert) {
+    let commandService = getService('command-service');
+    let searchCommand = new SearchCardsByQueryCommand(
+      commandService.commandContext,
+    );
+    let result = await searchCommand.execute({
+      query: {
+        filter: { matches: 'xylophone' },
+      },
+    });
+    assert.strictEqual(
+      result.cardIds.length,
+      1,
+      'only mark.json has "xylophone" in its markdown',
+    );
+    assert.strictEqual(result.cardIds[0], 'http://test-realm/test/Author/mark');
+  });
+
+  test('search with matches composed inside every + eq', async function (assert) {
+    let commandService = getService('command-service');
+    let searchCommand = new SearchCardsByQueryCommand(
+      commandService.commandContext,
+    );
+    let result = await searchCommand.execute({
+      query: {
+        filter: {
+          on: { module: 'http://test-realm/test/author', name: 'Author' },
+          every: [{ matches: 'droid' }, { eq: { firstName: 'R2-D2' } }],
+        },
+      },
+    });
+    assert.strictEqual(
+      result.cardIds.length,
+      1,
+      'composed matches + eq returns r2.json',
+    );
     assert.strictEqual(result.cardIds[0], 'http://test-realm/test/Author/r2');
   });
 });
