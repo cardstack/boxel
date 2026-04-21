@@ -322,14 +322,23 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
       .thumbnail-input-container {
         position: relative;
       }
+      .thumbnail-placeholder:not(:has(input)) {
+        position: absolute;
+        top: var(--boxel-sp-xs);
+        left: var(--boxel-sp-sm);
+        color: var(--muted-foreground, var(--boxel-450));
+      }
       .thumbnail-placeholder :deep(input) {
         position: absolute;
         left: 0;
         right: 0;
-        width: 99%;
+        width: 100%;
+        height: 100%;
         padding-block: 0;
         background: none;
         border: none;
+        outline-offset: -1px;
+        outline-width: 2px;
       }
       .null-preview {
         color: var(--muted-foreground, var(--boxel-450));

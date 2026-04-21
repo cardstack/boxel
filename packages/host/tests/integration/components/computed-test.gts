@@ -673,7 +673,9 @@ module('Integration | computeds', function (hooks) {
       mockMatrixUtils,
       contents: { 'test-cards.gts': { Article } },
     });
-    let theme = new Theme({ cardInfo: new CardInfoField({ name: 'Ocean Blue' }) });
+    let theme = new Theme({
+      cardInfo: new CardInfoField({ name: 'Ocean Blue' }),
+    });
     let instance = new Article({
       cardInfo: new CardInfoField({ theme }),
     });
