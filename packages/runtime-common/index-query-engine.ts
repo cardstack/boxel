@@ -927,12 +927,12 @@ export class IndexQueryEngine {
     ]);
   }
 
-  // Full-text matches predicate. SQL generation is adapter-specific (see the
-  // companion issues for pg/sqlite). For now we emit an unsatisfiable
-  // placeholder so the walker composes correctly inside any/every/not without
-  // returning rows.
+  // Full-text matches predicate. Postgres translates to a tsvector/tsquery
+  // match against the indexed markdown column, threading the user-supplied
+  // query string as a parameterized value. SQLite lands in a follow-up issue
+  // and currently returns no rows.
   private matchesCondition(
-    _filter: MatchesFilter,
+    filter: MatchesFilter,
     _on: CodeRef,
     typeConditionRef?: CodeRef,
   ): CardExpression {
@@ -941,7 +941,13 @@ export class IndexQueryEngine {
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
       [
         dbExpression({
-          pg: '/* matches placeholder */ FALSE',
+          pg: [
+            `to_tsvector('english', coalesce(i.markdown, ''))`,
+            '@@',
+            `websearch_to_tsquery('english',`,
+            param(filter.matches),
+            `)`,
+          ],
           sqlite: '/* matches placeholder */ FALSE',
         }),
       ],
