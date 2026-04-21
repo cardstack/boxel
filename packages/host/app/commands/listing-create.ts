@@ -160,10 +160,6 @@ export default class ListingCreateCommand extends HostBaseCommand<
           codeRef,
         ),
       },
-      {
-        name: 'autoGenerateThumbnail',
-        promise: this.autoGenerateThumbnail(listingCard, codeRef, targetRealm),
-      },
     ];
 
     const backgroundWork = Promise.allSettled(
@@ -177,6 +173,11 @@ export default class ListingCreateCommand extends HostBaseCommand<
           );
         }
       });
+    });
+
+    // Fire-and-forget thumbnail generation (external API call, should not block modal)
+    this.autoGenerateThumbnail(listingCard, codeRef, targetRealm).catch((e) => {
+      console.warn('Failed to auto-generate thumbnail:', e);
     });
 
     const { ListingCreateResult } = commandModule;

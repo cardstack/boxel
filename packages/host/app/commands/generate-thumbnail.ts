@@ -82,13 +82,19 @@ export default class GenerateThumbnailCommand extends HostBaseCommand<
     return GenerateThumbnailInput;
   }
 
-  requireInputFields = ['prompt'];
+  requireInputFields = ['prompt', 'targetRealmUrl'];
 
   protected async run(
     input: BaseCommandModule.GenerateThumbnailInput,
   ): Promise<BaseCommandModule.GenerateThumbnailOutput> {
-    const { prompt, sourceImageUrl, targetRealmUrl, targetPath, targetCardId, cardName } =
-      input;
+    const {
+      prompt,
+      sourceImageUrl,
+      targetRealmUrl,
+      targetPath,
+      targetCardId,
+      cardName,
+    } = input;
 
     let promptText = prompt?.trim();
     if (!promptText) {
