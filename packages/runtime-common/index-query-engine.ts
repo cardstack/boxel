@@ -51,6 +51,10 @@ import {
   type RangeFilter,
   RANGE_OPERATORS,
   isCardTypeFilter,
+  isAnyFilter,
+  isEveryFilter,
+  isNotFilter,
+  isMatchesFilter,
 } from './query';
 import type { SerializedError } from './error';
 import type { DBAdapter } from './db';
@@ -460,7 +464,7 @@ export class IndexQueryEngine {
         'WHERE',
         ...everyCondition,
         'GROUP BY url',
-        ...this.orderExpression(sort),
+        ...this.orderExpression(sort, filter),
         ...(page
           ? [`LIMIT ${page.size} OFFSET ${(page.number ?? 0) * page.size}`]
           : []),
@@ -589,8 +593,34 @@ export class IndexQueryEngine {
     }
   }
 
-  private orderExpression(sort: Sort | undefined): CardExpression {
+  private orderExpression(
+    sort: Sort | undefined,
+    filter: Filter | undefined,
+  ): CardExpression {
+    // When the caller didn't supply an explicit sort and the filter tree
+    // contains a `matches` node, default to rank-desc so the top-ranked
+    // full-text hits lead. Empty/whitespace-only match strings are
+    // normalized to FALSE in matchesCondition and contribute nothing to
+    // ranking — skip the rank clause in that case. PG emits
+    // ts_rank_cd(tsvector, tsquery) DESC; SQLite has no native rank, so
+    // the branch is empty and URL ordering takes over (M2 adds a synthetic
+    // rank — out of scope here).
     if (!sort) {
+      let rankedMatch = filter ? findFirstMatchesFilter(filter) : undefined;
+      if (rankedMatch && rankedMatch.matches.trim() !== '') {
+        return [
+          'ORDER BY',
+          dbExpression({
+            pg: [
+              `ts_rank_cd(to_tsvector('english', coalesce(i.markdown, '')), websearch_to_tsquery('english',`,
+              param(rankedMatch.matches),
+              `)) DESC,`,
+            ],
+            sqlite: '',
+          }),
+          'url COLLATE "POSIX"',
+        ];
+      }
       return ['ORDER BY url COLLATE "POSIX"'];
     }
     return [
@@ -1477,6 +1507,37 @@ function tableFromOpts(opts: WIPOptions | undefined) {
 // char itself) with a backslash before binding.
 function escapeSqliteLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+// Deterministic pre-order walk: recurses into any/every/not and returns the
+// first MatchesFilter encountered, or undefined if the tree has none. The
+// engine uses this to decide whether to default the order-by to rank-desc
+// when the caller didn't supply an explicit sort. If multiple matches
+// terms appear, the first one wins for ranking purposes — acceptable
+// because combined ranking across alternatives has no single right answer
+// and isn't in the spec's test matrix.
+function findFirstMatchesFilter(filter: Filter): MatchesFilter | undefined {
+  if (isMatchesFilter(filter)) {
+    return filter;
+  }
+  if (isAnyFilter(filter)) {
+    for (let child of filter.any) {
+      let found = findFirstMatchesFilter(child);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  if (isEveryFilter(filter)) {
+    for (let child of filter.every) {
+      let found = findFirstMatchesFilter(child);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  if (isNotFilter(filter)) {
+    return findFirstMatchesFilter(filter.not);
+  }
+  return undefined;
 }
 
 function assertNever(value: never) {
