@@ -439,7 +439,7 @@ module('Integration | card-catalog', function (hooks) {
   });
 
   module('content search', function () {
-    test(`finds cards by description content, not just title, and respects type scoping`, async function (assert) {
+    test('finds cards by description content, not just title, and respects type scoping', async function (assert) {
       await waitFor('[data-test-card-catalog-modal]');
       await waitFor(
         `[data-test-card-catalog-item="${testRealmURL}Spec/author"]`,
