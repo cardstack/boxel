@@ -2335,7 +2335,10 @@ module('Integration | card-basics', function (hooks) {
         .containsText(summary);
       assert
         .dom('[data-test-edit-preview="cardThumbnailURL"]')
-        .hasText('Thumbnail URL');
+        .hasText('Card Thumbnail URL None');
+      assert
+        .dom('[data-test-edit-preview="cardTheme"]')
+        .hasText('Card Theme None');
       assert
         .dom('[data-test-edit-preview] input')
         .doesNotExist('preview fields are not editable');
@@ -2370,8 +2373,12 @@ module('Integration | card-basics', function (hooks) {
           },
         });
       }
-      let localTheme = new Theme({ cardTitle: 'Local Theme' });
-      let linkedTheme = new Theme({ cardTitle: 'Volley Blue' });
+      let localTheme = new Theme({
+        cardInfo: new CardInfoField({ name: 'Local Theme' }),
+      });
+      let linkedTheme = new Theme({
+        cardInfo: new CardInfoField({ name: 'Volley Blue' }),
+      });
       let team = new Team({
         cardInfo: new CardInfoField({
           theme: linkedTheme,
@@ -2399,9 +2406,6 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="cardInfo-summary"]')
         .hasText('Volleyball player');
-      assert
-        .dom('[data-test-field="cardTheme"]')
-        .containsText('Local Theme');
 
       await renderCard(loader, instance, 'edit');
       assert.dom('[data-test-field="cardInfo-name"] input').hasValue('Johnny');
@@ -2418,14 +2422,6 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="cardInfo-theme"]')
         .containsText('Local Theme');
-      assert
-        .dom('[data-test-field="cardTheme"]')
-        .containsText('Local Theme');
-      assert
-        .dom(
-          '[data-test-field="cardTheme"] [data-test-links-to-editor="cardTheme"]',
-        )
-        .doesNotExist();
       assert.dom('[data-test-field="cardInfo-notes"] textarea').exists();
       assert.dom('[data-test-field="firstName"] input').hasValue('John');
       assert
@@ -2444,6 +2440,9 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-edit-preview="cardThumbnailURL"]')
         .containsText('http://john/pic.jpg');
+      assert
+        .dom('[data-test-edit-preview="cardTheme"]')
+        .containsText('Local Theme');
 
       await percySnapshot(assert);
     });
@@ -2471,16 +2470,15 @@ module('Integration | card-basics', function (hooks) {
             return this.bookCoverImage;
           },
         });
-        @field cardTheme: InstanceType<typeof Theme> | null = linksTo(
-          () => Theme,
-          {
-            computeVia: function (this: Book) {
-              return this.cardInfo.theme ?? this.collection?.cardTheme;
-            },
+        @field cardTheme = linksTo(() => Theme, {
+          computeVia: function (this: Book) {
+            return this.cardInfo.theme ?? this.collection?.cardTheme;
           },
-        );
+        });
       }
-      let linkedTheme = new Theme({ cardTitle: 'Night Library' });
+      let linkedTheme = new Theme({
+        cardInfo: new CardInfoField({ name: 'Night Library' }),
+      });
       let collection = new Collection({
         cardInfo: new CardInfoField({
           theme: linkedTheme,
@@ -2505,7 +2503,6 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="cardInfo-summary"]')
         .hasText('This book will keep you up at night');
-      assert.dom('[data-test-field="cardTheme"]').containsText('Night Library');
 
       await renderCard(loader, instance, 'edit');
       assert.dom('[data-test-field="cardInfo-name"] input').hasNoValue();
@@ -2518,16 +2515,10 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-thumbnail-placeholder]')
         .hasText('http://book/pic.jpg');
       assert.dom('[data-test-thumbnail-input] input').hasNoValue();
-      await click('[data-test-toggle-thumbnail-editor]');
       assert
         .dom('[data-test-field="cardInfo-theme"]')
         .doesNotContainText('Night Library');
-      assert.dom('[data-test-field="cardTheme"]').containsText('Night Library');
-      assert
-        .dom(
-          '[data-test-field="cardTheme"] [data-test-links-to-editor="cardTheme"]',
-        )
-        .doesNotExist();
+      await click('[data-test-toggle-thumbnail-editor]');
       assert
         .dom('[data-test-field="bookCoverImage"] input')
         .hasValue('http://book/pic.jpg');
@@ -2544,6 +2535,9 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-edit-preview="cardThumbnailURL"]')
         .containsText('http://book/pic.jpg');
+      assert
+        .dom('[data-test-edit-preview="cardTheme"]')
+        .containsText('Night Library');
     });
 
     test('render card-def instance with cardInfo overrides (not computed)', async function (assert) {
@@ -2554,18 +2548,18 @@ module('Integration | card-basics', function (hooks) {
         @field cardDescription = contains(StringField);
         @field cardThumbnailURL = contains(StringField);
         @field shelf = linksTo(Shelf);
-        @field cardTheme: InstanceType<typeof Theme> | null = linksTo(
-          () => Theme,
-          {
-            computeVia: function (this: Book) {
-              return this.cardInfo.theme ?? this.shelf?.cardTheme;
-            },
-          },
-        );
+        @field cardTheme = linksTo(() => Theme);
       }
 
-      let localTheme = new Theme({ cardTitle: 'Local Theme' });
-      let linkedTheme = new Theme({ cardTitle: 'Sleepless Pages' });
+      let localTheme1 = new Theme({
+        cardInfo: new CardInfoField({ name: 'Local Theme 1' }),
+      });
+      let localTheme2 = new Theme({
+        cardInfo: new CardInfoField({ name: 'Local Theme 2' }),
+      });
+      let linkedTheme = new Theme({
+        cardInfo: new CardInfoField({ name: 'Sleepless Pages' }),
+      });
       let shelf = new Shelf({
         cardInfo: new CardInfoField({
           theme: linkedTheme,
@@ -2577,9 +2571,10 @@ module('Integration | card-basics', function (hooks) {
         cardThumbnailURL: 'http://book/pic.jpg',
         cardInfo: new CardInfoField({
           summary: 'The latest novel from John Doe',
-          theme: localTheme,
+          theme: localTheme1,
         }),
         shelf,
+        cardTheme: localTheme2,
       });
       await renderCard(loader, insomniac, 'isolated');
       assert.dom('[data-test-field="cardInfo-name"]').hasText('Insomniac');
@@ -2599,9 +2594,7 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="cardThumbnailURL"]')
         .hasText('Card Thumbnail URL http://book/pic.jpg');
-      assert
-        .dom('[data-test-field="cardTheme"]')
-        .containsText('Local Theme');
+      assert.dom('[data-test-field="cardTheme"]').containsText('Local Theme 2');
 
       await renderCard(loader, insomniac, 'edit');
       assert.dom('[data-test-field="cardInfo-name"] input').hasNoValue();
@@ -2613,6 +2606,9 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-thumbnail-placeholder] input')
         .hasValue('http://book/pic.jpg');
       assert.dom('[data-test-thumbnail-input] input').hasNoValue();
+      assert
+        .dom('[data-test-field="cardInfo-theme"]')
+        .containsText('Local Theme 1');
       await click('[data-test-toggle-thumbnail-editor]');
       assert.dom('[data-test-field="cardTitle"] input').hasValue('Insomniac');
       assert
@@ -2621,17 +2617,6 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="cardThumbnailURL"] input')
         .hasValue('http://book/pic.jpg');
-      assert
-        .dom('[data-test-field="cardInfo-theme"]')
-        .containsText('Local Theme');
-      assert
-        .dom('[data-test-field="cardTheme"]')
-        .containsText('Local Theme');
-      assert
-        .dom(
-          '[data-test-field="cardTheme"] [data-test-links-to-editor="cardTheme"]',
-        )
-        .doesNotExist();
 
       // default preview (on edit template)
       await click('[data-test-toggle-preview]');
@@ -2645,6 +2630,9 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-edit-preview="cardThumbnailURL"]')
         .containsText('http://book/pic.jpg');
+      assert
+        .dom('[data-test-edit-preview="cardTheme"]')
+        .containsText('Local Theme 2');
     });
 
     test('render card-def instance with cardInfo overrides (complex)', async function (assert) {
@@ -2693,7 +2681,9 @@ module('Integration | card-basics', function (hooks) {
         );
       }
 
-      let linkedTheme = new Theme({ cardTitle: 'Holiday Departure' });
+      let linkedTheme = new Theme({
+        cardInfo: new CardInfoField({ name: 'Holiday Departure' }),
+      });
       let travelProfile = new TravelProfile({
         cardInfo: new CardInfoField({
           theme: linkedTheme,
@@ -2725,9 +2715,6 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="flightNumber"]')
         .hasText('Flight Number 101');
-      assert
-        .dom('[data-test-field="cardTheme"]')
-        .containsText('Holiday Departure');
 
       await renderCard(loader, instance, 'edit');
       assert
@@ -2741,18 +2728,11 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="cardInfo-thumbnailURL"] input')
         .hasNoValue();
+      assert
+        .dom('[data-test-field="cardInfo-theme"] [data-test-add-new="theme"]')
+        .exists();
       await click('[data-test-toggle-thumbnail-editor]');
-      assert
-        .dom('[data-test-field="cardInfo-theme"]')
-        .doesNotContainText('Holiday Departure');
-      assert
-        .dom('[data-test-field="cardTheme"]')
-        .containsText('Holiday Departure');
-      assert
-        .dom(
-          '[data-test-field="cardTheme"] [data-test-links-to-editor="cardTheme"]',
-        )
-        .doesNotExist();
+
       assert.dom('[data-test-field="destination"] input').hasValue('LAX');
 
       // default preview (in edit mode)
@@ -2768,6 +2748,9 @@ module('Integration | card-basics', function (hooks) {
         .containsText(
           'Smith Wedding Flight - John, Jane + kids to LA for holiday wedding',
         );
+      assert
+        .dom('[data-test-edit-preview="cardTheme"]')
+        .containsText('Holiday Departure');
     });
 
     test('render default isolated template', async function (assert) {

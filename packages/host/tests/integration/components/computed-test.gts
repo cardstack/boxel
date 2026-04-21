@@ -1,5 +1,5 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
-import { settled } from '@ember/test-helpers';
+import { click, settled } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -673,19 +673,15 @@ module('Integration | computeds', function (hooks) {
       mockMatrixUtils,
       contents: { 'test-cards.gts': { Article } },
     });
-    let theme = new Theme({ cardTitle: 'Ocean Blue' });
+    let theme = new Theme({ cardInfo: new CardInfoField({ name: 'Ocean Blue' }) });
     let instance = new Article({
       cardInfo: new CardInfoField({ theme }),
     });
 
-    await renderCard(loader, instance, 'isolated');
-    assert.dom('[data-test-field="cardTheme"]').containsText('Ocean Blue');
-
     await renderCard(loader, instance, 'edit');
+    await click('[data-test-toggle-preview]');
     assert
-      .dom(
-        '[data-test-field="cardTheme"] [data-test-links-to-editor="cardTheme"]',
-      )
-      .doesNotExist();
+      .dom('[data-test-edit-preview="cardTheme"]')
+      .containsText('Ocean Blue');
   });
 });

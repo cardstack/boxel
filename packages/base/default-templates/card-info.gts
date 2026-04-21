@@ -2,7 +2,6 @@ import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 
-import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import NameIcon from '@cardstack/boxel-icons/folder-pen';
 import SummaryIcon from '@cardstack/boxel-icons/notepad-text';
 import LinkIcon from '@cardstack/boxel-icons/link';
@@ -14,10 +13,19 @@ import type { CardOrFieldTypeIcon, CardDef, FieldsTypeFor } from '../card-api';
 import setBackgroundImage from '../helpers/set-background-image';
 
 import { FieldContainer, Button } from '@cardstack/boxel-ui/components';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { ChevronRight } from '@cardstack/boxel-ui/icons';
 
+import { startCase } from 'lodash';
+
 import { getFieldIcon } from '@cardstack/runtime-common';
+
+export const cardInfoFields: string[] = [
+  'cardTitle',
+  'cardDescription',
+  'cardThumbnailURL',
+  'cardTheme',
+];
 
 class CardInfoImageContainer extends GlimmerComponent<{
   Args: {
@@ -140,32 +148,30 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
         <div class='default-preview'>
           <FieldContainer
             @label='Card Type'
-            @icon={{CaptionsIcon}}
+            @icon={{@model.constructor.icon}}
             data-test-edit-preview='cardType'
           >
             {{@model.constructor.displayName}}
           </FieldContainer>
-          <FieldContainer
-            @label='Title'
-            @icon={{getFieldIcon @model 'cardTitle'}}
-            data-test-edit-preview='cardTitle'
-          >
-            <@fields.cardTitle @format='embedded' />
-          </FieldContainer>
-          <FieldContainer
-            @label='Description'
-            @icon={{getFieldIcon @model 'cardDescription'}}
-            data-test-edit-preview='cardDescription'
-          >
-            <@fields.cardDescription @format='embedded' />
-          </FieldContainer>
-          <FieldContainer
-            @label='Thumbnail URL'
-            @icon={{LinkIcon}}
-            data-test-edit-preview='cardThumbnailURL'
-          >
-            <@fields.cardThumbnailURL @format='embedded' />
-          </FieldContainer>
+          {{#each this.previewFields as |item|}}
+            {{#let item.Field as |Field|}}
+              <FieldContainer
+                @label={{item.label}}
+                @icon={{if
+                  (eq item.key 'cardThumbnailURL')
+                  LinkIcon
+                  (getFieldIcon @model item.key)
+                }}
+                data-test-edit-preview={{item.key}}
+              >
+                {{#if item.value}}
+                  <Field @format='embedded' />
+                {{else}}
+                  <em class='null-preview'>None</em>
+                {{/if}}
+              </FieldContainer>
+            {{/let}}
+          {{/each}}
         </div>
       {{/if}}
       <FieldContainer class='main-fields'>
@@ -228,7 +234,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
           </FieldContainer>
           <FieldContainer
             class='card-info-field'
-            @label='Thumbnail URL'
+            @label='Card Thumbnail URL'
             @tag='label'
             @icon={{LinkIcon}}
             data-test-field='cardInfo-thumbnailURL'
@@ -325,6 +331,9 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
         background: none;
         border: none;
       }
+      .null-preview {
+        color: var(--muted-foreground, var(--boxel-450));
+      }
     </style>
   </template>
 
@@ -338,6 +347,15 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
   private toggleThumbnailEditor = () => {
     this.isThumbnailEditorVisible = !this.isThumbnailEditorVisible;
   };
+
+  private get previewFields() {
+    return cardInfoFields.map((key) => ({
+      key,
+      label: startCase(key),
+      value: (this.args.model as any)?.[key],
+      Field: (this.args.fields as any)?.[key],
+    }));
+  }
 
   private get showThumbnailPlaceholder() {
     return (

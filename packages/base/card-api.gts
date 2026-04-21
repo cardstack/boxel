@@ -2914,7 +2914,7 @@ export class CardDef extends BaseDef {
       return this.cardInfo.summary;
     },
   });
-  @field cardTheme: Theme | null = linksTo(() => Theme, {
+  @field cardTheme: InstanceType<typeof Theme> | null = linksTo(() => Theme, {
     computeVia: function (this: CardDef) {
       return this.cardInfo.theme;
     },
