@@ -4,7 +4,7 @@ import {
   contains,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { type LooseSingleCardDocument, type RealmResourceIdentifier } from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
 import UrlField from 'https://cardstack.com/base/url';
 import MarkdownField from 'https://cardstack.com/base/markdown';
@@ -24,7 +24,7 @@ import { htmlSafe } from '@ember/template';
 import StoreIcon from '@cardstack/boxel-icons/store';
 
 import type { Query } from '@cardstack/runtime-common';
-import { realmURL } from '@cardstack/runtime-common';
+import { realmURL, type RealmResourceIdentifier } from '@cardstack/runtime-common';
 
 const productSource = {
   // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
@@ -92,19 +92,19 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
           {
             any: [
               {
-                on: { module: productModule, name: 'OnlineProduct' },
+                on: { module: productModule as RealmResourceIdentifier, name: 'OnlineProduct' },
                 contains: { productName: searchTerm },
               },
               {
-                on: { module: productModule, name: 'OnlineProduct' },
+                on: { module: productModule as RealmResourceIdentifier, name: 'OnlineProduct' },
                 contains: { category: searchTerm },
               },
               {
-                on: { module: productModule, name: 'OnlineProduct' },
+                on: { module: productModule as RealmResourceIdentifier, name: 'OnlineProduct' },
                 contains: { shortDescription: searchTerm },
               },
               {
-                on: { module: productModule, name: 'OnlineProduct' },
+                on: { module: productModule as RealmResourceIdentifier, name: 'OnlineProduct' },
                 contains: { sku: searchTerm },
               },
             ],

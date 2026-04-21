@@ -7,7 +7,7 @@ import {
 import { CRMTaskStatusField } from './shared';
 import GlimmerComponent from '@glimmer/component';
 import { TaskPlanner, TaskCard } from './components/base-task-planner';
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument, RealmResourceIdentifier } from '@cardstack/runtime-common';
 import type { Query, Filter } from '@cardstack/runtime-common/query';
 import { DndItem } from '@cardstack/boxel-ui/components';
 import { AppCard } from './app-card';
@@ -120,7 +120,7 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
       ? {
           filter: {
             on: {
-              module: this.config.taskSource.module,
+              module: this.config.taskSource.module as RealmResourceIdentifier,
               name: this.config.taskSource.name,
             },
             every: everyArr,
@@ -129,7 +129,7 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
       : {
           filter: {
             type: {
-              module: this.config.taskSource.module,
+              module: this.config.taskSource.module as RealmResourceIdentifier,
               name: this.config.taskSource.name,
             },
           },

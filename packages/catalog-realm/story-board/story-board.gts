@@ -21,6 +21,7 @@ import {
   Query,
   LooseSingleCardDocument,
   realmURL,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 import ExternalLinkIcon from '@cardstack/boxel-icons/external-link';
@@ -856,7 +857,7 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
       // Filter to only show Story type cards
       filter: {
         type: {
-          module: moduleUrl,
+          module: moduleUrl as RealmResourceIdentifier,
           name: 'Story',
         },
       },
@@ -865,7 +866,7 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
         {
           by: sortConfig[this.sortBy].by,
           on: {
-            module: moduleUrl,
+            module: moduleUrl as RealmResourceIdentifier,
             name: 'Story',
           },
           direction: sortConfig[this.sortBy].direction as 'asc' | 'desc',

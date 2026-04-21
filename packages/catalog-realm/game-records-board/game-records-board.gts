@@ -8,11 +8,11 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
 import { CardList } from '../components/card-list';
-import { realmURL } from '@cardstack/runtime-common';
+import { realmURL, type RealmResourceIdentifier } from '@cardstack/runtime-common';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { ResolvedCodeRef, Query } from '@cardstack/runtime-common';
+import { ResolvedCodeRef, Query, type RealmResourceIdentifier } from '@cardstack/runtime-common';
 
 interface GameStatusField {
   label: string;
@@ -77,7 +77,7 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
     return {
       filter: {
         on: {
-          module: adoptsFromModule,
+          module: adoptsFromModule as RealmResourceIdentifier,
           name: adoptsFromName,
         },
         eq: {
@@ -144,7 +144,7 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
         gameMap.set(key, {
           adoptsFrom: adoptsFrom as ResolvedCodeRef,
           ref: {
-            module: gameResult.ref.module,
+            module: gameResult.ref.module as RealmResourceIdentifier,
             name: gameResult.ref.name,
           },
           title: gameResult.game.cardTitle,
