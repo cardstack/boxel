@@ -3207,17 +3207,29 @@ module('Unit | query', function (hooks) {
     await setupIndex(dbAdapter, [
       {
         card: vangogh,
-        data: { markdown: 'Van Gogh is a puppy with a painterly coat.' },
+        data: {
+          search_doc: { name: 'Van Gogh' },
+          markdown: 'Van Gogh is a puppy with a painterly coat.',
+        },
       },
     ]);
 
+    let type = await personCardType(testCards);
     let { cards } = await indexQueryEngine.searchCards(new URL(testRealmURL), {
-      // websearch_to_tsquery semantics: unquoted spaces are AND, so we use
-      // explicit OR here to ensure the row matches. "the" is a stop-word;
-      // "unicorn" is absent from the markdown; "puppy" and "painterly" are
-      // both present. matchedTerms should reflect only the present, non-stop
-      // tokens.
-      filter: { matches: 'puppy or painterly or unicorn or the' },
+      // PG's websearch_to_tsquery uses AND between tokens and SQLite's LIKE
+      // fallback matches the query as a literal substring — both predicates
+      // would reject "puppy painterly unicorn the" for this markdown. Wrap
+      // the matches branch in an `any` alongside an `eq` that selects the
+      // row so matchedTerms synthesis runs on the raw query regardless of
+      // which branch produced the hit. "the" is a stop-word; "unicorn" is
+      // absent from the markdown; "puppy" and "painterly" are both present.
+      filter: {
+        on: type,
+        any: [
+          { matches: 'puppy painterly unicorn the' },
+          { eq: { name: 'Van Gogh' } },
+        ],
+      },
     });
     assert.deepEqual(
       [...cards[0].meta.matchedTerms!].sort(),
