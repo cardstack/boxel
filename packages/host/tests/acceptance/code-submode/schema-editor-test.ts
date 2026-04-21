@@ -48,7 +48,8 @@ const indexCardSource = `
   }
 `;
 
-const personCardFieldCount = `${cardDefFieldCount + 5}`;
+const personOwnFieldCount = 5;
+const personTotalFieldCount = `${cardDefFieldCount + personOwnFieldCount}`;
 const personCardSource = `
   import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
   import { Friend } from './friend';
@@ -375,11 +376,11 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitFor('[data-test-card-schema]');
 
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
-    assert.dom('[data-test-total-fields]').containsText(personCardFieldCount);
+    assert.dom('[data-test-total-fields]').containsText(personTotalFieldCount);
 
     assert
       .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
-      .containsText('+ 5 Fields');
+      .containsText(`+ ${personOwnFieldCount} Fields`);
     assert
       .dom(
         `[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-card-display-name="String"]`,
@@ -531,7 +532,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click(`button[data-test-clickable-definition-container`);
     await waitFor('[data-test-card-schema]');
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
-    assert.dom('[data-test-total-fields]').containsText(personCardFieldCount);
+    assert.dom('[data-test-total-fields]').containsText(personTotalFieldCount);
   });
 
   test('shows displayName of CardResource when field refers to itself', async function (assert) {
@@ -834,7 +835,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     assert
       .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
-      .containsText('+ 5 Fields');
+      .containsText(`+ ${personOwnFieldCount} Fields`);
 
     assert.true(
       getMonacoContent().includes('firstName = contains(StringField)'),
@@ -877,7 +878,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     });
     assert
       .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
-      .containsText('+ 4 Fields'); // One field less
+      .containsText(`+ ${personOwnFieldCount - 1} Fields`); // One field less
     assert
       .dom(
         '[data-test-card-schema="Person"] [data-test-field-name="firstName"]',
