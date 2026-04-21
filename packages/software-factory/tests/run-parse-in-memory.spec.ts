@@ -441,6 +441,18 @@ test.describe('runParseInMemory e2e', () => {
       expect(
         brokenOnly.errors.some((e) => e.message.includes('adoptsFrom')),
       ).toBe(true);
+
+      // Extensionless JSON card ID (the form whole-realm discovery emits
+      // from Spec linkedExamples) must also round-trip through path mode.
+      let extensionless = await runParseInMemory({
+        targetRealmUrl: realmUrl,
+        client,
+        path: 'ParseTestCard/example-1',
+      });
+      expect(extensionless.status).toBe('passed');
+      expect(extensionless.parseableFiles).toEqual(['ParseTestCard/example-1']);
+      expect(extensionless.filesChecked).toBe(1);
+      expect(extensionless.errorCount).toBe(0);
     } finally {
       cleanup();
     }
