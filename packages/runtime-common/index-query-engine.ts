@@ -46,6 +46,7 @@ import {
   type InFilter,
   type NotFilter,
   type ContainsFilter,
+  type MatchesFilter,
   type Sort,
   type RangeFilter,
   RANGE_OPERATORS,
@@ -828,6 +829,8 @@ export class IndexQueryEngine {
       return this.notCondition(filter, on, typeConditionRef);
     } else if ('range' in filter) {
       return this.rangeCondition(filter, on, typeConditionRef);
+    } else if ('matches' in filter) {
+      return this.matchesCondition(filter, on, typeConditionRef);
     } else if ('every' in filter) {
       return every([
         ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
@@ -921,6 +924,27 @@ export class IndexQueryEngine {
       ...Object.entries(filter.range).map(([key, filterValue]) => {
         return this.fieldRangeFilter(key, filterValue as RangeFilterValue, on);
       }),
+    ]);
+  }
+
+  // Full-text matches predicate. SQL generation is adapter-specific (see the
+  // companion issues for pg/sqlite). For now we emit an unsatisfiable
+  // placeholder so the walker composes correctly inside any/every/not without
+  // returning rows.
+  private matchesCondition(
+    _filter: MatchesFilter,
+    _on: CodeRef,
+    typeConditionRef?: CodeRef,
+  ): CardExpression {
+    let typeRef = typeConditionRef;
+    return every([
+      ...(typeRef ? [this.typeCondition(typeRef)] : []),
+      [
+        dbExpression({
+          pg: '/* matches placeholder */ FALSE',
+          sqlite: '/* matches placeholder */ FALSE',
+        }),
+      ],
     ]);
   }
 
