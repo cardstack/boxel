@@ -3032,9 +3032,12 @@ module('Unit | query', function (hooks) {
       2,
       `union of the 'matches' branch and the 'eq' branch`,
     );
+    // Default order is rank-desc when a matches node is present (CS-10829):
+    // ringo matched the 'matches' branch, so its rank > 0; mango arrived
+    // via the 'eq' branch with rank 0 and sorts after ringo.
     assert.deepEqual(
       getIds(cards),
-      [mango.id, ringo.id],
+      [ringo.id, mango.id],
       'results are correct',
     );
   });
@@ -3209,9 +3212,12 @@ module('Unit | query', function (hooks) {
     ]);
 
     let { cards } = await indexQueryEngine.searchCards(new URL(testRealmURL), {
-      // "the" is a stop-word; "unicorn" is absent from the markdown; "puppy"
-      // and "painterly" are both present.
-      filter: { matches: 'puppy painterly unicorn the' },
+      // websearch_to_tsquery semantics: unquoted spaces are AND, so we use
+      // explicit OR here to ensure the row matches. "the" is a stop-word;
+      // "unicorn" is absent from the markdown; "puppy" and "painterly" are
+      // both present. matchedTerms should reflect only the present, non-stop
+      // tokens.
+      filter: { matches: 'puppy or painterly or unicorn or the' },
     });
     assert.deepEqual(
       [...cards[0].meta.matchedTerms!].sort(),
