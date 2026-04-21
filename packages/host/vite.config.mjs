@@ -74,6 +74,14 @@ const sourceMapJsResolver = {
 };
 
 export default defineConfig({
+  // Preserve function/class names through esbuild's minifier. Boxel's card
+  // runtime introspects `Class.name` in user-visible places — validation
+  // errors ("references unknown path X on Person"), displayName fallbacks,
+  // the query-field-schema checks — so mangled names break both tests and
+  // production error messages.
+  esbuild: {
+    keepNames: true,
+  },
   resolve: {
     alias: {
       path: require.resolve('path-browserify'),
