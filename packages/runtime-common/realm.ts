@@ -2158,7 +2158,15 @@ export class Realm {
     let source = await fileContentToText(fileWithContent);
     let transpiled: string;
     try {
-      transpiled = await transpileJS(source, fileWithContent.path);
+      // Force an absolute path so babel's internal path.resolve doesn't depend
+      // on process.cwd(), which differs between node and browser shims and was
+      // observed to drop the leading slash on vite builds — producing a
+      // moduleName of "dir/person.gts" instead of "/dir/person.gts" in
+      // compiled templates.
+      let debugFilename = fileWithContent.path.startsWith('/')
+        ? fileWithContent.path
+        : `/${fileWithContent.path}`;
+      transpiled = await transpileJS(source, debugFilename);
     } catch (err: any) {
       let cardError =
         err instanceof CardError

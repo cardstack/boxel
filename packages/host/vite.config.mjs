@@ -74,6 +74,24 @@ const sourceMapJsResolver = {
 };
 
 export default defineConfig({
+  // Preserve function/class names. Boxel's card runtime introspects
+  // `Class.name` in user-visible places — validation errors ("references
+  // unknown path X on Person"), displayName fallbacks, the
+  // query-field-schema checks — so mangled names break both tests and
+  // production error messages. The esbuild option covers dep-optimizer
+  // transforms; the rolldown output option is what actually preserves
+  // names through Vite 8's production minifier (oxc-minifier), including
+  // classes declared inside function bodies.
+  esbuild: {
+    keepNames: true,
+  },
+  build: {
+    rolldownOptions: {
+      output: {
+        keepNames: true,
+      },
+    },
+  },
   resolve: {
     alias: {
       path: require.resolve('path-browserify'),
@@ -101,6 +119,12 @@ export default defineConfig({
         nodeBuiltinStubResolver,
         sourceMapJsResolver,
       ],
+    },
+  },
+  preview: {
+    cors: true,
+    headers: {
+      'Cache-Control': 'no-store',
     },
   },
 });
