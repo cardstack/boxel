@@ -103,4 +103,10 @@ export default defineConfig({
       ],
     },
   },
+  preview: {
+    cors: true,
+    headers: {
+      'Cache-Control': 'no-store',
+    },
+  },
 });
