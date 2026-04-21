@@ -35,7 +35,10 @@ export async function start(examOptions) {
 
     loadRealmTests(application).catch((error) => {
       const details =
-        error?.stack || error?.message || JSON.stringify(error) || String(error);
+        error?.stack ||
+        error?.message ||
+        JSON.stringify(error) ||
+        String(error);
       console.error(`Failed to load realm tests: ${details}`);
       QUnit.start(); //restarting test due to failure
     });
