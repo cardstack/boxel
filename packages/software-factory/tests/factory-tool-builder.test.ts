@@ -1571,7 +1571,6 @@ module('factory-tool-builder > add_comment', function () {
   });
 });
 
-// ---------------------------------------------------------------------------
 // run_evaluate tool (in-memory validation — CS-10779)
 // ---------------------------------------------------------------------------
 
@@ -1753,5 +1752,187 @@ module('buildFactoryTools — run_evaluate', function () {
     assert.strictEqual(result.modulesWithErrors, 1);
     assert.strictEqual(result.failures.length, 1);
     assert.strictEqual(result.failures[0].path, 'broken.gts');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// run_parse tool (in-memory validation — CS-10778)
+// ---------------------------------------------------------------------------
+
+module('buildFactoryTools — run_parse', function () {
+  test('registers run_parse with an optional path parameter', function (assert) {
+    let config = makeConfig();
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runParse = tools.find((t) => t.name === 'run_parse')!;
+    assert.ok(runParse, 'run_parse tool is registered');
+    let params = runParse.parameters as {
+      type: string;
+      properties: Record<string, { type: string }>;
+      required?: string[];
+    };
+    assert.strictEqual(params.type, 'object');
+    assert.strictEqual(params.properties.path.type, 'string');
+    assert.strictEqual(params.required, undefined, 'path is optional');
+  });
+
+  test('delegates to injected runParseInMemory and forwards realm config', async function (assert) {
+    let capturedOptions:
+      | {
+          targetRealmUrl: string;
+          hasClient: boolean;
+          path: string | undefined;
+        }
+      | undefined;
+    let stubResult = {
+      status: 'passed' as const,
+      filesChecked: 2,
+      filesWithErrors: 0,
+      errorCount: 0,
+      durationMs: 25,
+      parseableFiles: ['a.gts', 'b.gts'],
+      errors: [],
+    };
+
+    let config = makeConfig({
+      runParseInMemory: async (options) => {
+        capturedOptions = {
+          targetRealmUrl: options.targetRealmUrl,
+          hasClient: Boolean(options.client),
+          path: options.path,
+        };
+        return stubResult;
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runParse = tools.find((t) => t.name === 'run_parse')!;
+
+    let result = await runParse.execute({});
+
+    assert.deepEqual(result, stubResult, 'tool returns the in-memory result');
+    assert.strictEqual(
+      capturedOptions?.targetRealmUrl,
+      TARGET_REALM,
+      'forwards targetRealmUrl from config',
+    );
+    assert.true(
+      capturedOptions?.hasClient,
+      'forwards the configured BoxelCLIClient',
+    );
+    assert.strictEqual(
+      capturedOptions?.path,
+      undefined,
+      'path is omitted when not provided',
+    );
+  });
+
+  test('forwards path when provided to single-file parse', async function (assert) {
+    let capturedPath: string | undefined;
+    let stubResult = {
+      status: 'failed' as const,
+      filesChecked: 1,
+      filesWithErrors: 1,
+      errorCount: 1,
+      durationMs: 8,
+      parseableFiles: ['my-card.gts'],
+      errors: [
+        {
+          file: 'my-card.gts',
+          line: 3,
+          column: 5,
+          message: "Type 'string' is not assignable to type 'number'.",
+        },
+      ],
+    };
+
+    let config = makeConfig({
+      runParseInMemory: async (options) => {
+        capturedPath = options.path;
+        return stubResult;
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runParse = tools.find((t) => t.name === 'run_parse')!;
+
+    let result = (await runParse.execute({
+      path: 'my-card.gts',
+    })) as typeof stubResult;
+
+    assert.strictEqual(
+      capturedPath,
+      'my-card.gts',
+      'path is forwarded to the engine',
+    );
+    assert.strictEqual(result.status, 'failed');
+    assert.deepEqual(result.parseableFiles, ['my-card.gts']);
+  });
+
+  test('empty-string path is treated as "no path" (whole-realm parse)', async function (assert) {
+    let capturedPath: string | undefined;
+    let config = makeConfig({
+      runParseInMemory: async (options) => {
+        capturedPath = options.path;
+        return {
+          status: 'passed' as const,
+          filesChecked: 0,
+          filesWithErrors: 0,
+          errorCount: 0,
+          durationMs: 0,
+          parseableFiles: [],
+          errors: [],
+        };
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runParse = tools.find((t) => t.name === 'run_parse')!;
+
+    await runParse.execute({ path: '   ' });
+
+    assert.strictEqual(
+      capturedPath,
+      undefined,
+      'whitespace-only path falls back to whole-realm parse',
+    );
+  });
+
+  test('propagates failed parse results unchanged', async function (assert) {
+    let stubResult = {
+      status: 'failed' as const,
+      filesChecked: 1,
+      filesWithErrors: 1,
+      errorCount: 2,
+      durationMs: 12,
+      parseableFiles: ['bad.gts'],
+      errors: [
+        {
+          file: 'bad.gts',
+          line: 4,
+          column: 5,
+          message: "Type 'string' is not assignable to type 'number'.",
+        },
+        {
+          file: 'bad.gts',
+          line: 7,
+          column: 1,
+          message: "Cannot find name 'foo'.",
+        },
+      ],
+    };
+    let config = makeConfig({
+      runParseInMemory: async () => stubResult,
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let runParse = tools.find((t) => t.name === 'run_parse')!;
+
+    let result = (await runParse.execute({})) as typeof stubResult;
+
+    assert.strictEqual(result.status, 'failed');
+    assert.strictEqual(result.errorCount, 2);
+    assert.strictEqual(result.errors.length, 2);
+    assert.ok(result.errors[0].message.includes('not assignable'));
   });
 });

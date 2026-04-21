@@ -27,6 +27,11 @@ import {
   type RunLintResult,
 } from './lint-execution';
 import { logger } from './logger';
+import {
+  runParseInMemory,
+  type RunParseInMemoryOptions,
+  type RunParseResult,
+} from './parse-execution';
 import { ensureJsonExtension, addCommentToIssue } from './realm-operations';
 import { runTestsInMemory } from './test-run-execution';
 import type { RunTestsInMemoryOptions, RunTestsResult } from './test-run-types';
@@ -78,6 +83,10 @@ export interface ToolBuilderConfig {
   runEvaluateInMemory?: (
     options: RunEvaluateInMemoryOptions,
   ) => Promise<RunEvaluateResult>;
+  /** Injected for testing — defaults to runParseInMemory. */
+  runParseInMemory?: (
+    options: RunParseInMemoryOptions,
+  ) => Promise<RunParseResult>;
 }
 
 export interface ToolCallEntry {
@@ -125,6 +134,7 @@ export function buildFactoryTools(
     buildRunLintTool(config),
     buildRunTestsTool(config),
     buildRunEvaluateTool(config),
+    buildRunParseTool(config),
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
@@ -702,6 +712,53 @@ function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
       return execute({
         targetRealmUrl: config.targetRealmUrl,
         realmServerUrl: config.realmServerUrl,
+        client: config.client,
+        ...(path ? { path } : {}),
+      });
+    },
+  };
+}
+
+function buildRunParseTool(config: ToolBuilderConfig): FactoryTool {
+  let execute = config.runParseInMemory ?? runParseInMemory;
+  return {
+    name: 'run_parse',
+    description:
+      'Parse and type-check files in the target realm and return an ' +
+      'in-memory result (status, error counts, per-error file/line/column/' +
+      'message). Without "path", runs glint (ember-tsc) over every .gts / ' +
+      '.gjs / .ts file in the realm AND validates every .json file listed ' +
+      'as a Spec linkedExample (same discovery as the parse validation ' +
+      'step). With "path", parses only that single realm-relative file — ' +
+      '.gts / .gjs / .ts files are type-checked via glint, .json files ' +
+      'are parsed and checked for card document structure. The extension ' +
+      'is required (paths without one are rejected) — whole-realm ' +
+      'discovery already normalizes Spec linkedExamples to include .json, ' +
+      'so the "parseableFiles" entries returned by a prior whole-realm ' +
+      'run can be fed straight back into "path" verbatim. Safe to call ' +
+      'repeatedly for mid-turn self-validation — this tool does NOT ' +
+      'create a ParseResult card or any other realm artifact. The ' +
+      'orchestrator still runs the full validation pipeline (which writes ' +
+      'a ParseResult card) automatically after signal_done, so calling ' +
+      'this is optional. Auth: per-realm JWT.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Optional realm-relative path to a single file to parse. Must end in .gts / .gjs / .ts / .json (paths without an extension are rejected). Omit to parse every parseable file (GTS modules + Spec-linked JSON examples) in the target realm.',
+        },
+      },
+    },
+    execute: async (args) => {
+      let rawPath = args.path;
+      let path =
+        typeof rawPath === 'string' && rawPath.trim() !== ''
+          ? rawPath.trim()
+          : undefined;
+      return execute({
+        targetRealmUrl: config.targetRealmUrl,
         client: config.client,
         ...(path ? { path } : {}),
       });

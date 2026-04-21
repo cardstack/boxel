@@ -138,6 +138,14 @@ When `readFile` returns a parsed `document` (as the realm API does for `.json` f
 
 **Performance:** The tsconfig content is cached in memory (it never changes between runs). The `node_modules` symlink avoids copying hundreds of megabytes of dependencies.
 
+**Shared engine.** The discovery, glint invocation, and per-file parse loop live in `src/parse-execution.ts` (`discoverParseableGtsFiles` + `discoverJsonExampleFiles` + `parseRealmFiles`, plus the glint runner and JSON validators). Both the validation pipeline's `ParseValidationStep` (which owns `ParseResult` artifact lifecycle) and the in-memory `run_parse` agent tool (see below) consume the same engine, so parse coverage stays identical.
+
+### In-Memory `run_parse` Agent Tool (CS-10778)
+
+The agent also has a `run_parse` tool exposed on the factory tool set. It runs the same discovery + glint / JSON engine as the validation step and returns a flat, JSON-friendly `RunParseResult` (`status`, `filesChecked`, `filesWithErrors`, `errorCount`, `durationMs`, `parseableFiles`, `errors[{ file, line, column, message }]`). Unlike `ParseValidationStep`, it **does not create a `ParseResult` card** — no realm artifact is written, so it's safe to call repeatedly for mid-turn self-validation before `signal_done`. The orchestrator's post-`signal_done` parse validation still writes the durable `ParseResult`.
+
+The tool accepts an optional `path` argument. When omitted, every `.gts` / `.gjs` / `.ts` file in the realm is type-checked AND every `.json` file listed as a Spec `linkedExample` is validated (matching the validation step's behavior). When supplied, the tool skips discovery and parses only that one realm-relative file — `.gts` / `.gjs` / `.ts` runs through glint; `.json` is parsed and checked for card document structure. Paths with non-parseable extensions (`.md`, etc.) short-circuit to `status: 'error'` without calling the realm.
+
 The `ParseResult` card definition (`realm/parse-result.gts`) and CRUD (`src/parse-result-cards.ts`) follow the same patterns as `LintResult` and `EvalResult` — fitted/embedded/isolated templates, a running state, `ParseFileResult` field def with nested `ParseError` entries, and links to Issue/Project.
 
 ### Lint Step Details (CS-10714)
