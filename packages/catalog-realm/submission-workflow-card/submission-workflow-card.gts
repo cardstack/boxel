@@ -274,6 +274,7 @@ export class SubmissionWorkflowCard extends CardDef {
   // ── Submission data ──
   @field roomId = contains(StringField);
   @field branchName = contains(StringField);
+  @field catalogRealmUrl = contains(StringField);
 
   // ── Links to real cards ──
   @field listing = linksTo(() => Listing);
@@ -431,17 +432,17 @@ export class SubmissionWorkflowCard extends CardDef {
       let listingRealmHref = listing[realmURL]?.href;
       if (!listingRealmHref) return null;
 
-      // Strip the source realm prefix to get the repo-relative path
       let relativePath = listing.id.startsWith(listingRealmHref)
         ? listing.id.slice(listingRealmHref.length)
         : listing.id;
 
-      // Derive external-catalog realm URL from the card's realm origin (convention)
-      let cardRealmHref = this.args.model[realmURL]?.href;
-      if (!cardRealmHref) return null;
-      let origin = new URL(cardRealmHref).origin;
+      let catalogRealmUrl = this.args.model.catalogRealmUrl;
+      if (!catalogRealmUrl) return null;
 
-      return `${origin}/external-catalog/${relativePath}`;
+      let base = catalogRealmUrl.endsWith('/')
+        ? catalogRealmUrl
+        : catalogRealmUrl + '/';
+      return `${base}${relativePath}`;
     }
 
     // ── CI state ──
