@@ -39,7 +39,11 @@ import { render, teardown } from '../lib/isolated-render';
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
 import type { ComponentLike } from '@glint/template';
-import type { SimpleDocument, SimpleElement, SimpleNode } from '@simple-dom/interface';
+import type {
+  SimpleDocument,
+  SimpleElement,
+  SimpleNode,
+} from '@simple-dom/interface';
 import type { Tokenizer } from '@simple-dom/parser';
 
 const ELEMENT_NODE_TYPE = 1;
@@ -231,25 +235,20 @@ export function parseCardHtml(
   let serializer = new Serializer(voidMap);
 
   if (capture === 'textContent') {
-    // Mirror realm-server/prerender/utils.ts: for markdown captures, narrow to
-    // [data-markdown-output] (so the hidden HTML source sibling of the
-    // CardDef/FieldDef markdown fallback is excluded) or fall back to
-    // [data-markdown-render-container], or the root.
-    let rootElement: SimpleElement | undefined;
+    // Used for markdown-format captures. Realm-server puppeteer targets
+    // [data-markdown-output] specifically because its async turndown modifier
+    // has fired by capture time in a real browser. The in-browser test
+    // prerender path cannot reliably flush `scheduleOnce('afterRender')`
+    // before capture, so we take textContent of the whole render tree
+    // instead — that always includes the rendered fallback-source text
+    // (which holds the card's visible content) and excludes HTML attribute
+    // values (so wrapper class names like "markdown-format" do not pollute
+    // the indexed markdown column).
+    let parts: string[] = [];
     for (let node = fragment.firstChild; node; node = node.nextSibling) {
-      if (node.nodeType === ELEMENT_NODE_TYPE) {
-        rootElement = node as SimpleElement;
-        break;
-      }
+      parts.push(collectTextContent(node));
     }
-    if (!rootElement) {
-      return '';
-    }
-    let target =
-      findElementByAttribute(rootElement, 'data-markdown-output') ??
-      findElementByAttribute(rootElement, 'data-markdown-render-container') ??
-      rootElement;
-    return collectTextContent(target);
+    return parts.join('');
   }
 
   let parts: string[] = [];
@@ -271,24 +270,6 @@ export function parseCardHtml(
     return parts.join('').trim();
   }
   throw new Error(`unable to determine HTML for card. found HTML:\n${html}`);
-}
-
-function findElementByAttribute(
-  root: SimpleElement,
-  attrName: string,
-): SimpleElement | undefined {
-  if (root.getAttribute(attrName) !== null) {
-    return root;
-  }
-  for (let child = root.firstChild; child; child = child.nextSibling) {
-    if (child.nodeType === ELEMENT_NODE_TYPE) {
-      let found = findElementByAttribute(child as SimpleElement, attrName);
-      if (found) {
-        return found;
-      }
-    }
-  }
-  return undefined;
 }
 
 function collectTextContent(node: SimpleNode): string {
