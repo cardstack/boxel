@@ -1934,6 +1934,73 @@ export function stripExcelCellPrefix(source: string): { source: string; changed:
 //   a & b  -> ((a|tostring) + (b|tostring))     // Excel coerces both sides
 // We process occurrences right-to-left so `^`'s right-associativity and
 // `&` chaining both fall out naturally.
+/**
+ * Rewrite `X STARTSWITH Y` / `X ENDSWITH Y` / `X CONTAINS Y` as infix
+ * operators (outside predicate brackets) into pipe-form jq calls:
+ *
+ *   .donor STARTSWITH "Mr."   →   ((.donor) | startswith("Mr."))
+ *   .email CONTAINS "@"       →   ((.email) | contains("@"))
+ *
+ * The word forms compile correctly inside predicate brackets (`[X STARTSWITH Y]`)
+ * via compilePredicate, so this pass is careful to skip inside `[...]`.
+ * Formula-call form (`STARTSWITH(x; y)`) is already handled by the
+ * function-call compiler — we only rewrite when the word is followed by an
+ * atom, not `(`.
+ */
+export function rewriteWordBinaryOperators(
+  source: string,
+): { source: string; changed: boolean } {
+  const WORD_OPS: Record<string, string> = {
+    STARTSWITH: 'startswith',
+    ENDSWITH: 'endswith',
+    CONTAINS: 'contains',
+  };
+  let current = source;
+  let changed = false;
+  let guard = 0;
+  while (guard++ < 1024) {
+    const tokens = tokenizeQuietly(current);
+    if (!tokens) break;
+    let rewroteThisPass = false;
+    // Walk right-to-left so indices on the left remain valid between passes.
+    // Track predicate-bracket depth so `[Field STARTSWITH "X"]` is skipped
+    // (compilePredicate handles it natively).
+    const depthAt = new Array<number>(tokens.length).fill(0);
+    {
+      let depth = 0;
+      for (let i = 0; i < tokens.length; i++) {
+        const t = tokens[i];
+        if (t.type === 'punc' && t.value === '[') depth++;
+        depthAt[i] = depth;
+        if (t.type === 'punc' && t.value === ']') depth--;
+      }
+    }
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      const tok = tokens[i];
+      if (tok.type !== 'ident') continue;
+      const jqName = WORD_OPS[tok.value.toUpperCase()];
+      if (!jqName) continue;
+      // Inside predicate brackets? Let compilePredicate handle it.
+      if (depthAt[i] > 0) continue;
+      // Formula-call form (FUNC(...))? Let function-call compiler handle it.
+      const next = tokens[i + 1];
+      if (next && next.type === 'punc' && next.value === '(') continue;
+      const lhs = excelOperandExtent(tokens, i, -1);
+      const rhs = excelOperandExtent(tokens, i, +1);
+      if (!lhs || !rhs) continue;
+      const lhsText = current.slice(lhs.start, lhs.end);
+      const rhsText = current.slice(rhs.start, rhs.end);
+      const replacement = `((${lhsText}) | ${jqName}(${rhsText}))`;
+      current = current.slice(0, lhs.start) + replacement + current.slice(rhs.end);
+      changed = true;
+      rewroteThisPass = true;
+      break;
+    }
+    if (!rewroteThisPass) break;
+  }
+  return { source: current, changed };
+}
+
 export function rewriteExcelOperators(
   source: string,
 ): { source: string; changed: boolean } {
@@ -2158,21 +2225,30 @@ function rewriteInequality(source: string): { source: string; changed: boolean }
 // `+=`, `-=`, `|=`, `//=` stay untouched — the tokenizer emits those as
 // separate multi-char ops, so our scan only ever sees the bare `=`.
 function rewriteTopLevelEquals(source: string): { source: string; changed: boolean } {
+  // BXL treats `=` as comparison (Excel convention). Convert every `=`
+  // token to `==` so jq's parser sees comparison instead of assignment.
+  //
+  // We skip inside `[ ]` only because the predicate compiler accepts
+  // raw `=` there (and treating `[Field = X]` identically to
+  // `[Field == X]` is handled downstream). Inside `(...)` and `{...}`
+  // we DO convert — a prior version kept depth===0 only, which broke
+  // expressions like `NOT (Amount = 0 AND Flag = true)` because the
+  // inner `=` never became `==`.
   const tokens = tokenizeQuietly(source);
   if (!tokens) return { source, changed: false };
   const edits: Array<[number, number]> = [];
-  let depth = 0;
+  let bracketDepth = 0;
   for (const tok of tokens) {
-    if (tok.type === 'punc' && ['(', '[', '{'].includes(tok.value)) {
-      depth++;
+    if (tok.type === 'punc' && tok.value === '[') {
+      bracketDepth++;
       continue;
     }
-    if (tok.type === 'punc' && [')', ']', '}'].includes(tok.value)) {
-      depth--;
+    if (tok.type === 'punc' && tok.value === ']') {
+      bracketDepth--;
       continue;
     }
     if (
-      depth === 0 &&
+      bracketDepth === 0 &&
       tok.type === 'op' &&
       tok.value === '=' &&
       tok.start !== undefined &&
@@ -2230,6 +2306,15 @@ export function preprocessReadableSource(
       message: 'Rewrote Excel-style `^` / `&` operators to BXL equivalents.',
     });
     next = ops.source;
+  }
+  const wordOps = rewriteWordBinaryOperators(next);
+  if (wordOps.changed) {
+    rewrites.push({
+      code: 'word-binary-operator-rewritten',
+      message:
+        'Rewrote word-form STARTSWITH / ENDSWITH / CONTAINS (outside predicate brackets) to pipe-form jq calls.',
+    });
+    next = wordOps.source;
   }
   return { source: next, rewrites };
 }

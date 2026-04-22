@@ -712,6 +712,27 @@ function shouldInsertReadableSpace(
   if (current.value === '..' || previous.value === '..') {
     return false;
   }
+  // jq keywords (`and`, `or`, `not`, `if`, `then`, …) LOOK like idents
+  // so `isValueToken` returns true for them, but `and.foo` / `not.foo`
+  // are invalid jq. Force a space between a jq keyword and anything
+  // word-like or path-like that follows.
+  if (
+    previous.type === 'ident' &&
+    JQ_BINDING_KEYWORDS.has(previous.value.toLowerCase()) &&
+    (current.value === '.' ||
+      current.value === '..' ||
+      current.type === 'ident' ||
+      current.type === 'var' ||
+      current.type === 'number' ||
+      current.type === 'string' ||
+      current.value === '(' ||
+      current.value === '[' ||
+      current.value === '{' ||
+      current.value === '-')
+  ) {
+    return true;
+  }
+
   // Field access stays tight-binding — `Customer.Name`, `[all].SKU`,
   // `:last.Field`. But `.field` after a binary arith op (`a - .foo`)
   // should still get a space; only suppress the space when the `.` is
