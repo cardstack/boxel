@@ -16,6 +16,7 @@ import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { logger } from './logger';
+import { validateRealmRelativePath } from './realm-relative-path';
 
 let log = logger('eval-execution');
 
@@ -362,29 +363,6 @@ function getExtensionRank(file: string): number {
     }
   }
   return EXTENSION_PRECEDENCE.length;
-}
-
-/**
- * Validate that the agent-supplied `path` is a safe realm-relative path —
- * no absolute paths, no `..` traversal, and no URL scheme. Returns an
- * error message if rejected, or null if the path is acceptable. The
- * realm-server's `_run-command` is realm-scoped, but rejecting these
- * cases up-front keeps the tool's contract explicit and prevents an
- * agent-produced absolute URL or traversal segment from silently
- * evaluating a module outside the target realm.
- */
-function validateRealmRelativePath(path: string): string | null {
-  if (/^[a-z][a-z0-9+.-]*:/i.test(path)) {
-    return `Path "${path}" must be realm-relative — absolute URLs (with a scheme) are not accepted.`;
-  }
-  if (path.startsWith('/')) {
-    return `Path "${path}" must be realm-relative — paths starting with "/" are not accepted.`;
-  }
-  let segments = path.split('/');
-  if (segments.some((seg) => seg === '..')) {
-    return `Path "${path}" must not contain ".." segments — the path must stay inside the target realm.`;
-  }
-  return null;
 }
 
 async function defaultEvaluateModule(

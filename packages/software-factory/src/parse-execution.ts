@@ -29,6 +29,7 @@ import { specRef } from '@cardstack/runtime-common/constants';
 
 import { logger } from './logger';
 import type { ParseErrorData, ParseFileResultData } from './parse-result-cards';
+import { validateRealmRelativePath } from './realm-relative-path';
 
 let log = logger('parse-execution');
 
@@ -416,6 +417,10 @@ export async function runParseInMemory(
 
   if (options.path) {
     let path = options.path;
+    let pathError = validateRealmRelativePath(path);
+    if (pathError) {
+      return emptyErrorResult(pathError);
+    }
     if (PARSEABLE_GTS_EXTENSIONS.some((ext) => path.endsWith(ext))) {
       gtsFiles = [path];
     } else if (path.endsWith(PARSEABLE_JSON_EXTENSION)) {
