@@ -2164,6 +2164,169 @@ module(basename(__filename), function () {
       );
     });
 
+    // ---- CS-10758 step 3: /release-batch broadcast ----
+
+    test('release-batch broadcasts to every server assigned to the affinity', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app, registry } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/release-broadcast';
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlB },
+        },
+      });
+
+      // Pin the affinity to both servers directly. Issuing two prerender-visits
+      // wouldn't work here: under vacancy-first routing (CS-10758 step 2), the
+      // second visit prefers the already-assigned server on an assignedPref
+      // tie-break and both requests stick to A. What we're exercising is the
+      // broadcast fanout once an affinity has been assigned to multiple
+      // servers, not the routing that got it there.
+      let affinityKey = realmAffinityKey(realm);
+      registry.affinities.set(affinityKey, [serverUrlA!, serverUrlB!]);
+      registry.servers.get(serverUrlA!)!.activeAffinities.add(affinityKey);
+      registry.servers.get(serverUrlB!)!.activeAffinities.add(affinityKey);
+
+      let res = await request.post('/release-batch').send({
+        data: {
+          type: 'release-batch-request',
+          attributes: {
+            batchId: 'job-42-abcd',
+            affinityType: 'realm',
+            affinityValue: realm,
+          },
+        },
+      });
+      assert.strictEqual(res.status, 204, 'broadcast returned 204');
+      let aCalls = mockPrerenderA?.releaseBatchCalls ?? [];
+      let bCalls = mockPrerenderB?.releaseBatchCalls ?? [];
+      assert.deepEqual(
+        aCalls,
+        [
+          {
+            batchId: 'job-42-abcd',
+            affinityType: 'realm',
+            affinityValue: realm,
+          },
+        ],
+        'server A received the release-batch',
+      );
+      assert.deepEqual(
+        bCalls,
+        [
+          {
+            batchId: 'job-42-abcd',
+            affinityType: 'realm',
+            affinityValue: realm,
+          },
+        ],
+        'server B received the release-batch',
+      );
+    });
+
+    test('release-batch skips servers not assigned to the affinity', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '1';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/release-scoped';
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlB },
+        },
+      });
+
+      // multiplex=1 so only one server gets the affinity
+      let firstVisit = await request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/1`));
+      let assignedServer = firstVisit.headers['x-boxel-prerender-target'];
+      let otherServer = assignedServer === serverUrlA ? serverUrlB : serverUrlA;
+
+      let res = await request.post('/release-batch').send({
+        data: {
+          type: 'release-batch-request',
+          attributes: {
+            batchId: 'job-42-abcd',
+            affinityType: 'realm',
+            affinityValue: realm,
+          },
+        },
+      });
+      assert.strictEqual(res.status, 204);
+
+      let assignedCalls =
+        assignedServer === serverUrlA
+          ? (mockPrerenderA?.releaseBatchCalls ?? [])
+          : (mockPrerenderB?.releaseBatchCalls ?? []);
+      let otherCalls =
+        otherServer === serverUrlA
+          ? (mockPrerenderA?.releaseBatchCalls ?? [])
+          : (mockPrerenderB?.releaseBatchCalls ?? []);
+      assert.strictEqual(
+        assignedCalls.length,
+        1,
+        'assigned server received the release-batch',
+      );
+      assert.strictEqual(
+        otherCalls.length,
+        0,
+        'unassigned server did NOT receive the release-batch',
+      );
+    });
+
+    test('release-batch rejects invalid request attributes', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      let missingBatchId = await request.post('/release-batch').send({
+        data: {
+          type: 'release-batch-request',
+          attributes: {
+            affinityType: 'realm',
+            affinityValue: 'https://realm.example/',
+          },
+        },
+      });
+      assert.strictEqual(
+        missingBatchId.status,
+        400,
+        'missing batchId is rejected',
+      );
+
+      let badType = await request.post('/release-batch').send({
+        data: {
+          type: 'release-batch-request',
+          attributes: {
+            batchId: 'job-1-abcd',
+            affinityType: 'bogus',
+            affinityValue: 'https://realm.example/',
+          },
+        },
+      });
+      assert.strictEqual(
+        badType.status,
+        400,
+        'unknown affinityType is rejected',
+      );
+    });
+
     test('returns draining immediately when manager is draining', async function (assert) {
       let draining = true;
       let { app } = buildPrerenderManagerApp({
@@ -2222,6 +2385,7 @@ function makeMockPrerender(): {
       type: 'visit' | 'module' | 'command',
     ) => Promise<void> | void,
   ) => void;
+  releaseBatchCalls: Array<Record<string, unknown>>;
 } {
   let app = new Koa();
   let router = new Router();
@@ -2331,6 +2495,16 @@ function makeMockPrerender(): {
     let body = raw ? JSON.parse(raw) : {};
     await responder(ctxt, body, 'command');
   });
+  // Capture release-batch calls so tests can assert the manager
+  // broadcast reached this server (CS-10758 step 3).
+  let releaseBatchCalls: Array<Record<string, unknown>> = [];
+  router.post('/release-batch', async (ctxt) => {
+    let raw = await readBody(ctxt);
+    let body = raw ? JSON.parse(raw) : {};
+    releaseBatchCalls.push(body?.data?.attributes ?? {});
+    ctxt.status = 204;
+  });
+  (app as any).releaseBatchCalls = releaseBatchCalls;
   app.use(router.routes());
   let server = createServer(app.callback()).listen(0);
   let stopped = false;
@@ -2347,6 +2521,7 @@ function makeMockPrerender(): {
     setResponder: (r) => {
       responder = r;
     },
+    releaseBatchCalls,
   };
 }
 

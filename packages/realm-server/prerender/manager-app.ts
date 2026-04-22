@@ -1037,6 +1037,115 @@ export function buildPrerenderManagerApp(options?: {
     proxyPrerenderRequest(ctxt, 'run-command', 'command'),
   );
 
+  // Broadcast a release-batch to every server currently assigned to the
+  // requested affinity (CS-10758 step 3). Any assigned server could hold
+  // local ownership from an earlier visit; the indexer doesn't track
+  // which server owned what, so fanout is the robust choice. A server
+  // that doesn't own the batch no-ops the request. Non-assigned servers
+  // are skipped — they can't possibly have ownership for this affinity.
+  router.post('/release-batch', async (ctxt) => {
+    try {
+      let request = await fetchRequestFromContext(ctxt);
+      let raw = await request.text();
+      let body: any;
+      try {
+        body = raw ? JSON.parse(raw) : {};
+      } catch (e) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [{ status: 400, message: 'Invalid JSON body' }],
+        };
+        return;
+      }
+      let attrs = body?.data?.attributes ?? {};
+      let batchId = attrs.batchId;
+      let affinityType = attrs.affinityType;
+      let affinityValue = attrs.affinityValue;
+      if (
+        typeof batchId !== 'string' ||
+        batchId.trim().length === 0 ||
+        (affinityType !== 'realm' && affinityType !== 'user') ||
+        typeof affinityValue !== 'string' ||
+        affinityValue.trim().length === 0
+      ) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [
+            {
+              status: 400,
+              message:
+                'Missing or invalid attributes: batchId, affinityType, affinityValue',
+            },
+          ],
+        };
+        return;
+      }
+      let affinityKey = toAffinityKey({
+        affinityType: affinityType as AffinityType,
+        affinityValue,
+      });
+      let targets = [...(registry.affinities.get(affinityKey) ?? [])];
+      log.info(
+        `broadcasting release-batch for ${affinityKey} (batch ${batchId}) to ${targets.length} assigned server(s)`,
+      );
+      // Fire the releases in parallel; don't fail the response on any
+      // single server's error — the ownership either clears or it
+      // doesn't, either outcome is safe.
+      await Promise.all(
+        targets.map(async (target) => {
+          let targetURL = `${normalizeURL(target)}/release-batch`;
+          // Each target gets its own abort — a single stuck upstream
+          // must not block the broadcast from resolving. The indexer's
+          // IndexRunner.finally awaits this broadcast, so an unbounded
+          // fetch here would leave indexing jobs hung after useful work
+          // is done. Use the same timeout family the proxy route uses
+          // (resolvePrerenderServerProxyTimeoutMs, default 150s) so the
+          // upper bound on a release-batch matches the upper bound on a
+          // regular prerender request.
+          let ac = new AbortController();
+          let timer = setTimeout(() => ac.abort(), proxyTimeoutMs);
+          (timer as any).unref?.();
+          try {
+            let res = await fetch(targetURL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/vnd.api+json',
+                Accept: 'application/vnd.api+json',
+              },
+              body: raw,
+              signal: ac.signal,
+            });
+            if (!res.ok) {
+              log.warn(
+                `release-batch on ${target} for ${affinityKey} returned ${res.status}`,
+              );
+            }
+          } catch (err) {
+            if ((err as { name?: string })?.name === 'AbortError') {
+              log.warn(
+                `release-batch on ${target} for ${affinityKey} timed out after ${proxyTimeoutMs}ms`,
+              );
+            } else {
+              log.warn(
+                `release-batch on ${target} for ${affinityKey} network error:`,
+                err,
+              );
+            }
+          } finally {
+            clearTimeout(timer);
+          }
+        }),
+      );
+      ctxt.status = 204;
+    } catch (err: any) {
+      log.error('Unhandled error in /release-batch broadcast:', err);
+      ctxt.status = 500;
+      ctxt.body = {
+        errors: [{ status: 500, message: err?.message ?? 'Unknown error' }],
+      };
+    }
+  });
+
   let verboseManagerLogs =
     process.env.PRERENDER_MANAGER_VERBOSE_LOGS === 'true';
   app
