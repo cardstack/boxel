@@ -2168,7 +2168,7 @@ module(basename(__filename), function () {
 
     test('release-batch broadcasts to every server assigned to the affinity', async function (assert) {
       process.env.PRERENDER_MULTIPLEX = '2';
-      let { app } = buildPrerenderManagerApp();
+      let { app, registry } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
       let realm = 'https://realm.example/release-broadcast';
 
@@ -2185,15 +2185,16 @@ module(basename(__filename), function () {
         },
       });
 
-      // Pin the affinity to both servers by issuing two prerender-visits
-      // (multiplex=2 lets both servers take ownership of the same affinity
-      // across successive requests).
-      await request
-        .post('/prerender-visit')
-        .send(makeBody(realm, `${realm}/1`));
-      await request
-        .post('/prerender-visit')
-        .send(makeBody(realm, `${realm}/2`));
+      // Pin the affinity to both servers directly. Issuing two prerender-visits
+      // wouldn't work here: under vacancy-first routing (CS-10758 step 2), the
+      // second visit prefers the already-assigned server on an assignedPref
+      // tie-break and both requests stick to A. What we're exercising is the
+      // broadcast fanout once an affinity has been assigned to multiple
+      // servers, not the routing that got it there.
+      let affinityKey = realmAffinityKey(realm);
+      registry.affinities.set(affinityKey, [serverUrlA!, serverUrlB!]);
+      registry.servers.get(serverUrlA!)!.activeAffinities.add(affinityKey);
+      registry.servers.get(serverUrlB!)!.activeAffinities.add(affinityKey);
 
       let res = await request.post('/release-batch').send({
         data: {
