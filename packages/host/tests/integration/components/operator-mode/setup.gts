@@ -6,6 +6,7 @@ import type {
   LooseSingleCardDocument,
   Realm,
   Loader,
+  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import { baseRealm } from '@cardstack/runtime-common';
 
@@ -498,7 +499,7 @@ export function setupOperatorModeTests(
               },
               meta: {
                 adoptsFrom: {
-                  module: '../spec-card-linker.gts',
+                  module: '../spec-card-linker.gts' as RealmResourceIdentifier,
                   name: 'SpecCardLinker',
                 },
               },
@@ -533,7 +534,7 @@ export function setupOperatorModeTests(
               },
               meta: {
                 adoptsFrom: {
-                  module: '../person',
+                  module: '../person' as RealmResourceIdentifier,
                   name: 'Person',
                 },
               },
@@ -558,7 +559,7 @@ export function setupOperatorModeTests(
               },
               meta: {
                 adoptsFrom: {
-                  module: '../friend-with-css.gts',
+                  module: '../friend-with-css.gts' as RealmResourceIdentifier,
                   name: 'FriendWithCSS',
                 },
               },
@@ -578,7 +579,7 @@ export function setupOperatorModeTests(
               },
               meta: {
                 adoptsFrom: {
-                  module: '../friend-with-css.gts',
+                  module: '../friend-with-css.gts' as RealmResourceIdentifier,
                   name: 'FriendWithCSS',
                 },
               },
@@ -598,7 +599,7 @@ export function setupOperatorModeTests(
               },
               meta: {
                 adoptsFrom: {
-                  module: '../friend-with-css.gts',
+                  module: '../friend-with-css.gts' as RealmResourceIdentifier,
                   name: 'FriendWithCSS',
                 },
               },

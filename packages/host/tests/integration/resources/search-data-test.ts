@@ -104,7 +104,7 @@ module(`Integration | search data resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book`,
+              module: `${testRealmURL}book` as RealmResourceIdentifier,
               name: 'Book',
             },
           },
@@ -123,7 +123,7 @@ module(`Integration | search data resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book`,
+              module: `${testRealmURL}book` as RealmResourceIdentifier,
               name: 'Book',
             },
           },
@@ -281,7 +281,7 @@ module(`Integration | search data resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book`,
+              module: `${testRealmURL}book` as RealmResourceIdentifier,
               name: 'Book',
             },
           },

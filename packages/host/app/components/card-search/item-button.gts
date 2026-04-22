@@ -7,7 +7,10 @@ import { Button } from '@cardstack/boxel-ui/components';
 import { and, cn, not } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
-import { isCardInstance } from '@cardstack/runtime-common';
+import {
+  isCardInstance,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 
 import type RealmService from '@cardstack/host/services/realm';
 
@@ -39,7 +42,7 @@ interface Signature {
 // Render CardDef default fitted template for visual consistency of cards in search results
 let resultsCardRef = {
   name: 'CardDef',
-  module: 'https://cardstack.com/base/card-api',
+  module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
 };
 
 function isNewCardArgs(item: ItemType): item is NewCardArgs {

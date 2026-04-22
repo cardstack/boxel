@@ -16,6 +16,7 @@ import { module, test } from 'qunit';
 import {
   baseRealm,
   type LooseSingleCardDocument,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -1252,7 +1253,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: '../exploding-card.gts',
+              module: '../exploding-card.gts' as RealmResourceIdentifier,
               name: 'ExplodingCard',
             },
           },

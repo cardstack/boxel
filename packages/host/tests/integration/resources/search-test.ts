@@ -127,7 +127,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}article`,
+              module: `${testRealmURL}article` as RealmResourceIdentifier,
               name: 'Article',
             },
           },
@@ -143,7 +143,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book`,
+              module: `${testRealmURL}book` as RealmResourceIdentifier,
               name: 'Book',
             },
           },
@@ -165,7 +165,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}post`,
+              module: `${testRealmURL}post` as RealmResourceIdentifier,
               name: 'Post',
             },
           },
@@ -187,7 +187,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}article`,
+              module: `${testRealmURL}article` as RealmResourceIdentifier,
               name: 'Article',
             },
           },
@@ -206,7 +206,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book`,
+              module: `${testRealmURL}book` as RealmResourceIdentifier,
               name: 'Book',
             },
           },
@@ -225,7 +225,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book`,
+              module: `${testRealmURL}book` as RealmResourceIdentifier,
               name: 'Book',
             },
           },
@@ -244,7 +244,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book`,
+              module: `${testRealmURL}book` as RealmResourceIdentifier,
               name: 'Book',
             },
           },
@@ -258,13 +258,13 @@ module(`Integration | search resource`, function (hooks) {
             cardDescription: 'A card that represents a blog post',
             specType: 'card',
             ref: {
-              module: `${testRealmURL}post`,
+              module: `${testRealmURL}post` as RealmResourceIdentifier,
               name: 'Post',
             },
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}spec`,
+              module: `${baseRealm.url}spec` as RealmResourceIdentifier,
               name: 'Spec',
             },
           },
@@ -278,13 +278,13 @@ module(`Integration | search resource`, function (hooks) {
             cardDescription: 'A card that represents an online article ',
             specType: 'card',
             ref: {
-              module: `${testRealmURL}article`,
+              module: `${testRealmURL}article` as RealmResourceIdentifier,
               name: 'Article',
             },
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}spec`,
+              module: `${baseRealm.url}spec` as RealmResourceIdentifier,
               name: 'Spec',
             },
           },
@@ -427,7 +427,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book`,
+              module: `${testRealmURL}book` as RealmResourceIdentifier,
               name: 'Book',
             },
           },
@@ -484,7 +484,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book`,
+              module: `${testRealmURL}book` as RealmResourceIdentifier,
               name: 'Book',
             },
           },

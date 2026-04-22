@@ -9,6 +9,7 @@ import {
   type Permissions,
   baseRealm,
   testRealmURL,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -265,7 +266,7 @@ module('Integration | RichMarkdownField', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}card-api`,
+              module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
               name: 'CardDef',
             },
           },

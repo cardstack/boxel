@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, type RealmResourceIdentifier } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -120,7 +120,7 @@ module('Integration | commands | search', function (hooks) {
       query: {
         filter: {
           eq: { firstName: 'R2-D2' },
-          on: { module: 'http://test-realm/test/author', name: 'Author' },
+          on: { module: 'http://test-realm/test/author' as RealmResourceIdentifier, name: 'Author' },
         },
       },
     });

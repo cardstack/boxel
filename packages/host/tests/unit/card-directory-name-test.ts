@@ -67,7 +67,7 @@ module('Unit | runtime-common | card directory names', function () {
       let ref: CodeRef = {
         type: 'fieldOf',
         field: 'bio',
-        card: { module: '../person', name: 'default' },
+        card: { module: '../person' as RealmResourceIdentifier, name: 'default' },
       };
       assert.strictEqual(getCardDirectoryName(ref, paths), 'Person');
     });

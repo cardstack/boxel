@@ -28,6 +28,7 @@ import {
   specRef,
   resolveCardReference,
   type CodeRef,
+  type RealmResourceIdentifier,
   isCardInstance,
   moduleFrom,
 } from '@cardstack/runtime-common';
@@ -127,7 +128,7 @@ export default class EditFieldModal extends Component<Signature> {
     // When adding a new field, we want to default to the base string card
     if (!field) {
       let ref = {
-        module: 'https://cardstack.com/base/card-api', // This seems fundamental enough to be hardcoded
+        module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier, // This seems fundamental enough to be hardcoded
         name: 'StringField',
       };
       this.isFieldDef = true;
@@ -234,7 +235,7 @@ export default class EditFieldModal extends Component<Signature> {
       this.args.moduleSyntax.addField({
         cardBeingModified,
         fieldName,
-        fieldRef: fieldRef as { module: string; name: string },
+        fieldRef: fieldRef as { module: RealmResourceIdentifier; name: string },
         fieldType,
         fieldDefinitionType: this.isFieldDef ? 'field' : 'card',
         incomingRelativeTo,

@@ -14,6 +14,8 @@ import type {
   LooseSingleCardDocument,
   Relationship,
   Permissions,
+  RealmIdentifier,
+  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import {
   baseRealm,
@@ -143,7 +145,7 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
           name: 'Post',
         },
       },
@@ -190,17 +192,17 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Post',
           },
-          realmURL: testRealmURL,
+          realmURL: testRealmURL as RealmIdentifier,
           fields: {
             author: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                 name: 'Person',
               },
-              realmURL: testRealmURL,
+              realmURL: testRealmURL as RealmIdentifier,
             },
           },
         },
@@ -241,7 +243,7 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
           name: 'Item',
         },
       },
@@ -279,10 +281,10 @@ module('Integration | serialization', function (hooks) {
     });
     (post as any)[meta] = {
       adoptsFrom: {
-        module: `${testRealmURL}test-cards`,
+        module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
         name: 'Post',
       },
-      realmURL: testRealmURL,
+      realmURL: testRealmURL as RealmIdentifier,
     };
 
     let serialized = serializeCard(post, {
@@ -321,7 +323,7 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Post/1.json`,
       loader,
       undefined,
-      testRealmURL,
+      testRealmURL as RealmIdentifier,
     );
 
     assert.strictEqual(
@@ -359,7 +361,7 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Post/2.json`,
       loader,
       undefined,
-      testRealmURL,
+      testRealmURL as RealmIdentifier,
     );
 
     assert.deepEqual(
@@ -399,14 +401,14 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
           name: 'Post',
         },
-        realmURL: testRealmURL,
+        realmURL: testRealmURL as RealmIdentifier,
         fields: {
           author: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Employee',
             },
           },
@@ -458,7 +460,7 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Post/3.json`,
       loader,
       undefined,
-      testRealmURL,
+      testRealmURL as RealmIdentifier,
     );
 
     assert.strictEqual(
@@ -495,7 +497,7 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Post/3.json`,
       loader,
       undefined,
-      testRealmURL,
+      testRealmURL as RealmIdentifier,
     );
 
     assert.deepEqual(
@@ -529,7 +531,7 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Post/4.json`,
       loader,
       undefined,
-      testRealmURL,
+      testRealmURL as RealmIdentifier,
     );
 
     assert.strictEqual(
@@ -564,7 +566,7 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Post/5.json`,
       loader,
       undefined,
-      testRealmURL,
+      testRealmURL as RealmIdentifier,
     );
 
     post.author = new Person({ firstName: 'Replacement' });
@@ -596,7 +598,7 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
           name: 'Person',
         },
       },
@@ -637,7 +639,7 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
           name: 'Person',
         },
       },
@@ -693,7 +695,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `../test-cards`,
+            module: `../test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
@@ -776,7 +778,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
@@ -818,7 +820,7 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
           name: 'Person',
         },
       },
@@ -838,7 +840,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Person',
             },
           },
@@ -877,7 +879,7 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
           name: 'DriverCard',
         },
       },
@@ -991,7 +993,7 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
           name: 'Post',
         },
       },
@@ -1098,14 +1100,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Toy/spookyToiletPaper`,
+          id: `${testRealmURL}Toy/spookyToiletPaper` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             cardDescription: 'Toilet paper ghost: Poooo!',
@@ -1113,13 +1115,13 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Toy',
             },
           },
         },
         {
-          id: `${testRealmURL}Pet/mango`,
+          id: `${testRealmURL}Pet/mango` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             firstName: 'Mango',
@@ -1138,7 +1140,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Pet',
             },
           },
@@ -1228,7 +1230,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
@@ -1243,7 +1245,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Toy',
             },
           },
@@ -1265,7 +1267,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Pet',
             },
           },
@@ -1312,14 +1314,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Toy/spookyToiletPaper`,
+          id: `${testRealmURL}Toy/spookyToiletPaper` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             cardDescription: 'Toilet paper ghost: Poooo!',
@@ -1327,13 +1329,13 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Toy',
             },
           },
         },
         {
-          id: `${testRealmURL}Pet/mango`,
+          id: `${testRealmURL}Pet/mango` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             firstName: 'Mango',
@@ -1352,7 +1354,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Pet',
             },
           },
@@ -1465,7 +1467,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
@@ -1515,7 +1517,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
@@ -1575,7 +1577,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
@@ -1601,7 +1603,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
@@ -1640,7 +1642,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
@@ -1700,21 +1702,21 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Pet',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Person/burcu`,
+          id: `${testRealmURL}Person/burcu` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             firstName: 'Burcu',
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Person',
             },
           },
@@ -1819,14 +1821,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Person/mango`,
+          id: `${testRealmURL}Person/mango` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             firstName: 'Mango',
@@ -1841,7 +1843,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Person',
             },
           },
@@ -1884,7 +1886,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
@@ -1924,14 +1926,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Person/mango`,
+          id: `${testRealmURL}Person/mango` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             firstName: 'Mango',
@@ -1945,7 +1947,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Person',
             },
           },
@@ -2056,14 +2058,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Toy/spookyToiletPaper`,
+          id: `${testRealmURL}Toy/spookyToiletPaper` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             cardDescription: 'Toilet paper ghost: Poooo!',
@@ -2071,7 +2073,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Toy',
             },
           },
@@ -2188,14 +2190,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Toy/spookyToiletPaper`,
+          id: `${testRealmURL}Toy/spookyToiletPaper` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             cardDescription: 'Toilet paper ghost: Poooo!',
@@ -2203,7 +2205,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Toy',
             },
           },
@@ -2330,14 +2332,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Toy/spookyToiletPaper`,
+          id: `${testRealmURL}Toy/spookyToiletPaper` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             cardDescription: 'Toilet paper ghost: Poooo!',
@@ -2345,7 +2347,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Toy',
             },
           },
@@ -2428,21 +2430,21 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Person/hassan`,
+          id: `${testRealmURL}Person/hassan` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             firstName: 'Hassan',
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Person',
             },
           },
@@ -2532,7 +2534,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Post',
           },
         },
@@ -2592,7 +2594,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Post',
           },
         },
@@ -2715,7 +2717,7 @@ module('Integration | serialization', function (hooks) {
     });
     assert.deepEqual(serialized.data.meta?.fields?.author, {
       adoptsFrom: {
-        module: `${testRealmURL}test-cards`,
+        module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
         name: 'Employee',
       },
     });
@@ -2750,7 +2752,7 @@ module('Integration | serialization', function (hooks) {
     );
     assert.deepEqual(serialized.data.meta?.fields?.specialField, {
       adoptsFrom: {
-        module: `${testRealmURL}test-cards`,
+        module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
         name: 'SpecialStringA',
       },
     });
@@ -2788,13 +2790,13 @@ module('Integration | serialization', function (hooks) {
     assert.deepEqual(serialized.data.meta?.fields, {
       'specialField.0': {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
           name: 'SpecialStringA',
         },
       },
       'specialField.1': {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
           name: 'SpecialStringB',
         },
       },
@@ -2820,13 +2822,13 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'TestCard',
           },
           fields: {
             specialField: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                 name: 'SpecialStringA',
               },
             },
@@ -2869,19 +2871,19 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'TestCard',
           },
           fields: {
             'specialField.0': {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                 name: 'SpecialStringA',
               },
             },
             'specialField.1': {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                 name: 'SpecialStringB',
               },
             },
@@ -2948,7 +2950,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}trip-info-cards`,
+            module: `${testRealmURL}trip-info-cards` as RealmResourceIdentifier,
             name: 'TripInfo',
           },
           fields: {
@@ -2956,7 +2958,7 @@ module('Integration | serialization', function (hooks) {
               fields: {
                 nextTravelGoal: {
                   adoptsFrom: {
-                    module: `${testRealmURL}trip-info-cards`,
+                    module: `${testRealmURL}trip-info-cards` as RealmResourceIdentifier,
                     name: 'TravelGoalWithProgress',
                   },
                 },
@@ -3074,7 +3076,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Post',
             },
           },
@@ -3134,7 +3136,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: { birthdate: '2019-10-30' },
         meta: {
-          adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+          adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
         },
       },
     };
@@ -3176,7 +3178,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: { birthdate: '2019-10-30', firstBirthday: '1984-01-01' },
         meta: {
-          adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+          adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
         },
       },
     };
@@ -3258,13 +3260,13 @@ module('Integration | serialization', function (hooks) {
           },
         },
         meta: {
-          adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+          adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
         },
       });
 
       assert.deepEqual(serialized.included, [
         {
-          id: `${testRealmURL}Pet/mango`,
+          id: `${testRealmURL}Pet/mango` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             name: 'Mango',
@@ -3274,11 +3276,11 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
           },
         },
         {
-          id: `${testRealmURL}Person/hassan`,
+          id: `${testRealmURL}Person/hassan` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             firstName: 'Hassan',
@@ -3296,7 +3298,7 @@ module('Integration | serialization', function (hooks) {
             friendPet: { links: { self: null } },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
       ]);
@@ -3338,20 +3340,20 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: `${testRealmURL}Pet/mango` as RealmResourceIdentifier,
             type: 'card',
             attributes: { name: 'Mango' },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
             },
           },
           {
-            id: `${testRealmURL}Person/hassan`,
+            id: `${testRealmURL}Person/hassan` as RealmResourceIdentifier,
             type: 'card',
             attributes: {
               cardDescription: null,
@@ -3368,7 +3370,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                 name: 'Person',
               },
             },
@@ -3450,7 +3452,7 @@ module('Integration | serialization', function (hooks) {
             friendPet: { links: { self: null } },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
       });
@@ -3486,7 +3488,7 @@ module('Integration | serialization', function (hooks) {
             friendPet: { links: { self: null } },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
       };
@@ -3532,7 +3534,7 @@ module('Integration | serialization', function (hooks) {
             friend: { links: { self: `${testRealmURL}Person/hassan` } },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
       };
@@ -3578,7 +3580,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Schedule',
           },
         },
@@ -3634,7 +3636,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Schedule',
           },
         },
@@ -3773,7 +3775,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Post',
             },
           },
@@ -3846,7 +3848,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Post',
           },
         },
@@ -3917,13 +3919,13 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Post',
           },
           fields: {
             author: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                 name: 'Employee',
               },
             },
@@ -4025,19 +4027,19 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Post',
           },
           fields: {
             author: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                 name: 'Employee',
               },
               fields: {
                 loves: {
                   adoptsFrom: {
-                    module: `${testRealmURL}test-cards`,
+                    module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                     name: 'Pet',
                   },
                 },
@@ -4148,20 +4150,20 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Group',
           },
           fields: {
             people: [
               {
                 adoptsFrom: {
-                  module: `${testRealmURL}test-cards`,
+                  module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                   name: 'Employee',
                 },
               },
               {
                 adoptsFrom: {
-                  module: `${testRealmURL}test-cards`,
+                  module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                   name: 'Customer',
                 },
               },
@@ -4245,7 +4247,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                 name: 'Person',
               },
             },
@@ -4259,7 +4261,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                 name: 'QueryCard',
               },
             },
@@ -4433,7 +4435,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Article',
           },
           fields: {
@@ -4442,13 +4444,13 @@ module('Integration | serialization', function (hooks) {
                 tags: [
                   {
                     adoptsFrom: {
-                      module: `${testRealmURL}test-cards`,
+                      module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                       name: 'PriorityTag',
                     },
                   },
                   {
                     adoptsFrom: {
-                      module: `${testRealmURL}test-cards`,
+                      module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                       name: 'StatusTag',
                     },
                   },
@@ -4600,14 +4602,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Group',
           },
           fields: {
             people: [
               {
                 adoptsFrom: {
-                  module: `${testRealmURL}test-cards`,
+                  module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                   name: 'Employee',
                 },
                 fields: {
@@ -4615,7 +4617,7 @@ module('Integration | serialization', function (hooks) {
                     {},
                     {
                       adoptsFrom: {
-                        module: `${testRealmURL}test-cards`,
+                        module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                         name: 'DogWalker',
                       },
                     },
@@ -4699,14 +4701,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Pet/mango`,
+          id: `${testRealmURL}Pet/mango` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             firstName: 'Mango',
@@ -4716,13 +4718,13 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Pet',
             },
             fields: {
               favorite: {
                 adoptsFrom: {
-                  module: `${testRealmURL}test-cards`,
+                  module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                   name: 'Toy',
                 },
               },
@@ -4815,14 +4817,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Listing',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}DrumKitCard/kit`,
+          id: `${testRealmURL}DrumKitCard/kit` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             name: '808 Analog Kit',
@@ -4830,13 +4832,13 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'DrumKitCard',
             },
           },
         },
         {
-          id: `${testRealmURL}BeatMakerCard/app`,
+          id: `${testRealmURL}BeatMakerCard/app` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             cardTitle: 'Beat Maker Studio',
@@ -4844,7 +4846,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'BeatMakerCard',
             },
           },
@@ -4925,14 +4927,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Listing',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}DrumKitCard/kit`,
+          id: `${testRealmURL}DrumKitCard/kit` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             name: '808 Analog Kit',
@@ -4940,13 +4942,13 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'DrumKitCard',
             },
           },
         },
         {
-          id: `${testRealmURL}BeatMakerCard/app`,
+          id: `${testRealmURL}BeatMakerCard/app` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             cardTitle: 'Beat Maker Studio',
@@ -4954,7 +4956,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'BeatMakerCard',
             },
           },
@@ -5010,7 +5012,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: './person',
+            module: './person' as RealmResourceIdentifier,
             name: 'Person',
           },
         },
@@ -5034,7 +5036,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `./person`,
+              module: `./person` as RealmResourceIdentifier,
               name: 'Person',
             },
           },
@@ -5089,7 +5091,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: './post',
+            module: './post' as RealmResourceIdentifier,
             name: 'Post',
           },
         },
@@ -5117,7 +5119,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `./post`,
+              module: `./post` as RealmResourceIdentifier,
               name: 'Post',
             },
           },
@@ -5192,7 +5194,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: './blog',
+            module: './blog' as RealmResourceIdentifier,
             name: 'Blog',
           },
         },
@@ -5235,7 +5237,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `./blog`,
+              module: `./blog` as RealmResourceIdentifier,
               name: 'Blog',
             },
           },
@@ -5348,14 +5350,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Blog',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Certificate/0`,
+          id: `${testRealmURL}Certificate/0` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             level: 25,
@@ -5365,13 +5367,13 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Certificate',
             },
           },
         },
         {
-          id: `${testRealmURL}Certificate/1`,
+          id: `${testRealmURL}Certificate/1` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             level: 20,
@@ -5381,13 +5383,13 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Certificate',
             },
           },
         },
         {
-          id: `${testRealmURL}Certificate/2`,
+          id: `${testRealmURL}Certificate/2` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             level: 18,
@@ -5397,7 +5399,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Certificate',
             },
           },
@@ -5480,7 +5482,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `./test-cards`,
+              module: `./test-cards` as RealmResourceIdentifier,
               name: 'Blog',
             },
           },
@@ -5492,10 +5494,10 @@ module('Integration | serialization', function (hooks) {
               level: 20,
               cardInfo,
             },
-            id: `${testRealmURL}Certificate/1`,
+            id: `${testRealmURL}Certificate/1` as RealmResourceIdentifier,
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                 name: 'Certificate',
               },
             },
@@ -5507,10 +5509,10 @@ module('Integration | serialization', function (hooks) {
               level: 18,
               cardInfo,
             },
-            id: `${testRealmURL}Certificate/2`,
+            id: `${testRealmURL}Certificate/2` as RealmResourceIdentifier,
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                 name: 'Certificate',
               },
             },
@@ -5522,10 +5524,10 @@ module('Integration | serialization', function (hooks) {
               level: 25,
               cardInfo,
             },
-            id: `${testRealmURL}Certificate/0`,
+            id: `${testRealmURL}Certificate/0` as RealmResourceIdentifier,
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                 name: 'Certificate',
               },
             },
@@ -5586,7 +5588,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
@@ -5618,7 +5620,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
@@ -5659,7 +5661,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `../test-cards`,
+            module: `../test-cards` as RealmResourceIdentifier,
             name: 'Person',
           },
         },
@@ -5679,7 +5681,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/captain',
+                module: 'http://localhost:4202/test/captain' as RealmResourceIdentifier,
                 name: 'Captain',
               },
             },
@@ -5704,7 +5706,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `http://localhost:4202/test/captain`,
+              module: `http://localhost:4202/test/captain` as RealmResourceIdentifier,
               name: 'Boat',
             },
           },
@@ -5757,7 +5759,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Pet',
             },
           },
@@ -5880,30 +5882,30 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: `${testRealmURL}Pet/mango` as RealmResourceIdentifier,
             type: 'card',
             attributes: {
               firstName: 'Mango',
               cardInfo,
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
             },
           },
           {
-            id: `${testRealmURL}Pet/vanGogh`,
+            id: `${testRealmURL}Pet/vanGogh` as RealmResourceIdentifier,
             type: 'card',
             attributes: {
               firstName: 'Van Gogh',
               cardInfo,
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
             },
           },
         ],
@@ -5963,7 +5965,7 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
         included: [
@@ -5975,7 +5977,7 @@ module('Integration | serialization', function (hooks) {
               cardInfo,
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
             },
           },
           {
@@ -5986,7 +5988,7 @@ module('Integration | serialization', function (hooks) {
               cardInfo,
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
             },
           },
         ],
@@ -6037,12 +6039,12 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: `${testRealmURL}Pet/mango` as RealmResourceIdentifier,
             type: 'card',
             attributes: {
               cardDescription: null,
@@ -6051,11 +6053,11 @@ module('Integration | serialization', function (hooks) {
               cardInfo: {},
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
             },
           },
           {
-            id: `${testRealmURL}Pet/vanGogh`,
+            id: `${testRealmURL}Pet/vanGogh` as RealmResourceIdentifier,
             type: 'card',
             attributes: {
               cardDescription: null,
@@ -6064,7 +6066,7 @@ module('Integration | serialization', function (hooks) {
               cardInfo: {},
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
             },
           },
         ],
@@ -6161,12 +6163,12 @@ module('Integration | serialization', function (hooks) {
             ],
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: `${testRealmURL}Pet/mango` as RealmResourceIdentifier,
             type: 'card',
             attributes: {
               cardDescription: null,
@@ -6175,11 +6177,11 @@ module('Integration | serialization', function (hooks) {
               cardInfo: {},
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
             },
           },
           {
-            id: `${testRealmURL}Pet/vanGogh`,
+            id: `${testRealmURL}Pet/vanGogh` as RealmResourceIdentifier,
             type: 'card',
             attributes: {
               cardDescription: null,
@@ -6188,7 +6190,7 @@ module('Integration | serialization', function (hooks) {
               cardInfo: {},
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
             },
           },
         ],
@@ -6313,23 +6315,23 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Toy/spookyToiletPaper`,
+            id: `${testRealmURL}Toy/spookyToiletPaper` as RealmResourceIdentifier,
             type: 'card',
             attributes: {
               cardDescription: 'Toilet paper ghost: Poooo!',
               cardInfo,
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Toy' },
+              adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Toy' },
             },
           },
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: `${testRealmURL}Pet/mango` as RealmResourceIdentifier,
             type: 'card',
             attributes: {
               firstName: 'Mango',
@@ -6347,7 +6349,7 @@ module('Integration | serialization', function (hooks) {
               },
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
             },
           },
         ],
@@ -6436,7 +6438,7 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
       });
@@ -6459,7 +6461,7 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
       });
@@ -6497,7 +6499,7 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
       };
@@ -6576,21 +6578,21 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Person',
             },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: `${testRealmURL}Pet/mango` as RealmResourceIdentifier,
             type: 'card',
             attributes: {
               firstName: 'Mango',
               cardInfo,
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
             },
           },
         ],
@@ -6654,21 +6656,21 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Person',
             },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: `${testRealmURL}Pet/mango` as RealmResourceIdentifier,
             type: 'card',
             attributes: {
               firstName: 'Mango',
               cardInfo,
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
             },
           },
         ],
@@ -6727,12 +6729,12 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `../test-cards`, name: 'Person' },
+            adoptsFrom: { module: `../test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Person/mango`,
+            id: `${testRealmURL}Person/mango` as RealmResourceIdentifier,
             type: 'card',
             attributes: {
               firstName: 'Mango',
@@ -6742,11 +6744,11 @@ module('Integration | serialization', function (hooks) {
               friends: { links: { self: null } },
             },
             meta: {
-              adoptsFrom: { module: `../test-cards`, name: 'Person' },
+              adoptsFrom: { module: `../test-cards` as RealmResourceIdentifier, name: 'Person' },
             },
           },
           {
-            id: `${testRealmURL}Person/vanGogh`,
+            id: `${testRealmURL}Person/vanGogh` as RealmResourceIdentifier,
             type: 'card',
             attributes: {
               firstName: 'Van Gogh',
@@ -6756,7 +6758,7 @@ module('Integration | serialization', function (hooks) {
               friends: { links: { self: null } },
             },
             meta: {
-              adoptsFrom: { module: `../test-cards`, name: 'Person' },
+              adoptsFrom: { module: `../test-cards` as RealmResourceIdentifier, name: 'Person' },
             },
           },
         ],
@@ -6800,12 +6802,12 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Person/mango`,
+            id: `${testRealmURL}Person/mango` as RealmResourceIdentifier,
             type: 'card',
             attributes: {
               cardDescription: null,
@@ -6817,13 +6819,13 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                 name: 'Person',
               },
             },
           },
           {
-            id: `${testRealmURL}Person/vanGogh`,
+            id: `${testRealmURL}Person/vanGogh` as RealmResourceIdentifier,
             type: 'card',
             attributes: {
               cardDescription: null,
@@ -6838,7 +6840,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                 name: 'Person',
               },
             },
@@ -6929,13 +6931,13 @@ module('Integration | serialization', function (hooks) {
           },
         },
         meta: {
-          adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+          adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
         },
       });
 
       assert.deepEqual(serialized.included, [
         {
-          id: `${testRealmURL}Pet/mango`,
+          id: `${testRealmURL}Pet/mango` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             name: 'Mango',
@@ -6945,11 +6947,11 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
           },
         },
         {
-          id: `${testRealmURL}Pet/van-gogh`,
+          id: `${testRealmURL}Pet/van-gogh` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             name: 'Van Gogh',
@@ -6959,11 +6961,11 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
           },
         },
         {
-          id: `${testRealmURL}Friend/hassan`,
+          id: `${testRealmURL}Friend/hassan` as RealmResourceIdentifier,
           type: 'card',
           attributes: {
             firstName: 'Hassan',
@@ -6983,7 +6985,7 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Friend' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Friend' },
           },
         },
       ]);
@@ -7031,28 +7033,28 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: `${testRealmURL}Pet/mango` as RealmResourceIdentifier,
             type: 'card',
             attributes: { name: 'Mango', cardTitle: null },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
             },
           },
           {
-            id: `${testRealmURL}Pet/van-gogh`,
+            id: `${testRealmURL}Pet/van-gogh` as RealmResourceIdentifier,
             type: 'card',
             attributes: { name: 'Van Gogh', cardTitle: null },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
             },
           },
           {
-            id: `${testRealmURL}Friend/hassan`,
+            id: `${testRealmURL}Friend/hassan` as RealmResourceIdentifier,
             type: 'card',
             attributes: { firstName: 'Hassan', cardTitle: null },
             relationships: {
@@ -7067,7 +7069,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                 name: 'Friend',
               },
             },
@@ -7149,7 +7151,7 @@ module('Integration | serialization', function (hooks) {
             friendPets: { links: { self: null } },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
       });
@@ -7186,7 +7188,7 @@ module('Integration | serialization', function (hooks) {
             friend: { links: { self: null } },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
       };
@@ -7253,16 +7255,16 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Person' },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: `${testRealmURL}Pet/mango` as RealmResourceIdentifier,
             type: 'card',
             attributes: { name: 'Mango' },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: { module: `${testRealmURL}test-cards` as RealmResourceIdentifier, name: 'Pet' },
             },
           },
         ],
@@ -7366,7 +7368,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Sample',
             },
           },
@@ -7463,7 +7465,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Sample',
             },
           },
@@ -7617,7 +7619,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Sample',
             },
           },
@@ -7723,7 +7725,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Post',
             },
           },
@@ -7763,7 +7765,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Post',
             },
           },
@@ -7800,7 +7802,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Post',
             },
           },
@@ -7845,7 +7847,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
               name: 'Post',
             },
           },

@@ -33,6 +33,7 @@ import {
   fields,
   cardTypeDisplayName,
   type CodeRef,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -881,7 +882,7 @@ module('Integration | card-basics', function (hooks) {
       card.number = 42;
       card.boolean = true;
       card.languagesSpoken = ['english', 'japanese'];
-      card.ref = { module: `${testRealmURL}person`, name: 'Person' };
+      card.ref = { module: `${testRealmURL}person` as RealmResourceIdentifier, name: 'Person' };
       let readName: string = card.firstName;
       assert.strictEqual(readName, 'arthur');
       let readNumber: number = card.number;

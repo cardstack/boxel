@@ -26,6 +26,7 @@ import {
   baseRealm,
   Deferred,
   isResolvedCodeRef,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import type { Query } from '@cardstack/runtime-common/query';
@@ -309,7 +310,7 @@ export default class CardCatalogModal extends Component<Signature> {
         sort: [
           {
             on: {
-              module: `${baseRealm.url}card-api`,
+              module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
               name: 'CardDef',
             },
             by: 'cardTitle',

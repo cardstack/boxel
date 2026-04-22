@@ -8,6 +8,7 @@ import { baseRealm, Deferred } from '@cardstack/runtime-common';
 import type {
   SingleCardDocument,
   SingleFileMetaDocument,
+  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -167,11 +168,11 @@ function buildThemeDocument(palette: string): SingleCardDocument {
   return {
     data: {
       type: 'card',
-      id: `${testRealmURL}ThemeCard/main`,
+      id: `${testRealmURL}ThemeCard/main` as RealmResourceIdentifier,
       attributes: { palette },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}reactive`,
+          module: `${testRealmURL}reactive` as RealmResourceIdentifier,
           name: 'ThemeCard',
         },
       },
@@ -300,7 +301,7 @@ module('Integration | field configuration', function (hooks) {
         'ThemeCard/main.json': {
           data: {
             type: 'card',
-            id: `${testRealmURL}ThemeCard/main`,
+            id: `${testRealmURL}ThemeCard/main` as RealmResourceIdentifier,
             attributes: { palette: 'purple' },
             meta: {
               adoptsFrom: {

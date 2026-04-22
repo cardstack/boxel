@@ -17,6 +17,7 @@ import {
   type Realm,
   type LooseSingleCardDocument,
   CardContextName,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import type { PrerenderedCardLike } from '@cardstack/runtime-common/prerendered-card-search';
 
@@ -218,7 +219,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book`,
+              module: `${testRealmURL}book` as RealmResourceIdentifier,
               name: 'Book',
             },
           },
@@ -233,7 +234,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book`,
+              module: `${testRealmURL}book` as RealmResourceIdentifier,
               name: 'Book',
             },
           },
@@ -255,7 +256,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}post`,
+              module: `${testRealmURL}post` as RealmResourceIdentifier,
               name: 'Post',
             },
           },
@@ -277,7 +278,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}article`,
+              module: `${testRealmURL}article` as RealmResourceIdentifier,
               name: 'Article',
             },
           },
@@ -296,7 +297,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book`,
+              module: `${testRealmURL}book` as RealmResourceIdentifier,
               name: 'Book',
             },
           },
@@ -315,7 +316,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book`,
+              module: `${testRealmURL}book` as RealmResourceIdentifier,
               name: 'Book',
             },
           },
@@ -334,7 +335,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book`,
+              module: `${testRealmURL}book` as RealmResourceIdentifier,
               name: 'Book',
             },
           },
@@ -354,7 +355,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}spec`,
+              module: `${baseRealm.url}spec` as RealmResourceIdentifier,
               name: 'Spec',
             },
           },
@@ -374,7 +375,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}spec`,
+              module: `${baseRealm.url}spec` as RealmResourceIdentifier,
               name: 'Spec',
             },
           },
@@ -402,7 +403,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: `${testRealmURL}book`,
+          module: `${testRealmURL}book` as RealmResourceIdentifier,
           name: 'Book',
         },
         eq: {
@@ -412,7 +413,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testRealmURL}book`, name: 'Book' },
+          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
         },
       ],
     };
@@ -464,7 +465,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: `${baseRealm.url}card-api`,
+          module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
           name: 'FileDef',
         },
         eq: {
@@ -515,7 +516,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: `${testRealmURL}book`,
+          module: `${testRealmURL}book` as RealmResourceIdentifier,
           name: 'Book',
         },
         eq: {
@@ -525,7 +526,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testRealmURL}book`, name: 'Book' },
+          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
         },
       ],
     };
@@ -610,7 +611,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book`,
+              module: `${testRealmURL}book` as RealmResourceIdentifier,
               name: 'Book',
             },
           },
@@ -621,7 +622,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: `${testRealmURL}book`,
+          module: `${testRealmURL}book` as RealmResourceIdentifier,
           name: 'Book',
         },
         eq: {
@@ -631,7 +632,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testRealmURL}book`, name: 'Book' },
+          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
         },
       ],
     };
@@ -693,7 +694,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: `${testRealmURL}book`,
+          module: `${testRealmURL}book` as RealmResourceIdentifier,
           name: 'Book',
         },
         eq: {
@@ -703,7 +704,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testRealmURL}book`, name: 'Book' },
+          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
         },
       ],
     };
@@ -764,7 +765,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: `${testRealmURL}book`,
+          module: `${testRealmURL}book` as RealmResourceIdentifier,
           name: 'Book',
         },
         eq: {
@@ -774,7 +775,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testRealmURL}book`, name: 'Book' },
+          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
         },
       ],
     };
@@ -826,7 +827,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         type: {
-          module: `${testRealmURL}book`,
+          module: `${testRealmURL}book` as RealmResourceIdentifier,
           name: 'Book',
         },
       },
@@ -837,7 +838,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       sort: [
         {
           by: 'author.firstName',
-          on: { module: `${testRealmURL}book`, name: 'Book' },
+          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
           direction: 'asc',
         },
       ],
@@ -957,7 +958,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: `${testRealmURL}book`,
+          module: `${testRealmURL}book` as RealmResourceIdentifier,
           name: 'Book',
         },
         eq: {
@@ -967,7 +968,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testRealmURL}book`, name: 'Book' },
+          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
         },
       ],
     };

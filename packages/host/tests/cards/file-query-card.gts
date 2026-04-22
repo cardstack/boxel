@@ -7,9 +7,14 @@ import {
 import { FileDef } from 'https://cardstack.com/base/file-api';
 import StringField from 'https://cardstack.com/base/string';
 
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
+
 const fileSearchQuery = {
   filter: {
-    type: { module: 'https://cardstack.com/base/card-api', name: 'FileDef' },
+    type: {
+      module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+      name: 'FileDef',
+    },
   },
   realm: '$thisRealm',
 };

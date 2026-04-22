@@ -26,6 +26,7 @@ import type {
   CodeRef,
   CardErrorJSONAPI,
   ResolvedCodeRef,
+  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import {
   type getCards,
@@ -379,7 +380,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     if (!this.args.selectedDeclaration?.exportName) {
       return {
         name: '',
-        module: '',
+        module: '' as RealmResourceIdentifier,
       };
     }
     return {
@@ -387,7 +388,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       module: `${this.operatorModeStateService.state.codePath!.href.replace(
         /\.[^.]+$/,
         '',
-      )}`,
+      )}` as RealmResourceIdentifier,
     };
   }
 

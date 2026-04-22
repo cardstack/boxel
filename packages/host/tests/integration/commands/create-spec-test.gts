@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, type RealmResourceIdentifier } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
@@ -106,7 +106,7 @@ export class AppCard extends CardDef {
 export default class TestComponent extends Component {
   static displayName = 'Test Component';
 }`,
-          'test-command.gts': `import { Command } from '@cardstack/runtime-common';
+          'test-command.gts': `import { Command, type RealmResourceIdentifier } from '@cardstack/runtime-common';
 
 export default class TestCommand extends Command {
   static displayName = 'Test Command';
@@ -125,7 +125,7 @@ export class TestSpec extends Spec {
   test('creates spec with correct type for card definition', async function (assert) {
     const result = await createSpecCommand.execute({
       codeRef: {
-        module: `${testRealmURL}test-card.gts`,
+        module: `${testRealmURL}test-card.gts` as RealmResourceIdentifier,
         name: 'TestCard',
       },
       targetRealm: testRealmURL,
@@ -159,7 +159,7 @@ export class TestSpec extends Spec {
   test('creates spec with correct type for field definition', async function (assert) {
     const result = await createSpecCommand.execute({
       codeRef: {
-        module: `${testRealmURL}test-field.gts`,
+        module: `${testRealmURL}test-field.gts` as RealmResourceIdentifier,
         name: 'TestField',
       },
       targetRealm: testRealmURL,
@@ -176,7 +176,7 @@ export class TestSpec extends Spec {
   test('creates spec with correct type for app definition', async function (assert) {
     const result = await createSpecCommand.execute({
       codeRef: {
-        module: `${testRealmURL}app-card.gts`,
+        module: `${testRealmURL}app-card.gts` as RealmResourceIdentifier,
         name: 'AppCard',
       },
       targetRealm: testRealmURL,
@@ -193,7 +193,7 @@ export class TestSpec extends Spec {
   test('creates spec with correct type for component definition', async function (assert) {
     const result = await createSpecCommand.execute({
       codeRef: {
-        module: `${testRealmURL}test-component.gts`,
+        module: `${testRealmURL}test-component.gts` as RealmResourceIdentifier,
         name: 'TestComponent',
       },
       targetRealm: testRealmURL,
@@ -214,7 +214,7 @@ export class TestSpec extends Spec {
   test('creates spec with correct type for command definition', async function (assert) {
     const result = await createSpecCommand.execute({
       codeRef: {
-        module: `${testRealmURL}test-command.gts`,
+        module: `${testRealmURL}test-command.gts` as RealmResourceIdentifier,
         name: 'TestCommand',
       },
       targetRealm: testRealmURL,
@@ -237,7 +237,7 @@ export class TestSpec extends Spec {
     try {
       await createSpecCommand.execute({
         codeRef: {
-          module: `${testRealmURL}test-card.gts`,
+          module: `${testRealmURL}test-card.gts` as RealmResourceIdentifier,
           name: 'NonExistentExport', // Export that doesn't exist
         },
         targetRealm: testRealmURL,
@@ -258,7 +258,7 @@ export class TestSpec extends Spec {
     try {
       await createSpecCommand.execute({
         codeRef: {
-          module: `${testRealmURL}test-spec.gts`,
+          module: `${testRealmURL}test-spec.gts` as RealmResourceIdentifier,
           name: 'TestSpec',
         },
         targetRealm: testRealmURL,
@@ -299,7 +299,7 @@ export class TestSpec extends Spec {
 
   test('returns empty specs array when trying to create spec with duplicate code ref', async function (assert) {
     const codeRef = {
-      module: `${testRealmURL}test-card`, // remember NO .gts extension
+      module: `${testRealmURL}test-card` as RealmResourceIdentifier, // remember NO .gts extension
       name: 'TestCard',
     };
 
@@ -348,7 +348,7 @@ export class TestSpec extends Spec {
   test('auto generates README on initial spec creation when autoGenerateReadme is true', async function (assert) {
     const result = await createSpecCommand.execute({
       codeRef: {
-        module: `${testRealmURL}test-card.gts`,
+        module: `${testRealmURL}test-card.gts` as RealmResourceIdentifier,
         name: 'TestCard',
       },
       targetRealm: testRealmURL,

@@ -12,7 +12,7 @@ import { module, test } from 'qunit';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
-import { CardContextName } from '@cardstack/runtime-common';
+import { CardContextName, type RealmResourceIdentifier } from '@cardstack/runtime-common';
 
 import type StoreService from '@cardstack/host/services/store';
 
@@ -101,7 +101,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}author`,
+                module: `${testRealmURL}author` as RealmResourceIdentifier,
                 name: 'Author',
               },
             },
@@ -116,7 +116,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}author`,
+                module: `${testRealmURL}author` as RealmResourceIdentifier,
                 name: 'Author',
               },
             },
@@ -131,7 +131,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}author`,
+                module: `${testRealmURL}author` as RealmResourceIdentifier,
                 name: 'Author',
               },
             },
@@ -154,7 +154,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
           return {
             filter: {
               on: {
-                module: `${testRealmURL}author`,
+                module: `${testRealmURL}author` as RealmResourceIdentifier,
                 name: 'Author',
               },
               eq: {

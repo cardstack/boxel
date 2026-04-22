@@ -78,7 +78,7 @@ module('code-ref', function (hooks) {
 
   test('can dynamically load a card definition', async function (assert) {
     let ref = {
-      module: `${testRealmURL}person`,
+      module: `${testRealmURL}person` as RealmResourceIdentifier,
       name: 'Person',
     };
     await loadCardDef(ref, { loader });
@@ -97,11 +97,14 @@ module('code-ref', function (hooks) {
 
   test('can instantiate a card that uses a code-ref field', async function (assert) {
     let adoptsFrom = {
-      module: `${testRealmURL}code-ref-test`,
+      module: `${testRealmURL}code-ref-test` as RealmResourceIdentifier,
       name: 'TestCard',
     };
     await loadCardDef(adoptsFrom, { loader });
-    let ref = { module: `${testRealmURL}person`, name: 'Person' };
+    let ref = {
+      module: `${testRealmURL}person` as RealmResourceIdentifier,
+      name: 'Person',
+    };
     let doc = {
       data: {
         attributes: { ref },
@@ -131,7 +134,7 @@ module('code-ref', function (hooks) {
             adoptsFrom: {
               type: 'ancestorOf',
               card: {
-                module: `${testRealmURL}code-ref-test-1`,
+                module: `${testRealmURL}code-ref-test-1` as RealmResourceIdentifier,
                 name: 'TestCard1',
               },
             },
@@ -141,7 +144,7 @@ module('code-ref', function (hooks) {
               adoptsFrom: {
                 type: 'fieldOf',
                 card: {
-                  module: `${testRealmURL}code-ref-test-3`,
+                  module: `${testRealmURL}code-ref-test-3` as RealmResourceIdentifier,
                   name: 'TestCard3',
                 },
                 field: 'someField',
@@ -170,7 +173,7 @@ module('code-ref', function (hooks) {
             adoptsFrom: {
               type: 'ancestorOf',
               card: {
-                module: `${testRealmURL}foo-bar-1`,
+                module: `${testRealmURL}foo-bar-1` as RealmResourceIdentifier,
                 name: 'TestCard1',
               },
             },
@@ -180,7 +183,7 @@ module('code-ref', function (hooks) {
               adoptsFrom: {
                 type: 'fieldOf',
                 card: {
-                  module: `${testRealmURL}foo-bar-3`,
+                  module: `${testRealmURL}foo-bar-3` as RealmResourceIdentifier,
                   name: 'TestCard3',
                 },
                 field: 'someField',

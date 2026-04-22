@@ -15,7 +15,10 @@ module('normalizeQueryDefinition', function () {
     type: 'containsMany',
     isPrimitive: false,
     isComputed: false,
-    fieldOrCard: { module: 'https://example.com/test', name: 'Test' },
+    fieldOrCard: {
+      module: 'https://example.com/test' as RealmResourceIdentifier,
+      name: 'Test',
+    },
   } as const;
 
   test('resolves serialized resources with base paths and dot paths', function (assert) {
@@ -190,7 +193,10 @@ module('normalizeQueryDefinition', function () {
       fieldDefinition.fieldOrCard,
       relativeTo,
     );
-    let typeRef = { module: 'https://example.com/other', name: 'Other' };
+    let typeRef = {
+      module: 'https://example.com/other' as RealmResourceIdentifier,
+      name: 'Other',
+    };
 
     let normalized = normalizeQueryDefinition({
       fieldDefinition,
@@ -214,7 +220,10 @@ module('normalizeQueryDefinition', function () {
   test('does not overwrite existing on in leaf filters', function (assert) {
     let realmURL = new URL('https://realm.example/');
     let relativeTo = new URL('https://realm.example/cards/1');
-    let existingOn = { module: 'https://example.com/custom', name: 'Custom' };
+    let existingOn = {
+      module: 'https://example.com/custom' as RealmResourceIdentifier,
+      name: 'Custom',
+    };
 
     let normalized = normalizeQueryDefinition({
       fieldDefinition,

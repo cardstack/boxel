@@ -40,6 +40,7 @@ import {
   type RealmInfo,
   type RealmPermissions,
   type RenderError,
+  type RealmIdentifier,
 } from '@cardstack/runtime-common';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -1437,7 +1438,7 @@ export async function saveCard(
   id: string,
   loader: Loader,
   store?: CardStore,
-  realmURL?: string,
+  realmURL?: RealmIdentifier,
 ) {
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
   let doc = api.serializeCard(instance);

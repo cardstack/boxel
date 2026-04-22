@@ -20,6 +20,7 @@ import {
   ensureTrailingSlash,
   type Realm,
   type LooseSingleCardDocument,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
@@ -313,7 +314,7 @@ module('Acceptance | operator mode tests', function (hooks) {
               cardDescription: 'Spec for Person Card',
               specType: 'card',
               ref: {
-                module: `${testRealmURL}person`,
+                module: `${testRealmURL}person` as RealmResourceIdentifier,
                 name: 'Person',
               },
             },
@@ -332,7 +333,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}pet`,
+                module: `${testRealmURL}pet` as RealmResourceIdentifier,
                 name: 'Pet',
               },
             },
@@ -345,7 +346,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}pet`,
+                module: `${testRealmURL}pet` as RealmResourceIdentifier,
                 name: 'Pet',
               },
             },
@@ -373,7 +374,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}person`,
+                module: `${testRealmURL}person` as RealmResourceIdentifier,
                 name: 'Person',
               },
             },
@@ -393,7 +394,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}person`,
+                module: `${testRealmURL}person` as RealmResourceIdentifier,
                 name: 'Person',
               },
             },
@@ -459,7 +460,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${realm2URL}person`,
+                module: `${realm2URL}person` as RealmResourceIdentifier,
                 name: 'Person',
               },
             },
@@ -559,7 +560,7 @@ module('Acceptance | operator mode tests', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${testRealmURL}person`,
+                  module: `${testRealmURL}person` as RealmResourceIdentifier,
                   name: 'Person',
                 },
               },

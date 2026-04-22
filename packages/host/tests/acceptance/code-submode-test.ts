@@ -19,6 +19,7 @@ import stringify from 'safe-stable-stringify';
 import {
   baseRealm,
   type LooseSingleCardDocument,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import type { Realm } from '@cardstack/runtime-common/realm';
@@ -725,7 +726,7 @@ module('Acceptance | code submode tests', function (_hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: '../person',
+                    module: '../person' as RealmResourceIdentifier,
                     name: 'Person',
                   },
                 },
@@ -2114,7 +2115,7 @@ module('Acceptance | code submode tests', function (_hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: '../person',
+                module: '../person' as RealmResourceIdentifier,
                 name: 'Person',
               },
             },
@@ -2188,7 +2189,7 @@ module('Acceptance | code submode tests', function (_hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: '../person',
+                module: '../person' as RealmResourceIdentifier,
                 name: 'Person',
               },
             },
@@ -2310,7 +2311,7 @@ module('Acceptance | code submode tests', function (_hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: '../person',
+                module: '../person' as RealmResourceIdentifier,
                 name: 'Person',
               },
             },
@@ -2335,7 +2336,7 @@ module('Acceptance | code submode tests', function (_hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: '../person',
+                module: '../person' as RealmResourceIdentifier,
                 name: 'Person',
               },
             },

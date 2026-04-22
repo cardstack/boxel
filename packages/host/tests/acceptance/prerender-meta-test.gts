@@ -8,6 +8,8 @@ import {
   baseRealm,
   type PrerenderMeta,
   type RenderRouteOptions,
+  type RealmIdentifier,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import {
@@ -251,7 +253,7 @@ module('Acceptance | prerender | meta', function (hooks) {
       {
         data: {
           type: 'card',
-          id: `${testRealmURL}Person/hassan`,
+          id: `${testRealmURL}Person/hassan` as RealmResourceIdentifier,
           attributes: {
             name: 'Hassan',
             cardTitle: 'Hassan',
@@ -284,10 +286,10 @@ module('Acceptance | prerender | meta', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: '../person',
+              module: '../person' as RealmResourceIdentifier,
               name: 'Person',
             },
-            realmURL: testRealmURL,
+            realmURL: testRealmURL as RealmIdentifier,
           },
         },
       },
