@@ -1100,6 +1100,29 @@ module(basename(__filename), function () {
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
         });
+
+        test('image GET on a non-public realm uses private Cache-Control', async function (assert) {
+          let bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+          let jwt = createJWT(testRealm, 'john', ['read', 'write']);
+
+          await request
+            .post('/private-icon.png')
+            .set('Content-Type', 'application/octet-stream')
+            .set('Authorization', `Bearer ${jwt}`)
+            .send(Buffer.from(bytes));
+
+          let response = await request
+            .get('/private-icon.png')
+            .set('Accept', 'image/*')
+            .set('Authorization', `Bearer ${jwt}`);
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.headers['cache-control'],
+            'private, max-age=60, must-revalidate',
+            'auth-gated image uses private Cache-Control so shared caches cannot serve it to other users',
+          );
+        });
       });
     });
 
@@ -1212,7 +1235,7 @@ module(basename(__filename), function () {
           );
         });
 
-        test('image 304 response carries Cache-Control', async function (assert) {
+        test('image 304 response carries Cache-Control, ETag, and Last-Modified', async function (assert) {
           let bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
           await request
             .post('/revalidate.png')
@@ -1235,6 +1258,15 @@ module(basename(__filename), function () {
             second.headers['cache-control'],
             'public, max-age=60, must-revalidate',
             '304 responses include Cache-Control so browsers can refresh their cached directive',
+          );
+          assert.strictEqual(
+            second.headers['etag'],
+            etag,
+            '304 echoes the matched ETag (RFC 9110)',
+          );
+          assert.ok(
+            second.headers['last-modified'],
+            '304 includes Last-Modified so caches can update stored metadata',
           );
         });
 
