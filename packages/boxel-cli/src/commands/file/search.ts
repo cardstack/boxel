@@ -90,7 +90,11 @@ export function registerSearchCommand(file: Command): void {
       let query: Record<string, unknown>;
       try {
         let parsed = JSON.parse(opts.query);
-        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        if (
+          typeof parsed !== 'object' ||
+          parsed === null ||
+          Array.isArray(parsed)
+        ) {
           console.error(
             `${FG_RED}Error:${RESET} --query must be a JSON object, got ${Array.isArray(parsed) ? 'array' : typeof parsed}`,
           );

@@ -41,7 +41,10 @@ beforeAll(async () => {
   await setupTestProfile(profileManager);
 });
 
-afterAll(async () => { cleanupProfile?.(); await stopTestRealmServer(); });
+afterAll(async () => {
+  cleanupProfile?.();
+  await stopTestRealmServer();
+});
 
 describe('file search (integration)', () => {
   it('returns results from the realm', async () => {
