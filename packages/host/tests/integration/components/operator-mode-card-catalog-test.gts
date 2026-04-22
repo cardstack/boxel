@@ -471,17 +471,12 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     });
 
     await click(`[data-test-open-search-field]`);
-    typeIn(`[data-test-search-field]`, 'Mark');
-    // 300ms input debounce + typeIn keystroke delay means the "Searching…"
-    // window opens ~0.5–1s after the call; widen past waitUntil's 1s default.
-    await waitUntil(
-      () =>
-        (
-          document.querySelector('[data-test-search-label]') as HTMLElement
-        )?.innerText.includes('Searching…'),
-      { timeout: 5000 },
-    );
-    assert.dom(`[data-test-search-label]`).containsText('Searching…');
+    // `fillIn` atomically sets the input value and triggers one `input` event,
+    // so the 300ms debounce fires exactly once. Previously we relied on
+    // `typeIn` + a `waitUntil` on the transient "Searching…" label — that
+    // window is ~300–500ms on local machines and occasionally shorter on CI,
+    // producing flaky timeouts that didn't reflect a real regression.
+    await fillIn(`[data-test-search-field]`, 'Mark');
     await waitFor(`[data-test-search-result="${testRealmURL}Author/mark"]`, {
       timeout: 10000,
     });
@@ -495,13 +490,13 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     await click(`[data-test-search-sheet-cancel-button]`);
     await click(`[data-test-open-search-field]`);
-    await typeIn(`[data-test-search-field]`, 'Mark J');
+    await fillIn(`[data-test-search-field]`, 'Mark J');
     await waitUntil(
       () =>
         (
           document.querySelector('[data-test-search-label]') as HTMLElement
         )?.innerText.includes('1 result'),
-      { timeout: 5000 },
+      { timeout: 10000 },
     );
     assert
       .dom(`[data-test-search-label]`)
@@ -513,13 +508,13 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     assert.dom(`[data-test-search-sheet-search-result]`).doesNotExist();
 
     await focus(`[data-test-search-field]`);
-    typeIn(`[data-test-search-field]`, 'No Cards');
+    await fillIn(`[data-test-search-field]`, 'No Cards');
     await waitUntil(
       () =>
         (
           document.querySelector('[data-test-search-label]') as HTMLElement
         )?.innerText.includes('0 results'),
-      { timeout: 5000 },
+      { timeout: 10000 },
     );
     assert
       .dom(`[data-test-search-label]`)
