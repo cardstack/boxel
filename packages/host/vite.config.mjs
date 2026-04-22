@@ -89,7 +89,13 @@ export default defineConfig({
   // async-arrow-task-transform, which only matches ClassProperty nodes.
   // Letting babel do all TypeScript handling keeps class fields intact
   // through the async-arrow transform.
+  //
+  // Use esbuild as the production minifier. The default (terser) cannot
+  // parse matrix-js-sdk's indexeddb-crypto-store chunk, which contains
+  // post-minified Unicode identifiers like `ࢶ` that terser's parser
+  // rejects. esbuild's parser handles the full identifier range.
   build: {
+    minify: 'esbuild',
     rolldownOptions: {
       output: {
         keepNames: true,
