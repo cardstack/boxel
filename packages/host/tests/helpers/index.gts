@@ -1994,7 +1994,6 @@ export async function verifyJSONWithUUIDInFolder(
 
 export async function addSkillToAiAssistant(
   skillCardId: string,
-  _search?: string,
   roomId?: string,
 ) {
   let resolvedRoomId =
@@ -2033,21 +2032,9 @@ export async function addSkillToAiAssistant(
           ),
       ),
     {
+      timeout: 5000,
       timeoutMessage: `Timed out waiting for room skill state for "${skillCardId}"`,
     },
   );
 
-  if (document.querySelector('[data-test-skill-menu]')) {
-    await waitUntil(
-      () =>
-        Boolean(
-          document.querySelector(
-            `[data-test-skill-options-button="${skillCardId}"]`,
-          ),
-        ),
-      {
-        timeoutMessage: `Timed out waiting for skill options button for "${skillCardId}"`,
-      },
-    );
-  }
 }

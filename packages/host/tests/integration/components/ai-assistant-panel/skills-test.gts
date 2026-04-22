@@ -299,6 +299,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
         document
           .querySelector('[data-test-active-skills-count]')
           ?.textContent?.trim() === '1 Skill',
+      { timeout: 5000, timeoutMessage: 'Timed out waiting for env skill to be active' },
     );
     let roomId = document
       .querySelector('[data-test-room]')
@@ -400,7 +401,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
     await addSkillToAiAssistant(enabledSkillId);
 
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    if (!document.querySelector('[data-test-skill-menu] [data-test-pill-menu-add-button]')) {
+      await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    }
     await waitFor('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await fillIn('[data-test-search-field]', 'Exanple');
@@ -1112,7 +1115,6 @@ ${REPLACE_MARKER}
 
     await addSkillToAiAssistant(`${testRealmURL}Skill/example`);
     await click('[data-test-send-message-btn]');
-    await click('[data-test-pill-menu-button]');
 
     const initialRoomStateSkillsJson = getRoomState(
       roomId,
