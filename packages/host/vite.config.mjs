@@ -90,18 +90,21 @@ export default defineConfig(({ mode }) => ({
   // Letting babel do all TypeScript handling keeps class fields intact
   // through the async-arrow transform.
   //
-  // In production mode only, override the default minifier (terser) with
-  // esbuild. terser's parser cannot handle matrix-js-sdk's
-  // indexeddb-crypto-store chunk, which contains post-minified Unicode
-  // identifiers like `ࢶ`. esbuild's minifier mangles identifiers, which
-  // is acceptable for the production-only Preview Host deploy; dev-mode
-  // builds (used by test-web-assets, host tests, matrix tests, and
-  // software-factory tests) skip minification and keep original names.
+  // For production mode, disable Vite's built-in minifier (defaults to
+  // terser, which fails to parse matrix-js-sdk's indexeddb-crypto-store
+  // chunk because of Unicode identifiers like `ࢶ`) and instead use
+  // rolldown's native oxc minifier via `rolldownOptions.output.minify`.
+  // oxc handles the full Unicode identifier range and respects the
+  // sibling `keepNames: true` so the card runtime's `Class.name`
+  // introspection keeps working in production. Dev-mode builds (used by
+  // test-web-assets, host tests, matrix tests, and software-factory
+  // tests) skip minification entirely.
   build: {
-    ...(mode === 'production' ? { minify: 'esbuild' } : {}),
+    minify: false,
     rolldownOptions: {
       output: {
         keepNames: true,
+        ...(mode === 'production' ? { minify: true } : {}),
       },
     },
   },
