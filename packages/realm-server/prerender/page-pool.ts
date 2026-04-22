@@ -46,6 +46,18 @@ type PoolEntry = {
   closing?: boolean;
   transitioning?: boolean;
 };
+// CS-10817 step 1: BrowserContext shared across Pages that belong to
+// the same affinity. Defined here but not yet populated — the pool
+// still creates one context per page. Subsequent steps will start
+// adopting standby contexts as the shared context on first visit and
+// spawning additional pages into that context.
+type SharedContext = {
+  context: BrowserContext;
+  affinityKey: string;
+  pageCount: number;
+  lastUsedAt: number;
+  closing?: boolean;
+};
 type StandbyEntry = {
   type: 'standby';
   context: BrowserContext;
@@ -106,6 +118,11 @@ export class PagePool {
   #affinityPages = new Map<string, Set<PoolEntry>>();
   #standbys = new Set<StandbyEntry>();
   #lru = new Set<string>();
+  // CS-10817 step 1: shared context bookkeeping. Populated in later
+  // steps; initialized now so the data structure + cap are visible to
+  // tests and observability before any sharing behavior turns on.
+  #sharedContexts = new Map<string, SharedContext>();
+  #sharedContextCap: number;
   #maxPages: number;
   #affinityTabMax: number;
   #serverURL: string;
@@ -140,6 +157,17 @@ export class PagePool {
       envTabMax = 1;
     }
     this.#affinityTabMax = Math.min(Math.max(1, envTabMax), this.#maxPages);
+    // CS-10817 step 1: configurable cap on total shared contexts
+    // (active + orphaned). Default to 2× maxPages so there's headroom
+    // for a handful of recently-disposed contexts to survive as orphans
+    // for reuse. Still dormant in this step.
+    let envSharedCap = Number(
+      process.env.PRERENDER_SHARED_CONTEXT_CAP ?? this.#maxPages * 2,
+    );
+    if (!Number.isFinite(envSharedCap) || envSharedCap <= 0) {
+      envSharedCap = this.#maxPages * 2;
+    }
+    this.#sharedContextCap = Math.max(1, envSharedCap);
     this.#serverURL = options.serverURL;
     this.#browserManager = options.browserManager;
     this.#boxelHostURL = options.boxelHostURL;
@@ -155,6 +183,35 @@ export class PagePool {
 
   getWarmAffinities(): string[] {
     return [...this.#affinityPages.keys()];
+  }
+
+  // CS-10817 step 1: observability into the (currently dormant) shared
+  // context cache. Always returns an empty snapshot until later steps
+  // start populating `#sharedContexts`.
+  getSharedContextSnapshot(): {
+    cap: number;
+    entries: Array<{
+      affinityKey: string;
+      pageCount: number;
+      lastUsedAt: number;
+      closing: boolean;
+    }>;
+  } {
+    let entries: Array<{
+      affinityKey: string;
+      pageCount: number;
+      lastUsedAt: number;
+      closing: boolean;
+    }> = [];
+    for (let shared of this.#sharedContexts.values()) {
+      entries.push({
+        affinityKey: shared.affinityKey,
+        pageCount: shared.pageCount,
+        lastUsedAt: shared.lastUsedAt,
+        closing: shared.closing === true,
+      });
+    }
+    return { cap: this.#sharedContextCap, entries };
   }
 
   // Per-affinity vacancy snapshot consumed by the prerender manager for
@@ -310,6 +367,7 @@ export class PagePool {
     }
     this.#affinityPages.clear();
     this.#standbys.clear();
+    this.#sharedContexts.clear();
     this.#lru.clear();
     this.#ensuringStandbys = null;
     this.#creatingStandbys = 0;
