@@ -2771,6 +2771,320 @@ module('Unit | query', function (hooks) {
     );
   });
 
+  test(`'matches' filter returns rows whose markdown contains the query (case-insensitive)`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          markdown:
+            'Mango is a friendly puppy who loves to play fetch in the park.',
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          markdown: 'Van Gogh is a calm dog with a painterly coat.',
+        },
+      },
+      {
+        card: ringo,
+        data: { markdown: 'Ringo plays the drums and enjoys long naps.' },
+      },
+    ]);
+
+    let lower = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      filter: { matches: 'mango' },
+    });
+    assert.strictEqual(lower.meta.page.total, 1, 'one row matches "mango"');
+    assert.deepEqual(getIds(lower.cards), [mango.id]);
+
+    let upper = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      filter: { matches: 'MANGO' },
+    });
+    assert.strictEqual(
+      upper.meta.page.total,
+      1,
+      'upper-case query still matches',
+    );
+
+    let none = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      filter: { matches: 'xylophone' },
+    });
+    assert.strictEqual(none.meta.page.total, 0, 'no rows match a missing term');
+  });
+
+  test(`'matches' escapes LIKE wildcards so user input matches literally`, async function (assert) {
+    let { mango, vangogh } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: { markdown: 'Summer sale: 50% off today only.' },
+      },
+      {
+        card: vangogh,
+        data: { markdown: 'Fifty kittens lined up on the fence.' },
+      },
+    ]);
+
+    let percent = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      filter: { matches: '50%' },
+    });
+    assert.strictEqual(
+      percent.meta.page.total,
+      1,
+      '"50%" matches the literal "50%" row only',
+    );
+    assert.deepEqual(getIds(percent.cards), [mango.id]);
+
+    let underscore = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      filter: { matches: '_nothing_' },
+    });
+    assert.strictEqual(
+      underscore.meta.page.total,
+      0,
+      'underscore is treated literally, not as a single-char wildcard',
+    );
+  });
+
+  test(`'matches' does not match rows whose markdown is null`, async function (assert) {
+    // Include a non-null row that matches the query so the null-only case
+    // is distinguishable from "query hits no rows at all".
+    let { mango, vangogh } = testCards;
+    await setupIndex(dbAdapter, [
+      { card: mango, data: { markdown: 'Mango likes fetch.' } },
+      { card: vangogh, data: { markdown: null } },
+    ]);
+
+    let { meta, cards } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      { filter: { matches: 'mango' } },
+    );
+    assert.strictEqual(
+      meta.page.total,
+      1,
+      'only the non-null row matching "mango" is returned',
+    );
+    assert.deepEqual(getIds(cards), [mango.id]);
+  });
+
+  test(`'matches' empty query matches nothing`, async function (assert) {
+    let { mango, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      { card: mango, data: { markdown: 'Mango likes fetch.' } },
+      { card: ringo, data: { markdown: 'Ringo likes drums.' } },
+    ]);
+
+    let { meta: emptyMeta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      { filter: { matches: '' } },
+    );
+    assert.strictEqual(
+      emptyMeta.page.total,
+      0,
+      'empty query does not match every row',
+    );
+
+    let { meta: wsMeta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      { filter: { matches: '   ' } },
+    );
+    assert.strictEqual(
+      wsMeta.page.total,
+      0,
+      'whitespace-only query does not match every row',
+    );
+  });
+
+  test(`'matches' parameterizes the query safely (injection attempt)`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      { card: mango, data: { markdown: 'Mango likes fetch.' } },
+      { card: vangogh, data: { markdown: 'Van Gogh likes naps.' } },
+      { card: ringo, data: { markdown: 'Ringo likes drums.' } },
+    ]);
+
+    let { meta } = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      filter: { matches: `'; DROP TABLE boxel_index; --` },
+    });
+    assert.strictEqual(
+      meta.page.total,
+      0,
+      'malicious input is treated as literal LIKE text, not SQL',
+    );
+
+    let sanity = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      filter: { matches: 'mango' },
+    });
+    assert.strictEqual(
+      sanity.meta.page.total,
+      1,
+      'boxel_index table is intact after injection attempt',
+    );
+  });
+
+  test(`'matches' tolerates unicode and special characters in the query`, async function (assert) {
+    let { mango } = testCards;
+    await setupIndex(dbAdapter, [
+      { card: mango, data: { markdown: 'Mango likes fetch.' } },
+    ]);
+
+    let { meta } = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      filter: { matches: 'café 🦮 "$1 $2"' },
+    });
+    assert.strictEqual(
+      meta.page.total,
+      0,
+      'special characters do not throw; no rows match',
+    );
+  });
+
+  test(`'matches' composes inside 'every' with eq/contains/range/cardType`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          search_doc: { name: 'Mango', age: 35 },
+          markdown: 'Mango is the name here.',
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: { name: 'Van Gogh', age: 30 },
+          markdown: 'Van Gogh is here.',
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: { name: 'Ringo', age: 25 },
+          markdown: 'Ringo is here.',
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          every: [
+            { type },
+            { matches: 'mango' },
+            { eq: { name: 'Mango' } },
+            { contains: { name: 'Mang' } },
+            { range: { age: { gt: 10 } } },
+          ],
+        },
+      },
+    );
+
+    assert.strictEqual(
+      meta.page.total,
+      1,
+      `every-composition narrows to the one row matching all predicates`,
+    );
+    assert.deepEqual(getIds(cards), [mango.id], 'correct row returned');
+  });
+
+  test(`'matches' composes inside 'any' alongside other filters`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          search_doc: { name: 'Mango' },
+          markdown: 'Mango is here.',
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: { name: 'Van Gogh' },
+          markdown: 'Van Gogh is here.',
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: { name: 'Ringo' },
+          markdown: 'Ringo is here.',
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          any: [{ matches: 'ringo' }, { eq: { name: 'Mango' } }],
+        },
+      },
+    );
+
+    assert.strictEqual(
+      meta.page.total,
+      2,
+      `union of the 'matches' branch and the 'eq' branch`,
+    );
+    assert.deepEqual(
+      getIds(cards),
+      [mango.id, ringo.id],
+      'results are correct',
+    );
+  });
+
+  test(`'matches' composes inside 'not'`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          search_doc: { name: 'Mango' },
+          markdown: 'Mango is here.',
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: { name: 'Van Gogh' },
+          markdown: 'Van Gogh is here.',
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: { name: 'Ringo' },
+          markdown: 'Ringo is here.',
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: { on: type, not: { matches: 'mango' } },
+      },
+    );
+
+    assert.strictEqual(
+      meta.page.total,
+      2,
+      `'not' drops the one row that matched 'mango'`,
+    );
+    assert.deepEqual(
+      getIds(cards),
+      [ringo.id, vangogh.id],
+      'non-mango person rows returned',
+    );
+  });
+
   test('can sort using a general field that is not an attribute of a card', async function (assert) {
     await setupIndex(dbAdapter, [
       {

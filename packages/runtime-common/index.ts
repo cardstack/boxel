@@ -343,6 +343,11 @@ export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { Loader };
 export {
+  fetchWithTransientRetry,
+  isRetryableStatus,
+  DEFAULT_TRANSIENT_RETRY_DELAYS_MS,
+} from './loader';
+export {
   cardTypeDisplayName,
   cardTypeIcon,
   getFieldIcon,

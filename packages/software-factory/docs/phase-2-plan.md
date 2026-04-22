@@ -138,6 +138,14 @@ When `readFile` returns a parsed `document` (as the realm API does for `.json` f
 
 **Performance:** The tsconfig content is cached in memory (it never changes between runs). The `node_modules` symlink avoids copying hundreds of megabytes of dependencies.
 
+**Shared engine.** The discovery, glint invocation, and per-file parse loop live in `src/parse-execution.ts` (`discoverParseableGtsFiles` + `discoverJsonExampleFiles` + `parseRealmFiles`, plus the glint runner and JSON validators). Both the validation pipeline's `ParseValidationStep` (which owns `ParseResult` artifact lifecycle) and the in-memory `run_parse` agent tool (see below) consume the same engine, so parse coverage stays identical.
+
+### In-Memory `run_parse` Agent Tool (CS-10778)
+
+The agent also has a `run_parse` tool exposed on the factory tool set. It runs the same discovery + glint / JSON engine as the validation step and returns a flat, JSON-friendly `RunParseResult` (`status`, `filesChecked`, `filesWithErrors`, `errorCount`, `durationMs`, `parseableFiles`, `errors[{ file, line, column, message }]`). Unlike `ParseValidationStep`, it **does not create a `ParseResult` card** — no realm artifact is written, so it's safe to call repeatedly for mid-turn self-validation before `signal_done`. The orchestrator's post-`signal_done` parse validation still writes the durable `ParseResult`.
+
+The tool accepts an optional `path` argument. When omitted, every `.gts` / `.gjs` / `.ts` file in the realm is type-checked AND every `.json` file listed as a Spec `linkedExample` is validated (matching the validation step's behavior). When supplied, the tool skips discovery and parses only that one realm-relative file — `.gts` / `.gjs` / `.ts` runs through glint; `.json` is parsed and checked for card document structure. Paths with non-parseable extensions (`.md`, etc.) short-circuit to `status: 'error'` without calling the realm.
+
 The `ParseResult` card definition (`realm/parse-result.gts`) and CRUD (`src/parse-result-cards.ts`) follow the same patterns as `LintResult` and `EvalResult` — fitted/embedded/isolated templates, a running state, `ParseFileResult` field def with nested `ParseError` entries, and links to Issue/Project.
 
 ### Lint Step Details (CS-10714)
@@ -546,6 +554,14 @@ Behavior:
 - It takes no arguments — it always runs the full `*.test.gts` set in the target realm.
 
 Rationale for reintroduction: the original `run_tests` tool was removed because it ran through `executeTestRunFromRealm()`, which meant the agent could create duplicate `TestRun` instances and confuse sequence-number ordering. The in-memory variant sidesteps that problem entirely — no card is ever written — so letting the agent call it mid-turn to check its own work is safe. The pipeline remains the source of truth for the persistent `TestRun` artifact.
+
+### run_evaluate: In-Memory Self-Validation (CS-10779)
+
+The `run_evaluate` tool lets the agent evaluate one (or every non-test) ESM module in the target realm via the prerenderer sandbox and get back a flat `RunEvaluateResult` (`status`, `modulesChecked`, `modulesWithErrors`, `durationMs`, `evaluableFiles`, `failures: { path, error, stackTrace? }[]`). Unlike the pipeline's `EvalValidationStep`, it does NOT write an `EvalResult` card — so the agent can call it mid-turn as many times as it likes without creating realm artifacts. The orchestrator still runs the full validation pipeline (which writes the durable `EvalResult` card) after `signal_done`, so calling this tool is optional.
+
+Discovery (all non-test `.gts` / `.gjs` / `.ts` / `.js` files, alphabetical) and per-module evaluation now live in the shared `src/eval-execution.ts` engine, used by both `EvalValidationStep` (card-writing path) and `runEvaluateInMemory` (tool path). The `path` parameter accepts a single realm-relative file; non-evaluable extensions and test files (`*.test.*`) short-circuit to `status: 'error'` without calling the realm.
+
+Failure line/column numbers still reference the transpiled module — the tool description points the agent at `fetch_transpiled_module` for debugging while making explicit that transpiled output is read-only scratch and must never be copied into source.
 
 The `run_command` tool description explicitly states it is for Boxel host commands only (format: `@cardstack/boxel-host/commands/<name>/default`), not shell commands or scripts.
 

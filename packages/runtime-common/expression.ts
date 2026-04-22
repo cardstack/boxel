@@ -28,9 +28,16 @@ export interface Param {
   kind: 'param';
 }
 
+// pg/sqlite carries either a raw SQL fragment (scalar) or an inline
+// Expression array, which lets adapter-specific branches thread parameters
+// through without concatenating user input into SQL text. The scalar type
+// deliberately excludes JSON arrays/objects — both to avoid rendering them
+// as SQL text (never a valid use case) and to make the Array.isArray()
+// branch in expressionToSql() unambiguously mean "inline Expression".
+type DBSpecificScalar = string | number | boolean | null;
 export interface DBSpecificExpression {
-  pg?: PgPrimitive;
-  sqlite?: PgPrimitive;
+  pg?: DBSpecificScalar | Expression;
+  sqlite?: DBSpecificScalar | Expression;
   kind: 'db-specific-expression';
 }
 
@@ -137,8 +144,8 @@ export function dbExpression({
   pg,
   sqlite,
 }: {
-  pg?: PgPrimitive;
-  sqlite?: PgPrimitive;
+  pg?: DBSpecificScalar | Expression;
+  sqlite?: DBSpecificScalar | Expression;
 }): DBSpecificExpression {
   return { pg, sqlite, kind: 'db-specific-expression' };
 }
@@ -402,53 +409,60 @@ export function expressionToSql(
       fn: string;
     }
   >();
-  let text = query
-    .map((element) => {
-      if (isDbExpression(element)) {
-        return element[dbAdapterKind] ?? '';
-      } else if (isParam(element)) {
-        let value = element[dbAdapterKind] ?? element.param ?? null;
-        values.push(
-          value && typeof value === 'object' ? JSON.stringify(value) : value,
-        );
-        return `$${values.length}`;
-      } else if (typeof element === 'string') {
-        return element;
-      } else if (element.kind === 'table-valued-tree') {
-        let { column, rootPath, fieldPath, treeColumn } = element;
-        let field = trimBrackets(
-          rootPath === '$' ? column : rootPath.split('.').pop()!,
-        );
-        let key = `tree_${column}_${fieldPath}`;
-        let { name } = tableValuedFunctions.get(key) ?? {};
-        if (!name) {
-          name = `${field}${nonce++}_tree`;
-          let absolutePath = rootPath === '$' ? '$' : `$.${rootPath}`;
 
-          tableValuedFunctions.set(key, {
-            name,
-            fn: `jsonb_tree(${column}, '${absolutePath}') as ${name}`,
-          });
-        }
-        return `${name}.${treeColumn}`;
-      } else if (element.kind === 'table-valued-each') {
-        let { column } = element;
-        let key = `each_${column}`;
-        let { name } = tableValuedFunctions.get(key) ?? {};
-        if (!name) {
-          name = `${column}${nonce++}_array_element`;
-
-          tableValuedFunctions.set(key, {
-            name,
-            fn: `jsonb_array_elements_text(case jsonb_typeof(${column}) when 'array' then ${column} else '[]' end) as ${name}`,
-          });
-        }
-        return name;
-      } else {
-        throw assertNever(element);
+  let renderElement = (element: Expression[number]): string => {
+    if (isDbExpression(element)) {
+      let value = element[dbAdapterKind];
+      if (Array.isArray(value)) {
+        return (value as Expression).map(renderElement).join(' ');
       }
-    })
-    .join(' ');
+      return (value as DBSpecificScalar | undefined) == null
+        ? ''
+        : String(value);
+    } else if (isParam(element)) {
+      let value = element[dbAdapterKind] ?? element.param ?? null;
+      values.push(
+        value && typeof value === 'object' ? JSON.stringify(value) : value,
+      );
+      return `$${values.length}`;
+    } else if (typeof element === 'string') {
+      return element;
+    } else if (element.kind === 'table-valued-tree') {
+      let { column, rootPath, fieldPath, treeColumn } = element;
+      let field = trimBrackets(
+        rootPath === '$' ? column : rootPath.split('.').pop()!,
+      );
+      let key = `tree_${column}_${fieldPath}`;
+      let { name } = tableValuedFunctions.get(key) ?? {};
+      if (!name) {
+        name = `${field}${nonce++}_tree`;
+        let absolutePath = rootPath === '$' ? '$' : `$.${rootPath}`;
+
+        tableValuedFunctions.set(key, {
+          name,
+          fn: `jsonb_tree(${column}, '${absolutePath}') as ${name}`,
+        });
+      }
+      return `${name}.${treeColumn}`;
+    } else if (element.kind === 'table-valued-each') {
+      let { column } = element;
+      let key = `each_${column}`;
+      let { name } = tableValuedFunctions.get(key) ?? {};
+      if (!name) {
+        name = `${column}${nonce++}_array_element`;
+
+        tableValuedFunctions.set(key, {
+          name,
+          fn: `jsonb_array_elements_text(case jsonb_typeof(${column}) when 'array' then ${column} else '[]' end) as ${name}`,
+        });
+      }
+      return name;
+    } else {
+      throw assertNever(element);
+    }
+  };
+
+  let text = query.map(renderElement).join(' ');
 
   if (tableValuedFunctions.size > 0) {
     text = replace(
