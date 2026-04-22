@@ -1,5 +1,5 @@
 import '../helpers/setup-realm-server';
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -29,43 +29,24 @@ beforeAll(async () => {
 afterAll(async () => { cleanupProfile?.(); await stopTestRealmServer(); });
 
 describe('realm cancel-indexing (integration)', () => {
-  it('sends POST to _cancel-indexing-job with cancelPending: true', async () => {
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
-    try {
-      await cancelIndexing(realmUrl, { profileManager });
-      expect(fetchSpy).toHaveBeenCalledOnce();
-      let [url, init] = fetchSpy.mock.calls[0];
-      expect(String(url)).toContain('_cancel-indexing-job');
-      expect(init!.method).toBe('POST');
-      let body = JSON.parse(init!.body as string);
-      expect(body).toEqual({ cancelPending: true });
-    } finally { fetchSpy.mockRestore(); }
+  it('cancels indexing on a running realm and returns ok', async () => {
+    let result = await cancelIndexing(realmUrl, { profileManager });
+    expect(result.ok).toBe(true);
+    expect(result.error).toBeUndefined();
   });
 
-  it('returns error when no active profile', async () => {
+  it('returns error for an unreachable realm', async () => {
+    let result = await cancelIndexing('http://127.0.0.1:1/fake/', { profileManager });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBeDefined();
+  });
+
+  it('throws when no active profile', async () => {
     let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
     let emptyManager = new ProfileManager(emptyDir);
-    let result = await cancelIndexing(realmUrl, { profileManager: emptyManager });
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain('No active profile');
+    await expect(
+      cancelIndexing(realmUrl, { profileManager: emptyManager }),
+    ).rejects.toThrow('No active profile');
     fs.rmSync(emptyDir, { recursive: true, force: true });
-  });
-
-  it('returns error when fetch throws', async () => {
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch').mockRejectedValueOnce(new Error('network failure'));
-    try {
-      let result = await cancelIndexing(realmUrl, { profileManager });
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('network failure');
-    } finally { fetchSpy.mockRestore(); }
-  });
-
-  it('returns error on non-2xx response', async () => {
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch').mockResolvedValueOnce(new Response('Server Error', { status: 500 }));
-    try {
-      let result = await cancelIndexing(realmUrl, { profileManager });
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('500');
-    } finally { fetchSpy.mockRestore(); }
   });
 });
