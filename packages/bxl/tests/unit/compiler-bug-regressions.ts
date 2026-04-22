@@ -153,4 +153,24 @@ assertEval('(Amount = 100)', false, '#3 evaluates negative case');
 const predResult = evaluateBxl('[1,2,3] | [.[] | select(. > 1)]', { x: 1 });
 ok(Array.isArray(predResult.value), '#3 predicate-bracket path still works');
 
+// ─────────────────────────────────────────────────────────────────────────
+// Bug #4 — jq string interpolation `"\(.field)"` rejected by tokenizer
+// Symptom: compile threw "Bad escaped character in JSON at position 2"
+// because the tokenizer ran every string through JSON.parse(), which
+// doesn't know `\(`. Fix: fall back to a custom decoder that preserves
+// interpolation syntax.
+// ─────────────────────────────────────────────────────────────────────────
+
+assertCompile(
+  '"\\(.bpSystolic)/\\(.bpDiastolic)"',
+  '"\\(.bpSystolic)/\\(.bpDiastolic)"',
+  '#4 jq string interpolation compiles without JSON-parse error',
+);
+
+strictEqual(
+  evaluateBxl('"\\(.x)/\\(.y)"', { x: 120, y: 80 }).value,
+  '120/80',
+  '#4 string interpolation evaluates correctly',
+);
+
 console.log('BXL compiler bug regressions: all checks passed');

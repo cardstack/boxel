@@ -553,9 +553,27 @@ function tokenize(source: string): Token[] {
           value += current;
         }
       }
+      // jq string interpolation `"\(...)"` is not a JSON escape, so the
+      // naive JSON.parse pass below would choke. When we detect any
+      // non-JSON escape sequence, preserve the raw decoded form without
+      // JSON parsing. The string's semantic content matters only for
+      // literal comparison; compilation is downstream and the raw source
+      // is faithfully preserved in `raw`.
+      let decoded: string;
+      try {
+        decoded = JSON.parse(`"${value}"`);
+      } catch {
+        // Fall back: strip only the simple escapes JSON does support.
+        decoded = value
+          .replace(/\\n/g, '\n')
+          .replace(/\\t/g, '\t')
+          .replace(/\\r/g, '\r')
+          .replace(/\\"/g, '"')
+          .replace(/\\\\/g, '\\');
+      }
       tokens.push({
         type: 'string',
-        value: JSON.parse(`"${value}"`),
+        value: decoded,
         start,
         end: index,
         raw: source.slice(start, index),
@@ -714,6 +732,13 @@ export function tokenizeReadableSyntax(source: string): ReadableSyntaxToken[] {
 
 function tokenSource(token: Token): string {
   if (token.type === 'string') {
+    // Preserve the original source form for strings that contain jq
+    // interpolation (`\(...)`) — JSON.stringify would double-escape the
+    // backslash and jq would no longer recognize the interpolation.
+    // The `raw` field captures the literal source slice.
+    if (token.raw && token.raw.includes('\\(')) {
+      return token.raw;
+    }
     return JSON.stringify(token.value);
   }
   return token.value;
