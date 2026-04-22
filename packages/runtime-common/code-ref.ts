@@ -50,13 +50,12 @@ let localIdentities = new WeakMap<
   | { type: 'fieldOf'; card: typeof BaseDef; field: string }
 >();
 
-export function isResolvedCodeRef(ref?: CodeRef | {}): ref is ResolvedCodeRef {
-  if (ref && 'module' in ref && 'name' in ref) {
-    return true;
-  } else {
-    return false;
-  }
-}
+// Pure shape predicates live in `card-document-shape.ts` so callers that
+// only need to recognize a CodeRef don't pull the transitive runtime
+// chain rooted in this file. Re-exported here for backward compat; the
+// local imports let the remainder of this file call them directly.
+import { isResolvedCodeRef, isCodeRef } from './card-document-shape';
+export { isResolvedCodeRef, isCodeRef };
 
 export function assertIsResolvedCodeRef(
   ref: unknown,
@@ -65,32 +64,6 @@ export function assertIsResolvedCodeRef(
   if (!isResolvedCodeRef(ref as CodeRef | {})) {
     throw new Error(message);
   }
-}
-
-export function isCodeRef(ref: any): ref is CodeRef {
-  if (!ref || typeof ref !== 'object') {
-    return false;
-  }
-  if (!('type' in ref)) {
-    if (!('module' in ref) || !('name' in ref)) {
-      return false;
-    }
-    return typeof ref.module === 'string' && typeof ref.name === 'string';
-  } else if (ref.type === 'ancestorOf') {
-    if (!('card' in ref)) {
-      return false;
-    }
-    return isCodeRef(ref.card);
-  } else if (ref.type === 'fieldOf') {
-    if (!('card' in ref) || !('field' in ref)) {
-      return false;
-    }
-    if (typeof ref.card !== 'object' || typeof ref.field !== 'string') {
-      return false;
-    }
-    return isCodeRef(ref.card);
-  }
-  return false;
 }
 
 export function isBaseDef(cardOrField: any): cardOrField is typeof BaseDef {

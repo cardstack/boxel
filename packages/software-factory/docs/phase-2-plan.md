@@ -563,6 +563,14 @@ Discovery (all non-test `.gts` / `.gjs` / `.ts` / `.js` files, alphabetical) and
 
 Failure line/column numbers still reference the transpiled module — the tool description points the agent at `fetch_transpiled_module` for debugging while making explicit that transpiled output is read-only scratch and must never be copied into source.
 
+### run_instantiate: In-Memory Self-Validation (CS-10823)
+
+The `run_instantiate` tool lets the agent instantiate example card instances in the target realm via the prerenderer sandbox and get back a flat `RunInstantiateResult` (`status`, `instancesChecked`, `instancesWithErrors`, `durationMs`, `instanceFiles`, `failures: { path, cardName, error, stackTrace? }[]`). Unlike the pipeline's `InstantiateValidationStep`, it does NOT write an `InstantiateResult` card — so the agent can call it mid-turn as many times as it likes without creating realm artifacts. The orchestrator still runs the full validation pipeline (which writes the durable `InstantiateResult` card) after `signal_done`, so calling this tool is optional.
+
+Discovery (every Spec card in the realm, every `linkedExample` on every card/app Spec — same spec-based discovery the validation step uses) and per-instance instantiation now live in the shared `src/instantiate-execution.ts` engine, used by both `InstantiateValidationStep` (card-writing path) and `runInstantiateInMemory` (tool path). Spec-discovered example paths are normalized to `.json`-suffixed realm-relative form (Boxel relationship `self` links are extensionless) so the tool's `instanceFiles` list has the same shape whether the tool was called with or without `path`. The `path` parameter accepts a single realm-relative `.json` file and skips spec discovery entirely — the example's `meta.adoptsFrom` supplies the module + card name. Non-`.json` paths short-circuit to `status: 'error'` without calling the realm.
+
+Failure line/column numbers still reference the transpiled module — the tool description points the agent at `fetch_transpiled_module` for debugging while making explicit that transpiled output is read-only scratch and must never be copied into source.
+
 The `run_command` tool description explicitly states it is for Boxel host commands only (format: `@cardstack/boxel-host/commands/<name>/default`), not shell commands or scripts.
 
 ### Playwright waitForFunction Timeout

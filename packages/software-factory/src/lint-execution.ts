@@ -15,6 +15,7 @@ import type {
   LintViolationData,
 } from './lint-result-cards';
 import { logger } from './logger';
+import { validateRealmRelativePath } from './realm-relative-path';
 
 let log = logger('lint-execution');
 
@@ -240,12 +241,17 @@ export async function runLintInMemory(
 ): Promise<RunLintResult> {
   let lintableFiles: string[];
   if (options.path) {
-    if (!LINTABLE_EXTENSIONS.some((ext) => options.path!.endsWith(ext))) {
+    let path = options.path;
+    let pathError = validateRealmRelativePath(path);
+    if (pathError) {
+      return emptyErrorResult(pathError);
+    }
+    if (!LINTABLE_EXTENSIONS.some((ext) => path.endsWith(ext))) {
       return emptyErrorResult(
-        `Path "${options.path}" is not lintable — must end with one of ${LINTABLE_EXTENSIONS.join(', ')}`,
+        `Path "${path}" is not lintable — must end with one of ${LINTABLE_EXTENSIONS.join(', ')}`,
       );
     }
-    lintableFiles = [options.path];
+    lintableFiles = [path];
   } else {
     try {
       lintableFiles = await discoverLintableFiles({
