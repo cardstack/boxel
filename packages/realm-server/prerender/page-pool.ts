@@ -691,15 +691,51 @@ export class PagePool {
     entry.page.removeAllListeners('console');
     this.#attachPageConsole(entry.page, affinityKey, entry.pageId);
     this.#addAffinityEntry(affinityKey, entry);
+    // CS-10817 step 2: record this page's context as the affinity's
+    // shared context if we don't have one yet. Subsequent steps start
+    // reusing this context; for now it's purely bookkeeping — behavior
+    // is unchanged from main.
+    this.#recordSharedContextForFirstPage(standby.context, affinityKey);
     return entry;
   }
 
+  // Register an affinity's first adopted context. If the affinity
+  // already has a shared context entry, we leave it alone (the new
+  // page is already covered by bookkeeping; step 3 will switch to
+  // adding pages into the existing shared context instead of making
+  // one-page shared contexts).
+  #recordSharedContextForFirstPage(
+    context: BrowserContext,
+    affinityKey: string,
+  ): void {
+    let existing = this.#sharedContexts.get(affinityKey);
+    if (existing && !existing.closing) {
+      existing.pageCount++;
+      existing.lastUsedAt = Date.now();
+      return;
+    }
+    this.#sharedContexts.set(affinityKey, {
+      context,
+      affinityKey,
+      pageCount: 1,
+      lastUsedAt: Date.now(),
+    });
+  }
+
   #reassignAffinityTab(entry: PoolEntry, affinityKey: string): PoolEntry {
+    let oldAffinityKey = entry.affinityKey;
     this.#detachAffinityEntry(entry);
+    // CS-10817 step 2: the moving page takes the context with it.
+    // Drop the old affinity's shared-context row so the entry ends up
+    // counted only against its new affinity.
+    if (oldAffinityKey) {
+      this.#releaseSharedContextForClosedPage(oldAffinityKey);
+    }
     entry.affinityKey = affinityKey;
     entry.page.removeAllListeners('console');
     this.#attachPageConsole(entry.page, affinityKey, entry.pageId);
     this.#addAffinityEntry(affinityKey, entry);
+    this.#recordSharedContextForFirstPage(entry.context, affinityKey);
     entry.lastUsedAt = Date.now();
     return entry;
   }
@@ -760,6 +796,24 @@ export class PagePool {
     }
     if (!retainConsoleErrors) {
       this.#consoleErrorsByPageId.delete(entry.pageId);
+    }
+    // CS-10817 step 2: keep the shared-context bookkeeping honest.
+    // When we close a pool entry, drop the matching shared-context
+    // row so cap accounting and getSharedContextSnapshot() stay in
+    // sync. No-op for standbys (they aren't tracked in
+    // #sharedContexts).
+    if (entry.type === 'pool' && entry.affinityKey) {
+      this.#releaseSharedContextForClosedPage(entry.affinityKey);
+    }
+  }
+
+  #releaseSharedContextForClosedPage(affinityKey: string): void {
+    let shared = this.#sharedContexts.get(affinityKey);
+    if (!shared) return;
+    shared.pageCount = Math.max(0, shared.pageCount - 1);
+    shared.lastUsedAt = Date.now();
+    if (shared.pageCount === 0) {
+      this.#sharedContexts.delete(affinityKey);
     }
   }
 
