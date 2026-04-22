@@ -31,8 +31,16 @@ const TEMPLATE_LINT_EXTENSIONS = ['.hbs', '.gts', '.gjs'];
 const TSC_EXTENSIONS = ['.ts', '.gts'];
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_FILE_COUNT = 500;
+// Reserved filename for the generated per-run lint tsconfig. Placed inside
+// the submission temp dir but guarded against collision with a user-submitted
+// file of the same name (see sanitizeRelativePath).
+export const LINT_TSCONFIG_FILENAME = '.__submission-lint-tsconfig__.json';
 
-const SPAWN_TIMEOUT_MS = 120_000;
+const SPAWN_TIMEOUT_MS = (() => {
+  let raw = process.env.BOT_RUNNER_LINT_TIMEOUT_MS;
+  let parsed = raw ? parseInt(raw, 10) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 300_000;
+})();
 
 export interface SubmissionFile {
   filename: string;
@@ -74,6 +82,9 @@ export function sanitizeRelativePath(
   }
   if (filename.split(/[\\/]/).some((seg) => seg === '..')) {
     throw new Error(`filename must not contain ..: ${filename}`);
+  }
+  if (filename === LINT_TSCONFIG_FILENAME) {
+    throw new Error(`filename is reserved: ${filename}`);
   }
   let resolved = path.resolve(tempDir, filename);
   let anchor = tempDir.endsWith(path.sep) ? tempDir : tempDir + path.sep;
@@ -205,6 +216,7 @@ export async function runLintOnSubmissionFiles(
     }
 
     let templateLintErrors = await runTemplateLint(
+      runId,
       relPaths,
       tempDir,
       tempRelFromCatalog,
@@ -212,7 +224,12 @@ export async function runLintOnSubmissionFiles(
     let hasTscFiles = relPaths.some((p) =>
       TSC_EXTENSIONS.some((ext) => p.toLowerCase().endsWith(ext)),
     );
-    let tscErrors = hasTscFiles ? await runEmberTsc(tempRelFromHost) : [];
+    if (hasTscFiles) {
+      await writeSubmissionTsconfig(tempDir);
+    }
+    let tscErrors = hasTscFiles
+      ? await runEmberTsc(runId, tempDir, tempRelFromHost)
+      : [];
 
     let fixedFiles: SubmissionFile[] = [];
     let fixedFileCount = 0;
@@ -266,6 +283,7 @@ export async function runLintOnSubmissionFiles(
 }
 
 async function runTemplateLint(
+  runId: string,
   relPaths: string[],
   tempDir: string,
   tempRelFromCatalog: string,
@@ -284,30 +302,51 @@ async function runTemplateLint(
       path.join(tempRelFromCatalog, rel).replace(/\\/g, '/'),
     ),
   ];
-  let { stdout, stderr, code } = await spawnCapture(
-    TEMPLATE_LINT_BIN,
-    args,
-    CATALOG_REALM_DIR,
-  );
+  let startedAt = Date.now();
+  let result;
+  try {
+    result = await spawnCapture(TEMPLATE_LINT_BIN, args, CATALOG_REALM_DIR);
+  } catch (err: any) {
+    throw new Error(`[runId=${runId}] template-lint ${err?.message ?? err}`);
+  }
+  let { stdout, stderr, code } = result;
+  log.info('template-lint finished', {
+    runId,
+    durationMs: Date.now() - startedAt,
+    code,
+    fileCount: templateFiles.length,
+  });
   // ember-template-lint: 0 = clean, 1 = lint errors present (with --format
   // json, stdout still contains the JSON report). Anything else (crash,
   // bad args, null from signal) is a hard failure — don't let silent
   // failure let a bad submission sail through.
   if (code !== 0 && code !== 1) {
     throw new Error(
-      `ember-template-lint exited with unexpected code ${code}: ${stderr.slice(0, 500)}`,
+      `[runId=${runId}] ember-template-lint exited with unexpected code ${code}: ${stderr.slice(0, 500)}`,
     );
   }
   return parseTemplateLintOutput(stdout, tempDir, CATALOG_REALM_DIR);
 }
 
-async function runEmberTsc(tempRelFromHost: string): Promise<string[]> {
-  let args = ['--noEmit'];
-  let { stdout, stderr, code } = await spawnCapture(
-    EMBER_TSC_BIN,
-    args,
-    HOST_DIR,
-  );
+async function runEmberTsc(
+  runId: string,
+  tempDir: string,
+  tempRelFromHost: string,
+): Promise<string[]> {
+  let args = ['--noEmit', '-p', path.join(tempDir, LINT_TSCONFIG_FILENAME)];
+  let startedAt = Date.now();
+  let result;
+  try {
+    result = await spawnCapture(EMBER_TSC_BIN, args, HOST_DIR);
+  } catch (err: any) {
+    throw new Error(`[runId=${runId}] ember-tsc ${err?.message ?? err}`);
+  }
+  let { stdout, stderr, code } = result;
+  log.info('ember-tsc finished', {
+    runId,
+    durationMs: Date.now() - startedAt,
+    code,
+  });
   if (code === 0) return [];
   // tsc exits 1 when it reports type errors, 2 for "fatal" diagnostics.
   // Anything outside {0,1,2} (e.g. null from a signal, or a much larger
@@ -315,11 +354,39 @@ async function runEmberTsc(tempRelFromHost: string): Promise<string[]> {
   // treat as a hard failure so we don't ship a bad submission.
   if (code !== 1 && code !== 2) {
     throw new Error(
-      `ember-tsc exited with unexpected code ${code}: ${stderr.slice(0, 500)}`,
+      `[runId=${runId}] ember-tsc exited with unexpected code ${code}: ${stderr.slice(0, 500)}`,
     );
   }
   let combined = `${stdout}\n${stderr}`;
   return parseTscOutput(combined, tempRelFromHost);
+}
+
+// Mirrors the boxel-catalog CI lint scope
+async function writeSubmissionTsconfig(tempDir: string): Promise<void> {
+  let toPosix = (p: string): string => p.split(path.sep).join('/');
+  let prefixRelative = (p: string): string =>
+    p.startsWith('.') ? p : './' + p;
+  let extendsPath = prefixRelative(
+    toPosix(path.relative(tempDir, path.join(HOST_DIR, 'tsconfig.json'))),
+  );
+  let baseDir = toPosix(
+    path.relative(tempDir, path.join(REPO_ROOT, 'packages', 'base')),
+  );
+  let experimentsDir = toPosix(
+    path.relative(
+      tempDir,
+      path.join(REPO_ROOT, 'packages', 'experiments-realm'),
+    ),
+  );
+  let tsconfig = {
+    extends: extendsPath,
+    exclude: [`${baseDir}/**/__boxel/**`, `${experimentsDir}/**/*`],
+  };
+  await fs.writeFile(
+    path.join(tempDir, LINT_TSCONFIG_FILENAME),
+    JSON.stringify(tsconfig, null, 2),
+    'utf8',
+  );
 }
 
 interface ReadableLike {
