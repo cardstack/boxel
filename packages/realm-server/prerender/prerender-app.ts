@@ -477,7 +477,12 @@ export function buildPrerenderApp(options: {
   // Composite visit prerender: runs a caller-selected subset of
   // {fileExtract, cardRender, fileRender} on a single page acquisition.
   router.post('/prerender-visit', async (ctxt: Koa.Context) => {
-    let requestId = ctxt.get(PRERENDER_REQUEST_ID_HEADER) || randomUUID();
+    // CS-10872: sanitize to keep grepable IDs in logs & headers —
+    // same contract as the shared `registerPrerenderRoute` wrapper
+    // used by /prerender-module, /prerender-file-extract, etc.
+    let requestId =
+      sanitizePrerenderRequestId(ctxt.get(PRERENDER_REQUEST_ID_HEADER)) ??
+      randomUUID();
     ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
     try {
       let request = await fetchRequestFromContext(ctxt);

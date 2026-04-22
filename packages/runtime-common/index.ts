@@ -80,8 +80,14 @@ export interface RenderTimeoutDiagnostics {
   // through manager and prerender-server. Paste into a log search to
   // join all three stacks for this call.
   requestId?: string;
-  // Ms spent in PagePool.getPage before render work began. See waits
-  // for the sub-breakdown (semaphore / tabQueue / tabStartup).
+  // Total wall time spent in `PagePool.getPage` before render work
+  // began. The three `waits` sub-fields below each cover a specific
+  // await; `launchMs` is measured around the full method and so is
+  // typically >= `semaphoreMs + tabQueueMs + tabStartupMs` — the
+  // residual is synchronous bookkeeping (affinity reassignment,
+  // LRU touch, standby top-up kickoff) that doesn't fall into any
+  // of the three buckets. For triage the sub-field breakdown is
+  // what matters: which *await* dominated launch time.
   launchMs?: number;
   waits?: {
     semaphoreMs?: number;
