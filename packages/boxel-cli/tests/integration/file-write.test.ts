@@ -92,15 +92,15 @@ describe('file write (integration)', () => {
     expect((doc as any).data.attributes.title).toBe('Written Card');
   });
 
-  it('throws when no active profile', async () => {
+  it('returns error result when no active profile', async () => {
     let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
     let emptyManager = new ProfileManager(emptyDir);
 
-    await expect(
-      write(realmUrl, 'test.gts', 'content', {
-        profileManager: emptyManager,
-      }),
-    ).rejects.toThrow('No active profile');
+    let result = await write(realmUrl, 'test.gts', 'content', {
+      profileManager: emptyManager,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('No active profile');
 
     fs.rmSync(emptyDir, { recursive: true, force: true });
   });
