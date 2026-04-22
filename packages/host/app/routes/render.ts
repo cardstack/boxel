@@ -155,6 +155,12 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__renderModel = undefined;
     (globalThis as any).__docsInFlight = undefined;
     (globalThis as any).__boxelRenderStage = undefined;
+    // CS-10872: also tear down the stage setter + timestamp. Without
+    // this, an in-flight task that fires after deactivate (e.g. a
+    // straggler promise) could resume stage writes against the next
+    // render's timeline and confuse a subsequent timeout capture.
+    (globalThis as any).__boxelSetRenderStage = undefined;
+    (globalThis as any).__boxelRenderStageSetAt = undefined;
     (globalThis as any).__boxelRenderDiagnostics = undefined;
     (globalThis as any).__waitForRenderLoadStability = undefined;
     window.removeEventListener('boxel-render-error', this.handleRenderError);

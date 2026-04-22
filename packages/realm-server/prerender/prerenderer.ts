@@ -392,7 +392,6 @@ export class Prerenderer {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
-    let prerenderStart = Date.now();
     let attemptOptions = renderOptions;
     let lastResult:
       | {
@@ -401,7 +400,12 @@ export class Prerenderer {
           pool: PoolMeta;
         }
       | undefined;
+    // CS-10872: `totalElapsedMs` must cover only the attempt whose
+    // result we return, not earlier retries. Reset the marker at the
+    // top of each iteration so launch+render still sums to ~total.
+    let attemptStart = Date.now();
     for (let attempt = 0; attempt < 3; attempt++) {
+      attemptStart = Date.now();
       let result: {
         response: ModuleRenderResponse;
         timings: Timings;
@@ -472,7 +476,7 @@ export class Prerenderer {
       Prerenderer.decorateRenderErrorsWithTimings(
         result.response,
         result.timings,
-        Date.now() - prerenderStart,
+        Date.now() - attemptStart,
       );
       return result;
     }
@@ -485,7 +489,7 @@ export class Prerenderer {
       Prerenderer.decorateRenderErrorsWithTimings(
         lastResult.response,
         lastResult.timings,
-        Date.now() - prerenderStart,
+        Date.now() - attemptStart,
       );
       return lastResult;
     }
@@ -562,7 +566,6 @@ export class Prerenderer {
       types,
       opts,
     } = this.#gateClearCache(rawArgs);
-    let prerenderStart = Date.now();
     let attemptOptions = renderOptions;
     let lastResult:
       | {
@@ -571,7 +574,11 @@ export class Prerenderer {
           pool: PoolMeta;
         }
       | undefined;
+    // CS-10872: see prerenderModule for why totalElapsedMs is
+    // attempt-local rather than loop-wide.
+    let attemptStart = Date.now();
     for (let attempt = 0; attempt < 3; attempt++) {
+      attemptStart = Date.now();
       let result: {
         response: RenderVisitResponse;
         timings: Timings;
@@ -644,7 +651,7 @@ export class Prerenderer {
       Prerenderer.decorateRenderErrorsWithTimings(
         result.response,
         result.timings,
-        Date.now() - prerenderStart,
+        Date.now() - attemptStart,
       );
       return result;
     }
@@ -652,7 +659,7 @@ export class Prerenderer {
       Prerenderer.decorateRenderErrorsWithTimings(
         lastResult.response,
         lastResult.timings,
-        Date.now() - prerenderStart,
+        Date.now() - attemptStart,
       );
       return lastResult;
     }

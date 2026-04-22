@@ -25,6 +25,7 @@ import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
+  sanitizePrerenderRequestId,
 } from './prerender-constants';
 import { randomUUID } from 'crypto';
 
@@ -271,7 +272,10 @@ export function buildPrerenderApp(options: {
       // CS-10872: echo manager's correlation ID so operators can grep
       // one ID across client → manager → prerender-server. Fall back
       // to a mint if the caller didn't supply one (direct calls, tests).
-      let requestId = ctxt.get(PRERENDER_REQUEST_ID_HEADER) || randomUUID();
+      // CS-10872: sanitize to keep grepable IDs in logs & headers.
+      let requestId =
+        sanitizePrerenderRequestId(ctxt.get(PRERENDER_REQUEST_ID_HEADER)) ??
+        randomUUID();
       ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
       try {
         let request = await fetchRequestFromContext(ctxt);

@@ -18,6 +18,12 @@ import {
 type FetchingModule = {
   state: 'fetching';
   deferred: Deferred<void>;
+  // CS-10872: retain the full requested module URL (with extension)
+  // since `setModule` stores modules under a trimmed identifier for
+  // cache purposes. The diagnostic getter returns this string instead
+  // of the trimmed map key so timeout diagnostics point at a real,
+  // resolvable URL.
+  originalURL: string;
 };
 
 type RegisteredModule = {
@@ -229,11 +235,17 @@ export class Loader {
   // Render-timeout error document with "what the loader was waiting
   // on". Returns [] when the loader is quiescent. Intentionally read-
   // only; do not use for control flow.
+  //
+  // Note: we iterate the modules map but return each FetchingModule's
+  // stored `originalURL`, not the trimmed map key. The cache keys have
+  // executable extensions stripped (see `trimModuleIdentifier`), so a
+  // naive key read would conflate `.gts` / `.ts` / `.js` siblings and
+  // surface unresolvable identifiers in the timeout diagnostics.
   get inFlightModuleImports(): string[] {
     let urls: string[] = [];
-    for (let [url, mod] of this.modules) {
+    for (let mod of this.modules.values()) {
       if (mod.state === 'fetching') {
-        urls.push(url);
+        urls.push(mod.originalURL);
       }
     }
     return urls;
@@ -778,6 +790,7 @@ export class Loader {
     let module = {
       state: 'fetching' as const,
       deferred: new Deferred<void>(),
+      originalURL: moduleIdentifier,
     };
     this.setModule(moduleIdentifier, module);
 

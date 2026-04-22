@@ -19,7 +19,7 @@ module(
     setupRenderingTest(hooks);
 
     function makeTimeoutError(
-      overrides?: Partial<CardErrorJSONAPI['meta']['diagnostics']>,
+      overrides?: Record<string, unknown>,
     ): CardErrorJSONAPI {
       let diagnostics: Record<string, unknown> = {
         requestId: 'b14e24e3-8b1f-4a7d-9e62-3c5f2db2c1aa',

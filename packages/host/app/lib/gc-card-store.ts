@@ -523,6 +523,17 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.#fileMetaDocsInFlight.clear();
     this.#inFlight.clear();
     this.#loadGeneration = 0;
+    // CS-10872: diagnostic trackers follow the same lifecycle as the
+    // in-flight maps. If a loader/cache reset happens mid-render
+    // (triggered by a `clearCache: true` clearCache retry, for
+    // example), stale in-flight entries and recent-history rows must
+    // not survive into the next render's timeout diagnostics.
+    this.#queryLoadsInFlight.clear();
+    this.#cardDocStartedAt.clear();
+    this.#fileMetaStartedAt.clear();
+    this.#recentQueryLoads.length = 0;
+    this.#recentCardDocLoads.length = 0;
+    this.#recentFileMetaLoads.length = 0;
     this.#idResolver.reset();
   }
 

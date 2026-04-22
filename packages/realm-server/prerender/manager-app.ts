@@ -9,6 +9,7 @@ import {
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
   resolvePrerenderServerProxyTimeoutMs,
+  sanitizePrerenderRequestId,
 } from './prerender-constants';
 import { randomUUID } from 'crypto';
 import { fromAffinityKey, toAffinityKey } from './affinity';
@@ -811,7 +812,12 @@ export function buildPrerenderManagerApp(options?: {
     // CS-10872: honor caller-supplied correlation ID; mint one if
     // absent (direct curl, test harnesses). Echo on every subsequent
     // log line so a single grep surfaces the full proxy story.
-    let requestId = ctxt.get(PRERENDER_REQUEST_ID_HEADER) || randomUUID();
+    // CS-10872: sanitize the inbound id so it can't carry
+    // arbitrarily long / unusual payloads into log lines or
+    // response headers. Fall back to a fresh UUID when invalid.
+    let requestId =
+      sanitizePrerenderRequestId(ctxt.get(PRERENDER_REQUEST_ID_HEADER)) ??
+      randomUUID();
     ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
     let proxyStart = now();
     try {
