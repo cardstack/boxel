@@ -105,7 +105,7 @@ async function registerUser({
   const container = getSynapseContainerName();
   const adminFlag = admin ? '--admin' : '--no-admin';
   const command = `docker exec ${container} register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u ${username} -p ${password} ${adminFlag}`;
-  console.log(`Registering ${label}`);
+  console.log(`[${label}] Registering`);
   const { err, stdout } = await execAsync(command);
   if (err) {
     if (stdout.includes('User ID already taken')) {
@@ -115,13 +115,15 @@ async function registerUser({
           `User ${username} already exists, but the password does not match`,
         );
       }
-      console.log(`User ${username} already exists and the password matches`);
+      console.log(`[${label}] Already exists and the password matches`);
       return;
     }
     throw err;
   }
-  const trimmed = stdout.trim();
-  if (trimmed) console.log(trimmed);
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed) console.log(`[${label}] ${trimmed}`);
+  }
 }
 
 async function ensureUserRecord(matrixUserId: string): Promise<void> {
@@ -159,7 +161,7 @@ async function ensureUserRecord(matrixUserId: string): Promise<void> {
         .split('\n')
         .some((line) => line.includes('INSERT 0 1'));
       if (inserted) {
-        console.log(`Added an entry to the users table: ${matrixUserId}`);
+        console.log(`[${matrixUserId}] Added an entry to the users table`);
       }
       resolve();
     });
