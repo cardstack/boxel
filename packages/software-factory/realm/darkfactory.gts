@@ -1,3 +1,8 @@
+import { tracked } from '@glimmer/tracking';
+import { fn, get } from '@ember/helper';
+import { on } from '@ember/modifier';
+import Owner from '@ember/owner';
+
 import {
   CardDef,
   FieldDef,
@@ -8,6 +13,7 @@ import {
   linksTo,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
+import BooleanField from 'https://cardstack.com/base/boolean';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import DateTimeField from 'https://cardstack.com/base/datetime';
@@ -15,44 +21,120 @@ import MarkdownField from 'https://cardstack.com/base/markdown';
 import TextAreaField from 'https://cardstack.com/base/text-area';
 import enumField from 'https://cardstack.com/base/enum';
 
-export const IssueStatusField = enumField(StringField, {
-  options: [
-    { value: 'backlog', label: 'Backlog' },
-    { value: 'in_progress', label: 'In Progress' },
-    { value: 'blocked', label: 'Blocked' },
-    { value: 'review', label: 'In Review' },
-    { value: 'done', label: 'Done' },
-  ],
+import SquareKanban from '@cardstack/boxel-icons/square-kanban';
+
+import {
+  ContextButton,
+  Pill,
+  SortDropdown,
+  Switch,
+} from '@cardstack/boxel-ui/components';
+
+import { realmURL } from '@cardstack/runtime-common';
+
+import { IssueOptionField } from './issue-option';
+import { KanbanColumnField } from './kanban-column';
+import { KanbanPlane } from './kanban-plane';
+import { KanbanDragManager } from './kanban-drag';
+import { type KanbanPlacement } from './kanban-engine';
+
+const issueCodeRef = {
+  // @ts-ignore this is not a CJS file, import.meta is allowed
+  module: new URL('./darkfactory', import.meta.url).href,
+  name: 'Issue',
+};
+
+const issueStatusOptions = [
+  { value: 'backlog', label: 'Backlog' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'blocked', label: 'Blocked' },
+  { value: 'review', label: 'In Review' },
+  { value: 'done', label: 'Done' },
+];
+
+const issueTypeOptions = [
+  { value: 'bootstrap', label: 'Bootstrap' },
+  { value: 'feature', label: 'Feature' },
+  { value: 'bug', label: 'Bug' },
+  { value: 'task', label: 'Task' },
+  { value: 'research', label: 'Research' },
+  { value: 'infrastructure', label: 'Infrastructure' },
+];
+
+const issuePriorityOptions = [
+  { value: 'critical', label: 'Critical' },
+  { value: 'high', label: 'High' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'low', label: 'Low' },
+];
+
+const projectStatusOptions = [
+  { value: 'planning', label: 'Planning' },
+  { value: 'active', label: 'Active' },
+  { value: 'on_hold', label: 'On Hold' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'archived', label: 'Archived' },
+];
+
+interface ColumnOption {
+  value: string;
+  label: string;
+}
+interface Column {
+  value: string;
+  label: string;
+  fieldName: string;
+  orderField: string;
+  options: ColumnOption[];
+}
+
+const defaultColumns: Column[] = [
+  {
+    value: 'status',
+    label: 'Status',
+    fieldName: 'computedStatus',
+    orderField: 'statusBoardOrder',
+    options: issueStatusOptions,
+  },
+  {
+    value: 'priority',
+    label: 'Priority',
+    fieldName: 'priority',
+    orderField: 'priorityBoardOrder',
+    options: issuePriorityOptions,
+  },
+  {
+    value: 'issueType',
+    label: 'Type',
+    fieldName: 'issueType',
+    orderField: 'issueTypeBoardOrder',
+    options: issueTypeOptions,
+  },
+];
+
+const IssueStatusField = enumField(StringField, {
+  options: function (this: any) {
+    const opts = this.kanbanBoard?.issueStatusOptions;
+    return opts?.length ? opts : issueStatusOptions;
+  },
 });
 
-export const IssuePriorityField = enumField(StringField, {
-  options: [
-    { value: 'critical', label: 'Critical' },
-    { value: 'high', label: 'High' },
-    { value: 'medium', label: 'Medium' },
-    { value: 'low', label: 'Low' },
-  ],
+const IssueTypeField = enumField(StringField, {
+  options: function (this: any) {
+    const opts = this.kanbanBoard?.issueTypeOptions;
+    return opts?.length ? opts : issueTypeOptions;
+  },
 });
 
-export const IssueTypeField = enumField(StringField, {
-  options: [
-    { value: 'bootstrap', label: 'Bootstrap' },
-    { value: 'feature', label: 'Feature' },
-    { value: 'bug', label: 'Bug' },
-    { value: 'task', label: 'Task' },
-    { value: 'research', label: 'Research' },
-    { value: 'infrastructure', label: 'Infrastructure' },
-  ],
+const IssuePriorityField = enumField(StringField, {
+  options: function (this: any) {
+    const opts = this.kanbanBoard?.issuePriorityOptions;
+    return opts?.length ? opts : issuePriorityOptions;
+  },
 });
 
-export const ProjectStatusField = enumField(StringField, {
-  options: [
-    { value: 'planning', label: 'Planning' },
-    { value: 'active', label: 'Active' },
-    { value: 'on_hold', label: 'On Hold' },
-    { value: 'completed', label: 'Completed' },
-    { value: 'archived', label: 'Archived' },
-  ],
+const ProjectStatusField = enumField(StringField, {
+  options: projectStatusOptions,
 });
 
 export const KnowledgeTypeField = enumField(StringField, {
@@ -74,7 +156,7 @@ export class AgentProfile extends CardDef {
   @field specialization = contains(StringField);
   @field notes = contains(MarkdownField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: AgentProfile) {
       return this.cardInfo.name?.trim()?.length
         ? this.cardInfo.name
@@ -150,7 +232,7 @@ export class KnowledgeArticle extends CardDef {
   @field lastUpdatedBy = linksTo(() => AgentProfile);
   @field updatedAt = contains(DateTimeField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: KnowledgeArticle) {
       return this.cardInfo.name?.trim()?.length
         ? this.cardInfo.name
@@ -254,7 +336,7 @@ export class Comment extends FieldDef {
         <div class='comment-header'>
           <span class='comment-author'>{{@model.author}}</span>
           {{#if @model.datetime}}
-            <span class='comment-date'>{{@model.datetime}}</span>
+            <span class='comment-date'><@fields.datetime /></span>
           {{/if}}
         </div>
         <div class='comment-body'>
@@ -308,8 +390,12 @@ export class Issue extends CardDef {
   @field createdAt = contains(DateTimeField);
   @field updatedAt = contains(DateTimeField);
   @field comments = containsMany(Comment);
+  @field kanbanBoard = linksTo(() => CardDef);
+  @field statusBoardOrder = contains(NumberField);
+  @field priorityBoardOrder = contains(NumberField);
+  @field issueTypeBoardOrder = contains(NumberField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Issue) {
       return this.cardInfo.name?.trim()?.length
         ? this.cardInfo.name
@@ -324,9 +410,15 @@ export class Issue extends CardDef {
           <strong>{{if @model.issueId @model.issueId 'ISSUE'}}</strong>
           <span
             class='status status-{{if @model.status @model.status "backlog"}}'
-          >{{if @model.status @model.status 'backlog'}}</span>
+          >
+            {{#if @model.status}}
+              <@fields.status @format='atom' />
+            {{else}}
+              Backlog
+            {{/if}}
+          </span>
         </div>
-        <div>{{if @model.summary @model.summary 'Untitled Issue'}}</div>
+        <div><@fields.cardTitle /></div>
       </div>
       <style scoped>
         .issue-card {
@@ -335,9 +427,6 @@ export class Issue extends CardDef {
         }
         .compact {
           padding: 0.75rem;
-          border: 1px solid var(--border);
-          border-radius: 0.5rem;
-          background: var(--card);
         }
         .row {
           display: flex;
@@ -383,9 +472,15 @@ export class Issue extends CardDef {
             <strong>{{if @model.issueId @model.issueId 'ISSUE'}}</strong>
             <span
               class='status status-{{if @model.status @model.status "backlog"}}'
-            >{{if @model.status @model.status 'backlog'}}</span>
+            >
+              {{#if @model.status}}
+                <@fields.status @format='atom' />
+              {{else}}
+                Backlog
+              {{/if}}
+            </span>
           </div>
-          <h1>{{if @model.summary @model.summary 'Untitled Issue'}}</h1>
+          <h1><@fields.cardTitle /></h1>
         </header>
         {{#if @model.project}}
           <section>
@@ -465,12 +560,12 @@ export class Issue extends CardDef {
           background: #fef2f2;
         }
         .comments-section {
-          margin-top: 16px;
+          margin-top: 1rem;
         }
         .comments-section h3 {
           font-size: var(--boxel-font-size);
           font-weight: 600;
-          margin-bottom: 8px;
+          margin-bottom: 0.5rem;
         }
       </style>
     </template>
@@ -490,11 +585,7 @@ export class Project extends CardDef {
   @field issues = linksToMany(() => Issue, {
     query: {
       filter: {
-        on: {
-          // @ts-ignore this is not a CJS file, import.meta is allowed
-          module: new URL('./darkfactory', import.meta.url).href,
-          name: 'Issue',
-        },
+        on: issueCodeRef,
         eq: { 'project.id': '$this.id' },
       },
     },
@@ -502,8 +593,63 @@ export class Project extends CardDef {
   @field knowledgeBase = linksToMany(() => KnowledgeArticle);
   @field successCriteria = contains(MarkdownField);
   @field testArtifactsRealmUrl = contains(StringField);
+  @field hideEmptyColumns = contains(BooleanField);
+  @field groupBy = contains(
+    enumField(StringField, {
+      options: defaultColumns.map(({ value, label }) => ({
+        value,
+        label,
+      })),
+    }),
+  );
+  @field issuePriorityOptions = containsMany(IssueOptionField);
+  @field issueStatusOptions = containsMany(IssueOptionField);
+  @field issueTypeOptions = containsMany(IssueOptionField);
+  @field statusColumnConfig = containsMany(KanbanColumnField);
+  @field priorityColumnConfig = containsMany(KanbanColumnField);
+  @field typeColumnConfig = containsMany(KanbanColumnField);
+  @field columns = containsMany(KanbanColumnField, {
+    computeVia: function (this: Project) {
+      const source =
+        defaultColumns.find((o) => o.value === this.groupBy) ??
+        defaultColumns[0]!;
+      const boardOptions =
+        source.value === 'priority'
+          ? (this.issuePriorityOptions as
+              | { value: string; label: string }[]
+              | undefined)
+          : source.value === 'issueType'
+            ? (this.issueTypeOptions as
+                | { value: string; label: string }[]
+                | undefined)
+            : source.value === 'status'
+              ? (this.issueStatusOptions as
+                  | { value: string; label: string }[]
+                  | undefined)
+              : null;
+      const options = boardOptions?.length ? boardOptions : source.options;
+      const config = ((source.value === 'issueType'
+        ? this.typeColumnConfig
+        : source.value === 'priority'
+          ? this.priorityColumnConfig
+          : this.statusColumnConfig) ?? []) as KanbanColumnField[];
+      return options
+        .map((o, i) => {
+          const stored = config.find((c) => c.key === o.value);
+          return new KanbanColumnField({
+            key: o.value,
+            label: o.label,
+            color: stored?.color,
+            wipLimit: stored?.wipLimit ?? null,
+            collapsed: stored?.collapsed ?? null,
+            sortOrder: stored?.sortOrder ?? i,
+          });
+        })
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    },
+  });
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Project) {
       return this.cardInfo.name?.trim()?.length
         ? this.cardInfo.name
@@ -526,13 +672,15 @@ export class Project extends CardDef {
                 @model.projectStatus
                 "planning"
               }}'
-          >{{if @model.projectStatus @model.projectStatus 'planning'}}</span>
+          >
+            {{#if @model.projectStatus}}
+              <@fields.projectStatus @format='atom' />
+            {{else}}
+              Planning
+            {{/if}}
+          </span>
         </div>
-        <div>{{if
-            @model.projectName
-            @model.projectName
-            'Untitled Project'
-          }}</div>
+        <div><@fields.cardTitle /></div>
       </div>
       <style scoped>
         .project-card {
@@ -586,108 +734,730 @@ export class Project extends CardDef {
   static embedded = this.fitted;
 
   static isolated = class Isolated extends Component<typeof Project> {
+    @tracked selectedCardIndex: number | null = null;
+    @tracked showSettings = false;
+    dragManager: KanbanDragManager | null = null;
+    private orderInitPending = false;
+
+    constructor(owner: Owner, args: any) {
+      super(owner, args);
+      this.initManager();
+    }
+
+    initManager(): void {
+      this.dragManager = new KanbanDragManager({
+        placements: () => this.kanbanPlacements,
+        columnCount: () => this.kanbanColumns.length || 4,
+        containerElement: () => null,
+        onChange: (newPlacements) => this.commitPlacements(newPlacements),
+        onSelect: (index) => {
+          this.selectedCardIndex = index;
+        },
+        onOpen: (index) => {
+          const card = (this.args.model?.issues as any[])?.[index];
+          if (card) this.args.viewCard?.(card, 'isolated');
+        },
+      });
+    }
+
+    get kanbanPlacements(): KanbanPlacement[] {
+      const cards = this.args.model?.issues ?? [];
+      const columns = this.args.model?.columns ?? [];
+      if ((cards as any[]).length === 0) return [];
+      const maxSortOrder: Record<number, number> = {};
+      const groupBy = this.args.model?.groupBy;
+      const source =
+        defaultColumns.find((o) => o.value === groupBy) ?? defaultColumns[0]!;
+      const placements = (cards as any[]).map((card: any, index: number) => {
+        const value = card[source.fieldName];
+        const colIndex = (columns as any[]).findIndex(
+          (col: any) => col.key === value,
+        );
+        const column = colIndex >= 0 ? colIndex : 0;
+        const stored = card[source.orderField];
+        let sortOrder: number;
+        if (stored != null) {
+          sortOrder = stored;
+          maxSortOrder[column] = Math.max(maxSortOrder[column] ?? 0, stored);
+        } else {
+          maxSortOrder[column] = (maxSortOrder[column] ?? 0) + 1;
+          sortOrder = maxSortOrder[column];
+        }
+        return { index, column, sortOrder };
+      });
+
+      // Persist default order for cards that don't have one yet (e.g. newly added).
+      // Deferred so the write doesn't happen during rendering.
+      const uninitialized = placements.filter(
+        (p) => (cards as any[])[p.index]?.[source.orderField] == null,
+      );
+      if (uninitialized.length > 0 && !this.orderInitPending) {
+        this.orderInitPending = true;
+        const orderField = source.orderField;
+        Promise.resolve().then(() => {
+          this.orderInitPending = false;
+          for (const p of uninitialized) {
+            const card = (cards as any[])[p.index];
+            if (card && card[orderField] == null) {
+              card[orderField] = p.sortOrder;
+            }
+          }
+        });
+      }
+
+      return placements;
+    }
+
+    get manager(): KanbanDragManager {
+      if (!this.dragManager) this.initManager();
+      return this.dragManager!;
+    }
+
+    get kanbanColumns(): KanbanColumnField[] {
+      return this.args.model?.columns ?? [];
+    }
+
+    get cardCount(): number {
+      return this.args.model?.issues?.length ?? 0;
+    }
+
+    get realmURL(): URL | undefined {
+      return (this.args.model as any)[realmURL];
+    }
+
+    addCardToColumn = async (
+      columnKey: string | null | undefined,
+    ): Promise<void> => {
+      if (!columnKey) return;
+      const model = this.args.model;
+      if (!model) return;
+
+      const source =
+        defaultColumns.find((o) => o.value === (model as any).groupBy) ??
+        defaultColumns[0]!;
+      const attributeName = source.fieldName;
+      const kanbanBoardId = (model as any).id ?? null;
+
+      await this.args.createCard?.(issueCodeRef, new URL(issueCodeRef.module), {
+        realmURL: this.realmURL,
+        doc: {
+          data: {
+            type: 'card',
+            attributes: { [attributeName]: columnKey },
+            relationships: {
+              kanbanBoard: { links: { self: kanbanBoardId } },
+            },
+            meta: { adoptsFrom: issueCodeRef },
+          },
+        },
+      });
+    };
+
+    get groupByOptions(): { displayName: string; sort: string }[] {
+      return defaultColumns.map(({ value, label }) => ({
+        displayName: label,
+        sort: value,
+      }));
+    }
+
+    get selectedGroupByOption():
+      | { displayName: string; sort: string }
+      | undefined {
+      let groupBy = (this.args.model as any)?.groupBy ?? 'status';
+      return (
+        this.groupByOptions.find((option) => option.sort === groupBy) ??
+        undefined
+      );
+    }
+
+    onGroupByChange = (option: { displayName: string; sort: string }): void => {
+      let model = this.args.model as any;
+      if (!model || model.groupBy === option.sort) {
+        return;
+      }
+      model.groupBy = option.sort;
+    };
+
+    get hideEmptyColumns(): boolean {
+      return Boolean((this.args.model as any)?.hideEmptyColumns);
+    }
+
+    toggleHideEmptyColumns = (): void => {
+      let model = this.args.model as any;
+      if (!model) {
+        return;
+      }
+      model.hideEmptyColumns = !this.hideEmptyColumns;
+    };
+
+    // ── Persistence ──────────────────────────────────────────────────
+
+    commitPlacements = (newPlacements: KanbanPlacement[]): void => {
+      const model = this.args.model;
+      if (!model) return;
+      const cards = model.issues as any[];
+      const columns = model.columns as any[];
+      if (!cards || !columns) return;
+      const source =
+        defaultColumns.find((o) => o.value === (model as any).groupBy) ??
+        defaultColumns[0]!;
+      for (const np of newPlacements) {
+        const card = cards[np.index];
+        const col = columns[np.column];
+        if (card && col) {
+          if (card[source.fieldName] !== col.key)
+            card[source.fieldName] = col.key;
+          if (card[source.orderField] !== np.sortOrder)
+            card[source.orderField] = np.sortOrder;
+        }
+      }
+    };
+
+    // ── Settings ─────────────────────────────────────────────────────
+
+    setColumnConfig = (key: string, patch: Record<string, unknown>): void => {
+      const model = this.args.model as any;
+      if (!model) return;
+      const groupBy = model.groupBy ?? 'status';
+      const configField =
+        groupBy === 'issueType'
+          ? 'issueColumnConfig'
+          : groupBy === 'priority'
+            ? 'priorityColumnConfig'
+            : 'statusColumnConfig';
+      const cols: KanbanColumnField[] = model[configField] ?? [];
+      const cfg = cols.find((c: any) => c.key === key) as any;
+      if (cfg) {
+        for (const [k, v] of Object.entries(patch)) {
+          cfg[k] = v;
+        }
+      } else {
+        cols.push(new KanbanColumnField({ key, ...patch }));
+      }
+    };
+
+    toggleSettings = (): void => {
+      this.showSettings = !this.showSettings;
+    };
+
+    onColorChange = (key: string | null | undefined, event: Event): void => {
+      if (!key) return;
+      this.setColumnConfig(key, {
+        color: (event.target as HTMLInputElement).value,
+      });
+    };
+
+    onWipChange = (key: string | null | undefined, event: Event): void => {
+      if (!key) return;
+      const raw = (event.target as HTMLInputElement).valueAsNumber;
+      this.setColumnConfig(key, {
+        wipLimit: isNaN(raw) || raw <= 0 ? null : raw,
+      });
+    };
+
+    onCollapseChange = (key: string | null | undefined, event: Event): void => {
+      if (!key) return;
+      this.setColumnConfig(key, {
+        collapsed: (event.target as HTMLInputElement).checked,
+      });
+    };
+
+    moveColUp = (key: string | null | undefined, _event: Event): void => {
+      if (!key) return;
+      const cols = this.kanbanColumns;
+      const idx = cols.findIndex((c) => c.key === key);
+      if (idx <= 0) return;
+      const a = cols[idx]!;
+      const b = cols[idx - 1]!;
+      const aOrder = a.sortOrder ?? idx;
+      const bOrder = b.sortOrder ?? idx - 1;
+      this.setColumnConfig(a.key!, { sortOrder: bOrder });
+      this.setColumnConfig(b.key!, { sortOrder: aOrder });
+    };
+
+    moveColDown = (key: string | null | undefined, _event: Event): void => {
+      if (!key) return;
+      const cols = this.kanbanColumns;
+      const idx = cols.findIndex((c) => c.key === key);
+      if (idx < 0 || idx >= cols.length - 1) return;
+      const a = cols[idx]!;
+      const b = cols[idx + 1]!;
+      const aOrder = a.sortOrder ?? idx;
+      const bOrder = b.sortOrder ?? idx + 1;
+      this.setColumnConfig(a.key!, { sortOrder: bOrder });
+      this.setColumnConfig(b.key!, { sortOrder: aOrder });
+    };
+
+    // ── Template ─────────────────────────────────────────────────────
+
     <template>
-      <article class='surface'>
-        <header>
-          <div class='row'>
-            <strong>{{if
-                @model.projectCode
-                @model.projectCode
-                'PROJECT'
-              }}</strong>
-            <span
-              class='status status-{{if
-                  @model.projectStatus
-                  @model.projectStatus
-                  "planning"
-                }}'
-            >{{if @model.projectStatus @model.projectStatus 'planning'}}</span>
+      <div class='kanban-surface'>
+        <header class='kanban-toolbar'>
+          <div class='toolbar-left'>
+            <div class='kanban-heading'>
+              <div class='kanban-meta-top'>
+                <Pill @size='extra-small' @variant='secondary'>
+                  {{if @model.projectCode @model.projectCode 'BOARD'}}
+                </Pill>
+                {{#if @model.projectStatus}}
+                  <Pill @size='extra-small'>
+                    <@fields.projectStatus @format='atom' />
+                  </Pill>
+                {{/if}}
+              </div>
+              <h2 class='kanban-title'>
+                <SquareKanban />
+                <@fields.cardTitle />
+              </h2>
+              {{!-- {{#if @model.dueDate}}
+              <div class='kanban-project'>
+                <span class='dim-label'>Due Date</span>
+                <@fields.dueDate @format='atom' />
+              </div>
+            {{/if}} --}}
+            </div>
+            <div>
+              <span class='card-count'>{{this.cardCount}} cards</span>
+            </div>
           </div>
-          <h1>{{if
-              @model.projectName
-              @model.projectName
-              'Untitled Project'
-            }}</h1>
+          <div class='toolbar-right'>
+            <div class='column-visibility-toggle'>
+              <span class='group-by-label'>Hide empty</span>
+              <Switch
+                @isEnabled={{this.hideEmptyColumns}}
+                @onChange={{this.toggleHideEmptyColumns}}
+                @label='Hide empty columns'
+              />
+            </div>
+            <div class='group-by-picker'>
+              <SortDropdown
+                @options={{this.groupByOptions}}
+                @selectedOption={{this.selectedGroupByOption}}
+                @onSelect={{this.onGroupByChange}}
+              />
+            </div>
+            <ContextButton
+              class='settings-button'
+              @label='Toggle column settings'
+              @icon='context-menu-vertical'
+              @variant='ghost'
+              {{on 'click' this.toggleSettings}}
+            />
+          </div>
         </header>
-        {{#if @model.objective}}
-          <section>
-            <h2>Objective</h2>
-            <p>{{@model.objective}}</p>
-          </section>
-        {{/if}}
-        {{#if @model.scope}}
-          <section>
-            <h2>Scope</h2>
-            <@fields.scope />
-          </section>
-        {{/if}}
-        {{#if @model.technicalContext}}
-          <section>
-            <h2>Technical Context</h2>
-            <@fields.technicalContext />
-          </section>
-        {{/if}}
-        {{#if @model.successCriteria}}
-          <section>
-            <h2>Success Criteria</h2>
-            <@fields.successCriteria />
-          </section>
-        {{/if}}
-        {{#if @model.issues.length}}
-          <section>
-            <h2>Issues</h2>
-            <@fields.issues />
-          </section>
-        {{/if}}
-        {{#if @model.knowledgeBase.length}}
-          <section>
-            <h2>Knowledge Base</h2>
-            <@fields.knowledgeBase />
-          </section>
-        {{/if}}
-      </article>
+
+        <div class='kanban-main'>
+          <div class='kanban-body'>
+            <KanbanPlane
+              @columns={{this.kanbanColumns}}
+              @placements={{this.kanbanPlacements}}
+              @manager={{this.manager}}
+              @interactive={{true}}
+              @hideEmpty={{@model.hideEmptyColumns}}
+              @onAddCard={{this.addCardToColumn}}
+            >
+              <:card as |placement|>
+                {{#let (get @fields.issues placement.index) as |CardField|}}
+                  {{#if CardField}}
+                    <div class='kanban-card-wrap'>
+                      <CardField @format='fitted' />
+                    </div>
+                  {{else}}
+                    <div class='card-placeholder'>Card {{placement.index}}</div>
+                  {{/if}}
+                {{/let}}
+              </:card>
+              <:ghost as |dragIdx|>
+                {{#let (get @fields.issues dragIdx) as |CardField|}}
+                  {{#if CardField}}
+                    <div class='ghost-wrap'>
+                      <CardField @format='fitted' />
+                    </div>
+                  {{/if}}
+                {{/let}}
+              </:ghost>
+            </KanbanPlane>
+          </div>
+
+          {{#if this.showSettings}}
+            <aside class='settings-panel'>
+              <div class='settings-header'>Column Settings</div>
+              {{#each this.kanbanColumns as |col|}}
+                <div class='settings-row'>
+                  <div class='settings-top'>
+                    <span class='settings-name'>{{col.label}}</span>
+                    <div class='settings-order'>
+                      <button
+                        type='button'
+                        class='order-btn'
+                        {{on 'click' (fn this.moveColUp col.key)}}
+                      >↑</button>
+                      <button
+                        type='button'
+                        class='order-btn'
+                        {{on 'click' (fn this.moveColDown col.key)}}
+                      >↓</button>
+                    </div>
+                  </div>
+                  <div class='settings-controls'>
+                    <label class='settings-field'>
+                      <span class='field-label'>Color</span>
+                      <input
+                        type='color'
+                        class='color-input'
+                        value={{if col.color col.color '#6366f1'}}
+                        {{on 'change' (fn this.onColorChange col.key)}}
+                      />
+                    </label>
+                    <label class='settings-field'>
+                      <span class='field-label'>WIP</span>
+                      <input
+                        type='number'
+                        class='wip-input'
+                        value={{col.wipLimit}}
+                        min='0'
+                        placeholder='∞'
+                        {{on 'change' (fn this.onWipChange col.key)}}
+                      />
+                    </label>
+                    <label class='settings-field'>
+                      <input
+                        type='checkbox'
+                        checked={{col.collapsed}}
+                        {{on 'change' (fn this.onCollapseChange col.key)}}
+                      />
+                      <span class='field-label'>Collapse</span>
+                    </label>
+                  </div>
+                </div>
+              {{/each}}
+            </aside>
+          {{/if}}
+        </div>
+      </div>
+
       <style scoped>
-        .surface {
-          padding: 1.5rem;
-          display: grid;
-          gap: 1rem;
-        }
-        .row {
+        .kanban-surface {
+          --kanban-surface-bg: var(--background, var(--boxel-200));
+          --kanban-card-bg: var(--card, var(--boxel-light));
+          --kanban-foreground: var(--foreground, var(--boxel-dark));
+          --kanban-muted-bg: var(--muted, var(--boxel-100));
+          --kanban-muted-foreground: var(--muted-foreground, var(--boxel-500));
+          --kanban-border-color: var(--border, var(--boxel-border-color));
+
           display: flex;
-          justify-content: space-between;
+          flex-direction: column;
+          height: 100%;
+          min-height: 100%;
+          background: var(--kanban-surface-bg);
+          color: var(--kanban-foreground);
+        }
+        .kanban-toolbar {
+          display: flex;
           align-items: center;
-          gap: 0.75rem;
+          justify-content: space-between;
+          padding: 0.625rem 1rem;
+          border-bottom: 1px solid var(--kanban-border-color);
+          background: var(--kanban-card-bg);
+          flex-shrink: 0;
         }
-        .status {
+        .toolbar-left {
+          display: flex;
+          gap: 0.5rem;
+        }
+        .kanban-heading {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+        .kanban-meta-top {
+          display: flex;
+          align-items: center;
+          gap: 0.375rem;
+        }
+        .toolbar-right {
+          display: flex;
+          align-items: center;
+          gap: 0.375rem;
+        }
+        .group-by-picker {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          min-width: 11rem;
+        }
+        .column-visibility-toggle {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+        .group-by-label {
           font-size: 0.75rem;
-          text-transform: uppercase;
+          color: var(--kanban-muted-foreground);
+          white-space: nowrap;
+        }
+        .group-by-picker :deep(.sort-options-label) {
+          color: var(--kanban-muted-foreground);
+          font-size: 0.75rem;
+        }
+        .group-by-picker :deep(.sort-button) {
+          min-width: 8rem;
+        }
+        .kanban-title {
+          display: flex;
+          align-items: center;
+          gap: 0.375rem;
+          font-size: 0.875rem;
           font-weight: 600;
+          margin: 0;
+          letter-spacing: -0.01em;
+        }
+        .kanban-project {
+          display: flex;
+          align-items: center;
+          gap: 0.375rem;
+        }
+        .dim-label {
+          font-size: 0.75rem;
+          font-weight: 500;
+          color: var(--kanban-muted-foreground);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+        .card-count {
+          font-size: 0.75rem;
+          color: var(--kanban-muted-foreground);
           padding: 0.125rem 0.5rem;
-          border-radius: 0.25rem;
+          background: var(--kanban-muted-bg);
+          border-radius: 4px;
         }
-        .status-active {
-          color: var(--boxel-blue, #2563eb);
-          background: #eff6ff;
+        .settings-button {
+          color: var(--kanban-muted-foreground);
         }
-        .status-planning {
-          color: var(--boxel-400, #9ca3af);
-          background: #f9fafb;
+        .kanban-main {
+          flex: 1;
+          min-height: 0;
+          display: flex;
+          overflow: hidden;
         }
-        .status-completed {
-          color: var(--boxel-green, #16a34a);
-          background: #f0fdf4;
+        .kanban-body {
+          flex: 1;
+          min-height: 0;
+          overflow: hidden;
         }
-        .status-on_hold {
-          color: var(--boxel-orange, #ea580c);
-          background: #fff7ed;
+        .kanban-card-wrap {
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+          border-radius: inherit;
         }
-        .status-archived {
-          color: var(--boxel-400, #9ca3af);
-          background: #f3f4f6;
+        .ghost-wrap {
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+          border-radius: inherit;
+        }
+        .card-placeholder {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          font-size: 0.75rem;
+          color: var(--kanban-muted-foreground);
+        }
+        /* ── Settings panel ── */
+        .settings-panel {
+          width: 15rem;
+          flex-shrink: 0;
+          background: var(--kanban-card-bg);
+          border-left: 1px solid var(--kanban-border-color);
+          display: flex;
+          flex-direction: column;
+          overflow-y: auto;
+        }
+        .settings-header {
+          padding: 0.5rem 0.75rem;
+          border-bottom: 1px solid var(--kanban-border-color);
+          font-size: 0.6875rem;
+          font-weight: 600;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--kanban-muted-foreground);
+          flex-shrink: 0;
+        }
+        .settings-row {
+          padding: 0.625rem 0.75rem;
+          border-bottom: 1px solid var(--kanban-border-color);
+          display: flex;
+          flex-direction: column;
+          gap: 0.375rem;
+        }
+        .settings-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .settings-name {
+          font-size: 0.8125rem;
+          font-weight: 600;
+          color: var(--kanban-foreground);
+        }
+        .settings-order {
+          display: flex;
+          gap: 0.125rem;
+        }
+        .order-btn {
+          padding: 0.0625rem 0.3125rem;
+          font-size: 0.6875rem;
+          line-height: 1.4;
+          background: var(--kanban-muted-bg);
+          border: 1px solid var(--kanban-border-color);
+          border-radius: 3px;
+          cursor: pointer;
+          color: var(--kanban-foreground);
+        }
+        .order-btn:hover {
+          background: var(--kanban-border-color);
+        }
+        .settings-controls {
+          display: flex;
+          align-items: center;
+          gap: 0.625rem;
+          flex-wrap: wrap;
+        }
+        .settings-field {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          cursor: pointer;
+        }
+        .field-label {
+          font-size: 0.6875rem;
+          color: var(--kanban-muted-foreground);
+        }
+        .color-input {
+          width: 1.5rem;
+          height: 1.125rem;
+          padding: 0;
+          border: 1px solid var(--kanban-border-color);
+          border-radius: 3px;
+          cursor: pointer;
+        }
+        .wip-input {
+          width: 2.75rem;
+          padding: 0.125rem 0.25rem;
+          font-size: 0.6875rem;
+          border: 1px solid var(--kanban-border-color);
+          border-radius: 3px;
+          background: var(--kanban-muted-bg);
+          color: var(--kanban-foreground);
         }
       </style>
     </template>
   };
+  // static isolated = class Isolated extends Component<typeof Project> {
+  //   <template>
+  //     <article class='surface'>
+  //       <header>
+  //         <div class='row'>
+  //           <strong>{{if
+  //               @model.projectCode
+  //               @model.projectCode
+  //               'PROJECT'
+  //             }}</strong>
+  //           <span
+  //             class='status status-{{if
+  //                 @model.projectStatus
+  //                 @model.projectStatus
+  //                 "planning"
+  //               }}'
+  //           >{{if @model.projectStatus @model.projectStatus 'planning'}}</span>
+  //         </div>
+  //         <h1>{{if
+  //             @model.projectName
+  //             @model.projectName
+  //             'Untitled Project'
+  //           }}</h1>
+  //       </header>
+  //       {{#if @model.objective}}
+  //         <section>
+  //           <h2>Objective</h2>
+  //           <p>{{@model.objective}}</p>
+  //         </section>
+  //       {{/if}}
+  //       {{#if @model.scope}}
+  //         <section>
+  //           <h2>Scope</h2>
+  //           <@fields.scope />
+  //         </section>
+  //       {{/if}}
+  //       {{#if @model.technicalContext}}
+  //         <section>
+  //           <h2>Technical Context</h2>
+  //           <@fields.technicalContext />
+  //         </section>
+  //       {{/if}}
+  //       {{#if @model.successCriteria}}
+  //         <section>
+  //           <h2>Success Criteria</h2>
+  //           <@fields.successCriteria />
+  //         </section>
+  //       {{/if}}
+  //       {{#if @model.issues.length}}
+  //         <section>
+  //           <h2>Issues</h2>
+  //           <@fields.issues />
+  //         </section>
+  //       {{/if}}
+  //       {{#if @model.knowledgeBase.length}}
+  //         <section>
+  //           <h2>Knowledge Base</h2>
+  //           <@fields.knowledgeBase />
+  //         </section>
+  //       {{/if}}
+  //     </article>
+  //     <style scoped>
+  //       .surface {
+  //         padding: 1.5rem;
+  //         display: grid;
+  //         gap: 1rem;
+  //       }
+  //       .row {
+  //         display: flex;
+  //         justify-content: space-between;
+  //         align-items: center;
+  //         gap: 0.75rem;
+  //       }
+  //       .status {
+  //         font-size: 0.75rem;
+  //         text-transform: uppercase;
+  //         font-weight: 600;
+  //         padding: 0.125rem 0.5rem;
+  //         border-radius: 0.25rem;
+  //       }
+  //       .status-active {
+  //         color: var(--boxel-blue, #2563eb);
+  //         background: #eff6ff;
+  //       }
+  //       .status-planning {
+  //         color: var(--boxel-400, #9ca3af);
+  //         background: #f9fafb;
+  //       }
+  //       .status-completed {
+  //         color: var(--boxel-green, #16a34a);
+  //         background: #f0fdf4;
+  //       }
+  //       .status-on_hold {
+  //         color: var(--boxel-orange, #ea580c);
+  //         background: #fff7ed;
+  //       }
+  //       .status-archived {
+  //         color: var(--boxel-400, #9ca3af);
+  //         background: #f3f4f6;
+  //       }
+  //     </style>
+  //   </template>
+  // };
 }
 
 export class DarkFactory extends CardDef {
