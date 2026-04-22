@@ -1,0 +1,93 @@
+{
+  "name": "@cardstack/bxl",
+  "version": "0.1.0-dev.0",
+  "description": "Boxel Expression Language: readable syntax, linter, formatter, and sandboxed evaluator that compiles to jqxl v1.",
+  "keywords": [
+    "bxl",
+    "boxel",
+    "jq",
+    "jqxl",
+    "expression-language",
+    "formula",
+    "spreadsheet"
+  ],
+  "license": "MIT",
+  "author": "Cardstack",
+  "homepage": "https://github.com/cardstack/bxl",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cardstack/bxl.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cardstack/bxl/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./compiler": {
+      "types": "./dist/compiler.d.ts",
+      "import": "./dist/compiler.js"
+    },
+    "./linter": {
+      "types": "./dist/linter.d.ts",
+      "import": "./dist/linter.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js"
+    },
+    "./runtime-bare": {
+      "types": "./dist/runtime-bare.d.ts",
+      "import": "./dist/runtime-bare.js"
+    },
+    "./syntax/textmate": "./dist/syntax/bxl.tmLanguage.json",
+    "./examples": {
+      "types": "./dist/examples/index.d.ts",
+      "import": "./dist/examples/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "bxl": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests examples",
+    "test": "node scripts/run-tests.mjs",
+    "test:smoke": "tsx tests/smoke/bxl-smoke.ts",
+    "test:size": "node scripts/size-report.mjs --check",
+    "prepack": "npm run clean && npm run build",
+    "release:dry": "npm pack --dry-run"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "esbuild": "^0.20.0",
+    "eslint": "^9.0.0",
+    "happy-dom": "^14.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}

@@ -1,0 +1,49 @@
+import { parseBuiltinJqFilters } from '../../jqtools/evaluate/filters/lib/parseBuiltinJqFilters.js';
+
+export const formulaContribJqFilters = parseBuiltinJqFilters(`
+def TRUE: true;
+def FALSE: false;
+def NA: "#N/A" | error;
+def IF(test; value_if_true; value_if_false):
+  . as $xl_in
+  | if ($xl_in | test)
+      then ($xl_in | value_if_true)
+      else ($xl_in | value_if_false)
+    end;
+def IF(test; value_if_true): IF(test; value_if_true; false);
+def IFERROR(value; value_if_error):
+  . as $xl_in
+  | try ($xl_in | value) catch ($xl_in | value_if_error);
+def IFNA(value; value_if_na):
+  . as $xl_in
+  | try ($xl_in | value)
+    catch if . == "#N/A" then ($xl_in | value_if_na) else error end;
+def ISERROR(value):
+  try (. as $xl_in | $xl_in | value | false) catch true;
+def ISNA(value):
+  try (. as $xl_in | $xl_in | value | false) catch (. == "#N/A");
+def ISERR(value):
+  try (. as $xl_in | $xl_in | value | false) catch (. != "#N/A");
+def ERROR_TYPE(value):
+  (
+    try (. as $xl_in | $xl_in | value | "__XL_NO_ERROR__")
+    catch (
+      if . == "#NULL!" then 1
+      elif . == "#DIV/0!" then 2
+      elif . == "#VALUE!" then 3
+      elif . == "#REF!" then 4
+      elif . == "#NAME?" then 5
+      elif . == "#NUM!" then 6
+      elif . == "#N/A" then 7
+      elif . == "#GETTING_DATA" then 8
+      else NA end
+    )
+  )
+  | if . == "__XL_NO_ERROR__" then NA else . end;
+def IFS(c1; v1; c2; v2):
+  . as $in | if ($in | c1) then ($in | v1) elif ($in | c2) then ($in | v2) else NA end;
+def IFS(c1; v1; c2; v2; c3; v3):
+  . as $in | if ($in | c1) then ($in | v1) elif ($in | c2) then ($in | v2) elif ($in | c3) then ($in | v3) else NA end;
+def IFS(c1; v1; c2; v2; c3; v3; c4; v4):
+  . as $in | if ($in | c1) then ($in | v1) elif ($in | c2) then ($in | v2) elif ($in | c3) then ($in | v3) elif ($in | c4) then ($in | v4) else NA end;
+`);

@@ -1,0 +1,153 @@
+import type { ReadableSchema } from '../src/index.js';
+import {
+  bxlExampleInput,
+  bxlExampleSchema,
+} from './bxl-150-examples.ts';
+
+export interface BxlFormulaExample {
+  id: number;
+  level: string;
+  name: string;
+  expression: string;
+  expected: unknown;
+  tolerance?: number;
+}
+
+export const bxlFormulaExampleSchema: ReadableSchema = bxlExampleSchema;
+export const bxlFormulaExampleInput = bxlExampleInput;
+
+export const bxlFormulaExamples: BxlFormulaExample[] = [
+  { id: 1, level: '01 math', name: 'absolute value', expression: 'ABS(-12.5)', expected: 12.5 },
+  { id: 2, level: '01 math', name: 'round literal', expression: 'ROUND(89.044, 2)', expected: 89.04 },
+  { id: 3, level: '01 math', name: 'round invoice total', expression: 'ROUND(Total, 1)', expected: 89 },
+  { id: 4, level: '01 math', name: 'round up', expression: 'ROUNDUP(3.141, 2)', expected: 3.15 },
+  { id: 5, level: '01 math', name: 'round down', expression: 'ROUNDDOWN(3.149, 2)', expected: 3.14 },
+  { id: 6, level: '01 math', name: 'ceiling to whole number', expression: 'CEILING(12.1, 1)', expected: 13 },
+  { id: 7, level: '01 math', name: 'floor to whole number', expression: 'FLOOR(12.9, 1)', expected: 12 },
+  { id: 8, level: '01 math', name: 'integer truncation', expression: 'INT(12.9)', expected: 12 },
+  { id: 9, level: '01 math', name: 'mod remainder', expression: 'MOD(22, 5)', expected: 2 },
+  { id: 10, level: '01 math', name: 'power', expression: 'POWER(2, 8)', expected: 256 },
+  { id: 11, level: '01 math', name: 'square root', expression: 'SQRT(144)', expected: 12 },
+  { id: 12, level: '01 math', name: 'product array', expression: 'PRODUCT([2, 3, 4])', expected: 24 },
+  { id: 13, level: '01 math', name: 'sum array', expression: 'SUM([1, 2, 3, 4])', expected: 10 },
+  { id: 14, level: '01 math', name: 'sum readable quantities', expression: 'SUM("Line Item"[all].Quantity)', expected: 22 },
+  { id: 15, level: '01 math', name: 'discount from subtotal', expression: 'ROUND(SUM("Line Item"[all]."Line Total")*"Discount Rate", 2)', expected: 8 },
+
+  { id: 16, level: '02 statistics', name: 'average array', expression: 'AVERAGE([2, 4, 6, 8])', expected: 5 },
+  { id: 17, level: '02 statistics', name: 'min array', expression: 'MIN([10, 3, 7])', expected: 3 },
+  { id: 18, level: '02 statistics', name: 'max array', expression: 'MAX([10, 3, 7])', expected: 10 },
+  { id: 19, level: '02 statistics', name: 'count numbers', expression: 'COUNT([1, 2, 3])', expected: 3 },
+  { id: 20, level: '02 statistics', name: 'median odd count', expression: 'MEDIAN([10, 2, 4])', expected: 4 },
+  { id: 21, level: '02 statistics', name: 'large second', expression: 'LARGE([3, 7, 10, 2], 2)', expected: 7 },
+  { id: 22, level: '02 statistics', name: 'small second', expression: 'SMALL([3, 7, 10, 2], 2)', expected: 3 },
+  { id: 23, level: '02 statistics', name: 'sum of squares', expression: 'SUMSQ([2, 3, 4])', expected: 29 },
+  { id: 24, level: '02 statistics', name: 'countif equality', expression: 'COUNTIF([2, 5, 5, 8], 5)', expected: 2 },
+  { id: 25, level: '02 statistics', name: 'sumif greater than', expression: 'SUMIF([1, 2, 3, 4], ">2")', expected: 7 },
+  { id: 26, level: '02 statistics', name: 'averageif greater than', expression: 'AVERAGEIF([1, 2, 3, 4], ">2")', expected: 3.5 },
+  { id: 27, level: '02 statistics', name: 'count service categories', expression: 'COUNTIF("Line Item"[all].Category, "Service")', expected: 2 },
+  { id: 28, level: '02 statistics', name: 'sum service totals', expression: 'SUMIF("Line Item"[all].Category, "Service", "Line Item"[all]."Line Total")', expected: 33 },
+  { id: 29, level: '02 statistics', name: 'average supplies quantity', expression: 'AVERAGEIF("Line Item"[all].Category, "Supplies", "Line Item"[all].Quantity)', expected: 2.5 },
+  { id: 30, level: '02 statistics', name: 'population standard deviation', expression: 'STDEV_P([2, 4, 4, 4, 5, 5, 7, 9])', expected: 2 },
+
+  { id: 31, level: '03 text', name: 'upper customer', expression: 'UPPER(Customer.Name)', expected: 'ACME LEGAL' },
+  { id: 32, level: '03 text', name: 'lower owner email', expression: 'LOWER(Owner.Email)', expected: 'morgan@example.test' },
+  { id: 33, level: '03 text', name: 'proper phrase', expression: 'PROPER("acme legal services")', expected: 'Acme Legal Services' },
+  { id: 34, level: '03 text', name: 'left invoice prefix', expression: 'LEFT("Invoice Number", 3)', expected: 'INV' },
+  { id: 35, level: '03 text', name: 'right invoice suffix', expression: 'RIGHT("Invoice Number", 4)', expected: '1001' },
+  { id: 36, level: '03 text', name: 'mid invoice digits', expression: 'MID("Invoice Number", 5, 4)', expected: '1001' },
+  { id: 37, level: '03 text', name: 'customer name length', expression: 'LEN(Customer.Name)', expected: 10 },
+  { id: 38, level: '03 text', name: 'trim whitespace', expression: 'TRIM("  Acme   Legal  ")', expected: 'Acme Legal' },
+  { id: 39, level: '03 text', name: 'concat parts', expression: 'CONCAT(["INV", "-", "1001"])', expected: 'INV-1001' },
+  { id: 40, level: '03 text', name: 'concatenate parts', expression: 'CONCATENATE(["A", "B", "C"])', expected: 'ABC' },
+  { id: 41, level: '03 text', name: 'textjoin ignore empty', expression: 'TEXTJOIN(", ", true, ["A", "", "B"])', expected: 'A, B' },
+  { id: 42, level: '03 text', name: 'substitute word', expression: 'SUBSTITUTE("Copy Toner", "Toner", "Ink")', expected: 'Copy Ink' },
+  { id: 43, level: '03 text', name: 'replace invoice number', expression: 'REPLACE("Invoice Number", 5, 4, "2002")', expected: 'INV-2002' },
+  { id: 44, level: '03 text', name: 'find case-sensitive text', expression: 'FIND("Legal", Customer.Name)', expected: 6 },
+  { id: 45, level: '03 text', name: 'search case-insensitive text', expression: 'SEARCH("legal", Customer.Name)', expected: 6 },
+  { id: 46, level: '03 text', name: 'exact comparison', expression: 'EXACT(Customer.Name, "Acme Legal")', expected: true },
+  { id: 47, level: '03 text', name: 'value number parse', expression: 'VALUE("42.5")', expected: 42.5 },
+  { id: 48, level: '03 text', name: 'numbervalue parse', expression: 'NUMBERVALUE("1,234.50", ".", ",")', expected: 1234.5 },
+
+  { id: 49, level: '04 logic and type', name: 'if status', expression: 'IF(Status == "open", "open", "closed")', expected: 'open' },
+  { id: 50, level: '04 logic and type', name: 'ifs total band', expression: 'IFS(Total > 100, "high", Total > 50, "medium")', expected: 'medium' },
+  { id: 51, level: '04 logic and type', name: 'and array', expression: 'AND([Total > 80, Shipping > 0])', expected: true },
+  { id: 52, level: '04 logic and type', name: 'or array', expression: 'OR([Total > 100, Shipping > 0])', expected: true },
+  { id: 53, level: '04 logic and type', name: 'not closed', expression: 'NOT(Status == "closed")', expected: true },
+  { id: 54, level: '04 logic and type', name: 'true literal helper', expression: 'TRUE()', expected: true },
+  { id: 55, level: '04 logic and type', name: 'false literal helper', expression: 'FALSE()', expected: false },
+  { id: 56, level: '04 logic and type', name: 'is number', expression: 'ISNUMBER(Total)', expected: true },
+  { id: 57, level: '04 logic and type', name: 'is text', expression: 'ISTEXT(Customer.Name)', expected: true },
+  { id: 58, level: '04 logic and type', name: 'is blank', expression: 'ISBLANK(null)', expected: true },
+
+  { id: 59, level: '05 lookup and rows', name: 'choose option', expression: 'CHOOSE(2, ["standard", "gold", "platinum"])', expected: 'gold' },
+  { id: 60, level: '05 lookup and rows', name: 'row count helper', expression: 'ROWS([[1, 2], [3, 4]])', expected: 2 },
+  { id: 61, level: '05 lookup and rows', name: 'column count helper', expression: 'COLUMNS([[1, 2], [3, 4]])', expected: 2 },
+  { id: 62, level: '05 lookup and rows', name: 'match first service row', expression: 'MATCH("Service", "Line Item"[all].Category, 0)', expected: 4 },
+  { id: 63, level: '05 lookup and rows', name: 'lookup value', expression: 'LOOKUP(3, [1, 2, 3, 4], ["one", "two", "three", "four"])', expected: 'three' },
+  { id: 64, level: '05 lookup and rows', name: 'vlookup table', expression: 'VLOOKUP("COPY-03", [["COPY-03", "Toner"], ["SRV-01", "Service"]], 2, false)', expected: 'Toner' },
+  { id: 65, level: '05 lookup and rows', name: 'vlookup by readable rows', expression: 'VLOOKUP_BY("Line Item"[all], "sku", "COPY-04", "lineTotal")', expected: 18 },
+  { id: 66, level: '05 lookup and rows', name: 'sumif by readable rows', expression: 'SUMIF_BY("Line Item"[all], "lineTotal", "category", "Service")', expected: 33 },
+  { id: 67, level: '05 lookup and rows', name: 'countif by readable rows', expression: 'COUNTIF_BY("Line Item"[all], "warehouse", "North")', expected: 2 },
+  { id: 68, level: '05 lookup and rows', name: 'averageif by readable rows', expression: 'AVERAGEIF_BY("Line Item"[all], "quantity", "category", "Supplies")', expected: 2.5 },
+  { id: 69, level: '05 lookup and rows', name: 'sumifs by readable rows', expression: 'SUMIFS_BY("Line Item"[all], "lineTotal", { category: "Service", warehouse: "North" })', expected: 33 },
+  { id: 70, level: '05 lookup and rows', name: 'countifs by readable rows', expression: 'COUNTIFS_BY("Line Item"[all], { category: "Service", warehouse: "North" })', expected: 2 },
+
+  { id: 71, level: '06 date finance engineering', name: 'year from date', expression: 'YEAR(DATE(2026, 4, 22))', expected: 2026 },
+  { id: 72, level: '06 date finance engineering', name: 'month from date', expression: 'MONTH(DATE(2026, 4, 22))', expected: 4 },
+  { id: 73, level: '06 date finance engineering', name: 'day from date', expression: 'DAY(DATE(2026, 4, 22))', expected: 22 },
+  { id: 74, level: '06 date finance engineering', name: 'days between dates', expression: 'DAYS(DATE(2026, 4, 30), DATE(2026, 4, 22))', expected: 8 },
+  { id: 75, level: '06 date finance engineering', name: 'base conversion', expression: 'BASE(255, 16)', expected: 'ff' },
+  { id: 76, level: '07 password game', name: 'arabic to roman numeral', expression: 'ROMAN(35)', expected: 'XXXV' },
+  { id: 77, level: '07 password game', name: 'roman numeral to arabic', expression: 'ARABIC("XXXV")', expected: 35 },
+
+  { id: 78, level: '08 scalar math trig', name: 'acos one', expression: 'ACOS(1)', expected: 0 },
+  { id: 79, level: '08 scalar math trig', name: 'acosh one', expression: 'ACOSH(1)', expected: 0 },
+  { id: 80, level: '08 scalar math trig', name: 'acot one', expression: 'ACOT(1)', expected: Math.PI / 4, tolerance: 1e-12 },
+  { id: 81, level: '08 scalar math trig', name: 'acoth two', expression: 'ACOTH(2)', expected: 0.5493061443340548, tolerance: 1e-12 },
+  { id: 82, level: '08 scalar math trig', name: 'asin one', expression: 'ASIN(1)', expected: Math.PI / 2, tolerance: 1e-12 },
+  { id: 83, level: '08 scalar math trig', name: 'asinh one', expression: 'ASINH(1)', expected: 0.881373587019543, tolerance: 1e-12 },
+  { id: 84, level: '08 scalar math trig', name: 'atan one', expression: 'ATAN(1)', expected: Math.PI / 4, tolerance: 1e-12 },
+  { id: 85, level: '08 scalar math trig', name: 'atan2 unit point', expression: 'ATAN2(1, 1)', expected: Math.PI / 4, tolerance: 1e-12 },
+  { id: 86, level: '08 scalar math trig', name: 'atanh half', expression: 'ATANH(0.5)', expected: 0.5493061443340548, tolerance: 1e-12 },
+  { id: 87, level: '08 scalar math trig', name: 'cos zero', expression: 'COS(0)', expected: 1 },
+  { id: 88, level: '08 scalar math trig', name: 'cosh zero', expression: 'COSH(0)', expected: 1 },
+  { id: 89, level: '08 scalar math trig', name: 'cot one', expression: 'COT(1)', expected: 0.6420926159343306, tolerance: 1e-12 },
+  { id: 90, level: '08 scalar math trig', name: 'coth one', expression: 'COTH(1)', expected: 1.3130352854993312, tolerance: 1e-12 },
+  { id: 91, level: '08 scalar math trig', name: 'csc one', expression: 'CSC(1)', expected: 1.1883951057781212, tolerance: 1e-12 },
+  { id: 92, level: '08 scalar math trig', name: 'csch one', expression: 'CSCH(1)', expected: 0.8509181282393216, tolerance: 1e-12 },
+  { id: 93, level: '08 scalar math trig', name: 'sec zero', expression: 'SEC(0)', expected: 1 },
+  { id: 94, level: '08 scalar math trig', name: 'sech zero', expression: 'SECH(0)', expected: 1 },
+  { id: 95, level: '08 scalar math trig', name: 'sin half pi', expression: 'SIN(PI()/2)', expected: 1, tolerance: 1e-12 },
+  { id: 96, level: '08 scalar math trig', name: 'sinh zero', expression: 'SINH(0)', expected: 0 },
+  { id: 97, level: '08 scalar math trig', name: 'tan zero', expression: 'TAN(0)', expected: 0 },
+  { id: 98, level: '08 scalar math trig', name: 'tanh zero', expression: 'TANH(0)', expected: 0 },
+  { id: 99, level: '08 scalar math trig', name: 'exp one', expression: 'EXP(1)', expected: Math.E, tolerance: 1e-12 },
+  { id: 100, level: '08 scalar math trig', name: 'ln exp one', expression: 'LN(EXP(1))', expected: 1, tolerance: 1e-12 },
+  { id: 101, level: '08 scalar math trig', name: 'log base two', expression: 'LOG(8, 2)', expected: 3 },
+  { id: 102, level: '08 scalar math trig', name: 'log10 thousand', expression: 'LOG10(1000)', expected: 3 },
+  { id: 103, level: '08 scalar math trig', name: 'trunc decimals', expression: 'TRUNC(3.14159, 2)', expected: 3.14 },
+  { id: 104, level: '08 scalar math trig', name: 'sqrtpi one', expression: 'SQRTPI(1)', expected: Math.sqrt(Math.PI), tolerance: 1e-12 },
+  { id: 105, level: '08 scalar math trig', name: 'multinomial pair', expression: 'MULTINOMIAL([2, 3])', expected: 10 },
+  { id: 106, level: '08 scalar math trig', name: 'series sum powers', expression: 'SERIESSUM(2, 0, 1, [1, 2, 3])', expected: 17 },
+  { id: 107, level: '08 scalar math trig', name: 'sum x squared minus y squared', expression: 'SUMX2MY2([2, 3], [1, 2])', expected: 8 },
+  { id: 108, level: '08 scalar math trig', name: 'sum x squared plus y squared', expression: 'SUMX2PY2([2, 3], [1, 2])', expected: 18 },
+  { id: 109, level: '08 scalar math trig', name: 'sum x minus y squared', expression: 'SUMXMY2([2, 3], [1, 2])', expected: 2 },
+  { id: 110, level: '09 complex engineering', name: 'imcosh zero', expression: 'IMCOSH("0")', expected: '1' },
+  { id: 111, level: '09 complex engineering', name: 'imsinh zero', expression: 'IMSINH("0")', expected: 0 },
+  { id: 112, level: '09 complex engineering', name: 'imsec zero', expression: 'IMSEC("0")', expected: '1' },
+  { id: 113, level: '09 complex engineering', name: 'imsech zero', expression: 'IMSECH("0")', expected: '1' },
+  { id: 114, level: '09 complex engineering', name: 'imcot real prefix', expression: 'VALUE(LEFT(IMCOT("1"), 5))', expected: 0.642, tolerance: 0.001 },
+  { id: 115, level: '09 complex engineering', name: 'imcsc real prefix', expression: 'VALUE(LEFT(IMCSC("1"), 5))', expected: 1.188, tolerance: 0.001 },
+  { id: 116, level: '09 complex engineering', name: 'imcsch real prefix', expression: 'VALUE(LEFT(IMCSCH("1"), 5))', expected: 0.850, tolerance: 0.001 },
+  { id: 117, level: '10 scalar dates', name: 'now after fixed date', expression: 'NOW() > DATE(2025, 1, 1)', expected: true },
+  { id: 118, level: '10 scalar dates', name: 'networkdays intl weekend code', expression: 'NETWORKDAYS_INTL(DATE(2026, 4, 20), DATE(2026, 4, 26), 1)', expected: 5 },
+  { id: 119, level: '10 scalar dates', name: 'networkdays intl weekend mask', expression: 'NETWORKDAYS_INTL(DATE(2026, 4, 20), DATE(2026, 4, 26), "0000011")', expected: 5 },
+  { id: 120, level: '10 scalar dates', name: 'workday intl weekend code', expression: 'WORKDAY_INTL(DATE(2026, 4, 20), 5, 1) == DATE(2026, 4, 27)', expected: true },
+  { id: 121, level: '10 scalar dates', name: 'workday intl weekend mask', expression: 'WORKDAY_INTL(DATE(2026, 4, 20), 5, "0000011") == DATE(2026, 4, 27)', expected: true },
+];
+
+if (bxlFormulaExamples.length !== 121) {
+  throw new Error(
+    `Expected 121 BXL formula examples, found ${bxlFormulaExamples.length}`,
+  );
+}

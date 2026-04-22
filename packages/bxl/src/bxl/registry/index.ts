@@ -1,0 +1,46 @@
+/**
+ * BXL builtin registry.
+ *
+ * Extends the jqtools core registry (jq builtins) with the 'formula' library
+ * — Excel helpers implemented in src/formulajs/ and wired to the jq runtime
+ * via src/bxl/bridge/formula-contrib-*.ts.
+ *
+ * This module is the public BXL registry. Callers who want only jq's own
+ * builtins can skip it and use jqtools/evaluate/filters/registry directly.
+ */
+
+import type {
+  BuiltinLibrary,
+  ResolvedBuiltinRegistry,
+} from '../../jqtools/evaluate/filters/registry.js';
+import {
+  CORE_REGISTRY,
+  resolveRegistry,
+} from '../../jqtools/evaluate/filters/registry.js';
+import { formulaContribJqFilters } from '../bridge/formula-contrib-jq.js';
+import { formulaContribNativeFilters } from '../bridge/formula-contrib-native.js';
+
+export const formulaLibrary: BuiltinLibrary = {
+  jq: formulaContribJqFilters,
+  native: formulaContribNativeFilters,
+};
+
+export const BXL_REGISTRY: Record<string, BuiltinLibrary> = {
+  ...CORE_REGISTRY,
+  formula: formulaLibrary,
+};
+
+export type BuiltinLibraryName = 'core' | 'formula';
+
+export const DEFAULT_BUILTIN_LIBRARIES: BuiltinLibraryName[] = [
+  'core',
+  'formula',
+];
+
+export function resolveBuiltinRegistry(
+  libraries: BuiltinLibraryName[] = DEFAULT_BUILTIN_LIBRARIES,
+): ResolvedBuiltinRegistry {
+  return resolveRegistry(BXL_REGISTRY, libraries);
+}
+
+export type { ResolvedBuiltinRegistry, BuiltinLibrary };

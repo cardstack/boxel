@@ -1,0 +1,111 @@
+(* BXL readable syntax grammar.
+
+   This file formalizes the readable overlay accepted by BXL. The overlay is
+   compiled to canonical jqxl v1 before jqxl tokenization and parsing. Native
+   jqxl expressions remain valid wherever NativeExpr appears.
+
+   Lexical note: quoted labels and string literals use the same JSON string
+   token. In schema-aware contexts, a quoted token that matches a field label is
+   resolved as a field path. Otherwise it remains a string literal.
+
+   Forgiving-input note: readable BXL keywords, selector words, predicate words,
+   pseudo-class names, booleans, null, and formula function names are accepted
+   case-insensitively by the compiler. Formula function calls (and the `all` /
+   `any` combinators) accept either `,` or `;` as argument separator; the
+   formatter normalizes those to `,` in both Solid and Readable output. Bare
+   multi-word labels are accepted when the active schema resolves the phrase
+   unambiguously.
+*)
+
+Program             = Expr ;
+
+Expr                = IfExpr | PipeExpr ;
+IfExpr              = "if", Expr, "then", Expr,
+                      { "elif", Expr, "then", Expr },
+                      "else", Expr, "end" ;
+
+PipeExpr            = OrExpr, { "|", OrExpr } ;
+OrExpr              = AndExpr, { "or", AndExpr } ;
+AndExpr             = CompareExpr, { "and", CompareExpr } ;
+CompareExpr         = AddExpr, [ CompareOp, AddExpr ] ;
+AddExpr             = MultiplyExpr, { ("+" | "-"), MultiplyExpr } ;
+MultiplyExpr        = UnaryExpr, { ("*" | "/" | "%"), UnaryExpr } ;
+UnaryExpr           = "not", "(", Expr, ")" | PostfixExpr ;
+
+PostfixExpr         = PrimaryExpr, { PathStep | Selector | PseudoClass | OptionalSuffix } ;
+PrimaryExpr         = Literal
+                    | ReadablePath
+                    | FunctionCall
+                    | ArrayExpr
+                    | ObjectExpr
+                    | "(", Expr, ")"
+                    | NativeExpr ;
+
+ReadablePath        = Label, { PathStep | Selector | PseudoClass | OptionalSuffix } ;
+PathStep            = ("." | "?."), Label ;
+OptionalSuffix      = "?" ;
+
+Selector            = "[", SelectorBody, "]" ;
+SelectorBody        = EmptyStream
+                    | AllSelector
+                    | HumanIndex
+                    | HumanRange
+                    | RawIndex
+                    | LastIndex
+                    | NativeIndex
+                    | NativeSlice
+                    | RowAndPredicate
+                    | Predicate
+                    | Expr ;
+
+EmptyStream         = ;
+AllSelector         = "all" | "..." ;
+HumanIndex         = ("row" | "item"), Number ;
+HumanRange         = ("row" | "item"), Number, "..", Number ;
+RawIndex           = "#", Number ;
+LastIndex          = "last", "(", ")", [ "-", Number ] ;
+NativeIndex        = Number ;
+NativeSlice        = [ Number ], ":", [ Number ] ;
+RowAndPredicate    = HumanIndex, ",", Predicate ;
+
+Predicate          = PredicateOr ;
+PredicateOr        = PredicateAnd, { "or", PredicateAnd } ;
+PredicateAnd       = PredicateUnary, { "and", PredicateUnary } ;
+PredicateUnary     = "not", PredicateUnary
+                    | "(", Predicate, ")"
+                    | PredicateComparison
+                    | PredicateValue ;
+PredicateComparison = PredicateValue, PredicateOp, PredicateValue ;
+PredicateValue     = ReadablePath | Literal | FunctionCall | "(", Expr, ")" ;
+PredicateOp        = "=" | "==" | "!=" | "<" | "<=" | ">" | ">="
+                    | "^=" | "$=" | "*="
+                    | "STARTSWITH" | "ENDSWITH" | "CONTAINS" | "IN" ;
+
+PseudoClass        = ":", PseudoName, [ "(", PseudoArg, ")" ] ;
+PseudoName         = "first" | "last" | "only" | "empty"
+                    | "nth" | "nth-last" | "odd" | "even" | "not" ;
+PseudoArg          = Number | Predicate ;
+
+FunctionCall       = Identifier, "(", [ FunctionArgs ], ")" ;
+FunctionArgs       = Expr, { ("," | ";"), Expr } ;
+
+ArrayExpr          = "[", [ Expr, { ",", Expr } ], "]" ;
+ObjectExpr         = "{", [ ObjectEntry, { ",", ObjectEntry } ], "}" ;
+ObjectEntry        = ObjectKey, ":", Expr ;
+ObjectKey          = Identifier | String ;
+
+Label              = Identifier | QuotedLabel ;
+Literal            = String | Number | Boolean | Null ;
+Boolean            = "true" | "false" ;
+Null               = "null" ;
+
+CompareOp          = "==" | "!=" | "<" | "<=" | ">" | ">=" ;
+Identifier         = Letter, { Letter | Digit | "_" } ;
+QuotedLabel        = String ;
+String             = '"', { JsonStringChar }, '"' ;
+Number             = Digit, { Digit }, [ ".", Digit, { Digit } ] ;
+
+NativeExpr         = (* Any expression accepted by the jqxl parser. *) ;
+Letter             = "A".."Z" | "a".."z" | "_" ;
+Digit              = "0".."9" ;
+JsonStringChar     = (* Any JSON string character or escape sequence. *) ;

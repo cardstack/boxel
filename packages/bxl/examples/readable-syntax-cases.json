@@ -1,0 +1,71 @@
+{
+  "schemaName": "Invoice",
+  "input": {
+    "invoiceNumber": "INV-1001",
+    "subtotal": 50,
+    "taxRate": 8.25,
+    "taxAmount": 4.13,
+    "total": 54.13,
+    "billTo": {
+      "name": "Acme Legal",
+      "countryCode": "US"
+    },
+    "owner": {
+      "email": "owner@example.test"
+    },
+    "lineItems": [
+      {
+        "sku": "COPY-01",
+        "quantity": 1,
+        "lineTotal": 10
+      },
+      {
+        "sku": "BRAND-RED",
+        "quantity": 5,
+        "lineTotal": 10
+      },
+      {
+        "sku": "COPY-03",
+        "quantity": 6,
+        "lineTotal": 12
+      },
+      {
+        "sku": "COPY-04",
+        "quantity": 9,
+        "lineTotal": 18
+      }
+    ]
+  },
+  "expressions": [
+    {
+      "name": "Label path + one-based row",
+      "source": "\"Line Item\"[row 4].Quantity",
+      "canonical": ".lineItems[3].quantity",
+      "expected": 9
+    },
+    {
+      "name": "Pseudo first",
+      "source": "\"Line Item\":first.SKU",
+      "canonical": ".lineItems[0].sku",
+      "expected": "COPY-01"
+    },
+    {
+      "name": "Data-anchored predicate",
+      "source": "\"Line Item\"[SKU = \"COPY-04\"].Quantity",
+      "canonical": "first(.lineItems[] | select(.sku == \"COPY-04\")).quantity",
+      "expected": 9
+    },
+    {
+      "name": "Formula labels",
+      "source": "ROUND(Subtotal * \"Tax Rate\" / 100, 2) == \"Tax Amount\"",
+      "canonical": "ROUND(.subtotal*.taxRate/100;2)==.taxAmount",
+      "expected": true
+    },
+    {
+      "name": "Safe aggregate comparison",
+      "source": "(\"Line Item\"[all].\"Line Total\" | add) == Subtotal",
+      "canonical": "([.lineItems[].lineTotal]|add)==.subtotal",
+      "expected": true
+    }
+  ]
+}

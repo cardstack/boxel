@@ -1,0 +1,15 @@
+# BXL Documentation
+
+This directory holds the v0.1 documentation set.
+
+| File                        | Purpose                                        |
+| --------------------------- | ---------------------------------------------- |
+| `syntax-reference.md`       | Canonical public BXL syntax                    |
+| `grammar.ebnf`              | Formal grammar (matches implementation)        |
+| `sandbox.md`                | Sandbox contract, blocked builtins, budgets    |
+| `excel-compatibility.md`    | Supported Excel paste idioms and formulas      |
+| `formulas.md`               | Excel helper matrix with gaps                  |
+| `api.md`                    | TypeScript API and option defaults             |
+
+Each file is ported from the equivalent staging-tree doc in follow-up commits
+and is a release gate for v0.1. See the root [RELEASE-PLAN.md](../RELEASE-PLAN.md).

@@ -1,0 +1,205 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "BXL",
+  "scopeName": "source.bxl",
+  "fileTypes": [
+    "bxl",
+    "jqxl",
+    "jqxlexpr"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#variables"
+    },
+    {
+      "include": "#formats"
+    },
+    {
+      "include": "#excel-functions"
+    },
+    {
+      "include": "#jq-functions"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#selectors"
+    },
+    {
+      "include": "#pseudo-classes"
+    },
+    {
+      "include": "#members"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#punctuation"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.bxl",
+          "match": "#(?!\\d).*"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.bxl",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.bxl",
+              "match": "\\\\(?:[\"\\\\/bfnrt]|u[0-9A-Fa-f]{4})"
+            },
+            {
+              "name": "meta.interpolation.bxl",
+              "begin": "\\\\\\(",
+              "end": "\\)",
+              "patterns": [
+                {
+                  "include": "$self"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "variables": {
+      "patterns": [
+        {
+          "name": "variable.other.dollar.bxl",
+          "match": "\\$[A-Za-z_][A-Za-z0-9_]*"
+        }
+      ]
+    },
+    "formats": {
+      "patterns": [
+        {
+          "name": "support.function.format.bxl",
+          "match": "@[A-Za-z_][A-Za-z0-9_]*"
+        }
+      ]
+    },
+    "excel-functions": {
+      "patterns": [
+        {
+          "name": "support.function.excel.bxl",
+          "match": "\\b(?:ABS|ACCRINT|ACOS|ACOSH|ACOT|ACOTH|AND|ARABIC|ASIN|ASINH|ATAN|ATAN2|ATANH|AVEDEV|AVERAGE|AVERAGEIF|AVERAGEIFS_BY|AVERAGEIF_BY|BASE|BIN2DEC|BIN2HEX|BIN2OCT|BITAND|BITLSHIFT|BITOR|BITRSHIFT|BITXOR|CEILING|CEILING_MATH|CHAR|CHOOSE|CLEAN|CODE|COL|COLUMNS|COMBIN|COMBINA|COMPLEX|CONCAT|CONCATENATE|CONVERT|CORREL|COS|COSH|COT|COTH|COUNT|COUNTA|COUNTBLANK|COUNTIF|COUNTIFS_BY|COUNTIF_BY|COUPDAYS|CSC|CSCH|CUMIPMT|CUMPRINC|DATE|DATEDIF|DATEVALUE|DAY|DAYS|DAYS360|DB|DDB|DEC2BIN|DEC2HEX|DEC2OCT|DECIMAL|DEGREES|DELTA|DEVSQ|DISC|DOLLAR|DOLLARDE|DOLLARFR|EDATE|EFFECT|EOMONTH|ERF|ERFC|EVEN|EXACT|EXP|FACT|FACTDOUBLE|FALSE|FIND|FIXED|FLOOR|FLOOR_MATH|FORECAST|FV|FVSCHEDULE|GCD|GEOMEAN|GESTEP|HARMEAN|HEX2BIN|HEX2DEC|HEX2OCT|HLOOKUP|HOUR|IF|IFERROR|IFNA|IFS|IMABS|IMAGINARY|IMARGUMENT|IMCONJUGATE|IMCOS|IMCOSH|IMCOT|IMCSC|IMCSCH|IMDIV|IMEXP|IMLN|IMLOG10|IMLOG2|IMPOWER|IMPRODUCT|IMREAL|IMSEC|IMSECH|IMSIN|IMSINH|IMSQRT|IMSUB|IMSUM|IMTAN|INDEX|INT|INTERCEPT|IPMT|IRR|IRR_BY|ISBLANK|ISERR|ISERROR|ISEVEN|ISLOGICAL|ISNA|ISNONTEXT|ISNUMBER|ISODD|ISOWEEKNUM|ISPMT|ISTEXT|KURT|LARGE|LCM|LEFT|LEN|LN|LOG|LOG10|LOOKUP|LOOKUP_BY|LOWER|MATCH|MAX|MAXIFS|MEDIAN|MID|MIN|MINIFS|MINUTE|MIRR|MOD|MONTH|MROUND|MULTINOMIAL|N|NETWORKDAYS|NETWORKDAYS_INTL|NOMINAL|NOT|NOW|NPER|NPV|NPV_BY|NUMBERVALUE|OCT2BIN|OCT2DEC|OCT2HEX|ODD|OR|PDURATION|PEARSON|PERCENTILE_EXC|PERCENTILE_INC|PERCENTRANK_EXC|PERCENTRANK_INC|PERMUT|PI|PMT|POWER|PPMT|PRICEDISC|PRODUCT|PROPER|PV|QUARTILE_EXC|QUARTILE_INC|QUOTIENT|RADIANS|RAND|RANDBETWEEN|RANK_AVG|RANK_EQ|RATE|REPLACE|REPT|RIGHT|ROMAN|ROUND|ROUNDDOWN|ROUNDUP|ROWS|RRI|SEARCH|SEC|SECH|SECOND|SERIESSUM|SIGN|SIN|SINH|SKEW|SLN|SLOPE|SMALL|SQRT|SQRTPI|STDEV|STDEV_P|STDEV_S|SUBSTITUTE|SUM|SUMIF|SUMIFS_BY|SUMIF_BY|SUMPRODUCT|SUMSQ|SUMX2MY2|SUMX2PY2|SUMXMY2|SWITCH|SYD|T|TAN|TANH|TBILLEQ|TBILLPRICE|TBILLYIELD|TEXT|TEXTJOIN|TIME|TIMEVALUE|TODAY|TRIM|TRIMMEAN|TRUE|TRUNC|TYPE|UNICHAR|UNICODE|UPPER|VALUE|VAR|VAR_P|VAR_S|VLOOKUP|VLOOKUP_BY|WEEKDAY|WEEKNUM|WORKDAY|WORKDAY_INTL|XIRR|XIRR_BY|XNPV|XNPV_BY|XOR|YEAR|YEARFRAC)\\b(?=\\s*\\()"
+        }
+      ]
+    },
+    "jq-functions": {
+      "patterns": [
+        {
+          "name": "support.function.jq.bxl",
+          "match": "\\b(?:add|all|any|ascii_downcase|ascii_upcase|builtins|capture|contains|debug|del|endswith|first|flatten|from_entries|fromjson|getpath|group_by|has|inside|join|keys|last|length|map|map_values|match|max|max_by|min|min_by|now|paths|pick|range|reverse|select|setpath|sort|sort_by|split|startswith|stderr|test|to_entries|tojson|tonumber|tostring|type|unique|unique_by|with_entries)\\b(?=\\s*(?:\\(|\\||,|\\]|\\}|$))"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.bxl",
+          "match": "\\b(?:as|break|catch|def|elif|else|end|foreach|if|label|reduce|then|try)\\b"
+        },
+        {
+          "name": "keyword.operator.logical.bxl",
+          "match": "\\b(?:and|or|not)\\b"
+        },
+        {
+          "name": "keyword.operator.predicate.bxl",
+          "match": "\\b(?:STARTSWITH|ENDSWITH|CONTAINS|IN)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.bxl",
+          "match": "\\b(?:true|false|null)\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.bxl",
+          "match": "(?<![A-Za-z0-9_])-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?(?![A-Za-z0-9_])"
+        }
+      ]
+    },
+    "selectors": {
+      "patterns": [
+        {
+          "name": "keyword.other.selector-row.bxl",
+          "match": "\\b(?:row|item)\\s+\\d+(?:\\.\\.\\d+)?\\b"
+        },
+        {
+          "name": "keyword.other.selector-all.bxl",
+          "match": "\\b(?:all)\\b|\\.\\.\\."
+        },
+        {
+          "name": "constant.numeric.zero-based-index.bxl",
+          "match": "#\\d+"
+        }
+      ]
+    },
+    "pseudo-classes": {
+      "patterns": [
+        {
+          "name": "entity.other.attribute-name.pseudo-class.bxl",
+          "match": ":(?:first|last|only|empty|nth-last|nth|odd|even|not)\\b"
+        }
+      ]
+    },
+    "members": {
+      "patterns": [
+        {
+          "name": "variable.other.member.bxl",
+          "match": "(?<=\\.)[A-Za-z_][A-Za-z0-9_]*"
+        },
+        {
+          "name": "variable.other.field.bxl",
+          "match": "\\b[A-Z][A-Za-z0-9_]*(?=\\s*(?:\\.|\\[|:|\\?|==|!=|<=|>=|=|<|>|\\^=|\\$=|\\*=))"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.bxl",
+          "match": "\\?//|//=|\\+=|-=|\\*=|/=|%=|\\|=|==|!=|<=|>=|\\^=|\\$=|\\?\\.|//|\\.\\.|[|,+\\-*/%=<>?:;.]"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.section.bxl",
+          "match": "[\\[\\]{}()]"
+        }
+      ]
+    }
+  }
+}
