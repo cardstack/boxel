@@ -111,9 +111,7 @@ export function registerListCommand(file: Command): void {
         for (let filename of result.filenames) {
           console.log(`${DIM}${filename}${RESET}`);
         }
-        console.log(
-          `\n${DIM}${result.filenames.length} file(s)${RESET}`,
-        );
+        console.log(`\n${DIM}${result.filenames.length} file(s)${RESET}`);
       }
     });
 }
