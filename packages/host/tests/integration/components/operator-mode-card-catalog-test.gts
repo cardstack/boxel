@@ -491,12 +491,21 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click(`[data-test-search-sheet-cancel-button]`);
     await click(`[data-test-open-search-field]`);
     await fillIn(`[data-test-search-field]`, 'Mark J');
+    // Wait for the specific result (Author/mark matches "Mark J" via its
+    // cardTitle "Mark Jackson") rather than polling the label's innerText;
+    // DOM-element waits aren't racy against the transient "Searching…" state.
+    await waitFor(`[data-test-search-result="${testRealmURL}Author/mark"]`, {
+      timeout: 15000,
+    });
     await waitUntil(
-      () =>
-        (
-          document.querySelector('[data-test-search-label]') as HTMLElement
-        )?.innerText.includes('1 result'),
-      { timeout: 10000 },
+      () => {
+        let label = document.querySelector(
+          '[data-test-search-label]',
+        ) as HTMLElement | null;
+        let text = label?.innerText ?? '';
+        return text.length > 0 && !text.includes('Searching');
+      },
+      { timeout: 15000 },
     );
     assert
       .dom(`[data-test-search-label]`)
@@ -510,11 +519,14 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await focus(`[data-test-search-field]`);
     await fillIn(`[data-test-search-field]`, 'No Cards');
     await waitUntil(
-      () =>
-        (
-          document.querySelector('[data-test-search-label]') as HTMLElement
-        )?.innerText.includes('0 results'),
-      { timeout: 10000 },
+      () => {
+        let label = document.querySelector(
+          '[data-test-search-label]',
+        ) as HTMLElement | null;
+        let text = label?.innerText ?? '';
+        return text.length > 0 && !text.includes('Searching');
+      },
+      { timeout: 15000 },
     );
     assert
       .dom(`[data-test-search-label]`)
