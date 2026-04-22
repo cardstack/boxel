@@ -860,16 +860,33 @@ export class PagePool {
     shared.pageCount = Math.max(0, shared.pageCount - 1);
     shared.lastUsedAt = Date.now();
     if (shared.pageCount !== 0) return;
-    // CS-10817 step 3: no pages left for this affinity — close the
-    // shared context. A later step will switch to retaining it as an
-    // orphan (with an LRU cap) so a subsequent visit can reuse the
-    // warm HTTP cache; until then, behave like main and close.
-    this.#sharedContexts.delete(affinityKey);
-    if (shared.closing) return;
+    // CS-10817 step 3/4: no pages left for this affinity. In step 3
+    // this always triggered an immediate close (matching main's
+    // semantics). Step 5 will switch to retaining the context as an
+    // orphan for reuse by the next same-affinity visit; for now we
+    // still close, but callers route through `#closeSharedContext`
+    // so step 5 only has to toggle one branch.
+    return this.#closeSharedContext(affinityKey);
+  }
+
+  // Detach a shared-context row from the map and tear down its
+  // BrowserContext. Used by `#releaseSharedContextForClosedPage`,
+  // `disposeAffinity`, `closeAll`, and the orphan-LRU sweep so every
+  // close goes through a single code path.
+  async #closeSharedContext(affinityKey: string): Promise<void> {
+    let shared = this.#sharedContexts.get(affinityKey);
+    if (!shared) return;
+    if (shared.closing) {
+      this.#sharedContexts.delete(affinityKey);
+      return;
+    }
     shared.closing = true;
-    return shared.context.close().catch((e) => {
+    this.#sharedContexts.delete(affinityKey);
+    try {
+      await shared.context.close();
+    } catch (e) {
       log.warn(`Error closing shared context for ${affinityKey}:`, e);
-    });
+    }
   }
 
   #attachPageConsole(page: Page, affinityKey: string, pageId: string): void {
