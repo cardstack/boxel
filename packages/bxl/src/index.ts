@@ -124,3 +124,21 @@ export function bxl(expression: string, options: BxlOptions = {}) {
     return evaluateBxl(expression, this, options).value;
   };
 }
+
+/**
+ * `expression` / `expr` — aliases of `bxl`.
+ *
+ * Reads beautifully inside @field decorators:
+ *
+ *   @field total = contains(NumberField, {
+ *     computeVia: expression('ROUND(.subtotal * (1 + .taxRate), 2)'),
+ *   });
+ *
+ *   @field isActive = contains(BooleanField, {
+ *     computeVia: expr('Status = "active"'),
+ *   });
+ *
+ * Identical semantics to `bxl(...)`. Pick whichever reads best in context.
+ */
+export const expression = bxl;
+export const expr = bxl;

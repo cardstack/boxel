@@ -115,8 +115,8 @@ assertCompile(
 
 assertCompile(
   'NOT Anonymous',
-  'not .anonymous',
-  '#2 `not` + `.path` gets a space (not `not.anonymous`)',
+  '((.anonymous) | not)',
+  '#2 `NOT` + path wraps in parens + pipe (jq has no prefix `not`)',
 );
 
 assertCompile(

@@ -46,4 +46,29 @@ def IFS(c1; v1; c2; v2; c3; v3):
   . as $in | if ($in | c1) then ($in | v1) elif ($in | c2) then ($in | v2) elif ($in | c3) then ($in | v3) else NA end;
 def IFS(c1; v1; c2; v2; c3; v3; c4; v4):
   . as $in | if ($in | c1) then ($in | v1) elif ($in | c2) then ($in | v2) elif ($in | c3) then ($in | v3) elif ($in | c4) then ($in | v4) else NA end;
+
+# BXL-native helpers (lowercase) + Excel helpers not yet expressed in jq.
+# ISBLANK is defined as a native filter elsewhere with Excel-strict
+# semantics (null only, NOT empty string). present(x) below is the
+# looser, form-friendly positive form that treats "" as absent too.
+def present(x):
+  . as $in | ($in | x) as $v | ($v != null) and ($v != "");
+
+# when(p; q): conditional-requirement / implication.
+# Reads "when p, require q" and vacuously passes when p is false.
+# Excel shape is IF(p, q, TRUE); when(p; q) is the BXL shortcut.
+def when(p; q):
+  . as $in | if ($in | p) then ($in | q) else true end;
+
+def implies(p; q): when(p; q);
+
+# words(s): count whitespace-separated non-empty tokens. Excel has no
+# direct equivalent; handles null gracefully and ignores double-spaces.
+def words(s):
+  . as $in | ($in | s) as $v
+  | (($v // "") | split(" ") | map(select(. != "")) | length);
+
+# nonempty(arr): strip nulls and empty strings from an array.
+def nonempty(arr):
+  . as $in | ($in | arr) | map(select(. != null and . != ""));
 `);

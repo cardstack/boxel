@@ -376,6 +376,7 @@ const CASE_INSENSITIVE_JQ_FUNCTIONS = new Set([
   'fromjson',
   'group_by',
   'has',
+  'implies',
   'keys',
   'last',
   'length',
@@ -383,6 +384,8 @@ const CASE_INSENSITIVE_JQ_FUNCTIONS = new Set([
   'map_values',
   'max',
   'min',
+  'nonempty',
+  'present',
   'reverse',
   'select',
   'sort',
@@ -396,7 +399,9 @@ const CASE_INSENSITIVE_JQ_FUNCTIONS = new Set([
   'type',
   'unique',
   'unique_by',
+  'when',
   'with_entries',
+  'words',
 ]);
 
 const PATH_RESERVED = new Set([
@@ -1111,28 +1116,56 @@ class Compiler {
         continue;
       }
 
-      if (
-        isIdent(token, 'not') &&
-        this.tokens[this.index + 1]?.type === 'punc' &&
-        this.tokens[this.index + 1]?.value === '('
-      ) {
-        const open = this.index + 1;
-        const close = findMatching(this.tokens, open);
-        const inner = new Compiler(
-          this.tokens,
-          { schema: this.schema, rootPathPrefix: readableRootPrefix, itemScope },
-          open + 1,
-          close,
-        ).compile(scope);
-        // Wrap the whole `X | not` in parens so a surrounding `and` /
-        // `or` doesn't accidentally swallow the pipe (jq's `|` has
-        // lower precedence than `and` / `or`).
-        appendPart(parts, `((${inner.source}) | not)`);
-        warnings.push(...inner.warnings);
-        needsRootBinding = needsRootBinding || Boolean(inner.needsRootBinding);
-        changed = true;
-        this.index = close + 1;
-        continue;
+      if (isIdent(token, 'not')) {
+        const nextTok = this.tokens[this.index + 1];
+        // NOT (expr)  → recurse into the parenthesized group
+        if (nextTok?.type === 'punc' && nextTok.value === '(') {
+          const open = this.index + 1;
+          const close = findMatching(this.tokens, open);
+          const inner = new Compiler(
+            this.tokens,
+            { schema: this.schema, rootPathPrefix: readableRootPrefix, itemScope },
+            open + 1,
+            close,
+          ).compile(scope);
+          appendPart(parts, `((${inner.source}) | not)`);
+          warnings.push(...inner.warnings);
+          needsRootBinding = needsRootBinding || Boolean(inner.needsRootBinding);
+          changed = true;
+          this.index = close + 1;
+          continue;
+        }
+        // NOT FUNC(args)  → compile the function call, then pipe to not.
+        // jq has no prefix `not`; it's a filter, used as `expr | not`.
+        if (
+          nextTok?.type === 'ident' &&
+          this.tokens[this.index + 2]?.type === 'punc' &&
+          this.tokens[this.index + 2]?.value === '('
+        ) {
+          this.index++; // consume `not`
+          const fn = this.compileFunctionCall(scope, readableRootPrefix, itemScope);
+          appendPart(parts, `((${fn.source}) | not)`);
+          warnings.push(...fn.warnings);
+          needsRootBinding = needsRootBinding || Boolean(fn.needsRootBinding);
+          streamItemScope = fn.streamItemScope ?? streamItemScope;
+          changed = true;
+          continue;
+        }
+        // NOT <path>  → compile the path, then pipe to not.
+        if (nextTok?.type === 'ident' || nextTok?.value === '.') {
+          this.index++; // consume `not`
+          const path = this.tryCompilePath(scope, readableRootPrefix, itemScope);
+          if (path) {
+            appendPart(parts, `((${path.source}) | not)`);
+            warnings.push(...path.warnings);
+            needsRootBinding = needsRootBinding || Boolean(path.needsRootBinding);
+            streamItemScope = path.streamItemScope ?? streamItemScope;
+            changed = true;
+            continue;
+          }
+          // Not a path either — back up and let the token fall through.
+          this.index--;
+        }
       }
 
       if (
