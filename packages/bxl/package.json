@@ -65,7 +65,9 @@
     "docs",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE.md",
+    "SECURITY.md"
   ],
   "publishConfig": {
     "access": "public",
