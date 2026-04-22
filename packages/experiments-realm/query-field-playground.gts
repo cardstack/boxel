@@ -27,7 +27,7 @@ const matchingFriendQuery = {
   page: {
     size: '$this.pageSize',
   },
-  realm: '$thisRealm',
+  realm: '$REALM',
 };
 
 export class QueryFieldPlayground extends CardDef {
@@ -123,7 +123,7 @@ export class QueryFieldPlayground extends CardDef {
         <section class='summary'>
           <h3>Active query snapshot</h3>
           <ul>
-            <li>realm: $thisRealm</li>
+            <li>realm: $REALM</li>
             <li>filter: contains(firstName: "{{this.filterDisplay}}")</li>
             <li>sort: firstName {{this.directionLabel}}</li>
             <li>page.size: {{@model.pageSize}}</li>
