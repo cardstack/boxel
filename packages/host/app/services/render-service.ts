@@ -39,10 +39,11 @@ import { render, teardown } from '../lib/isolated-render';
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
 import type { ComponentLike } from '@glint/template';
-import type { SimpleDocument, SimpleElement } from '@simple-dom/interface';
+import type { SimpleDocument, SimpleElement, SimpleNode } from '@simple-dom/interface';
 import type { Tokenizer } from '@simple-dom/parser';
 
 const ELEMENT_NODE_TYPE = 1;
+const TEXT_NODE_TYPE = 3;
 const MAX_ASYNC_RENDER_PASSES = 3;
 const { environment } = config;
 
@@ -178,7 +179,7 @@ export default class RenderService extends Service {
 
   async renderCardComponent(
     component: BoxComponent,
-    capture: 'innerHTML' | 'outerHTML' = 'outerHTML',
+    capture: 'innerHTML' | 'outerHTML' | 'textContent' = 'outerHTML',
     format: Format = 'isolated',
     waitForAsync?: () => Promise<void>,
   ): Promise<string> {
@@ -219,7 +220,7 @@ export default class RenderService extends Service {
 
 export function parseCardHtml(
   html: string,
-  capture: 'innerHTML' | 'outerHTML' = 'outerHTML',
+  capture: 'innerHTML' | 'outerHTML' | 'textContent' = 'outerHTML',
 ): string {
   let document = createDocument();
   let parser = new Parser(tokenize as Tokenizer, document, voidMap);
@@ -228,6 +229,28 @@ export function parseCardHtml(
     throw new Error(`no HTML to parse`);
   }
   let serializer = new Serializer(voidMap);
+
+  if (capture === 'textContent') {
+    // Mirror realm-server/prerender/utils.ts: for markdown captures, narrow to
+    // [data-markdown-output] (so the hidden HTML source sibling of the
+    // CardDef/FieldDef markdown fallback is excluded) or fall back to
+    // [data-markdown-render-container], or the root.
+    let rootElement: SimpleElement | undefined;
+    for (let node = fragment.firstChild; node; node = node.nextSibling) {
+      if (node.nodeType === ELEMENT_NODE_TYPE) {
+        rootElement = node as SimpleElement;
+        break;
+      }
+    }
+    if (!rootElement) {
+      return '';
+    }
+    let target =
+      findElementByAttribute(rootElement, 'data-markdown-output') ??
+      findElementByAttribute(rootElement, 'data-markdown-render-container') ??
+      rootElement;
+    return collectTextContent(target);
+  }
 
   let parts: string[] = [];
   for (let node = fragment.firstChild; node; node = node.nextSibling) {
@@ -248,6 +271,38 @@ export function parseCardHtml(
     return parts.join('').trim();
   }
   throw new Error(`unable to determine HTML for card. found HTML:\n${html}`);
+}
+
+function findElementByAttribute(
+  root: SimpleElement,
+  attrName: string,
+): SimpleElement | undefined {
+  if (root.getAttribute(attrName) !== null) {
+    return root;
+  }
+  for (let child = root.firstChild; child; child = child.nextSibling) {
+    if (child.nodeType === ELEMENT_NODE_TYPE) {
+      let found = findElementByAttribute(child as SimpleElement, attrName);
+      if (found) {
+        return found;
+      }
+    }
+  }
+  return undefined;
+}
+
+function collectTextContent(node: SimpleNode): string {
+  if (node.nodeType === TEXT_NODE_TYPE) {
+    return node.nodeValue ?? '';
+  }
+  if (node.nodeType !== ELEMENT_NODE_TYPE) {
+    return '';
+  }
+  let parts: string[] = [];
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    parts.push(collectTextContent(child));
+  }
+  return parts.join('');
 }
 
 function getChildElementById(
