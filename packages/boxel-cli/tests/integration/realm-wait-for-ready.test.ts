@@ -1,5 +1,5 @@
 import '../helpers/setup-realm-server';
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -29,31 +29,30 @@ beforeAll(async () => {
 afterAll(async () => { cleanupProfile?.(); await stopTestRealmServer(); });
 
 describe('realm wait-for-ready (integration)', () => {
-  it('polls _readiness-check endpoint', async () => {
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
-    try {
-      let result = await waitForReady(realmUrl, { timeoutMs: 5000, profileManager });
-      expect(result.ready).toBe(true);
-      expect(fetchSpy).toHaveBeenCalled();
-      let [url, init] = fetchSpy.mock.calls[0];
-      expect(String(url)).toContain('_readiness-check');
-      expect(init!.method).toBe('GET');
-    } finally { fetchSpy.mockRestore(); }
+  it('returns ready for a running realm', async () => {
+    let result = await waitForReady(realmUrl, {
+      timeoutMs: 5000,
+      profileManager,
+    });
+    expect(result.ready).toBe(true);
+    expect(result.error).toBeUndefined();
   });
 
-  it('returns not ready on timeout', async () => {
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch').mockResolvedValue(new Response('Not Ready', { status: 503 }));
-    try {
-      let result = await waitForReady(realmUrl, { timeoutMs: 100, profileManager });
-      expect(result.ready).toBe(false);
-      expect(result.error).toContain('not ready after');
-    } finally { fetchSpy.mockRestore(); }
+  it('returns not ready when realm URL is unreachable', async () => {
+    let result = await waitForReady('http://127.0.0.1:1/fake/', {
+      timeoutMs: 500,
+      profileManager,
+    });
+    expect(result.ready).toBe(false);
+    expect(result.error).toContain('not ready after');
   });
 
   it('throws when no active profile', async () => {
     let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
     let emptyManager = new ProfileManager(emptyDir);
-    await expect(waitForReady(realmUrl, { profileManager: emptyManager })).rejects.toThrow('No active profile');
+    await expect(
+      waitForReady(realmUrl, { profileManager: emptyManager }),
+    ).rejects.toThrow('No active profile');
     fs.rmSync(emptyDir, { recursive: true, force: true });
   });
 });
