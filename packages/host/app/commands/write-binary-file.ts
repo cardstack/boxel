@@ -86,7 +86,7 @@ export default class WriteBinaryFileCommand extends HostBaseCommand<
     }
 
     let bytes = base64ToUint8Array(input.base64Content);
-    let blob = new Blob([bytes]);
+    let blob = new Blob([bytes as any]);
 
     let clientRequestId = `binary:${uuidv4()}`;
     this.cardService.clientRequestIds.add(clientRequestId);
