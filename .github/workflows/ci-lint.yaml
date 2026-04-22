@@ -3,7 +3,8 @@ name: CI Lint
 on:
   push:
     branches: [main]
-  pull_request:
+  # pull_request: disabled on `gc-settling-experiment` branch — this
+  # branch only needs the host-test memory reports. Do not merge.
 
 permissions:
   checks: write

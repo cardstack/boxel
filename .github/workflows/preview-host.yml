@@ -1,15 +1,9 @@
 name: Preview Host
 
 on:
-  pull_request:
-    paths:
-      - "packages/host/**"
-      - "packages/boxel-ui/**"
-      - "packages/boxel-icons/**"
-      - ".github/workflows/pr-boxel-host.yml"
-      - ".github/workflows/preview-host.yml"
-      - "package.json"
-      - "pnpm-lock.yaml"
+  # pull_request: disabled on `gc-settling-experiment` branch — this
+  # branch only needs the host-test memory reports. Do not merge.
+  workflow_dispatch:
 
 permissions:
   contents: read

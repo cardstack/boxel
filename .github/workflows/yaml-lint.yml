@@ -1,10 +1,9 @@
 name: YAML Lint
 
 on:
-  pull_request:
-    paths:
-      - "**.yml"
-      - "**.yaml"
+  # pull_request: disabled on `gc-settling-experiment` branch — this
+  # branch only needs the host-test memory reports. Do not merge.
+  workflow_dispatch:
 
 jobs:
   lint:
