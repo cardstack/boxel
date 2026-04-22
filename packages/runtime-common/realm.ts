@@ -2097,23 +2097,45 @@ export class Realm {
       etagVariant?: string;
     },
   ): Promise<ResponseWithNodeStream> {
+    let contentType = options?.defaultHeaders?.['content-type'];
+    // Only advertise `public` caching when the realm is world-readable;
+    // otherwise the response is auth-gated and must not be stored by shared
+    // caches (e.g. CDNs) where it could be served to another user.
+    let cacheVisibility = requestContext.permissions['*']?.includes('read')
+      ? 'public'
+      : 'private';
+    // Serve realm-hosted images (e.g. realm icons and backgrounds) with an
+    // explicit Cache-Control so browsers don't fall back to Last-Modified
+    // heuristics. must-revalidate + ETag keeps updates responsive while
+    // avoiding repeated revalidation within a browsing session.
+    let cacheControl = contentType?.startsWith('image/')
+      ? `${cacheVisibility}, max-age=60, must-revalidate`
+      : `${cacheVisibility}, max-age=0`;
     let etag = buildEtag(ref.lastModified, options?.etagVariant);
+    let lastModified = formatRFC7231(ref.lastModified * 1000);
     if (etag && request.headers.get('if-none-match') === etag) {
       return createResponse({
         body: null,
-        init: { status: 304 },
+        init: {
+          status: 304,
+          headers: {
+            'cache-control': cacheControl,
+            'last-modified': lastModified,
+            etag,
+          },
+        },
         requestContext,
       });
     }
     let createdFromDb = await this.getCreatedTime(ref.path);
     let headers: Record<string, string> = {
       ...(options?.defaultHeaders || {}),
-      'last-modified': formatRFC7231(ref.lastModified * 1000),
+      'last-modified': lastModified,
       ...(Symbol.for('shimmed-module') in ref
         ? { 'X-Boxel-Shimmed-Module': 'true' }
         : {}),
       ...(etag ? { etag } : {}),
-      'cache-control': 'public, max-age=0', // instructs the browser to check with server before using cache
+      'cache-control': cacheControl,
     };
     if (createdFromDb != null) {
       headers['x-created'] = formatRFC7231(createdFromDb * 1000);

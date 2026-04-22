@@ -1100,6 +1100,29 @@ module(basename(__filename), function () {
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
         });
+
+        test('image GET on a non-public realm uses private Cache-Control', async function (assert) {
+          let bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+          let jwt = createJWT(testRealm, 'john', ['read', 'write']);
+
+          await request
+            .post('/private-icon.png')
+            .set('Content-Type', 'application/octet-stream')
+            .set('Authorization', `Bearer ${jwt}`)
+            .send(Buffer.from(bytes));
+
+          let response = await request
+            .get('/private-icon.png')
+            .set('Accept', 'image/*')
+            .set('Authorization', `Bearer ${jwt}`);
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.headers['cache-control'],
+            'private, max-age=60, must-revalidate',
+            'auth-gated image uses private Cache-Control so shared caches cannot serve it to other users',
+          );
+        });
       });
     });
 
@@ -1162,6 +1185,107 @@ module(basename(__filename), function () {
             response.headers['content-type'],
             'image/png',
             'content-type is image/png for .png files',
+          );
+        });
+
+        test('image GET returns explicit Cache-Control for browser image requests', async function (assert) {
+          let bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+          await request
+            .post('/icon.png')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+
+          let response = await request
+            .get('/icon.png')
+            .set('Accept', 'image/*');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.headers['content-type'],
+            'image/png',
+            'content-type is image/png for .png files',
+          );
+          assert.strictEqual(
+            response.headers['cache-control'],
+            'public, max-age=60, must-revalidate',
+            'image responses set an explicit Cache-Control instead of relying on Last-Modified heuristics',
+          );
+          assert.ok(
+            response.headers['etag'],
+            'ETag header is present so browsers can revalidate when the image changes',
+          );
+        });
+
+        test('image GET returns the same Cache-Control when requested via card+source Accept', async function (assert) {
+          let bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+          await request
+            .post('/bg.png')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+
+          let response = await request
+            .get('/bg.png')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.headers['cache-control'],
+            'public, max-age=60, must-revalidate',
+            'image Cache-Control applies regardless of Accept header',
+          );
+        });
+
+        test('image 304 response carries Cache-Control, ETag, and Last-Modified', async function (assert) {
+          let bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+          await request
+            .post('/revalidate.png')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+
+          let first = await request
+            .get('/revalidate.png')
+            .set('Accept', 'image/*');
+          let etag = first.headers['etag'];
+          assert.ok(etag, 'first response has ETag');
+
+          let second = await request
+            .get('/revalidate.png')
+            .set('Accept', 'image/*')
+            .set('If-None-Match', etag);
+
+          assert.strictEqual(second.status, 304, 'HTTP 304 status');
+          assert.strictEqual(
+            second.headers['cache-control'],
+            'public, max-age=60, must-revalidate',
+            '304 responses include Cache-Control so browsers can refresh their cached directive',
+          );
+          assert.strictEqual(
+            second.headers['etag'],
+            etag,
+            '304 echoes the matched ETag (RFC 9110)',
+          );
+          assert.ok(
+            second.headers['last-modified'],
+            '304 includes Last-Modified so caches can update stored metadata',
+          );
+        });
+
+        test('non-image file GET keeps max-age=0 Cache-Control', async function (assert) {
+          let bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // %PDF
+          await request
+            .post('/doc.pdf')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+
+          let response = await request
+            .get('/doc.pdf')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.headers['cache-control'],
+            'public, max-age=0',
+            'non-image files keep the default revalidate-always Cache-Control',
           );
         });
 
