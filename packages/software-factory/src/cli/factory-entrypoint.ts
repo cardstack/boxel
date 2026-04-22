@@ -16,59 +16,62 @@ import { configureLogger, logger } from '../logger';
 let log = logger('factory-entrypoint');
 
 async function main(): Promise<void> {
-  try {
-    if (wantsFactoryEntrypointHelp(process.argv.slice(2))) {
-      console.log(getFactoryEntrypointUsage());
-      return;
-    }
+  if (wantsFactoryEntrypointHelp(process.argv.slice(2))) {
+    console.log(getFactoryEntrypointUsage());
+    return;
+  }
 
-    let options = parseFactoryEntrypointArgs(process.argv.slice(2));
+  let options = parseFactoryEntrypointArgs(process.argv.slice(2));
 
-    // --debug raises the log level so debug-gated lines (e.g. full
-    // run-command response bodies) surface, unless the caller has already
-    // pinned a level via LOG_LEVELS.
-    if (options.debug && !process.env.LOG_LEVELS) {
-      configureLogger('*=debug');
-    }
+  // --debug raises the log level so debug-gated lines (e.g. full
+  // run-command response bodies) surface, unless the caller has already
+  // pinned a level via LOG_LEVELS.
+  if (options.debug && !process.env.LOG_LEVELS) {
+    configureLogger('*=debug');
+  }
 
-    await BoxelCLIClient.ensureProfile({
-      realmServerUrl: options.realmServerUrl ?? undefined,
-    });
+  await BoxelCLIClient.ensureProfile({
+    realmServerUrl: options.realmServerUrl ?? undefined,
+  });
 
-    log.info(`brief=${options.briefUrl}`);
-    log.info('Starting seed issue + issue-driven loop...');
+  log.info(`brief=${options.briefUrl}`);
+  log.info('Starting seed issue + issue-driven loop...');
 
-    let summary = await runFactoryEntrypoint(options);
+  let summary = await runFactoryEntrypoint(options);
 
-    if (summary.issueLoop) {
+  if (summary.issueLoop) {
+    log.info(
+      `Issue loop complete: outcome=${summary.issueLoop.outcome} ` +
+        `outerCycles=${summary.issueLoop.outerCycles} ` +
+        `issues=${summary.issueLoop.issueResults.length}`,
+    );
+    for (let ir of summary.issueLoop.issueResults) {
       log.info(
-        `Issue loop complete: outcome=${summary.issueLoop.outcome} ` +
-          `outerCycles=${summary.issueLoop.outerCycles} ` +
-          `issues=${summary.issueLoop.issueResults.length}`,
+        `  ${ir.issueId}: ${ir.exitReason} (${ir.innerIterations} iterations, ${ir.toolCallCount} tool calls)`,
       );
-      for (let ir of summary.issueLoop.issueResults) {
-        log.info(
-          `  ${ir.issueId}: ${ir.exitReason} (${ir.innerIterations} iterations, ${ir.toolCallCount} tool calls)`,
-        );
-      }
-      if (summary.issueLoop.outcome === 'all_issues_done') {
-        log.info('All issues done.');
-      } else {
-        log.info(`Exiting with outcome=${summary.issueLoop.outcome}`);
-      }
     }
-
-    if (!options.debug) {
-      process.exit(0);
-    }
-
-    let output = JSON.stringify(summary, null, 2) + '\n';
-    if (!process.stdout.write(output)) {
-      process.stdout.once('drain', () => process.exit(0));
+    if (summary.issueLoop.outcome === 'all_issues_done') {
+      log.info('All issues done.');
     } else {
-      process.exit(0);
+      log.info(`Exiting with outcome=${summary.issueLoop.outcome}`);
     }
-  } catch (error) {
+  }
+
+  // Reflect the run outcome in the exit code so CI / callers can detect
+  // failures without parsing logs. `completed` is the only success state;
+  // `ready` means the entrypoint returned before the loop ran, which we
+  // treat as a failed invocation.
+  if (summary.result.status !== 'completed') {
+    process.exitCode = 1;
+  }
+
+  if (options.debug) {
+    process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
+  }
+}
+
+main()
+  .catch((error: unknown) => {
     if (error instanceof FactoryEntrypointUsageError) {
       log.error(error.message);
       log.error('');
@@ -81,8 +84,11 @@ async function main(): Promise<void> {
       log.error(String(error));
     }
 
-    process.exit(1);
-  }
-}
-
-void main();
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    // Lingering handles (fetch keep-alive sockets, pg pool idle) can prevent
+    // the event loop from draining. Schedule a deferred exit so stdout/stderr
+    // have time to flush before the process terminates.
+    setTimeout(() => process.exit(process.exitCode ?? 0), 100).unref();
+  });

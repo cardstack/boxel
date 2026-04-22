@@ -188,7 +188,11 @@ export class TestValidationStep implements ValidationStepRunner {
       handle.testRunId,
     );
 
-    if (details) {
+    if (handle.status === 'error') {
+      log.info(
+        `Test run error${handle.errorMessage ? `: ${handle.errorMessage}` : ''}`,
+      );
+    } else if (details) {
       let skippedNote =
         details.skippedCount > 0 ? `, ${details.skippedCount} skipped` : '';
       log.info(
