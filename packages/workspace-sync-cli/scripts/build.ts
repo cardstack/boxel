@@ -1,5 +1,9 @@
 import { build } from 'esbuild';
-import { mkdirSync, chmodSync } from 'fs';
+import { copyFileSync, mkdirSync, chmodSync } from 'fs';
+import { createRequire } from 'module';
+import { dirname, join } from 'path';
+
+const require = createRequire(import.meta.url);
 
 // Node.js built-in modules that should remain external
 const nodeBuiltins = [
@@ -101,6 +105,18 @@ async function buildCLI() {
     console.log('Making CLI files executable...');
     chmodSync('dist/push.js', 0o755);
     chmodSync('dist/pull.js', 0o755);
+
+    // content-tag (pulled in by runtime-common/transpile) embeds a
+    // `require('fs').readFileSync(path.join(__dirname, 'content_tag_bg.wasm'))`
+    // call that survives bundling. Copy the wasm next to dist/*.js so that
+    // call resolves at runtime. content-tag's default node entry is
+    // pkg/node.cjs; the wasm ships alongside the inner pkg/node/ module it
+    // re-exports.
+    const contentTagEntry = require.resolve('content-tag');
+    copyFileSync(
+      join(dirname(contentTagEntry), 'node', 'content_tag_bg.wasm'),
+      'dist/content_tag_bg.wasm',
+    );
 
     console.log('✅ Build complete!');
 
