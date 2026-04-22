@@ -464,6 +464,12 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     assert.dom(`[data-test-stack-card-header]`).containsText(ctx.realmName);
 
+    // Wait for realm indexing to populate the grid before searching.
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item="${testRealmURL}Author/mark"]`, {
+      timeout: 10000,
+    });
+
     await click(`[data-test-open-search-field]`);
     typeIn(`[data-test-search-field]`, 'Mark');
     await waitUntil(() =>
@@ -472,11 +478,8 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       )?.innerText.includes('Searching…'),
     );
     assert.dom(`[data-test-search-label]`).containsText('Searching…');
-    await waitUntil(() => {
-      let label = (
-        document.querySelector('[data-test-search-label]') as HTMLElement
-      )?.innerText;
-      return label && !label.includes('Searching…') && label.includes('result');
+    await waitFor(`[data-test-search-result="${testRealmURL}Author/mark"]`, {
+      timeout: 10000,
     });
 
     // Search is now full-text on card markdown content; Author/mark has
@@ -926,9 +929,16 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    // Wait for realm indexing to populate the grid before searching.
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item="${testRealmURL}Author/mark"]`, {
+      timeout: 10000,
+    });
     await click(`[data-test-open-search-field]`);
     await fillIn(`[data-test-search-field]`, 'Mark');
-    await waitFor(`[data-test-search-result="${testRealmURL}Author/mark"]`);
+    await waitFor(`[data-test-search-result="${testRealmURL}Author/mark"]`, {
+      timeout: 10000,
+    });
     assert.dom(`[data-test-search-sheet-section-header]`).exists();
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
