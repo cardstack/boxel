@@ -1,5 +1,10 @@
 import { deleteFile, type DeleteResult } from '../commands/file/delete';
 import {
+  lint as coreLint,
+  type LintResult,
+  type LintMessage,
+} from '../commands/file/lint';
+import {
   readTranspiledModule,
   type ReadTranspiledResult,
 } from '../commands/read-transpiled';
@@ -80,21 +85,7 @@ export interface RunCommandResult {
   error?: string | null;
 }
 
-export interface LintMessage {
-  ruleId: string | null;
-  severity: 1 | 2;
-  message: string;
-  line: number;
-  column: number;
-  endLine?: number;
-  endColumn?: number;
-}
-
-export interface LintResult {
-  fixed: boolean;
-  output: string;
-  messages: LintMessage[];
-}
+export type { LintMessage, LintResult };
 
 export interface WaitForReadyResult {
   ready: boolean;
@@ -387,32 +378,14 @@ export class BoxelCLIClient {
 
   /**
    * Lint a single file's source code via the realm's `_lint` endpoint.
+   * Delegates to the standalone `lint()` in `commands/file/lint.ts`.
    */
   async lint(
     realmUrl: string,
     source: string,
     filename: string,
   ): Promise<LintResult> {
-    let lintUrl = `${ensureTrailingSlash(realmUrl)}_lint`;
-    let response = await this.pm.authedRealmFetch(lintUrl, {
-      method: 'POST',
-      headers: {
-        Accept: MIME.JSON,
-        'Content-Type': MIME.CardSource,
-        'X-Filename': filename,
-        'X-HTTP-Method-Override': 'QUERY',
-      },
-      body: source,
-    });
-
-    if (!response.ok) {
-      let body = await response.text().catch(() => '(no body)');
-      throw new Error(
-        `_lint returned HTTP ${response.status}: ${body.slice(0, 300)}`,
-      );
-    }
-
-    return (await response.json()) as LintResult;
+    return coreLint(realmUrl, source, filename, { profileManager: this.pm });
   }
 
   /**
