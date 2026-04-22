@@ -264,17 +264,32 @@ export class PagePool {
     release: () => void;
   }> {
     let t0 = Date.now();
-    await this.#ensureStandbyPool();
-    let { entry, reused, releaseTab } =
-      await this.#selectEntryForAffinity(affinityKey);
-    if (entry.affinityKey !== affinityKey) {
-      let oldReleaseTab = releaseTab;
-      ({ entry, releaseTab } = await this.#reassignAffinityTab(
-        entry,
-        affinityKey,
-        oldReleaseTab,
-      ));
-      reused = false;
+    let entry: PoolEntry;
+    let reused: boolean;
+    let releaseTab: () => void;
+    // Retry if the entry we end up holding was torn down while we were
+    // queued on its TabQueue. This happens when a cross-realm request
+    // reassigned the entry we were waiting behind: the old entry's page
+    // has been closed and it's been detached from its affinity, so handing
+    // it to the caller would yield a dead page.
+    for (;;) {
+      await this.#ensureStandbyPool();
+      ({ entry, reused, releaseTab } =
+        await this.#selectEntryForAffinity(affinityKey));
+      if (entry.closing) {
+        releaseTab();
+        continue;
+      }
+      if (entry.affinityKey !== affinityKey) {
+        let oldReleaseTab = releaseTab;
+        ({ entry, releaseTab } = await this.#reassignAffinityTab(
+          entry,
+          affinityKey,
+          oldReleaseTab,
+        ));
+        reused = false;
+      }
+      break;
     }
     if (entry.transitioning) {
       entry.transitioning = false;
@@ -724,9 +739,7 @@ export class PagePool {
     if (this.#standbys.size > 0) {
       let standby = this.#selectLRUTab([...this.#standbys]);
       this.#standbys.delete(standby);
-      let entry = await this.#assignStandbyToAffinity(standby, affinityKey);
-      let releaseTab = await entry.queue.acquire();
-      return { entry, releaseTab };
+      return await this.#assignStandbyToAffinity(standby, affinityKey);
     }
 
     let idleCandidates: PoolEntry[] = [];
@@ -761,10 +774,16 @@ export class PagePool {
   // exists, close the standby's page+context and spawn a fresh page in
   // the existing shared context so the new page inherits the cache +
   // localStorage accumulated by earlier pages.
+  //
+  // Returns the entry with its queue slot already acquired — callers must
+  // release via the returned `releaseTab`. The queue slot is taken before
+  // the entry is added to `#affinityPages` so that concurrent `getPage`
+  // callers observe the new entry as busy (pendingCount >= 1) rather than
+  // as idle, which would let both callers land on the same tab.
   async #assignStandbyToAffinity(
     standby: StandbyEntry,
     affinityKey: string,
-  ): Promise<PoolEntry> {
+  ): Promise<{ entry: PoolEntry; releaseTab: () => void }> {
     let existing = this.#sharedContexts.get(affinityKey);
     if (!existing || existing.closing) {
       this.#adoptStandbyContextForAffinity(standby, affinityKey);
@@ -779,20 +798,25 @@ export class PagePool {
       };
       entry.page.removeAllListeners('console');
       this.#attachPageConsole(entry.page, affinityKey, entry.pageId);
+      // acquire() increments pendingCount synchronously before yielding,
+      // so the entry is never observable with depth 0.
+      let releaseTabPromise = entry.queue.acquire();
       this.#addAffinityEntry(affinityKey, entry);
-      return entry;
+      let releaseTab = await releaseTabPromise;
+      return { entry, releaseTab };
     }
-    // The affinity already has a warm shared context. Close the standby
-    // (its context is ad-hoc and not shared with anything) and attach a
-    // new page to the shared context.
-    try {
-      await standby.context.close();
-    } catch (e) {
+    // The affinity already has a warm shared context. Close the standby's
+    // ad-hoc context in the background (we don't need to block on it) and
+    // attach a new page to the shared context. Blocking here would stall
+    // the caller on an unrelated browser close — and since the standby's
+    // context isn't shared with anything else, any eventual close error
+    // only affects bookkeeping.
+    void standby.context.close().catch((e) => {
       log.warn(
         `Error closing displaced standby context for ${affinityKey}:`,
         e,
       );
-    }
+    });
     this.#consoleErrorsByPageId.delete(standby.pageId);
     return await this.#spawnPoolEntryInSharedContext(affinityKey);
   }
@@ -803,9 +827,12 @@ export class PagePool {
   // via /_standby so render-runner can invoke `globalThis.boxelTransitionTo`
   // later. Without this bootstrap, first use of the replacement page
   // fails at `transitionTo()` / `page.evaluate()`.
+  //
+  // Returns the entry with its queue slot already acquired (see
+  // `#assignStandbyToAffinity` for the race this closes).
   async #spawnPoolEntryInSharedContext(
     affinityKey: string,
-  ): Promise<PoolEntry> {
+  ): Promise<{ entry: PoolEntry; releaseTab: () => void }> {
     let { context } = await this.#acquireSharedContext(affinityKey);
     let page: Page | undefined;
     try {
@@ -822,8 +849,10 @@ export class PagePool {
         lastUsedAt: Date.now(),
         queue: new TabQueue(),
       };
+      let releaseTabPromise = entry.queue.acquire();
       this.#addAffinityEntry(affinityKey, entry);
-      return entry;
+      let releaseTab = await releaseTabPromise;
+      return { entry, releaseTab };
     } catch (e) {
       // Roll back the pageCount bump from #acquireSharedContext and
       // close the half-initialized page so we don't leak a Chrome tab.
@@ -852,21 +881,35 @@ export class PagePool {
   //
   // Takes the caller's queue-acquire handle and returns a fresh one for
   // the new entry — the old entry's queue handle is released inside.
+  //
+  // Spawn-before-release: we spawn the replacement entry FIRST, then
+  // release the old TabQueue slot (which wakes any queued waiter). If
+  // we released first, a queued same-realm waiter could re-enter
+  // `#selectEntryForAffinity` while the replacement entry wasn't yet in
+  // `#affinityPages` and the old entry was already marked closing — no
+  // candidates anywhere, throw "No standby page available" (the retry
+  // loop in `getPage` would also observe the empty state on its next
+  // pass). Spawning first guarantees the new entry is visible before any
+  // waiter wakes.
   async #reassignAffinityTab(
     oldEntry: PoolEntry,
     affinityKey: string,
     oldReleaseTab: () => void,
   ): Promise<{ entry: PoolEntry; releaseTab: () => void }> {
     let oldAffinityKey = oldEntry.affinityKey;
-    this.#detachAffinityEntry(oldEntry);
     oldEntry.closing = true;
-    // Release the old tab's queue slot before closing the page so anyone
-    // who was waiting on it observes the closure rather than leaking.
+    // Spawn the replacement in the destination affinity's shared context,
+    // including the /_standby bootstrap so RenderRunner's transitionTo /
+    // page.evaluate calls work on first use. The spawn helper returns the
+    // entry with its queue slot already acquired synchronously; no extra
+    // acquire here would race against concurrent getPage callers.
+    let result = await this.#spawnPoolEntryInSharedContext(affinityKey);
     try {
       oldReleaseTab();
     } catch (_e) {
       // best-effort release
     }
+    this.#detachAffinityEntry(oldEntry);
     try {
       await oldEntry.page.close();
     } catch (e) {
@@ -879,12 +922,7 @@ export class PagePool {
       this.#releaseSharedContext(oldAffinityKey);
     }
     this.#consoleErrorsByPageId.delete(oldEntry.pageId);
-    // Spawn the replacement in the destination affinity's shared context,
-    // including the /_standby bootstrap so RenderRunner's transitionTo /
-    // page.evaluate calls work on first use.
-    let entry = await this.#spawnPoolEntryInSharedContext(affinityKey);
-    let releaseTab = await entry.queue.acquire();
-    return { entry, releaseTab };
+    return result;
   }
 
   #addAffinityEntry(affinityKey: string, entry: PoolEntry): void {

@@ -4641,7 +4641,12 @@ module(basename(__filename), function () {
           }
         });
 
-        test('queues same-realm request when tab is transitioning', async function (assert) {
+        test('queued same-realm request after cross-realm reassign re-selects a fresh entry', async function (assert) {
+          // CS-10817: cross-realm reassignment closes the old page and
+          // spawns a new one in the destination realm's shared context —
+          // the old page is not reused for a queued same-realm request.
+          // getPage retries the selection instead of handing back the
+          // torn-down entry.
           let { pool } = makeStubPagePool(1, undefined, undefined, {
             disableStandbyRefill: true,
           });
@@ -4650,6 +4655,7 @@ module(basename(__filename), function () {
             await pool.warmStandbys();
 
             let first = await pool.getPage('realm-a');
+            let firstId = first.pageId;
 
             let crossResolved = false;
             let sameResolved = false;
@@ -4669,28 +4675,32 @@ module(basename(__filename), function () {
             );
             assert.false(
               sameResolved,
-              'same-realm request queues even while transitioning',
+              'same-realm request queues behind cross-realm reassign',
             );
 
             first.release();
 
             let cross = await crossPromise;
-            assert.strictEqual(
+            assert.notStrictEqual(
               cross.pageId,
-              first.pageId,
-              'cross-realm request uses the existing tab',
+              firstId,
+              'cross-realm reassign spawns a fresh page',
+            );
+            assert.true(
+              pool.getWarmAffinities().includes('realm-b'),
+              'cross-realm request warms realm-b',
             );
             cross.release();
 
             let same = await samePromise;
-            assert.strictEqual(
+            assert.notStrictEqual(
               same.pageId,
-              first.pageId,
-              'same-realm request uses the same tab',
+              firstId,
+              'same-realm request lands on a new entry after its queued tab was torn down',
             );
-            assert.false(
-              pool.getWarmAffinities().includes('realm-b'),
-              'tab realigned back to realm-a after same-realm request',
+            assert.true(
+              pool.getWarmAffinities().includes('realm-a'),
+              'same-realm request warms realm-a on a fresh entry',
             );
             same.release();
           } finally {
