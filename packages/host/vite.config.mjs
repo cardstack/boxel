@@ -73,7 +73,7 @@ const sourceMapJsResolver = {
   },
 };
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   // Preserve function/class names. Boxel's card runtime introspects
   // `Class.name` in user-visible places — validation errors ("references
   // unknown path X on Person"), displayName fallbacks, the
@@ -82,32 +82,27 @@ export default defineConfig({
   // through Vite 8's production minifier (oxc-minifier), including classes
   // declared inside function bodies.
   //
-  // Use esbuild as the production minifier. The default (terser) cannot
-  // parse matrix-js-sdk's indexeddb-crypto-store chunk, which contains
-  // post-minified Unicode identifiers like `ࢶ` that terser's parser
-  // rejects. esbuild's parser handles the full identifier range.
+  // We DO NOT enable esbuild here. With `esbuild: { keepNames: true }`,
+  // vite routes .ts files through esbuild before rollup's babel plugin,
+  // and esbuild converts class fields (`x = foo()`) into constructor
+  // `__publicField(this, "x", foo())` calls. That breaks ember-concurrency's
+  // async-arrow-task-transform, which only matches ClassProperty nodes.
+  // Letting babel do all TypeScript handling keeps class fields intact
+  // through the async-arrow transform.
   //
-  // The top-level `esbuild.keepNames: true` is required because esbuild's
-  // minifier mangles identifiers by default, which breaks the card
-  // runtime's `Class.name` introspection. The matching `supported` +
-  // `target: 'esnext'` settings keep esbuild from lowering class fields
-  // (`x = foo()`) into `__publicField(this, "x", foo())` constructor
-  // calls; that lowering breaks ember-concurrency's async-arrow-task-
-  // transform, which only matches ClassProperty AST nodes.
+  // In production mode only, override the default minifier (terser) with
+  // esbuild. terser's parser cannot handle matrix-js-sdk's
+  // indexeddb-crypto-store chunk, which contains post-minified Unicode
+  // identifiers like `ࢶ`. esbuild's minifier mangles identifiers, which
+  // is acceptable for the production-only Preview Host deploy; dev-mode
+  // builds (used by test-web-assets, host tests, matrix tests, and
+  // software-factory tests) skip minification and keep original names.
   build: {
-    minify: 'esbuild',
+    ...(mode === 'production' ? { minify: 'esbuild' } : {}),
     rolldownOptions: {
       output: {
         keepNames: true,
       },
-    },
-  },
-  esbuild: {
-    keepNames: true,
-    target: 'esnext',
-    supported: {
-      'class-field': true,
-      'class-static-field': true,
     },
   },
   resolve: {
@@ -145,4 +140,4 @@ export default defineConfig({
       'Cache-Control': 'no-store',
     },
   },
-});
+}));
