@@ -382,7 +382,51 @@ async function stopChildProcess(
   });
 }
 
+class PrerenderPortContentionError extends Error {
+  constructor(
+    public readonly port: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'PrerenderPortContentionError';
+  }
+}
+
 export async function startHarnessPrerenderServer(options: {
+  boxelHostURL: string;
+  port?: number;
+}): Promise<{
+  url: string;
+  stop(): Promise<void>;
+}> {
+  // findAvailablePort picks a port, closes its probe socket, and hands the
+  // number back. Between close and the child binding, another process in
+  // the same CI worker can snatch the port and the child dies with
+  // EADDRINUSE. Retry with a fresh port when that happens. If the caller
+  // pinned the port explicitly, don't second-guess them — try once.
+  let maxAttempts = options.port ? 1 : 4;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await attemptStartHarnessPrerenderServer(options);
+    } catch (err) {
+      lastError = err;
+      if (
+        attempt < maxAttempts &&
+        err instanceof PrerenderPortContentionError
+      ) {
+        log.warn(
+          `prerender server port ${err.port} contended at bind — retrying (attempt ${attempt + 1}/${maxAttempts})`,
+        );
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
+async function attemptStartHarnessPrerenderServer(options: {
   boxelHostURL: string;
   port?: number;
 }): Promise<{
@@ -454,11 +498,14 @@ export async function startHarnessPrerenderServer(options: {
           recentStdout,
           recentStderr,
         });
-        reject(
-          new Error(
-            `prerender server exited before it became ready (code: ${code}, signal: ${signal})${diagnostic}`,
-          ),
-        );
+        let message = `prerender server exited before it became ready (code: ${code}, signal: ${signal})${diagnostic}`;
+        if (
+          hostStartupLooksLikePortContention(`${recentStdout}\n${recentStderr}`)
+        ) {
+          reject(new PrerenderPortContentionError(port, message));
+        } else {
+          reject(new Error(message));
+        }
       });
     };
     errorListener = reject;
