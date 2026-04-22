@@ -1,4 +1,5 @@
 import { deleteFile, type DeleteResult } from '../commands/file/delete';
+import { read as fileRead, type ReadResult } from '../commands/file/read';
 import {
   lint as coreLint,
   type LintResult,
@@ -18,7 +19,7 @@ import { pull as realmPull } from '../commands/realm/pull';
 import { getProfileManager, type ProfileManager } from './profile-manager';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-export type { ListFilesResult, ReadTranspiledResult };
+export type { ReadResult, ListFilesResult, ReadTranspiledResult };
 
 const MIME = {
   CardSource: 'application/vnd.card+source',
@@ -54,15 +55,6 @@ export interface PullResult {
   error?: string;
 }
 
-export interface ReadResult {
-  ok: boolean;
-  status?: number;
-  /** Parsed JSON document (for .json files). */
-  document?: Record<string, unknown>;
-  /** Raw text content (for non-JSON files like .gts). */
-  content?: string;
-  error?: string;
-}
 
 export type { DeleteResult };
 export type { WriteResult };
@@ -145,38 +137,12 @@ export class BoxelCLIClient {
   /**
    * Read a file from a realm. Returns parsed JSON for .json files,
    * raw text for everything else (.gts, etc.).
+   *
+   * Delegates to the standalone `read()` in `commands/file/read.ts`
+   * so the CLI and programmatic API share one implementation.
    */
   async read(realmUrl: string, path: string): Promise<ReadResult> {
-    let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
-
-    try {
-      let response = await this.pm.authedRealmFetch(url, {
-        method: 'GET',
-        headers: { Accept: MIME.CardSource },
-      });
-
-      if (!response.ok) {
-        let body = await response.text();
-        return {
-          ok: false,
-          status: response.status,
-          error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-        };
-      }
-
-      let text = await response.text();
-      try {
-        let document = JSON.parse(text) as Record<string, unknown>;
-        return { ok: true, status: response.status, document };
-      } catch {
-        return { ok: true, status: response.status, content: text };
-      }
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
+    return fileRead(realmUrl, path, { profileManager: this.pm });
   }
 
   /**

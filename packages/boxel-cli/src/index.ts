@@ -45,6 +45,7 @@ program
 
 registerFileCommand(program);
 registerRealmCommand(program);
+registerFileCommand(program);
 registerRunCommand(program);
 registerReadTranspiledCommand(program);
 
