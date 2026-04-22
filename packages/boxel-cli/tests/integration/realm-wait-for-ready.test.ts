@@ -26,7 +26,10 @@ beforeAll(async () => {
   await setupTestProfile(profileManager);
 });
 
-afterAll(async () => { cleanupProfile?.(); await stopTestRealmServer(); });
+afterAll(async () => {
+  cleanupProfile?.();
+  await stopTestRealmServer();
+});
 
 describe('realm wait-for-ready (integration)', () => {
   it('returns ready for a running realm', async () => {
