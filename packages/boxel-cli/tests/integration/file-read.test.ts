@@ -100,13 +100,15 @@ describe('file read (integration)', () => {
     expect(result.error).toContain('404');
   });
 
-  it('throws when no active profile', async () => {
+  it('returns error result when no active profile', async () => {
     let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
     let emptyManager = new ProfileManager(emptyDir);
 
-    await expect(
-      read(realmUrl, 'test-card.json', { profileManager: emptyManager }),
-    ).rejects.toThrow('No active profile');
+    let result = await read(realmUrl, 'test-card.json', {
+      profileManager: emptyManager,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('No active profile');
 
     fs.rmSync(emptyDir, { recursive: true, force: true });
   });
