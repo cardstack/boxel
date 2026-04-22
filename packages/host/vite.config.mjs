@@ -82,24 +82,32 @@ export default defineConfig({
   // through Vite 8's production minifier (oxc-minifier), including classes
   // declared inside function bodies.
   //
-  // We DO NOT enable esbuild here. With `esbuild: { keepNames: true }`,
-  // vite routes .ts files through esbuild before rollup's babel plugin,
-  // and esbuild converts class fields (`x = foo()`) into constructor
-  // `__publicField(this, "x", foo())` calls. That breaks ember-concurrency's
-  // async-arrow-task-transform, which only matches ClassProperty nodes.
-  // Letting babel do all TypeScript handling keeps class fields intact
-  // through the async-arrow transform.
-  //
   // Use esbuild as the production minifier. The default (terser) cannot
   // parse matrix-js-sdk's indexeddb-crypto-store chunk, which contains
   // post-minified Unicode identifiers like `ࢶ` that terser's parser
   // rejects. esbuild's parser handles the full identifier range.
+  //
+  // The top-level `esbuild.keepNames: true` is required because esbuild's
+  // minifier mangles identifiers by default, which breaks the card
+  // runtime's `Class.name` introspection. The matching `supported` +
+  // `target: 'esnext'` settings keep esbuild from lowering class fields
+  // (`x = foo()`) into `__publicField(this, "x", foo())` constructor
+  // calls; that lowering breaks ember-concurrency's async-arrow-task-
+  // transform, which only matches ClassProperty AST nodes.
   build: {
     minify: 'esbuild',
     rolldownOptions: {
       output: {
         keepNames: true,
       },
+    },
+  },
+  esbuild: {
+    keepNames: true,
+    target: 'esnext',
+    supported: {
+      'class-field': true,
+      'class-static-field': true,
     },
   },
   resolve: {
