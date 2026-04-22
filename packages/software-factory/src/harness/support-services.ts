@@ -405,12 +405,10 @@ export async function startHarnessPrerenderServer(options: {
   // EADDRINUSE. Retry with a fresh port when that happens. If the caller
   // pinned the port explicitly, don't second-guess them — try once.
   let maxAttempts = options.port ? 1 : 4;
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  for (let attempt = 1; ; attempt++) {
     try {
       return await attemptStartHarnessPrerenderServer(options);
     } catch (err) {
-      lastError = err;
       if (
         attempt < maxAttempts &&
         err instanceof PrerenderPortContentionError
@@ -423,7 +421,6 @@ export async function startHarnessPrerenderServer(options: {
       throw err;
     }
   }
-  throw lastError;
 }
 
 async function attemptStartHarnessPrerenderServer(options: {

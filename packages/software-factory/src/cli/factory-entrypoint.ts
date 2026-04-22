@@ -66,8 +66,24 @@ async function main(): Promise<void> {
   }
 
   if (options.debug) {
-    process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
+    await writeToStdout(JSON.stringify(summary, null, 2) + '\n');
   }
+}
+
+// Large summaries can exceed the stdout high-water mark, in which case
+// `process.stdout.write()` returns false and the remainder is buffered. The
+// deferred `setTimeout(...).unref()` exit in the `.finally()` block below
+// would otherwise terminate the process before the buffer drains, truncating
+// the JSON summary.
+function writeToStdout(chunk: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (process.stdout.write(chunk)) {
+      resolve();
+      return;
+    }
+    process.stdout.once('drain', resolve);
+    process.stdout.once('error', reject);
+  });
 }
 
 main()
