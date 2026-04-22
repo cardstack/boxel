@@ -41,8 +41,9 @@ export function installRealmServerAssertOwnRealmServerBypassPatch(): {
             // Ember ApplicationInstance on window['@cardstack/host'], so we
             // reach service classes through Ember's owner.factoryFor instead.
             let appInstance = (window as any)['@cardstack/host'];
-            let RealmServerClass =
-              appInstance?.factoryFor?.('service:realm-server')?.class;
+            let RealmServerClass = appInstance?.factoryFor?.(
+              'service:realm-server',
+            )?.class;
             if (!RealmServerClass?.prototype) {
               return;
             }
@@ -79,8 +80,9 @@ export function installRealmServerAssertOwnRealmServerBypassPatch(): {
             // Cleanup mirrors setup above: locate the same service class via
             // the Ember ApplicationInstance's factoryFor, then restore.
             let appInstance = (window as any)['@cardstack/host'];
-            let RealmServerClass =
-              appInstance?.factoryFor?.('service:realm-server')?.class;
+            let RealmServerClass = appInstance?.factoryFor?.(
+              'service:realm-server',
+            )?.class;
             let originalAssertOwnRealmServer = (globalThis as any)
               .__boxelOriginalAssertOwnRealmServer;
             if (RealmServerClass?.prototype && originalAssertOwnRealmServer) {
