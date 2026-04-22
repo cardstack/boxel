@@ -725,11 +725,14 @@ export class PagePool {
   #reassignAffinityTab(entry: PoolEntry, affinityKey: string): PoolEntry {
     let oldAffinityKey = entry.affinityKey;
     this.#detachAffinityEntry(entry);
-    // CS-10817 step 2: the moving page takes the context with it.
-    // Drop the old affinity's shared-context row so the entry ends up
-    // counted only against its new affinity.
+    // CS-10817 step 2/3: the moving page takes its BrowserContext with
+    // it — the context is still in use, just under a different
+    // affinity. Transfer the shared-context row rather than running
+    // `#releaseSharedContextForClosedPage` on the old key (which would
+    // close the context when pageCount hit zero and take the moving
+    // page down with it).
     if (oldAffinityKey) {
-      this.#releaseSharedContextForClosedPage(oldAffinityKey);
+      this.#transferSharedContextBookkeeping(oldAffinityKey);
     }
     entry.affinityKey = affinityKey;
     entry.page.removeAllListeners('console');
@@ -738,6 +741,19 @@ export class PagePool {
     this.#recordSharedContextForFirstPage(entry.context, affinityKey);
     entry.lastUsedAt = Date.now();
     return entry;
+  }
+
+  // Drop the old affinity's shared-context row without closing the
+  // underlying BrowserContext — used by `#reassignAffinityTab` when a
+  // page moves between affinities but keeps its context.
+  #transferSharedContextBookkeeping(oldAffinityKey: string): void {
+    let shared = this.#sharedContexts.get(oldAffinityKey);
+    if (!shared) return;
+    shared.pageCount = Math.max(0, shared.pageCount - 1);
+    shared.lastUsedAt = Date.now();
+    if (shared.pageCount === 0) {
+      this.#sharedContexts.delete(oldAffinityKey);
+    }
   }
 
   #addAffinityEntry(affinityKey: string, entry: PoolEntry): void {
@@ -780,13 +796,37 @@ export class PagePool {
 
   async #closeEntry(entry: Entry, retainConsoleErrors = false): Promise<void> {
     let release: (() => void) | undefined;
+    let affinityKey = entry.type === 'pool' ? entry.affinityKey : null;
     try {
       entry.closing = true;
       release = await entry.queue.acquire();
-      await entry.context.close();
+      if (entry.type === 'standby') {
+        // Standbys own their BrowserContext entirely — no other pool
+        // entry references it. Close the whole context.
+        await entry.context.close();
+      } else {
+        // CS-10817 step 3: the context is potentially shared across
+        // other pool entries for the same affinity. Close only this
+        // page; `#releaseSharedContextForClosedPage` below decrements
+        // the shared row so future steps (orphan eviction / explicit
+        // disposeAffinity) can close the context when pageCount hits
+        // zero.
+        //
+        // The release runs in a `finally` so a `page.close()` throw
+        // (target closed / protocol error) can't leave `pageCount`
+        // permanently inflated — pageCount would otherwise wedge the
+        // context, blocking both orphan LRU and dispose cleanup.
+        try {
+          await entry.page.close();
+        } finally {
+          if (affinityKey) {
+            this.#releaseSharedContextForClosedPage(affinityKey);
+          }
+        }
+      }
     } catch (e) {
       log.warn(
-        `Error closing context for ${
+        `Error closing entry for ${
           entry.type === 'pool' ? entry.affinityKey : 'standby'
         }:`,
         e,
@@ -797,14 +837,6 @@ export class PagePool {
     if (!retainConsoleErrors) {
       this.#consoleErrorsByPageId.delete(entry.pageId);
     }
-    // CS-10817 step 2: keep the shared-context bookkeeping honest.
-    // When we close a pool entry, drop the matching shared-context
-    // row so cap accounting and getSharedContextSnapshot() stay in
-    // sync. No-op for standbys (they aren't tracked in
-    // #sharedContexts).
-    if (entry.type === 'pool' && entry.affinityKey) {
-      this.#releaseSharedContextForClosedPage(entry.affinityKey);
-    }
   }
 
   #releaseSharedContextForClosedPage(affinityKey: string): void {
@@ -813,7 +845,17 @@ export class PagePool {
     shared.pageCount = Math.max(0, shared.pageCount - 1);
     shared.lastUsedAt = Date.now();
     if (shared.pageCount === 0) {
+      // CS-10817 step 3: no pages left for this affinity — close the
+      // shared context. A later step will switch to retaining it as
+      // an orphan (with an LRU cap) so a subsequent visit can reuse
+      // the warm HTTP cache; until then, behave like main and close.
       this.#sharedContexts.delete(affinityKey);
+      if (!shared.closing) {
+        shared.closing = true;
+        void shared.context.close().catch((e) => {
+          log.warn(`Error closing shared context for ${affinityKey}:`, e);
+        });
+      }
     }
   }
 

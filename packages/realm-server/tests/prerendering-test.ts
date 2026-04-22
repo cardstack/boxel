@@ -131,6 +131,13 @@ function makeStubPagePool(
                 (globalThis as any).localStorage = originalLocalStorage;
               }
             },
+            async close() {
+              // CS-10817 step 3: PagePool closes individual pool pages
+              // (without closing the shared context) on entry
+              // disposal. Context-level bookkeeping still runs via
+              // the context.close() hook above.
+              return;
+            },
             browserContext() {
               return context;
             },
