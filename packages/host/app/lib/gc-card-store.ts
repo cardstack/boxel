@@ -380,7 +380,13 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         ms: Date.now() - startedAt,
       });
     };
-    void load.finally(release);
+    // Swallow the chained promise's rejection — `load` may be an
+    // ember-concurrency TaskInstance that rejects with TaskCancelation
+    // when the owning component unmounts. Our only interest is that
+    // `release()` runs on settle; failing to catch here would surface
+    // the cancelation as an unhandled promise rejection and fail
+    // unrelated tests that tear down SearchResource mid-load.
+    load.finally(release).catch(() => {});
     return release;
   }
 

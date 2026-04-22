@@ -121,34 +121,25 @@ export function buildPrerenderApp(options: {
     };
   };
 
-  // CS-10872: walk any RenderError embedded in a response and merge
-  // server-observed timings into its `diagnostics` block. The host
-  // already attaches `renderStage` / `cardDocsInFlight` / etc. from
-  // `withTimeout`; this layer adds the requestId + launch breakdown
-  // so the persisted error document tells the full story of "where
-  // did the 90 seconds go".
+  // CS-10872: walk any RenderError embedded in a response and stamp
+  // the per-request `requestId` onto its `diagnostics` block. The
+  // launch/waits/render/total timings are already attached inside
+  // Prerenderer (so they land regardless of whether the caller came
+  // through HTTP or in-process tests); this layer just adds the
+  // HTTP-only correlation id for cross-log grepping.
   function decorateRenderErrorDiagnostics(
     response: any,
     requestId: string,
-    timings: Timings,
-    totalMs: number,
   ): void {
     if (!response || typeof response !== 'object') {
       return;
     }
-    let serverContext = {
-      requestId,
-      launchMs: timings.launchMs,
-      waits: timings.waits,
-      renderElapsedMs: timings.renderMs,
-      totalElapsedMs: totalMs,
-    };
     let visit = (err: any) => {
       if (!err || typeof err !== 'object') return;
       if (!err.diagnostics || typeof err.diagnostics !== 'object') {
         err.diagnostics = {};
       }
-      Object.assign(err.diagnostics, serverContext);
+      err.diagnostics.requestId = requestId;
     };
     visit(response.error);
     visit((response as any).pageUnusableError);
@@ -396,7 +387,7 @@ export function buildPrerenderApp(options: {
           pool.affinityValue,
           poolFlagSuffix,
         );
-        decorateRenderErrorDiagnostics(response, requestId, timings, totalMs);
+        decorateRenderErrorDiagnostics(response, requestId);
         ctxt.status = 201;
         ctxt.set('Content-Type', 'application/vnd.api+json');
         ctxt.body = {
@@ -659,7 +650,7 @@ export function buildPrerenderApp(options: {
         pool.affinityValue,
         poolFlagSuffix,
       );
-      decorateRenderErrorDiagnostics(response, requestId, timings, totalMs);
+      decorateRenderErrorDiagnostics(response, requestId);
       ctxt.status = 201;
       ctxt.set('Content-Type', 'application/vnd.api+json');
       ctxt.body = {

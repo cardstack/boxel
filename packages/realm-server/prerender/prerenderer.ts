@@ -302,6 +302,46 @@ export class Prerenderer {
     return owner ? { batchId: owner.batchId, since: owner.since } : undefined;
   }
 
+  // CS-10872: walk any RenderError embedded in a response and merge
+  // server-observed timings into its `diagnostics` block. The
+  // prerender server's HTTP layer additionally attaches a
+  // `requestId` via `decorateRenderErrorDiagnostics` — this method
+  // covers the in-process path (test harnesses, co-located callers)
+  // so the diagnostics payload is consistent regardless of how the
+  // prerender was invoked.
+  static decorateRenderErrorsWithTimings(
+    response: unknown,
+    timings: { launchMs: number; renderMs: number; waits: unknown },
+    totalMs: number,
+  ): void {
+    if (!response || typeof response !== 'object') {
+      return;
+    }
+    let serverContext = {
+      launchMs: timings.launchMs,
+      waits: timings.waits,
+      renderElapsedMs: timings.renderMs,
+      totalElapsedMs: totalMs,
+    };
+    let visit = (err: unknown) => {
+      if (!err || typeof err !== 'object') return;
+      let e = err as { diagnostics?: Record<string, unknown> };
+      if (!e.diagnostics || typeof e.diagnostics !== 'object') {
+        e.diagnostics = {};
+      }
+      Object.assign(e.diagnostics, serverContext);
+    };
+    let r = response as Record<string, unknown>;
+    visit(r.error);
+    visit(r.pageUnusableError);
+    for (let key of ['card', 'fileExtract', 'fileRender'] as const) {
+      let sub = r[key];
+      if (sub && typeof sub === 'object') {
+        visit((sub as { error?: unknown }).error);
+      }
+    }
+  }
+
   #gateClearCache<
     T extends PrerenderVisitArgs & {
       opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
@@ -352,6 +392,7 @@ export class Prerenderer {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
+    let prerenderStart = Date.now();
     let attemptOptions = renderOptions;
     let lastResult:
       | {
@@ -428,6 +469,11 @@ export class Prerenderer {
         );
       }
 
+      Prerenderer.decorateRenderErrorsWithTimings(
+        result.response,
+        result.timings,
+        Date.now() - prerenderStart,
+      );
       return result;
     }
     if (lastResult) {
@@ -436,6 +482,11 @@ export class Prerenderer {
           `module prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
         );
       }
+      Prerenderer.decorateRenderErrorsWithTimings(
+        lastResult.response,
+        lastResult.timings,
+        Date.now() - prerenderStart,
+      );
       return lastResult;
     }
     throw new Error(`module prerender attempts exhausted for ${url}`);
@@ -461,8 +512,9 @@ export class Prerenderer {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
+    let commandStart = Date.now();
     try {
-      return await this.#renderRunner.runCommandAttempt({
+      let result = await this.#renderRunner.runCommandAttempt({
         affinityType: 'user',
         affinityValue: userId,
         auth,
@@ -470,6 +522,12 @@ export class Prerenderer {
         commandInput,
         opts,
       });
+      Prerenderer.decorateRenderErrorsWithTimings(
+        result.response,
+        result.timings,
+        Date.now() - commandStart,
+      );
+      return result;
     } catch (e) {
       log.error(`command run attempt failed (user ${userId})`, e);
       throw e;
@@ -504,6 +562,7 @@ export class Prerenderer {
       types,
       opts,
     } = this.#gateClearCache(rawArgs);
+    let prerenderStart = Date.now();
     let attemptOptions = renderOptions;
     let lastResult:
       | {
@@ -582,9 +641,19 @@ export class Prerenderer {
           )} for ${url}`,
         );
       }
+      Prerenderer.decorateRenderErrorsWithTimings(
+        result.response,
+        result.timings,
+        Date.now() - prerenderStart,
+      );
       return result;
     }
     if (lastResult) {
+      Prerenderer.decorateRenderErrorsWithTimings(
+        lastResult.response,
+        lastResult.timings,
+        Date.now() - prerenderStart,
+      );
       return lastResult;
     }
     throw new Error(`visit prerender attempts exhausted for ${url}`);
