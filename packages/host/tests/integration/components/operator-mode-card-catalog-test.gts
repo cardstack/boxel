@@ -472,7 +472,12 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       )?.innerText.includes('Searching…'),
     );
     assert.dom(`[data-test-search-label]`).containsText('Searching…');
-    await settled();
+    await waitUntil(() => {
+      let label = (
+        document.querySelector('[data-test-search-label]') as HTMLElement
+      )?.innerText;
+      return label && !label.includes('Searching…') && label.includes('result');
+    });
 
     // Search is now full-text on card markdown content; Author/mark has
     // firstName "Mark" which appears in its rendered markdown.
@@ -923,6 +928,9 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await click(`[data-test-open-search-field]`);
     await fillIn(`[data-test-search-field]`, 'Mark');
+    await waitFor(
+      `[data-test-search-result="${testRealmURL}Author/mark"]`,
+    );
     assert.dom(`[data-test-search-sheet-section-header]`).exists();
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
