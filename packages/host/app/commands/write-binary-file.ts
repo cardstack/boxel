@@ -86,7 +86,7 @@ export default class WriteBinaryFileCommand extends HostBaseCommand<
     }
 
     let bytes = base64ToUint8Array(input.base64Content);
-    let blob = new Blob([bytes.buffer as ArrayBuffer]);
+    let blob = new Blob([bytes as any]);
 
     let clientRequestId = `binary:${uuidv4()}`;
     this.cardService.clientRequestIds.add(clientRequestId);
@@ -102,9 +102,30 @@ export default class WriteBinaryFileCommand extends HostBaseCommand<
     });
 
     if (!response.ok) {
-      let errorMessage = `Could not write binary file ${finalUrl}, status ${response.status}: ${response.statusText} - ${await response.text()}`;
-      console.error(errorMessage);
-      throw new Error(errorMessage);
+      const MAX_RESPONSE_TEXT_LENGTH = 500;
+      let responseText: string;
+      try {
+        let rawText = await response.text();
+        responseText =
+          rawText.length > MAX_RESPONSE_TEXT_LENGTH
+            ? rawText.slice(0, MAX_RESPONSE_TEXT_LENGTH) +
+              `… (${rawText.length} chars total)`
+            : rawText;
+      } catch {
+        responseText = '(unable to read response body)';
+      }
+      let wafRule = response.headers.get('x-blocked-by-waf-rule');
+      let details = [
+        `[WriteBinaryFile] Failed to write ${finalUrl}`,
+        `Status: ${response.status} ${response.statusText}`,
+        `File size: ${bytes.byteLength} bytes`,
+        wafRule ? `WAF rule: ${wafRule}` : null,
+        `Response: ${responseText}`,
+      ]
+        .filter(Boolean)
+        .join(' | ');
+      console.error(details);
+      throw new Error(details);
     }
 
     let commandModule = await this.loadCommandModule();
