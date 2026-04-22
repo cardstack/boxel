@@ -12,6 +12,7 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import SourceCode from '@cardstack/boxel-icons/source-code';
 
@@ -695,14 +696,16 @@ export class SubmissionWorkflowCard extends CardDef {
                   {{#if (eq step.key 'merge-catalog')}}
                     {{#if this.catalogListingUrl}}
                       <div class='sw-step-detail sw-catalog-link'>
-                        <a
-                          href={{this.catalogListingUrl}}
+                        <BoxelButton
+                          @as='anchor'
+                          @href={{this.catalogListingUrl}}
+                          @kind='primary'
+                          @size='small'
                           target='_blank'
                           rel='noopener noreferrer'
-                          class='sw-view-in-catalog'
                         >
                           View listing in catalog
-                        </a>
+                        </BoxelButton>
                       </div>
                     {{/if}}
                   {{/if}}
@@ -1390,19 +1393,6 @@ export class SubmissionWorkflowCard extends CardDef {
         /* ── Catalog link ── */
         .sw-catalog-link {
           margin-top: 8px;
-        }
-        .sw-view-in-catalog {
-          display: inline-block;
-          padding: 8px 16px;
-          background: var(--boxel-highlight);
-          color: white;
-          border-radius: 6px;
-          text-decoration: none;
-          font-size: 13px;
-          font-weight: 600;
-        }
-        .sw-view-in-catalog:hover {
-          opacity: 0.9;
         }
 
         /* ── Responsive ── */
