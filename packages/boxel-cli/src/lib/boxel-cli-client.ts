@@ -17,6 +17,7 @@ import { write as coreWrite, type WriteResult } from '../commands/file/write';
 import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { pull as realmPull } from '../commands/realm/pull';
 import { sync as realmSync, type SyncResult } from '../commands/realm/sync';
+import { waitForReady as coreWaitForReady } from '../commands/realm/wait-for-ready';
 import { getProfileManager, type ProfileManager } from './profile-manager';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
@@ -328,28 +329,10 @@ export class BoxelCLIClient {
     realmUrl: string,
     timeoutMs = 30_000,
   ): Promise<WaitForReadyResult> {
-    let readinessUrl = `${ensureTrailingSlash(realmUrl)}_readiness-check`;
-    let startedAt = Date.now();
-
-    while (Date.now() - startedAt < timeoutMs) {
-      try {
-        let response = await this.pm.authedRealmFetch(readinessUrl, {
-          method: 'GET',
-          headers: { Accept: MIME.JSON },
-        });
-        if (response.ok) {
-          return { ready: true };
-        }
-      } catch {
-        // retry
-      }
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-
-    return {
-      ready: false,
-      error: `Realm not ready after ${timeoutMs}ms: ${readinessUrl}`,
-    };
+    return coreWaitForReady(realmUrl, {
+      timeoutMs,
+      profileManager: this.pm,
+    });
   }
 
   /**
