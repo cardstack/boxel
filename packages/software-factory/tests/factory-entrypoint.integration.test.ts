@@ -81,7 +81,7 @@ function createTempProfileHome(options: {
 }
 
 module('factory-entrypoint integration', function () {
-  test('factory:go package script prints a structured JSON summary', async function (assert) {
+  test('factory:go --debug prints a structured JSON summary', async function (assert) {
     let canonicalTargetRealmUrl: string;
     let targetRealmUrl: string;
     let createdCardPaths = new Set<string>();
@@ -279,6 +279,7 @@ module('factory-entrypoint integration', function () {
           targetRealmUrl,
           '--realm-server-url',
           `${origin}/`,
+          '--debug',
         ],
         {
           cwd: packageRoot,

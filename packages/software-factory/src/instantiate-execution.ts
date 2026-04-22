@@ -712,11 +712,12 @@ async function defaultInstantiateCard(
     commandInput,
   );
 
-  // Log status/error metadata only. The serialized `response.result` can
-  // contain card attributes (user data) and bloats logs when the tool is
-  // called repeatedly mid-turn, so it stays out of the default log stream.
-  log.info(
-    `run-command response for ${cardName}: status=${response.status}, error=${response.error}`,
+  // The serialized `response.result` can contain card attributes (user
+  // data) and bloats logs when the tool is called repeatedly mid-turn,
+  // so it stays out of the default log stream. --debug raises the logger
+  // level to see the full body.
+  log.debug(
+    `run-command response for ${cardName}: status=${response.status}, error=${response.error}, result=${response.result}`,
   );
 
   if (response.status !== 'ready') {
