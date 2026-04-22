@@ -35,6 +35,7 @@ import type { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 
 import {
   setupLocalIndexing,
+  addSkillToAiAssistant,
   setupOnSave,
   setupAuthEndpoints,
   setupUserSubscription,
@@ -2860,16 +2861,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
 
     // First, let's add some skills to the current room
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await waitFor('[data-test-skill-menu]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(`[data-test-card-catalog-item="${testRealmURL}Skill/example"]`);
-    await click('[data-test-card-catalog-go-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(
-      `[data-test-card-catalog-item="${testRealmURL}Skill/example2"]`,
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/example`);
+    await addSkillToAiAssistant(`${testRealmURL}Skill/example2`);
 
     await waitUntil(
       () =>

@@ -28,6 +28,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import {
+  addSkillToAiAssistant,
   envSkillId,
   testRealmURL,
   setupCardLogs,
@@ -282,19 +283,23 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     });
   });
 
-  async function setCardInOperatorModeState(
-    cardURL?: string,
-    format: 'isolated' | 'edit' = 'isolated',
-  ) {
-    await operatorModeStateService.restore({
-      stacks: cardURL ? [[{ id: cardURL, format }]] : [[]],
+  async function renderAiAssistantPanel(id?: string) {
+    operatorModeStateService.restore({
+      stacks: id ? [[{ id, format: 'isolated' }]] : [[]],
+      aiAssistantOpen: true,
     });
-  }
-
-  async function openAiAssistant(): Promise<string> {
-    await waitFor('[data-test-open-ai-assistant]');
-    await click('[data-test-open-ai-assistant]');
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
     await waitFor('[data-test-room-settled]');
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-active-skills-count]')
+          ?.textContent?.trim() === '1 Skill',
+    );
     let roomId = document
       .querySelector('[data-test-room]')
       ?.getAttribute('data-test-room');
@@ -304,37 +309,15 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     return roomId;
   }
 
-  async function renderAiAssistantPanel(id?: string) {
-    await setCardInOperatorModeState(id);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template><OperatorMode @onClose={{noop}} /></template>
-      },
-    );
-    let roomId = await openAiAssistant();
-    return roomId;
-  }
-
   test('same skill card added twice with no changes results in no-op', async function (assert) {
     const roomId = await renderAiAssistantPanel(
       `${testRealmURL}Person/fadhlan`,
     );
 
-    await waitFor('[data-test-room-settled]');
-    await waitUntil(
-      () =>
-        document
-          .querySelector('[data-test-active-skills-count]')
-          ?.textContent?.trim() === '1 Skill',
-    );
     assert.dom('[data-test-active-skills-count]').containsText('1 Skill');
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     assert.dom('[data-test-skill-menu]').containsText('Skills: 1 of 1 active');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/example`);
     await waitUntil(() =>
       document
         .querySelector('[data-test-skill-menu]')
@@ -384,19 +367,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
   test('skill pill menu opens the skill card', async function (assert) {
     await renderAiAssistantPanel();
-    await waitFor('[data-test-room-settled]');
 
     let skillId = `${testRealmURL}Skill/example`;
-
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(`[data-test-card-catalog-item="${skillId}"]`);
-    await click('[data-test-card-catalog-go-button]');
-    await waitUntil(() =>
-      Boolean(
-        document.querySelector(`[data-test-skill-options-button="${skillId}"]`),
-      ),
-    );
+    await addSkillToAiAssistant(skillId);
 
     assert.false(
       operatorModeStateService.getOpenCardIds().includes(skillId),
@@ -418,12 +391,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
   test('skill pill menu opens the skill card while in code mode', async function (assert) {
     await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
 
     let skillId = `${testRealmURL}Skill/example`;
-    await click(`[data-test-card-catalog-item="${skillId}"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(skillId);
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
@@ -453,22 +423,8 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     const roomId1 = await renderAiAssistantPanel(
       `${testRealmURL}Skill/example`,
     );
-
-    await waitFor('[data-test-room-settled]');
-    await waitUntil(
-      () =>
-        document
-          .querySelector('[data-test-active-skills-count]')
-          ?.textContent?.trim() === '1 Skill',
-    );
-    assert.dom('[data-test-active-skills-count]').containsText('1 Skill');
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    assert.dom('[data-test-skill-menu]').containsText('Skills: 1 of 1 active');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    const skillId = `${testRealmURL}Skill/example`;
+    await addSkillToAiAssistant(skillId);
     await fillIn(
       '[data-test-boxel-input-id="ai-chat-input"]',
       'Upload the skill cards and command definitions',
@@ -491,12 +447,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     }
 
     // Add the same skill card without changes
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(skillId);
     await fillIn(
       '[data-test-boxel-input-id="ai-chat-input"]',
       'Use the previous command definition',
@@ -553,12 +504,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     }
 
     // Add the skill card with modified command
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(skillId);
     await fillIn(
       '[data-test-boxel-input-id="ai-chat-input"]',
       'Change the command',
@@ -624,11 +570,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     assert.dom('[data-test-active-skills-count]').containsText('1 Skill');
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     assert.dom('[data-test-skill-menu]').containsText('Skills: 1 of 1 active');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/example`);
     await fillIn(
       '[data-test-boxel-input-id="ai-chat-input"]',
       'Upload the skill cards and command definitions',
@@ -719,12 +661,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
   test('updated skill card instructions result in new event and updated room state when sending message', async function (assert) {
     const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
 
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/example`);
 
     const initialRoomStateSkillsJson = getRoomState(
       roomId,
@@ -800,12 +737,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
   test('updated skill card instructions result in new event and updated room state when command is completing', async function (assert) {
     const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
 
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/example`);
 
     const initialRoomStateSkillsJson = getRoomState(
       roomId,
@@ -900,12 +832,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
   test('updated skill card instructions result in new event and updated room state when code patch is completing', async function (assert) {
     const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
 
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/example`);
 
     const initialRoomStateSkillsJson = getRoomState(
       roomId,
@@ -993,12 +920,7 @@ ${REPLACE_MARKER}
   test('updated command definition results in new event and updated room state', async function (assert) {
     const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
 
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/example`);
 
     const initialRoomStateSkillsJson = getRoomState(
       roomId,
@@ -1139,12 +1061,7 @@ ${REPLACE_MARKER}
   test('adding skill card results in new command definitions being added but not duplicated', async function (assert) {
     const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
 
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/example`);
     await click('[data-test-send-message-btn]');
     await click('[data-test-pill-menu-button]');
 
@@ -1168,12 +1085,7 @@ ${REPLACE_MARKER}
       'placeholder is not present',
     );
     // Attach the second skill card
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/example2"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/example2`);
     await click('[data-test-send-message-btn]');
     const finalRoomStateSkillsJson = getRoomState(
       roomId,

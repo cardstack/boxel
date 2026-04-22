@@ -6,7 +6,7 @@ import {
   visit,
   settled,
 } from '@ember/test-helpers';
-import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
+import { fillIn, findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -1989,4 +1989,28 @@ export async function verifyJSONWithUUIDInFolder(
       'file name shape not as expected when checking for [uuid].[extension]',
     );
   }
+}
+
+export async function addSkillToAiAssistant(
+  skillCardId: string,
+  search?: string,
+) {
+  if (!document.querySelector('[data-test-skill-menu] [data-test-pill-menu-add-button]')) {
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+  }
+  await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+  if (search) {
+    await fillIn('[data-test-search-field]', search);
+  }
+  await click(`[data-test-card-catalog-item="${skillCardId}"]`);
+  await click('[data-test-card-catalog-go-button]');
+  await waitUntil(
+    () =>
+      Boolean(
+        document.querySelector(
+          `[data-test-skill-options-button="${skillCardId}"]`,
+        ),
+      ),
+    { timeoutMessage: `Timed out waiting for skill options button for "${skillCardId}"` },
+  );
 }

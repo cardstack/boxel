@@ -28,6 +28,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
+  addSkillToAiAssistant,
   setupLocalIndexing,
   setupOnSave,
   setupRealmCacheTeardown,
@@ -349,15 +350,7 @@ ${REPLACE_MARKER}\n\`\`\``;
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
 
-    // open skill menu
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-
-    // add useful-commands skill, which includes the switch-submode command
-    await click(
-      `[data-test-card-catalog-item="${testRealmURL}Skill/useful-commands"]`,
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/useful-commands`);
 
     // there are 3 patches in the message
     // 1. hello.txt: Hello, world! -> Hi, world!
@@ -612,15 +605,7 @@ ${REPLACE_MARKER}\n\`\`\``;
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
 
-    // open skill menu
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-
-    // add useful-commands skill, which includes the switch-submode command
-    await click(
-      `[data-test-card-catalog-item="${testRealmURL}Skill/useful-commands"]`,
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/useful-commands`);
 
     // there are 3 patches in the message
     // 1. hello.txt: Hello, world! -> Hi, world! # will apply
