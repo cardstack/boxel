@@ -69,6 +69,7 @@ export async function startTestRealmServer(options?: {
     matrixURL,
     permissions: {
       '*': ['read', 'write'],
+      [`@${TEST_USERNAME}:localhost`]: ['read', 'write', 'realm-owner'],
     },
     prerenderer: noopPrerenderer,
   });
