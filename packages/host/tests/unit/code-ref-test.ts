@@ -134,7 +134,8 @@ module('code-ref', function (hooks) {
             adoptsFrom: {
               type: 'ancestorOf',
               card: {
-                module: `${testRealmURL}code-ref-test-1` as RealmResourceIdentifier,
+                module:
+                  `${testRealmURL}code-ref-test-1` as RealmResourceIdentifier,
                 name: 'TestCard1',
               },
             },
@@ -144,7 +145,8 @@ module('code-ref', function (hooks) {
               adoptsFrom: {
                 type: 'fieldOf',
                 card: {
-                  module: `${testRealmURL}code-ref-test-3` as RealmResourceIdentifier,
+                  module:
+                    `${testRealmURL}code-ref-test-3` as RealmResourceIdentifier,
                   name: 'TestCard3',
                 },
                 field: 'someField',

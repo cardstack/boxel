@@ -16,7 +16,12 @@ import stringify from 'safe-stable-stringify';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
-import { Deferred, baseRealm, skillCardRef, type RealmResourceIdentifier } from '@cardstack/runtime-common';
+import {
+  Deferred,
+  baseRealm,
+  skillCardRef,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_ACTIVE_LLM,

@@ -311,7 +311,8 @@ module('Integration | commands | transform-cards', function (hooks) {
         },
       },
       commandRef: {
-        module: `${testRealmURL}uppercase-name-command` as RealmResourceIdentifier,
+        module:
+          `${testRealmURL}uppercase-name-command` as RealmResourceIdentifier,
         name: 'default',
       },
     });
@@ -351,7 +352,8 @@ module('Integration | commands | transform-cards', function (hooks) {
         },
       },
       commandRef: {
-        module: `${testRealmURL}add-metadata-command` as RealmResourceIdentifier,
+        module:
+          `${testRealmURL}add-metadata-command` as RealmResourceIdentifier,
         name: 'default',
       },
     });
@@ -468,7 +470,8 @@ module('Integration | commands | transform-cards', function (hooks) {
           },
         },
         commandRef: {
-          module: `${testRealmURL}non-existent-command` as RealmResourceIdentifier,
+          module:
+            `${testRealmURL}non-existent-command` as RealmResourceIdentifier,
           name: 'default',
         },
       });

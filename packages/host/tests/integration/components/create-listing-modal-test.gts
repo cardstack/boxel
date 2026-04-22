@@ -25,7 +25,10 @@ module('Integration | components | create-listing-modal', function (hooks) {
     );
 
     ctx.operatorModeStateService.showCreateListingModal({
-      codeRef: { module: `${testRealmURL}pet` as RealmResourceIdentifier, name: 'Pet' },
+      codeRef: {
+        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        name: 'Pet',
+      },
       targetRealm: testRealmURL,
       declarationKind: 'card',
     });
@@ -46,7 +49,10 @@ module('Integration | components | create-listing-modal', function (hooks) {
     );
 
     ctx.operatorModeStateService.showCreateListingModal({
-      codeRef: { module: `${testRealmURL}pet` as RealmResourceIdentifier, name: 'Pet' },
+      codeRef: {
+        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        name: 'Pet',
+      },
       targetRealm: testRealmURL,
       declarationKind: 'card',
     });
@@ -66,7 +72,10 @@ module('Integration | components | create-listing-modal', function (hooks) {
     );
 
     ctx.operatorModeStateService.showCreateListingModal({
-      codeRef: { module: `${testRealmURL}pet` as RealmResourceIdentifier, name: 'Pet' },
+      codeRef: {
+        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        name: 'Pet',
+      },
       targetRealm: testRealmURL,
       declarationKind: 'card',
     });
@@ -84,7 +93,10 @@ module('Integration | components | create-listing-modal', function (hooks) {
     );
 
     ctx.operatorModeStateService.showCreateListingModal({
-      codeRef: { module: `${testRealmURL}pet` as RealmResourceIdentifier, name: 'Pet' },
+      codeRef: {
+        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        name: 'Pet',
+      },
       targetRealm: testRealmURL,
       declarationKind: 'card',
     });
@@ -104,7 +116,10 @@ module('Integration | components | create-listing-modal', function (hooks) {
     );
 
     ctx.operatorModeStateService.showCreateListingModal({
-      codeRef: { module: `${testRealmURL}pet` as RealmResourceIdentifier, name: 'Pet' },
+      codeRef: {
+        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        name: 'Pet',
+      },
       targetRealm: testRealmURL,
       openCardIds: [`${testRealmURL}Pet/mango`],
       declarationKind: 'card',
@@ -137,7 +152,10 @@ module('Integration | components | create-listing-modal', function (hooks) {
     );
 
     ctx.operatorModeStateService.showCreateListingModal({
-      codeRef: { module: `${testRealmURL}pet` as RealmResourceIdentifier, name: 'Pet' },
+      codeRef: {
+        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        name: 'Pet',
+      },
       targetRealm: testRealmURL,
       openCardIds: [`${testRealmURL}Pet/mango`],
       declarationKind: 'card',
@@ -166,7 +184,10 @@ module('Integration | components | create-listing-modal', function (hooks) {
     );
 
     ctx.operatorModeStateService.showCreateListingModal({
-      codeRef: { module: `${testRealmURL}pet` as RealmResourceIdentifier, name: 'PetName' },
+      codeRef: {
+        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        name: 'PetName',
+      },
       targetRealm: testRealmURL,
       declarationKind: 'field',
     });

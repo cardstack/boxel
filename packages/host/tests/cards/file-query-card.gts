@@ -1,3 +1,5 @@
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
+
 import {
   contains,
   linksToMany,
@@ -6,8 +8,6 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { FileDef } from 'https://cardstack.com/base/file-api';
 import StringField from 'https://cardstack.com/base/string';
-
-import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
 
 const fileSearchQuery = {
   filter: {

@@ -88,7 +88,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   test('filter on', async function (assert) {
     let filter = {
-      on: { module: `${testRealmURL}booking` as RealmResourceIdentifier, name: 'Booking' },
+      on: {
+        module: `${testRealmURL}booking` as RealmResourceIdentifier,
+        name: 'Booking',
+      },
       eq: { booker: 'Arthur' },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
@@ -102,7 +105,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   test('filter by type', async function (assert) {
     let filter = {
-      type: { module: `${testRealmURL}booking` as RealmResourceIdentifier, name: 'Booking' },
+      type: {
+        module: `${testRealmURL}booking` as RealmResourceIdentifier,
+        name: 'Booking',
+      },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
     assert.deepEqual(suggestions, [
@@ -117,11 +123,17 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
     let filter = {
       every: [
         {
-          on: { module: `${testRealmURL}article` as RealmResourceIdentifier, name: 'Article' },
+          on: {
+            module: `${testRealmURL}article` as RealmResourceIdentifier,
+            name: 'Article',
+          },
           eq: { author: 'Kafka' },
         },
         {
-          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
           eq: { author: 'Kafka' },
         },
       ],
@@ -143,11 +155,17 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
     let filter = {
       any: [
         {
-          on: { module: `${testRealmURL}article` as RealmResourceIdentifier, name: 'Article' },
+          on: {
+            module: `${testRealmURL}article` as RealmResourceIdentifier,
+            name: 'Article',
+          },
           eq: { author: 'Kafka' },
         },
         {
-          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
           eq: { author: 'Kafka' },
         },
       ],
@@ -159,13 +177,24 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   test('filter with every with type and on', async function (assert) {
     let filter = {
       every: [
-        { type: { module: `${testRealmURL}booking` as RealmResourceIdentifier, name: 'Booking' } },
         {
-          on: { module: `${testRealmURL}article` as RealmResourceIdentifier, name: 'Article' },
+          type: {
+            module: `${testRealmURL}booking` as RealmResourceIdentifier,
+            name: 'Booking',
+          },
+        },
+        {
+          on: {
+            module: `${testRealmURL}article` as RealmResourceIdentifier,
+            name: 'Article',
+          },
           eq: { author: 'Kafka' },
         },
         {
-          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
           eq: { author: 'Kafka' },
         },
       ],
@@ -189,7 +218,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   test('filter by not', async function (assert) {
     let filter = {
-      on: { module: `${testRealmURL}article` as RealmResourceIdentifier, name: 'Article' },
+      on: {
+        module: `${testRealmURL}article` as RealmResourceIdentifier,
+        name: 'Article',
+      },
       not: { eq: { author: 'Carl' } },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
@@ -203,7 +235,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   test('filter by range', async function (assert) {
     let filter = {
-      on: { module: `${testRealmURL}post` as RealmResourceIdentifier, name: 'Post' },
+      on: {
+        module: `${testRealmURL}post` as RealmResourceIdentifier,
+        name: 'Post',
+      },
       range: { views: { lte: 10, gt: 5 }, 'author.posts': { gte: 1 } },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
@@ -217,7 +252,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   test('filter by card instance', async function (assert) {
     let filter = {
-      type: { module: `${baseRealm.url}card-api` as RealmResourceIdentifier, name: 'CardDef' },
+      type: {
+        module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+        name: 'CardDef',
+      },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
     assert.deepEqual(suggestions, [
@@ -240,7 +278,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
         { eq: { cardTitle: 'Card 1' } },
         { not: { eq: { 'author.firstName': 'Cardy' } } },
       ],
-      type: { module: `${baseRealm.url}card-api` as RealmResourceIdentifier, name: 'CardDef' },
+      type: {
+        module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+        name: 'CardDef',
+      },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
     assert.deepEqual(suggestions, [
@@ -263,7 +304,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
     let filter = {
       every: [
         {
-          type: { module: `${baseRealm.url}card-api` as RealmResourceIdentifier, name: 'CardDef' },
+          type: {
+            module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+            name: 'CardDef',
+          },
         },
         {
           on: {
@@ -300,7 +344,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   test('filter with on specifying multiSelect option', async function (assert) {
     let filter = {
-      on: { module: `${testRealmURL}booking` as RealmResourceIdentifier, name: 'Booking' },
+      on: {
+        module: `${testRealmURL}booking` as RealmResourceIdentifier,
+        name: 'Booking',
+      },
       eq: { booker: 'Arthur' },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, {
@@ -317,7 +364,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   test('filter with on but checking for "an"', async function (assert) {
     let filter = {
-      on: { module: `${testRealmURL}article` as RealmResourceIdentifier, name: 'Article' },
+      on: {
+        module: `${testRealmURL}article` as RealmResourceIdentifier,
+        name: 'Article',
+      },
       eq: { author: 'Kafka' },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
@@ -332,7 +382,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   test(`displays the right title even CodeRef is 'fieldOf' codeRef`, async function (assert) {
     let filter = {
       type: {
-        card: { module: `${testRealmURL}post` as RealmResourceIdentifier, name: 'Post' },
+        card: {
+          module: `${testRealmURL}post` as RealmResourceIdentifier,
+          name: 'Post',
+        },
         type: 'fieldOf',
         field: 'article',
       },
@@ -350,7 +403,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   test(`displays the right title even CodeRef is 'ancestorOf' codeRef`, async function (assert) {
     let filter = {
       type: {
-        card: { module: `${testRealmURL}blog-post` as RealmResourceIdentifier, name: 'BlogPost' },
+        card: {
+          module: `${testRealmURL}blog-post` as RealmResourceIdentifier,
+          name: 'BlogPost',
+        },
         type: 'ancestorOf',
       },
       eq: { 'post.title': 'Kafka' },

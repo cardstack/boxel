@@ -763,7 +763,8 @@ module('Acceptance | Commands tests', function (hooks) {
         {
           id: '29e8addb-197b-4d6d-b0a9-547959bf7c96',
           name: buildCommandFunctionName({
-            module: `${testRealmURL}search-and-open-card-command` as RealmResourceIdentifier,
+            module:
+              `${testRealmURL}search-and-open-card-command` as RealmResourceIdentifier,
             name: 'default',
           }),
           arguments: JSON.stringify({
@@ -841,7 +842,8 @@ module('Acceptance | Commands tests', function (hooks) {
         {
           id: '29e8addb-197b-4d6d-b0a9-547959bf7c96',
           name: buildCommandFunctionName({
-            module: `${testRealmURL}search-and-open-card-command` as RealmResourceIdentifier,
+            module:
+              `${testRealmURL}search-and-open-card-command` as RealmResourceIdentifier,
             name: 'default',
           }),
           arguments: JSON.stringify({

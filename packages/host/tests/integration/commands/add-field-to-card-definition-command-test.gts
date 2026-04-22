@@ -77,7 +77,8 @@ module(
         fieldName: 'lastName',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module: 'https://cardstack.com/base/string' as RealmResourceIdentifier,
+          module:
+            'https://cardstack.com/base/string' as RealmResourceIdentifier,
           name: 'default',
         },
         fieldType: 'contains',
@@ -116,7 +117,8 @@ module(
         fieldDefinitionType: 'field',
         fieldType: 'contains',
         fieldRef: {
-          module: 'https://cardstack.com/base/string' as RealmResourceIdentifier,
+          module:
+            'https://cardstack.com/base/string' as RealmResourceIdentifier,
           name: 'default',
         },
         incomingRelativeTo: undefined,

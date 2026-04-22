@@ -6,7 +6,10 @@ import { module, test } from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
 import type { Realm } from '@cardstack/runtime-common';
-import { baseRealm, type RealmResourceIdentifier } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import { isSingleCardDocument } from '@cardstack/runtime-common/document-types';
 import {
   cardSrc,
@@ -980,7 +983,8 @@ module('Integration | realm', function (hooks) {
     let { data: cards } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `http://localhost:4202/test/person` as RealmResourceIdentifier,
+          module:
+            `http://localhost:4202/test/person` as RealmResourceIdentifier,
           name: 'Person',
         },
         eq: { firstName: 'Van Gogh' },

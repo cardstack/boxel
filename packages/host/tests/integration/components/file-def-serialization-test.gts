@@ -1,7 +1,11 @@
 import { module, test } from 'qunit';
 
 import type { LooseSingleFileMetaDocument } from '@cardstack/runtime-common';
-import { baseRealm, isSingleFileMetaDocument, type RealmResourceIdentifier } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  isSingleFileMetaDocument,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 
 import {
   setupBaseRealm,

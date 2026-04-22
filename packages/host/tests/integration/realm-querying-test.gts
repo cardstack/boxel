@@ -527,7 +527,8 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}type-examples` as RealmResourceIdentifier,
+            module:
+              `${testModuleRealm}type-examples` as RealmResourceIdentifier,
             name: 'TypeExamples',
           },
         },
@@ -542,7 +543,8 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}type-examples` as RealmResourceIdentifier,
+            module:
+              `${testModuleRealm}type-examples` as RealmResourceIdentifier,
             name: 'TypeExamples',
           },
         },
@@ -556,7 +558,8 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}type-examples` as RealmResourceIdentifier,
+            module:
+              `${testModuleRealm}type-examples` as RealmResourceIdentifier,
             name: 'TypeExamples',
           },
         },
@@ -570,7 +573,8 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}type-examples` as RealmResourceIdentifier,
+            module:
+              `${testModuleRealm}type-examples` as RealmResourceIdentifier,
             name: 'TypeExamples',
           },
         },
@@ -598,7 +602,8 @@ module(`Integration | realm querying`, function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${testModuleRealm}file-query-card` as RealmResourceIdentifier,
+                  module:
+                    `${testModuleRealm}file-query-card` as RealmResourceIdentifier,
                   name: 'FileQueryCard',
                 },
               },
@@ -613,7 +618,10 @@ module(`Integration | realm querying`, function (hooks) {
   test(`can search for cards by using the 'eq' filter`, async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}post` as RealmResourceIdentifier, name: 'Post' },
+        on: {
+          module: `${testModuleRealm}post` as RealmResourceIdentifier,
+          name: 'Post',
+        },
         eq: { cardTitle: 'Card 1', cardDescription: 'Sample post' },
       },
     });
@@ -626,7 +634,10 @@ module(`Integration | realm querying`, function (hooks) {
   test(`can use 'eq' to find empty values`, async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}booking` as RealmResourceIdentifier, name: 'Booking' },
+        on: {
+          module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+          name: 'Booking',
+        },
         eq: { 'posts.author.lastName': null },
       },
     });
@@ -703,7 +714,10 @@ module(`Integration | realm querying`, function (hooks) {
   test(`can search for cards by using a computed field`, async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}post` as RealmResourceIdentifier, name: 'Post' },
+        on: {
+          module: `${testModuleRealm}post` as RealmResourceIdentifier,
+          name: 'Post',
+        },
         eq: { 'author.fullName': 'Carl Stack' },
       },
     });
@@ -716,7 +730,10 @@ module(`Integration | realm querying`, function (hooks) {
   test('can search for cards by using a linksTo field', async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}friend` as RealmResourceIdentifier, name: 'Friend' },
+        on: {
+          module: `${testModuleRealm}friend` as RealmResourceIdentifier,
+          name: 'Friend',
+        },
         eq: { 'friend.firstName': 'Mango' },
       },
     });
@@ -748,7 +765,10 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can search for file-meta entries by FileDef type', async function (assert) {
-    let fileDefRef = { module: `${baseRealm.url}card-api` as RealmResourceIdentifier, name: 'FileDef' };
+    let fileDefRef = {
+      module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+      name: 'FileDef',
+    };
     let result = (await queryEngine.searchCards({
       filter: {
         type: fileDefRef,
@@ -768,7 +788,10 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can search for file-meta entries by url', async function (assert) {
-    let fileDefRef = { module: `${baseRealm.url}card-api` as RealmResourceIdentifier, name: 'FileDef' };
+    let fileDefRef = {
+      module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+      name: 'FileDef',
+    };
     let targetUrl = `${testRealmURL}files/sample.txt`;
     let result = (await queryEngine.searchCards({
       filter: {
@@ -830,7 +853,10 @@ module(`Integration | realm querying`, function (hooks) {
   test('can handle a filter with double negatives', async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}post` as RealmResourceIdentifier, name: 'Post' },
+        on: {
+          module: `${testModuleRealm}post` as RealmResourceIdentifier,
+          name: 'Post',
+        },
         not: { not: { not: { eq: { 'author.firstName': 'Carl' } } } },
       },
     });
@@ -843,7 +869,10 @@ module(`Integration | realm querying`, function (hooks) {
   test('can filter by card type', async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        type: { module: `${testModuleRealm}article` as RealmResourceIdentifier, name: 'Article' },
+        type: {
+          module: `${testModuleRealm}article` as RealmResourceIdentifier,
+          name: 'Article',
+        },
       },
     });
     assert.deepEqual(
@@ -855,7 +884,10 @@ module(`Integration | realm querying`, function (hooks) {
     matching = (
       await queryEngine.searchCards({
         filter: {
-          type: { module: `${testModuleRealm}post` as RealmResourceIdentifier, name: 'Post' },
+          type: {
+            module: `${testModuleRealm}post` as RealmResourceIdentifier,
+            name: 'Post',
+          },
         },
       })
     ).data;
@@ -869,7 +901,10 @@ module(`Integration | realm querying`, function (hooks) {
   test(`can filter on a card's own fields using range`, async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}post` as RealmResourceIdentifier, name: 'Post' },
+        on: {
+          module: `${testModuleRealm}post` as RealmResourceIdentifier,
+          name: 'Post',
+        },
         range: {
           views: { lte: 10, gt: 5 },
           'author.posts': { gte: 1 },
@@ -886,7 +921,10 @@ module(`Integration | realm querying`, function (hooks) {
     {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
-          on: { module: `${testModuleRealm}booking` as RealmResourceIdentifier, name: 'Booking' },
+          on: {
+            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            name: 'Booking',
+          },
           range: {
             'posts.views': { gt: 10, lte: 16 },
             'posts.author.posts': { gte: 5, lt: 10 },
@@ -901,7 +939,10 @@ module(`Integration | realm querying`, function (hooks) {
     {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
-          on: { module: `${testModuleRealm}booking` as RealmResourceIdentifier, name: 'Booking' },
+          on: {
+            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            name: 'Booking',
+          },
           range: {
             'posts.views': { lte: 0 },
           },
@@ -917,7 +958,10 @@ module(`Integration | realm querying`, function (hooks) {
   test('can use an eq filter with a date field', async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}event` as RealmResourceIdentifier, name: 'Event' },
+        on: {
+          module: `${testModuleRealm}event` as RealmResourceIdentifier,
+          name: 'Event',
+        },
         eq: {
           date: '2024-10-30',
         },
@@ -932,7 +976,10 @@ module(`Integration | realm querying`, function (hooks) {
   test(`can filter on a nested field using 'eq'`, async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}post` as RealmResourceIdentifier, name: 'Post' },
+        on: {
+          module: `${testModuleRealm}post` as RealmResourceIdentifier,
+          name: 'Post',
+        },
         eq: { 'author.firstName': 'Carl' },
       },
     });
@@ -946,7 +993,10 @@ module(`Integration | realm querying`, function (hooks) {
     {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
-          on: { module: `${testModuleRealm}booking` as RealmResourceIdentifier, name: 'Booking' },
+          on: {
+            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            name: 'Booking',
+          },
           eq: { 'hosts.firstName': 'Arthur' },
         },
       });
@@ -959,7 +1009,10 @@ module(`Integration | realm querying`, function (hooks) {
     {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
-          on: { module: `${testModuleRealm}booking` as RealmResourceIdentifier, name: 'Booking' },
+          on: {
+            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            name: 'Booking',
+          },
           eq: { 'hosts.firstName': null },
         },
       });
@@ -968,7 +1021,10 @@ module(`Integration | realm querying`, function (hooks) {
     {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
-          on: { module: `${testModuleRealm}booking` as RealmResourceIdentifier, name: 'Booking' },
+          on: {
+            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            name: 'Booking',
+          },
           eq: {
             'posts.author.firstName': 'A',
             'posts.author.lastName': 'B',
@@ -984,7 +1040,10 @@ module(`Integration | realm querying`, function (hooks) {
     {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
-          on: { module: `${testModuleRealm}booking` as RealmResourceIdentifier, name: 'Booking' },
+          on: {
+            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            name: 'Booking',
+          },
           eq: {
             'hosts.firstName': 'Arthur',
             'posts.author.lastName': null,
@@ -1056,7 +1115,10 @@ module(`Integration | realm querying`, function (hooks) {
   test('can negate a filter', async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}article` as RealmResourceIdentifier, name: 'Article' },
+        on: {
+          module: `${testModuleRealm}article` as RealmResourceIdentifier,
+          name: 'Article',
+        },
         not: { eq: { 'author.firstName': 'Carl' } },
       },
     });
@@ -1078,7 +1140,10 @@ module(`Integration | realm querying`, function (hooks) {
             eq: { 'author.firstName': 'Cardy' },
           },
           {
-            on: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+            on: {
+              module: `${testModuleRealm}book` as RealmResourceIdentifier,
+              name: 'Book',
+            },
             eq: { 'author.firstName': 'Cardy' },
           },
         ],
@@ -1096,11 +1161,17 @@ module(`Integration | realm querying`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testModuleRealm}article` as RealmResourceIdentifier, name: 'Article' },
+          on: {
+            module: `${testModuleRealm}article` as RealmResourceIdentifier,
+            name: 'Article',
+          },
         },
       ],
       filter: {
-        type: { module: `${testModuleRealm}article` as RealmResourceIdentifier, name: 'Article' },
+        type: {
+          module: `${testModuleRealm}article` as RealmResourceIdentifier,
+          name: 'Article',
+        },
       },
     });
     assert.deepEqual(
@@ -1114,12 +1185,18 @@ module(`Integration | realm querying`, function (hooks) {
       sort: [
         {
           by: 'author.firstName',
-          on: { module: `${testModuleRealm}article` as RealmResourceIdentifier, name: 'Article' },
+          on: {
+            module: `${testModuleRealm}article` as RealmResourceIdentifier,
+            name: 'Article',
+          },
           direction: 'desc',
         },
       ],
       filter: {
-        type: { module: `${testModuleRealm}post` as RealmResourceIdentifier, name: 'Post' },
+        type: {
+          module: `${testModuleRealm}post` as RealmResourceIdentifier,
+          name: 'Post',
+        },
       },
     });
     assert.deepEqual(
@@ -1184,17 +1261,26 @@ module(`Integration | realm querying`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
           direction: 'asc',
         },
         {
           by: 'author.firstName',
-          on: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
           direction: 'desc',
         },
       ],
       filter: {
-        type: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+        type: {
+          module: `${testModuleRealm}book` as RealmResourceIdentifier,
+          name: 'Book',
+        },
       },
     });
     assert.deepEqual(
@@ -1213,15 +1299,24 @@ module(`Integration | realm querying`, function (hooks) {
       sort: [
         {
           by: 'editions',
-          on: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
         },
         {
           by: 'author.lastName',
-          on: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
         },
       ],
       filter: {
-        type: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+        type: {
+          module: `${testModuleRealm}book` as RealmResourceIdentifier,
+          name: 'Book',
+        },
       },
     });
     assert.deepEqual(
@@ -1240,11 +1335,17 @@ module(`Integration | realm querying`, function (hooks) {
       sort: [
         {
           by: 'pubDate',
-          on: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
         },
       ],
       filter: {
-        type: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+        type: {
+          module: `${testModuleRealm}book` as RealmResourceIdentifier,
+          name: 'Book',
+        },
       },
     });
     // note that sorting by nulls is problematic in that sqlite
@@ -1268,16 +1369,25 @@ module(`Integration | realm querying`, function (hooks) {
       sort: [
         {
           by: 'editions',
-          on: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
           direction: 'desc',
         },
         {
           by: 'author.lastName',
-          on: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
         },
       ],
       filter: {
-        type: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+        type: {
+          module: `${testModuleRealm}book` as RealmResourceIdentifier,
+          name: 'Book',
+        },
       },
     });
     assert.deepEqual(
@@ -1296,11 +1406,17 @@ module(`Integration | realm querying`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
         },
         {
           by: 'author.firstName',
-          on: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
           direction: 'desc',
         },
       ],
@@ -1339,18 +1455,27 @@ module(`Integration | realm querying`, function (hooks) {
       sort: [
         {
           by: 'author.firstName',
-          on: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
           direction: 'desc',
         },
       ],
       filter: {
         every: [
           {
-            on: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+            on: {
+              module: `${testModuleRealm}book` as RealmResourceIdentifier,
+              name: 'Book',
+            },
             not: { eq: { 'author.lastName': 'Aguilar' } },
           },
           {
-            on: { module: `${testModuleRealm}book` as RealmResourceIdentifier, name: 'Book' },
+            on: {
+              module: `${testModuleRealm}book` as RealmResourceIdentifier,
+              name: 'Book',
+            },
             eq: { editions: 10 },
           },
         ],
@@ -1388,7 +1513,10 @@ module(`Integration | realm querying`, function (hooks) {
   test(`can search on specific card by using 'contains' filter`, async function (assert) {
     let { data: personMatchingByTitle } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}person` as RealmResourceIdentifier, name: 'Person' },
+        on: {
+          module: `${testModuleRealm}person` as RealmResourceIdentifier,
+          name: 'Person',
+        },
         contains: { cardTitle: 'ca' },
       },
     });
@@ -1400,7 +1528,10 @@ module(`Integration | realm querying`, function (hooks) {
 
     let { data: dogMatchingByFirstName } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}dog` as RealmResourceIdentifier, name: 'Dog' },
+        on: {
+          module: `${testModuleRealm}dog` as RealmResourceIdentifier,
+          name: 'Dog',
+        },
         contains: { firstName: 'go' },
       },
     });
@@ -1414,7 +1545,10 @@ module(`Integration | realm querying`, function (hooks) {
   test(`can use 'contains' filter to find 'null' values`, async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}dog` as RealmResourceIdentifier, name: 'Dog' },
+        on: {
+          module: `${testModuleRealm}dog` as RealmResourceIdentifier,
+          name: 'Dog',
+        },
         contains: { cardTitle: null },
       },
     });

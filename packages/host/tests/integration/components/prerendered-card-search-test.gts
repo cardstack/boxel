@@ -413,7 +413,10 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
         },
       ],
     };
@@ -526,7 +529,10 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
         },
       ],
     };
@@ -632,7 +638,10 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
         },
       ],
     };
@@ -704,7 +713,10 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
         },
       ],
     };
@@ -775,7 +787,10 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
         },
       ],
     };
@@ -838,7 +853,10 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       sort: [
         {
           by: 'author.firstName',
-          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
           direction: 'asc',
         },
       ],
@@ -968,7 +986,10 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testRealmURL}book` as RealmResourceIdentifier, name: 'Book' },
+          on: {
+            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
         },
       ],
     };

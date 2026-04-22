@@ -330,9 +330,10 @@ module('Unit | index-writer', function (hooks) {
           } as LooseCardResource,
           search_doc: { name: 'Mango' },
           deps: [`${testRealmURL}person`],
-          types: [{ module: `./person` as RealmResourceIdentifier, name: 'Person' }, baseCardRef].map(
-            (i) => internalKeyFor(i, new URL(testRealmURL)),
-          ),
+          types: [
+            { module: `./person` as RealmResourceIdentifier, name: 'Person' },
+            baseCardRef,
+          ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
         },
       ],
     );
@@ -361,7 +362,10 @@ module('Unit | index-writer', function (hooks) {
       deps: new Set([`${testRealmURL}fancy-person`]),
       displayNames: ['Fancy Person', 'Person', 'Card'],
       types: [
-        { module: `./fancy-person` as RealmResourceIdentifier, name: 'FancyPerson' },
+        {
+          module: `./fancy-person` as RealmResourceIdentifier,
+          name: 'FancyPerson',
+        },
         { module: `./person` as RealmResourceIdentifier, name: 'Person' },
         baseCardRef,
       ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
@@ -399,9 +403,10 @@ module('Unit | index-writer', function (hooks) {
         },
         search_doc: { name: 'Mango' },
         deps: [`${testRealmURL}person`],
-        types: [{ module: `./person` as RealmResourceIdentifier, name: 'Person' }, baseCardRef].map((i) =>
-          internalKeyFor(i, new URL(testRealmURL)),
-        ),
+        types: [
+          { module: `./person` as RealmResourceIdentifier, name: 'Person' },
+          baseCardRef,
+        ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
       },
       'live version of the doc has not changed',
     );
@@ -438,7 +443,10 @@ module('Unit | index-writer', function (hooks) {
         search_doc: { name: 'Van Gogh' },
         deps: [`${testRealmURL}fancy-person`],
         types: [
-          { module: `./fancy-person` as RealmResourceIdentifier, name: 'FancyPerson' },
+          {
+            module: `./fancy-person` as RealmResourceIdentifier,
+            name: 'FancyPerson',
+          },
           { module: `./person` as RealmResourceIdentifier, name: 'Person' },
           baseCardRef,
         ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
@@ -480,7 +488,10 @@ module('Unit | index-writer', function (hooks) {
         search_doc: { name: 'Van Gogh' },
         deps: [`${testRealmURL}fancy-person`],
         types: [
-          { module: `./fancy-person` as RealmResourceIdentifier, name: 'FancyPerson' },
+          {
+            module: `./fancy-person` as RealmResourceIdentifier,
+            name: 'FancyPerson',
+          },
           { module: `./person` as RealmResourceIdentifier, name: 'Person' },
           baseCardRef,
         ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
@@ -490,12 +501,14 @@ module('Unit | index-writer', function (hooks) {
   });
 
   test('can copy index entries', async function (assert) {
-    let types = [{ module: `./person` as RealmResourceIdentifier, name: 'Person' }, baseCardRef].map((i) =>
-      internalKeyFor(i, new URL(testRealmURL)),
-    );
-    let destTypes = [{ module: `./person` as RealmResourceIdentifier, name: 'Person' }, baseCardRef].map(
-      (i) => internalKeyFor(i, new URL(testRealmURL2)),
-    );
+    let types = [
+      { module: `./person` as RealmResourceIdentifier, name: 'Person' },
+      baseCardRef,
+    ].map((i) => internalKeyFor(i, new URL(testRealmURL)));
+    let destTypes = [
+      { module: `./person` as RealmResourceIdentifier, name: 'Person' },
+      baseCardRef,
+    ].map((i) => internalKeyFor(i, new URL(testRealmURL2)));
     let modified = Date.now();
     let resource: CardResource = {
       id: `${testRealmURL}1` as RealmResourceIdentifier,
@@ -660,9 +673,10 @@ module('Unit | index-writer', function (hooks) {
   });
 
   test('error entry includes last known good state when available', async function (assert) {
-    let types = [{ module: `./person` as RealmResourceIdentifier, name: 'Person' }, baseCardRef].map((i) =>
-      internalKeyFor(i, new URL(testRealmURL)),
-    );
+    let types = [
+      { module: `./person` as RealmResourceIdentifier, name: 'Person' },
+      baseCardRef,
+    ].map((i) => internalKeyFor(i, new URL(testRealmURL)));
     let modified = Date.now();
     let resource: CardResource = {
       id: `${testRealmURL}1` as RealmResourceIdentifier,
@@ -1290,7 +1304,10 @@ module('Unit | index-writer', function (hooks) {
       baseCardRef,
     );
     let fancyPersonTypes = internalKeysFor(
-      { module: './fancy-person' as RealmResourceIdentifier, name: 'FancyPerson' },
+      {
+        module: './fancy-person' as RealmResourceIdentifier,
+        name: 'FancyPerson',
+      },
       { module: './person' as RealmResourceIdentifier, name: 'Person' },
       baseCardRef,
     );

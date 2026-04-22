@@ -151,7 +151,8 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+            module:
+              'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
             name: 'CardDef',
           },
           realmURL: 'http://test-realm/test/' as RealmIdentifier,
@@ -303,7 +304,8 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+              module:
+                'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
               name: 'CardDef',
             },
           },
@@ -386,7 +388,8 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4202/test/person' as RealmResourceIdentifier,
+              module:
+                'http://localhost:4202/test/person' as RealmResourceIdentifier,
               name: 'Person',
             },
           },
@@ -421,7 +424,8 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4202/test/pet' as RealmResourceIdentifier,
+              module:
+                'http://localhost:4202/test/pet' as RealmResourceIdentifier,
               name: 'Pet',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -484,7 +488,8 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4202/test/pet' as RealmResourceIdentifier,
+              module:
+                'http://localhost:4202/test/pet' as RealmResourceIdentifier,
               name: 'Pet',
             },
           },
@@ -577,7 +582,8 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4202/test/pet' as RealmResourceIdentifier,
+              module:
+                'http://localhost:4202/test/pet' as RealmResourceIdentifier,
               name: 'Pet',
             },
             realmURL: 'http://test-realm/test/' as RealmIdentifier,
@@ -864,7 +870,8 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/spec' as RealmResourceIdentifier,
+            module:
+              'https://cardstack.com/base/spec' as RealmResourceIdentifier,
             name: 'Spec',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -994,7 +1001,8 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/spec' as RealmResourceIdentifier,
+            module:
+              'https://cardstack.com/base/spec' as RealmResourceIdentifier,
             name: 'Spec',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -2263,7 +2271,8 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `http://localhost:4202/test/vendor` as RealmResourceIdentifier,
+              module:
+                `http://localhost:4202/test/vendor` as RealmResourceIdentifier,
               name: 'Vendor',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -2308,7 +2317,8 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `http://localhost:4202/test/chain` as RealmResourceIdentifier,
+                module:
+                  `http://localhost:4202/test/chain` as RealmResourceIdentifier,
                 name: 'Chain',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -2349,7 +2359,8 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `http://localhost:4202/test/chain` as RealmResourceIdentifier,
+                module:
+                  `http://localhost:4202/test/chain` as RealmResourceIdentifier,
                 name: 'Chain',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -2853,7 +2864,10 @@ module(`Integration | realm indexing`, function (hooks) {
             'cardInfo.theme': { links: { self: null } },
           },
           meta: {
-            adoptsFrom: { module: `${testModuleRealm}pet` as RealmResourceIdentifier, name: 'Pet' },
+            adoptsFrom: {
+              module: `${testModuleRealm}pet` as RealmResourceIdentifier,
+              name: 'Pet',
+            },
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Pet/mango.json`,
             ),
@@ -2889,7 +2903,10 @@ module(`Integration | realm indexing`, function (hooks) {
             'cardInfo.theme': { links: { self: null } },
           },
           meta: {
-            adoptsFrom: { module: `${testModuleRealm}pet` as RealmResourceIdentifier, name: 'Pet' },
+            adoptsFrom: {
+              module: `${testModuleRealm}pet` as RealmResourceIdentifier,
+              name: 'Pet',
+            },
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Pet/vanGogh.json`,
             ),
@@ -3149,7 +3166,8 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/spec' as RealmResourceIdentifier,
+            module:
+              'https://cardstack.com/base/spec' as RealmResourceIdentifier,
             name: 'Spec',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -3314,7 +3332,8 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'http://localhost:4202/test/friend' as RealmResourceIdentifier,
+            module:
+              'http://localhost:4202/test/friend' as RealmResourceIdentifier,
             name: 'Friend',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -3465,7 +3484,8 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4202/test/friend' as RealmResourceIdentifier,
+              module:
+                'http://localhost:4202/test/friend' as RealmResourceIdentifier,
               name: 'Friend',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -3516,7 +3536,8 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/friend' as RealmResourceIdentifier,
+                module:
+                  'http://localhost:4202/test/friend' as RealmResourceIdentifier,
                 name: 'Friend',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -3613,7 +3634,8 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4202/test/friend' as RealmResourceIdentifier,
+              module:
+                'http://localhost:4202/test/friend' as RealmResourceIdentifier,
               name: 'Friend',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -3664,7 +3686,8 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/friend' as RealmResourceIdentifier,
+                module:
+                  'http://localhost:4202/test/friend' as RealmResourceIdentifier,
                 name: 'Friend',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -3791,7 +3814,8 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4202/test/friend' as RealmResourceIdentifier,
+              module:
+                'http://localhost:4202/test/friend' as RealmResourceIdentifier,
               name: 'Friend',
             },
             lastModified: adapter.lastModifiedMap.get(

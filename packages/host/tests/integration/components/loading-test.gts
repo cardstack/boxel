@@ -1,7 +1,10 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type RealmResourceIdentifier } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -77,7 +80,8 @@ module('Integration | loading', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}card-with-broken-icon` as RealmResourceIdentifier,
+            module:
+              `${testRealmURL}card-with-broken-icon` as RealmResourceIdentifier,
             name: 'CardWithBrokenIcon',
           },
         },
