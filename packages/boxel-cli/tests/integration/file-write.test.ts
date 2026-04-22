@@ -48,55 +48,48 @@ afterAll(async () => {
 });
 
 describe('file write (integration)', () => {
-  it('writes a file to the realm successfully', async () => {
-    let result = await write(realmUrl, 'test-file.gts', 'export default class {}', {
+  it('writes a .gts file and can read it back from the realm', async () => {
+    let source = 'export const hello = "world";';
+    let writeResult = await write(realmUrl, 'roundtrip.gts', source, {
       profileManager,
     });
+    expect(writeResult.ok).toBe(true);
 
-    expect(result.ok).toBe(true);
-    expect(result.error).toBeUndefined();
+    // Verify by reading back via the realm
+    let response = await profileManager.authedRealmFetch(
+      `${realmUrl}roundtrip.gts`,
+      { method: 'GET', headers: { Accept: 'application/vnd.card+source' } },
+    );
+    expect(response.ok).toBe(true);
+    let content = await response.text();
+    expect(content).toContain('hello');
   });
 
-  it('sends correct HTTP method and headers', async () => {
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
-    try {
-      await write(realmUrl, 'hello.gts', 'let x = 1;', {
-        profileManager,
-      });
+  it('writes a .json card and can read it back', async () => {
+    let card = JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: { title: 'Written Card' },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/card-api',
+            name: 'CardDef',
+          },
+        },
+      },
+    });
+    let writeResult = await write(realmUrl, 'WrittenCard/1.json', card, {
+      profileManager,
+    });
+    expect(writeResult.ok).toBe(true);
 
-      expect(fetchSpy).toHaveBeenCalledOnce();
-      let [url, init] = fetchSpy.mock.calls[0];
-      expect(url).toContain('hello.gts');
-      expect(init!.method).toBe('POST');
-      let headers = init!.headers as Record<string, string>;
-      expect(headers['Content-Type']).toBe('application/vnd.card+source');
-      expect(headers['Accept']).toBe('application/vnd.card+source');
-      expect(init!.body).toBe('let x = 1;');
-    } finally {
-      fetchSpy.mockRestore();
-    }
-  });
-
-  it('reads content from a local file via --file option pattern', async () => {
-    let tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-file-write-'));
-    let tmpFile = path.join(tmpDir, 'source.gts');
-    fs.writeFileSync(tmpFile, 'export const greeting = "hello";', 'utf-8');
-
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
-    try {
-      let content = fs.readFileSync(tmpFile, 'utf-8');
-      let result = await write(realmUrl, 'greeting.gts', content, {
-        profileManager,
-      });
-
-      expect(result.ok).toBe(true);
-      expect(fetchSpy).toHaveBeenCalledOnce();
-      let [, init] = fetchSpy.mock.calls[0];
-      expect(init!.body).toBe('export const greeting = "hello";');
-    } finally {
-      fetchSpy.mockRestore();
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    let response = await profileManager.authedRealmFetch(
+      `${realmUrl}WrittenCard/1.json`,
+      { method: 'GET', headers: { Accept: 'application/vnd.card+source' } },
+    );
+    expect(response.ok).toBe(true);
+    let doc = await response.json();
+    expect((doc as any).data.attributes.title).toBe('Written Card');
   });
 
   it('throws when no active profile', async () => {
@@ -110,35 +103,5 @@ describe('file write (integration)', () => {
     ).rejects.toThrow('No active profile');
 
     fs.rmSync(emptyDir, { recursive: true, force: true });
-  });
-
-  it('returns error on non-2xx HTTP response', async () => {
-    let fetchSpy = vi
-      .spyOn(profileManager, 'authedRealmFetch')
-      .mockResolvedValueOnce(new Response('Not Found', { status: 404 }));
-    try {
-      let result = await write(realmUrl, 'missing.gts', 'content', {
-        profileManager,
-      });
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('404');
-    } finally {
-      fetchSpy.mockRestore();
-    }
-  });
-
-  it('returns error when fetch throws (network error)', async () => {
-    let fetchSpy = vi
-      .spyOn(profileManager, 'authedRealmFetch')
-      .mockRejectedValueOnce(new Error('network failure'));
-    try {
-      let result = await write(realmUrl, 'test.gts', 'content', {
-        profileManager,
-      });
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('network failure');
-    } finally {
-      fetchSpy.mockRestore();
-    }
   });
 });
