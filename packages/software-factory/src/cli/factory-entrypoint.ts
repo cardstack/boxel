@@ -11,7 +11,7 @@ import {
   wantsFactoryEntrypointHelp,
 } from '../factory-entrypoint';
 import { FactoryBriefError } from '../factory-brief';
-import { logger } from '../logger';
+import { configureLogger, logger } from '../logger';
 
 let log = logger('factory-entrypoint');
 
@@ -23,6 +23,13 @@ async function main(): Promise<void> {
     }
 
     let options = parseFactoryEntrypointArgs(process.argv.slice(2));
+
+    // --debug raises the log level so debug-gated lines (e.g. full
+    // run-command response bodies) surface, unless the caller has already
+    // pinned a level via LOG_LEVELS.
+    if (options.debug && !process.env.LOG_LEVELS) {
+      configureLogger('*=debug');
+    }
 
     await BoxelCLIClient.ensureProfile({
       realmServerUrl: options.realmServerUrl ?? undefined,
@@ -44,6 +51,15 @@ async function main(): Promise<void> {
           `  ${ir.issueId}: ${ir.exitReason} (${ir.innerIterations} iterations, ${ir.toolCallCount} tool calls)`,
         );
       }
+      if (summary.issueLoop.outcome === 'all_issues_done') {
+        log.info('All issues done.');
+      } else {
+        log.info(`Exiting with outcome=${summary.issueLoop.outcome}`);
+      }
+    }
+
+    if (!options.debug) {
+      process.exit(0);
     }
 
     let output = JSON.stringify(summary, null, 2) + '\n';

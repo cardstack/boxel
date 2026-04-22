@@ -188,6 +188,16 @@ export class TestValidationStep implements ValidationStepRunner {
       handle.testRunId,
     );
 
+    if (details) {
+      let skippedNote =
+        details.skippedCount > 0 ? `, ${details.skippedCount} skipped` : '';
+      log.info(
+        `${details.passedCount} passed, ${details.failedCount} failed${skippedNote}`,
+      );
+    } else {
+      log.info(`Test run ${handle.status}`);
+    }
+
     // Step 4: Map to ValidationStepResult
     if (handle.status === 'passed') {
       return {

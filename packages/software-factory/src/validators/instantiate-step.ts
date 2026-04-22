@@ -603,8 +603,8 @@ export class InstantiateValidationStep implements ValidationStepRunner {
       commandInput,
     );
 
-    log.info(
-      `run-command response for ${cardName}: status=${response.status}, error=${response.error}, result=${response.result?.slice(0, 300)}`,
+    log.debug(
+      `run-command response for ${cardName}: status=${response.status}, error=${response.error}, result=${response.result}`,
     );
 
     if (response.status !== 'ready') {
