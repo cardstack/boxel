@@ -362,6 +362,11 @@ export class OpenRouterFactoryAgent implements LoopAgent {
 
     if (tools.length > 0) {
       body.tools = tools;
+      // Opt in to OpenAI-compatible parallel tool calls so a single assistant
+      // turn can emit multiple tool_calls[]. Without this, OpenRouter routes
+      // to Anthropic serialize 1 call/turn and re-send the full context each
+      // round, producing the O(n²) context blow-up observed in CS-10814.
+      body.parallel_tool_calls = true;
     }
 
     let response: Response;

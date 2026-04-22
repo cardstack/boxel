@@ -209,6 +209,16 @@ module('factory-agent-schema-boundary / runtime', function () {
       (params as { _def?: unknown })._def,
       'OpenRouter path: parameters do NOT carry Zod internal "_def"',
     );
+
+    // CS-10814: the OpenAI-compatible `parallel_tool_calls` flag must be
+    // asserted on the wire so the route batches multiple tool_use blocks
+    // per assistant turn instead of serializing them 1-per-turn.
+    let parallelToolCalls = (capturedBody as { parallel_tool_calls?: boolean })
+      .parallel_tool_calls;
+    assert.true(
+      parallelToolCalls,
+      'OpenRouter body sets parallel_tool_calls: true when tools are present',
+    );
   });
 
   test('Claude path: run() does not touch OPENROUTER_CHAT_URL', async function (assert) {
