@@ -1438,9 +1438,14 @@ export class RenderRunner {
       step,
     );
     try {
+      // CS-10817 step 6: the tab is dead but the realm's cache/auth
+      // in the BrowserContext is still valid — keep it as an orphan
+      // so the next visit for this affinity spawns a fresh page in
+      // the warm context and skips the cold module-source waterfall.
       await this.#pagePool.disposeAffinity(affinityKey, {
         awaitIdle: false,
         retainConsoleErrors: true,
+        retainSharedContext: true,
       });
     } catch (e) {
       log.warn(`Error disposing affinity %s on %s:`, affinityKey, reason, e);

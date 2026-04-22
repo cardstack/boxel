@@ -309,19 +309,26 @@ export class PagePool {
 
   async disposeAffinity(
     affinityKey: string,
-    options?: { awaitIdle?: boolean; retainConsoleErrors?: boolean },
+    options?: {
+      awaitIdle?: boolean;
+      retainConsoleErrors?: boolean;
+      // CS-10817 step 6: when true, tear down the page(s) for this
+      // affinity but keep the shared BrowserContext alive as an
+      // orphan so the next visit for the same affinity can reuse its
+      // warm HTTP cache + localStorage. Callers that need realm
+      // state wiped (auth change, explicit reset) should leave this
+      // false (default) so the context is closed too.
+      retainSharedContext?: boolean;
+    },
   ): Promise<void> {
     let entries = this.#affinityPages.get(affinityKey);
     let hasEntries = !!entries && entries.size > 0;
-    // CS-10817 step 5: an affinity can live on as an orphan shared
-    // context after its last page closed. Dispose has to tear that
-    // down too — otherwise a caller expecting "this affinity is gone
-    // and should rewarm cold" would instead reuse the stale orphan.
     let hasOrphan = this.#sharedContexts.has(affinityKey);
     if (!hasEntries && !hasOrphan) return;
     this.#lru.delete(affinityKey);
     let awaitIdle = options?.awaitIdle !== false;
     let retainConsoleErrors = options?.retainConsoleErrors ?? false;
+    let retainSharedContext = options?.retainSharedContext === true;
     if (awaitIdle) {
       this.#affinityPages.delete(affinityKey);
       if (entries) {
@@ -329,9 +336,9 @@ export class PagePool {
           await this.#closeEntry(entry, retainConsoleErrors);
         }
       }
-      // `#closeEntry` only retains orphans; the dispose path wants
-      // the context GONE, not parked. Force-close.
-      await this.#closeSharedContext(affinityKey);
+      if (!retainSharedContext) {
+        await this.#closeSharedContext(affinityKey);
+      }
       await this.#notifyManagerAffinityEvicted(affinityKey);
     } else {
       let closePromises: Promise<void>[] = [];
@@ -349,13 +356,15 @@ export class PagePool {
           void p;
         }
       }
-      // Close the orphan after all page-closes settle so a concurrent
-      // `#spawnPoolEntryInSharedContext` on the same affinity is not
-      // racing a mid-flight context.close() (Codex P1 review #1 on
-      // PR #4465).
-      void Promise.allSettled(closePromises).then(() =>
-        this.#closeSharedContext(affinityKey),
-      );
+      if (!retainSharedContext) {
+        // Close the orphan after all page-closes settle so a concurrent
+        // `#spawnPoolEntryInSharedContext` on the same affinity is not
+        // racing a mid-flight context.close() (Codex P1 review #1 on
+        // PR #4465).
+        void Promise.allSettled(closePromises).then(() =>
+          this.#closeSharedContext(affinityKey),
+        );
+      }
       void this.#notifyManagerAffinityEvicted(affinityKey);
     }
     // Notify subscribers (e.g. Prerenderer's batch-ownership tracker) that
