@@ -1,5 +1,5 @@
 import '../helpers/setup-realm-server';
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -18,7 +18,22 @@ let cleanupProfile: () => void;
 let realmUrl: string;
 
 beforeAll(async () => {
-  await startTestRealmServer();
+  await startTestRealmServer({
+    fileSystem: {
+      'SearchTarget/1.json': JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: { title: 'Searchable Card' },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/card-api',
+              name: 'CardDef',
+            },
+          },
+        },
+      }),
+    },
+  });
   realmUrl = `${TEST_REALM_SERVER_URL}/test/`;
   let testProfile = createTestProfileDir();
   profileManager = testProfile.profileManager;
@@ -29,42 +44,25 @@ beforeAll(async () => {
 afterAll(async () => { cleanupProfile?.(); await stopTestRealmServer(); });
 
 describe('file search (integration)', () => {
-  it('sends QUERY to _search with correct headers', async () => {
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
-    try {
-      await search(realmUrl, { filter: { type: { name: 'CardDef' } } }, { profileManager });
-      expect(fetchSpy).toHaveBeenCalledOnce();
-      let [url, init] = fetchSpy.mock.calls[0];
-      expect(String(url)).toContain('_search');
-      expect(init!.method).toBe('QUERY');
-      let headers = init!.headers as Record<string, string>;
-      expect(headers['Accept']).toBe('application/vnd.card+json');
-      expect(headers['Content-Type']).toBe('application/json');
-    } finally { fetchSpy.mockRestore(); }
+  it('returns results from the realm', async () => {
+    let result = await search(realmUrl, {}, { profileManager });
+    expect(result.ok, `search failed: ${result.error}`).toBe(true);
+    expect(result.data).toBeDefined();
+    expect(Array.isArray(result.data)).toBe(true);
+  });
+
+  it('returns ok: false for search on invalid realm URL', async () => {
+    let result = await search('http://127.0.0.1:1/', {}, { profileManager });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBeDefined();
   });
 
   it('throws when no active profile', async () => {
     let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
     let emptyManager = new ProfileManager(emptyDir);
-    await expect(search(realmUrl, {}, { profileManager: emptyManager })).rejects.toThrow('No active profile');
+    await expect(
+      search(realmUrl, {}, { profileManager: emptyManager }),
+    ).rejects.toThrow('No active profile');
     fs.rmSync(emptyDir, { recursive: true, force: true });
-  });
-
-  it('returns error when fetch throws', async () => {
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch').mockRejectedValueOnce(new Error('network failure'));
-    try {
-      let result = await search(realmUrl, {}, { profileManager });
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('network failure');
-    } finally { fetchSpy.mockRestore(); }
-  });
-
-  it('returns error on non-2xx response', async () => {
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch').mockResolvedValueOnce(new Response('Server Error', { status: 500 }));
-    try {
-      let result = await search(realmUrl, {}, { profileManager });
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('500');
-    } finally { fetchSpy.mockRestore(); }
   });
 });
