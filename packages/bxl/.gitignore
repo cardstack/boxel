@@ -12,3 +12,6 @@ coverage/
 *.tgz
 .vscode/
 .idea/
+
+# Personal realm-sync config — points at your local Boxel workspace
+.bxl-realm-sync.json

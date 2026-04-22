@@ -81,6 +81,8 @@
     "test": "node scripts/run-tests.mjs",
     "test:smoke": "tsx tests/smoke/bxl-smoke.ts",
     "test:size": "node scripts/size-report.mjs --check",
+    "realm": "node scripts/build-realm-bundle.mjs",
+    "realm:local": "node scripts/build-realm-bundle.mjs --no-sync",
     "prepack": "npm run clean && npm run build",
     "release:dry": "npm pack --dry-run"
   },
