@@ -34,9 +34,10 @@ export async function search(
   let pm = options?.profileManager ?? getProfileManager();
   let active = pm.getActiveProfile();
   if (!active) {
-    throw new Error(
-      'No active profile. Run `boxel profile add` to create one.',
-    );
+    return {
+      ok: false,
+      error: 'No active profile. Run `boxel profile add` to create one.',
+    };
   }
 
   let searchUrl = `${ensureTrailingSlash(realmUrl)}_search`;
