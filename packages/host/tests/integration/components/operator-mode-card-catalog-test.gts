@@ -465,7 +465,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     assert.dom(`[data-test-stack-card-header]`).containsText(ctx.realmName);
 
     await click(`[data-test-open-search-field]`);
-    typeIn(`[data-test-search-field]`, 'ma');
+    typeIn(`[data-test-search-field]`, 'Mark');
     await waitUntil(() =>
       (
         document.querySelector('[data-test-search-label]') as HTMLElement
@@ -474,8 +474,8 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     assert.dom(`[data-test-search-label]`).containsText('Searching…');
     await settled();
 
-    assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
-    // New design: realm name is in a section header; multiple realms can appear (Base + test realm)
+    // Search is now full-text on card markdown content; Author/mark has
+    // firstName "Mark" which appears in its rendered markdown.
     assert.dom(`.search-sheet-content`).containsText('Operator Mode Workspace');
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
@@ -922,9 +922,8 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await click(`[data-test-open-search-field]`);
-    await fillIn(`[data-test-search-field]`, 'ma');
+    await fillIn(`[data-test-search-field]`, 'Mark');
     assert.dom(`[data-test-search-sheet-section-header]`).exists();
-    assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
       .exists();
@@ -940,8 +939,8 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await click(`[data-test-open-search-field]`);
-    // Use a query that returns multiple results in one realm (ma -> Pet/mango, Author/mark, etc.)
-    await fillIn(`[data-test-search-field]`, 'ma');
+    // Full-text matches on card markdown; Author/mark contains "Mark" in firstName.
+    await fillIn(`[data-test-search-field]`, 'Mark');
     await waitFor('[data-test-search-sheet-search-result]');
     const initialCount = document.querySelectorAll(
       '[data-test-search-sheet-search-result]',
