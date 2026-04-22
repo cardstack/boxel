@@ -84,12 +84,14 @@ describe('file delete (integration)', () => {
     expect(result.ok, 'unrelated file should still exist').toBe(true);
   });
 
-  it('throws when no active profile', async () => {
+  it('returns error result when no active profile', async () => {
     let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
     let emptyManager = new ProfileManager(emptyDir);
-    await expect(
-      deleteFile(realmUrl, 'keep-this.json', { profileManager: emptyManager }),
-    ).rejects.toThrow('No active profile');
+    let result = await deleteFile(realmUrl, 'keep-this.json', {
+      profileManager: emptyManager,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('No active profile');
     fs.rmSync(emptyDir, { recursive: true, force: true });
   });
 });
