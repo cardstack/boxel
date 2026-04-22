@@ -3,6 +3,10 @@ import {
   readTranspiledModule,
   type ReadTranspiledResult,
 } from '../commands/read-transpiled';
+import {
+  write as coreWrite,
+  type WriteResult,
+} from '../commands/file/write';
 import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { pull as realmPull } from '../commands/realm/pull';
 import { getProfileManager, type ProfileManager } from './profile-manager';
@@ -57,12 +61,8 @@ export interface ReadResult {
   error?: string;
 }
 
-export interface WriteResult {
-  ok: boolean;
-  error?: string;
-}
-
 export type { DeleteResult };
+export type { WriteResult };
 
 export interface SearchResult {
   ok: boolean;
@@ -211,39 +211,16 @@ export class BoxelCLIClient {
   /**
    * Write a file to a realm. Content is sent as-is with card+source MIME type.
    * Path should include the file extension.
+   *
+   * Delegates to `write()` in `commands/file/write.ts` so the CLI and
+   * programmatic API share one implementation.
    */
   async write(
     realmUrl: string,
     path: string,
     content: string,
   ): Promise<WriteResult> {
-    let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
-
-    try {
-      let response = await this.pm.authedRealmFetch(url, {
-        method: 'POST',
-        headers: {
-          Accept: MIME.CardSource,
-          'Content-Type': MIME.CardSource,
-        },
-        body: content,
-      });
-
-      if (!response.ok) {
-        let body = await response.text();
-        return {
-          ok: false,
-          error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-        };
-      }
-
-      return { ok: true };
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
+    return coreWrite(realmUrl, path, content, { profileManager: this.pm });
   }
 
   /**
