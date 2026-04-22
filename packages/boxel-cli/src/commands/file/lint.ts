@@ -89,10 +89,7 @@ export function registerLintCommand(file: Command): void {
   file
     .command('lint')
     .description('Lint a file in a realm using the realm lint endpoint')
-    .argument(
-      '<path>',
-      'Realm-relative file path to lint (e.g., my-card.gts)',
-    )
+    .argument('<path>', 'Realm-relative file path to lint (e.g., my-card.gts)')
     .requiredOption('--realm <realm-url>', 'The realm URL to lint against')
     .option(
       '--file <local-filepath>',
@@ -113,10 +110,7 @@ export function registerLintCommand(file: Command): void {
       } else {
         // Fetch source from realm using read
         let pm = getProfileManager();
-        let readUrl = new URL(
-          filePath,
-          ensureTrailingSlash(opts.realm),
-        ).href;
+        let readUrl = new URL(filePath, ensureTrailingSlash(opts.realm)).href;
         try {
           let response = await pm.authedRealmFetch(readUrl, {
             method: 'GET',

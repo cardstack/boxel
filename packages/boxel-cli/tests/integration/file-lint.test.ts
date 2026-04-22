@@ -26,7 +26,10 @@ beforeAll(async () => {
   await setupTestProfile(profileManager);
 });
 
-afterAll(async () => { cleanupProfile?.(); await stopTestRealmServer(); });
+afterAll(async () => {
+  cleanupProfile?.();
+  await stopTestRealmServer();
+});
 
 describe('file lint (integration)', () => {
   it('lints source via the realm _lint endpoint and returns a result', async () => {
@@ -42,7 +45,9 @@ describe('file lint (integration)', () => {
     let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
     let emptyManager = new ProfileManager(emptyDir);
     await expect(
-      lint(realmUrl, 'let x = 1;', 'test.gts', { profileManager: emptyManager }),
+      lint(realmUrl, 'let x = 1;', 'test.gts', {
+        profileManager: emptyManager,
+      }),
     ).rejects.toThrow('No active profile');
     fs.rmSync(emptyDir, { recursive: true, force: true });
   });
