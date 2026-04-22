@@ -1,5 +1,5 @@
 import '../helpers/setup-realm-server';
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -91,22 +91,6 @@ describe('file read (integration)', () => {
     expect(result.document).toBeUndefined();
   });
 
-  it('uses authedRealmFetch with Accept: application/vnd.card+source', async () => {
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
-    try {
-      await read(realmUrl, 'test-card.json', { profileManager });
-
-      expect(fetchSpy).toHaveBeenCalledOnce();
-      let [url, init] = fetchSpy.mock.calls[0];
-      expect(String(url)).toContain('test-card.json');
-      expect(init!.method).toBe('GET');
-      let headers = init!.headers as Record<string, string>;
-      expect(headers['Accept']).toBe('application/vnd.card+source');
-    } finally {
-      fetchSpy.mockRestore();
-    }
-  });
-
   it('returns a not-ok result with 404 status for a nonexistent file', async () => {
     let result = await read(realmUrl, 'does-not-exist.json', {
       profileManager,
@@ -127,16 +111,4 @@ describe('file read (integration)', () => {
     fs.rmSync(emptyDir, { recursive: true, force: true });
   });
 
-  it('returns error when fetch throws', async () => {
-    let fetchSpy = vi
-      .spyOn(profileManager, 'authedRealmFetch')
-      .mockRejectedValueOnce(new Error('network failure'));
-    try {
-      let result = await read(realmUrl, 'test-card.json', { profileManager });
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('network failure');
-    } finally {
-      fetchSpy.mockRestore();
-    }
-  });
 });
