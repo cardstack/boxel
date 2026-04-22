@@ -5099,6 +5099,63 @@ module(basename(__filename), function () {
             }
           }
         });
+
+        test('additional tabs at tabMax > 1 do not leak their BrowserContext on close', async function (assert) {
+          // Regression guard: when a second/third getPage takes
+          // another standby, that standby's BrowserContext is
+          // different from the one recorded in `#sharedContexts` for
+          // the affinity. `#closeEntry` has to notice the mismatch
+          // and close the entry's own context — otherwise the
+          // shared-context bookkeeping would only tear down the
+          // first-registered context and leak the rest.
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          process.env.PRERENDER_AFFINITY_TAB_MAX = '3';
+          let { pool, contextsCreated, contextsClosed } = makeStubPagePool(3);
+          try {
+            await pool.warmStandbys();
+
+            let createdBefore = contextsCreated.length;
+            let first = await pool.getPage('realm-a');
+            let second = await pool.getPage('realm-a');
+            let third = await pool.getPage('realm-a');
+
+            // First page adopts a standby's context; subsequent tabs
+            // take another standby, so the contexts differ —
+            // #closeEntry's mismatch branch is what guarantees no
+            // leak.
+            assert.notStrictEqual(
+              first.page.browserContext(),
+              second.page.browserContext(),
+              'second tab uses the next standby BrowserContext',
+            );
+            assert.strictEqual(
+              pool.getSharedContextSnapshot().entries.length,
+              1,
+              'sharedContexts tracks exactly one context for the affinity',
+            );
+
+            let closedBefore = contextsClosed.length;
+            first.release();
+            second.release();
+            third.release();
+            await pool.disposeAffinity('realm-a');
+
+            let netCreated = contextsCreated.length - createdBefore;
+            let netClosed = contextsClosed.length - closedBefore;
+            assert.strictEqual(
+              netClosed,
+              netCreated,
+              'every BrowserContext opened during the test was closed — no leak',
+            );
+          } finally {
+            await pool.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
       });
     });
   }
