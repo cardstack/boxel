@@ -2097,11 +2097,19 @@ export class Realm {
       etagVariant?: string;
     },
   ): Promise<ResponseWithNodeStream> {
+    let contentType = options?.defaultHeaders?.['content-type'];
+    // Serve realm-hosted images (e.g. realm icons and backgrounds) with an
+    // explicit Cache-Control so browsers don't fall back to Last-Modified
+    // heuristics. must-revalidate + ETag keeps updates responsive while
+    // avoiding repeated revalidation within a browsing session.
+    let cacheControl = contentType?.startsWith('image/')
+      ? 'public, max-age=60, must-revalidate'
+      : 'public, max-age=0';
     let etag = buildEtag(ref.lastModified, options?.etagVariant);
     if (etag && request.headers.get('if-none-match') === etag) {
       return createResponse({
         body: null,
-        init: { status: 304 },
+        init: { status: 304, headers: { 'cache-control': cacheControl } },
         requestContext,
       });
     }
@@ -2113,7 +2121,7 @@ export class Realm {
         ? { 'X-Boxel-Shimmed-Module': 'true' }
         : {}),
       ...(etag ? { etag } : {}),
-      'cache-control': 'public, max-age=0', // instructs the browser to check with server before using cache
+      'cache-control': cacheControl,
     };
     if (createdFromDb != null) {
       headers['x-created'] = formatRFC7231(createdFromDb * 1000);
