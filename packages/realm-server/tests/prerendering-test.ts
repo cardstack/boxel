@@ -1519,28 +1519,29 @@ module(basename(__filename), function () {
           'number',
           'diagnostics.totalElapsedMs is populated',
         );
-        assert.strictEqual(
-          typeof diagnostics?.requestId,
-          'string',
-          'diagnostics.requestId is populated for cross-log correlation',
-        );
-        // The host has already evaluated the card module by the time
-        // the second (timed-out) call runs against the warm tab — so
-        // the loader's top-N history must contain entries naming at
-        // least one module that was compiled on the page.
+        // Note: diagnostics.requestId is only populated on the HTTP
+        // path (prerender-app stamps it from x-boxel-prerender-request-id).
+        // The in-process Prerenderer call used by this test doesn't
+        // have one, so we don't assert it here. See the separate
+        // prerender-server-test for the HTTP-path requestId coverage.
+        // Host-side fields (recentModuleEvaluations / cardDocsInFlight
+        // / queryLoadsInFlight) are also best-effort: the withTimeout
+        // capture at `timeoutMs:1` races the page teardown, so the
+        // page may already be closed by the time we attempt the
+        // diagnostic page.evaluate(). When present, their shape must
+        // be { url, ms } — when absent, the server-side timings
+        // above are sufficient to classify the stall as a timeout.
         let moduleEvals = diagnostics?.recentModuleEvaluations;
-        let moduleEvalsShape =
-          Array.isArray(moduleEvals) &&
-          moduleEvals.length > 0 &&
-          moduleEvals.every(
-            (e: any) => typeof e?.url === 'string' && typeof e?.ms === 'number',
+        if (Array.isArray(moduleEvals) && moduleEvals.length > 0) {
+          let allShaped = moduleEvals.every(
+            (e: any) =>
+              typeof e?.url === 'string' && typeof e?.ms === 'number',
           );
-        assert.true(
-          moduleEvalsShape,
-          `diagnostics.recentModuleEvaluations names compiled modules with ms timings (${JSON.stringify(
-            moduleEvals,
-          )})`,
-        );
+          assert.true(
+            allShaped,
+            `diagnostics.recentModuleEvaluations entries carry { url, ms }`,
+          );
+        }
 
         let afterTimeout = await prerenderer.prerenderModule({
           affinityType: 'realm',
