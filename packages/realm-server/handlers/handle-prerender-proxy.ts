@@ -101,6 +101,16 @@ export default function handlePrerenderProxy({
 
     let prerenderResponse;
 
+    // Defense-in-depth (CS-10758 step 3): user-initiated prerenders must
+    // never force the prerenderer to clear its warm loader, even if the
+    // caller crafts a request with `renderOptions.clearCache: true`. The
+    // server-side batch-ownership gate also strips this, but scrubbing at
+    // the HTTP boundary means no path from user traffic can reach a
+    // warm-loader wipe regardless of whether a batch currently owns the
+    // affinity.
+    let userRenderOptions: typeof attrs.renderOptions = attrs.renderOptions
+      ? { ...attrs.renderOptions, clearCache: undefined }
+      : undefined;
     try {
       if (kind === 'module') {
         prerenderResponse = await prerenderer.prerenderModule({
@@ -109,7 +119,7 @@ export default function handlePrerenderProxy({
           realm: attrs.realm,
           url: attrs.url,
           auth,
-          renderOptions: attrs.renderOptions,
+          renderOptions: userRenderOptions,
         });
       } else {
         let passFlag =
@@ -123,7 +133,7 @@ export default function handlePrerenderProxy({
           url: attrs.url,
           auth,
           renderOptions: {
-            ...(attrs.renderOptions ?? {}),
+            ...(userRenderOptions ?? {}),
             ...passFlag,
           },
         });

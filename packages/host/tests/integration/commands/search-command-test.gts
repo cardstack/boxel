@@ -1,7 +1,11 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type RealmResourceIdentifier } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  type Query,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -45,6 +49,25 @@ module('Integration | commands | search', function (hooks) {
     autostart: true,
   });
 
+  function runTypeTitleSearch(input: {
+    cardType: string | undefined;
+    cardTitle: string | undefined;
+  }) {
+    let commandService = getService('command-service');
+    let searchCommand = new SearchCardsByTypeAndTitleCommand(
+      commandService.commandContext,
+    );
+    return searchCommand.execute(input);
+  }
+
+  function runQuerySearch(query: Query) {
+    let commandService = getService('command-service');
+    let searchCommand = new SearchCardsByQueryCommand(
+      commandService.commandContext,
+    );
+    return searchCommand.execute({ query });
+  }
+
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -60,6 +83,7 @@ module('Integration | commands | search', function (hooks) {
       static displayName = 'Author';
       @field firstName = contains(StringField);
       @field lastName = contains(StringField);
+      @field bio = contains(StringField);
       @field cardTitle = contains(StringField, {
         computeVia: function (this: Author) {
           return [this.firstName, this.lastName].filter(Boolean).join(' ');
@@ -71,10 +95,14 @@ module('Integration | commands | search', function (hooks) {
         mockMatrixUtils,
         contents: {
           'author.gts': { Author },
-          'Author/r2.json': new Author({ firstName: 'R2-D2' }),
+          'Author/r2.json': new Author({
+            firstName: 'R2-D2',
+            bio: 'Astromech droid who communicates in beeps and whistles.',
+          }),
           'Author/mark.json': new Author({
             firstName: 'Mark',
             lastName: 'Jackson',
+            bio: 'Novelist specializing in xylophone-themed mystery fiction.',
           }),
           '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
         },
@@ -83,11 +111,7 @@ module('Integration | commands | search', function (hooks) {
   });
 
   test('search for a title', async function (assert) {
-    let commandService = getService('command-service');
-    let searchCommand = new SearchCardsByTypeAndTitleCommand(
-      commandService.commandContext,
-    );
-    let result = await searchCommand.execute({
+    let result = await runTypeTitleSearch({
       cardTitle: 'Mark Jackson',
       cardType: undefined,
     });
@@ -96,11 +120,7 @@ module('Integration | commands | search', function (hooks) {
   });
 
   test('search for a card type', async function (assert) {
-    let commandService = getService('command-service');
-    let searchCommand = new SearchCardsByTypeAndTitleCommand(
-      commandService.commandContext,
-    );
-    let result = await searchCommand.execute({
+    let result = await runTypeTitleSearch({
       cardType: 'Author',
       cardTitle: undefined,
     });
@@ -112,19 +132,46 @@ module('Integration | commands | search', function (hooks) {
   });
 
   test('search with a query', async function (assert) {
-    let commandService = getService('command-service');
-    let searchCommand = new SearchCardsByQueryCommand(
-      commandService.commandContext,
-    );
-    let result = await searchCommand.execute({
-      query: {
-        filter: {
-          eq: { firstName: 'R2-D2' },
-          on: { module: 'http://test-realm/test/author' as RealmResourceIdentifier, name: 'Author' },
+    let result = await runQuerySearch({
+      filter: {
+        eq: { firstName: 'R2-D2' },
+        on: {
+          module: 'http://test-realm/test/author' as RealmResourceIdentifier,
+          name: 'Author',
         },
       },
     });
     assert.strictEqual(result.cardIds.length, 1);
+    assert.strictEqual(result.cardIds[0], 'http://test-realm/test/Author/r2');
+  });
+
+  test('search with a matches filter', async function (assert) {
+    let result = await runQuerySearch({
+      filter: { matches: 'xylophone' },
+    });
+    assert.strictEqual(
+      result.cardIds.length,
+      1,
+      'only mark.json has "xylophone" in its markdown',
+    );
+    assert.strictEqual(result.cardIds[0], 'http://test-realm/test/Author/mark');
+  });
+
+  test('search with matches composed inside every + eq', async function (assert) {
+    let result = await runQuerySearch({
+      filter: {
+        on: {
+          module: 'http://test-realm/test/author' as RealmResourceIdentifier,
+          name: 'Author',
+        },
+        every: [{ matches: 'droid' }, { eq: { firstName: 'R2-D2' } }],
+      },
+    });
+    assert.strictEqual(
+      result.cardIds.length,
+      1,
+      'composed matches + eq returns r2.json',
+    );
     assert.strictEqual(result.cardIds[0], 'http://test-realm/test/Author/r2');
   });
 });

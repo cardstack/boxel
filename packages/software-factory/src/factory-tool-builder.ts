@@ -15,10 +15,27 @@ import type {
 } from '@cardstack/runtime-common';
 
 import { buildCardDocument } from './darkfactory-schemas';
+import {
+  runEvaluateInMemory,
+  type RunEvaluateInMemoryOptions,
+  type RunEvaluateResult,
+} from './eval-execution';
 import type { ToolExecutor } from './factory-tool-executor';
 import type { ToolRegistry } from './factory-tool-registry';
+import {
+  runLintInMemory,
+  type RunLintInMemoryOptions,
+  type RunLintResult,
+} from './lint-execution';
 import { logger } from './logger';
+import {
+  runParseInMemory,
+  type RunParseInMemoryOptions,
+  type RunParseResult,
+} from './parse-execution';
 import { ensureJsonExtension, addCommentToIssue } from './realm-operations';
+import { runTestsInMemory } from './test-run-execution';
+import type { RunTestsInMemoryOptions, RunTestsResult } from './test-run-types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -57,6 +74,20 @@ export interface ToolBuilderConfig {
       relationships?: Record<string, unknown>;
     }
   >;
+  /** Injected for testing — defaults to runLintInMemory. */
+  runLintInMemory?: (options: RunLintInMemoryOptions) => Promise<RunLintResult>;
+  /** Injected for testing — defaults to runTestsInMemory. */
+  runTestsInMemory?: (
+    options: RunTestsInMemoryOptions,
+  ) => Promise<RunTestsResult>;
+  /** Injected for testing — defaults to runEvaluateInMemory. */
+  runEvaluateInMemory?: (
+    options: RunEvaluateInMemoryOptions,
+  ) => Promise<RunEvaluateResult>;
+  /** Injected for testing — defaults to runParseInMemory. */
+  runParseInMemory?: (
+    options: RunParseInMemoryOptions,
+  ) => Promise<RunParseResult>;
 }
 
 export interface ToolCallEntry {
@@ -101,6 +132,10 @@ export function buildFactoryTools(
     buildFetchTranspiledModuleTool(config),
     buildSearchRealmTool(config),
     buildRunCommandTool(config),
+    buildRunLintTool(config),
+    buildRunTestsTool(config),
+    buildRunEvaluateTool(config),
+    buildRunParseTool(config),
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
@@ -576,8 +611,162 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
   };
 }
 
-// Note: buildRunTestsTool was removed — the validation pipeline runs tests
-// automatically via executeTestRunFromRealm after each agent turn.
+function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
+  let execute = config.runTestsInMemory ?? runTestsInMemory;
+  return {
+    name: 'run_tests',
+    description:
+      "Run the realm's QUnit tests against the target realm and return an " +
+      'in-memory result object (status, pass/fail counts, failure details). ' +
+      'Safe to call repeatedly for mid-turn self-validation — this tool does ' +
+      'NOT create a TestRun card or any other realm artifact. The ' +
+      'orchestrator still runs the full validation pipeline (which writes a ' +
+      'TestRun card) automatically after signal_done, so calling this is ' +
+      'optional. Takes no arguments — runs all *.test.gts files in the ' +
+      'target realm. Auth: per-realm JWT.',
+    parameters: { type: 'object', properties: {} },
+    execute: async () => {
+      return execute({
+        targetRealmUrl: config.targetRealmUrl,
+        client: config.client,
+        hostAppUrl: config.hostAppUrl ?? config.realmServerUrl,
+      });
+    },
+  };
+}
+
+function buildRunLintTool(config: ToolBuilderConfig): FactoryTool {
+  let execute = config.runLintInMemory ?? runLintInMemory;
+  return {
+    name: 'run_lint',
+    description:
+      'Run ESLint + Prettier (with @cardstack/boxel rules) and return an ' +
+      'in-memory result (status, error/warning counts, per-violation ' +
+      'details). Without "path", lints every .gts / .gjs / .ts / .js file ' +
+      'in the target realm. With "path", lints only that single realm-' +
+      'relative file — handy for a quick self-check right after writing ' +
+      'one file. Safe to call repeatedly for mid-turn self-validation — ' +
+      'this tool does NOT create a LintResult card or any other realm ' +
+      'artifact. The orchestrator still runs the full validation pipeline ' +
+      '(which writes a LintResult card) automatically after signal_done, ' +
+      'so calling this is optional. Auth: per-realm JWT.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Optional realm-relative path to a single .gts / .gjs / .ts / .js file to lint. Omit to lint every lintable file in the target realm.',
+        },
+      },
+    },
+    execute: async (args) => {
+      let rawPath = args.path;
+      let path =
+        typeof rawPath === 'string' && rawPath.trim() !== ''
+          ? rawPath.trim()
+          : undefined;
+      return execute({
+        targetRealmUrl: config.targetRealmUrl,
+        client: config.client,
+        ...(path ? { path } : {}),
+      });
+    },
+  };
+}
+
+function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
+  let execute = config.runEvaluateInMemory ?? runEvaluateInMemory;
+  return {
+    name: 'run_evaluate',
+    description:
+      'Evaluate ESM modules (.gts / .gjs / .ts / .js) in the target realm ' +
+      'via the prerenderer sandbox and return an in-memory result (status, ' +
+      'module counts, per-failure error + stackTrace). Without "path", ' +
+      'evaluates every non-test evaluable module in the realm. With ' +
+      '"path", evaluates only that single realm-relative file — handy ' +
+      'for a quick self-check right after writing one module. Safe to ' +
+      'call repeatedly for mid-turn self-validation — this tool does NOT ' +
+      'create an EvalResult card or any other realm artifact. The ' +
+      'orchestrator still runs the full validation pipeline (which writes ' +
+      'an EvalResult card) automatically after signal_done, so calling ' +
+      'this is optional. When a failure reports a line/column, those ' +
+      'numbers refer to the transpiled module — use `fetch_transpiled_module` ' +
+      'to locate the offending source construct, then fix the .gts source ' +
+      '(never copy transpiled patterns back into source). Auth: realm ' +
+      'server token.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Optional realm-relative path to a single .gts / .gjs / .ts / .js file to evaluate. Omit to evaluate every non-test evaluable module in the target realm. Test files (*.test.*) are rejected — the test runner validates those.',
+        },
+      },
+    },
+    execute: async (args) => {
+      let rawPath = args.path;
+      let path =
+        typeof rawPath === 'string' && rawPath.trim() !== ''
+          ? rawPath.trim()
+          : undefined;
+      return execute({
+        targetRealmUrl: config.targetRealmUrl,
+        realmServerUrl: config.realmServerUrl,
+        client: config.client,
+        ...(path ? { path } : {}),
+      });
+    },
+  };
+}
+
+function buildRunParseTool(config: ToolBuilderConfig): FactoryTool {
+  let execute = config.runParseInMemory ?? runParseInMemory;
+  return {
+    name: 'run_parse',
+    description:
+      'Parse and type-check files in the target realm and return an ' +
+      'in-memory result (status, error counts, per-error file/line/column/' +
+      'message). Without "path", runs glint (ember-tsc) over every .gts / ' +
+      '.gjs / .ts file in the realm AND validates every .json file listed ' +
+      'as a Spec linkedExample (same discovery as the parse validation ' +
+      'step). With "path", parses only that single realm-relative file — ' +
+      '.gts / .gjs / .ts files are type-checked via glint, .json files ' +
+      'are parsed and checked for card document structure. The extension ' +
+      'is required (paths without one are rejected) — whole-realm ' +
+      'discovery already normalizes Spec linkedExamples to include .json, ' +
+      'so the "parseableFiles" entries returned by a prior whole-realm ' +
+      'run can be fed straight back into "path" verbatim. Safe to call ' +
+      'repeatedly for mid-turn self-validation — this tool does NOT ' +
+      'create a ParseResult card or any other realm artifact. The ' +
+      'orchestrator still runs the full validation pipeline (which writes ' +
+      'a ParseResult card) automatically after signal_done, so calling ' +
+      'this is optional. Auth: per-realm JWT.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Optional realm-relative path to a single file to parse. Must end in .gts / .gjs / .ts / .json (paths without an extension are rejected). Omit to parse every parseable file (GTS modules + Spec-linked JSON examples) in the target realm.',
+        },
+      },
+    },
+    execute: async (args) => {
+      let rawPath = args.path;
+      let path =
+        typeof rawPath === 'string' && rawPath.trim() !== ''
+          ? rawPath.trim()
+          : undefined;
+      return execute({
+        targetRealmUrl: config.targetRealmUrl,
+        client: config.client,
+        ...(path ? { path } : {}),
+      });
+    },
+  };
+}
 
 function buildSignalDoneTool(): FactoryTool {
   return {

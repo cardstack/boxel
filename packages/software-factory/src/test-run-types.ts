@@ -124,6 +124,37 @@ export interface QunitResults {
 // Execution Options
 // ---------------------------------------------------------------------------
 
+export interface RunTestsInMemoryOptions {
+  targetRealmUrl: string;
+  client: BoxelCLIClient;
+  /** URL of the host app served by the compat proxy (typically the realm server URL). */
+  hostAppUrl: string;
+  /** Path to the host app's dist directory. Defaults to packages/host/dist. */
+  hostDistDir?: string;
+  /** Log browser console output for debugging. */
+  debug?: boolean;
+}
+
+export interface RunTestsFailure {
+  testName: string;
+  module: string;
+  message: string;
+  stackTrace?: string;
+}
+
+export interface RunTestsResult {
+  status: 'passed' | 'failed' | 'error';
+  passedCount: number;
+  failedCount: number;
+  skippedCount: number;
+  durationMs: number;
+  /** Realm-relative `.test.gts` paths discovered before the run. */
+  testFiles: string[];
+  failures: RunTestsFailure[];
+  /** Set only when `status === 'error'`. */
+  errorMessage?: string;
+}
+
 export interface ExecuteTestRunOptions {
   targetRealmUrl: string;
   testResultsModuleUrl: string;

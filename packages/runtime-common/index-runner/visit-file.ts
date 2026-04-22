@@ -28,6 +28,11 @@ interface VisitFileFusedOptions {
   batch: Batch;
   jobInfo: JobInfo;
   auth: string;
+  // Indexing batch identifier (CS-10758 step 3). Threaded into
+  // PrerenderVisitArgs so the server-side gate honors `clearCache: true`
+  // for this batch's visits and strips it from concurrent non-batch
+  // traffic that happens to land on the same warm tab.
+  batchId: string;
   prerenderer: Prerenderer;
   consumeClearCacheForRender(): boolean;
   logDebug(message: string): void;
@@ -62,6 +67,7 @@ export async function visitFileForIndexingFused({
   batch,
   jobInfo,
   auth,
+  batchId,
   prerenderer,
   consumeClearCacheForRender,
   logDebug,
@@ -151,6 +157,7 @@ export async function visitFileForIndexingFused({
       url: fileURL,
       auth,
       renderOptions,
+      batchId,
     });
   } catch (err) {
     logWarn(

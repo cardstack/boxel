@@ -364,24 +364,24 @@ module(basename(__filename), function () {
       assert.strictEqual(result, 'http://localhost:4201/realm/card');
     });
 
-    // --- $thisRealm resolution ---
+    // --- $REALM resolution ---
 
-    test('$thisRealm against scoped base', function (assert) {
+    test('$REALM against scoped base', function (assert) {
       let result = resolveRRI(
-        '$thisRealm/string',
+        '$REALM/string',
         '@cardstack/base/fields/number' as RealmResourceIdentifier,
       );
       assert.strictEqual(result, '@cardstack/base/string');
     });
 
-    test('$thisRealm against URL base', function (assert) {
+    test('$REALM against URL base', function (assert) {
       registerCardReferencePrefix(
         '@test/contact/',
         'https://home.boxel.ai/contact/',
       );
       try {
         let result = resolveRRI(
-          '$thisRealm/card',
+          '$REALM/card',
           'https://home.boxel.ai/contact/users/' as RealmResourceIdentifier,
         );
         assert.strictEqual(result, 'https://home.boxel.ai/contact/card');

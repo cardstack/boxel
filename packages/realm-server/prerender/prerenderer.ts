@@ -3,6 +3,7 @@ import {
   type RenderRouteOptions,
   type ModuleRenderResponse,
   type PrerenderVisitArgs,
+  type ReleaseBatchArgs,
   type RenderVisitResponse,
   logger,
   type RunCommandResponse,
@@ -57,6 +58,116 @@ class AsyncSemaphore {
   };
 }
 
+// Pure policy function for CS-10758 step 3 `clearCache` batch ownership.
+// Given the incoming visit args and the current owner entry (if any),
+// decides whether to strip `clearCache`, honor it, or replace the owner,
+// and returns the gated args plus an optional owner mutation and log
+// message. Extracted from Prerenderer.#gateClearCache so the policy table
+// is unit-testable without constructing a full Prerenderer (which would
+// launch Chrome via PagePool.warmStandbys during its constructor).
+//
+//   ┌─────────────────────────────┬─────────────┬──────────────────────┐
+//   │ caller                      │ owner state │ action               │
+//   ├─────────────────────────────┼─────────────┼──────────────────────┤
+//   │ batchId=A + clearCache:true │ none        │ honor; owner := A    │
+//   │ batchId=A + clearCache:true │ A           │ honor (same batch)   │
+//   │ batchId=B + clearCache:true │ A (B ≠ A)   │ replace owner := B,  │
+//   │                             │             │ honor clearCache     │
+//   │                             │             │ (legit successor)    │
+//   │ no batchId + clearCache:true│ any owner   │ STRIP clearCache     │
+//   │ no batchId + clearCache:true│ none        │ honor (no protect)   │
+//   │ any + clearCache:false/off  │ any         │ run; touch owner if  │
+//   │                             │             │ batchId matches      │
+//   └─────────────────────────────┴─────────────┴──────────────────────┘
+//
+// Rationale: indexing jobs are serialized per-realm through the queue, so
+// two legitimate same-realm batches never run concurrently. The only
+// source of a different-batchId + clearCache is a **successor** batch
+// (crash recovery, or the next .gts-triggered run). That successor should
+// win — it's the one with fresh module sources to pick up. Stripping its
+// clearCache would silently regress the .gts invalidation semantic. The
+// `no batchId` row covers the threat the ticket names: user-initiated
+// prerenders and cross-realm traffic that happen to land on the
+// indexer's warm tab.
+export type BatchOwner = { batchId: string; since: number };
+
+export interface BatchClearCacheDecision<
+  T extends Pick<PrerenderVisitArgs, 'renderOptions'>,
+> {
+  gatedArgs: T;
+  // `undefined`  — leave owner map unchanged
+  // `null`       — (reserved; not used today — delete the owner entry)
+  // { ... }      — set the owner entry for this affinity
+  newOwner?: BatchOwner | null;
+  log?: { level: 'info' | 'warn'; message: string };
+}
+
+export function computeBatchClearCacheGate<
+  T extends Pick<
+    PrerenderVisitArgs,
+    'affinityType' | 'affinityValue' | 'renderOptions' | 'batchId'
+  >,
+>(
+  args: T,
+  owner: BatchOwner | undefined,
+  nowMs: number,
+): BatchClearCacheDecision<T> {
+  let wantsClearCache = args.renderOptions?.clearCache === true;
+  let affinityKey = toAffinityKey({
+    affinityType: args.affinityType,
+    affinityValue: args.affinityValue,
+  });
+
+  if (!wantsClearCache) {
+    // Non-clearing visit is always OK. Touch the owner timestamp if
+    // this visit belongs to the current owner (keeps-alive semantics).
+    if (args.batchId && owner?.batchId === args.batchId) {
+      return {
+        gatedArgs: args,
+        newOwner: { batchId: owner.batchId, since: nowMs },
+      };
+    }
+    return { gatedArgs: args };
+  }
+
+  if (args.batchId) {
+    // batchId + clearCache is always honored. A different batchId means
+    // a legit successor; replace ownership so subsequent visits in the
+    // new batch own the affinity.
+    let log: BatchClearCacheDecision<T>['log'];
+    if (owner && owner.batchId !== args.batchId) {
+      log = {
+        level: 'info',
+        message: `batch owner for ${affinityKey} changing from ${owner.batchId} to ${args.batchId}`,
+      };
+    }
+    return {
+      gatedArgs: args,
+      newOwner: { batchId: args.batchId, since: nowMs },
+      log,
+    };
+  }
+
+  // No batchId — user request / cross-realm traffic. If an active owner
+  // exists, strip clearCache so the owner's warm loader survives.
+  if (owner) {
+    let strippedRenderOptions = {
+      ...(args.renderOptions ?? {}),
+      clearCache: undefined,
+    };
+    return {
+      gatedArgs: { ...args, renderOptions: strippedRenderOptions },
+      log: {
+        level: 'warn',
+        message: `stripping clearCache from non-batch request for ${affinityKey} (owner=${owner.batchId})`,
+      },
+    };
+  }
+
+  // No batchId and no owner — nothing to protect; honor.
+  return { gatedArgs: args };
+}
+
 export class Prerenderer {
   #stopped = false;
   #browserManager: BrowserManager;
@@ -66,6 +177,12 @@ export class Prerenderer {
   #affinityIdleEvictMs: number;
   #semaphore: AsyncSemaphore;
   #restartInFlight: Promise<void> | null = null;
+  // `clearCache` batch ownership (CS-10758 step 3). Maps affinityKey to
+  // `{ batchId, since }` for the batch that currently owns the affinity's
+  // warm loader. See `#gateClearCache` for the full policy. Populated on
+  // any batch'd `clearCache: true` visit and cleared on `releaseBatch`,
+  // successor-batch replacement, or affinity disposal.
+  #batchOwnership = new Map<string, { batchId: string; since: number }>();
 
   constructor(options: { serverURL: string; maxPages?: number }) {
     let maxPages = options.maxPages ?? 4;
@@ -77,6 +194,16 @@ export class Prerenderer {
       browserManager: this.#browserManager,
       boxelHostURL,
       renderSemaphore: this.#semaphore,
+      onAffinityDisposed: (affinityKey) => {
+        // Affinity tear-down implies the warm loader is gone, so any
+        // owner entry for that affinity is now meaningless. Clear it
+        // proactively so the next batch doesn't inherit a stale owner.
+        if (this.#batchOwnership.delete(affinityKey)) {
+          log.debug(
+            `batch ownership cleared for ${affinityKey} due to affinity disposal`,
+          );
+        }
+      },
     });
     this.#renderRunner = new RenderRunner({
       pagePool: this.#pagePool,
@@ -104,6 +231,10 @@ export class Prerenderer {
     return this.#pagePool.getWarmAffinities();
   }
 
+  getVacancySnapshot(): Record<string, { idle: boolean; tabCount: number }> {
+    return this.#pagePool.getVacancySnapshot();
+  }
+
   async stop(): Promise<void> {
     if (this.#cleanupInterval) {
       clearInterval(this.#cleanupInterval);
@@ -124,6 +255,60 @@ export class Prerenderer {
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     this.#renderRunner.clearAuthCache(affinityKey);
     await this.#pagePool.disposeAffinity(affinityKey);
+  }
+
+  // Release this batch's ownership of an affinity's warm loader (CS-10758
+  // step 3). Called from `IndexRunner`'s `finally` blocks and via the
+  // `/release-batch` HTTP endpoint. No-ops if the caller isn't the current
+  // owner — a successor batch that acquired ownership before the prior
+  // batch got around to releasing should not have its ownership cleared.
+  async releaseBatch({
+    batchId,
+    affinityType,
+    affinityValue,
+  }: ReleaseBatchArgs): Promise<void> {
+    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let owner = this.#batchOwnership.get(affinityKey);
+    if (owner?.batchId === batchId) {
+      this.#batchOwnership.delete(affinityKey);
+      log.debug(`batch ${batchId} released ownership of ${affinityKey}`);
+    }
+  }
+
+  // Read-only observability accessor used by tests. Callers outside of
+  // tests should not rely on this shape; it's a debugging surface, not a
+  // stable API.
+  getBatchOwnership(
+    affinityKey: string,
+  ): { batchId: string; since: number } | undefined {
+    let owner = this.#batchOwnership.get(affinityKey);
+    return owner ? { batchId: owner.batchId, since: owner.since } : undefined;
+  }
+
+  #gateClearCache<
+    T extends PrerenderVisitArgs & {
+      opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    },
+  >(args: T): T {
+    let affinityKey = toAffinityKey({
+      affinityType: args.affinityType,
+      affinityValue: args.affinityValue,
+    });
+    let owner = this.#batchOwnership.get(affinityKey);
+    let decision = computeBatchClearCacheGate(args, owner, Date.now());
+    if (decision.newOwner === null) {
+      this.#batchOwnership.delete(affinityKey);
+    } else if (decision.newOwner) {
+      this.#batchOwnership.set(affinityKey, decision.newOwner);
+    }
+    if (decision.log) {
+      if (decision.log.level === 'info') {
+        log.info(decision.log.message);
+      } else if (decision.log.level === 'warn') {
+        log.warn(decision.log.message);
+      }
+    }
+    return decision.gatedArgs as T;
   }
 
   async prerenderModule({
@@ -274,19 +459,11 @@ export class Prerenderer {
     }
   }
 
-  async prerenderVisit({
-    affinityType,
-    affinityValue,
-    realm,
-    url,
-    auth,
-    renderOptions,
-    fileData,
-    types,
-    opts,
-  }: PrerenderVisitArgs & {
-    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
-  }): Promise<{
+  async prerenderVisit(
+    rawArgs: PrerenderVisitArgs & {
+      opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    },
+  ): Promise<{
     response: RenderVisitResponse;
     timings: { launchMs: number; renderMs: number };
     pool: PoolMeta;
@@ -294,6 +471,22 @@ export class Prerenderer {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
+    // Apply batch-ownership gating before the retry loop so the internal
+    // retry-with-clearCache (see `retrySignature` handling below) operates
+    // on options that have already been through the gate. The retry still
+    // works regardless of ownership — it's the external caller's
+    // clearCache that's policy-checked, not the server's own recovery.
+    let {
+      affinityType,
+      affinityValue,
+      realm,
+      url,
+      auth,
+      renderOptions,
+      fileData,
+      types,
+      opts,
+    } = this.#gateClearCache(rawArgs);
     let attemptOptions = renderOptions;
     let lastResult:
       | {

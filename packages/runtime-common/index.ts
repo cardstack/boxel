@@ -166,6 +166,24 @@ export type PrerenderVisitArgs = {
   // Inputs required only when the fileRender pass is requested
   fileData?: FileRenderArgs['fileData'];
   types?: string[];
+  // Identifies the indexing batch this visit belongs to (CS-10758 step 3).
+  // Required to honor `renderOptions.clearCache: true` on the prerender
+  // server when another batch currently owns the affinity. Visits without
+  // a batchId (e.g. user-initiated prerenders, cross-realm traffic) have
+  // clearCache stripped whenever an active batch owns the affinity —
+  // protecting the indexer's warm loader from being wiped by incidental
+  // callers.
+  batchId?: string;
+};
+
+// Arguments for releasing an indexing batch's ownership of an affinity,
+// called from `IndexRunner`'s `finally` blocks after a run completes.
+// Clears the owner entry so the next batch can acquire it without a forced
+// successor-replacement.
+export type ReleaseBatchArgs = {
+  batchId: string;
+  affinityType: AffinityType;
+  affinityValue: string;
 };
 
 // Each sub-field is populated only when the corresponding pass was requested.
@@ -199,6 +217,11 @@ export interface Prerenderer {
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
   prerenderVisit(args: PrerenderVisitArgs): Promise<RenderVisitResponse>;
   runCommand(args: RunCommandArgs): Promise<RunCommandResponse>;
+  // Optional: supported by server-side prerenderers that implement
+  // `clearCache` batch ownership (CS-10758 step 3). Callers should probe
+  // before invoking since not every Prerenderer implementation participates
+  // in ownership tracking (e.g. test stubs, remote variants on older servers).
+  releaseBatch?(args: ReleaseBatchArgs): Promise<void>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -320,6 +343,11 @@ export { getCreatedTime } from './file-meta';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { Loader };
+export {
+  fetchWithTransientRetry,
+  isRetryableStatus,
+  DEFAULT_TRANSIENT_RETRY_DELAYS_MS,
+} from './loader';
 export {
   cardTypeDisplayName,
   cardTypeIcon,

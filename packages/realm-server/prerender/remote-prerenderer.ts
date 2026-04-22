@@ -183,6 +183,7 @@ export function createRemotePrerenderer(
       renderOptions,
       fileData,
       types,
+      batchId,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> {
       return await requestWithRetry<RenderVisitResponse>(
         'prerender-visit',
@@ -196,6 +197,7 @@ export function createRemotePrerenderer(
           renderOptions: renderOptions ?? {},
           ...(fileData ? { fileData } : {}),
           ...(types ? { types } : {}),
+          ...(batchId ? { batchId } : {}),
         },
       );
     },
@@ -211,6 +213,51 @@ export function createRemotePrerenderer(
           commandInput,
         },
       );
+    },
+    // Release this batch's ownership of an affinity (CS-10758 step 3).
+    // Routed through the manager so the release fans out to every server
+    // currently assigned this affinity (any of which could hold local
+    // ownership from a prior visit). Best-effort: a network-level failure
+    // is logged but not rethrown — the owner expires implicitly on
+    // successor replacement or affinity disposal. Bounded by an abort
+    // timer so a hung manager can't block IndexRunner's `finally` and
+    // stall queue progress after useful indexing work is done.
+    async releaseBatch({ batchId, affinityType, affinityValue }) {
+      let endpoint = new URL('release-batch', prerenderURL);
+      let ac = new AbortController();
+      let timer = setTimeout(() => ac.abort(), requestTimeoutMs);
+      (timer as any).unref?.();
+      try {
+        let response = await fetch(endpoint, {
+          method: 'POST',
+          headers: jsonApiHeaders,
+          body: JSON.stringify({
+            data: {
+              type: 'release-batch-request',
+              attributes: { batchId, affinityType, affinityValue },
+            },
+          }),
+          signal: ac.signal,
+        });
+        if (!response.ok) {
+          log.warn(
+            `releaseBatch for ${affinityType}:${affinityValue} (batch ${batchId}) returned ${response.status}`,
+          );
+        }
+      } catch (e) {
+        if ((e as { name?: string })?.name === 'AbortError') {
+          log.warn(
+            `releaseBatch for ${affinityType}:${affinityValue} (batch ${batchId}) timed out after ${requestTimeoutMs}ms`,
+          );
+        } else {
+          log.warn(
+            `releaseBatch for ${affinityType}:${affinityValue} (batch ${batchId}) network error:`,
+            e,
+          );
+        }
+      } finally {
+        clearTimeout(timer);
+      }
     },
   };
 }

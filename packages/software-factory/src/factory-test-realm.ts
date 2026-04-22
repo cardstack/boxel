@@ -17,6 +17,9 @@ export type {
   QunitTestResult,
   RunRealmTestsFailure,
   RunRealmTestsOutput,
+  RunTestsFailure,
+  RunTestsInMemoryOptions,
+  RunTestsResult,
   TestModuleResultData,
   TestResultEntryData,
   TestRunAttributes,
@@ -35,4 +38,8 @@ export {
 } from './test-run-cards';
 
 // Execution & resume
-export { executeTestRunFromRealm, resolveTestRun } from './test-run-execution';
+export {
+  executeTestRunFromRealm,
+  resolveTestRun,
+  runTestsInMemory,
+} from './test-run-execution';

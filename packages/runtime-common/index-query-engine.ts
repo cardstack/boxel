@@ -47,6 +47,7 @@ import {
   type InFilter,
   type NotFilter,
   type ContainsFilter,
+  type MatchesFilter,
   type Sort,
   type RangeFilter,
   RANGE_OPERATORS,
@@ -829,6 +830,8 @@ export class IndexQueryEngine {
       return this.notCondition(filter, on, typeConditionRef);
     } else if ('range' in filter) {
       return this.rangeCondition(filter, on, typeConditionRef);
+    } else if ('matches' in filter) {
+      return this.matchesCondition(filter, on, typeConditionRef);
     } else if ('every' in filter) {
       return every([
         ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
@@ -922,6 +925,43 @@ export class IndexQueryEngine {
       ...Object.entries(filter.range).map(([key, filterValue]) => {
         return this.fieldRangeFilter(key, filterValue as RangeFilterValue, on);
       }),
+    ]);
+  }
+
+  // Full-text matches predicate. Postgres uses tsvector/tsquery on the
+  // indexed markdown column; SQLite falls back to a case-insensitive
+  // substring LIKE with `%`/`_`/`\` escaped in JS before binding. An
+  // empty/whitespace-only query short-circuits to FALSE so SQLite doesn't
+  // match every non-null row (PG's websearch_to_tsquery already yields an
+  // empty tsquery that matches nothing — we match that behavior here).
+  private matchesCondition(
+    filter: MatchesFilter,
+    _on: CodeRef,
+    typeConditionRef?: CodeRef,
+  ): CardExpression {
+    let typeRef = typeConditionRef;
+    let predicate: CardExpression =
+      filter.matches.trim() === ''
+        ? ['FALSE']
+        : [
+            dbExpression({
+              pg: [
+                `to_tsvector('english', coalesce(i.markdown, ''))`,
+                '@@',
+                `websearch_to_tsquery('english',`,
+                param(filter.matches),
+                `)`,
+              ],
+              sqlite: [
+                `LOWER(i.markdown) LIKE LOWER(`,
+                param(`%${escapeSqliteLikePattern(filter.matches)}%`),
+                `) ESCAPE '\\'`,
+              ],
+            }),
+          ];
+    return every([
+      ...(typeRef ? [this.typeCondition(typeRef)] : []),
+      predicate,
     ]);
   }
 
@@ -1431,6 +1471,13 @@ function assertIndexEntry<T>(obj: T): Omit<
 
 function tableFromOpts(opts: WIPOptions | undefined) {
   return opts?.useWorkInProgressIndex ? 'boxel_index_working' : 'boxel_index';
+}
+
+// SQLite LIKE treats `%` and `_` as wildcards. With `ESCAPE '\'` we can
+// neutralize user-supplied wildcards by prefixing them (and the escape
+// char itself) with a backslash before binding.
+function escapeSqliteLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
 function assertNever(value: never) {

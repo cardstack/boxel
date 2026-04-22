@@ -117,6 +117,12 @@ export class PagePool {
   #ensuringStandbys: Promise<void> | null = null;
   #creatingStandbys = 0;
   #consoleErrorsByPageId = new Map<string, Map<string, ConsoleErrorEntry>>();
+  // Fired from `disposeAffinity` after an affinity's tabs are torn down.
+  // Consumed by the Prerenderer to clear `clearCache` batch ownership
+  // for the affinity (CS-10758 step 3) — stale ownership across a page
+  // disposal would otherwise prevent the next batch from taking the
+  // affinity without a successor replacement.
+  #onAffinityDisposed: ((affinityKey: string) => void) | undefined;
 
   constructor(options: {
     maxPages: number;
@@ -126,6 +132,7 @@ export class PagePool {
     standbyTimeoutMs?: number;
     renderSemaphore?: RenderSemaphore;
     disableStandbyRefill?: boolean;
+    onAffinityDisposed?: (affinityKey: string) => void;
   }) {
     this.#maxPages = options.maxPages;
     let envTabMax = Number(process.env.PRERENDER_AFFINITY_TAB_MAX ?? 4);
@@ -139,6 +146,7 @@ export class PagePool {
     this.#standbyTimeoutMs = options.standbyTimeoutMs ?? 30_000;
     this.#renderSemaphore = options.renderSemaphore;
     this.#disableStandbyRefill = options.disableStandbyRefill ?? false;
+    this.#onAffinityDisposed = options.onAffinityDisposed;
   }
 
   set serverURL(url: string) {
@@ -147,6 +155,21 @@ export class PagePool {
 
   getWarmAffinities(): string[] {
     return [...this.#affinityPages.keys()];
+  }
+
+  // Per-affinity vacancy snapshot consumed by the prerender manager for
+  // warm-vacancy-first routing (CS-10758). `idle: true` means every tab
+  // currently owned by this affinity has an empty render queue — the next
+  // visit can run without waiting. `tabCount` tracks how many pages the
+  // affinity has claimed (bounded by PRERENDER_AFFINITY_TAB_MAX).
+  getVacancySnapshot(): Record<string, { idle: boolean; tabCount: number }> {
+    let snapshot: Record<string, { idle: boolean; tabCount: number }> = {};
+    for (let [affinityKey, entries] of this.#affinityPages) {
+      let tabCount = entries.size;
+      let idle = [...entries].every((entry) => entry.queue.pendingCount === 0);
+      snapshot[affinityKey] = { idle, tabCount };
+    }
+    return snapshot;
   }
 
   resetConsoleErrors(pageId: string): void {
@@ -254,6 +277,14 @@ export class PagePool {
         });
       }
       void this.#notifyManagerAffinityEvicted(affinityKey);
+    }
+    // Notify subscribers (e.g. Prerenderer's batch-ownership tracker) that
+    // this affinity has been torn down. Best-effort: subscriber failures
+    // must not leak back into the dispose path.
+    try {
+      this.#onAffinityDisposed?.(affinityKey);
+    } catch (e) {
+      log.warn(`onAffinityDisposed subscriber threw for ${affinityKey}:`, e);
     }
     void this.#browserManager.cleanupUserDataDirs();
     void this.#ensureStandbyPool();

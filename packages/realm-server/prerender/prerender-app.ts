@@ -527,6 +527,14 @@ export function buildPrerenderApp(options: {
       let affinityValue = rawAffinityValue as string;
       let url = rawUrl as string;
       let auth = rawAuth as string;
+      // Optional batch id (CS-10758 step 3). If absent or not a non-empty
+      // string the prerenderer treats the visit as batch-less and strips
+      // any `clearCache: true` when an active batch owns the affinity.
+      let rawBatchId = attrs.batchId;
+      let batchId =
+        typeof rawBatchId === 'string' && rawBatchId.trim().length > 0
+          ? rawBatchId
+          : undefined;
 
       let start = Date.now();
       let execPromise = prerenderer
@@ -539,6 +547,7 @@ export function buildPrerenderApp(options: {
           renderOptions,
           ...(fileData ? { fileData } : {}),
           ...(Array.isArray(types) ? { types } : {}),
+          ...(batchId ? { batchId } : {}),
         })
         .then((result) => ({ result }));
       let drainPromise = options.drainingPromise
@@ -631,6 +640,69 @@ export function buildPrerenderApp(options: {
     }
   });
 
+  // Release an indexing batch's ownership of an affinity's warm loader
+  // (CS-10758 step 3). Called by the indexer's `finally` block via the
+  // manager's broadcast proxy. No-op if this server isn't the current
+  // owner — safe to broadcast to servers that never saw the batch.
+  router.post('/release-batch', async (ctxt: Koa.Context) => {
+    try {
+      let request = await fetchRequestFromContext(ctxt);
+      let raw = await request.text();
+      let body: any;
+      try {
+        body = raw ? JSON.parse(raw) : {};
+      } catch (e) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [{ status: 400, message: 'Invalid JSON body' }],
+        };
+        return;
+      }
+      let attrs = body?.data?.attributes ?? {};
+      let batchId = attrs.batchId;
+      let affinityType = attrs.affinityType;
+      let affinityValue = attrs.affinityValue;
+      let missing: string[] = [];
+      if (typeof batchId !== 'string' || batchId.trim().length === 0) {
+        missing.push('batchId');
+      }
+      if (affinityType !== 'realm' && affinityType !== 'user') {
+        missing.push('affinityType');
+      }
+      if (
+        typeof affinityValue !== 'string' ||
+        affinityValue.trim().length === 0
+      ) {
+        missing.push('affinityValue');
+      }
+      if (missing.length > 0) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [
+            {
+              status: 400,
+              message: `Missing or invalid attributes: ${missing.join(', ')}`,
+            },
+          ],
+        };
+        return;
+      }
+      await prerenderer.releaseBatch({
+        batchId,
+        affinityType: affinityType as AffinityType,
+        affinityValue,
+      });
+      ctxt.status = 204;
+    } catch (err: any) {
+      Sentry.captureException(err);
+      log.error('Unhandled error in /release-batch:', err);
+      ctxt.status = 500;
+      ctxt.body = {
+        errors: [{ status: 500, message: err?.message ?? 'Unknown error' }],
+      };
+    }
+  });
+
   app
     .use((ctxt: Koa.Context, next: Koa.Next) => {
       if (
@@ -702,13 +774,18 @@ async function unregisterWithManager(serverURL: string) {
 export function createPrerenderHttpServer(options?: {
   maxPages?: number;
   port?: number;
+  // Default true. Gates the process-wide uncaughtException AND
+  // unhandledRejection handlers, both of which call process.exit(1). In tests
+  // pass false so the qunit runner isn't torn down before teardown hooks can
+  // release hardcoded test ports (CS-10813).
+  fatalExitOnUncaught?: boolean;
 }): Server {
   let draining = false;
   let drainingResolved = false;
   let drainingDeferred = new Deferred<void>();
   let heartbeatTimer: NodeJS.Timeout | undefined;
   let isClosing = false;
-  let fatalExitInProgress = false;
+  let fatalExitOnUncaught = options?.fatalExitOnUncaught ?? true;
   let serverURL = resolvePrerenderServerURL(options?.port);
   let { app, prerenderer } = buildPrerenderApp({
     maxPages: options?.maxPages,
@@ -755,6 +832,10 @@ export function createPrerenderHttpServer(options?: {
             url: serverURL,
             status: status ?? (draining ? 'draining' : 'active'),
             warmedAffinities: prerenderer.getWarmAffinities(),
+            // Per-affinity vacancy snapshot. Consumed by the prerender
+            // manager's warm-vacancy-first routing (CS-10758). Additive to
+            // warmedAffinities for rolling-deploy back-compat.
+            affinityVacancy: prerenderer.getVacancySnapshot(),
           },
         },
       };
@@ -848,37 +929,46 @@ export function createPrerenderHttpServer(options?: {
   process.on('SIGTERM', shutdownHandler);
   process.on('SIGINT', shutdownHandler);
 
-  async function handleFatal(
-    type: 'uncaughtException' | 'unhandledRejection',
-    err: any,
-  ) {
-    if (fatalExitInProgress) return;
-    fatalExitInProgress = true;
-    log.error(`Fatal ${type}; shutting down prerenderer`, err);
-    try {
-      await prerenderer.stop();
-    } catch (e: any) {
-      log.warn('Error stopping prerenderer during fatal shutdown:', e);
-    }
-    try {
-      server.close();
-    } catch (e: any) {
-      log.warn('Error closing server during fatal shutdown:', e);
-    }
-    setTimeout(() => process.exit(1), 100);
-  }
+  let uncaughtExceptionHandler: ((err: unknown) => void) | undefined;
+  let unhandledRejectionHandler: ((err: unknown) => void) | undefined;
+  if (fatalExitOnUncaught) {
+    let fatalExitInProgress = false;
+    const handleFatal = async (
+      type: 'uncaughtException' | 'unhandledRejection',
+      err: any,
+    ) => {
+      if (fatalExitInProgress) return;
+      fatalExitInProgress = true;
+      log.error(`Fatal ${type}; shutting down prerenderer`, err);
+      try {
+        await prerenderer.stop();
+      } catch (e: any) {
+        log.warn('Error stopping prerenderer during fatal shutdown:', e);
+      }
+      try {
+        server.close();
+      } catch (e: any) {
+        log.warn('Error closing server during fatal shutdown:', e);
+      }
+      setTimeout(() => process.exit(1), 100);
+    };
 
-  const uncaughtExceptionHandler = (err: unknown) =>
-    handleFatal('uncaughtException', err);
-  const unhandledRejectionHandler = (err: unknown) =>
-    handleFatal('unhandledRejection', err);
-  process.on('uncaughtException', uncaughtExceptionHandler);
-  process.on('unhandledRejection', unhandledRejectionHandler);
+    uncaughtExceptionHandler = (err: unknown) =>
+      handleFatal('uncaughtException', err);
+    unhandledRejectionHandler = (err: unknown) =>
+      handleFatal('unhandledRejection', err);
+    process.on('uncaughtException', uncaughtExceptionHandler);
+    process.on('unhandledRejection', unhandledRejectionHandler);
+  }
   server.on('close', () => {
     process.off('SIGTERM', shutdownHandler);
     process.off('SIGINT', shutdownHandler);
-    process.off('uncaughtException', uncaughtExceptionHandler);
-    process.off('unhandledRejection', unhandledRejectionHandler);
+    if (uncaughtExceptionHandler) {
+      process.off('uncaughtException', uncaughtExceptionHandler);
+    }
+    if (unhandledRejectionHandler) {
+      process.off('unhandledRejection', unhandledRejectionHandler);
+    }
   });
   return server;
 }

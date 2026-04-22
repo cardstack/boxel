@@ -7,6 +7,7 @@ import start from 'ember-exam/test-support/start';
 // eslint-disable-next-line ember/no-test-import-export
 import { loadRealmTests } from './live-test';
 import { setupQUnit } from './helpers/setup-qunit';
+import { registerShardWarmup } from './helpers/shard-warmup';
 
 const application = Application.create({
   ...config.APP,
@@ -24,6 +25,7 @@ function setupHostTests() {
 
   if (isParallelExamRun) {
     QUnit.config.failOnZeroTests = false;
+    registerShardWarmup();
   }
 
   start();

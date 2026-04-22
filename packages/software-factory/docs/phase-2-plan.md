@@ -138,6 +138,14 @@ When `readFile` returns a parsed `document` (as the realm API does for `.json` f
 
 **Performance:** The tsconfig content is cached in memory (it never changes between runs). The `node_modules` symlink avoids copying hundreds of megabytes of dependencies.
 
+**Shared engine.** The discovery, glint invocation, and per-file parse loop live in `src/parse-execution.ts` (`discoverParseableGtsFiles` + `discoverJsonExampleFiles` + `parseRealmFiles`, plus the glint runner and JSON validators). Both the validation pipeline's `ParseValidationStep` (which owns `ParseResult` artifact lifecycle) and the in-memory `run_parse` agent tool (see below) consume the same engine, so parse coverage stays identical.
+
+### In-Memory `run_parse` Agent Tool (CS-10778)
+
+The agent also has a `run_parse` tool exposed on the factory tool set. It runs the same discovery + glint / JSON engine as the validation step and returns a flat, JSON-friendly `RunParseResult` (`status`, `filesChecked`, `filesWithErrors`, `errorCount`, `durationMs`, `parseableFiles`, `errors[{ file, line, column, message }]`). Unlike `ParseValidationStep`, it **does not create a `ParseResult` card** — no realm artifact is written, so it's safe to call repeatedly for mid-turn self-validation before `signal_done`. The orchestrator's post-`signal_done` parse validation still writes the durable `ParseResult`.
+
+The tool accepts an optional `path` argument. When omitted, every `.gts` / `.gjs` / `.ts` file in the realm is type-checked AND every `.json` file listed as a Spec `linkedExample` is validated (matching the validation step's behavior). When supplied, the tool skips discovery and parses only that one realm-relative file — `.gts` / `.gjs` / `.ts` runs through glint; `.json` is parsed and checked for card document structure. Paths with non-parseable extensions (`.md`, etc.) short-circuit to `status: 'error'` without calling the realm.
+
 The `ParseResult` card definition (`realm/parse-result.gts`) and CRUD (`src/parse-result-cards.ts`) follow the same patterns as `LintResult` and `EvalResult` — fitted/embedded/isolated templates, a running state, `ParseFileResult` field def with nested `ParseError` entries, and links to Issue/Project.
 
 ### Lint Step Details (CS-10714)
@@ -150,6 +158,14 @@ The lint validation step (`src/validators/lint-step.ts`) uses the realm's existi
 4. Collect `messages` from the response where `severity === 2` (errors)
 
 The `LintResult` card definition (`realm/lint-result.gts`) mirrors the `TestRun` card structure with fitted/embedded/isolated templates, a running state, and links to Issue/Project. Card CRUD is in `src/lint-result-cards.ts`.
+
+**Shared engine.** The per-file discovery and lint loop live in `src/lint-execution.ts` (`discoverLintableFiles` + `lintRealmFiles`). Both the validation pipeline's `LintValidationStep` (which owns `LintResult` artifact lifecycle) and the in-memory `run_lint` agent tool (see below) consume the same engine, so rule coverage and read/lint semantics stay identical.
+
+### In-Memory `run_lint` Agent Tool (CS-10776)
+
+The agent also has a `run_lint` tool exposed on the factory tool set. It runs the same discovery + `_lint` engine as the validation step and returns a flat, JSON-friendly `RunLintResult` (`status`, `filesChecked`, `filesWithErrors`, `errorCount`, `warningCount`, `durationMs`, `lintableFiles`, `violations[{ rule, file, line, column, message, severity }]`). Unlike `LintValidationStep`, it **does not create a `LintResult` card** — no realm artifact is written, so it's safe to call repeatedly for mid-turn self-validation before `signal_done`. The orchestrator's post-`signal_done` lint validation still writes the durable `LintResult`.
+
+The tool accepts an optional `path` argument. When omitted, every lintable file in the realm is linted (matching the validation step's behavior). When supplied, the tool skips discovery and lints only that one realm-relative file — handy for a fast self-check right after writing or editing a single file. Paths with non-lintable extensions (`.json`, etc.) short-circuit to `status: 'error'` without calling the realm.
 
 ### Eval Step Details (CS-10715)
 
@@ -222,7 +238,7 @@ If the brief describes only one entry-point card, there will be one implementati
 
 Each implementation issue must carry `project` and `relatedKnowledge` relationships pointing to the Project and KnowledgeArticle cards created during bootstrap. This is how `ContextBuilder.buildForIssue()` loads project scope and brief context for the agent when working on these issues.
 
-The agent does **not** need to create "run tests" issues. Test execution happens automatically as part of the validation phase after every inner-loop iteration.
+The agent does **not** need to create "run tests" issues. Test execution happens automatically as part of the validation phase after every inner-loop iteration. The agent may also call the `run_tests` tool mid-turn for in-memory self-validation (see "run_tests Tool: In-Memory Validation" below) — that call is optional and never replaces the orchestrator's post-turn pipeline.
 
 ### Validation Behavior for Bootstrap Issues
 
@@ -527,9 +543,25 @@ When the loop outcome is `all_issues_done`, the orchestrator automatically sets 
 
 The `update_issue`, `update_project`, and `create_knowledge` tools perform a **read-patch-write** cycle: they read the existing card source, merge the agent-provided attributes on top, and write back the merged document. This preserves attributes the agent didn't include in its update call. Earlier versions used a full-document write via `buildCardDocument()` which would clobber existing attributes — this was identified as a critical bug during e2e testing (bootstrap-seed issue was reduced to just `status` and `updatedAt` after an update).
 
-### run_tests Tool Removed from Agent
+### run_tests Tool: In-Memory Validation (CS-10777)
 
-The `run_tests` tool is **not exposed** to the agent. The validation pipeline runs tests automatically after every agent turn (after `signal_done`). Giving the agent the tool caused it to waste iterations running tests manually, sometimes before writing test files, and creating duplicate TestRun instances. The system prompt and skills inform the agent that the orchestrator handles test execution.
+The `run_tests` tool **is exposed** to the agent, but as an **in-memory** validator rather than a realm-writing one. This is the first member of the `CS-10775` in-memory validation tool family (with in-memory `lint`, `parse`, and `evaluate` counterparts coming as sibling issues).
+
+Behavior:
+
+- The tool discovers `*.test.gts` files in the target realm, drives QUnit via Playwright/Chromium (through the shared `runQunitInBrowser()` engine), and returns a flat `RunTestsResult` object — `{ status, passedCount, failedCount, skippedCount, durationMs, testFiles, failures, errorMessage? }`.
+- It does **not** create a `TestRun` card or any other realm artifact. The orchestrator's post-`signal_done` validation pipeline still writes the durable `TestRun` artifact.
+- It takes no arguments — it always runs the full `*.test.gts` set in the target realm.
+
+Rationale for reintroduction: the original `run_tests` tool was removed because it ran through `executeTestRunFromRealm()`, which meant the agent could create duplicate `TestRun` instances and confuse sequence-number ordering. The in-memory variant sidesteps that problem entirely — no card is ever written — so letting the agent call it mid-turn to check its own work is safe. The pipeline remains the source of truth for the persistent `TestRun` artifact.
+
+### run_evaluate: In-Memory Self-Validation (CS-10779)
+
+The `run_evaluate` tool lets the agent evaluate one (or every non-test) ESM module in the target realm via the prerenderer sandbox and get back a flat `RunEvaluateResult` (`status`, `modulesChecked`, `modulesWithErrors`, `durationMs`, `evaluableFiles`, `failures: { path, error, stackTrace? }[]`). Unlike the pipeline's `EvalValidationStep`, it does NOT write an `EvalResult` card — so the agent can call it mid-turn as many times as it likes without creating realm artifacts. The orchestrator still runs the full validation pipeline (which writes the durable `EvalResult` card) after `signal_done`, so calling this tool is optional.
+
+Discovery (all non-test `.gts` / `.gjs` / `.ts` / `.js` files, alphabetical) and per-module evaluation now live in the shared `src/eval-execution.ts` engine, used by both `EvalValidationStep` (card-writing path) and `runEvaluateInMemory` (tool path). The `path` parameter accepts a single realm-relative file; non-evaluable extensions and test files (`*.test.*`) short-circuit to `status: 'error'` without calling the realm.
+
+Failure line/column numbers still reference the transpiled module — the tool description points the agent at `fetch_transpiled_module` for debugging while making explicit that transpiled output is read-only scratch and must never be copied into source.
 
 The `run_command` tool description explicitly states it is for Boxel host commands only (format: `@cardstack/boxel-host/commands/<name>/default`), not shell commands or scripts.
 

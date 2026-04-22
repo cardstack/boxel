@@ -1,6 +1,7 @@
 import {
   waitFor,
   click,
+  fillIn,
   triggerKeyEvent,
   focus,
   doubleClick,
@@ -124,7 +125,8 @@ module('Integration | card-catalog', function (hooks) {
         }),
         'Spec/author.json': new Spec({
           cardTitle: 'Author',
-          cardDescription: 'Spec for Author',
+          cardDescription:
+            'Spec for Author — covers biographical sketches by ornithologists',
           specType: 'card',
           ref: {
             module: `${testRealmURL}author`,
@@ -169,7 +171,8 @@ module('Integration | card-catalog', function (hooks) {
         }),
         'Spec/address.json': new Spec({
           cardTitle: 'Address',
-          cardDescription: 'Spec for Address field',
+          cardDescription:
+            'Spec for Address field — also frequented by ornithologists',
           specType: 'field',
           ref: {
             module: `${testRealmURL}address`,
@@ -432,6 +435,38 @@ module('Integration | card-catalog', function (hooks) {
       await waitFor('[data-test-card-catalog-modal]', { count: 0 });
       assert.dom(`[data-test-stack-card-index="0"]`).exists();
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
+    });
+  });
+
+  module('content search', function () {
+    test('finds cards by description content, not just title, and respects type scoping', async function (assert) {
+      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor(
+        `[data-test-card-catalog-item="${testRealmURL}Spec/author"]`,
+      );
+
+      // 'ornithologists' appears in both Spec/author (specType: 'card') and
+      // Spec/address (specType: 'field'). The chooser's baseFilter scopes to
+      // card-type specs, so only the Author spec should surface — proving
+      // matches is layered on top of type scoping, not replacing it.
+      await fillIn('[data-test-search-field]', 'ornithologists');
+      await waitFor(
+        `[data-test-realm="${realmName}"] [data-test-card-catalog-item="${testRealmURL}Spec/author"]`,
+      );
+
+      assert
+        .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+        .exists(
+          { count: 1 },
+          'only the card-type spec is shown; field-type spec with the same content term is filtered out',
+        );
+      assert
+        .dom(
+          `[data-test-realm="${realmName}"] [data-test-card-catalog-item="${testRealmURL}Spec/address"]`,
+        )
+        .doesNotExist(
+          'field-type spec is excluded even though its description matches',
+        );
     });
   });
 });

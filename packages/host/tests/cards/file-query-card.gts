@@ -16,7 +16,7 @@ const fileSearchQuery = {
       name: 'FileDef',
     },
   },
-  realm: '$thisRealm',
+  realm: '$REALM',
 };
 
 export class FileQueryCard extends CardDef {
