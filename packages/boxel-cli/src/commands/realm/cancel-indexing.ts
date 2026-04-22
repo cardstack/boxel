@@ -22,7 +22,10 @@ export function registerCancelIndexingCommand(realm: Command): void {
   realm
     .command('cancel-indexing')
     .description('Cancel all indexing jobs (running + pending) for a realm')
-    .requiredOption('--realm <realm-url>', 'URL of the realm to cancel indexing for')
+    .requiredOption(
+      '--realm <realm-url>',
+      'URL of the realm to cancel indexing for',
+    )
     .action(async (options: { realm: string }) => {
       let result = await cancelIndexing(options.realm);
       if (result.ok) {
@@ -30,9 +33,7 @@ export function registerCancelIndexingCommand(realm: Command): void {
           `${FG_GREEN}Cancelled indexing jobs for ${options.realm}${RESET}`,
         );
       } else {
-        console.error(
-          `${FG_RED}Error: ${result.error}${RESET}`,
-        );
+        console.error(`${FG_RED}Error: ${result.error}${RESET}`);
         process.exit(1);
       }
     });

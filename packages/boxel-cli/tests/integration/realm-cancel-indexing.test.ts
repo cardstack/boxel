@@ -26,7 +26,10 @@ beforeAll(async () => {
   await setupTestProfile(profileManager);
 });
 
-afterAll(async () => { cleanupProfile?.(); await stopTestRealmServer(); });
+afterAll(async () => {
+  cleanupProfile?.();
+  await stopTestRealmServer();
+});
 
 describe('realm cancel-indexing (integration)', () => {
   it('cancels indexing on a running realm and returns ok', async () => {
@@ -36,7 +39,9 @@ describe('realm cancel-indexing (integration)', () => {
   });
 
   it('returns error for an unreachable realm', async () => {
-    let result = await cancelIndexing('http://127.0.0.1:1/fake/', { profileManager });
+    let result = await cancelIndexing('http://127.0.0.1:1/fake/', {
+      profileManager,
+    });
     expect(result.ok).toBe(false);
     expect(result.error).toBeDefined();
   });
