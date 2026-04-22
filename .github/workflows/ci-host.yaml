@@ -339,9 +339,6 @@ jobs:
       # the junit summary back to the PR / commit.
       checks: write
       pull-requests: write
-      # contents: needed only for the "Update memory baseline" step, which
-      # pushes a commit — and only fires on push-to-main (see step condition).
-      contents: write
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -379,20 +376,35 @@ jobs:
           junit_files: host.xml
           check_name: Host Test Results
 
+  host-memory-baseline:
+    name: Host Memory Baseline
+    if: ${{ !cancelled() && (needs.host-test.result == 'success' || needs.host-test.result == 'failure') }}
+    concurrency:
+      group: host-memory-baseline-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    needs: host-test
+    runs-on: ubuntu-latest
+    permissions:
+      # contents: needed only for the "Update memory baseline" step, which
+      # pushes a commit — and only fires on push-to-main (see step condition).
+      contents: write
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+
       - name: Download memory reports
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        if: ${{ !cancelled() }}
         with:
           path: all-memory-reports
           pattern: memory-report-*
           merge-multiple: true
 
       - name: Check memory baseline
-        if: ${{ !cancelled() }}
         run: node packages/host/scripts/check-memory-baseline.mjs all-memory-reports packages/host/memory-baseline.json
 
       - name: Update memory baseline
-        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.host-test.result == 'success' }}
+        if: ${{ github.ref == 'refs/heads/main' && needs.host-test.result == 'success' }}
         run: |
           node packages/host/scripts/update-memory-baseline.mjs all-memory-reports packages/host/memory-baseline.json
           if git diff --quiet packages/host/memory-baseline.json; then
