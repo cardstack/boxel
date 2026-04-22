@@ -44,7 +44,7 @@ NODE_ENV=development \
   --toUrl="${REALM_BASE_URL}/skills/" \
   \
   ${START_CATALOG:+--fromUrl="${LEGACY_CATALOG_REALM_URL}"} \
-  ${START_CATALOG:+--toUrl="${LEGACY_CATALOG_REALM_URL}"}
+  ${START_CATALOG:+--toUrl="${LEGACY_CATALOG_REALM_URL}"} \
   \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl="${REALM_BASE_URL}/openrouter/" \

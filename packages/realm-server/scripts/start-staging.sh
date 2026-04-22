@@ -83,4 +83,3 @@ NODE_NO_WARNINGS=1 \
   --username='software_factory_realm' \
   --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
   --toUrl="${SOFTWARE_FACTORY_REALM_URL}"
-  --toUrl='https://realms-staging.stack.cards/experiments/'
