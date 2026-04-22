@@ -57,13 +57,13 @@ describe('file list (integration)', () => {
     expect(result.error).toBeDefined();
   });
 
-  it('throws when no active profile', async () => {
+  it('returns error result when no active profile', async () => {
     let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
     let emptyManager = new ProfileManager(emptyDir);
 
-    await expect(
-      listFiles(realmUrl, { profileManager: emptyManager }),
-    ).rejects.toThrow('No active profile');
+    let result = await listFiles(realmUrl, { profileManager: emptyManager });
+    expect(result.filenames).toEqual([]);
+    expect(result.error).toContain('No active profile');
 
     fs.rmSync(emptyDir, { recursive: true, force: true });
   });

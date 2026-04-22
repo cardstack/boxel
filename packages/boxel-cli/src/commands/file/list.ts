@@ -34,9 +34,10 @@ export async function listFiles(
   let pm = options?.profileManager ?? getProfileManager();
   let active = pm.getActiveProfile();
   if (!active) {
-    throw new Error(
-      'No active profile. Run `boxel profile add` to create one.',
-    );
+    return {
+      filenames: [],
+      error: 'No active profile. Run `boxel profile add` to create one.',
+    };
   }
 
   let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
@@ -104,6 +105,9 @@ export function registerListCommand(file: Command): void {
 
       if (opts.json) {
         console.log(JSON.stringify(result, null, 2));
+        if (result.error) {
+          process.exit(1);
+        }
       } else if (result.error) {
         console.error(`${FG_RED}Error:${RESET} ${result.error}`);
         process.exit(1);
