@@ -18,7 +18,7 @@ class Isolated extends Component<typeof DailyReportDashboard> {
       filter: {
         on: {
           // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./daily-report', import.meta.url).href,
+          module: new URL('./daily-report', import.meta.url).href as RealmResourceIdentifier,
           name: 'DailyReport',
         },
         eq: {
@@ -31,7 +31,7 @@ class Isolated extends Component<typeof DailyReportDashboard> {
           by: 'reportDate',
           on: {
             // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL('./daily-report', import.meta.url).href,
+            module: new URL('./daily-report', import.meta.url).href as RealmResourceIdentifier,
             name: 'DailyReport',
           },
           direction: 'desc',

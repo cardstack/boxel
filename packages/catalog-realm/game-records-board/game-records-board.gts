@@ -8,11 +8,15 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
 import { CardList } from '../components/card-list';
-import { realmURL, type RealmResourceIdentifier } from '@cardstack/runtime-common';
+import {
+  realmURL,
+  ResolvedCodeRef,
+  Query,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { ResolvedCodeRef, Query, type RealmResourceIdentifier } from '@cardstack/runtime-common';
 
 interface GameStatusField {
   label: string;

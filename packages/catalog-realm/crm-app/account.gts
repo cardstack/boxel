@@ -45,7 +45,7 @@ import TrendingUp from '@cardstack/boxel-icons/trending-up';
 
 const taskSource = {
   // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-  module: new URL('./task', import.meta.url).href,
+  module: new URL('./task', import.meta.url).href as RealmResourceIdentifier,
   name: 'CRMTask',
 };
 
@@ -118,7 +118,7 @@ class IsolatedTemplate extends Component<typeof Account> {
       filter: {
         on: {
           // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./deal', import.meta.url).href,
+          module: new URL('./deal', import.meta.url).href as RealmResourceIdentifier,
           name: 'Deal',
         },
         every: [
@@ -269,7 +269,7 @@ class IsolatedTemplate extends Component<typeof Account> {
       filter: {
         on: {
           // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./deal', import.meta.url).href,
+          module: new URL('./deal', import.meta.url).href as RealmResourceIdentifier,
           name: 'Deal',
         },
         every: [
@@ -686,7 +686,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
       filter: {
         on: {
           // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./deal', import.meta.url).href,
+          module: new URL('./deal', import.meta.url).href as RealmResourceIdentifier,
           name: 'Deal',
         },
         every: [
@@ -790,7 +790,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
       filter: {
         on: {
           // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./deal', import.meta.url).href,
+          module: new URL('./deal', import.meta.url).href as RealmResourceIdentifier,
           name: 'Deal',
         },
         every: [

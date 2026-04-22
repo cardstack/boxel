@@ -10,7 +10,10 @@ import {
   CardDef,
   BaseDef,
 } from 'https://cardstack.com/base/card-api';
-import { type getCards } from '@cardstack/runtime-common';
+import {
+  type getCards,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
@@ -135,7 +138,7 @@ export interface FilterConfig {
   searchKey: string;
   label: string;
   codeRef: {
-    module: string;
+    module: RealmResourceIdentifier;
     name: string;
   };
   options: () => any[];

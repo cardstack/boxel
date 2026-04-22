@@ -20,7 +20,7 @@ export class ReviewBlog extends BlogApp {
       cardRef: {
         name: 'Review',
         // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-        module: new URL('./review', import.meta.url).href,
+        module: new URL('./review', import.meta.url).href as RealmResourceIdentifier,
       },
     },
     {
@@ -31,7 +31,7 @@ export class ReviewBlog extends BlogApp {
       cardRef: {
         name: 'Author',
         // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-        module: new URL('./author', import.meta.url).href,
+        module: new URL('./author', import.meta.url).href as RealmResourceIdentifier,
       },
     },
     {
@@ -42,7 +42,7 @@ export class ReviewBlog extends BlogApp {
       cardRef: {
         name: 'BlogCategory',
         // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-        module: new URL('./blog-category', import.meta.url).href,
+        module: new URL('./blog-category', import.meta.url).href as RealmResourceIdentifier,
       },
     },
   ];

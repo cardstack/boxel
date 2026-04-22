@@ -7,13 +7,17 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
-import { realmURL, type RealmResourceIdentifier } from '@cardstack/runtime-common';
+import {
+  realmURL,
+  ResolvedCodeRef,
+  Query,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { ResolvedCodeRef, Query, type RealmResourceIdentifier } from '@cardstack/runtime-common';
 import PlayerPreview from './components/player-preview';
 
 interface GameStatusField {

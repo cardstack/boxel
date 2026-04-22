@@ -432,7 +432,7 @@ export class BlogApp extends CardDef {
         {
           on: {
             // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL('./blog-post', import.meta.url).href,
+            module: new URL('./blog-post', import.meta.url).href as RealmResourceIdentifier,
             name: 'BlogPost',
           },
           by: 'publishDate',
@@ -468,7 +468,7 @@ export class BlogApp extends CardDef {
       cardRef: {
         name: 'BlogPost',
         // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-        module: new URL('./blog-post', import.meta.url).href,
+        module: new URL('./blog-post', import.meta.url).href as RealmResourceIdentifier,
       },
     },
     {
@@ -479,7 +479,7 @@ export class BlogApp extends CardDef {
       cardRef: {
         name: 'Author',
         // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-        module: new URL('./author', import.meta.url).href,
+        module: new URL('./author', import.meta.url).href as RealmResourceIdentifier,
       },
     },
     {
@@ -490,7 +490,7 @@ export class BlogApp extends CardDef {
       cardRef: {
         name: 'BlogCategory',
         // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-        module: new URL('./blog-category', import.meta.url).href,
+        module: new URL('./blog-category', import.meta.url).href as RealmResourceIdentifier,
       },
     },
   ];

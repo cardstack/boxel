@@ -1,7 +1,10 @@
 import { on } from '@ember/modifier';
 
 import { Component, realmURL } from 'https://cardstack.com/base/card-api';
-import type { Query } from '@cardstack/runtime-common';
+import type {
+  Query,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 
 import { eq, or } from '@cardstack/boxel-ui/helpers';
 import { BoxelButton } from '@cardstack/boxel-ui/components';
@@ -66,7 +69,7 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
     return {
       // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
       module: new URL('../../../github-event/github-event', import.meta.url)
-        .href,
+        .href as RealmResourceIdentifier,
       name: 'GithubEventCard' as const,
     };
   }

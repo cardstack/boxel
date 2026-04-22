@@ -22,8 +22,11 @@ import { htmlSafe } from '@ember/template';
 import { eq, lt, gt, subtract } from '@cardstack/boxel-ui/helpers';
 import { cached } from '@glimmer/tracking';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common';
+import type {
+  LooseSingleCardDocument,
+  Query,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import type Owner from '@ember/owner';
 
 // Simple date formatting helper for calendar
@@ -754,7 +757,7 @@ class CalendarIsolated extends Component<typeof CalendarCard> {
   private _addEvent = restartableTask(async () => {
     const calendarEventSource = {
       // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-      module: new URL(import.meta.url).href,
+      module: new URL(import.meta.url).href as RealmResourceIdentifier,
       name: 'CalendarEvent',
     };
 
@@ -3038,14 +3041,14 @@ export class CalendarCard extends CardDef {
           {
             type: {
               // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-              module: new URL(import.meta.url).href,
+              module: new URL(import.meta.url).href as RealmResourceIdentifier,
               name: 'CalendarEvent',
             },
           },
           {
             on: {
               // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-              module: new URL(import.meta.url).href,
+              module: new URL(import.meta.url).href as RealmResourceIdentifier,
               name: 'CalendarEvent',
             },
             eq: { 'calendar.id': this.id },
@@ -3057,7 +3060,7 @@ export class CalendarCard extends CardDef {
           by: 'startTime',
           on: {
             // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL(import.meta.url).href,
+            module: new URL(import.meta.url).href as RealmResourceIdentifier,
             name: 'CalendarEvent',
           },
           direction: 'asc',

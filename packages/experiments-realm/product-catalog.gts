@@ -20,7 +20,7 @@ export class ProductCatalog extends CardDef {
       filter: {
         type: {
           // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./ikea-product', import.meta.url).href,
+          module: new URL('./ikea-product', import.meta.url).href as RealmResourceIdentifier,
           name: 'IkeaProduct',
         },
       },
@@ -28,7 +28,7 @@ export class ProductCatalog extends CardDef {
         {
           on: {
             // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL('./ikea-product', import.meta.url).href,
+            module: new URL('./ikea-product', import.meta.url).href as RealmResourceIdentifier,
             name: 'IkeaProduct',
           },
           by: 'productName',

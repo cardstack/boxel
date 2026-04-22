@@ -180,7 +180,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
       },
       taskSource: {
         // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-        module: new URL('./sprint-task', import.meta.url).href,
+        module: new URL('./sprint-task', import.meta.url).href as RealmResourceIdentifier,
         name: 'SprintTask',
         getQuery: () => this.getTaskQuery,
       },
@@ -190,7 +190,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
           label: 'Status',
           codeRef: {
             // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL('./sprint-task', import.meta.url).href,
+            module: new URL('./sprint-task', import.meta.url).href as RealmResourceIdentifier,
             name: 'Status',
           },
           options: () => SprintTaskStatusField.values,
@@ -200,7 +200,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
           label: 'Assignee',
           codeRef: {
             // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL('./sprint-task', import.meta.url).href,
+            module: new URL('./sprint-task', import.meta.url).href as RealmResourceIdentifier,
             name: 'TeamMember',
           },
           options: () => this.assigneeCards,

@@ -8,7 +8,10 @@ import { TrackedMap } from 'tracked-built-ins';
 import GlimmerComponent from '@glimmer/component';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { action } from '@ember/object';
-import { type getCards } from '@cardstack/runtime-common';
+import {
+  type getCards,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import { FilterDropdown } from './filter/filter-dropdown';
 import { StatusPill } from './filter/filter-dropdown-item';
 import { FilterTrigger } from './filter/filter-trigger';
@@ -135,7 +138,7 @@ export interface FilterConfig {
   searchKey: string;
   label: string;
   codeRef: {
-    module: string;
+    module: RealmResourceIdentifier;
     name: string;
   };
   options: () => any[];

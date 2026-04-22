@@ -42,7 +42,7 @@ class Edit extends Component<typeof MonetaryAmount> {
         filter: {
           type: {
             // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL('./asset', import.meta.url).href,
+            module: new URL('./asset', import.meta.url).href as RealmResourceIdentifier,
             name: 'Currency',
           },
         },
@@ -50,7 +50,7 @@ class Edit extends Component<typeof MonetaryAmount> {
           {
             on: {
               // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-              module: new URL('./asset', import.meta.url).href,
+              module: new URL('./asset', import.meta.url).href as RealmResourceIdentifier,
               name: 'Currency',
             },
             by: 'name',

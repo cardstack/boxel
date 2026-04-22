@@ -4,7 +4,7 @@ import {
   contains,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import { type LooseSingleCardDocument, type RealmResourceIdentifier } from '@cardstack/runtime-common';
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
 import UrlField from 'https://cardstack.com/base/url';
 import MarkdownField from 'https://cardstack.com/base/markdown';
@@ -24,23 +24,26 @@ import { htmlSafe } from '@ember/template';
 import StoreIcon from '@cardstack/boxel-icons/store';
 
 import type { Query } from '@cardstack/runtime-common';
-import { realmURL, type RealmResourceIdentifier } from '@cardstack/runtime-common';
+import {
+  realmURL,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 
 const productSource = {
   // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-  module: new URL('../online-product/online-product', import.meta.url).href,
+  module: new URL('../online-product/online-product', import.meta.url).href as RealmResourceIdentifier,
   name: 'OnlineProduct',
 };
 
 const orderSource = {
   // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-  module: new URL('../online-order/online-order', import.meta.url).href,
+  module: new URL('../online-order/online-order', import.meta.url).href as RealmResourceIdentifier,
   name: 'OnlineOrder',
 };
 
 const customerSource = {
   // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-  module: new URL('../online-customer/online-customer', import.meta.url).href,
+  module: new URL('../online-customer/online-customer', import.meta.url).href as RealmResourceIdentifier,
   name: 'OnlineCustomer',
 };
 
@@ -55,7 +58,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
         type: {
           // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('../online-product/online-product', import.meta.url)
-            .href,
+            .href as RealmResourceIdentifier,
           name: 'OnlineProduct',
         },
       },
@@ -67,7 +70,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
       type: {
         // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
         module: new URL('../online-product/online-product', import.meta.url)
-          .href,
+          .href as RealmResourceIdentifier,
         name: 'OnlineProduct',
       },
     };
@@ -119,7 +122,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
       filter: {
         type: {
           // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('../online-order/online-order', import.meta.url).href,
+          module: new URL('../online-order/online-order', import.meta.url).href as RealmResourceIdentifier,
           name: 'OnlineOrder',
         },
       },
@@ -132,7 +135,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
         type: {
           // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('../online-customer/online-customer', import.meta.url)
-            .href,
+            .href as RealmResourceIdentifier,
           name: 'OnlineCustomer',
         },
       },

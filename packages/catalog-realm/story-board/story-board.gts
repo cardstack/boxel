@@ -902,7 +902,7 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
   private createCard = restartableTask(async () => {
     let ref = {
       // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-      module: new URL('./story-board', import.meta.url).href,
+      module: new URL('./story-board', import.meta.url).href as RealmResourceIdentifier,
       name: 'Story',
     };
 

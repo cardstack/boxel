@@ -109,7 +109,7 @@ class Isolated extends Component<typeof Catalog> {
       filter: {
         on: {
           // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./listing/listing', import.meta.url).href,
+          module: new URL('./listing/listing', import.meta.url).href as RealmResourceIdentifier,
           name:
             this.activeTabId === 'showcase'
               ? 'Listing'
@@ -130,7 +130,7 @@ class Isolated extends Component<typeof Catalog> {
       filter: {
         type: {
           // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./listing/category', import.meta.url).href,
+          module: new URL('./listing/category', import.meta.url).href as RealmResourceIdentifier,
           name: 'Category',
         },
       },
@@ -272,7 +272,7 @@ class Isolated extends Component<typeof Catalog> {
       filter: {
         type: {
           // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./listing/tag', import.meta.url).href,
+          module: new URL('./listing/tag', import.meta.url).href as RealmResourceIdentifier,
           name: 'Tag',
         },
       },

@@ -264,7 +264,7 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
       },
       taskSource: {
         // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-        module: new URL('./task', import.meta.url).href,
+        module: new URL('./task', import.meta.url).href as RealmResourceIdentifier,
         name: 'CRMTask',
         getQuery: () => this.getTaskQuery,
       },
@@ -274,7 +274,7 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
           label: 'Status',
           codeRef: {
             // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL('./task', import.meta.url).href,
+            module: new URL('./task', import.meta.url).href as RealmResourceIdentifier,
             name: 'Status',
           },
           options: () => CRMTaskStatusField.values,
@@ -284,7 +284,7 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
           label: 'Assignee',
           codeRef: {
             // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL('./representative', import.meta.url).href,
+            module: new URL('./representative', import.meta.url).href as RealmResourceIdentifier,
             name: 'Representative',
           },
           options: () => this.assigneeCards,

@@ -34,7 +34,7 @@ class Isolated extends Component<typeof GamingHub> {
   get gameRecordQuery(): Query {
     const moduleRef = {
       // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-      module: new URL('../game-record/game-record', import.meta.url).href,
+      module: new URL('../game-record/game-record', import.meta.url).href as RealmResourceIdentifier,
       name: 'GameRecord',
     };
 
@@ -72,7 +72,7 @@ class Isolated extends Component<typeof GamingHub> {
   get playingGamesQuery(): Query {
     const moduleRef = {
       // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-      module: new URL('../game-record/game-record', import.meta.url).href,
+      module: new URL('../game-record/game-record', import.meta.url).href as RealmResourceIdentifier,
       name: 'GameRecord',
     };
 
