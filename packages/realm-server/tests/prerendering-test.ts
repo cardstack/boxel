@@ -1534,8 +1534,7 @@ module(basename(__filename), function () {
         let moduleEvals = diagnostics?.recentModuleEvaluations;
         if (Array.isArray(moduleEvals) && moduleEvals.length > 0) {
           let allShaped = moduleEvals.every(
-            (e: any) =>
-              typeof e?.url === 'string' && typeof e?.ms === 'number',
+            (e: any) => typeof e?.url === 'string' && typeof e?.ms === 'number',
           );
           assert.true(
             allShaped,
