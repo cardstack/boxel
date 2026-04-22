@@ -12,6 +12,7 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import SourceCode from '@cardstack/boxel-icons/source-code';
 
@@ -274,6 +275,7 @@ export class SubmissionWorkflowCard extends CardDef {
   // ── Submission data ──
   @field roomId = contains(StringField);
   @field branchName = contains(StringField);
+  @field catalogRealmUrl = contains(StringField);
 
   // ── Links to real cards ──
   @field listing = linksTo(() => Listing);
@@ -421,6 +423,27 @@ export class SubmissionWorkflowCard extends CardDef {
     get isClosed() {
       let label = this.prActionLabel;
       return label === 'Closed' || label === 'Merged';
+    }
+
+    get catalogListingUrl(): string | null {
+      if (!this.isMerged) return null;
+      let listing = this.args.model.listing;
+      if (!listing?.id) return null;
+
+      let listingRealmHref = listing[realmURL]?.href;
+      if (!listingRealmHref) return null;
+
+      let relativePath = listing.id.startsWith(listingRealmHref)
+        ? listing.id.slice(listingRealmHref.length)
+        : listing.id;
+
+      let catalogRealmUrl = this.args.model.catalogRealmUrl;
+      if (!catalogRealmUrl) return null;
+
+      let base = catalogRealmUrl.endsWith('/')
+        ? catalogRealmUrl
+        : catalogRealmUrl + '/';
+      return `${base}${relativePath}`;
     }
 
     // ── CI state ──
@@ -666,6 +689,23 @@ export class SubmissionWorkflowCard extends CardDef {
                     {{#if @model.prCard}}
                       <div class='sw-step-detail'>
                         <@fields.reviewStatus />
+                      </div>
+                    {{/if}}
+                  {{/if}}
+
+                  {{#if (eq step.key 'merge-catalog')}}
+                    {{#if this.catalogListingUrl}}
+                      <div class='sw-step-detail sw-catalog-link'>
+                        <BoxelButton
+                          @as='anchor'
+                          @href={{this.catalogListingUrl}}
+                          @kind='primary'
+                          @size='small'
+                          target='_blank'
+                          rel='noopener noreferrer'
+                        >
+                          View listing in catalog
+                        </BoxelButton>
                       </div>
                     {{/if}}
                   {{/if}}
@@ -1348,6 +1388,11 @@ export class SubmissionWorkflowCard extends CardDef {
             opacity: 0.6;
             transform: scale(0.85);
           }
+        }
+
+        /* ── Catalog link ── */
+        .sw-catalog-link {
+          margin-top: 8px;
         }
 
         /* ── Responsive ── */
