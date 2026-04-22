@@ -1,6 +1,9 @@
 import type { Command } from 'commander';
 import { readFileSync } from 'fs';
-import { getProfileManager, type ProfileManager } from '../../lib/profile-manager';
+import {
+  getProfileManager,
+  type ProfileManager,
+} from '../../lib/profile-manager';
 import { FG_GREEN, FG_RED, DIM, RESET } from '../../lib/colors';
 
 export interface WriteResult {

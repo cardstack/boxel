@@ -3,10 +3,7 @@ import {
   readTranspiledModule,
   type ReadTranspiledResult,
 } from '../commands/read-transpiled';
-import {
-  write as coreWrite,
-  type WriteResult,
-} from '../commands/file/write';
+import { write as coreWrite, type WriteResult } from '../commands/file/write';
 import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { pull as realmPull } from '../commands/realm/pull';
 import { getProfileManager, type ProfileManager } from './profile-manager';
