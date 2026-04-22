@@ -380,7 +380,12 @@ export default class ErrorDisplay
         margin: 0 0 var(--boxel-sp-xs) 0;
         font-family: var(--boxel-monospace-font-family, monospace);
         font-size: var(--boxel-font-size-xs);
+        line-height: 1.5;
         word-break: break-word;
+        background: #fff6d6;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius);
+        border-left: 3px solid var(--boxel-warning-200);
       }
 
       .actions {
