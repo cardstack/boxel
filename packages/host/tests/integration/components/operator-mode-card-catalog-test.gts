@@ -517,7 +517,15 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     assert.dom(`[data-test-search-sheet-search-result]`).doesNotExist();
 
     await focus(`[data-test-search-field]`);
-    await fillIn(`[data-test-search-field]`, 'No Cards');
+    // Use a synthetic, UUID-like term guaranteed not to appear in any card's
+    // markdown or cardTitle. "No Cards" (the previous fixture) happens to be
+    // a substring of common instructional phrasing that appears in 30+ base
+    // realm skill/spec cards, so under the `matches` (markdown LIKE)
+    // semantics it's no longer a zero-result query.
+    await fillIn(
+      `[data-test-search-field]`,
+      'zzz-nonexistent-search-term-xyz-987',
+    );
     await waitUntil(
       () => {
         let label = document.querySelector(
