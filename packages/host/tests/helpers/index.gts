@@ -6,7 +6,7 @@ import {
   visit,
   settled,
 } from '@ember/test-helpers';
-import { fillIn, findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
+import { click, findAll, waitUntil, waitFor } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -42,6 +42,7 @@ import {
   type RenderError,
 } from '@cardstack/runtime-common';
 
+import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import {
@@ -1993,24 +1994,60 @@ export async function verifyJSONWithUUIDInFolder(
 
 export async function addSkillToAiAssistant(
   skillCardId: string,
-  search?: string,
+  _search?: string,
+  roomId?: string,
 ) {
-  if (!document.querySelector('[data-test-skill-menu] [data-test-pill-menu-add-button]')) {
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+  let resolvedRoomId =
+    roomId ??
+    document.querySelector('[data-test-room]')?.getAttribute('data-test-room');
+
+  if (!resolvedRoomId) {
+    throw new Error(
+      `Expected an active AI assistant room before adding skill "${skillCardId}"`,
+    );
   }
-  await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-  if (search) {
-    await fillIn('[data-test-search-field]', search);
-  }
-  await click(`[data-test-card-catalog-item="${skillCardId}"]`);
-  await click('[data-test-card-catalog-go-button]');
+
+  let command = new UpdateRoomSkillsCommand(
+    getService('command-service').commandContext,
+  );
+  await command.execute({
+    roomId: resolvedRoomId,
+    skillCardIdsToActivate: [skillCardId],
+  });
+
+  let matrixService = getService('matrix-service') as {
+    getRoomData(roomId: string): {
+      skillsConfig: {
+        enabledSkillCards?: Array<{ sourceUrl?: string }>;
+      };
+    } | null;
+  };
+
   await waitUntil(
     () =>
       Boolean(
-        document.querySelector(
-          `[data-test-skill-options-button="${skillCardId}"]`,
-        ),
+        matrixService
+          .getRoomData(resolvedRoomId)
+          ?.skillsConfig.enabledSkillCards?.some(
+            (fileDef) => fileDef.sourceUrl === skillCardId,
+          ),
       ),
-    { timeoutMessage: `Timed out waiting for skill options button for "${skillCardId}"` },
+    {
+      timeoutMessage: `Timed out waiting for room skill state for "${skillCardId}"`,
+    },
   );
+
+  if (document.querySelector('[data-test-skill-menu]')) {
+    await waitUntil(
+      () =>
+        Boolean(
+          document.querySelector(
+            `[data-test-skill-options-button="${skillCardId}"]`,
+          ),
+        ),
+      {
+        timeoutMessage: `Timed out waiting for skill options button for "${skillCardId}"`,
+      },
+    );
+  }
 }

@@ -365,6 +365,55 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
   });
 
+  test('skill picker can add a skill through the UI', async function (assert) {
+    const roomId = await renderAiAssistantPanel();
+    let skillId = `${testRealmURL}Skill/example`;
+
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await waitFor('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await waitFor(`[data-test-card-catalog-item="${skillId}"]`);
+    await click(`[data-test-card-catalog-item="${skillId}"]`);
+    await click('[data-test-card-catalog-go-button]');
+
+    await waitUntil(
+      () =>
+        Boolean(
+          getRoomState(
+            roomId,
+            APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+          )?.enabledSkillCards?.some((card: any) => card.sourceUrl === skillId),
+        ),
+      { timeoutMessage: `timed out waiting for ${skillId} to be enabled` },
+    );
+
+    assert
+      .dom(`[data-test-skill-options-button="${skillId}"]`)
+      .exists('selected skill is shown in the skill menu');
+    assert.dom('[data-test-skill-menu]').containsText('Skills: 2 of 2 active');
+  });
+
+  test('skill picker excludes already-enabled skills', async function (assert) {
+    await renderAiAssistantPanel();
+    let enabledSkillId = `${testRealmURL}Skill/example`;
+    let availableSkillId = `${testRealmURL}Skill/example2`;
+
+    await addSkillToAiAssistant(enabledSkillId);
+
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await waitFor('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await fillIn('[data-test-search-field]', 'Exanple');
+    await waitFor(`[data-test-card-catalog-item="${availableSkillId}"]`);
+
+    assert
+      .dom(`[data-test-card-catalog-item="${enabledSkillId}"]`)
+      .doesNotExist('already-enabled skill is excluded from the picker');
+    assert
+      .dom(`[data-test-card-catalog-item="${availableSkillId}"]`)
+      .exists('a different skill remains available in the picker');
+  });
+
   test('skill pill menu opens the skill card', async function (assert) {
     await renderAiAssistantPanel();
 
