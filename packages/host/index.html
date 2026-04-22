@@ -2,11 +2,30 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Boxel</title>
     <meta name="description" content="" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
     {{content-for "head"}}
+
+    <script>
+      // Resolve dynamic-import chunk URLs against the host's distURL rather
+      // than the document origin — the HTML may be served by realm-server
+      // on a different origin than the built assets. See the
+      // experimental.renderBuiltUrl hook in vite.config.mjs.
+      (function () {
+        var meta = document.querySelector(
+          'meta[name="@cardstack/host/config/environment"]',
+        );
+        var assetsURL = '/';
+        if (meta) {
+          try {
+            var config = JSON.parse(decodeURIComponent(meta.content));
+            if (config && config.assetsURL) assetsURL = config.assetsURL;
+          } catch (e) {}
+        }
+        globalThis.__boxelAssetsURL = assetsURL;
+      })();
+    </script>
 
     <link integrity="" rel="stylesheet" href="/@embroider/virtual/vendor.css" />
     <link integrity="" rel="stylesheet" href="/@embroider/virtual/app.css" />
@@ -28,6 +47,7 @@
     {{content-for "head-footer"}}
 
     <meta data-boxel-head-start />
+    <title>Boxel</title>
     <meta data-boxel-head-end />
 
   </head>

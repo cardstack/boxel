@@ -73,7 +73,7 @@ const sourceMapJsResolver = {
   },
 };
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   // Preserve function/class names. Boxel's card runtime introspects
   // `Class.name` in user-visible places — validation errors ("references
   // unknown path X on Person"), displayName fallbacks, the
@@ -89,11 +89,48 @@ export default defineConfig({
   // async-arrow-task-transform, which only matches ClassProperty nodes.
   // Letting babel do all TypeScript handling keeps class fields intact
   // through the async-arrow transform.
+  //
+  // For production mode, disable Vite's built-in minifier (defaults to
+  // terser, which fails to parse matrix-js-sdk's indexeddb-crypto-store
+  // chunk because of Unicode identifiers like `ࢶ`) and instead use
+  // rolldown's native oxc minifier via `rolldownOptions.output.minify`.
+  // oxc handles the full Unicode identifier range and respects the
+  // sibling `keepNames: true` so the card runtime's `Class.name`
+  // introspection keeps working in production. Dev-mode builds (used by
+  // test-web-assets, host tests, matrix tests, and software-factory
+  // tests) skip minification entirely.
   build: {
+    minify: false,
     rolldownOptions: {
       output: {
         keepNames: true,
+        ...(mode === 'production' ? { minify: true } : {}),
       },
+    },
+  },
+  // The built host is served from one origin (the configured assetsURL /
+  // distURL, e.g. http://localhost:4200) while the HTML that boots it is
+  // served from another origin (realm-server, e.g. http://localhost:4205).
+  // Static <script>/<link> tags in index.html are rewritten to absolute
+  // assetsURL by realm-server (see packages/realm-server/server.ts). But
+  // Vite's runtime preload helper resolves dynamic-import chunk hrefs
+  // against the document origin, so they 404 on the realm-server origin.
+  // Emit a runtime expression for JS asset references so they resolve
+  // against a globally-configured assets URL set by the inline bootstrap
+  // script in index.html. When the global is unset (testem test runner,
+  // vite dev server, any host that doesn't inject the bootstrap), fall
+  // back to `/` so URLs stay root-absolute and resolve against the
+  // document origin as Vite would by default.
+  experimental: {
+    renderBuiltUrl(filename, { hostType }) {
+      if (hostType === 'js') {
+        return {
+          runtime: `(globalThis.__boxelAssetsURL||"/")+${JSON.stringify(filename)}`,
+        };
+      }
+      // Leave HTML/CSS references alone (root-absolute `/assets/...`) so
+      // realm-server's absolute-URL rewrite regex can prepend assetsURL.
+      return undefined;
     },
   },
   resolve: {
@@ -131,4 +168,4 @@ export default defineConfig({
       'Cache-Control': 'no-store',
     },
   },
-});
+}));
