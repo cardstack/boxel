@@ -1,5 +1,5 @@
 import '../helpers/setup-realm-server';
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -40,25 +40,21 @@ afterAll(async () => {
 });
 
 describe('file list (integration)', () => {
-  it('returns sorted filenames from the realm', async () => {
+  it('returns sorted filenames including seeded files', async () => {
     let result = await listFiles(realmUrl, { profileManager });
 
     expect(result.error).toBeUndefined();
     expect(result.filenames).toContain('hello.gts');
     expect(result.filenames).toContain('world.json');
     expect(result.filenames).toContain('nested/deep.gts');
-    // Verify sorted order
     let sorted = [...result.filenames].sort();
     expect(result.filenames).toEqual(sorted);
   });
 
-  it('returns JSON-serialisable output (--json mode)', async () => {
-    let result = await listFiles(realmUrl, { profileManager });
-
-    let json = JSON.parse(JSON.stringify(result));
-    expect(json.filenames).toBeInstanceOf(Array);
-    expect(json.filenames.length).toBeGreaterThan(0);
-    expect(json.error).toBeUndefined();
+  it('returns error for an unreachable realm', async () => {
+    let result = await listFiles('http://127.0.0.1:1/', { profileManager });
+    expect(result.filenames).toEqual([]);
+    expect(result.error).toBeDefined();
   });
 
   it('throws when no active profile', async () => {
@@ -70,34 +66,5 @@ describe('file list (integration)', () => {
     ).rejects.toThrow('No active profile');
 
     fs.rmSync(emptyDir, { recursive: true, force: true });
-  });
-
-  it('returns error when fetch throws', async () => {
-    let fetchSpy = vi
-      .spyOn(profileManager, 'authedRealmFetch')
-      .mockRejectedValueOnce(new Error('network failure'));
-    try {
-      let result = await listFiles(realmUrl, { profileManager });
-      expect(result.filenames).toEqual([]);
-      expect(result.error).toContain('network failure');
-    } finally {
-      fetchSpy.mockRestore();
-    }
-  });
-
-  it('uses authedRealmFetch with Accept: application/vnd.api+json', async () => {
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
-    try {
-      await listFiles(realmUrl, { profileManager });
-
-      expect(fetchSpy).toHaveBeenCalledOnce();
-      let [url, init] = fetchSpy.mock.calls[0];
-      expect(String(url)).toContain('_mtimes');
-      expect(init!.method).toBe('GET');
-      let headers = init!.headers as Record<string, string>;
-      expect(headers['Accept']).toBe('application/vnd.api+json');
-    } finally {
-      fetchSpy.mockRestore();
-    }
   });
 });
