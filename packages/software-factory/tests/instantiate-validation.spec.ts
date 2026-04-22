@@ -4,6 +4,10 @@ import { expect, test } from './fixtures';
 
 import { InstantiateValidationStep } from '../src/validators/instantiate-step';
 import type { InstantiateValidationDetails } from '../src/validators/instantiate-step';
+import {
+  seedTagsCardWithBrokenExampleAndSpec,
+  seedValidCardWithSpec,
+} from './helpers/instantiate-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
 
 const fixtureRealmDir = resolve(
@@ -11,37 +15,6 @@ const fixtureRealmDir = resolve(
   'test-fixtures',
   'test-realm-runner',
 );
-
-// A valid .gts card module that should instantiate successfully.
-const VALID_MODULE_GTS = `import {
-  CardDef,
-  field,
-  contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-
-export class ValidCard extends CardDef {
-  static displayName = 'Valid Card';
-  @field name = contains(StringField);
-}
-`;
-
-// A card with a containsMany field — evaluates fine, but instantiation
-// should fail when the example provides a non-array value.
-const TAGS_CARD_MODULE_GTS = `import {
-  CardDef,
-  field,
-  contains,
-  containsMany,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-
-export class TagsCard extends CardDef {
-  static displayName = 'Tags Card';
-  @field name = contains(StringField);
-  @field tags = containsMany(StringField);
-}
-`;
 
 test.use({ realmDir: fixtureRealmDir });
 test.use({ realmServerMode: 'isolated' });
@@ -64,80 +37,7 @@ test.describe('instantiate-validation e2e', () => {
     });
 
     try {
-      // Write a valid card module
-      let writeResult = await client.write(
-        realmUrl,
-        'instantiate-test-card.gts',
-        VALID_MODULE_GTS,
-      );
-      expect(writeResult.ok).toBe(true);
-
-      await client.waitForFile(realmUrl, 'instantiate-test-card.gts', {
-        pollMs: 300,
-        timeoutMs: 30_000,
-      });
-
-      // Write an example instance card with relative adoptsFrom
-      // (the step runner resolves to absolute before sending to host command)
-      let exampleDoc = {
-        data: {
-          type: 'card',
-          attributes: { name: 'Example Instance' },
-          meta: {
-            adoptsFrom: {
-              module: '../instantiate-test-card',
-              name: 'ValidCard',
-            },
-          },
-        },
-      };
-      let exampleWrite = await client.write(
-        realmUrl,
-        'ValidCard/example-1.json',
-        JSON.stringify(exampleDoc, null, 2),
-      );
-      expect(exampleWrite.ok).toBe(true);
-
-      await client.waitForFile(realmUrl, 'ValidCard/example-1.json', {
-        pollMs: 300,
-        timeoutMs: 30_000,
-      });
-
-      // Write a Spec card that points to the card module and links to the example
-      let specDoc = {
-        data: {
-          type: 'card',
-          attributes: {
-            specType: 'card',
-            ref: {
-              module: '../instantiate-test-card',
-              name: 'ValidCard',
-            },
-          },
-          relationships: {
-            'linkedExamples.0': {
-              links: { self: '../ValidCard/example-1' },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/spec',
-              name: 'Spec',
-            },
-          },
-        },
-      };
-      let specWrite = await client.write(
-        realmUrl,
-        'Spec/valid-card-spec.json',
-        JSON.stringify(specDoc, null, 2),
-      );
-      expect(specWrite.ok).toBe(true);
-
-      await client.waitForFile(realmUrl, 'Spec/valid-card-spec.json', {
-        pollMs: 300,
-        timeoutMs: 30_000,
-      });
+      await seedValidCardWithSpec(client, realmUrl);
 
       let step = new InstantiateValidationStep({
         client,
@@ -197,80 +97,7 @@ test.describe('instantiate-validation e2e', () => {
     });
 
     try {
-      // Write a card with a containsMany field (evaluates fine)
-      let cardWrite = await client.write(
-        realmUrl,
-        'tags-card.gts',
-        TAGS_CARD_MODULE_GTS,
-      );
-      expect(cardWrite.ok).toBe(true);
-      await client.waitForFile(realmUrl, 'tags-card.gts', {
-        pollMs: 300,
-        timeoutMs: 30_000,
-      });
-
-      // Write the Spec card FIRST (before the bad example) so it gets
-      // indexed before the bad example potentially stalls the indexer.
-      let specDoc = {
-        data: {
-          type: 'card',
-          attributes: {
-            specType: 'card',
-            ref: {
-              module: '../tags-card',
-              name: 'TagsCard',
-            },
-          },
-          relationships: {
-            'linkedExamples.0': {
-              links: { self: '../TagsCard/bad-example' },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/spec',
-              name: 'Spec',
-            },
-          },
-        },
-      };
-      let specWrite = await client.write(
-        realmUrl,
-        'Spec/tags-card-spec.json',
-        JSON.stringify(specDoc, null, 2),
-      );
-      expect(specWrite.ok).toBe(true);
-      await client.waitForFile(realmUrl, 'Spec/tags-card-spec.json', {
-        pollMs: 300,
-        timeoutMs: 30_000,
-      });
-
-      // Now write the bad example (after the Spec is indexed)
-      let exampleDoc = {
-        data: {
-          type: 'card',
-          attributes: {
-            name: 'Bad Tags Card',
-            tags: 'not-an-array',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../tags-card',
-              name: 'TagsCard',
-            },
-          },
-        },
-      };
-      let exampleWrite = await client.write(
-        realmUrl,
-        'TagsCard/bad-example.json',
-        JSON.stringify(exampleDoc, null, 2),
-      );
-      expect(exampleWrite.ok).toBe(true);
-      await client.waitForFile(realmUrl, 'TagsCard/bad-example.json', {
-        pollMs: 300,
-        timeoutMs: 30_000,
-      });
+      await seedTagsCardWithBrokenExampleAndSpec(client, realmUrl);
 
       let step = new InstantiateValidationStep({
         client,
