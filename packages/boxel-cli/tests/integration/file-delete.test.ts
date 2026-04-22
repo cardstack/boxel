@@ -23,10 +23,28 @@ beforeAll(async () => {
   await startTestRealmServer({
     fileSystem: {
       'keep-this.json': JSON.stringify({
-        data: { type: 'card', attributes: { title: 'Keep' }, meta: { adoptsFrom: { module: 'https://cardstack.com/base/card-api', name: 'CardDef' } } },
+        data: {
+          type: 'card',
+          attributes: { title: 'Keep' },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/card-api',
+              name: 'CardDef',
+            },
+          },
+        },
       }),
       'delete-me.json': JSON.stringify({
-        data: { type: 'card', attributes: { title: 'Delete' }, meta: { adoptsFrom: { module: 'https://cardstack.com/base/card-api', name: 'CardDef' } } },
+        data: {
+          type: 'card',
+          attributes: { title: 'Delete' },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/card-api',
+              name: 'CardDef',
+            },
+          },
+        },
       }),
     },
   });
@@ -38,7 +56,10 @@ beforeAll(async () => {
   client = new BoxelCLIClient(profileManager);
 });
 
-afterAll(async () => { cleanupProfile?.(); await stopTestRealmServer(); });
+afterAll(async () => {
+  cleanupProfile?.();
+  await stopTestRealmServer();
+});
 
 describe('file delete (integration)', () => {
   it('deletes a file and confirms it no longer exists via read', async () => {
@@ -47,7 +68,9 @@ describe('file delete (integration)', () => {
     expect(before.ok, 'file should exist before delete').toBe(true);
 
     // Delete it
-    let result = await deleteFile(realmUrl, 'delete-me.json', { profileManager });
+    let result = await deleteFile(realmUrl, 'delete-me.json', {
+      profileManager,
+    });
     expect(result.ok).toBe(true);
 
     // Verify it's gone
