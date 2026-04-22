@@ -32,16 +32,14 @@ For a quickstart, see [here](./QUICKSTART.md)
 
 ### Catalog Realms
 
-There are two catalog realms running side by side:
+Two catalog realms run side by side. The **Cardstack Catalog** (served from [cardstack/boxel-catalog](https://github.com/cardstack/boxel-catalog)) is the source of truth for new development and the destination for community submissions. The **Legacy Catalog** (shipped from this monorepo) remains available during the deprecation window for content that hasn't been migrated upstream.
 
-| Realm                  | Source                                                                                  | URL path             | Purpose                                                                                                       |
-| ---------------------- | --------------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------- |
-| **Catalog** (monorepo) | `packages/catalog-realm`                                                                | `/catalog/`          | The existing catalog that ships from this monorepo. Currently used in production.                             |
-| **External Catalog**   | `packages/catalog` (clones [boxel-catalog](https://github.com/cardstack/boxel-catalog)) | `/external-catalog/` | A separate catalog maintained in its own repository. This is the future replacement for the monorepo catalog. |
+| Realm                  | Source                                                                                  | URL path           | Purpose                                                                                                                          |
+| ---------------------- | --------------------------------------------------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Cardstack Catalog**  | `packages/catalog` (clones [boxel-catalog](https://github.com/cardstack/boxel-catalog)) | `/catalog/`        | Official catalog. New listings and community submissions land here via `pr-listing-create` PRs to `cardstack/boxel-catalog`.     |
+| **Legacy Catalog**     | `packages/catalog-realm`                                                                | `/legacy-catalog/` | Historical catalog shipped from this repo. Kept visible in the workspace chooser while existing content migrates upstream.       |
 
-**Why two?** Switching between monorepo and external catalog sources used to require rebuilding the host app and reindexing. By running both catalogs simultaneously, we can test the external repo catalog in staging and production alongside the existing one, without disrupting the current experience. The external catalog is gated behind a localStorage flag (`boxel:externalCatalog`) so it can be toggled on for testing without affecting other users.
-
-Both catalogs are controlled by the same `SKIP_CATALOG` flag — setting `SKIP_CATALOG=true` skips setup and startup for both.
+Both catalogs appear in the workspace chooser by default; the Cardstack Catalog is sorted first, Legacy Catalog last. Both are controlled by the same `SKIP_CATALOG` flag — setting `SKIP_CATALOG=true` skips setup and startup for both.
 
 To learn more about Boxel and Cards, see our [documentation](./docs/README.md)
 
