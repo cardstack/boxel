@@ -928,9 +928,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await click(`[data-test-open-search-field]`);
     await fillIn(`[data-test-search-field]`, 'Mark');
-    await waitFor(
-      `[data-test-search-result="${testRealmURL}Author/mark"]`,
-    );
+    await waitFor(`[data-test-search-result="${testRealmURL}Author/mark"]`);
     assert.dom(`[data-test-search-sheet-section-header]`).exists();
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
