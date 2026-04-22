@@ -91,6 +91,21 @@ function execAsync(
   });
 }
 
+async function waitForPostgres(): Promise<void> {
+  const maxAttempts = 30;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const { err } = await execAsync(
+      'docker exec boxel-pg pg_isready -U postgres',
+    );
+    if (!err) return;
+    process.stdout.write('.');
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new Error(
+    `Postgres (boxel-pg) did not become ready after ${maxAttempts} attempts.`,
+  );
+}
+
 async function registerUser({
   username,
   password,
@@ -178,7 +193,12 @@ async function main() {
 
   const realmSecretSeed = process.env.REALM_SECRET_SEED || "shhh! it's a secret";
 
-  await waitForSynapse();
+  // In 'all' mode we'll INSERT into the users table for bot/writer accounts,
+  // so ensure Postgres is reachable too. 'realms-only' mode never touches
+  // Postgres, so we skip that check there.
+  await Promise.all(
+    mode === 'all' ? [waitForSynapse(), waitForPostgres()] : [waitForSynapse()],
+  );
 
   // The admin user must exist before we can mint a registration token, so
   // register it sequentially first. Everything else fans out in parallel.
