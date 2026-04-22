@@ -86,7 +86,7 @@ export default class WriteBinaryFileCommand extends HostBaseCommand<
     }
 
     let bytes = base64ToUint8Array(input.base64Content);
-    let blob = new Blob([bytes as any]);
+    let blob = new Blob([bytes]);
 
     let clientRequestId = `binary:${uuidv4()}`;
     this.cardService.clientRequestIds.add(clientRequestId);
@@ -102,9 +102,15 @@ export default class WriteBinaryFileCommand extends HostBaseCommand<
     });
 
     if (!response.ok) {
+      const MAX_RESPONSE_TEXT_LENGTH = 500;
       let responseText: string;
       try {
-        responseText = await response.text();
+        let rawText = await response.text();
+        responseText =
+          rawText.length > MAX_RESPONSE_TEXT_LENGTH
+            ? rawText.slice(0, MAX_RESPONSE_TEXT_LENGTH) +
+              `… (${rawText.length} chars total)`
+            : rawText;
       } catch {
         responseText = '(unable to read response body)';
       }
