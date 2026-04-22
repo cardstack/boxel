@@ -79,6 +79,17 @@ module('Integration | commands | write-binary-file', function (hooks) {
     );
     let response = await fetch(new URL('test-image.png', testRealmURL));
     assert.strictEqual(response.status, 200, 'file is accessible after write');
+
+    let expectedBytes = Uint8Array.from(atob(TINY_PNG_BASE64), (char) =>
+      char.charCodeAt(0),
+    );
+    let actualBytes = new Uint8Array(await response.arrayBuffer());
+
+    assert.deepEqual(
+      Array.from(actualBytes),
+      Array.from(expectedBytes),
+      'stored file bytes match the decoded base64 content',
+    );
   });
 
   test('a 403 from WAF is surfaced in the error message', async function (assert) {
