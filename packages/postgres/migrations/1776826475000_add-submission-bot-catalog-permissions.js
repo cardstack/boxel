@@ -1,11 +1,14 @@
+// Grant the submission bot (@submissionbot) read+write access to the
+// Cardstack Catalog (/catalog/). The bot runs pr-listing-create flows and
+// needs to resolve and lint modules that live in the catalog. Follows the
+// pattern established by 1770623937158_add-submission-realm-permissions.js.
 exports.up = (pgm) => {
   switch (process.env.REALM_SENTRY_ENVIRONMENT) {
     case 'staging':
       pgm.sql(
         `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
          VALUES
-           ('https://realms-staging.stack.cards/legacy-catalog/', '@legacy_catalog_realm:stack.cards', true, true, true),
-           ('https://realms-staging.stack.cards/legacy-catalog/', '*', true, false, false)
+           ('https://realms-staging.stack.cards/catalog/', '@submissionbot:stack.cards', true, true, false)
          ON CONFLICT ON CONSTRAINT realm_user_permissions_pkey
          DO UPDATE SET
            realm_url   = EXCLUDED.realm_url,
@@ -19,8 +22,7 @@ exports.up = (pgm) => {
       pgm.sql(
         `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
          VALUES
-           ('https://app.boxel.ai/legacy-catalog/', '@legacy_catalog_realm:boxel.ai', true, true, true),
-           ('https://app.boxel.ai/legacy-catalog/', '*', true, false, false)
+           ('https://app.boxel.ai/catalog/', '@submissionbot:boxel.ai', true, true, false)
          ON CONFLICT ON CONSTRAINT realm_user_permissions_pkey
          DO UPDATE SET
            realm_url   = EXCLUDED.realm_url,
@@ -34,8 +36,7 @@ exports.up = (pgm) => {
       pgm.sql(
         `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
          VALUES
-           ('http://localhost:4201/legacy-catalog/', '@legacy_catalog_realm:localhost', true, true, true),
-           ('http://localhost:4201/legacy-catalog/', '*', true, false, false)
+           ('http://localhost:4201/catalog/', '@submissionbot:localhost', true, true, false)
          ON CONFLICT ON CONSTRAINT realm_user_permissions_pkey
          DO UPDATE SET
            realm_url   = EXCLUDED.realm_url,
@@ -51,17 +52,17 @@ exports.down = (pgm) => {
   switch (process.env.REALM_SENTRY_ENVIRONMENT) {
     case 'staging':
       pgm.sql(
-        "DELETE FROM realm_user_permissions WHERE realm_url = 'https://realms-staging.stack.cards/legacy-catalog/' AND username IN ('@legacy_catalog_realm:stack.cards', '*')",
+        "DELETE FROM realm_user_permissions WHERE realm_url = 'https://realms-staging.stack.cards/catalog/' AND username = '@submissionbot:stack.cards'",
       );
       break;
     case 'production':
       pgm.sql(
-        "DELETE FROM realm_user_permissions WHERE realm_url = 'https://app.boxel.ai/legacy-catalog/' AND username IN ('@legacy_catalog_realm:boxel.ai', '*')",
+        "DELETE FROM realm_user_permissions WHERE realm_url = 'https://app.boxel.ai/catalog/' AND username = '@submissionbot:boxel.ai'",
       );
       break;
     default:
       pgm.sql(
-        "DELETE FROM realm_user_permissions WHERE realm_url = 'http://localhost:4201/legacy-catalog/' AND username IN ('@legacy_catalog_realm:localhost', '*')",
+        "DELETE FROM realm_user_permissions WHERE realm_url = 'http://localhost:4201/catalog/' AND username = '@submissionbot:localhost'",
       );
   }
 };
