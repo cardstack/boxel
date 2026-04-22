@@ -131,6 +131,13 @@ function makeStubPagePool(
                 (globalThis as any).localStorage = originalLocalStorage;
               }
             },
+            async close() {
+              // CS-10817 step 3: PagePool closes individual pool pages
+              // (without closing the shared context) on entry
+              // disposal. Context-level bookkeeping still runs via
+              // the context.close() hook above.
+              return;
+            },
             browserContext() {
               return context;
             },
@@ -4909,6 +4916,245 @@ module(basename(__filename), function () {
             'no contexts closed when only standbys are present',
           );
           await pool.closeAll();
+        });
+      });
+
+      module('shared BrowserContext (CS-10817)', function () {
+        test('disposeAffinity with retainSharedContext keeps an orphan for re-warm', async function (assert) {
+          let { pool } = makeStubPagePool(2);
+          await pool.warmStandbys();
+
+          let first = await pool.getPage('realm-a');
+          let firstContext = first.page.browserContext();
+          first.release();
+          // Simulates the eviction path in render-runner.ts (unusable
+          // / retry) — the page is dead but the realm's warm cache
+          // in the BrowserContext is still valid.
+          await pool.disposeAffinity('realm-a', {
+            awaitIdle: true,
+            retainSharedContext: true,
+          });
+
+          let snapshot = pool.getSharedContextSnapshot();
+          let orphan = snapshot.entries.find(
+            (e) => e.affinityKey === 'realm-a',
+          );
+          assert.ok(orphan, 'shared context row kept for realm-a');
+          assert.strictEqual(
+            orphan?.pageCount,
+            0,
+            'pageCount is zero (orphan)',
+          );
+          assert.false(
+            orphan?.closing,
+            'orphan is not marked closing until cap evicts or explicit close',
+          );
+          // Subsequent getPage for the same affinity must reuse the
+          // orphan context, not spawn a fresh one.
+          let second = await pool.getPage('realm-a');
+          assert.strictEqual(
+            second.page.browserContext(),
+            firstContext,
+            're-warm spawns the new page in the orphan BrowserContext',
+          );
+          second.release();
+          await pool.closeAll();
+        });
+
+        test('disposeAffinity without retainSharedContext closes the context', async function (assert) {
+          let { pool } = makeStubPagePool(2);
+          await pool.warmStandbys();
+
+          let first = await pool.getPage('realm-a');
+          let firstContext = first.page.browserContext();
+          first.release();
+          await pool.disposeAffinity('realm-a');
+
+          assert.strictEqual(
+            pool
+              .getSharedContextSnapshot()
+              .entries.find((e) => e.affinityKey === 'realm-a'),
+            undefined,
+            'dispose without retain tears the shared-context row down',
+          );
+
+          let second = await pool.getPage('realm-a');
+          assert.notStrictEqual(
+            second.page.browserContext(),
+            firstContext,
+            'post-dispose visit gets a fresh BrowserContext',
+          );
+          second.release();
+          await pool.closeAll();
+        });
+
+        test('LRU evicts the oldest orphan when #sharedContextCap is exceeded', async function (assert) {
+          let originalNow = Date.now;
+          let now = 1000;
+          (Date as any).now = () => now;
+          let previousCap = process.env.PRERENDER_SHARED_CONTEXT_CAP;
+          process.env.PRERENDER_SHARED_CONTEXT_CAP = '2';
+          let { pool, contextsClosed } = makeStubPagePool(
+            3,
+            undefined,
+            undefined,
+            { disableStandbyRefill: true },
+          );
+          let orphanFor = async (affinityKey: string) => {
+            let lease = await pool.getPage(affinityKey);
+            lease.release();
+            await pool.disposeAffinity(affinityKey, {
+              awaitIdle: true,
+              retainSharedContext: true,
+            });
+            now += 10;
+          };
+          try {
+            await pool.warmStandbys();
+
+            await orphanFor('realm-a'); // t=1000
+            await orphanFor('realm-b'); // t=1010
+            // size = 2 so far; still within cap=2.
+            assert.strictEqual(
+              pool.getSharedContextSnapshot().entries.length,
+              2,
+              'two orphans retained under the cap',
+            );
+
+            // Creating a third orphan pushes total to 3 > cap=2 —
+            // oldest orphan (realm-a) evicted.
+            await orphanFor('realm-c');
+            let snapshot = pool.getSharedContextSnapshot();
+            assert.false(
+              snapshot.entries.some((e) => e.affinityKey === 'realm-a'),
+              'oldest orphan evicted by LRU when cap exceeded',
+            );
+            assert.true(
+              snapshot.entries.some((e) => e.affinityKey === 'realm-b'),
+              'newer orphan retained',
+            );
+            assert.true(
+              snapshot.entries.some((e) => e.affinityKey === 'realm-c'),
+              'most-recent orphan retained',
+            );
+            assert.ok(
+              contextsClosed.length >= 1,
+              'evicted orphan context was closed by LRU sweep',
+            );
+          } finally {
+            await pool.closeAll();
+            (Date as any).now = originalNow;
+            if (previousCap === undefined) {
+              delete process.env.PRERENDER_SHARED_CONTEXT_CAP;
+            } else {
+              process.env.PRERENDER_SHARED_CONTEXT_CAP = previousCap;
+            }
+          }
+        });
+
+        test('LRU does not evict active (in-use) shared contexts', async function (assert) {
+          let previousCap = process.env.PRERENDER_SHARED_CONTEXT_CAP;
+          process.env.PRERENDER_SHARED_CONTEXT_CAP = '1';
+          let { pool } = makeStubPagePool(3, undefined, undefined, {
+            disableStandbyRefill: true,
+          });
+          try {
+            await pool.warmStandbys();
+
+            // realm-a is held — active (pageCount=1). Exceeding cap
+            // must NOT evict it.
+            let first = await pool.getPage('realm-a');
+
+            // Orphan realm-b.
+            let second = await pool.getPage('realm-b');
+            second.release();
+            await pool.disposeAffinity('realm-b', {
+              awaitIdle: true,
+              retainSharedContext: true,
+            });
+
+            // Claim realm-c — two shared contexts exist (realm-a
+            // active, realm-b orphan). Claiming realm-c pushes total
+            // to 3 > cap=1; sweep should close realm-b, leave realm-a.
+            let third = await pool.getPage('realm-c');
+
+            let snapshot = pool.getSharedContextSnapshot();
+            assert.true(
+              snapshot.entries.some((e) => e.affinityKey === 'realm-a'),
+              'active realm-a context survives LRU sweep',
+            );
+            assert.false(
+              snapshot.entries.some((e) => e.affinityKey === 'realm-b'),
+              'orphan realm-b evicted to make room under cap',
+            );
+
+            first.release();
+            third.release();
+          } finally {
+            await pool.closeAll();
+            if (previousCap === undefined) {
+              delete process.env.PRERENDER_SHARED_CONTEXT_CAP;
+            } else {
+              process.env.PRERENDER_SHARED_CONTEXT_CAP = previousCap;
+            }
+          }
+        });
+
+        test('additional tabs at tabMax > 1 do not leak their BrowserContext on close', async function (assert) {
+          // Regression guard: when a second/third getPage takes
+          // another standby, that standby's BrowserContext is
+          // different from the one recorded in `#sharedContexts` for
+          // the affinity. `#closeEntry` has to notice the mismatch
+          // and close the entry's own context — otherwise the
+          // shared-context bookkeeping would only tear down the
+          // first-registered context and leak the rest.
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          process.env.PRERENDER_AFFINITY_TAB_MAX = '3';
+          let { pool, contextsCreated, contextsClosed } = makeStubPagePool(3);
+          try {
+            await pool.warmStandbys();
+
+            let createdBefore = contextsCreated.length;
+            let first = await pool.getPage('realm-a');
+            let second = await pool.getPage('realm-a');
+            let third = await pool.getPage('realm-a');
+
+            // First page adopts a standby's context; subsequent tabs
+            // take another standby, so the contexts differ —
+            // #closeEntry's mismatch branch is what guarantees no
+            // leak.
+            assert.notStrictEqual(
+              first.page.browserContext(),
+              second.page.browserContext(),
+              'second tab uses the next standby BrowserContext',
+            );
+            assert.strictEqual(
+              pool.getSharedContextSnapshot().entries.length,
+              1,
+              'sharedContexts tracks exactly one context for the affinity',
+            );
+
+            let closedBefore = contextsClosed.length;
+            first.release();
+            second.release();
+            third.release();
+            await pool.disposeAffinity('realm-a');
+
+            let netCreated = contextsCreated.length - createdBefore;
+            let netClosed = contextsClosed.length - closedBefore;
+            assert.strictEqual(
+              netClosed,
+              netCreated,
+              'every BrowserContext opened during the test was closed — no leak',
+            );
+          } finally {
+            await pool.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
         });
       });
     });
