@@ -1,5 +1,8 @@
 import type { Command } from 'commander';
-import { getProfileManager, type ProfileManager } from '../../lib/profile-manager';
+import {
+  getProfileManager,
+  type ProfileManager,
+} from '../../lib/profile-manager';
 import { FG_RED, DIM, RESET } from '../../lib/colors';
 
 export interface ReadResult {

@@ -110,5 +110,4 @@ describe('file read (integration)', () => {
 
     fs.rmSync(emptyDir, { recursive: true, force: true });
   });
-
 });
