@@ -1,6 +1,7 @@
 import * as childProcess from 'child_process';
 
 import { createRegistrationToken, loginUser } from '../docker/synapse';
+import { ensureUserRecord } from '../helpers/ensure-user-record';
 import {
   getSynapseContainerName,
   getSynapseURL,
@@ -139,48 +140,6 @@ async function registerUser({
     const trimmed = line.trim();
     if (trimmed) console.log(`[${label}] ${trimmed}`);
   }
-}
-
-async function ensureUserRecord(matrixUserId: string): Promise<void> {
-  const database = process.env.PGDATABASE || 'boxel';
-  const escaped = matrixUserId.replace(/'/g, "''");
-  const sql = `INSERT INTO users (matrix_user_id) VALUES ('${escaped}') ON CONFLICT (matrix_user_id) DO NOTHING;`;
-  await new Promise<void>((resolve, reject) => {
-    const proc = childProcess.spawn('docker', [
-      'exec',
-      'boxel-pg',
-      'psql',
-      '-U',
-      'postgres',
-      '-w',
-      '-d',
-      database,
-      '-c',
-      sql,
-    ]);
-    let stderr = '';
-    let stdout = '';
-    proc.stderr.on('data', (d: Buffer) => (stderr += d.toString()));
-    proc.stdout.on('data', (d: Buffer) => (stdout += d.toString()));
-    proc.on('error', reject);
-    proc.on('close', (code) => {
-      if (code !== 0) {
-        reject(
-          new Error(
-            `Failed to ensure user ${matrixUserId} in users table: ${stderr.trim()}`,
-          ),
-        );
-        return;
-      }
-      const inserted = stdout
-        .split('\n')
-        .some((line) => line.includes('INSERT 0 1'));
-      if (inserted) {
-        console.log(`[${matrixUserId}] Added an entry to the users table`);
-      }
-      resolve();
-    });
-  });
 }
 
 async function main() {
