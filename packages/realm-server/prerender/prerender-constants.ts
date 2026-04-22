@@ -2,6 +2,13 @@ export const PRERENDER_SERVER_STATUS_HEADER = 'X-Boxel-Prerender-Server-Status';
 export const PRERENDER_SERVER_STATUS_DRAINING = 'draining';
 export const PRERENDER_SERVER_DRAINING_STATUS_CODE = 410;
 
+// CS-10872: correlates one client-initiated prerender call across
+// remote-prerenderer → manager → prerender-server. The client assigns
+// the ID on the first request; the manager and prerender-server echo
+// it on both logs and response headers so operators can grep a single
+// ID across all three processes when diagnosing an abort/timeout.
+export const PRERENDER_REQUEST_ID_HEADER = 'x-boxel-prerender-request-id';
+
 // Base timeout for a single prerender capture on the prerender server
 // (DOM rendering + data loading inside the headless browser).
 const DEFAULT_RENDER_TIMEOUT_MS = 90_000;

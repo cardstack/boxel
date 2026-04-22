@@ -43,6 +43,31 @@ const log = logger('prerenderer');
 const reproduceLog = logger('prerenderer-reproduce');
 const commandRequestStorageKeyPrefix = 'boxel-command-request:';
 
+// CS-10872: surfaces the per-stage wait breakdown from PagePool.getPage so
+// operators can tell "waited for the render semaphore" (saturation) apart
+// from "waited for an affinity tab" (warm-tab serialization) apart from
+// "warmed a new tab". All three arrive tagged on every prerender response.
+export type LaunchWaits = {
+  semaphoreMs: number;
+  tabQueueMs: number;
+  tabStartupMs: number;
+};
+
+export type Timings = {
+  launchMs: number;
+  renderMs: number;
+  waits: LaunchWaits;
+};
+
+type PoolInfo = {
+  pageId: string;
+  affinityType: AffinityType;
+  affinityValue: string;
+  reused: boolean;
+  evicted: boolean;
+  timedOut: boolean;
+};
+
 const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
   // this is a side effect of glimmer scoped styles moving a DOM node that
   // glimmer is tracking. when we go to teardown the component glimmer gets mad
@@ -114,15 +139,8 @@ export class RenderRunner {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
   }): Promise<{
     response: RunCommandResponse;
-    timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      affinityType: AffinityType;
-      affinityValue: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
+    timings: Timings;
+    pool: PoolInfo;
   }> {
     this.#nonce++;
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
@@ -130,9 +148,9 @@ export class RenderRunner {
       `running command ${command ?? '<unknown>'}, nonce=${this.#nonce} affinity=${affinityKey}`,
     );
 
-    const { page, reused, launchMs, pageId, release } =
+    const { page, reused, launchMs, waits, pageId, release } =
       await this.#getPageForAffinity(affinityKey, auth);
-    const poolInfo = {
+    const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
       affinityValue,
@@ -246,7 +264,7 @@ export class RenderRunner {
         markTimeout(response.status);
         return {
           response,
-          timings: { launchMs, renderMs: Date.now() - renderStart },
+          timings: { launchMs, renderMs: Date.now() - renderStart, waits },
           pool: poolInfo,
         };
       }
@@ -279,7 +297,7 @@ export class RenderRunner {
 
       return {
         response,
-        timings: { launchMs, renderMs: Date.now() - renderStart },
+        timings: { launchMs, renderMs: Date.now() - renderStart, waits },
         pool: poolInfo,
       };
     } catch (e) {
@@ -290,7 +308,7 @@ export class RenderRunner {
       };
       return {
         response,
-        timings: { launchMs, renderMs: 0 },
+        timings: { launchMs, renderMs: 0, waits },
         pool: poolInfo,
       };
     } finally {
@@ -316,15 +334,8 @@ export class RenderRunner {
     renderOptions?: RenderRouteOptions;
   }): Promise<{
     response: ModuleRenderResponse;
-    timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      affinityType: AffinityType;
-      affinityValue: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
+    timings: Timings;
+    pool: PoolInfo;
   }> {
     this.#nonce++;
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
@@ -332,9 +343,9 @@ export class RenderRunner {
       `module prerendering url ${url}, nonce=${this.#nonce} affinity=${affinityKey} realm=${realm}`,
     );
 
-    const { page, reused, launchMs, pageId, release } =
+    const { page, reused, launchMs, waits, pageId, release } =
       await this.#getPageForAffinity(affinityKey, auth);
-    const poolInfo = {
+    const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
       affinityValue,
@@ -457,7 +468,7 @@ export class RenderRunner {
       response.error = this.#mergeConsoleErrors(pageId, response.error);
       return {
         response,
-        timings: { launchMs, renderMs: Date.now() - renderStart },
+        timings: { launchMs, renderMs: Date.now() - renderStart, waits },
         pool: poolInfo,
       };
     } finally {
@@ -483,15 +494,8 @@ export class RenderRunner {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
   }): Promise<{
     response: RenderVisitResponse;
-    timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      affinityType: AffinityType;
-      affinityValue: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
+    timings: Timings;
+    pool: PoolInfo;
   }> {
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     let requested = {
@@ -505,9 +509,9 @@ export class RenderRunner {
       ).join(',')}`,
     );
 
-    const { page, reused, launchMs, pageId, release } =
+    const { page, reused, launchMs, waits, pageId, release } =
       await this.#getPageForAffinity(affinityKey, auth);
-    const poolInfo = {
+    const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
       affinityValue,
@@ -628,6 +632,7 @@ export class RenderRunner {
               pageId,
               renderStart,
               launchMs,
+              waits,
               poolInfo,
             );
           }
@@ -642,6 +647,7 @@ export class RenderRunner {
               pageId,
               renderStart,
               launchMs,
+              waits,
               poolInfo,
             );
           }
@@ -715,6 +721,7 @@ export class RenderRunner {
             pageId,
             renderStart,
             launchMs,
+            waits,
             poolInfo,
           );
         }
@@ -933,6 +940,7 @@ export class RenderRunner {
             pageId,
             renderStart,
             launchMs,
+            waits,
             poolInfo,
           );
         }
@@ -1178,6 +1186,7 @@ export class RenderRunner {
         pageId,
         renderStart,
         launchMs,
+        waits,
         poolInfo,
       );
     } finally {
@@ -1199,25 +1208,12 @@ export class RenderRunner {
     pageId: string,
     renderStart: number,
     launchMs: number,
-    poolInfo: {
-      pageId: string;
-      affinityType: AffinityType;
-      affinityValue: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    },
+    waits: LaunchWaits,
+    poolInfo: PoolInfo,
   ): {
     response: RenderVisitResponse;
-    timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      affinityType: AffinityType;
-      affinityValue: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
+    timings: Timings;
+    pool: PoolInfo;
   } {
     if (response.pageUnusableError) {
       response.pageUnusableError = this.#mergeConsoleErrors(
@@ -1227,7 +1223,7 @@ export class RenderRunner {
     }
     return {
       response,
-      timings: { launchMs, renderMs: Date.now() - renderStart },
+      timings: { launchMs, renderMs: Date.now() - renderStart, waits },
       pool: poolInfo,
     };
   }

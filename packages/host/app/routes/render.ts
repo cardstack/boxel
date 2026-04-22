@@ -154,6 +154,8 @@ export default class RenderRoute extends Route<Model> {
     }
     (globalThis as any).__renderModel = undefined;
     (globalThis as any).__docsInFlight = undefined;
+    (globalThis as any).__boxelRenderStage = undefined;
+    (globalThis as any).__boxelRenderDiagnostics = undefined;
     (globalThis as any).__waitForRenderLoadStability = undefined;
     window.removeEventListener('boxel-render-error', this.handleRenderError);
     this.#detachWindowErrorListeners();
@@ -204,10 +206,70 @@ export default class RenderRoute extends Route<Model> {
     let parsedOptions = parseRenderRouteOptions(options);
     let canonicalOptions = serializeRenderRouteOptions(parsedOptions);
     this.#setupTransitionHelper(id, nonce, canonicalOptions);
+    // CS-10872: render-stage breadcrumb. `model()` running means we
+    // made it past route setup and are about to build the render
+    // model. Each long-running stage below updates this slot so the
+    // prerender's render-timeout error document can answer "where
+    // was the render when it stalled?".
+    (globalThis as any).__boxelRenderStage = 'model:start';
+    (globalThis as any).__boxelRenderStageSetAt = Date.now();
+    // CS-10872: every `__boxelRenderStage = X` write should also bump
+    // `__boxelRenderStageSetAt` so the timeout capture can report
+    // `stageAgeMs`. The setter wrapper below is the single place
+    // that enforces it; callers write via `__boxelSetRenderStage`.
+    (globalThis as any).__boxelSetRenderStage = (stage: string) => {
+      (globalThis as any).__boxelRenderStage = stage;
+      (globalThis as any).__boxelRenderStageSetAt = Date.now();
+    };
     // this is a tool for our prerenderer to understand if a timed out render is salvageable
     (globalThis as any).__docsInFlight = () =>
       this.store.cardDocsInFlight.length +
       this.store.fileMetaDocsInFlight.length;
+    // CS-10872: structured diagnostics hook preferred by the
+    // prerender's render-timeout capture path. Returns URL lists,
+    // in-flight module imports, in-flight query-field loads and the
+    // current stage so operators can tell loader-stall from query-
+    // stall from render-stall without reverse-engineering the DOM.
+    (globalThis as any).__boxelRenderDiagnostics = () => {
+      let loader = this.loaderService.loader;
+      let storeService = this.store as unknown as {
+        cardDocsInFlight: string[];
+        fileMetaDocsInFlight: string[];
+        queryLoadsInFlight?: () => Array<Record<string, unknown>>;
+        cardDocLoadsInFlight?: () => Array<{ url: string; ageMs: number }>;
+        fileMetaDocLoadsInFlight?: () => Array<{ url: string; ageMs: number }>;
+        recentCardDocLoads?: () => Array<{ url: string; ms: number }>;
+        recentFileMetaLoads?: () => Array<{ url: string; ms: number }>;
+        recentQueryLoads?: () => Array<Record<string, unknown>>;
+      };
+      let stage = (globalThis as any).__boxelRenderStage ?? null;
+      let stageSetAt = (globalThis as any).__boxelRenderStageSetAt ?? null;
+      let stageAgeMs =
+        typeof stageSetAt === 'number' ? Date.now() - stageSetAt : null;
+      let loaderAny = loader as unknown as {
+        inFlightModuleImports?: string[];
+        currentlyEvaluatingModule?: string | null;
+        recentModuleEvaluations?: Array<{ url: string; ms: number }>;
+      };
+      return {
+        renderStage: stage,
+        stageAgeMs,
+        currentId: id,
+        currentNonce: nonce,
+        cardDocsInFlight: storeService.cardDocsInFlight ?? [],
+        fileMetaDocsInFlight: storeService.fileMetaDocsInFlight ?? [],
+        cardDocLoadsInFlight: storeService.cardDocLoadsInFlight?.() ?? [],
+        fileMetaDocLoadsInFlight:
+          storeService.fileMetaDocLoadsInFlight?.() ?? [],
+        recentCardDocLoads: storeService.recentCardDocLoads?.() ?? [],
+        recentFileMetaLoads: storeService.recentFileMetaLoads?.() ?? [],
+        inFlightModuleImports: loaderAny?.inFlightModuleImports ?? [],
+        currentlyEvaluatingModule: loaderAny?.currentlyEvaluatingModule ?? null,
+        recentModuleEvaluations: loaderAny?.recentModuleEvaluations ?? [],
+        queryLoadsInFlight: storeService.queryLoadsInFlight?.() ?? [],
+        recentQueryLoads: storeService.recentQueryLoads?.() ?? [],
+      };
+    };
     (globalThis as any).__waitForRenderLoadStability = async () => {
       try {
         await this.#authGuard.race(() =>
@@ -332,6 +394,7 @@ export default class RenderRoute extends Route<Model> {
     // This is for host tests
     (globalThis as any).__renderModel = undefined;
 
+    (globalThis as any).__boxelSetRenderStage?.('buildModel:fetching-source');
     let response: Response;
     try {
       response = await this.#authGuard.race(() =>
@@ -395,6 +458,7 @@ export default class RenderRoute extends Route<Model> {
         this.#cardTypeTracker.set({ cardId: canonicalId, nonce }, undefined);
         throw new Error(JSON.stringify(doc.errors[0], null, 2));
       }
+      (globalThis as any).__boxelSetRenderStage?.('buildModel:deriving-type');
       let { derivedCardType, hydratedInstance } = await this.#authGuard.race(
         async () => {
           let derivedCardType = await deriveCardTypeFromDoc(
@@ -420,14 +484,21 @@ export default class RenderRoute extends Route<Model> {
             },
           };
 
+          (globalThis as any).__boxelSetRenderStage?.('buildModel:hydrating');
           let hydratedInstance = await this.store.add(enhancedDoc, {
             relativeTo: cardIdToURL(id),
             realm: realmURL,
             doNotPersist: true,
           });
           if (hydratedInstance) {
+            (globalThis as any).__boxelSetRenderStage?.(
+              'buildModel:touching-used-fields',
+            );
             await this.#touchIsUsedFields(hydratedInstance);
           }
+          (globalThis as any).__boxelSetRenderStage?.(
+            'buildModel:store-settle',
+          );
           await this.store.loaded();
           return { derivedCardType, hydratedInstance };
         },
@@ -679,6 +750,7 @@ export default class RenderRoute extends Route<Model> {
   }
 
   async #waitForRenderLoadStability(cardId: string): Promise<void> {
+    (globalThis as any).__boxelSetRenderStage?.('waiting-stability');
     let settleStartMs = nowMs();
     let stablePasses = 0;
     let passesCompleted = 0;

@@ -10,7 +10,7 @@ import {
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager';
 import { PagePool, StandbyTargetNotReadyError } from './page-pool';
-import { RenderRunner } from './render-runner';
+import { RenderRunner, type Timings } from './render-runner';
 import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry';
 import { toAffinityKey } from './affinity';
 
@@ -174,6 +174,11 @@ export class Prerenderer {
   #pagePool: PagePool;
   #renderRunner: RenderRunner;
   #cleanupInterval: NodeJS.Timeout | undefined;
+  // CS-10872: periodic queue-depth snapshot log timer. Quick visibility
+  // into fleet health (tabs, per-affinity pending) without chasing an
+  // incident. `unref()` so the timer never blocks process exit; cleared
+  // on `stop()` for test isolation.
+  #queueSnapshotInterval: NodeJS.Timeout | undefined;
   #affinityIdleEvictMs: number;
   #semaphore: AsyncSemaphore;
   #restartInFlight: Promise<void> | null = null;
@@ -211,6 +216,7 @@ export class Prerenderer {
     });
     this.#affinityIdleEvictMs = this.#resolveAffinityIdleEvictMs();
     this.#startCleanupLoop();
+    this.#startQueueSnapshotLoop();
     void this.#pagePool.warmStandbys().catch((e) => {
       if (e instanceof StandbyTargetNotReadyError) {
         log.debug(
@@ -235,10 +241,21 @@ export class Prerenderer {
     return this.#pagePool.getVacancySnapshot();
   }
 
+  // CS-10872: richer-than-vacancy snapshot used by prerender-app's
+  // periodic fleet-health log line. Kept off the manager heartbeat
+  // (operators read this locally) so we don't inflate every heartbeat.
+  getQueueDepthSnapshot() {
+    return this.#pagePool.getQueueDepthSnapshot();
+  }
+
   async stop(): Promise<void> {
     if (this.#cleanupInterval) {
       clearInterval(this.#cleanupInterval);
       this.#cleanupInterval = undefined;
+    }
+    if (this.#queueSnapshotInterval) {
+      clearInterval(this.#queueSnapshotInterval);
+      this.#queueSnapshotInterval = undefined;
     }
     await this.#pagePool.closeAll();
     await this.#browserManager.stop();
@@ -329,7 +346,7 @@ export class Prerenderer {
     renderOptions?: RenderRouteOptions;
   }): Promise<{
     response: ModuleRenderResponse;
-    timings: { launchMs: number; renderMs: number };
+    timings: Timings;
     pool: PoolMeta;
   }> {
     if (this.#stopped) {
@@ -339,14 +356,14 @@ export class Prerenderer {
     let lastResult:
       | {
           response: ModuleRenderResponse;
-          timings: { launchMs: number; renderMs: number };
+          timings: Timings;
           pool: PoolMeta;
         }
       | undefined;
     for (let attempt = 0; attempt < 3; attempt++) {
       let result: {
         response: ModuleRenderResponse;
-        timings: { launchMs: number; renderMs: number };
+        timings: Timings;
         pool: PoolMeta;
       };
       try {
@@ -438,7 +455,7 @@ export class Prerenderer {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
   }): Promise<{
     response: RunCommandResponse;
-    timings: { launchMs: number; renderMs: number };
+    timings: Timings;
     pool: PoolMeta;
   }> {
     if (this.#stopped) {
@@ -465,7 +482,7 @@ export class Prerenderer {
     },
   ): Promise<{
     response: RenderVisitResponse;
-    timings: { launchMs: number; renderMs: number };
+    timings: Timings;
     pool: PoolMeta;
   }> {
     if (this.#stopped) {
@@ -491,14 +508,14 @@ export class Prerenderer {
     let lastResult:
       | {
           response: RenderVisitResponse;
-          timings: { launchMs: number; renderMs: number };
+          timings: Timings;
           pool: PoolMeta;
         }
       | undefined;
     for (let attempt = 0; attempt < 3; attempt++) {
       let result: {
         response: RenderVisitResponse;
-        timings: { launchMs: number; renderMs: number };
+        timings: Timings;
         pool: PoolMeta;
       };
       try {
@@ -659,5 +676,42 @@ export class Prerenderer {
         });
     }, intervalMs);
     this.#cleanupInterval.unref?.();
+  }
+
+  #startQueueSnapshotLoop(): void {
+    // Default to 30 s — slow enough not to spam logs during idle, fast
+    // enough that a saturation-triggered 150 s abort (CS-10820) lands at
+    // least two snapshot rows to diagnose from. Disable with 0/negative.
+    let envInterval = process.env.PRERENDER_QUEUE_SNAPSHOT_INTERVAL_MS;
+    let intervalMs = envInterval !== undefined ? Number(envInterval) : 30_000;
+    if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
+      return;
+    }
+    this.#queueSnapshotInterval = setInterval(() => {
+      try {
+        let snap = this.#pagePool.getQueueDepthSnapshot();
+        if (snap.affinities.length === 0 && snap.totalPending === 0) {
+          // Quiet path: no active affinities and no pending work. Skip the
+          // log entirely so grep-able lines all describe real load.
+          return;
+        }
+        let perAffinity = snap.affinities
+          .map(
+            (a) =>
+              `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending})`,
+          )
+          .join(' ');
+        log.info(
+          'prerender-queue-snapshot totalTabs=%d totalPending=%d affinities=%d | %s',
+          snap.totalTabs,
+          snap.totalPending,
+          snap.affinities.length,
+          perAffinity,
+        );
+      } catch (e) {
+        log.warn('queue snapshot log failed:', e);
+      }
+    }, intervalMs);
+    this.#queueSnapshotInterval.unref?.();
   }
 }

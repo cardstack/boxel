@@ -4,11 +4,13 @@ import { logger } from '@cardstack/runtime-common';
 import { fetchRequestFromContext, fullRequestURL } from '../middleware';
 import { format } from 'date-fns';
 import {
+  PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
   resolvePrerenderServerProxyTimeoutMs,
 } from './prerender-constants';
+import { randomUUID } from 'crypto';
 import { fromAffinityKey, toAffinityKey } from './affinity';
 import type { AffinityType } from '@cardstack/runtime-common';
 
@@ -806,6 +808,12 @@ export function buildPrerenderManagerApp(options?: {
     pathSuffix: string,
     label: string,
   ) {
+    // CS-10872: honor caller-supplied correlation ID; mint one if
+    // absent (direct curl, test harnesses). Echo on every subsequent
+    // log line so a single grep surfaces the full proxy story.
+    let requestId = ctxt.get(PRERENDER_REQUEST_ID_HEADER) || randomUUID();
+    ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
+    let proxyStart = now();
     try {
       if (options?.isDraining?.()) {
         ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
@@ -905,8 +913,9 @@ export function buildPrerenderManagerApp(options?: {
 
         const targetURL = `${normalizeURL(target)}/${pathSuffix}`;
         let logTarget = attrs.url ?? attrs.command ?? '<unknown>';
+        let queueMs = now() - proxyStart;
         log.info(
-          `proxying ${label} prerender request for ${logTarget} to ${targetURL}`,
+          `proxying ${label} prerender request for ${logTarget} to ${targetURL} requestId=${requestId} affinity=${affinityKey} attempt=${attempts.size} queueMs=${queueMs}`,
         );
         let abortedDueToDrain = false;
         const ac = new AbortController();
@@ -928,6 +937,7 @@ export function buildPrerenderManagerApp(options?: {
           headers: {
             'Content-Type': 'application/vnd.api+json',
             Accept: ctxt.get('Accept') || 'application/vnd.api+json',
+            [PRERENDER_REQUEST_ID_HEADER]: requestId,
           },
           body: raw,
           signal: ac.signal,
@@ -935,7 +945,10 @@ export function buildPrerenderManagerApp(options?: {
           if (e?.name === 'AbortError' && options?.isDraining?.()) {
             abortedDueToDrain = true;
           } else {
-            log.warn('Upstream error:', e);
+            log.warn(
+              `Upstream error requestId=${requestId} target=${targetURL}:`,
+              e,
+            );
           }
           return null as any;
         });
@@ -1015,12 +1028,19 @@ export function buildPrerenderManagerApp(options?: {
         }
         ctxt.set('x-boxel-prerender-target', target);
         ctxt.set('x-boxel-prerender-affinity', affinityKey);
+        // Re-echo after res.headers iteration so the manager's ID
+        // wins over any header passthrough from the prerender-server.
+        ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
         const buf = Buffer.from(await res.arrayBuffer());
         ctxt.body = buf;
+        let proxyMs = now() - proxyStart;
+        log.info(
+          `proxied ${label} requestId=${requestId} affinity=${affinityKey} target=${target} status=${res.status} proxyMs=${proxyMs}`,
+        );
         return;
       }
     } catch (e) {
-      log.error(`Error in /${pathSuffix} proxy:`, e);
+      log.error(`Error in /${pathSuffix} proxy requestId=${requestId}:`, e);
       ctxt.status = 500;
       ctxt.body = { errors: [{ status: 500, message: 'Proxy error' }] };
     }

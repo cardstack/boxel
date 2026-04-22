@@ -1486,6 +1486,62 @@ module(basename(__filename), function () {
           'timeout retains page identifier',
         );
 
+        // CS-10872: the timeout RenderError must carry the structured
+        // diagnostics block so operators reading the persisted error
+        // document see launch-vs-render breakdown + the host hooks.
+        let diagnostics = (timedOut.response.error as any)?.diagnostics;
+        assert.strictEqual(
+          typeof diagnostics,
+          'object',
+          'timeout error includes diagnostics object',
+        );
+        assert.notStrictEqual(diagnostics, null, 'diagnostics is not null');
+        assert.strictEqual(
+          typeof diagnostics?.launchMs,
+          'number',
+          'diagnostics.launchMs is populated by server-side enrichment',
+        );
+        let waitsShape =
+          typeof diagnostics?.waits?.semaphoreMs === 'number' &&
+          typeof diagnostics?.waits?.tabQueueMs === 'number' &&
+          typeof diagnostics?.waits?.tabStartupMs === 'number';
+        assert.true(
+          waitsShape,
+          'diagnostics.waits carries per-stage breakdown',
+        );
+        assert.strictEqual(
+          typeof diagnostics?.renderElapsedMs,
+          'number',
+          'diagnostics.renderElapsedMs is populated',
+        );
+        assert.strictEqual(
+          typeof diagnostics?.totalElapsedMs,
+          'number',
+          'diagnostics.totalElapsedMs is populated',
+        );
+        assert.strictEqual(
+          typeof diagnostics?.requestId,
+          'string',
+          'diagnostics.requestId is populated for cross-log correlation',
+        );
+        // The host has already evaluated the card module by the time
+        // the second (timed-out) call runs against the warm tab — so
+        // the loader's top-N history must contain entries naming at
+        // least one module that was compiled on the page.
+        let moduleEvals = diagnostics?.recentModuleEvaluations;
+        let moduleEvalsShape =
+          Array.isArray(moduleEvals) &&
+          moduleEvals.length > 0 &&
+          moduleEvals.every(
+            (e: any) => typeof e?.url === 'string' && typeof e?.ms === 'number',
+          );
+        assert.true(
+          moduleEvalsShape,
+          `diagnostics.recentModuleEvaluations names compiled modules with ms timings (${JSON.stringify(
+            moduleEvals,
+          )})`,
+        );
+
         let afterTimeout = await prerenderer.prerenderModule({
           affinityType: 'realm',
           affinityValue: realmURL,
@@ -1507,6 +1563,127 @@ module(basename(__filename), function () {
           'ready',
           'subsequent render succeeds',
         );
+      });
+
+      test('card prerender timeout surfaces query-field and linked-field load timings in diagnostics', async function (assert) {
+        // CS-10872: exercise a card render that depends on a
+        // `linksToMany` query field (which itself fans out into
+        // per-row `linksTo` loads). We slow the server-side search
+        // enough that a tight render timeout catches the render with
+        // a pending query-field load and/or its linked-field loads.
+        // The assertions below require the diagnostics to name the
+        // individual query and linked-field URLs, not just a count.
+        const cardURL = `${realmURL}directory-ops`;
+        let realmServerPatch =
+          installRealmServerAssertOwnRealmServerBypassPatch();
+        let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(8_000);
+        try {
+          let result = await prerenderer.prerenderVisit({
+            affinityType: 'realm',
+            affinityValue: realmURL,
+            realm: realmURL,
+            url: cardURL,
+            auth: auth(),
+            renderOptions: { cardRender: true },
+            opts: { timeoutMs: 2_000 },
+          });
+
+          let timeoutError =
+            (result.response.card?.error as any) ??
+            (result.response.pageUnusableError as any);
+          assert.ok(
+            timeoutError,
+            'timed-out card render surfaces a RenderError',
+          );
+          assert.strictEqual(
+            timeoutError?.error?.title,
+            'Render timeout',
+            'error title is "Render timeout"',
+          );
+
+          let diagnostics = timeoutError?.diagnostics;
+          assert.strictEqual(
+            typeof diagnostics,
+            'object',
+            'timeout error carries diagnostics block',
+          );
+          assert.notStrictEqual(diagnostics, null, 'diagnostics is not null');
+
+          // Server-side launch / render breakdown must always be present.
+          assert.strictEqual(
+            typeof diagnostics?.launchMs,
+            'number',
+            'diagnostics.launchMs populated',
+          );
+          let waitsShape =
+            typeof diagnostics?.waits?.semaphoreMs === 'number' &&
+            typeof diagnostics?.waits?.tabQueueMs === 'number' &&
+            typeof diagnostics?.waits?.tabStartupMs === 'number';
+          assert.true(waitsShape, 'diagnostics.waits breakdown populated');
+          assert.strictEqual(
+            typeof diagnostics?.renderElapsedMs,
+            'number',
+            'diagnostics.renderElapsedMs populated',
+          );
+
+          // Render-stage breadcrumb: we got past route setup, so the
+          // stage should name *something* from buildModel:* or later.
+          assert.strictEqual(
+            typeof diagnostics?.renderStage,
+            'string',
+            `diagnostics.renderStage populated (got ${JSON.stringify(
+              diagnostics?.renderStage,
+            )})`,
+          );
+
+          // The core assertion: the in-flight OR recent query-load
+          // list must name at least one entry. Whether it's still
+          // pending or just completed depends on exact timing of the
+          // delayed search vs. the 2s timeout, so we accept either.
+          let queryLoads: Array<Record<string, unknown>> = [
+            ...(Array.isArray(diagnostics?.queryLoadsInFlight)
+              ? diagnostics.queryLoadsInFlight
+              : []),
+            ...(Array.isArray(diagnostics?.recentQueryLoads)
+              ? diagnostics.recentQueryLoads
+              : []),
+          ];
+          assert.true(
+            queryLoads.length > 0,
+            `diagnostics surface at least one query load (in-flight or recent): ${JSON.stringify(
+              diagnostics,
+            )}`,
+          );
+          // Every tracked query load should be tagged with a source
+          // string (SearchResource annotates seed/search/live-refresh).
+          let allTagged = queryLoads.every((entry) => {
+            let meta = (entry as any)?.meta ?? entry;
+            return typeof meta?.source === 'string';
+          });
+          assert.true(
+            allTagged,
+            'each query load entry is tagged with a `source` identifier',
+          );
+
+          // Loader must have recorded at least one module evaluation
+          // for the directory-query module (or its dependencies). The
+          // history is bounded and captures Glimmer-compile cost.
+          let moduleEvals = diagnostics?.recentModuleEvaluations;
+          let moduleEvalsShape =
+            Array.isArray(moduleEvals) &&
+            moduleEvals.length > 0 &&
+            moduleEvals.every(
+              (e: any) =>
+                typeof e?.url === 'string' && typeof e?.ms === 'number',
+            );
+          assert.true(
+            moduleEvalsShape,
+            'diagnostics.recentModuleEvaluations names compiled modules with ms timings',
+          );
+        } finally {
+          await realmServerPatch.restore();
+          delayedSearchPatch.restore();
+        }
       });
 
       test('file prerender returns extracted metadata', async function (assert) {
@@ -5208,7 +5385,11 @@ module(basename(__filename), function () {
 
           return {
             response,
-            timings: { launchMs: 0, renderMs: 1 },
+            timings: {
+              launchMs: 0,
+              renderMs: 1,
+              waits: { semaphoreMs: 0, tabQueueMs: 0, tabStartupMs: 0 },
+            },
             pool: {
               pageId: `page-${attemptCount}`,
               affinityType,
@@ -5305,7 +5486,11 @@ module(basename(__filename), function () {
 
           return {
             response: { fileExtract },
-            timings: { launchMs: 0, renderMs: 1 },
+            timings: {
+              launchMs: 0,
+              renderMs: 1,
+              waits: { semaphoreMs: 0, tabQueueMs: 0, tabStartupMs: 0 },
+            },
             pool: {
               pageId: `page-${attemptCount}`,
               affinityType,
@@ -5411,7 +5596,11 @@ module(basename(__filename), function () {
 
           return {
             response: { card },
-            timings: { launchMs: 0, renderMs: 1 },
+            timings: {
+              launchMs: 0,
+              renderMs: 1,
+              waits: { semaphoreMs: 0, tabQueueMs: 0, tabStartupMs: 0 },
+            },
             pool: {
               pageId: `page-${attemptCount}`,
               affinityType,

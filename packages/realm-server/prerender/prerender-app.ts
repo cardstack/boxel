@@ -18,12 +18,15 @@ import {
   fetchRequestFromContext,
 } from '../middleware';
 import { Prerenderer } from './index';
+import type { Timings } from './render-runner';
 import { resolvePrerenderManagerURL } from './config';
 import {
+  PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
 } from './prerender-constants';
+import { randomUUID } from 'crypto';
 
 type PrerenderServer = Server & {
   __stopPrerenderer?: () => Promise<void>;
@@ -107,7 +110,7 @@ export function buildPrerenderApp(options: {
 
   type PrerenderExecResult<R> = {
     response: R;
-    timings: { launchMs: number; renderMs: number };
+    timings: Timings;
     pool: {
       pageId: string;
       affinityType: AffinityType;
@@ -117,6 +120,45 @@ export function buildPrerenderApp(options: {
       timedOut: boolean;
     };
   };
+
+  // CS-10872: walk any RenderError embedded in a response and merge
+  // server-observed timings into its `diagnostics` block. The host
+  // already attaches `renderStage` / `cardDocsInFlight` / etc. from
+  // `withTimeout`; this layer adds the requestId + launch breakdown
+  // so the persisted error document tells the full story of "where
+  // did the 90 seconds go".
+  function decorateRenderErrorDiagnostics(
+    response: any,
+    requestId: string,
+    timings: Timings,
+    totalMs: number,
+  ): void {
+    if (!response || typeof response !== 'object') {
+      return;
+    }
+    let serverContext = {
+      requestId,
+      launchMs: timings.launchMs,
+      waits: timings.waits,
+      renderElapsedMs: timings.renderMs,
+      totalElapsedMs: totalMs,
+    };
+    let visit = (err: any) => {
+      if (!err || typeof err !== 'object') return;
+      if (!err.diagnostics || typeof err.diagnostics !== 'object') {
+        err.diagnostics = {};
+      }
+      Object.assign(err.diagnostics, serverContext);
+    };
+    visit(response.error);
+    visit((response as any).pageUnusableError);
+    for (let key of ['card', 'fileExtract', 'fileRender'] as const) {
+      let sub = response[key];
+      if (sub && typeof sub === 'object') {
+        visit((sub as any).error);
+      }
+    }
+  }
 
   let isNonEmptyString = (value: unknown): value is string =>
     typeof value === 'string' && value.trim().length > 0;
@@ -235,6 +277,11 @@ export function buildPrerenderApp(options: {
     },
   ) {
     router.post(path, async (ctxt: Koa.Context) => {
+      // CS-10872: echo manager's correlation ID so operators can grep
+      // one ID across client → manager → prerender-server. Fall back
+      // to a mint if the caller didn't supply one (direct calls, tests).
+      let requestId = ctxt.get(PRERENDER_REQUEST_ID_HEADER) || randomUUID();
+      ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
       try {
         let request = await fetchRequestFromContext(ctxt);
         let raw = await request.text();
@@ -334,17 +381,22 @@ export function buildPrerenderApp(options: {
         let poolFlagSuffix =
           poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
         log.info(
-          '%s %s total=%dms launch=%dms render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+          '%s %s requestId=%s total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
           options.infoLabel,
           parsed.logTarget,
+          requestId,
           totalMs,
           timings.launchMs,
+          timings.waits.semaphoreMs,
+          timings.waits.tabQueueMs,
+          timings.waits.tabStartupMs,
           timings.renderMs,
           pool.pageId,
           pool.affinityType,
           pool.affinityValue,
           poolFlagSuffix,
         );
+        decorateRenderErrorDiagnostics(response, requestId, timings, totalMs);
         ctxt.status = 201;
         ctxt.set('Content-Type', 'application/vnd.api+json');
         ctxt.body = {
@@ -358,6 +410,7 @@ export function buildPrerenderApp(options: {
               launchMs: timings.launchMs,
               renderMs: timings.renderMs,
               totalMs,
+              waits: timings.waits,
             },
             pool,
           },
@@ -429,6 +482,8 @@ export function buildPrerenderApp(options: {
   // Composite visit prerender: runs a caller-selected subset of
   // {fileExtract, cardRender, fileRender} on a single page acquisition.
   router.post('/prerender-visit', async (ctxt: Koa.Context) => {
+    let requestId = ctxt.get(PRERENDER_REQUEST_ID_HEADER) || randomUUID();
+    ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
     try {
       let request = await fetchRequestFromContext(ctxt);
       let raw = await request.text();
@@ -590,16 +645,21 @@ export function buildPrerenderApp(options: {
         .join(', ');
       let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
       log.info(
-        'visit prerendered %s total=%dms launch=%dms render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+        'visit prerendered %s requestId=%s total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
         url,
+        requestId,
         totalMs,
         timings.launchMs,
+        timings.waits.semaphoreMs,
+        timings.waits.tabQueueMs,
+        timings.waits.tabStartupMs,
         timings.renderMs,
         pool.pageId,
         pool.affinityType,
         pool.affinityValue,
         poolFlagSuffix,
       );
+      decorateRenderErrorDiagnostics(response, requestId, timings, totalMs);
       ctxt.status = 201;
       ctxt.set('Content-Type', 'application/vnd.api+json');
       ctxt.body = {
@@ -613,6 +673,7 @@ export function buildPrerenderApp(options: {
             launchMs: timings.launchMs,
             renderMs: timings.renderMs,
             totalMs,
+            waits: timings.waits,
           },
           pool,
         },

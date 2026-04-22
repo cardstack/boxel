@@ -233,6 +233,52 @@ export class PagePool {
     return snapshot;
   }
 
+  // CS-10872: richer periodic-log snapshot. Whereas `getVacancySnapshot`
+  // collapses each affinity to {idle, tabCount} for routing, this exposes
+  // the raw per-affinity queue depth plus totals, so the prerender-app
+  // can log a single-line "fleet health" summary every N seconds.
+  getQueueDepthSnapshot(): {
+    totalTabs: number;
+    totalPending: number;
+    affinities: Array<{
+      affinityKey: string;
+      tabCount: number;
+      pendingTotal: number;
+      maxPending: number;
+      idle: boolean;
+    }>;
+  } {
+    let totalTabs = 0;
+    let totalPending = 0;
+    let affinities: Array<{
+      affinityKey: string;
+      tabCount: number;
+      pendingTotal: number;
+      maxPending: number;
+      idle: boolean;
+    }> = [];
+    for (let [affinityKey, entries] of this.#affinityPages) {
+      let tabCount = entries.size;
+      let pendingTotal = 0;
+      let maxPending = 0;
+      for (let entry of entries) {
+        let p = entry.queue.pendingCount;
+        pendingTotal += p;
+        if (p > maxPending) maxPending = p;
+      }
+      totalTabs += tabCount;
+      totalPending += pendingTotal;
+      affinities.push({
+        affinityKey,
+        tabCount,
+        pendingTotal,
+        maxPending,
+        idle: pendingTotal === 0,
+      });
+    }
+    return { totalTabs, totalPending, affinities };
+  }
+
   resetConsoleErrors(pageId: string): void {
     this.#consoleErrorsByPageId.set(pageId, new Map());
   }
@@ -270,13 +316,22 @@ export class PagePool {
     page: Page;
     reused: boolean;
     launchMs: number;
+    // CS-10872: per-stage breakdown so operators can tell "waited for
+    // the global render semaphore" (the CS-10820 saturation signal)
+    // apart from "waited behind the affinity's tab queue" apart from
+    // "warmed a new tab". All three are operationally different.
+    waits: { semaphoreMs: number; tabQueueMs: number; tabStartupMs: number };
     pageId: string;
     release: () => void;
   }> {
     let t0 = Date.now();
+    let startupStart = Date.now();
     await this.#ensureStandbyPool();
+    let tabStartupMs = Date.now() - startupStart;
+    let tabQueueStart = Date.now();
     let { entry, reused, releaseTab } =
       await this.#selectEntryForAffinity(affinityKey);
+    let tabQueueMs = Date.now() - tabQueueStart;
     if (entry.affinityKey !== affinityKey) {
       entry = this.#reassignAffinityTab(entry, affinityKey);
       reused = false;
@@ -284,9 +339,11 @@ export class PagePool {
     if (entry.transitioning) {
       entry.transitioning = false;
     }
+    let semaphoreStart = Date.now();
     let releaseGlobal = this.#renderSemaphore
       ? await this.#renderSemaphore.acquire()
       : undefined;
+    let semaphoreMs = Date.now() - semaphoreStart;
     entry.lastUsedAt = Date.now();
     this.#touchLRU(affinityKey);
     void this.#ensureStandbyPool();
@@ -307,6 +364,7 @@ export class PagePool {
       pageId: entry.pageId,
       reused,
       launchMs: Date.now() - t0,
+      waits: { semaphoreMs, tabQueueMs, tabStartupMs },
       release,
     };
   }
