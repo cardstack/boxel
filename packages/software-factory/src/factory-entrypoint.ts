@@ -120,17 +120,6 @@ export interface RunFactoryEntrypointDependencies {
     realmUrl: string,
     workspaceDir: string,
   ) => Promise<void>;
-  /**
-   * After the post-seed sync, wait for the realm to serve the seed card
-   * over HTTP so the scheduler's `listIssues()` doesn't race with the
-   * realm's search index. Tests stub this out. Defaults to
-   * `client.waitForFile`.
-   */
-  waitForSeedReadable?: (
-    client: BoxelCLIClient,
-    realmUrl: string,
-    seedIssueId: string,
-  ) => Promise<void>;
 }
 export { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
@@ -303,18 +292,10 @@ export async function runFactoryEntrypoint(
     dependencies?.syncWorkspaceToRealm ?? defaultSyncWorkspaceToRealm;
   await syncWorkspaceToRealm(client, targetRealm.url, workspaceDir);
 
-  // Wait for the seed card to be readable from the realm. `client.sync`
-  // returns when the HTTP POST completes, but the realm's indexer runs
-  // asynchronously — if the scheduler's `listIssues()` (which hits the
-  // realm's search index) races with indexing, it returns empty and the
-  // loop exits without picking up the seed. Polling the card URL is the
-  // same mechanism the pre-CS-10882 factory used (via waitForFile inside
-  // createSeedIssue) to bridge that race.
-  if (seedResult.status === 'created') {
-    let waitForSeedReadable =
-      dependencies?.waitForSeedReadable ?? defaultWaitForSeedReadable;
-    await waitForSeedReadable(client, targetRealm.url, seedResult.issueId);
-  }
+  // Note: the realm's search index runs asynchronously, so the
+  // scheduler's first `listIssues()` call right after the post-seed sync
+  // can race with indexing. `IssueScheduler.loadIssues` handles that
+  // with a short bounded retry — no orchestrator-level polling needed.
 
   let summary = buildFactoryEntrypointSummary(
     options,
@@ -441,44 +422,6 @@ async function defaultPullTargetRealm(
   }
   log.info(
     `Pulled ${result.files.length} file(s) from target realm into workspace`,
-  );
-}
-
-async function defaultWaitForSeedReadable(
-  client: BoxelCLIClient,
-  realmUrl: string,
-  seedIssueId: string,
-): Promise<void> {
-  // Two-stage wait:
-  //   1. Poll the card URL until the realm serves it (disk write done).
-  //   2. Poll the search index until it returns the seed (indexer done).
-  // The loop's scheduler uses `client.search` to enumerate issues; if we
-  // returned after just stage 1, the index might still be stale and
-  // `listIssues()` would come back empty, so the loop would exit before
-  // picking up the seed.
-  let readable = await client.waitForFile(realmUrl, seedIssueId, {
-    timeoutMs: 15_000,
-    pollMs: 250,
-  });
-  if (!readable) {
-    throw new Error(
-      `Seed issue synced to realm but not readable after 15s: ${seedIssueId}`,
-    );
-  }
-
-  let seedCardUrl = new URL(seedIssueId, realmUrl).href;
-  let deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    let result = await client.search(realmUrl, {
-      filter: { eq: { id: seedCardUrl } },
-    });
-    if (result.ok && result.data && result.data.length > 0) {
-      return;
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(
-    `Seed issue indexed in realm but not visible to search after 15s: ${seedIssueId}`,
   );
 }
 

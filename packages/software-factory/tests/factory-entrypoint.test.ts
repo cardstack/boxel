@@ -348,7 +348,6 @@ module('factory-entrypoint', function (hooks) {
         // specs that exercise a live realm.
         pullTargetRealm: async () => {},
         syncWorkspaceToRealm: async () => {},
-        waitForSeedReadable: async () => {},
         runIssueLoop: async () => ({
           outcome: 'all_issues_done' as const,
           outerCycles: 1,
@@ -427,7 +426,6 @@ module('factory-entrypoint', function (hooks) {
         },
         pullTargetRealm: async () => {},
         syncWorkspaceToRealm: async () => {},
-        waitForSeedReadable: async () => {},
         runIssueLoop: async () => ({
           outcome: 'all_issues_done' as const,
           outerCycles: 0,
