@@ -407,10 +407,18 @@ module(basename(__filename), function () {
           },
           'response includes updated realm info',
         );
-        assert.deepEqual(
-          readJSONSync(realmConfigPath),
-          { ...(initialConfig ?? {}), backgroundURL: 'new-bg' },
-          '.realm.json contains the updated property',
+        // backgroundURL is owned by the RealmConfig card, not the sidecar.
+        let cardPath = join(
+          dir.name,
+          'realm_server_1',
+          'test',
+          'realm.json',
+        );
+        let cardDoc = readJSONSync(cardPath);
+        assert.strictEqual(
+          cardDoc.data.attributes.backgroundURL,
+          'new-bg',
+          'realm.json card contains the updated backgroundURL',
         );
       });
 
@@ -693,6 +701,10 @@ module(basename(__filename), function () {
         writeFileSync(realmConfigPath, invalidContent);
 
         try {
+          // publishable is sidecar-owned, so this exercises the sidecar
+          // JSON-parse error path. Card-owned fields (name, backgroundURL,
+          // iconURL, hostRoutingRules) go to realm.json and would not
+          // surface an error from a malformed .realm.json.
           let response = await request
             .patch('/_config')
             .set('Accept', SupportedMimeType.JSON)
@@ -707,7 +719,7 @@ module(basename(__filename), function () {
             .send({
               data: {
                 type: 'realm-config',
-                attributes: { backgroundURL: 'updated-bg' },
+                attributes: { publishable: false },
               },
             });
 
@@ -1842,6 +1854,7 @@ module(basename(__filename), function () {
     const basePath = resolve(join(__dirname, '..', '..', 'base'));
     const demoFileSystem: Record<string, string | LooseSingleCardDocument> = {
       '.realm.json': readJSONSync(join(__dirname, 'cards', '.realm.json')),
+      'realm.json': readJSONSync(join(__dirname, 'cards', 'realm.json')),
       'person.gts': readFileSync(
         join(__dirname, 'cards', 'person.gts'),
         'utf8',
