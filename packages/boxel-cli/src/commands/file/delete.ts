@@ -4,8 +4,9 @@ import {
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from '../../lib/profile-manager';
-import { isProtectedFile, SupportedMimeType } from '../../lib/realm-sync-base';
+import { isProtectedFile } from '../../lib/realm-sync-base';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { FG_RED, DIM, RESET } from '../../lib/colors';
 
 export interface DeleteResult {
