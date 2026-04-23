@@ -5,6 +5,8 @@
 **The language between data and code.**
 Spreadsheet-style formulas over JSON. Paste-compatible with Excel. Sandboxed by construction. Small enough to live inside a JSON field — powerful enough to drive constraints, formulas, defaults, and workflow gates.
 
+**Live site:** [**bxl.boxel.site**](https://bxl.boxel.site) &nbsp; · &nbsp; syntax reference, examples, docs — rendered
+
 </div>
 
 ```bxl
@@ -71,7 +73,7 @@ The eight design decisions that make BXL feel the way it does:
 - **UPPERCASE is a promise, lowercase is a contribution** — `ROUND(x; 2)` is paste-compatible with Excel. `present(x)`, `when(p; q)`, `words(s)` are BXL-native.
 - **One sandbox, many surfaces** — the same language powers computed fields, form validation, visibility rules, workflow gates, access policies, and annotation targets.
 
-The full reference with syntax-highlighted examples lives in [`docs/syntax-reference.html`](./docs/syntax-reference.html); the formal grammar in [`docs/grammar.ebnf`](./docs/grammar.ebnf).
+The full reference with syntax-highlighted examples is at **[bxl.boxel.site](https://bxl.boxel.site)** (also shipped as [`docs/syntax-reference.html`](./docs/syntax-reference.html) and [`docs/syntax-reference.md`](./docs/syntax-reference.md)); the formal grammar lives in [`docs/grammar.ebnf`](./docs/grammar.ebnf).
 
 ---
 
@@ -532,7 +534,8 @@ One-shot pipes too: `echo '{"n":42}' | bxl eval 'n * 2'` prints `84`.
 
 ## Docs
 
-- [`docs/syntax-reference.html`](./docs/syntax-reference.html) — canonical syntax reference, syntax-highlighted, rendered layout (open in a browser)
+- **[bxl.boxel.site](https://bxl.boxel.site)** — live site with the syntax reference rendered, syntax-highlighted, and searchable
+- [`docs/syntax-reference.html`](./docs/syntax-reference.html) — the same reference as a standalone HTML file (open locally in a browser)
 - [`docs/syntax-reference.md`](./docs/syntax-reference.md) — same reference in Markdown, for GitHub browsing and plain-text viewers
 - [`docs/grammar.ebnf`](./docs/grammar.ebnf) — formal grammar
 - [`docs/sandbox.md`](./docs/sandbox.md) — sandbox contract and threat model
