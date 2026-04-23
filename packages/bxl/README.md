@@ -21,13 +21,9 @@ ROUND(Subtotal * "Tax Rate" / 100, 2) = "Tax Amount" -- paste from Excel, it run
 
 <div align="center">
 
-| Looks like data        | Acts like code                   |
-| ---------------------- | -------------------------------- |
-| Serialized as a string | Executes, returns a typed result |
-| Diffable in git        | Has local scope (`as $x`)        |
-| Ships in catalogs      | Tracks dependencies              |
-| Reviewable by humans   | Bounded op budget                |
-| No compile step        | Sandboxed (zero I/O)             |
+**Looks like data** &nbsp; · &nbsp; serialized &nbsp; · &nbsp; diffable &nbsp; · &nbsp; catalog-shippable &nbsp; · &nbsp; reviewable &nbsp; · &nbsp; zero-setup
+
+**Acts like code** &nbsp; · &nbsp; executes &nbsp; · &nbsp; typed &nbsp; · &nbsp; scoped &nbsp; · &nbsp; dependency-tracked &nbsp; · &nbsp; sandboxed
 
 </div>
 
@@ -37,7 +33,7 @@ ROUND(Subtotal * "Tax Rate" / 100, 2) = "Tax Amount" -- paste from Excel, it run
 
 BXL is a small, safe expression language for computing over structured data. It's the formula bar your users already know, welded to jq's paths and pipelines, wrapped in a sandbox that refuses to do I/O.
 
-**You author in BXL. The engine runs canonical jqxl.** One evaluator, one AST, one canonical form — with a readable surface that reads like English when your schema has good display names.
+**You author in BXL. The engine runs canonical jq, plus every Excel function you already know.** One evaluator, one AST, one canonical form — with a readable surface that reads like English when your schema has good display names.
 
 ```ts
 evaluateBxl('ROUND(Subtotal * "Tax Rate" / 100, 2)', invoice, { schema });
@@ -182,7 +178,7 @@ BXL is evaluated from eight distinct positions in a typical application. Each us
 | **Workflow gate**       | Advance condition                 | `all(Steps[…]; Status = "done")`                        |
 | **Notification trigger**| Fire when threshold crossed       | `"Budget Remaining" < 1000`                             |
 | **Reactive predicate**  | Watch-and-fire rule               | `age("Last Heartbeat") > DURATION("60s")`               |
-| **Query transform**     | Bulk derivation over an array     | `"Line Item" \| map(Quantity * "Unit Price")`           |
+| **Query transform**     | Bulk derivation over an array     | <code>"Line Item" &#124; map(Quantity * "Unit Price")</code> |
 
 ### Where logic lives — three places, one rule each
 
@@ -215,7 +211,7 @@ BXL skips Excel's cell-grid functions (`OFFSET`, `INDIRECT`, `DAVERAGE`), most s
 
 ### 2 · jq · every valid jq is valid BXL
 
-[jq-tools](https://github.com/alexxander/jq-tools) is the actual runtime. BXL compiles to canonical jqxl before execution; the evaluator doesn't know or care whether you wrote `.lineItems[0].sku` or `"Line Item"[#1].SKU`. The Excel helpers are added as regular jq functions via jq's native extension mechanism — no parser fork, no runtime fork.
+[jq-tools](https://github.com/alexxander/jq-tools) is the actual runtime. BXL compiles to canonical jq before execution; the evaluator doesn't know or care whether you wrote `.lineItems[0].sku` or `"Line Item"[#1].SKU`. The Excel helpers are added as regular jq functions via jq's native extension mechanism — no parser fork, no runtime fork.
 
 ```
 jq:   .lineItems | map(select(.taxable)) | map(.lineTotal) | add
@@ -388,7 +384,7 @@ Our own work — the readable-syntax compiler, linter, formatter, sandbox, and r
 ```ts
 import {
   evaluateBxl,      // readable BXL → JSON value (full runtime)
-  compileBxl,       // readable BXL → canonical jqxl source (no evaluation)
+  compileBxl,       // readable BXL → canonical jq source (no evaluation)
   lintBxl,          // parser-only diagnostics (no formula helpers, no evaluator)
   solidifyBxl,      // normalize fuzzy input to Solid BXL (one-liner, canonical)
   expandBxl,        // wrap at pipes / multi-arg calls for readability
