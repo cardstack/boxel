@@ -27,14 +27,34 @@ export const TEST_WORKER_PORT_RANGE_END = Number(
   process.env.SOFTWARE_FACTORY_TEST_WORKER_PORT_RANGE_END ?? 32000,
 );
 
-// Coprime stride for linear-probe search so repeated attempts cover a wide
-// portion of the slot space before wrapping. 7 is coprime with 1200 slots.
-const TEST_WORKER_PORT_SEARCH_STRIDE = 7;
+function gcd(a: number, b: number): number {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+  while (y !== 0) {
+    let remainder = x % y;
+    x = y;
+    y = remainder;
+  }
+  return x;
+}
 
 const TEST_WORKER_PORT_NUM_SLOTS = Math.floor(
   (TEST_WORKER_PORT_RANGE_END - TEST_WORKER_PORT_RANGE_START) /
     TEST_WORKER_PORT_BLOCK_SIZE,
 );
+
+// Preferred stride for linear-probe search so repeated attempts cover a wide
+// portion of the slot space before wrapping. 7 is coprime with the default
+// 1200-slot range. If the configured slot count is a multiple of 7 (possible
+// via env-var overrides) the probe would only visit 1/7 of the slots, so
+// fall back to a pure linear probe (stride=1) in that case.
+const TEST_WORKER_PORT_PREFERRED_SEARCH_STRIDE = 7;
+const TEST_WORKER_PORT_SEARCH_STRIDE =
+  TEST_WORKER_PORT_NUM_SLOTS > 0 &&
+  gcd(TEST_WORKER_PORT_PREFERRED_SEARCH_STRIDE, TEST_WORKER_PORT_NUM_SLOTS) ===
+    1
+    ? TEST_WORKER_PORT_PREFERRED_SEARCH_STRIDE
+    : 1;
 
 const TEST_WORKER_RUN_OFFSET = Number(
   process.env.SOFTWARE_FACTORY_TEST_WORKER_RUN_OFFSET ??

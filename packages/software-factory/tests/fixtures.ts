@@ -209,57 +209,7 @@ async function startRealmProcess(
   // next few milliseconds; we reacquire the holders inside `stop()` below
   // after the child has exited so the ports stay ours between tests.
   await testWorkerPortSet.releaseRealmServerPorts();
-  let child = spawn(
-    tsNodeBin,
-    [
-      '--transpileOnly',
-      'src/cli/serve-realm.ts',
-      realmDir,
-      `--compatRealmServerPort=${testWorkerPortSet.compatRealmServerPort}`,
-      `--realmServerPort=${testWorkerPortSet.realmServerPort}`,
-      `--prerenderURL=${testWorkerPrerenderURL}`,
-    ],
-    {
-      cwd: packageRoot,
-      detached: true,
-      env: {
-        ...process.env,
-        NODE_NO_WARNINGS: '1',
-        SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
-        ...(supportMetadata?.context
-          ? {
-              SOFTWARE_FACTORY_CONTEXT: JSON.stringify(supportMetadata.context),
-            }
-          : {}),
-        ...(preparedTemplate
-          ? {
-              SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME:
-                preparedTemplate.templateDatabaseName,
-            }
-          : {}),
-        ...(preparedTemplate
-          ? {
-              SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL:
-                preparedTemplate.templateRealmServerURL,
-            }
-          : {}),
-        ...(permissions
-          ? {
-              SOFTWARE_FACTORY_PERMISSIONS: JSON.stringify(permissions),
-            }
-          : {}),
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-
-  child.stdout?.on('data', (chunk) => {
-    logs = appendLog(logs, String(chunk));
-  });
-  child.stderr?.on('data', (chunk) => {
-    logs = appendLog(logs, String(chunk));
-  });
-
+  let child: ReturnType<typeof spawn> | undefined;
   let metadata: {
     realmDir: string;
     realmURL: string;
@@ -272,37 +222,100 @@ async function startRealmProcess(
     sampleCardURL: string;
     ownerBearerToken: string;
   };
-
   try {
-    metadata = await waitForMetadataFile<{
-      realmDir: string;
-      realmURL: string;
-      realmServerURL: string;
-      ports: {
-        publicPort: number;
-        realmServerPort: number;
-        workerManagerPort: number;
-      };
-      sampleCardURL: string;
-      ownerBearerToken: string;
-    }>(metadataFile, child, () => logs);
+    child = spawn(
+      tsNodeBin,
+      [
+        '--transpileOnly',
+        'src/cli/serve-realm.ts',
+        realmDir,
+        `--compatRealmServerPort=${testWorkerPortSet.compatRealmServerPort}`,
+        `--realmServerPort=${testWorkerPortSet.realmServerPort}`,
+        `--prerenderURL=${testWorkerPrerenderURL}`,
+      ],
+      {
+        cwd: packageRoot,
+        detached: true,
+        env: {
+          ...process.env,
+          NODE_NO_WARNINGS: '1',
+          SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
+          ...(supportMetadata?.context
+            ? {
+                SOFTWARE_FACTORY_CONTEXT: JSON.stringify(
+                  supportMetadata.context,
+                ),
+              }
+            : {}),
+          ...(preparedTemplate
+            ? {
+                SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME:
+                  preparedTemplate.templateDatabaseName,
+              }
+            : {}),
+          ...(preparedTemplate
+            ? {
+                SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL:
+                  preparedTemplate.templateRealmServerURL,
+              }
+            : {}),
+          ...(permissions
+            ? {
+                SOFTWARE_FACTORY_PERMISSIONS: JSON.stringify(permissions),
+              }
+            : {}),
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+
+    child.stdout?.on('data', (chunk) => {
+      logs = appendLog(logs, String(chunk));
+    });
+    child.stderr?.on('data', (chunk) => {
+      logs = appendLog(logs, String(chunk));
+    });
+
+    // Race the metadata-file poll against an early `'error'` from the
+    // child. Without this, a spawn-level failure (e.g. ENOENT on the
+    // ts-node binary) leaves waitForMetadataFile polling until its
+    // 300-second timeout before the startup error surfaces.
+    let earlyError = new Promise<never>((_, reject) => {
+      child!.once('error', reject);
+    });
+    // Prevent the losing side of the race from emitting an unhandled
+    // rejection after the winner has settled.
+    earlyError.catch(() => {});
+    metadata = await Promise.race([
+      waitForMetadataFile<typeof metadata>(metadataFile, child, () => logs),
+      earlyError,
+    ]);
   } catch (error) {
-    // Fully tear down the half-started child before re-acquiring our port
-    // holders. Without the wait, the still-alive child can keep the ports
-    // bound and the reacquire throws, leaving the ports unheld for the
-    // rest of the worker's tests.
+    // Fully tear down the half-started child (if it got as far as
+    // being spawned) before re-acquiring our port holders. Without the
+    // wait, a still-alive child can keep the ports bound and the
+    // reacquire would throw, leaving the ports unheld for the rest of
+    // the worker's tests. A synchronous `spawn` throw (e.g. missing
+    // binary) skips the kill path entirely and lands straight on
+    // reacquire.
     try {
-      if (child.exitCode === null) {
-        killProcessGroup(child.pid!, 'SIGTERM');
+      let halfStartedChild = child;
+      if (
+        halfStartedChild &&
+        halfStartedChild.pid != null &&
+        halfStartedChild.exitCode === null
+      ) {
+        let pid = halfStartedChild.pid;
+        killProcessGroup(pid, 'SIGTERM');
         await new Promise<void>((resolvePromise) => {
           let timeout = setTimeout(() => {
-            killProcessGroup(child.pid!, 'SIGKILL');
+            killProcessGroup(pid, 'SIGKILL');
           }, 15_000);
-          child.once('exit', () => {
+          halfStartedChild!.once('exit', () => {
             clearTimeout(timeout);
             resolvePromise();
           });
-          child.once('error', () => {
+          halfStartedChild!.once('error', () => {
             clearTimeout(timeout);
             resolvePromise();
           });
@@ -315,20 +328,23 @@ async function startRealmProcess(
     throw error;
   }
 
+  // Narrow `child` for the rest of the function — if we reached here the
+  // metadata was read successfully, which means spawn succeeded.
+  let runningChild = child;
   let stop = async () => {
     try {
-      if (child.exitCode === null) {
-        killProcessGroup(child.pid!, 'SIGTERM');
+      if (runningChild.exitCode === null) {
+        killProcessGroup(runningChild.pid!, 'SIGTERM');
         await new Promise<void>((resolve, reject) => {
           let timeout = setTimeout(() => {
-            killProcessGroup(child.pid!, 'SIGKILL');
+            killProcessGroup(runningChild.pid!, 'SIGKILL');
           }, 15_000);
 
-          child.once('error', (error) => {
+          runningChild.once('error', (error) => {
             clearTimeout(timeout);
             reject(error);
           });
-          child.once('exit', () => {
+          runningChild.once('exit', () => {
             clearTimeout(timeout);
             resolve();
           });
