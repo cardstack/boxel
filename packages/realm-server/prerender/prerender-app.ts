@@ -261,7 +261,10 @@ export function buildPrerenderApp(options: {
       infoLabel: string;
       warnTimeoutMessage: (target: string) => string;
       errorContext: string;
-      execute: (args: A) => Promise<PrerenderExecResult<R>>;
+      execute: (
+        args: A,
+        opts: { signal: AbortSignal },
+      ) => Promise<PrerenderExecResult<R>>;
       afterResponse?: (target: string, response: R) => void;
       parseAttributes: (attrs: any) => RouteParseResult<A>;
       errorMessage?: string | ((err: any) => string);
@@ -277,6 +280,21 @@ export function buildPrerenderApp(options: {
         sanitizePrerenderRequestId(ctxt.get(PRERENDER_REQUEST_ID_HEADER)) ??
         randomUUID();
       ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
+      // Propagate client-disconnect through to the Prerenderer so a
+      // queued render can bail out of the semaphore / tab-queue wait
+      // instead of finishing work no one is waiting for. The manager
+      // aborts its upstream `fetch` on client close, which closes
+      // this request's socket. We listen on `ctxt.res` (not
+      // `ctxt.req`) because Node 17+ auto-destroys IncomingMessage
+      // after the body is consumed, firing `req.close` during normal
+      // flow; `res.close` fires after flushing on success or on
+      // real connection tear-down before the response is sent.
+      let ac = new AbortController();
+      const onClientClose = () => {
+        if (ctxt.res.writableEnded) return;
+        ac.abort();
+      };
+      ctxt.res.on('close', onClientClose);
       try {
         let request = await fetchRequestFromContext(ctxt);
         let raw = await request.text();
@@ -335,7 +353,7 @@ export function buildPrerenderApp(options: {
 
         let start = Date.now();
         let execPromise = options
-          .execute(routeArgs)
+          .execute(routeArgs, { signal: ac.signal })
           .then((result) => ({ result }));
         let drainPromise = options.drainingPromise
           ? options.drainingPromise.then(() => ({ draining: true as const }))
@@ -415,6 +433,14 @@ export function buildPrerenderApp(options: {
         }
         options.afterResponse?.(parsed.logTarget, response);
       } catch (err: any) {
+        // Swallow caller-cancelled: the socket is already closed,
+        // nothing to report to them, no error metric to emit.
+        if ((err as { name?: string })?.name === 'PrerenderCancelledError') {
+          log.debug(
+            `prerender cancelled before completion requestId=${requestId}`,
+          );
+          return;
+        }
         Sentry.captureException(err);
         log.error(`Unhandled error in ${options.errorContext}:`, err);
         ctxt.status = 500;
@@ -430,6 +456,8 @@ export function buildPrerenderApp(options: {
             },
           ],
         };
+      } finally {
+        ctxt.res.off('close', onClientClose);
       }
     });
   }
@@ -441,7 +469,8 @@ export function buildPrerenderApp(options: {
     warnTimeoutMessage: (url) => `module render of ${url} timed out`,
     errorContext: '/prerender-module',
     parseAttributes: parseDefaultPrerenderAttributes,
-    execute: (args) => prerenderer.prerenderModule(args),
+    execute: (args, { signal }) =>
+      prerenderer.prerenderModule({ ...args, signal }),
     drainingPromise: options.drainingPromise,
     afterResponse: (url, response) => {
       const moduleResponse = response as ModuleRenderResponse;
@@ -463,12 +492,13 @@ export function buildPrerenderApp(options: {
       errorContext: '/run-command',
       errorMessage: 'Error running command',
       parseAttributes: parseRunCommandAttributes,
-      execute: (args) =>
+      execute: (args, { signal }) =>
         prerenderer.runCommand({
           userId: args.affinityValue,
           auth: args.auth,
           command: args.command,
           commandInput: args.commandInput as Record<string, unknown> | null,
+          signal,
         }),
       drainingPromise: options.drainingPromise,
     },
@@ -484,6 +514,14 @@ export function buildPrerenderApp(options: {
       sanitizePrerenderRequestId(ctxt.get(PRERENDER_REQUEST_ID_HEADER)) ??
       randomUUID();
     ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
+    // Client-disconnect → cancel the render. See the note on the
+    // shared `registerPrerenderRoute` wrapper above.
+    let ac = new AbortController();
+    const onClientClose = () => {
+      if (ctxt.res.writableEnded) return;
+      ac.abort();
+    };
+    ctxt.res.on('close', onClientClose);
     try {
       let request = await fetchRequestFromContext(ctxt);
       let raw = await request.text();
@@ -603,6 +641,7 @@ export function buildPrerenderApp(options: {
           ...(fileData ? { fileData } : {}),
           ...(Array.isArray(types) ? { types } : {}),
           ...(batchId ? { batchId } : {}),
+          signal: ac.signal,
         })
         .then((result) => ({ result }));
       let drainPromise = options.drainingPromise
@@ -687,6 +726,12 @@ export function buildPrerenderApp(options: {
         );
       }
     } catch (err: any) {
+      if ((err as { name?: string })?.name === 'PrerenderCancelledError') {
+        log.debug(
+          `prerender-visit cancelled before completion requestId=${requestId}`,
+        );
+        return;
+      }
       Sentry.captureException(err);
       log.error('Unhandled error in /prerender-visit:', err);
       ctxt.status = 500;
@@ -698,6 +743,8 @@ export function buildPrerenderApp(options: {
           },
         ],
       };
+    } finally {
+      ctxt.res.off('close', onClientClose);
     }
   });
 

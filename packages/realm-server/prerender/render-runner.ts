@@ -90,7 +90,11 @@ export class RenderRunner {
     this.#boxelHostURL = options.boxelHostURL;
   }
 
-  async #getPageForAffinity(affinityKey: string, auth: string) {
+  async #getPageForAffinity(
+    affinityKey: string,
+    auth: string,
+    signal?: AbortSignal,
+  ) {
     let lastAuth = this.#lastAuthByAffinity.get(affinityKey);
     if (lastAuth) {
       let lastKeys = this.#authKeys(lastAuth);
@@ -105,7 +109,7 @@ export class RenderRunner {
         this.#lastAuthByAffinity.delete(affinityKey);
       }
     }
-    let pageInfo = await this.#pagePool.getPage(affinityKey);
+    let pageInfo = await this.#pagePool.getPage(affinityKey, { signal });
     this.#lastAuthByAffinity.set(affinityKey, auth);
     return pageInfo;
   }
@@ -130,6 +134,7 @@ export class RenderRunner {
     command,
     commandInput,
     opts,
+    signal,
   }: {
     affinityType: AffinityType;
     affinityValue: string;
@@ -137,6 +142,7 @@ export class RenderRunner {
     command: string;
     commandInput?: Record<string, unknown> | null;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    signal?: AbortSignal;
   }): Promise<{
     response: RunCommandResponse;
     timings: Timings;
@@ -149,7 +155,7 @@ export class RenderRunner {
     );
 
     const { page, reused, launchMs, waits, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth);
+      await this.#getPageForAffinity(affinityKey, auth, signal);
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
@@ -324,6 +330,7 @@ export class RenderRunner {
     auth,
     opts,
     renderOptions,
+    signal,
   }: {
     affinityType: AffinityType;
     affinityValue: string;
@@ -332,6 +339,7 @@ export class RenderRunner {
     auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
+    signal?: AbortSignal;
   }): Promise<{
     response: ModuleRenderResponse;
     timings: Timings;
@@ -344,7 +352,7 @@ export class RenderRunner {
     );
 
     const { page, reused, launchMs, waits, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth);
+      await this.#getPageForAffinity(affinityKey, auth, signal);
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
@@ -490,8 +498,10 @@ export class RenderRunner {
     renderOptions,
     fileData,
     types,
+    signal,
   }: PrerenderVisitArgs & {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    signal?: AbortSignal;
   }): Promise<{
     response: RenderVisitResponse;
     timings: Timings;
@@ -510,7 +520,7 @@ export class RenderRunner {
     );
 
     const { page, reused, launchMs, waits, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth);
+      await this.#getPageForAffinity(affinityKey, auth, signal);
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
