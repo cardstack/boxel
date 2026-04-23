@@ -884,17 +884,19 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 201);
           assert.strictEqual(response.body['atomic:results'].length, 1);
 
-          // GET reads via the index; under CI load the index write can
-          // lag the 201 response, so poll until it catches up. Match the
-          // 30s budget publish-unpublish-realm-test uses for prerender/index
-          // waits — the common failure mode is a slow first-instance
-          // prerender, not a stuck one.
+          // The atomic POST awaits indexing, so by 201 boxel_index should
+          // be updated. The remaining CI flake is read-path readiness —
+          // most often a slow first-instance prerender / module-cache
+          // populate that the GET is waiting on. Match the 30s budget
+          // publish-unpublish-realm-test uses for the same class of wait.
           let updatedCard: LooseSingleCardDocument | undefined;
+          let lastStatus: number | undefined;
           await waitUntil(
             async () => {
               let updatedCardResponse = await request
                 .get('/update-person')
                 .set('Accept', SupportedMimeType.CardJson);
+              lastStatus = updatedCardResponse.status;
               updatedCard = updatedCardResponse.body as
                 | LooseSingleCardDocument
                 | undefined;
@@ -903,8 +905,8 @@ module(basename(__filename), function () {
             {
               timeout: 30_000,
               interval: 100,
-              timeoutMessage:
-                'updated firstName was not visible via /update-person',
+              timeoutMessage: () =>
+                `updated firstName was not visible via /update-person (last GET status=${lastStatus}, last firstName=${JSON.stringify(updatedCard?.data?.attributes?.firstName)})`,
             },
           );
           assert.strictEqual(
