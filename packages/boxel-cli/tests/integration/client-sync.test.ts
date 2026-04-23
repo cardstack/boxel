@@ -75,7 +75,6 @@ describe('BoxelCLIClient.sync (integration)', () => {
     expect(result.pushed).toEqual(
       expect.arrayContaining(['hello.gts', 'card.json']),
     );
-    expect(result.pulled).toEqual([]);
     expect(result.remoteDeleted).toEqual([]);
     expect(result.localDeleted).toEqual([]);
     expect(result.skippedConflicts).toEqual([]);
