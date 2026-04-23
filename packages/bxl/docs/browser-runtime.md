@@ -147,6 +147,23 @@ const first = await session.evaluate();
 const next = await session.applyPatch('.amount', 1200);
 ```
 
+For guide-authoring or live rule-editing flows, you can prepare a revised plan
+and swap the session onto it without dropping the current card source:
+
+```ts
+const nextPrepared = await prepareBoxelRuntimeAsync(nextDefinition, {
+  schema,
+  guideUrl,
+  cacheKey: guideUrl,
+  contentHash: nextGuideHash,
+});
+
+const rebound = await session.swapPlan(nextPrepared);
+```
+
+`swapPlan()` keeps the current `session.source`, rebinds the session to the new
+prepared runtime, and immediately recomputes the result under the new plan.
+
 ### Content-Addressed Plan Keys
 
 `prepareBoxelRuntimeAsync()` now resolves the actual prepared-plan cache key

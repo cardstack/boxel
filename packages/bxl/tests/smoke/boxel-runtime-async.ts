@@ -201,6 +201,25 @@ const initial = {
   },
 };
 
+const swapSession = prepared.createSession(initial);
+await swapSession.ready;
+
+const swapped = await swapSession.swapPlan(preparedUpdated);
+strictEqual(
+  getBoxelValue(swapped.state, '.totalAnnual'),
+  12000,
+  'plan swaps should preserve the current source and recompute against the new prepared plan',
+);
+
+const swappedSecond = await swapSession.applyPatch('.amount', 1200);
+strictEqual(
+  getBoxelValue(swappedSecond.state, '.totalAnnual'),
+  28800,
+  'session patching should continue to use the swapped prepared plan',
+);
+
+await swapSession.dispose();
+
 const session = prepared.createSession(initial);
 await session.ready;
 

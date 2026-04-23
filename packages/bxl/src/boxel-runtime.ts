@@ -248,6 +248,7 @@ export interface BoxelRuntimeAsyncSession {
   evaluate(): Promise<BoxelRuntimeResult>;
   replace(input: unknown): Promise<BoxelRuntimeResult>;
   applyPatch(path: string, value: unknown): Promise<BoxelRuntimeResult>;
+  swapPlan(prepared: PreparedBoxelRuntimeAsync): Promise<BoxelRuntimeResult>;
   dispose(): Promise<void>;
 }
 
@@ -1757,6 +1758,12 @@ type WorkerRequest =
       path: string;
       value: unknown;
     })
+  | ({
+      requestId: string;
+      type: 'session-swap-plan';
+      sessionId: string;
+      cacheKey: string;
+    })
   | ({ requestId: string; type: 'session-dispose'; sessionId: string });
 
 type WorkerRequestWithoutId =
@@ -1777,6 +1784,7 @@ type WorkerRequestWithoutId =
       path: string;
       value: unknown;
     })
+  | ({ type: 'session-swap-plan'; sessionId: string; cacheKey: string })
   | ({ type: 'session-dispose'; sessionId: string });
 
 type WorkerResponse =
@@ -1824,6 +1832,20 @@ interface AsyncPreparedRuntimeCacheEntry {
 interface WorkerPlanEntry {
   prepared: PreparedBoxelRuntime;
   metadata: PreparedPlanMetadata;
+}
+
+const LOCAL_ASYNC_PREPARED_RUNTIME = Symbol('LocalAsyncPreparedRuntime');
+const WORKER_ASYNC_PREPARED_RUNTIME = Symbol('WorkerAsyncPreparedRuntime');
+
+interface LocalAsyncPreparedRuntimeHandle extends PreparedBoxelRuntimeAsync {
+  [LOCAL_ASYNC_PREPARED_RUNTIME]?: PreparedBoxelRuntime;
+}
+
+interface WorkerAsyncPreparedRuntimeHandle extends PreparedBoxelRuntimeAsync {
+  [WORKER_ASYNC_PREPARED_RUNTIME]?: {
+    manager: BoxelRuntimeWorkerManager;
+    metadata: PreparedPlanMetadata;
+  };
 }
 
 function cloneValue<T>(value: T): T {
@@ -2156,6 +2178,25 @@ export function __runBoxelRuntimeWorker() {
           });
           return;
         }
+        case 'session-swap-plan': {
+          const session = sessions.get(request.sessionId);
+          if (!session) {
+            throw new Error(`No Boxel runtime session ${request.sessionId}`);
+          }
+          const entry = plans.get(request.cacheKey);
+          if (!entry) {
+            throw new Error(`No prepared Boxel runtime plan for ${request.cacheKey}`);
+          }
+          const nextSession = entry.prepared.createSession(session.source);
+          nextSession.evaluate();
+          sessions.set(request.sessionId, nextSession);
+          scope.postMessage({
+            requestId: request.requestId,
+            ok: true,
+            value: snapshotSession(nextSession),
+          });
+          return;
+        }
         case 'session-dispose': {
           sessions.delete(request.sessionId);
           scope.postMessage({
@@ -2302,6 +2343,14 @@ class BoxelRuntimeWorkerManager {
     });
   }
 
+  swapSessionPlan(sessionId: string, cacheKey: string) {
+    return this.request<BoxelRuntimeSessionSnapshot>({
+      type: 'session-swap-plan',
+      sessionId,
+      cacheKey,
+    });
+  }
+
   disposeSession(sessionId: string) {
     return this.request<void>({
       type: 'session-dispose',
@@ -2365,6 +2414,22 @@ function invalidateLocalPreparedAsyncRuntimeCache(
   return removed;
 }
 
+function getLocalAsyncPreparedRuntime(
+  prepared: PreparedBoxelRuntimeAsync,
+): PreparedBoxelRuntime | null {
+  return (
+    prepared as LocalAsyncPreparedRuntimeHandle
+  )[LOCAL_ASYNC_PREPARED_RUNTIME] ?? null;
+}
+
+function getWorkerAsyncPreparedRuntime(
+  prepared: PreparedBoxelRuntimeAsync,
+): { manager: BoxelRuntimeWorkerManager; metadata: PreparedPlanMetadata } | null {
+  return (
+    prepared as WorkerAsyncPreparedRuntimeHandle
+  )[WORKER_ASYNC_PREPARED_RUNTIME] ?? null;
+}
+
 abstract class BaseAsyncBoxelRuntimeSession implements BoxelRuntimeAsyncSession {
   ready: Promise<void>;
   #source: unknown;
@@ -2419,6 +2484,10 @@ abstract class BaseAsyncBoxelRuntimeSession implements BoxelRuntimeAsyncSession 
     value: unknown,
   ): Promise<BoxelRuntimeSessionSnapshot>;
 
+  protected abstract swapPlanRemote(
+    prepared: PreparedBoxelRuntimeAsync,
+  ): Promise<BoxelRuntimeSessionSnapshot>;
+
   protected abstract disposeRemote(): Promise<void>;
 
   async evaluate(): Promise<BoxelRuntimeResult> {
@@ -2443,6 +2512,17 @@ abstract class BaseAsyncBoxelRuntimeSession implements BoxelRuntimeAsyncSession 
     return this.queue(async () => {
       await this.ready;
       const snapshot = await this.applyPatchRemote(path, value);
+      this.applySnapshot(snapshot);
+      return snapshot.result ?? buildMissingRuntimeResultError();
+    });
+  }
+
+  async swapPlan(
+    prepared: PreparedBoxelRuntimeAsync,
+  ): Promise<BoxelRuntimeResult> {
+    return this.queue(async () => {
+      await this.ready;
+      const snapshot = await this.swapPlanRemote(prepared);
       this.applySnapshot(snapshot);
       return snapshot.result ?? buildMissingRuntimeResultError();
     });
@@ -2491,6 +2571,21 @@ class LocalAsyncBoxelRuntimeSession extends BaseAsyncBoxelRuntimeSession {
     return snapshotSession(this.#session);
   }
 
+  protected async swapPlanRemote(
+    prepared: PreparedBoxelRuntimeAsync,
+  ): Promise<BoxelRuntimeSessionSnapshot> {
+    const localPrepared = getLocalAsyncPreparedRuntime(prepared);
+    if (!localPrepared) {
+      throw new Error(
+        'Cannot swap a local async Boxel runtime session to a worker-backed prepared plan. Recreate the session with the new prepared runtime instead.',
+      );
+    }
+
+    this.#session = localPrepared.createSession(this.source);
+    this.#session.evaluate();
+    return snapshotSession(this.#session);
+  }
+
   protected async disposeRemote(): Promise<void> {}
 }
 
@@ -2535,6 +2630,23 @@ class WorkerBackedBoxelRuntimeSession extends BaseAsyncBoxelRuntimeSession {
     return this.#manager.applyPatchToSession(this.#sessionId, path, value);
   }
 
+  protected async swapPlanRemote(
+    prepared: PreparedBoxelRuntimeAsync,
+  ): Promise<BoxelRuntimeSessionSnapshot> {
+    const workerPrepared = getWorkerAsyncPreparedRuntime(prepared);
+    if (!workerPrepared) {
+      throw new Error(
+        'Cannot swap a worker-backed Boxel runtime session to a local prepared plan. Recreate the session with the new prepared runtime instead.',
+      );
+    }
+
+    this.#cacheKey = workerPrepared.metadata.cacheKey;
+    return this.#manager.swapSessionPlan(
+      this.#sessionId,
+      workerPrepared.metadata.cacheKey,
+    );
+  }
+
   protected disposeRemote(): Promise<void> {
     return this.#manager.disposeSession(this.#sessionId);
   }
@@ -2544,7 +2656,7 @@ function createLocalAsyncPreparedBoxelRuntime(
   payload: PreparePlanPayload,
 ): PreparedBoxelRuntimeAsync {
   const prepared = prepareBoxelRuntime(payload.definition, payload.options);
-  return {
+  const runtime: LocalAsyncPreparedRuntimeHandle = {
     cacheKey: payload.cacheKey,
     cacheNamespace: payload.cacheNamespace,
     contentHash: payload.contentHash,
@@ -2562,13 +2674,15 @@ function createLocalAsyncPreparedBoxelRuntime(
       );
     },
   };
+  runtime[LOCAL_ASYNC_PREPARED_RUNTIME] = prepared;
+  return runtime;
 }
 
 function createWorkerBackedPreparedBoxelRuntime(
   manager: BoxelRuntimeWorkerManager,
   metadata: PreparedPlanMetadata,
 ): PreparedBoxelRuntimeAsync {
-  return {
+  const runtime: WorkerAsyncPreparedRuntimeHandle = {
     cacheKey: metadata.cacheKey,
     cacheNamespace: metadata.cacheNamespace,
     contentHash: metadata.contentHash,
@@ -2587,6 +2701,11 @@ function createWorkerBackedPreparedBoxelRuntime(
       );
     },
   };
+  runtime[WORKER_ASYNC_PREPARED_RUNTIME] = {
+    manager,
+    metadata,
+  };
+  return runtime;
 }
 
 export async function prepareBoxelRuntimeAsync(
