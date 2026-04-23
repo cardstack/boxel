@@ -30,6 +30,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
 
 import {
+  buildRecentsQuery,
   buildSearchQuery,
   shouldSkipSearchQuery,
 } from '@cardstack/host/utils/card-search/query-builder';
@@ -259,8 +260,8 @@ export default class SearchContent extends Component<Signature> {
         internalKeyFor(ref, undefined),
       );
       return {
-        query: buildSearchQuery(
-          this.searchTerm ?? '',
+        query: buildRecentsQuery(
+          this.searchTerm,
           this.args.activeSort,
           this.args.baseFilter,
           selectedTypeIds,
