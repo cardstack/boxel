@@ -7,7 +7,7 @@ import { expect, test } from './fixtures';
 import { runLintInMemory } from '../src/lint-execution';
 import { BAD_LINT_GTS } from './helpers/lint-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
-import { mkTestWorkspace } from './helpers/workspace-fixture';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -34,7 +34,7 @@ test.describe('runLintInMemory e2e', () => {
     });
 
     try {
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       // The fixture realm ships with a clean hello.gts and hello.test.gts.
@@ -92,7 +92,7 @@ test.describe('runLintInMemory e2e', () => {
       });
       expect(indexed).toBe(true);
 
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let result = await runLintInMemory({
@@ -154,7 +154,7 @@ test.describe('runLintInMemory e2e', () => {
         }
       }
 
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let result = await runLintInMemory({
@@ -185,7 +185,7 @@ test.describe('runLintInMemory e2e', () => {
     let result = await runLintInMemory({
       targetRealmUrl: 'http://localhost:1/',
       client: thrower,
-      workspaceDir: mkTestWorkspace().dir,
+      workspaceDir: createTestWorkspace().dir,
     });
 
     expect(result.status).toBe('error');
@@ -222,7 +222,7 @@ test.describe('runLintInMemory e2e', () => {
       });
       expect(indexed).toBe(true);
 
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       // Lint only the clean file — should pass even though bad-lint.gts is dirty.
@@ -277,7 +277,7 @@ test.describe('runLintInMemory e2e', () => {
     let result = await runLintInMemory({
       targetRealmUrl: 'http://localhost:1/',
       client: stubClient,
-      workspaceDir: mkTestWorkspace().dir,
+      workspaceDir: createTestWorkspace().dir,
       path: 'Spec/sticky-note.json',
     });
 

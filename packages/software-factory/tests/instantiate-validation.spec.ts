@@ -9,7 +9,7 @@ import {
   seedValidCardWithSpec,
 } from './helpers/instantiate-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
-import { mkTestWorkspace } from './helpers/workspace-fixture';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -40,7 +40,7 @@ test.describe('instantiate-validation e2e', () => {
     try {
       await seedValidCardWithSpec(client, realmUrl);
 
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let step = new InstantiateValidationStep({
@@ -107,7 +107,7 @@ test.describe('instantiate-validation e2e', () => {
     try {
       await seedTagsCardWithBrokenExampleAndSpec(client, realmUrl);
 
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let step = new InstantiateValidationStep({

@@ -7,7 +7,7 @@ import {
   type SpecInfo,
 } from '../src/validators/instantiate-step';
 import { createMockClient } from './helpers/mock-client';
-import { mkTestWorkspace } from './helpers/workspace-fixture';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -20,7 +20,7 @@ function makeConfig(
     client: createMockClient(),
     realmServerUrl: 'https://example.test/',
     instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
-    workspaceDir: mkTestWorkspace().dir,
+    workspaceDir: createTestWorkspace().dir,
     getNextSequenceNumber: async () => 1,
     ...overrides,
   };

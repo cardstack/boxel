@@ -38,7 +38,7 @@ export interface TestWorkspace {
  * Create an isolated workspace directory for a single test. Caller is
  * responsible for invoking `cleanup()` (typically from an `afterEach`).
  */
-export function mkTestWorkspace(): TestWorkspace {
+export function createTestWorkspace(): TestWorkspace {
   let dir = mkdtempSync(join(tmpdir(), 'boxel-factory-test-ws-'));
   return {
     dir,
@@ -68,7 +68,7 @@ export async function pullIntoTestWorkspace(
   client: BoxelCLIClient,
   realmUrl: string,
 ): Promise<TestWorkspace> {
-  let workspace = mkTestWorkspace();
+  let workspace = createTestWorkspace();
   let pullResult = await client.pull(realmUrl, workspace.dir);
   if (pullResult.error) {
     workspace.cleanup();

@@ -14,7 +14,7 @@ import type { ToolExecutor } from '../src/factory-tool-executor';
 import { ToolRegistry } from '../src/factory-tool-registry';
 import { createMockClient } from './helpers/mock-client';
 import {
-  mkTestWorkspace,
+  createTestWorkspace,
   type TestWorkspace,
 } from './helpers/workspace-fixture';
 
@@ -70,7 +70,7 @@ const DEFAULT_CARD_TYPE_SCHEMAS = new Map<
 ]);
 
 function makeWorkspace(): TestWorkspace {
-  return mkTestWorkspace();
+  return createTestWorkspace();
 }
 
 function makeConfig(

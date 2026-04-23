@@ -5,7 +5,7 @@ import { expect, test } from './fixtures';
 import { EvalValidationStep } from '../src/validators/eval-step';
 import type { EvalValidationDetails } from '../src/validators/eval-step';
 import { buildTestClient } from './helpers/test-client';
-import { mkTestWorkspace } from './helpers/workspace-fixture';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -77,7 +77,7 @@ test.describe('eval-validation e2e', () => {
       });
       expect(indexed).toBe(true);
 
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let step = new EvalValidationStep({
@@ -159,7 +159,7 @@ test.describe('eval-validation e2e', () => {
       });
       expect(indexed).toBe(true);
 
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let step = new EvalValidationStep({
@@ -225,7 +225,7 @@ test.describe('eval-validation e2e', () => {
     });
 
     try {
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let step = new EvalValidationStep({

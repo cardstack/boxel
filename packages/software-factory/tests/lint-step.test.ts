@@ -9,7 +9,7 @@ import {
 } from '../src/validators/lint-step';
 import type { LintResult } from '@cardstack/boxel-cli/api';
 import { createMockClient } from './helpers/mock-client';
-import { mkTestWorkspace } from './helpers/workspace-fixture';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -22,7 +22,7 @@ function makeConfig(
     client: createMockClient(),
     realmServerUrl: 'https://example.test/',
     lintResultsModuleUrl: 'https://example.test/lint-result',
-    workspaceDir: mkTestWorkspace().dir,
+    workspaceDir: createTestWorkspace().dir,
     // Default to a no-op sequence resolver for unit tests
     getNextSequenceNumber: async () => 1,
     ...overrides,

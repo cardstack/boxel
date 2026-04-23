@@ -14,7 +14,7 @@ import {
   PASSING_TEST_GTS,
   writeAndAwaitIndex,
 } from './helpers/qunit-test-fixtures';
-import { mkTestWorkspace } from './helpers/workspace-fixture';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -57,7 +57,7 @@ test.describe('factory-test-realm e2e', () => {
       });
       expect(moduleResponse.status).toBe(200);
 
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let handle = await executeTestRunFromRealm({
@@ -135,7 +135,7 @@ test.describe('factory-test-realm e2e', () => {
         FAILING_TEST_GTS,
       );
 
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let handle = await executeTestRunFromRealm({
@@ -202,7 +202,7 @@ test.describe('factory-test-realm e2e', () => {
           throw new Error('ECONNREFUSED');
         },
       }),
-      workspaceDir: mkTestWorkspace().dir,
+      workspaceDir: createTestWorkspace().dir,
     };
 
     let result = await createTestRun('error-test', ['test A'], options);

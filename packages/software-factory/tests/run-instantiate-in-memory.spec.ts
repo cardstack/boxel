@@ -10,7 +10,7 @@ import {
   seedValidCardWithSpec,
 } from './helpers/instantiate-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
-import { mkTestWorkspace } from './helpers/workspace-fixture';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -40,7 +40,7 @@ test.describe('runInstantiateInMemory e2e', () => {
     try {
       await seedValidCardWithSpec(client, realmUrl);
 
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let result = await runInstantiateInMemory({
@@ -86,7 +86,7 @@ test.describe('runInstantiateInMemory e2e', () => {
     try {
       await seedTagsCardWithBrokenExampleAndSpec(client, realmUrl);
 
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let result = await runInstantiateInMemory({
@@ -143,7 +143,7 @@ test.describe('runInstantiateInMemory e2e', () => {
       // cards. The in-memory tool — unlike the validation step — must not
       // fail on missing specs; it's a self-check that the agent can run
       // before it has produced any catalog cards.
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let result = await runInstantiateInMemory({
@@ -181,7 +181,7 @@ test.describe('runInstantiateInMemory e2e', () => {
       targetRealmUrl: 'http://localhost:1/',
       realmServerUrl: 'http://localhost:1/',
       client: thrower,
-      workspaceDir: mkTestWorkspace().dir,
+      workspaceDir: createTestWorkspace().dir,
     });
 
     expect(result.status).toBe('error');
@@ -212,7 +212,7 @@ test.describe('runInstantiateInMemory e2e', () => {
       await seedValidCardWithSpec(client, realmUrl);
       await seedTagsCardWithBrokenExampleAndSpec(client, realmUrl);
 
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let cleanOnly = await runInstantiateInMemory({
@@ -275,7 +275,7 @@ test.describe('runInstantiateInMemory e2e', () => {
       targetRealmUrl: 'http://localhost:1/',
       realmServerUrl: 'http://localhost:1/',
       client: stubClient,
-      workspaceDir: mkTestWorkspace().dir,
+      workspaceDir: createTestWorkspace().dir,
       path: 'my-card.gts',
     });
 
@@ -303,7 +303,7 @@ test.describe('runInstantiateInMemory e2e', () => {
     });
 
     try {
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let result = await runInstantiateInMemory({

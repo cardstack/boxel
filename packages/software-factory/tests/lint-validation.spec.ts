@@ -6,7 +6,7 @@ import { LintValidationStep } from '../src/validators/lint-step';
 import type { LintValidationDetails } from '../src/validators/lint-step';
 import { BAD_LINT_GTS } from './helpers/lint-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
-import { mkTestWorkspace } from './helpers/workspace-fixture';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -116,7 +116,7 @@ test.describe('lint-validation e2e', () => {
     });
 
     try {
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let step = new LintValidationStep({

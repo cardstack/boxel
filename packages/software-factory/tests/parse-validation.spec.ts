@@ -9,7 +9,7 @@ import {
   VALID_MODULE_GTS,
 } from './helpers/parse-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
-import { mkTestWorkspace } from './helpers/workspace-fixture';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -111,7 +111,7 @@ test.describe('parse-validation e2e', () => {
         timeoutMs: 30_000,
       });
 
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       // Scope to only the file we wrote — the fixture realm has pre-existing
@@ -190,7 +190,7 @@ test.describe('parse-validation e2e', () => {
         timeoutMs: 30_000,
       });
 
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       // Scope to only the broken file we wrote
@@ -253,7 +253,7 @@ test.describe('parse-validation e2e', () => {
     });
 
     try {
-      let workspace = mkTestWorkspace();
+      let workspace = createTestWorkspace();
 
       // Simulate a bootstrap scenario: no .gts files and no specs.
       // Inject empty file list so pre-existing fixture files don't interfere.

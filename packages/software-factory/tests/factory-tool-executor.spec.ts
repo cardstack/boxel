@@ -23,7 +23,7 @@ import {
   sourceRealmURLFor,
 } from '../src/harness/shared';
 import { buildTestClient } from './helpers/test-client';
-import { mkTestWorkspace } from './helpers/workspace-fixture';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 // realm-read/realm-write/realm-delete tools retired in CS-10882 — the
 // agent no longer performs target-realm I/O over HTTP. Tests for those
@@ -182,7 +182,7 @@ test('update_project writes and reads back a project card', async ({
   });
 
   try {
-    let workspace = mkTestWorkspace();
+    let workspace = createTestWorkspace();
     await client.pull(realm.realmURL.href, workspace.dir);
     let tools = await buildToolsForRealm(realm, client, workspace.dir);
     let updateProject = tools.find((t) => t.name === 'update_project')!;
@@ -222,7 +222,7 @@ test('update_issue writes and reads back an issue card', async ({ realm }) => {
   });
 
   try {
-    let workspace = mkTestWorkspace();
+    let workspace = createTestWorkspace();
     await client.pull(realm.realmURL.href, workspace.dir);
     let tools = await buildToolsForRealm(realm, client, workspace.dir);
     let updateIssue = tools.find((t) => t.name === 'update_issue')!;
@@ -266,7 +266,7 @@ test('add_comment appends a comment to an existing issue without changing other 
   });
 
   try {
-    let workspace = mkTestWorkspace();
+    let workspace = createTestWorkspace();
     await client.pull(realm.realmURL.href, workspace.dir);
     let tools = await buildToolsForRealm(realm, client, workspace.dir);
     let writeFile = tools.find((t) => t.name === 'write_file')!;
@@ -348,7 +348,7 @@ test('create_knowledge writes and reads back a knowledge article', async ({
   });
 
   try {
-    let workspace = mkTestWorkspace();
+    let workspace = createTestWorkspace();
     await client.pull(realm.realmURL.href, workspace.dir);
     let tools = await buildToolsForRealm(realm, client, workspace.dir);
     let createKnowledge = tools.find((t) => t.name === 'create_knowledge')!;
@@ -390,7 +390,7 @@ test('create_catalog_spec writes and reads back a Spec card', async ({
   });
 
   try {
-    let workspace = mkTestWorkspace();
+    let workspace = createTestWorkspace();
     await client.pull(realm.realmURL.href, workspace.dir);
     let tools = await buildToolsForRealm(realm, client, workspace.dir);
     let createCatalogSpec = tools.find(

@@ -15,7 +15,7 @@ import {
 import { NoOpStepRunner } from '../src/validators/noop-step';
 import { InstantiateValidationStep } from '../src/validators/instantiate-step';
 import { createMockClient } from './helpers/mock-client';
-import { mkTestWorkspace } from './helpers/workspace-fixture';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -215,7 +215,7 @@ module('ValidationPipeline', function () {
       evalResultsModuleUrl: 'https://example.test/eval-result',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
       parseResultsModuleUrl: 'https://example.test/parse-result',
-      workspaceDir: mkTestWorkspace().dir,
+      workspaceDir: createTestWorkspace().dir,
       // Inject a fetchFilenames that returns no files so the test, lint,
       // eval, and parse steps return "nothing to validate" without hitting a real realm
       fetchFilenames: async () => ({ filenames: [] }),
@@ -313,7 +313,7 @@ module('InstantiateValidationStep', function () {
       client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
-      workspaceDir: mkTestWorkspace().dir,
+      workspaceDir: createTestWorkspace().dir,
       searchSpecsFn: async () => ({ specs: [] }),
       fetchFilenames: async () => ({ filenames: [] }),
       getNextSequenceNumber: async () => 1,
@@ -335,7 +335,7 @@ module('InstantiateValidationStep', function () {
       client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
-      workspaceDir: mkTestWorkspace().dir,
+      workspaceDir: createTestWorkspace().dir,
       searchSpecsFn: async () => ({ specs: [] }),
       fetchFilenames: async () => ({
         filenames: ['my-card.gts', 'my-card.test.gts'],
@@ -363,7 +363,7 @@ module('InstantiateValidationStep', function () {
       client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
-      workspaceDir: mkTestWorkspace().dir,
+      workspaceDir: createTestWorkspace().dir,
       searchSpecsFn: async () => ({ specs: [] }),
       fetchFilenames: async () => ({
         filenames: ['my-card.test.gts'],
@@ -383,7 +383,7 @@ module('InstantiateValidationStep', function () {
       client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
-      workspaceDir: mkTestWorkspace().dir,
+      workspaceDir: createTestWorkspace().dir,
       searchSpecsFn: async () => ({
         specs: [
           {
@@ -419,7 +419,7 @@ module('InstantiateValidationStep', function () {
       client: createMockClient(),
       realmServerUrl: 'https://example.test/',
       instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
-      workspaceDir: mkTestWorkspace().dir,
+      workspaceDir: createTestWorkspace().dir,
       searchSpecsFn: async () => ({
         specs: [
           {

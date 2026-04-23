@@ -13,7 +13,7 @@ import {
   type TestRunAttributes,
 } from '../src/factory-test-realm';
 import { createMockClient } from './helpers/mock-client';
-import { mkTestWorkspace } from './helpers/workspace-fixture';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -24,7 +24,7 @@ const testRealmOptions = {
   testResultsModuleUrl:
     'https://realms.example.test/software-factory/test-results',
   realmServerUrl: 'https://realms.example.test/',
-  workspaceDir: mkTestWorkspace().dir,
+  workspaceDir: createTestWorkspace().dir,
 };
 
 // ---------------------------------------------------------------------------

@@ -7,7 +7,7 @@ import type { FactoryBrief } from '../src/factory-brief';
 import { RealmIssueStore } from '../src/issue-scheduler';
 import { expect, test } from './fixtures';
 import { buildTestClient } from './helpers/test-client';
-import { mkTestWorkspace } from './helpers/workspace-fixture';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const bootstrapTargetDir = resolve(
   process.cwd(),
@@ -59,7 +59,7 @@ function buildSeedContext(realm: {
     realmServerToken: `Bearer ${realm.serverToken}`,
   });
 
-  let workspace = mkTestWorkspace();
+  let workspace = createTestWorkspace();
 
   return {
     client,

@@ -12,7 +12,7 @@ import {
 } from '../src/validators/parse-step';
 import type { ParseErrorData } from '../src/parse-result-cards';
 import { createMockClient } from './helpers/mock-client';
-import { mkTestWorkspace } from './helpers/workspace-fixture';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -25,7 +25,7 @@ function makeConfig(
     client: createMockClient(),
     realmServerUrl: 'https://example.test/',
     parseResultsModuleUrl: 'https://example.test/parse-result',
-    workspaceDir: mkTestWorkspace().dir,
+    workspaceDir: createTestWorkspace().dir,
     getNextSequenceNumber: async () => 1,
     // Default glint check mock — returns no errors (clean files)
     runGlintCheckFn: async () => [],
