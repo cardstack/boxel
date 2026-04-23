@@ -5,7 +5,7 @@
   "description": "CLI tools for Boxel workspace management",
   "main": "./dist/index.js",
   "bin": {
-    "boxel": "./dist/index.js"
+    "boxel": "./bin/boxel.js"
   },
   "files": [
     "dist/**/*",
@@ -48,7 +48,6 @@
     "eslint-plugin-n": "catalog:",
     "eslint-plugin-prettier": "catalog:",
     "prettier": "catalog:",
-    "ts-node": "^10.9.1",
     "tsx": "^4.0.0",
     "typescript": "catalog:",
     "vite": "catalog:",
@@ -57,7 +56,7 @@
   "scripts": {
     "build": "pnpm clean && tsx scripts/build.ts",
     "clean": "rm -rf dist/*",
-    "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/index.ts",
+    "start": "tsx src/index.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --report-unused-disable-directives --cache",
@@ -75,6 +74,9 @@
   },
   "publishConfig": {
     "access": "public",
-    "provenance": true
+    "provenance": true,
+    "bin": {
+      "boxel": "./dist/index.js"
+    }
   }
 }
