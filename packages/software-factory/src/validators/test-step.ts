@@ -18,6 +18,7 @@ import { deriveIssueSlug } from '../factory-agent';
 import { executeTestRunFromRealm } from '../test-run-execution';
 import type { ExecuteTestRunOptions, TestRunHandle } from '../test-run-types';
 import { logger } from '../logger';
+import { readCard } from '../workspace-fs';
 
 import type { ValidationStepRunner } from './validation-pipeline';
 
@@ -32,6 +33,13 @@ export interface TestValidationStepConfig {
   realmServerUrl: string;
   hostAppUrl: string;
   testResultsModuleUrl: string;
+  /**
+   * Local workspace directory mirroring the target realm. The step reads
+   * back the TestRun card from here after execution; it also passes this
+   * through to the test-run writer so the initial/updated TestRun card is
+   * persisted locally and synced by the orchestrator.
+   */
+  workspaceDir: string;
   issueId?: string;
   /** Injected for testing — defaults to executeTestRunFromRealm. */
   executeTestRun?: (options: ExecuteTestRunOptions) => Promise<TestRunHandle>;
@@ -39,7 +47,11 @@ export interface TestValidationStepConfig {
   fetchFilenames?: (
     realmUrl: string,
   ) => Promise<{ filenames: string[]; error?: string }>;
-  /** Injected for testing — defaults to client.read. */
+  /**
+   * Injected for testing — defaults to reading from the workspace.
+   * `realmUrl` is ignored by the default; retained so tests can mock
+   * realm-URL-keyed reads if they wish.
+   */
   readCard?: (
     realmUrl: string,
     path: string,
@@ -100,8 +112,11 @@ export class TestValidationStep implements ValidationStepRunner {
       ((realmUrl: string) => config.client.listFiles(realmUrl));
     this.readCardFn =
       config.readCard ??
-      (async (realmUrl: string, path: string) => {
-        let result = await config.client.read(realmUrl, path);
+      (async (_realmUrl: string, path: string) => {
+        let result = await readCard(
+          config.workspaceDir,
+          path.endsWith('.json') ? path : `${path}.json`,
+        );
         return {
           ok: result.ok,
           document: result.document as unknown as
@@ -158,6 +173,7 @@ export class TestValidationStep implements ValidationStepRunner {
         slug,
         testNames: [],
         client: this.config.client,
+        workspaceDir: this.config.workspaceDir,
         realmServerUrl: this.config.realmServerUrl,
         hostAppUrl: this.config.hostAppUrl,
         forceNew: true,

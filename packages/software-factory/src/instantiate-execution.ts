@@ -23,6 +23,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { logger } from './logger';
 import { validateRealmRelativePath } from './realm-relative-path';
+import { readCard } from './workspace-fs';
 
 let log = logger('instantiate-execution');
 
@@ -83,6 +84,12 @@ export interface InstantiateRealmSpecsOptions {
   targetRealmUrl: string;
   realmServerUrl: string;
   client: BoxelCLIClient;
+  /**
+   * Local workspace directory to read example `.json` instances from. The
+   * realm is used for spec discovery and card instantiation (prerenderer),
+   * but example content comes from disk.
+   */
+  workspaceDir: string;
   /** Injected for testing — defaults to client.runCommand → instantiate-card. */
   instantiateCardFn?: InstantiateCardFn;
 }
@@ -100,6 +107,10 @@ export interface RunInstantiateInMemoryOptions {
   targetRealmUrl: string;
   realmServerUrl: string;
   client: BoxelCLIClient;
+  /**
+   * Local workspace directory to read example `.json` instances from.
+   */
+  workspaceDir: string;
   /**
    * When set, instantiate only this realm-relative `.json` file instead of
    * discovering every linkedExample on every Spec. Useful for mid-turn
@@ -192,6 +203,7 @@ export async function instantiateRealmSpecs(
     let exampleInstances = await collectExampleInstances(
       options.client,
       options.targetRealmUrl,
+      options.workspaceDir,
       spec,
     );
 
@@ -303,6 +315,7 @@ export async function runInstantiateInMemory(
     return runSingleInstance(
       options.path,
       options.targetRealmUrl,
+      options.workspaceDir,
       options.client,
       instantiateCardFn,
     );
@@ -341,6 +354,7 @@ export async function runInstantiateInMemory(
         targetRealmUrl: options.targetRealmUrl,
         realmServerUrl: options.realmServerUrl,
         client: options.client,
+        workspaceDir: options.workspaceDir,
         instantiateCardFn,
       },
       specsResult.specs,
@@ -369,6 +383,7 @@ export async function runInstantiateInMemory(
 async function runSingleInstance(
   path: string,
   targetRealmUrl: string,
+  workspaceDir: string,
   client: BoxelCLIClient,
   instantiateCardFn: InstantiateCardFn,
 ): Promise<RunInstantiateResult> {
@@ -382,7 +397,12 @@ async function runSingleInstance(
     );
   }
 
-  let prepared = await prepareExampleInstance(client, targetRealmUrl, path);
+  let prepared = await prepareExampleInstance(
+    client,
+    targetRealmUrl,
+    workspaceDir,
+    path,
+  );
   if ('error' in prepared) {
     return emptyErrorResult(prepared.error);
   }
@@ -422,8 +442,9 @@ async function runSingleInstance(
  * codeRef. Mirrors the per-example prep inside `instantiateRealmSpecs`.
  */
 async function prepareExampleInstance(
-  client: BoxelCLIClient,
+  _client: BoxelCLIClient,
   targetRealmUrl: string,
+  workspaceDir: string,
   exampleUrl: string,
 ): Promise<
   | {
@@ -433,9 +454,13 @@ async function prepareExampleInstance(
     }
   | { error: string }
 > {
+  let exampleFilePath = exampleUrl.endsWith('.json')
+    ? exampleUrl
+    : `${exampleUrl}.json`;
+
   let rawRead;
   try {
-    rawRead = await client.read(targetRealmUrl, exampleUrl);
+    rawRead = await readCard(workspaceDir, exampleFilePath);
   } catch (err) {
     return {
       error: `Failed to read example "${exampleUrl}": ${err instanceof Error ? err.message : String(err)}`,
@@ -444,7 +469,7 @@ async function prepareExampleInstance(
 
   if (!rawRead.ok || !rawRead.document) {
     return {
-      error: `Failed to read example "${exampleUrl}": ${rawRead.error ?? `HTTP ${rawRead.status ?? 'unknown'}`}`,
+      error: `Failed to read example "${exampleUrl}": ${rawRead.error ?? (rawRead.status === 404 ? 'not found in workspace' : 'unknown error')}`,
     };
   }
 
@@ -503,6 +528,7 @@ async function prepareExampleInstance(
 async function collectExampleInstances(
   client: BoxelCLIClient,
   targetRealmUrl: string,
+  workspaceDir: string,
   spec: SpecInfo,
 ): Promise<{ url: string; data: string }[]> {
   let exampleInstances: { url: string; data: string }[] = [];
@@ -510,6 +536,7 @@ async function collectExampleInstances(
     let prepared = await prepareExampleInstance(
       client,
       targetRealmUrl,
+      workspaceDir,
       exampleUrl,
     );
     if ('error' in prepared) {

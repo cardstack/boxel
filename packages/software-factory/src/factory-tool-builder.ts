@@ -40,6 +40,7 @@ import {
 import { ensureJsonExtension, addCommentToIssue } from './realm-operations';
 import { runTestsInMemory } from './test-run-execution';
 import type { RunTestsInMemoryOptions, RunTestsResult } from './test-run-types';
+import { readCard, writeCard } from './workspace-fs';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -64,6 +65,12 @@ export interface ToolBuilderConfig {
   darkfactoryModuleUrl: string;
   /** Boxel CLI client — owns all realm auth and API calls. */
   client: BoxelCLIClient;
+  /**
+   * Local workspace directory mirroring the target realm. All target-realm
+   * card reads/writes happen here; sync with the realm is orchestrated
+   * elsewhere in the loop.
+   */
+  workspaceDir: string;
   /** Module URL for the TestRun card definition (e.g., `<realmUrl>test-results`). */
   testResultsModuleUrl?: string;
   /** Realm server URL. Required — never inferred from realm URLs. */
@@ -222,7 +229,7 @@ function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'write_file',
     description:
-      'Write a file to a realm. The path must include the file extension. Auth: per-realm JWT.',
+      'Write a file to the target realm workspace. The path must include the file extension. Writes go to the local workspace and are synced to the realm between iterations.',
     parameters: {
       type: 'object',
       properties: {
@@ -243,8 +250,7 @@ function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
     execute: async (args) => {
       let path = requireStringArg(args, 'path', 'write_file');
       let content = requireStringArg(args, 'content', 'write_file');
-      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
-      return config.client.write(realmUrl, path, content);
+      return writeCard(config.workspaceDir, path, content);
     },
   };
 }
@@ -253,7 +259,7 @@ function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'read_file',
     description:
-      'Read a file from a realm as card source JSON. Auth: per-realm JWT.',
+      'Read a file from the target realm workspace. Returns parsed JSON when possible, otherwise raw text.',
     parameters: {
       type: 'object',
       properties: {
@@ -271,8 +277,7 @@ function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
     },
     execute: async (args) => {
       let path = requireStringArg(args, 'path', 'read_file');
-      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
-      return config.client.read(realmUrl, path);
+      return readCard(config.workspaceDir, path);
     },
   };
 }
@@ -340,22 +345,20 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
 /**
  * Read-patch-write helper for card update tools.
  *
- * Reads the existing card source, merges the provided attributes and
- * relationships on top, and returns the merged document ready to write.
- * Only falls back to creating a fresh document on confirmed 404 (card
- * doesn't exist yet). Other read failures are surfaced as errors to
- * avoid clobbering existing cards on transient failures.
+ * Reads the existing card source from the local workspace, merges the
+ * provided attributes and relationships on top, and returns the merged
+ * document ready to write. Falls back to creating a fresh document
+ * when the card is missing; other read failures surface as errors.
  */
 async function readPatchDocument(
-  client: BoxelCLIClient,
-  realmUrl: string,
+  workspaceDir: string,
   path: string,
   cardName: string,
   darkfactoryModuleUrl: string,
   attributes: Record<string, unknown>,
   relationships: Record<string, unknown> | undefined,
 ): Promise<LooseSingleCardDocument> {
-  let existing = await client.read(realmUrl, path);
+  let existing = await readCard(workspaceDir, path);
 
   if (existing.ok && existing.document) {
     let doc = existing.document as unknown as LooseSingleCardDocument;
@@ -370,15 +373,15 @@ async function readPatchDocument(
     return doc;
   }
 
-  // If the read failed with something other than 404, surface the error —
-  // including network errors where status is undefined.
+  // If the read failed for a reason other than "missing", surface it —
+  // we don't want to clobber on a transient I/O error.
   if (!existing.ok && existing.status !== 404) {
     throw new Error(
-      `Failed to read existing ${cardName} at "${path}": ${existing.error ?? `HTTP ${existing.status}`}`,
+      `Failed to read existing ${cardName} at "${path}": ${existing.error ?? 'unknown error'}`,
     );
   }
 
-  // 404 — card doesn't exist yet, create new document
+  // Missing — create a fresh document for the card type.
   return buildCardDocument(
     cardName,
     darkfactoryModuleUrl,
@@ -435,19 +438,17 @@ function buildUpdateProjectTool(config: ToolBuilderConfig): FactoryTool {
       let relationships = args.relationships as
         | Record<string, unknown>
         | undefined;
-      let realmUrl = config.targetRealmUrl;
 
       // Read-patch-write: preserve attributes the agent didn't include.
       let doc = await readPatchDocument(
-        config.client,
-        realmUrl,
+        config.workspaceDir,
         path,
         'Project',
         config.darkfactoryModuleUrl,
         attributes,
         relationships,
       );
-      return config.client.write(realmUrl, path, JSON.stringify(doc, null, 2));
+      return writeCard(config.workspaceDir, path, JSON.stringify(doc, null, 2));
     },
   };
 }
@@ -485,18 +486,16 @@ function buildUpdateIssueTool(config: ToolBuilderConfig): FactoryTool {
       let relationships = args.relationships as
         | Record<string, unknown>
         | undefined;
-      let realmUrl = config.targetRealmUrl;
 
       let doc = await readPatchDocument(
-        config.client,
-        realmUrl,
+        config.workspaceDir,
         path,
         'Issue',
         config.darkfactoryModuleUrl,
         attributes,
         relationships,
       );
-      return config.client.write(realmUrl, path, JSON.stringify(doc, null, 2));
+      return writeCard(config.workspaceDir, path, JSON.stringify(doc, null, 2));
     },
   };
 }
@@ -531,9 +530,7 @@ function buildAddCommentTool(config: ToolBuilderConfig): FactoryTool {
       let body = requireStringArg(args, 'body', 'add_comment');
       let author = requireStringArg(args, 'author', 'add_comment');
 
-      let realmUrl = config.targetRealmUrl;
-
-      return addCommentToIssue(config.client, realmUrl, path, {
+      return addCommentToIssue(config.workspaceDir, path, {
         body,
         author,
       });
@@ -559,18 +556,16 @@ function buildCreateKnowledgeTool(config: ToolBuilderConfig): FactoryTool {
       let relationships = args.relationships as
         | Record<string, unknown>
         | undefined;
-      let realmUrl = config.targetRealmUrl;
 
       let doc = await readPatchDocument(
-        config.client,
-        realmUrl,
+        config.workspaceDir,
         path,
         'KnowledgeArticle',
         config.darkfactoryModuleUrl,
         attributes,
         relationships,
       );
-      return config.client.write(realmUrl, path, JSON.stringify(doc, null, 2));
+      return writeCard(config.workspaceDir, path, JSON.stringify(doc, null, 2));
     },
   };
 }
@@ -595,7 +590,6 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
       let relationships = args.relationships as
         | Record<string, unknown>
         | undefined;
-      let realmUrl = config.targetRealmUrl;
       // Spec cards adopt from https://cardstack.com/base/spec, not darkfactory
       let doc: LooseSingleCardDocument = {
         data: {
@@ -614,7 +608,7 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
           [fieldName: string]: Relationship | Relationship[];
         };
       }
-      return config.client.write(realmUrl, path, JSON.stringify(doc, null, 2));
+      return writeCard(config.workspaceDir, path, JSON.stringify(doc, null, 2));
     },
   };
 }
@@ -677,6 +671,7 @@ function buildRunLintTool(config: ToolBuilderConfig): FactoryTool {
       return execute({
         targetRealmUrl: config.targetRealmUrl,
         client: config.client,
+        workspaceDir: config.workspaceDir,
         ...(path ? { path } : {}),
       });
     },
@@ -719,6 +714,8 @@ function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
         typeof rawPath === 'string' && rawPath.trim() !== ''
           ? rawPath.trim()
           : undefined;
+      // `run_evaluate` runs in the prerenderer sandbox and reads modules
+      // from the realm, so it doesn't need the workspace.
       return execute({
         targetRealmUrl: config.targetRealmUrl,
         realmServerUrl: config.realmServerUrl,
@@ -770,6 +767,7 @@ function buildRunParseTool(config: ToolBuilderConfig): FactoryTool {
       return execute({
         targetRealmUrl: config.targetRealmUrl,
         client: config.client,
+        workspaceDir: config.workspaceDir,
         ...(path ? { path } : {}),
       });
     },
@@ -820,6 +818,7 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
         targetRealmUrl: config.targetRealmUrl,
         realmServerUrl: config.realmServerUrl,
         client: config.client,
+        workspaceDir: config.workspaceDir,
         ...(path ? { path } : {}),
       });
     },

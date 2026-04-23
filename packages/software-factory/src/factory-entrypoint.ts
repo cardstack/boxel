@@ -20,6 +20,10 @@ import {
   type ResolveFactoryTargetRealmOptions,
 } from './factory-target-realm';
 import type { IssueLoopResult } from './issue-loop';
+import { logger } from './logger';
+import { ensureWorkspaceDir, resolveWorkspaceDir } from './workspace-fs';
+
+let log = logger('factory-entrypoint');
 
 export interface FactoryEntrypointOptions {
   briefUrl: string;
@@ -88,9 +92,16 @@ export interface RunFactoryEntrypointDependencies {
     options: {
       client: BoxelCLIClient;
       darkfactoryModuleUrl: string;
+      workspaceDir: string;
     },
   ) => Promise<SeedIssueResult>;
   runIssueLoop?: (config: IssueLoopWiringConfig) => Promise<IssueLoopResult>;
+  /**
+   * Override the workspace directory resolution. Primarily for tests so
+   * they can point the factory at a temp dir they control. In production
+   * this defaults to `resolveWorkspaceDir(targetRealmUrl)`.
+   */
+  resolveWorkspaceDir?: (targetRealmUrl: string) => string;
 }
 export { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
@@ -237,12 +248,48 @@ export async function runFactoryEntrypoint(
 
   let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealm.url);
 
-  // Create the seed issue in the realm
+  // Establish the local workspace for target-realm I/O. Every factory
+  // read/write against the target realm happens against this directory;
+  // the realm itself is reached only via `client.pull` / `client.sync`.
+  // The path is deterministic per realm so re-runs reuse state.
+  let workspaceDir = (
+    dependencies?.resolveWorkspaceDir ?? resolveWorkspaceDir
+  )(targetRealm.url);
+  await ensureWorkspaceDir(workspaceDir);
+  log.info(`Workspace directory: ${workspaceDir}`);
+
+  let pullResult = await client.pull(targetRealm.url, workspaceDir);
+  if (pullResult.error) {
+    throw new Error(
+      `Failed to pull target realm into workspace ${workspaceDir}: ${pullResult.error}`,
+    );
+  }
+  log.info(
+    `Pulled ${pullResult.files.length} file(s) from target realm into workspace`,
+  );
+
+  // Create the seed issue locally
   let seedResult = await (dependencies?.createSeed ?? createSeedIssue)(
     brief,
     targetRealm.url,
-    { client, darkfactoryModuleUrl },
+    { client, darkfactoryModuleUrl, workspaceDir },
   );
+
+  // Push the freshly-written seed (and any other pre-existing workspace
+  // state) to the realm so the scheduler's `listIssues()` query sees it.
+  let postSeedSync = await client.sync(targetRealm.url, workspaceDir, {
+    preferLocal: true,
+  });
+  if (postSeedSync.error) {
+    throw new Error(
+      `Failed to sync workspace to realm after seed creation: ${postSeedSync.error}`,
+    );
+  }
+  if (postSeedSync.hasError) {
+    log.warn(
+      'Post-seed workspace sync completed with errors — see prior log lines',
+    );
+  }
 
   let summary = buildFactoryEntrypointSummary(
     options,
@@ -259,6 +306,7 @@ export async function runFactoryEntrypoint(
     realmServerUrl: targetRealm.serverUrl,
     ownerUsername: targetRealm.ownerUsername,
     client,
+    workspaceDir,
     agent: options.agent,
     openRouterModel: options.openRouterModel,
     debug: options.debug,

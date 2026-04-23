@@ -13,6 +13,7 @@ import {
 import type { ToolExecutor } from '../src/factory-tool-executor';
 import { ToolRegistry } from '../src/factory-tool-registry';
 import { createMockClient } from './helpers/mock-client';
+import { mkTestWorkspace, type TestWorkspace } from './helpers/workspace-fixture';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -65,10 +66,25 @@ const DEFAULT_CARD_TYPE_SCHEMAS = new Map<
   ],
 ]);
 
+let activeWorkspaces: TestWorkspace[] = [];
+
+function makeWorkspace(): TestWorkspace {
+  let ws = mkTestWorkspace();
+  activeWorkspaces.push(ws);
+  return ws;
+}
+
+function cleanupWorkspaces(): void {
+  for (let ws of activeWorkspaces) {
+    ws.cleanup();
+  }
+  activeWorkspaces = [];
+}
+
 function makeConfig(
   overrides?: Partial<ToolBuilderConfig> & { fetch?: typeof globalThis.fetch },
 ): ToolBuilderConfig {
-  let { fetch: fetchOverride, client, ...rest } = overrides ?? {};
+  let { fetch: fetchOverride, client, workspaceDir, ...rest } = overrides ?? {};
   return {
     targetRealmUrl: TARGET_REALM,
     darkfactoryModuleUrl:
@@ -77,6 +93,7 @@ function makeConfig(
     client:
       client ??
       createMockClient(fetchOverride ? { fetch: fetchOverride } : undefined),
+    workspaceDir: workspaceDir ?? makeWorkspace().dir,
     cardTypeSchemas: DEFAULT_CARD_TYPE_SCHEMAS,
     ...rest,
   };

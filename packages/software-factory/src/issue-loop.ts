@@ -107,6 +107,18 @@ export interface IssueLoopConfig {
    */
   createValidator: (issueId: string) => Validator;
   targetRealmUrl: string;
+  /**
+   * Local workspace directory mirroring the target realm. Passed to the
+   * loop so it can interleave sync calls with agent turns and validation.
+   */
+  workspaceDir: string;
+  /**
+   * Push the workspace to the realm (prefer-local). Invoked after each
+   * agent turn — before validation runs — and again after validation
+   * writes its artifact cards. Factored out of the loop so tests can
+   * stub it without spinning up a real CLI client.
+   */
+  syncWorkspace: () => Promise<void>;
   briefUrl?: string;
   /** Maximum inner-loop iterations per issue. Default: 8. */
   maxIterationsPerIssue?: number;
@@ -202,6 +214,7 @@ export async function runIssueLoop(
     issueStore,
     createValidator,
     targetRealmUrl,
+    syncWorkspace,
     briefUrl,
     maxIterationsPerIssue = DEFAULT_MAX_ITERATIONS_PER_ISSUE,
     maxOuterCycles = DEFAULT_MAX_OUTER_CYCLES,
@@ -303,10 +316,20 @@ export async function runIssueLoop(
 
       log.info(`  Agent returned ${result.toolCalls.length} tool call(s)`);
 
+      // Push the agent's workspace writes to the realm so the prerenderer-
+      // backed validators (eval / instantiate / test-step's QUnit run) see
+      // the latest source when they execute against the realm.
+      await syncWorkspace();
+
       // Validation — runs after every agent turn.
       // Pass the iteration number so all steps use it as the sequence
       // number in artifact filenames (parse_slug-1, lint_slug-1, etc.)
       validationResults = await validator.validate(targetRealmUrl, iteration);
+
+      // Push the validator's artifact cards (ParseResult / LintResult /
+      // EvalResult / InstantiateResult / TestRun) to the realm so they
+      // appear in the Boxel UI.
+      await syncWorkspace();
       validationContext =
         validationResults && !validationResults.passed
           ? validator.formatForContext(validationResults)

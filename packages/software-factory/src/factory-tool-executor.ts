@@ -311,14 +311,6 @@ export class ToolExecutor {
     toolName: string,
     toolArgs: Record<string, unknown>,
   ): void {
-    // Extra validation for destructive realm operations
-    if (toolName === 'realm-delete') {
-      let realmUrl = toolArgs['realm-url'];
-      if (typeof realmUrl === 'string') {
-        this.validateRealmTarget(toolName, realmUrl);
-      }
-    }
-
     // boxel-push with --delete
     if (toolName === 'boxel-push' && toolArgs['delete']) {
       let realmUrl = toolArgs['realm-url'];
@@ -414,37 +406,6 @@ export class ToolExecutor {
     let ok: boolean;
 
     switch (toolName) {
-      case 'realm-read': {
-        let result = await client.read(
-          String(toolArgs['realm-url']),
-          String(toolArgs['path']),
-        );
-        ok = result.ok;
-        output = ok ? result.document : { error: result.error };
-        break;
-      }
-
-      case 'realm-write': {
-        let result = await client.write(
-          String(toolArgs['realm-url']),
-          String(toolArgs['path']),
-          String(toolArgs['content']),
-        );
-        ok = result.ok;
-        output = ok ? result : { error: result.error };
-        break;
-      }
-
-      case 'realm-delete': {
-        let result = await client.delete(
-          String(toolArgs['realm-url']),
-          String(toolArgs['path']),
-        );
-        ok = result.ok;
-        output = ok ? result : { error: result.error };
-        break;
-      }
-
       case 'realm-search': {
         let rawQuery = toolArgs['query'];
         if (typeof rawQuery !== 'string') {

@@ -15,6 +15,7 @@ import type {
   ExecuteTestRunOptions,
 } from '../src/test-run-types';
 import { createMockClient } from './helpers/mock-client';
+import { mkTestWorkspace } from './helpers/workspace-fixture';
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -28,6 +29,7 @@ function makeConfig(
     realmServerUrl: 'https://example.test/',
     hostAppUrl: 'https://example.test/',
     testResultsModuleUrl: 'https://example.test/test-results',
+    workspaceDir: mkTestWorkspace().dir,
     ...overrides,
   };
 }

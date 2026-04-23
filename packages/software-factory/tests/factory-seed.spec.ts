@@ -7,6 +7,7 @@ import type { FactoryBrief } from '../src/factory-brief';
 import { RealmIssueStore } from '../src/issue-scheduler';
 import { expect, test } from './fixtures';
 import { buildTestClient } from './helpers/test-client';
+import { mkTestWorkspace } from './helpers/workspace-fixture';
 
 const bootstrapTargetDir = resolve(
   process.cwd(),
@@ -51,23 +52,33 @@ function buildSeedContext(realm: {
     '../software-factory/darkfactory',
     realm.realmURL,
   ).href;
-  let { client, cleanup } = buildTestClient({
+  let { client, cleanup: clientCleanup } = buildTestClient({
     realmUrl: realm.realmURL.href,
     realmToken: `Bearer ${realm.ownerBearerToken}`,
     realmServerUrl: realm.realmServerURL.href,
     realmServerToken: `Bearer ${realm.serverToken}`,
   });
 
+  let workspace = mkTestWorkspace();
+
   return {
     client,
-    cleanup,
+    cleanup: () => {
+      clientCleanup();
+      workspace.cleanup();
+    },
     darkfactoryModuleUrl,
-    seedOptions: { client, darkfactoryModuleUrl },
+    workspaceDir: workspace.dir,
+    seedOptions: {
+      client,
+      darkfactoryModuleUrl,
+      workspaceDir: workspace.dir,
+    },
   };
 }
 
 test('creates bootstrap seed issue in a live realm', async ({ realm }) => {
-  let { client, cleanup, darkfactoryModuleUrl, seedOptions } =
+  let { client, cleanup, darkfactoryModuleUrl, workspaceDir, seedOptions } =
     buildSeedContext(realm);
 
   try {
@@ -79,6 +90,13 @@ test('creates bootstrap seed issue in a live realm', async ({ realm }) => {
 
     expect(result.issueId).toBe('Issues/bootstrap-seed');
     expect(result.status).toBe('created');
+
+    // The seed lives on local disk until we sync to the realm — mirrors
+    // the entrypoint orchestration (createSeedIssue + post-seed sync).
+    let syncResult = await client.sync(realm.realmURL.href, workspaceDir, {
+      preferLocal: true,
+    });
+    expect(syncResult.hasError).toBe(false);
 
     // Verify the card is readable with correct fields
     let issueResponse = await client.authedFetch(
@@ -121,6 +139,7 @@ test('creates bootstrap seed issue in a live realm', async ({ realm }) => {
       realmUrl: realm.realmURL.href,
       darkfactoryModuleUrl,
       client,
+      workspaceDir,
     });
 
     let issues = await issueStore.listIssues();

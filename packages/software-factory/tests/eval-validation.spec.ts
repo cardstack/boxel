@@ -5,6 +5,7 @@ import { expect, test } from './fixtures';
 import { EvalValidationStep } from '../src/validators/eval-step';
 import type { EvalValidationDetails } from '../src/validators/eval-step';
 import { buildTestClient } from './helpers/test-client';
+import { mkTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -76,14 +77,23 @@ test.describe('eval-validation e2e', () => {
       });
       expect(indexed).toBe(true);
 
+      let workspace = mkTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let step = new EvalValidationStep({
         client,
         realmServerUrl,
         evalResultsModuleUrl,
+        workspaceDir: workspace.dir,
         issueId: 'Issues/eval-e2e',
       });
 
       let result = await step.run(realmUrl);
+
+      // Push the EvalResult artifact card to the realm so the
+      // client.read assertion below finds it.
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // Must pass — valid modules with correct imports
       expect(result.step).toBe('evaluate');
