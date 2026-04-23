@@ -64,6 +64,14 @@ export class RealmRegistryReconciler {
   knownByUrl = new Map<string, RealmRegistryRow>();
   mounted = new Map<string, Realm>();
   pendingMounts = new Map<string, Promise<Realm>>();
+  // URLs the reconciler itself mounted via ensureMounted(). The unmount
+  // phase of reconcile() only touches these — realms registered via
+  // registerExistingMounts (legacy loadRealms path) are preserved even if
+  // they transiently appear absent from the registry during a skipped-
+  // backfill window on a peer instance. Phase 3 removes registerExistingMounts
+  // entirely and the reconciler owns all mounts, so every mount will be
+  // in this set.
+  #reconcilerOwned = new Set<string>();
 
   constructor(deps: ReconcilerDeps) {
     this.#deps = deps;
@@ -78,6 +86,11 @@ export class RealmRegistryReconciler {
   // treats those as already-mounted and doesn't try to re-mount them.
   // Coexistence with the legacy mount path is a Phase 2 property;
   // Phase 3 removes the legacy mount and the reconciler owns all mounts.
+  //
+  // Realms registered this way are NOT added to #reconcilerOwned, so the
+  // reconciler will never unmount them — their lifecycle is the legacy
+  // path's responsibility (publish/unpublish/delete handlers call
+  // removeMountedRealm / destroyMountedRealm directly).
   registerExistingMounts(realms: Iterable<Realm>): void {
     for (const realm of realms) {
       this.mounted.set(realm.url, realm);
@@ -158,8 +171,17 @@ export class RealmRegistryReconciler {
       }
     }
 
-    // Unmount removals: anything mounted locally that isn't in the registry.
+    // Unmount removals. Only touch realms the reconciler mounted itself
+    // (#reconcilerOwned); legacy-registered mounts are preserved. In a
+    // multi-instance deployment the reconciler may skip its boot backfill
+    // (peer holds the advisory lock) and then read a transiently partial
+    // registry — we don't want that to unmount legitimate legacy mounts.
+    // When Phase 3 removes the legacy mount path, every mount will be
+    // reconciler-owned and this filter becomes a no-op.
     for (const [url, realm] of this.mounted) {
+      if (!this.#reconcilerOwned.has(url)) {
+        continue;
+      }
       if (!nextKnown.has(url)) {
         try {
           await this.#deps.unmount(realm);
@@ -168,6 +190,7 @@ export class RealmRegistryReconciler {
           continue;
         }
         this.mounted.delete(url);
+        this.#reconcilerOwned.delete(url);
       }
     }
   }
@@ -190,6 +213,9 @@ export class RealmRegistryReconciler {
       try {
         const realm = await this.#deps.mountFromRow(row);
         this.mounted.set(row.url, realm);
+        // Mark as reconciler-owned so the unmount phase of a future
+        // reconcile() is allowed to tear it down when the row disappears.
+        this.#reconcilerOwned.add(row.url);
         return realm;
       } finally {
         this.pendingMounts.delete(row.url);
