@@ -144,6 +144,29 @@ module(basename(__filename), function () {
       assert.strictEqual(reconciler.mounted.size, 1);
     });
 
+    test('does NOT unmount legacy-registered mounts when they are absent from the registry', async function (assert) {
+      // Simulates the multi-instance race where this instance skipped its
+      // backfill (peer holds the advisory lock) and sees a registry that
+      // doesn't (yet) include realms the legacy loadRealms path already
+      // mounted. The reconciler must preserve those — their lifecycle
+      // belongs to the legacy handler path in Phase 2.
+      const legacyUrl = 'http://localhost:4201/luke/legacy/';
+      reconciler.registerExistingMounts([makeFakeRealm(legacyUrl)]);
+
+      // Registry is empty — no matching row for the legacy realm.
+      await reconciler.reconcile();
+
+      assert.deepEqual(
+        unmountCalls,
+        [],
+        'legacy-registered mount was not torn down despite missing registry row',
+      );
+      assert.ok(
+        reconciler.mounted.has(legacyUrl),
+        'legacy mount still in mounted map',
+      );
+    });
+
     test('reconcile unmounts realms whose registry rows have been deleted', async function (assert) {
       const url = 'http://localhost:4201/luke/src/';
       await seedRow(dbAdapter, {
@@ -253,7 +276,6 @@ module(basename(__filename), function () {
     });
 
     test('reconcile failure in one row does not prevent mounting the others', async function (assert) {
-      let failing = true;
       const localReconciler = new RealmRegistryReconciler({
         dbAdapter,
         mountFromRow: async (row) => {
@@ -264,7 +286,6 @@ module(basename(__filename), function () {
         },
         unmount: async () => {},
       });
-      void failing;
 
       await seedRow(dbAdapter, {
         url: 'http://localhost:4201/luke/bad/',

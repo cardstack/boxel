@@ -538,9 +538,13 @@ const getIndexHTML = async () => {
             : {}),
         },
       );
+      // start() before push/mount: if start() throws (e.g., fullIndex fails
+      // transiently), we don't want a half-initialized Realm sitting in
+      // `realms[]` and `virtualNetwork` where the next reconcile pass would
+      // double-mount it. Wait for start to succeed, then publish.
+      await reconciledRealm.start();
       realms.push(reconciledRealm);
       virtualNetwork.mount(reconciledRealm.handle);
-      await reconciledRealm.start();
       return reconciledRealm;
     },
     unmount: async (realm) => {
