@@ -23,6 +23,7 @@ import {
   internalKeyFor,
 } from '@cardstack/runtime-common';
 
+import type { PrerenderedCard } from '@cardstack/host/components/prerendered-card-search';
 import type { RealmFilter } from '@cardstack/host/components/realm-picker';
 import type { TypeFilter } from '@cardstack/host/components/type-picker';
 import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
@@ -41,6 +42,7 @@ import {
 import { SectionPagination } from '@cardstack/host/utils/card-search/section-pagination';
 import {
   assembleSections,
+  buildPrerenderedRecentsSection,
   buildQuerySections,
   buildRecentsSection,
   buildUrlSection,
@@ -234,6 +236,33 @@ export default class SearchContent extends Component<Signature> {
     );
   }
 
+  private get recentCardUrls(): string[] {
+    return this.recentCardsService.recentCardIds.map((id) =>
+      id.endsWith('.json') ? id : `${id}.json`,
+    );
+  }
+
+  // Compact-mode Recents are rendered as prerendered HTML fragments to
+  // avoid fetching card modules when the search sheet opens. Live CardDef
+  // recents are still used in full (non-compact) mode to support the
+  // sort/filter UI that depends on live card fields (cardTitle,
+  // lastModified, createdAt).
+  private prerenderedRecentsResource = getPrerenderedSearch(
+    this,
+    getOwner(this)!,
+    () => {
+      let shouldRun = this.args.isCompact && this.recentCardUrls.length > 0;
+      return {
+        query: shouldRun ? {} : undefined,
+        format: shouldRun ? ('fitted' as const) : undefined,
+        realms: this.realms,
+        cardUrls: shouldRun ? this.recentCardUrls : undefined,
+        isLive: false,
+        cardComponentModifier: this.cardComponentModifier,
+      };
+    },
+  );
+
   private get filteredRecentCards(): CardDef[] {
     const cards =
       (this.recentCardCollection?.cards?.filter(Boolean) as
@@ -338,6 +367,19 @@ export default class SearchContent extends Component<Signature> {
   }
 
   private get recentCardsSection() {
+    if (this.args.isCompact) {
+      // Compact mode: render recents from prerendered HTML. Preserve the
+      // most-recent-first order from RecentCardsService rather than the
+      // arbitrary order the server returns.
+      let byUrl = new Map<string, PrerenderedCard>();
+      for (let card of this.prerenderedRecentsResource.instances) {
+        byUrl.set(card.url, card);
+      }
+      let ordered = this.recentCardUrls
+        .map((url) => byUrl.get(url))
+        .filter((c): c is PrerenderedCard => c !== undefined);
+      return buildPrerenderedRecentsSection(ordered);
+    }
     return buildRecentsSection(this.sortedRecentCards);
   }
 
