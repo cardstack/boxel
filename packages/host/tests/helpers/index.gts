@@ -2036,5 +2036,4 @@ export async function addSkillToAiAssistant(
       timeoutMessage: `Timed out waiting for room skill state for "${skillCardId}"`,
     },
   );
-
 }

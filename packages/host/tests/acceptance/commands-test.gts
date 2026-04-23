@@ -1082,6 +1082,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
 
     await addSkillToAiAssistant(`${testRealmURL}Skill/useful-commands`);
+    await click('[data-test-skill-menu]');
     await click(
       '[data-test-skill-menu] [data-test-pill-menu-header] [data-test-pill-menu-button]',
     );

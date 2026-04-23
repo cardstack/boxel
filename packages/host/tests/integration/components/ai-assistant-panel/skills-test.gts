@@ -299,7 +299,10 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
         document
           .querySelector('[data-test-active-skills-count]')
           ?.textContent?.trim() === '1 Skill',
-      { timeout: 5000, timeoutMessage: 'Timed out waiting for env skill to be active' },
+      {
+        timeout: 5000,
+        timeoutMessage: 'Timed out waiting for env skill to be active',
+      },
     );
     let roomId = document
       .querySelector('[data-test-room]')
@@ -387,7 +390,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
         ),
       { timeoutMessage: `timed out waiting for ${skillId} to be enabled` },
     );
-
+    await click('[data-test-skill-menu]');
     assert
       .dom(`[data-test-skill-options-button="${skillId}"]`)
       .exists('selected skill is shown in the skill menu');
@@ -401,7 +404,11 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
     await addSkillToAiAssistant(enabledSkillId);
 
-    if (!document.querySelector('[data-test-skill-menu] [data-test-pill-menu-add-button]')) {
+    if (
+      !document.querySelector(
+        '[data-test-skill-menu] [data-test-pill-menu-add-button]',
+      )
+    ) {
       await click('[data-test-skill-menu][data-test-pill-menu-button]');
     }
     await waitFor('[data-test-skill-menu] [data-test-pill-menu-add-button]');
@@ -422,12 +429,12 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
     let skillId = `${testRealmURL}Skill/example`;
     await addSkillToAiAssistant(skillId);
-
     assert.false(
       operatorModeStateService.getOpenCardIds().includes(skillId),
       'skill card is not open before using the menu',
     );
 
+    await click('[data-test-skill-menu]');
     await click(`[data-test-skill-options-button="${skillId}"]`);
     await waitFor('[data-test-boxel-menu-item-text="Open Skill Card"]');
     await click('[data-test-boxel-menu-item-text="Open Skill Card"]');

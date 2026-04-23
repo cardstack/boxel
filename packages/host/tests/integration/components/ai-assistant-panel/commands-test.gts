@@ -1369,7 +1369,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await waitFor('[data-test-room-name="test room 1"]', { timeout: 10000 });
 
     // add environment skill
-    await addSkillToAiAssistant('http://test-realm/test/Skill/boxel-environment');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/boxel-environment`);
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1460,7 +1460,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await waitFor('[data-test-room-name="test room 1"]', { timeout: 10000 });
 
     // add environment skill
-    await addSkillToAiAssistant('http://test-realm/test/Skill/boxel-environment');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/boxel-environment`);
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,

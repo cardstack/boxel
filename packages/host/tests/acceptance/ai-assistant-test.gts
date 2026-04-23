@@ -2855,15 +2855,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           },
         ],
       ],
+      aiAssistantOpen: true,
     });
 
-    await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
     // First, let's add some skills to the current room
     await addSkillToAiAssistant(`${testRealmURL}Skill/example`);
     await addSkillToAiAssistant(`${testRealmURL}Skill/example2`);
-
+    await click('[data-test-skill-menu]');
     await waitUntil(
       () =>
         document.querySelectorAll(
