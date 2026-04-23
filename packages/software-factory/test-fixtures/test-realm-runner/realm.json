@@ -1,0 +1,14 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Test Realm Runner Fixture"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/realm-config",
+        "name": "RealmConfig"
+      }
+    }
+  }
+}

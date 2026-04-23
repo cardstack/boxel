@@ -21,6 +21,26 @@ if [ ! -f "$SUBMISSION_REALM_PATH/.realm.json" ]; then
 }
 EOF
 fi
+if [ ! -f "$SUBMISSION_REALM_PATH/realm.json" ]; then
+  cat > "$SUBMISSION_REALM_PATH/realm.json" << 'EOF'
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Submissions",
+      "backgroundURL": "https://boxel-images.boxel.ai/background-images/background-for-catalog-82x.jpg",
+      "iconURL": "https://boxel-images.boxel.ai/icons/Letter-s.png"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/realm-config",
+        "name": "RealmConfig"
+      }
+    }
+  }
+}
+EOF
+fi
 if [ ! -f "$SUBMISSION_REALM_PATH/index.json" ]; then
   cat > "$SUBMISSION_REALM_PATH/index.json" << 'EOF'
 {

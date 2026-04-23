@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Legacy Catalog",
+      "backgroundURL": "https://boxel-images.boxel.ai/background-images/background-for-catalog-82x.jpg",
+      "iconURL": "https://boxel-images.boxel.ai/icons/icon_catalog.png"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/realm-config",
+        "name": "RealmConfig"
+      }
+    }
+  }
+}

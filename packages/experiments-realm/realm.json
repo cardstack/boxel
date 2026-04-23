@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Experiments Workspace",
+      "backgroundURL": "https://boxel-images.boxel.ai/background-images/4k-light-streaks.jpg",
+      "iconURL": "https://boxel-images.boxel.ai/icons/cardstack-black.png"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/realm-config",
+        "name": "RealmConfig"
+      }
+    }
+  }
+}

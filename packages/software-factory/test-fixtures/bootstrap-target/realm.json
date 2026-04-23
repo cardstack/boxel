@@ -1,0 +1,14 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Bootstrap Target Test Realm"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/realm-config",
+        "name": "RealmConfig"
+      }
+    }
+  }
+}
