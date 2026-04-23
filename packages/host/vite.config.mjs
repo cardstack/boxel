@@ -108,6 +108,28 @@ export default defineConfig(({ mode }) => ({
       },
     },
   },
+  // The built host is served from one origin (the configured assetsURL /
+  // distURL, e.g. http://localhost:4200) while the HTML that boots it is
+  // served from another origin (realm-server, e.g. http://localhost:4205).
+  // Static <script>/<link> tags in index.html are rewritten to absolute
+  // assetsURL by realm-server (see packages/realm-server/server.ts). But
+  // Vite's runtime preload helper resolves dynamic-import chunk hrefs
+  // against the document origin, so they 404 on the realm-server origin.
+  // Emit a runtime expression for JS asset references so they resolve
+  // against a globally-configured assets URL set by the inline bootstrap
+  // script in index.html.
+  experimental: {
+    renderBuiltUrl(filename, { hostType }) {
+      if (hostType === 'js') {
+        return {
+          runtime: `globalThis.__boxelAssetsURL+${JSON.stringify(filename)}`,
+        };
+      }
+      // Leave HTML/CSS references alone (root-absolute `/assets/...`) so
+      // realm-server's absolute-URL rewrite regex can prepend assetsURL.
+      return undefined;
+    },
+  },
   resolve: {
     alias: {
       path: require.resolve('path-browserify'),

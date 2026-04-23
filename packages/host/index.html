@@ -8,6 +8,26 @@
 
     {{content-for "head"}}
 
+    <script>
+      // Resolve dynamic-import chunk URLs against the host's distURL rather
+      // than the document origin — the HTML may be served by realm-server
+      // on a different origin than the built assets. See the
+      // experimental.renderBuiltUrl hook in vite.config.mjs.
+      (function () {
+        var meta = document.querySelector(
+          'meta[name="@cardstack/host/config/environment"]',
+        );
+        var assetsURL = '/';
+        if (meta) {
+          try {
+            var config = JSON.parse(decodeURIComponent(meta.content));
+            if (config && config.assetsURL) assetsURL = config.assetsURL;
+          } catch (e) {}
+        }
+        globalThis.__boxelAssetsURL = assetsURL;
+      })();
+    </script>
+
     <link integrity="" rel="stylesheet" href="/@embroider/virtual/vendor.css" />
     <link integrity="" rel="stylesheet" href="/@embroider/virtual/app.css" />
     <link href="/boxel-favicon.png" rel="icon" type="image/x-icon" />
