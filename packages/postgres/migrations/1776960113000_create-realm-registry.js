@@ -43,14 +43,18 @@ exports.up = (pgm) => {
       notNull: true,
     },
     // For kind='published': the URL of the source realm it was published from (soft
-    // foreign key to another row's `url`; not enforced by the DB so that source and
+    // foreign key to another row's `url`; intentionally not an FK so that source and
     // published rows can be manipulated independently during migration).
     // For kind='source' or 'bootstrap': always NULL.
+    // Enforced by realm_registry_source_url_by_kind.
     source_url: {
       type: 'varchar',
     },
-    // Milliseconds since epoch of the most recent publish. Only meaningful for
-    // kind='published'; NULL otherwise.
+    // Milliseconds since epoch of the most recent publish. Populated for
+    // kind='published'; always NULL otherwise (enforced by
+    // realm_registry_last_published_by_kind). May still be NULL for a kind='published'
+    // row during transitional states (e.g., a row inserted before its first publish
+    // completes), so the constraint only enforces the "NULL for non-published" half.
     last_published_at: {
       type: 'bigint',
     },
@@ -82,6 +86,13 @@ exports.up = (pgm) => {
   pgm.addConstraint('realm_registry', 'realm_registry_kind_check', {
     check: "kind in ('source','published','bootstrap')",
   });
+  pgm.addConstraint('realm_registry', 'realm_registry_source_url_by_kind', {
+    check:
+      "(kind = 'published' AND source_url IS NOT NULL) OR (kind <> 'published' AND source_url IS NULL)",
+  });
+  pgm.addConstraint('realm_registry', 'realm_registry_last_published_by_kind', {
+    check: "kind = 'published' OR last_published_at IS NULL",
+  });
 
   pgm.createIndex('realm_registry', ['url'], {
     unique: true,
@@ -104,6 +115,11 @@ exports.down = (pgm) => {
   pgm.dropIndex('realm_registry', ['url'], {
     name: 'realm_registry_url_uniq',
   });
+  pgm.dropConstraint(
+    'realm_registry',
+    'realm_registry_last_published_by_kind',
+  );
+  pgm.dropConstraint('realm_registry', 'realm_registry_source_url_by_kind');
   pgm.dropConstraint('realm_registry', 'realm_registry_kind_check');
   pgm.dropTable('realm_registry');
 };
