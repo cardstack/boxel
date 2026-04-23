@@ -77,7 +77,7 @@ export class Prerenderer {
   #affinitySnapshotSampler!: AffinitySnapshotSampler;
 
   constructor(options: { serverURL: string; maxPages?: number }) {
-    let maxPages = options.maxPages ?? 4;
+    let maxPages = options.maxPages ?? 5;
     this.#semaphore = new AsyncSemaphore(maxPages);
     this.#browserManager = new BrowserManager();
     this.#pagePool = new PagePool({

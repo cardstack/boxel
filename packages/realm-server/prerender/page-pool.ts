@@ -222,7 +222,7 @@ export class PagePool {
     onAffinityDisposed?: (affinityKey: string) => void;
   }) {
     this.#maxPages = options.maxPages;
-    let envTabMax = Number(process.env.PRERENDER_AFFINITY_TAB_MAX ?? 4);
+    let envTabMax = Number(process.env.PRERENDER_AFFINITY_TAB_MAX ?? 5);
     if (!Number.isFinite(envTabMax) || envTabMax <= 0) {
       envTabMax = 1;
     }

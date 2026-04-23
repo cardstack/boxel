@@ -69,7 +69,7 @@ export function buildPrerenderApp(options: {
   let app = new Koa<Koa.DefaultState, Koa.Context>();
   let router = new Router();
   let maxPages =
-    options?.maxPages ?? Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
+    options?.maxPages ?? Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 5);
   let prerenderer = new Prerenderer({
     maxPages,
     serverURL: options.serverURL,
