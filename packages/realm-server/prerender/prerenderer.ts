@@ -1,8 +1,6 @@
 import {
   type AffinityType,
-  type PrerenderResponseMeta,
   type RenderRouteOptions,
-  type RenderTimeoutDiagnostics,
   type ModuleRenderResponse,
   type PrerenderVisitArgs,
   type ReleaseBatchArgs,
@@ -17,6 +15,16 @@ import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry';
 import { toAffinityKey } from './affinity';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel';
 import { AffinityActivityTracker } from './affinity-activity';
+import { AsyncSemaphore } from './async-semaphore';
+import {
+  type BatchOwner,
+  computeBatchClearCacheGate,
+} from './batch-ownership-gate';
+import {
+  AffinitySnapshotSampler,
+  type PeakRegistration,
+  decorateRenderErrorsWithTimings,
+} from './render-settlement';
 
 const log = logger('prerenderer');
 const defaultHostURL = isEnvironmentMode()
@@ -33,194 +41,6 @@ type PoolMeta = {
   evicted: boolean;
   timedOut: boolean;
 };
-
-// CS-10872 (affinity-snapshot diagnostic): one registration with the
-// shared peak sampler. `currentPeak()` samples on demand and returns
-// the richest observation seen so far; `stop()` unregisters and, if
-// this was the last registration, tears down the shared interval.
-type PeakRegistration = {
-  currentPeak: () => NonNullable<RenderTimeoutDiagnostics['affinitySnapshot']>;
-  stop: () => void;
-};
-
-// Exported so cancellation-plumbing unit tests can drive it
-// directly — it's a pure in-memory counting semaphore with no
-// Chrome dependency.
-export class AsyncSemaphore {
-  #available: number;
-  // `resolve` hands the acquirer the release function once a slot
-  // frees. `onCancel` gives the cancellation path a way to splice
-  // the entry out of the queue without racing #release.
-  #queue: Array<{
-    resolve: (release: () => void) => void;
-    onCancel: () => void;
-  }> = [];
-
-  constructor(max: number) {
-    this.#available = Math.max(1, max);
-  }
-
-  async acquire(signal?: AbortSignal): Promise<() => void> {
-    throwIfAborted(signal);
-    if (this.#available > 0) {
-      this.#available--;
-      return this.#release;
-    }
-    return await new Promise<() => void>((resolve, reject) => {
-      let settled = false;
-      let entry = {
-        resolve: (release: () => void) => {
-          if (settled) {
-            // The caller cancelled right as a slot became available.
-            // Hand the slot off to the next waiter (or restore the
-            // count) by calling release immediately, so the queue
-            // doesn't deadlock.
-            release();
-            return;
-          }
-          settled = true;
-          signal?.removeEventListener('abort', onAbort);
-          resolve(release);
-        },
-        onCancel: () => {
-          if (settled) return;
-          settled = true;
-          let idx = this.#queue.indexOf(entry);
-          if (idx !== -1) this.#queue.splice(idx, 1);
-          reject(
-            new PrerenderCancelledError({
-              state: 'queued',
-              reason:
-                typeof signal?.reason === 'string' ? signal!.reason : undefined,
-            }),
-          );
-        },
-      };
-      let onAbort = entry.onCancel;
-      this.#queue.push(entry);
-      signal?.addEventListener('abort', onAbort, { once: true });
-    });
-  }
-
-  #release = () => {
-    let next = this.#queue.shift();
-    if (next) {
-      next.resolve(this.#release);
-      return;
-    }
-    this.#available++;
-  };
-}
-
-// Pure policy function for CS-10758 step 3 `clearCache` batch ownership.
-// Given the incoming visit args and the current owner entry (if any),
-// decides whether to strip `clearCache`, honor it, or replace the owner,
-// and returns the gated args plus an optional owner mutation and log
-// message. Extracted from Prerenderer.#gateClearCache so the policy table
-// is unit-testable without constructing a full Prerenderer (which would
-// launch Chrome via PagePool.warmStandbys during its constructor).
-//
-//   ┌─────────────────────────────┬─────────────┬──────────────────────┐
-//   │ caller                      │ owner state │ action               │
-//   ├─────────────────────────────┼─────────────┼──────────────────────┤
-//   │ batchId=A + clearCache:true │ none        │ honor; owner := A    │
-//   │ batchId=A + clearCache:true │ A           │ honor (same batch)   │
-//   │ batchId=B + clearCache:true │ A (B ≠ A)   │ replace owner := B,  │
-//   │                             │             │ honor clearCache     │
-//   │                             │             │ (legit successor)    │
-//   │ no batchId + clearCache:true│ any owner   │ STRIP clearCache     │
-//   │ no batchId + clearCache:true│ none        │ honor (no protect)   │
-//   │ any + clearCache:false/off  │ any         │ run; touch owner if  │
-//   │                             │             │ batchId matches      │
-//   └─────────────────────────────┴─────────────┴──────────────────────┘
-//
-// Rationale: indexing jobs are serialized per-realm through the queue, so
-// two legitimate same-realm batches never run concurrently. The only
-// source of a different-batchId + clearCache is a **successor** batch
-// (crash recovery, or the next .gts-triggered run). That successor should
-// win — it's the one with fresh module sources to pick up. Stripping its
-// clearCache would silently regress the .gts invalidation semantic. The
-// `no batchId` row covers the threat the ticket names: user-initiated
-// prerenders and cross-realm traffic that happen to land on the
-// indexer's warm tab.
-export type BatchOwner = { batchId: string; since: number };
-
-export interface BatchClearCacheDecision<
-  T extends Pick<PrerenderVisitArgs, 'renderOptions'>,
-> {
-  gatedArgs: T;
-  // `undefined`  — leave owner map unchanged
-  // `null`       — (reserved; not used today — delete the owner entry)
-  // { ... }      — set the owner entry for this affinity
-  newOwner?: BatchOwner | null;
-  log?: { level: 'info' | 'warn'; message: string };
-}
-
-export function computeBatchClearCacheGate<
-  T extends Pick<
-    PrerenderVisitArgs,
-    'affinityType' | 'affinityValue' | 'renderOptions' | 'batchId'
-  >,
->(
-  args: T,
-  owner: BatchOwner | undefined,
-  nowMs: number,
-): BatchClearCacheDecision<T> {
-  let wantsClearCache = args.renderOptions?.clearCache === true;
-  let affinityKey = toAffinityKey({
-    affinityType: args.affinityType,
-    affinityValue: args.affinityValue,
-  });
-
-  if (!wantsClearCache) {
-    // Non-clearing visit is always OK. Touch the owner timestamp if
-    // this visit belongs to the current owner (keeps-alive semantics).
-    if (args.batchId && owner?.batchId === args.batchId) {
-      return {
-        gatedArgs: args,
-        newOwner: { batchId: owner.batchId, since: nowMs },
-      };
-    }
-    return { gatedArgs: args };
-  }
-
-  if (args.batchId) {
-    // batchId + clearCache is always honored. A different batchId means
-    // a legit successor; replace ownership so subsequent visits in the
-    // new batch own the affinity.
-    let log: BatchClearCacheDecision<T>['log'];
-    if (owner && owner.batchId !== args.batchId) {
-      log = {
-        level: 'info',
-        message: `batch owner for ${affinityKey} changing from ${owner.batchId} to ${args.batchId}`,
-      };
-    }
-    return {
-      gatedArgs: args,
-      newOwner: { batchId: args.batchId, since: nowMs },
-      log,
-    };
-  }
-
-  // No batchId — user request / cross-realm traffic. If an active owner
-  // exists, strip clearCache so the owner's warm loader survives.
-  if (owner) {
-    let strippedRenderOptions = {
-      ...(args.renderOptions ?? {}),
-      clearCache: undefined,
-    };
-    return {
-      gatedArgs: { ...args, renderOptions: strippedRenderOptions },
-      log: {
-        level: 'warn',
-        message: `stripping clearCache from non-batch request for ${affinityKey} (owner=${owner.batchId})`,
-      },
-    };
-  }
-
-  // No batchId and no owner — nothing to protect; honor.
-  return { gatedArgs: args };
-}
 
 export class Prerenderer {
   #stopped = false;
@@ -241,14 +61,20 @@ export class Prerenderer {
   // warm loader. See `#gateClearCache` for the full policy. Populated on
   // any batch'd `clearCache: true` visit and cleared on `releaseBatch`,
   // successor-batch replacement, or affinity disposal.
-  #batchOwnership = new Map<string, { batchId: string; since: number }>();
+  #batchOwnership = new Map<string, BatchOwner>();
 
   // CS-10872 (affinity-snapshot diagnostic): per-affinity tracker of
   // in-flight + queued Prerenderer calls. Populated on every
-  // `prerenderVisit` / `prerenderModule` entry and sampled at
-  // render-settle time — see `#getAffinitySnapshot` and
-  // `affinity-activity.ts`.
+  // `prerenderVisit` / `prerenderModule` entry and read by
+  // `#affinitySnapshotSampler` at render-settle time.
   #affinityActivity = new AffinityActivityTracker();
+
+  // CS-10872 (affinity-snapshot diagnostic): peak-sampling state lives
+  // in its own class now — see `render-settlement.ts`. The Prerenderer
+  // holds one sampler, registers each `prerenderVisit` / `prerenderModule`
+  // with it, and hands the resulting `PeakRegistration` to the method's
+  // finally block.
+  #affinitySnapshotSampler!: AffinitySnapshotSampler;
 
   constructor(options: { serverURL: string; maxPages?: number }) {
     let maxPages = options.maxPages ?? 4;
@@ -274,6 +100,10 @@ export class Prerenderer {
     this.#renderRunner = new RenderRunner({
       pagePool: this.#pagePool,
       boxelHostURL,
+    });
+    this.#affinitySnapshotSampler = new AffinitySnapshotSampler({
+      pagePool: this.#pagePool,
+      tracker: this.#affinityActivity,
     });
     this.#affinityIdleEvictMs = this.#resolveAffinityIdleEvictMs();
     this.#startCleanupLoop();
@@ -318,11 +148,7 @@ export class Prerenderer {
       clearInterval(this.#queueSnapshotInterval);
       this.#queueSnapshotInterval = undefined;
     }
-    if (this.#peakSamplerInterval) {
-      clearInterval(this.#peakSamplerInterval);
-      this.#peakSamplerInterval = undefined;
-    }
-    this.#snapshotPeaks.clear();
+    this.#affinitySnapshotSampler.shutdown();
     await this.#pagePool.closeAll();
     await this.#browserManager.stop();
     this.#stopped = true;
@@ -399,190 +225,10 @@ export class Prerenderer {
     return owner ? { batchId: owner.batchId, since: owner.since } : undefined;
   }
 
-  // Consolidate all diagnostic payloads onto `response.meta.diagnostics`
-  // so the indexer can pick them up uniformly and persist into
-  // `boxel_index.timing_diagnostics`. We merge two sources:
-  //
-  //   - Server-observed timings (launchMs / waits / renderElapsedMs /
-  //     totalElapsedMs) from the Prerenderer's own measurements.
-  //   - Host-side breadcrumbs (renderStage, in-flight loads, etc.)
-  //     lifted out of every embedded `RenderError.diagnostics` —
-  //     the transient transport set by `withTimeout`. We delete the
-  //     outer field after lifting so nothing downstream has to know
-  //     about the two-channel layout.
-  //
-  // The HTTP response envelope also carries `meta`, but
-  // remote-prerenderer only forwards `data.attributes`, not the
-  // envelope — so the values have to live inside the response body.
-  static decorateRenderErrorsWithTimings(
-    response: unknown,
-    timings: {
-      launchMs: number;
-      renderMs: number;
-      waits: RenderTimeoutDiagnostics['waits'];
-    },
-    totalMs: number,
-    affinitySnapshot?: RenderTimeoutDiagnostics['affinitySnapshot'],
-  ): void {
-    if (!response || typeof response !== 'object') {
-      return;
-    }
-    let r = response as Record<string, unknown>;
-    // Walk every embedded RenderError and lift its `.diagnostics` into
-    // a single aggregated block on response.meta. Typical case: one
-    // RenderError carries the full payload; aggregation covers the
-    // rare case where multiple pass errors each contributed fields.
-    let lifted: RenderTimeoutDiagnostics = {};
-    let lift = (wrapper: unknown) => {
-      if (!wrapper || typeof wrapper !== 'object') return;
-      let w = wrapper as { diagnostics?: RenderTimeoutDiagnostics };
-      if (!w.diagnostics || typeof w.diagnostics !== 'object') return;
-      lifted = { ...lifted, ...w.diagnostics };
-      delete w.diagnostics;
-    };
-    lift(r.error);
-    lift(r.pageUnusableError);
-    for (let key of ['card', 'fileExtract', 'fileRender'] as const) {
-      let sub = r[key];
-      if (sub && typeof sub === 'object') {
-        lift((sub as { error?: unknown }).error);
-      }
-    }
-    let diagnostics: RenderTimeoutDiagnostics = {
-      ...lifted,
-      launchMs: timings.launchMs,
-      waits: timings.waits,
-      renderElapsedMs: timings.renderMs,
-      totalElapsedMs: totalMs,
-      ...(affinitySnapshot ? { affinitySnapshot } : {}),
-    };
-    let existingMeta = (r.meta as PrerenderResponseMeta | undefined) ?? {};
-    r.meta = {
-      ...existingMeta,
-      diagnostics,
-    };
-  }
-
-  // CS-10872 (affinity-snapshot diagnostic): peak-sampling state.
-  // Reason for peak sampling: the self-referential deadlock's smoking
-  // gun is a sub-prerender *queued* on our tab *during* the render,
-  // but by the time the outer call returns the tab has been evicted
-  // and the queued siblings have been released — a one-shot end-of-
-  // call snapshot sees an empty affinity. Sampling periodically and
-  // keeping the peak catches the deadlock state while it's happening.
-  //
-  // One shared timer (not one per call) iterates every active
-  // registration on each tick so that an incident-time backlog of
-  // queued calls doesn't multiply timer overhead.
-  #snapshotPeaks = new Map<
-    symbol,
-    {
-      affinityKey: string;
-      selfHandle: symbol;
-      peak: NonNullable<RenderTimeoutDiagnostics['affinitySnapshot']>;
-    }
-  >();
-  #peakSamplerInterval: NodeJS.Timeout | undefined;
-  #peakSamplerIntervalMs = 3000;
-
-  #registerPeakSampling(
-    affinityKey: string,
-    selfHandle: symbol,
-  ): PeakRegistration {
-    let id = Symbol(`peak:${affinityKey}`);
-    let initial = this.#getAffinitySnapshot(affinityKey, selfHandle)!;
-    this.#snapshotPeaks.set(id, {
-      affinityKey,
-      selfHandle,
-      peak: initial,
-    });
-    this.#ensurePeakSamplerRunning();
-    return {
-      currentPeak: () => {
-        let entry = this.#snapshotPeaks.get(id);
-        if (!entry) return initial;
-        let cur = this.#getAffinitySnapshot(
-          entry.affinityKey,
-          entry.selfHandle,
-        )!;
-        if (Prerenderer.#isPeakBetter(cur, entry.peak)) entry.peak = cur;
-        return entry.peak;
-      },
-      stop: () => {
-        this.#snapshotPeaks.delete(id);
-        if (this.#snapshotPeaks.size === 0 && this.#peakSamplerInterval) {
-          clearInterval(this.#peakSamplerInterval);
-          this.#peakSamplerInterval = undefined;
-        }
-      },
-    };
-  }
-
-  #ensurePeakSamplerRunning(): void {
-    if (this.#peakSamplerInterval) return;
-    this.#peakSamplerInterval = setInterval(() => {
-      // Per-entry try/catch: a snapshot failure for one affinity
-      // (e.g. edge state during a concurrent restart/dispose) must
-      // not prevent the rest of this tick's entries from sampling.
-      for (let entry of this.#snapshotPeaks.values()) {
-        try {
-          let cur = this.#getAffinitySnapshot(
-            entry.affinityKey,
-            entry.selfHandle,
-          )!;
-          if (Prerenderer.#isPeakBetter(cur, entry.peak)) entry.peak = cur;
-        } catch (e) {
-          log.warn(
-            `affinity-snapshot peak sampler failed for ${entry.affinityKey}`,
-            e,
-          );
-        }
-      }
-    }, this.#peakSamplerIntervalMs);
-    this.#peakSamplerInterval.unref();
-  }
-
-  static #isPeakBetter(
-    candidate: NonNullable<RenderTimeoutDiagnostics['affinitySnapshot']>,
-    incumbent: NonNullable<RenderTimeoutDiagnostics['affinitySnapshot']>,
-  ): boolean {
-    let c = candidate.sameAffinityActivity.length;
-    let i = incumbent.sameAffinityActivity.length;
-    if (c !== i) return c > i;
-    return candidate.pendingTotal > incumbent.pendingTotal;
-  }
-
-  // CS-10872 (affinity-snapshot diagnostic): snapshot the same affinity,
-  // excluding the caller's own entry. Combines the tracker's view of
-  // same-affinity activity with the PagePool's tab / pending counts so
-  // operators can correlate "tabs/pending" with the specific URLs
-  // sharing the affinity right now.
-  #getAffinitySnapshot(
-    affinityKey: string,
-    selfHandle: symbol,
-  ): RenderTimeoutDiagnostics['affinitySnapshot'] {
-    let tabCount = 0;
-    let pendingTotal = 0;
-    let maxPending = 0;
-    for (let a of this.#pagePool.getQueueDepthSnapshot().affinities) {
-      if (a.affinityKey === affinityKey) {
-        tabCount = a.tabCount;
-        pendingTotal = a.pendingTotal;
-        maxPending = a.maxPending;
-        break;
-      }
-    }
-    return {
-      affinityKey,
-      tabCount,
-      pendingTotal,
-      maxPending,
-      sameAffinityActivity: this.#affinityActivity.sameAffinityActivity(
-        affinityKey,
-        selfHandle,
-      ),
-    };
-  }
+  // Back-compat static re-export: older callers / tests reference
+  // `Prerenderer.decorateRenderErrorsWithTimings`. Delegates to the free
+  // function in `render-settlement.ts`.
+  static decorateRenderErrorsWithTimings = decorateRenderErrorsWithTimings;
 
   #gateClearCache<
     T extends PrerenderVisitArgs & {
@@ -643,7 +289,10 @@ export class Prerenderer {
     // fails under pressure). Without this, `activity` would leak.
     let poller: PeakRegistration | undefined;
     try {
-      poller = this.#registerPeakSampling(affinityKey, activity.handle);
+      poller = this.#affinitySnapshotSampler.register(
+        affinityKey,
+        activity.handle,
+      );
       let overallStart = Date.now();
       let attemptOptions = renderOptions;
       let lastResult:
@@ -874,7 +523,10 @@ export class Prerenderer {
     // throw from `#registerPeakSampling` can't leak the activity entry.
     let poller: PeakRegistration | undefined;
     try {
-      poller = this.#registerPeakSampling(affinityKey, activity.handle);
+      poller = this.#affinitySnapshotSampler.register(
+        affinityKey,
+        activity.handle,
+      );
       let overallStart = Date.now();
       let attemptOptions = renderOptions;
       let lastResult:
