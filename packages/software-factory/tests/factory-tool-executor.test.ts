@@ -133,9 +133,9 @@ module('factory-tool-executor > source realm protection', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute('realm-read', {
+    let result = await executor.execute('realm-search', {
       'realm-url': 'https://realms.example.test/user/target/',
-      path: 'CardDef/my-card.gts',
+      query: JSON.stringify({ filter: { type: { name: 'Issue' } } }),
     });
 
     assert.strictEqual(result.exitCode, 0);
@@ -151,9 +151,9 @@ module('factory-tool-executor > source realm protection', function () {
     );
 
     try {
-      await executor.execute('realm-read', {
+      await executor.execute('realm-search', {
         'realm-url': 'https://realms.example.test/other/unrelated/',
-        path: 'foo.json',
+        query: '{}',
       });
       assert.ok(false, 'should have thrown');
     } catch (err) {
@@ -171,9 +171,9 @@ module('factory-tool-executor > source realm protection', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute('realm-read', {
+    let result = await executor.execute('realm-search', {
       'realm-url': 'https://realms.example.test/user/scratch-123/',
-      path: 'foo.json',
+      query: '{}',
     });
 
     assert.strictEqual(result.exitCode, 0);
@@ -189,9 +189,9 @@ module('factory-tool-executor > source realm protection', function () {
     );
 
     try {
-      await executor.execute('realm-read', {
+      await executor.execute('realm-search', {
         'realm-url': 'https://evil.example.test/hacker/realm/',
-        path: 'secrets.json',
+        query: '{}',
       });
       assert.ok(false, 'should have thrown');
     } catch (err) {
@@ -221,97 +221,6 @@ module('factory-tool-executor > source realm protection', function () {
 // ---------------------------------------------------------------------------
 
 module('factory-tool-executor > realm-api execution', function () {
-  test('realm-read makes GET request', async function (assert) {
-    let capturedUrl: string | undefined;
-    let capturedMethod: string | undefined;
-
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-        capturedUrl = String(input);
-        capturedMethod = init?.method;
-        return new Response(JSON.stringify({ card: 'data' }), {
-          status: 200,
-          headers: { 'Content-Type': SupportedMimeType.JSON },
-        });
-      }) as typeof globalThis.fetch,
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    let result = await executor.execute('realm-read', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      path: 'CardDef/my-card.gts',
-    });
-
-    assert.strictEqual(capturedMethod, 'GET');
-    assert.strictEqual(
-      capturedUrl,
-      'https://realms.example.test/user/target/CardDef/my-card.gts',
-    );
-    assert.strictEqual(result.exitCode, 0);
-    assert.deepEqual(result.output, { card: 'data' });
-    assert.strictEqual(result.tool, 'realm-read');
-    assert.strictEqual(typeof result.durationMs, 'number');
-  });
-
-  test('realm-write makes POST request', async function (assert) {
-    let capturedUrl: string | undefined;
-    let capturedMethod: string | undefined;
-    let capturedBody: string | undefined;
-
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-        capturedUrl = String(input);
-        capturedMethod = init?.method;
-        capturedBody = typeof init?.body === 'string' ? init.body : undefined;
-        return new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { 'Content-Type': SupportedMimeType.JSON },
-        });
-      }) as typeof globalThis.fetch,
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    let result = await executor.execute('realm-write', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      path: 'CardDef/new-card.gts',
-      content: 'export class NewCard {}',
-    });
-
-    assert.strictEqual(capturedMethod, 'POST');
-    assert.strictEqual(
-      capturedUrl,
-      'https://realms.example.test/user/target/CardDef/new-card.gts',
-    );
-    assert.strictEqual(capturedBody, 'export class NewCard {}');
-    assert.strictEqual(result.exitCode, 0);
-  });
-
-  test('realm-delete makes DELETE request', async function (assert) {
-    let capturedMethod: string | undefined;
-
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
-        capturedMethod = init?.method;
-        return new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { 'Content-Type': SupportedMimeType.JSON },
-        });
-      }) as typeof globalThis.fetch,
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    let result = await executor.execute('realm-delete', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      path: 'CardDef/old-card.gts',
-    });
-
-    assert.strictEqual(capturedMethod, 'DELETE');
-    assert.strictEqual(result.exitCode, 0);
-  });
-
   test('realm-search makes QUERY request', async function (assert) {
     let capturedMethod: string | undefined;
     let capturedUrl: string | undefined;
@@ -346,9 +255,9 @@ module('factory-tool-executor > realm-api execution', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute('realm-read', {
+    let result = await executor.execute('realm-search', {
       'realm-url': 'https://realms.example.test/user/target/',
-      path: 'missing.json',
+      query: JSON.stringify({ filter: { type: { name: 'Issue' } } }),
     });
 
     assert.strictEqual(result.exitCode, 1);
@@ -372,13 +281,13 @@ module('factory-tool-executor > logging', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    await executor.execute('realm-read', {
+    await executor.execute('realm-search', {
       'realm-url': 'https://realms.example.test/user/target/',
-      path: 'foo.json',
+      query: '{}',
     });
 
     assert.strictEqual(logEntries.length, 1);
-    assert.strictEqual(logEntries[0].tool, 'realm-read');
+    assert.strictEqual(logEntries[0].tool, 'realm-search');
     assert.strictEqual(logEntries[0].category, 'realm-api');
     assert.strictEqual(logEntries[0].exitCode, 0);
     assert.strictEqual(typeof logEntries[0].durationMs, 'number');
@@ -395,9 +304,9 @@ module('factory-tool-executor > logging', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute('realm-read', {
+    let result = await executor.execute('realm-search', {
       'realm-url': 'https://realms.example.test/user/target/',
-      path: 'broken.json',
+      query: '{}',
     });
 
     assert.strictEqual(result.exitCode, 1);
@@ -418,9 +327,9 @@ module('factory-tool-executor > ToolResult shape', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute('realm-read', {
+    let result = await executor.execute('realm-search', {
       'realm-url': 'https://realms.example.test/user/target/',
-      path: 'foo.json',
+      query: '{}',
     });
 
     assert.strictEqual(typeof result.tool, 'string');
@@ -436,14 +345,14 @@ module('factory-tool-executor > ToolResult shape', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute('realm-read', {
+    let result = await executor.execute('realm-search', {
       'realm-url': 'https://realms.example.test/user/target/',
-      path: 'foo.json',
+      query: '{}',
     });
 
     let serialized = JSON.stringify(result);
     let deserialized = JSON.parse(serialized) as ToolResult;
-    assert.strictEqual(deserialized.tool, 'realm-read');
+    assert.strictEqual(deserialized.tool, 'realm-search');
     assert.strictEqual(deserialized.exitCode, 0);
     assert.deepEqual(deserialized.output, { data: [1, 2, 3] });
   });

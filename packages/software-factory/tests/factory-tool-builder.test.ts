@@ -13,7 +13,10 @@ import {
 import type { ToolExecutor } from '../src/factory-tool-executor';
 import { ToolRegistry } from '../src/factory-tool-registry';
 import { createMockClient } from './helpers/mock-client';
-import { mkTestWorkspace, type TestWorkspace } from './helpers/workspace-fixture';
+import {
+  mkTestWorkspace,
+  type TestWorkspace,
+} from './helpers/workspace-fixture';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -66,19 +69,8 @@ const DEFAULT_CARD_TYPE_SCHEMAS = new Map<
   ],
 ]);
 
-let activeWorkspaces: TestWorkspace[] = [];
-
 function makeWorkspace(): TestWorkspace {
-  let ws = mkTestWorkspace();
-  activeWorkspaces.push(ws);
-  return ws;
-}
-
-function cleanupWorkspaces(): void {
-  for (let ws of activeWorkspaces) {
-    ws.cleanup();
-  }
-  activeWorkspaces = [];
+  return mkTestWorkspace();
 }
 
 function makeConfig(

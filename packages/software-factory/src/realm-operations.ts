@@ -8,7 +8,7 @@
  * realm via `client.sync` orchestrated by the loop.
  */
 
-import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
@@ -121,4 +121,3 @@ export async function getNextValidationSequenceNumber(
 
   return maxSeq + 1;
 }
-

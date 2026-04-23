@@ -84,10 +84,7 @@ export async function completeLintResult(
   attrs: LintResultAttributes,
   options: LintResultRealmOptions & { projectCardUrl?: string },
 ): Promise<{ updated: boolean; error?: string }> {
-  let readResult = await readCard(
-    options.workspaceDir,
-    `${lintResultId}.json`,
-  );
+  let readResult = await readCard(options.workspaceDir, `${lintResultId}.json`);
 
   if (!readResult.ok || !readResult.document) {
     return {

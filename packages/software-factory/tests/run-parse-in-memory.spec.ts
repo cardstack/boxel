@@ -12,6 +12,7 @@ import {
   VALID_MODULE_GTS,
 } from './helpers/parse-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
+import { mkTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -136,9 +137,13 @@ test.describe('runParseInMemory e2e', () => {
         }),
       ).toBe(true);
 
+      let workspace = mkTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let result = await runParseInMemory({
         targetRealmUrl: realmUrl,
         client,
+        workspaceDir: workspace.dir,
       });
 
       expect(result.status).toBe('passed');
@@ -194,9 +199,13 @@ test.describe('runParseInMemory e2e', () => {
         }),
       ).toBe(true);
 
+      let workspace = mkTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let result = await runParseInMemory({
         targetRealmUrl: realmUrl,
         client,
+        workspaceDir: workspace.dir,
       });
 
       expect(result.status).toBe('failed');
@@ -236,9 +245,13 @@ test.describe('runParseInMemory e2e', () => {
     try {
       await clearParseableFixtures(client, realmUrl);
 
+      let workspace = mkTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let result = await runParseInMemory({
         targetRealmUrl: realmUrl,
         client,
+        workspaceDir: workspace.dir,
       });
 
       expect(result.status).toBe('passed');
@@ -266,6 +279,7 @@ test.describe('runParseInMemory e2e', () => {
     let result = await runParseInMemory({
       targetRealmUrl: 'http://localhost:1/',
       client: thrower,
+      workspaceDir: mkTestWorkspace().dir,
     });
 
     expect(result.status).toBe('error');
@@ -316,11 +330,15 @@ test.describe('runParseInMemory e2e', () => {
         }),
       ).toBe(true);
 
+      let workspace = mkTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       // Parse just the clean file — even though broken-card.gts is dirty,
       // scoping should mean a pass.
       let cleanOnly = await runParseInMemory({
         targetRealmUrl: realmUrl,
         client,
+        workspaceDir: workspace.dir,
         path: 'parse-test-card.gts',
       });
       expect(cleanOnly.status).toBe('passed');
@@ -332,6 +350,7 @@ test.describe('runParseInMemory e2e', () => {
       let brokenOnly = await runParseInMemory({
         targetRealmUrl: realmUrl,
         client,
+        workspaceDir: workspace.dir,
         path: 'broken-card.gts',
       });
       expect(brokenOnly.status).toBe('failed');
@@ -410,10 +429,14 @@ test.describe('runParseInMemory e2e', () => {
         ),
       ).toBe(true);
 
+      let workspace = mkTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       // Valid JSON → passed.
       let validOnly = await runParseInMemory({
         targetRealmUrl: realmUrl,
         client,
+        workspaceDir: workspace.dir,
         path: 'ParseTestCard/example-1.json',
       });
       expect(validOnly.status).toBe('passed');
@@ -427,6 +450,7 @@ test.describe('runParseInMemory e2e', () => {
       let brokenOnly = await runParseInMemory({
         targetRealmUrl: realmUrl,
         client,
+        workspaceDir: workspace.dir,
         path: 'ParseTestCard/broken-example.json',
       });
       expect(brokenOnly.status).toBe('failed');
@@ -463,6 +487,7 @@ test.describe('runParseInMemory e2e', () => {
     let result = await runParseInMemory({
       targetRealmUrl: 'http://localhost:1/',
       client: stubClient,
+      workspaceDir: mkTestWorkspace().dir,
       path: 'notes.md',
     });
 
@@ -492,6 +517,7 @@ test.describe('runParseInMemory e2e', () => {
     let result = await runParseInMemory({
       targetRealmUrl: 'http://localhost:1/',
       client: stubClient,
+      workspaceDir: mkTestWorkspace().dir,
       path: 'ParseTestCard/example-1',
     });
 

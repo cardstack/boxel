@@ -14,6 +14,7 @@ import {
   PASSING_TEST_GTS,
   writeAndAwaitIndex,
 } from './helpers/qunit-test-fixtures';
+import { mkTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -56,6 +57,9 @@ test.describe('factory-test-realm e2e', () => {
       });
       expect(moduleResponse.status).toBe(200);
 
+      let workspace = mkTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let handle = await executeTestRunFromRealm({
         targetRealmUrl: realmUrl,
         testResultsModuleUrl,
@@ -63,8 +67,14 @@ test.describe('factory-test-realm e2e', () => {
         slug: 'hello-e2e',
         testNames: [],
         client,
+        workspaceDir: workspace.dir,
         hostAppUrl: realm.hostAppUrl,
       });
+
+      // Push the TestRun card to the realm so the client.read assertion
+      // below finds it via HTTP.
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // Handle assertions
       expect(handle.testRunId).toContain('Validations/test_hello-e2e');
@@ -125,6 +135,9 @@ test.describe('factory-test-realm e2e', () => {
         FAILING_TEST_GTS,
       );
 
+      let workspace = mkTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let handle = await executeTestRunFromRealm({
         targetRealmUrl: realmUrl,
         testResultsModuleUrl,
@@ -132,8 +145,12 @@ test.describe('factory-test-realm e2e', () => {
         slug: 'hello-fail',
         testNames: [],
         client,
+        workspaceDir: workspace.dir,
         hostAppUrl: realm.hostAppUrl,
       });
+
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // Handle assertions
       expect(handle.testRunId).toContain('Validations/test_hello-fail');
@@ -185,6 +202,7 @@ test.describe('factory-test-realm e2e', () => {
           throw new Error('ECONNREFUSED');
         },
       }),
+      workspaceDir: mkTestWorkspace().dir,
     };
 
     let result = await createTestRun('error-test', ['test A'], options);

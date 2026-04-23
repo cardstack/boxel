@@ -233,7 +233,8 @@ export async function runFactoryIssueLoop(
     createValidator,
     targetRealmUrl,
     workspaceDir,
-    syncWorkspace: () => syncWorkspaceToRealm(client, targetRealmUrl, workspaceDir),
+    syncWorkspace: () =>
+      syncWorkspaceToRealm(client, targetRealmUrl, workspaceDir),
     briefUrl: config.briefUrl,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
     maxOuterCycles: config.maxOuterCycles,

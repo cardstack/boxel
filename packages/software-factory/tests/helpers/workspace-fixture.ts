@@ -8,10 +8,18 @@
  * asserting against it.
  */
 
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  existsSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { writeFileSync } from 'node:fs';
+
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
 export interface TestWorkspace {
   /** Absolute path to the workspace root. */
@@ -49,4 +57,24 @@ export function mkTestWorkspace(): TestWorkspace {
       }
     },
   };
+}
+
+/**
+ * Create a workspace and pull the realm into it. Convenience for spec
+ * tests that need the workspace pre-populated with the realm's current
+ * state before running a step or in-memory tool.
+ */
+export async function pullIntoTestWorkspace(
+  client: BoxelCLIClient,
+  realmUrl: string,
+): Promise<TestWorkspace> {
+  let workspace = mkTestWorkspace();
+  let pullResult = await client.pull(realmUrl, workspace.dir);
+  if (pullResult.error) {
+    workspace.cleanup();
+    throw new Error(
+      `Failed to pull realm into test workspace: ${pullResult.error}`,
+    );
+  }
+  return workspace;
 }

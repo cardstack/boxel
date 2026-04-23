@@ -159,14 +159,21 @@ test.describe('eval-validation e2e', () => {
       });
       expect(indexed).toBe(true);
 
+      let workspace = mkTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let step = new EvalValidationStep({
         client,
         realmServerUrl,
         evalResultsModuleUrl,
+        workspaceDir: workspace.dir,
         issueId: 'Issues/eval-fail-e2e',
       });
 
       let result = await step.run(realmUrl);
+
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // Must fail — broken-module.gts imports from a non-existent module
       expect(result.step).toBe('evaluate');
@@ -218,14 +225,21 @@ test.describe('eval-validation e2e', () => {
     });
 
     try {
+      let workspace = mkTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let step = new EvalValidationStep({
         client,
         realmServerUrl,
         evalResultsModuleUrl,
+        workspaceDir: workspace.dir,
         issueId: 'Issues/eval-exclude-e2e',
       });
 
       let result = await step.run(realmUrl);
+
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // The fixture realm has hello.gts and hello.test.gts
       // Only hello.gts (and home.gts) should be evaluated, not hello.test.gts

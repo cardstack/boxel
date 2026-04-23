@@ -102,6 +102,24 @@ export interface RunFactoryEntrypointDependencies {
    * this defaults to `resolveWorkspaceDir(targetRealmUrl)`.
    */
   resolveWorkspaceDir?: (targetRealmUrl: string) => string;
+  /**
+   * Pull the target realm into the workspace. Tests stub this out so
+   * they don't make real HTTP calls. Defaults to `client.pull`.
+   */
+  pullTargetRealm?: (
+    client: BoxelCLIClient,
+    realmUrl: string,
+    workspaceDir: string,
+  ) => Promise<void>;
+  /**
+   * Push the workspace to the target realm (prefer-local). Tests stub
+   * this out. Defaults to `client.sync({ preferLocal: true })`.
+   */
+  syncWorkspaceToRealm?: (
+    client: BoxelCLIClient,
+    realmUrl: string,
+    workspaceDir: string,
+  ) => Promise<void>;
 }
 export { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
@@ -252,21 +270,14 @@ export async function runFactoryEntrypoint(
   // read/write against the target realm happens against this directory;
   // the realm itself is reached only via `client.pull` / `client.sync`.
   // The path is deterministic per realm so re-runs reuse state.
-  let workspaceDir = (
-    dependencies?.resolveWorkspaceDir ?? resolveWorkspaceDir
-  )(targetRealm.url);
+  let workspaceDir = (dependencies?.resolveWorkspaceDir ?? resolveWorkspaceDir)(
+    targetRealm.url,
+  );
   await ensureWorkspaceDir(workspaceDir);
   log.info(`Workspace directory: ${workspaceDir}`);
 
-  let pullResult = await client.pull(targetRealm.url, workspaceDir);
-  if (pullResult.error) {
-    throw new Error(
-      `Failed to pull target realm into workspace ${workspaceDir}: ${pullResult.error}`,
-    );
-  }
-  log.info(
-    `Pulled ${pullResult.files.length} file(s) from target realm into workspace`,
-  );
+  let pullTargetRealm = dependencies?.pullTargetRealm ?? defaultPullTargetRealm;
+  await pullTargetRealm(client, targetRealm.url, workspaceDir);
 
   // Create the seed issue locally
   let seedResult = await (dependencies?.createSeed ?? createSeedIssue)(
@@ -277,19 +288,9 @@ export async function runFactoryEntrypoint(
 
   // Push the freshly-written seed (and any other pre-existing workspace
   // state) to the realm so the scheduler's `listIssues()` query sees it.
-  let postSeedSync = await client.sync(targetRealm.url, workspaceDir, {
-    preferLocal: true,
-  });
-  if (postSeedSync.error) {
-    throw new Error(
-      `Failed to sync workspace to realm after seed creation: ${postSeedSync.error}`,
-    );
-  }
-  if (postSeedSync.hasError) {
-    log.warn(
-      'Post-seed workspace sync completed with errors — see prior log lines',
-    );
-  }
+  let syncWorkspaceToRealm =
+    dependencies?.syncWorkspaceToRealm ?? defaultSyncWorkspaceToRealm;
+  await syncWorkspaceToRealm(client, targetRealm.url, workspaceDir);
 
   let summary = buildFactoryEntrypointSummary(
     options,
@@ -399,6 +400,40 @@ export function buildFactoryEntrypointSummary(
       nextStep: 'run-issue-loop',
     },
   };
+}
+
+async function defaultPullTargetRealm(
+  client: BoxelCLIClient,
+  realmUrl: string,
+  workspaceDir: string,
+): Promise<void> {
+  let result = await client.pull(realmUrl, workspaceDir);
+  if (result.error) {
+    throw new Error(
+      `Failed to pull target realm into workspace ${workspaceDir}: ${result.error}`,
+    );
+  }
+  log.info(
+    `Pulled ${result.files.length} file(s) from target realm into workspace`,
+  );
+}
+
+async function defaultSyncWorkspaceToRealm(
+  client: BoxelCLIClient,
+  realmUrl: string,
+  workspaceDir: string,
+): Promise<void> {
+  let result = await client.sync(realmUrl, workspaceDir, {
+    preferLocal: true,
+  });
+  if (result.error) {
+    throw new Error(`Failed to sync workspace to realm: ${result.error}`);
+  }
+  if (result.hasError) {
+    log.warn(
+      'Workspace sync completed with errors — see prior log lines for details',
+    );
+  }
 }
 
 function requireStringValue(

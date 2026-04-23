@@ -55,10 +55,7 @@ export async function completeTestRun(
   attrs: TestRunAttributes,
   options: TestRunRealmOptions & { projectCardUrl?: string },
 ): Promise<{ updated: boolean; error?: string }> {
-  let readResult = await readCard(
-    options.workspaceDir,
-    `${testRunId}.json`,
-  );
+  let readResult = await readCard(options.workspaceDir, `${testRunId}.json`);
 
   if (!readResult.ok || !readResult.document) {
     return {

@@ -76,10 +76,7 @@ export async function completeEvalResult(
   attrs: EvalResultAttributes,
   options: EvalResultRealmOptions & { projectCardUrl?: string },
 ): Promise<{ updated: boolean; error?: string }> {
-  let readResult = await readCard(
-    options.workspaceDir,
-    `${evalResultId}.json`,
-  );
+  let readResult = await readCard(options.workspaceDir, `${evalResultId}.json`);
 
   if (!readResult.ok || !readResult.document) {
     return {
