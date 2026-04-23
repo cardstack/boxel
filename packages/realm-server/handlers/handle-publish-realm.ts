@@ -289,68 +289,68 @@ export default function handlePublishRealm({
         );
       }
 
-      let existingPublishedRealm = realms.find(
-        (r) => r.url === publishedRealmURL,
-      );
-
-      let userId;
-      let realmUsername;
-      let publishedRealmId: string;
-
-      if (existingPublishedRealm) {
-        let results = (await query(dbAdapter, [
-          `SELECT id, owner_username FROM published_realms WHERE published_realm_url =`,
-          param(publishedRealmURL),
-        ])) as Pick<PublishedRealmTable, 'id' | 'owner_username'>[];
-        if (!results.length) {
-          throw new Error(
-            `Published realm record not found for ${publishedRealmURL}`,
+      // Acquire the per-realm write lock early — before the existing-realm
+      // check, Matrix user registration, and permissions insert — so that
+      // two concurrent publishes for the same publishedRealmURL cannot
+      // race through those pre-lock steps (which would otherwise orphan a
+      // Matrix user / permissions row when one of them fails on the
+      // published_realms insert).
+      let { realm, lastPublishedAt, publishedRealmId } =
+        await withRealmWriteLock(dbAdapter, publishedRealmURL, async () => {
+          let existingPublishedRealm = realms.find(
+            (r) => r.url === publishedRealmURL,
           );
-        }
-        publishedRealmId = results[0].id;
-        realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
-      } else {
-        publishedRealmId = uuidv4();
-        realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
 
-        let { userId: newUserId } = await registerUser({
-          matrixURL: matrixClient.matrixURL,
-          displayname: realmUsername,
-          username: realmUsername,
-          password: await passwordFromSeed(realmUsername, realmSecretSeed),
-          registrationSecret: await getMatrixRegistrationSecret(),
-        });
-        userId = newUserId;
+          let userId;
+          let realmUsername;
+          let publishedRealmId: string;
 
-        await insertPermissions(dbAdapter, new URL(publishedRealmURL), {
-          [userId]: ['read', 'realm-owner'],
-          [ownerUserId]: ['read', 'realm-owner'],
-          '*': ['read'],
-        });
-      }
+          if (existingPublishedRealm) {
+            let results = (await query(dbAdapter, [
+              `SELECT id, owner_username FROM published_realms WHERE published_realm_url =`,
+              param(publishedRealmURL),
+            ])) as Pick<PublishedRealmTable, 'id' | 'owner_username'>[];
+            if (!results.length) {
+              throw new Error(
+                `Published realm record not found for ${publishedRealmURL}`,
+              );
+            }
+            publishedRealmId = results[0].id;
+            realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
+          } else {
+            publishedRealmId = uuidv4();
+            realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
 
-      let sourceRealm = realms.find((r) => r.url === sourceRealmURL);
-      if (!sourceRealm?.dir) {
-        throw new Error(
-          `Could not determine filesystem path for source realm ${sourceRealmURL}`,
-        );
-      }
-      // Publishing copies index state from the source realm, so we need to
-      // wait for any in-flight indexing/update propagation to settle first.
-      await sourceRealm.indexing();
-      await sourceRealm.flushUpdateEvents();
-      let sourceRealmPath = sourceRealm.dir;
-      let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
-      let publishedRealmPath = join(publishedDir, publishedRealmId);
-      // Serialize concurrent publishers of the same published realm URL.
-      // The lock wraps the FS swap, the legacy DB writes, and the CS-10889
-      // dual-write, so two in-flight publishes to the same URL never
-      // interleave. The lock is released on function exit (success or
-      // throw) via the finally block in withRealmWriteLock.
-      let { realm, lastPublishedAt } = await withRealmWriteLock(
-        dbAdapter,
-        publishedRealmURL,
-        async () => {
+            let { userId: newUserId } = await registerUser({
+              matrixURL: matrixClient.matrixURL,
+              displayname: realmUsername,
+              username: realmUsername,
+              password: await passwordFromSeed(realmUsername, realmSecretSeed),
+              registrationSecret: await getMatrixRegistrationSecret(),
+            });
+            userId = newUserId;
+
+            await insertPermissions(dbAdapter, new URL(publishedRealmURL), {
+              [userId]: ['read', 'realm-owner'],
+              [ownerUserId]: ['read', 'realm-owner'],
+              '*': ['read'],
+            });
+          }
+
+          let sourceRealm = realms.find((r) => r.url === sourceRealmURL);
+          if (!sourceRealm?.dir) {
+            throw new Error(
+              `Could not determine filesystem path for source realm ${sourceRealmURL}`,
+            );
+          }
+          // Publishing copies index state from the source realm, so we need to
+          // wait for any in-flight indexing/update propagation to settle first.
+          await sourceRealm.indexing();
+          await sourceRealm.flushUpdateEvents();
+          let sourceRealmPath = sourceRealm.dir;
+          let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
+          let publishedRealmPath = join(publishedDir, publishedRealmId);
+
           // Copy source to a temporary directory first, then swap it into
           // place so that a failed copy doesn't destroy the existing
           // published realm (e.g. due to disk-full or permission errors).
@@ -461,9 +461,8 @@ export default function handlePublishRealm({
             lastPublishedAt: Number(lastPublishedAt),
           });
 
-          return { realm: mountedRealm, lastPublishedAt };
-        },
-      );
+          return { realm: mountedRealm, lastPublishedAt, publishedRealmId };
+        });
 
       let response = createResponse({
         body: JSON.stringify(

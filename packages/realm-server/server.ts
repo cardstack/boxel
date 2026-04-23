@@ -916,11 +916,14 @@ export class RealmServer {
       publishable: true,
     };
 
-    // Serialize concurrent creations of the same realm URL. This is almost
-    // never a real concurrency concern — the endpoint was already checked
-    // above for collision — but the lock also serializes against a
-    // concurrent realm.write() or /_atomic targeting the same URL, which
-    // matters more under multi-instance.
+    // Serialize against any other caller of withRealmWriteLock for this
+    // same URL (concurrent createRealm for the same endpoint, or a
+    // concurrent publish/unpublish/delete). This is almost never a real
+    // concurrency concern — the endpoint was already checked above for
+    // collision. realm.write() and /_atomic are NOT yet wired into
+    // withRealmWriteLock (that requires moving the lock primitive into
+    // runtime-common or threading it through the Realm constructor — a
+    // deferred follow-up tracked alongside CS-10898).
     await withRealmWriteLock(this.dbAdapter, url, async () => {
       await insertPermissions(this.dbAdapter, new URL(url), {
         [ownerUserId]: DEFAULT_PERMISSIONS,
