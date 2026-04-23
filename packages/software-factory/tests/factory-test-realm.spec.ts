@@ -193,20 +193,24 @@ test.describe('factory-test-realm e2e', () => {
     }
   });
 
-  test('error path: unreachable realm returns error immediately', async () => {
+  test('error path: unwritable workspace returns error immediately', async () => {
+    // createTestRun writes to the local workspace (CS-10882). Point
+    // workspaceDir at a path that exists as a regular file — that blocks
+    // directory creation inside writeCard and surfaces an fs error
+    // without needing any HTTP round trip.
+    let workspace = createTestWorkspace();
+    workspace.write('blocker', 'file');
     let options: TestRunRealmOptions = {
       targetRealmUrl: 'http://localhost:1/',
       testResultsModuleUrl: 'http://localhost:1/software-factory/test-results',
-      client: createMockClient({
-        fetch: async () => {
-          throw new Error('ECONNREFUSED');
-        },
-      }),
-      workspaceDir: createTestWorkspace().dir,
+      client: createMockClient(),
+      workspaceDir: `${workspace.dir}/blocker`,
     };
 
     let result = await createTestRun('error-test', ['test A'], options);
     expect(result.created).toBe(false);
     expect(result.error).toBeTruthy();
+
+    workspace.cleanup();
   });
 });

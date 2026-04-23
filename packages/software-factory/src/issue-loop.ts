@@ -268,10 +268,15 @@ export async function runIssueLoop(
       `Outer cycle ${outerCycles}: picked issue ${issueSummaryLabel(issue)} (status=${issue.status}, priority=${issue.priority})`,
     );
 
-    // Mark the issue as in_progress when the loop picks it up
+    // Mark the issue as in_progress when the loop picks it up. The update
+    // writes to the local workspace, so sync it to the realm immediately
+    // — otherwise a failing agent turn (e.g. missing API key) would leave
+    // the realm showing `backlog` while the workspace has `in_progress`,
+    // and observers querying the realm would see stale state.
     if (issue.status !== 'in_progress') {
       try {
         await issueStore.updateIssue(issue.id, { status: 'in_progress' });
+        await syncWorkspace();
         issue = await scheduler.refreshIssueState(issue);
       } catch (err) {
         log.warn(
