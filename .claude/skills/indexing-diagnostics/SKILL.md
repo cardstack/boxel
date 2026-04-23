@@ -319,16 +319,16 @@ Sometimes the written diagnostics aren't enough — you want to replay the exact
 Two separate tokens are involved; keep them straight up front:
 
 - **User JWT** — a *realm-scoped* token you mint yourself, used to call the authenticated reindex endpoint (`POST <realm-url>_full-reindex` or `_reindex`). Without this you can't trigger the reindex, which means you don't get the artifacts below. This is the only reason you'll do the Matrix dance by hand.
-- **Indexer session JWT** — a separate token the indexer mints internally for its own prerender visits. You never construct this yourself; you read it out of the `prerenderer-reproduce` log line for the card you want to replay, and paste it into the browser's `localStorage['boxel-session']` so the prerender tab authenticates as the indexer did.
+- **Indexer `boxel-session` value** — the full `boxel-session` localStorage value the indexer's prerender tab uses. You never construct this yourself; you read it verbatim out of the `prerenderer-reproduce` log for the card you want to replay, and paste it into `localStorage['boxel-session']` so the prerender tab authenticates as the indexer did. Format: a JSON-stringified map `{ <realmUrl>: <realm-scoped-JWT>, … }`, one entry per realm the indexer has auth for — the host reads it with `JSON.parse(...)` and picks the right JWT per cross-realm fetch. **Copy the whole string from the log**, not just one of the inner JWTs.
 
-So the end-to-end flow is: mint user JWT → call `_full-reindex` with it → indexer runs → log emits render URLs + indexer session JWTs → paste into browser. Mint-your-own-JWT and read-JWT-from-log are *both* needed; they're not alternatives.
+So the end-to-end flow is: mint user JWT → call `_full-reindex` with it → indexer runs → log emits render URLs + session values → paste into browser. Mint-your-own-JWT and read-value-from-log are *both* needed; they're not alternatives.
 
 ### The `prerenderer-reproduce` log channel
 
-`packages/realm-server/prerender/render-runner.ts` defines a dedicated logger `prerenderer-reproduce` that emits a line **per card render** with a ready-to-use URL and the exact `boxel-session` JWT the indexer used:
+`packages/realm-server/prerender/render-runner.ts` defines a dedicated logger `prerenderer-reproduce` that emits a line **per card render** with a ready-to-use URL and the exact `boxel-session` value the indexer used (a JSON-stringified map from realm URL to realm-scoped JWT):
 
 ```
-manually visit prerendered url <card-id> at: <boxel-host>/render/<encoded-card-id>/<nonce>/<encoded-options>/html/isolated/0 with boxel-session = <JWT>
+manually visit prerendered url <card-id> at: <boxel-host>/render/<encoded-card-id>/<nonce>/<encoded-options>/html/isolated/0 with boxel-session = {"http://localhost:4201/user/my-realm/":"eyJ…","https://cardstack.com/base/":"eyJ…", …}
 ```
 
 This channel is **off** by default. Turn it on by adding `prerenderer-reproduce=debug` to `LOG_LEVELS` when starting the realm server. Example:
@@ -339,7 +339,7 @@ LOG_LEVELS='prerenderer-reproduce=debug' pnpm start-all
 LOG_LEVELS='*=info,prerenderer-reproduce=debug' pnpm start-all
 ```
 
-Then trigger the render you care about (see [Triggering a reindex](#triggering-a-reindex) below — this is where your user JWT gets used) and grep the realm-server log for `manually visit prerendered url`. You get two things: the URL and the *indexer's* session JWT. Paste that JWT into `localStorage['boxel-session']` on the host tab and navigate to the URL.
+Then trigger the render you care about (see [Triggering a reindex](#triggering-a-reindex) below — this is where your user JWT gets used) and grep the realm-server log for `manually visit prerendered url`. You get two things: the URL and the indexer's full `boxel-session` value (the JSON string after `boxel-session = `). Paste that whole string verbatim into `localStorage['boxel-session']` on the host tab and navigate to the URL — don't extract just one JWT from the map, the host needs the full map to handle cross-realm fetches.
 
 ### Minting the user JWT to trigger the reindex
 
@@ -377,7 +377,7 @@ Three different JWTs float around in this area, so always be explicit about whic
 |---|---|---|
 | Realm-server-level JWT | `/_realm-auth` top-level, signed by server secret seed | Server admin endpoints (publish, etc.); *not* accepted by card endpoints |
 | Realm-scoped JWT (this section) | Same `/_realm-auth` call, one per realm in the response map | Authenticating as a user to a specific realm — including `POST <realm>_full-reindex` |
-| Indexer session JWT (from `prerenderer-reproduce`) | Minted internally by the indexer per visit | Seeding `localStorage['boxel-session']` in the prerender tab |
+| Indexer `boxel-session` value (from `prerenderer-reproduce`) | Minted internally by the indexer — a JSON-stringified `{ <realmUrl>: <realm-scoped-JWT> }` map, one entry per realm the indexer has auth for | Pasted verbatim into `localStorage['boxel-session']` on the prerender tab |
 
 Mix them up and you get 401s with no obvious reason.
 
@@ -395,13 +395,15 @@ The render URL format is what the indexer uses and what `prerenderer-reproduce` 
 - `<encoded-options>` — `encodeURIComponent(JSON.stringify(renderOptions))`; `%7B%7D` (`{}`) works.
 - `html/isolated/0` — format / format-variant / recursion-depth; what card rendering uses.
 
-Before navigating, set `localStorage['boxel-session']` to the realm JWT (from either path above). Without it the page sees an unauthenticated load and the store fails to fetch anything.
+Before navigating, set `localStorage['boxel-session']` to the **full JSON string** that the `prerenderer-reproduce` log prints after `boxel-session = ` (a `{ <realmUrl>: <jwt> }` map, not a single JWT — the host `JSON.parse`s it). Without it the page sees an unauthenticated load and the store fails to fetch anything. If you set it to a bare JWT by mistake, the page fails on `JSON.parse` at load.
 
 ### Chrome MCP / headful replay recipe
 
 ```
 1. mcp__chrome-devtools__navigate_page → <boxel-host>  (any page under the host so we can set its localStorage)
-2. mcp__chrome-devtools__evaluate_script → localStorage.setItem('boxel-session', '<JWT>')
+2. mcp__chrome-devtools__evaluate_script → localStorage.setItem('boxel-session', '<session-value-from-log>')
+   // <session-value-from-log> is the JSON string the reproduce log printed after `boxel-session = `
+   // (a `{ <realmUrl>: <jwt> }` map), not a bare JWT.
 3. mcp__chrome-devtools__navigate_page → <render-url from the log>
 4. mcp__chrome-devtools__wait_for   → text like the card's title, or poll data-prerender-status
 5. mcp__chrome-devtools__evaluate_script → document.querySelector('[data-prerender]').dataset.prerenderStatus
@@ -473,23 +475,33 @@ LOG_LEVELS='*=info,prerenderer-reproduce=debug' pnpm start-all
 # Terminal 2 — mint the realm-scoped user JWT (matrix-login → /_realm-auth),
 # save it as $REALM_SCOPED_JWT. See "Minting the user JWT" above.
 
-# Terminal 2 — kick off a full reindex using that JWT
-curl -X POST -H "Authorization: $REALM_SCOPED_JWT" \
+# Terminal 2 — kick off a full reindex using that JWT.
+# NOTE the Accept header + JSON body: the route is registered with
+# SupportedMimeType.JSON, so without them the request falls through to
+# the card handler and you get a confusing "phantom card at /_full-reindex"
+# 404 instead of the 204 that means "job enqueued".
+curl -X POST \
+  -H "Authorization: $REALM_SCOPED_JWT" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{}' \
   "http://localhost:4201/user/<realm>/_full-reindex"
 
 # Terminal 1 — grep for the indexer's reproduce line for the card you're chasing
 grep 'manually visit prerendered url .*<card-id>' realm-server.log | tail -1
-# The line hands you: a render URL, and a separate indexer-minted session JWT.
+# The line hands you: a render URL, plus the full `boxel-session` JSON
+# string the indexer's tab is using (a { <realmUrl>: <jwt> } map).
 
-# Now paste the URL + that session JWT into Chrome MCP (or any real browser),
-# set localStorage['boxel-session'] = <session JWT>, navigate to the URL,
-# poll data-prerender-status, call __boxelRenderDiagnostics() while the page
-# is stuck.
+# Now paste the URL + that full JSON string into Chrome MCP (or any real
+# browser): set localStorage['boxel-session'] to the whole string from
+# after `boxel-session = ` (don't extract one inner JWT), navigate to
+# the URL, poll data-prerender-status, call __boxelRenderDiagnostics()
+# while the page is stuck.
 ```
 
-Two JWTs, two jobs: the realm-scoped one got you the reindex, the indexer-session one gets the browser tab past its auth check.
+Two different tokens do two different jobs: the user-minted realm-scoped JWT got you the reindex, the indexer's full session map gets the browser tab past its auth checks for every realm the render touches.
 
-If `GRAFANA_SECRET` is configured on your server, you can skip the user-JWT step and use `curl -H "Authorization: $GRAFANA_SECRET" http://localhost:4201/_grafana-full-reindex` instead. In dev the per-realm JWT path is almost always easier.
+If `GRAFANA_SECRET` is configured on your server, you can skip the user-JWT step and use `curl -H "Authorization: $GRAFANA_SECRET" http://localhost:4201/_grafana-full-reindex` instead (grafana endpoint is a GET, no MIME gotcha). In dev the per-realm JWT path is almost always easier.
 
 ## Extending the diagnostics
 

@@ -143,8 +143,14 @@ export interface RenderTimeoutDiagnostics {
   // shape mirrors QueryLoadInfo from `base/card-api.gts` but is
   // kept loose here to avoid a runtime/base circular type import.
   queryLoadsInFlight?: Array<Record<string, unknown>>;
-  // Prerender-server view of the same affinity at the moment this
-  // call settled (completion OR timeout). A non-empty
+  // Prerender-server view of the same affinity observed during the
+  // call. `pendingTotal` / `maxPending` / `sameAffinityActivity`
+  // represent the **peak** observed while the call was in flight —
+  // the Prerenderer samples periodically and keeps the richest
+  // snapshot, because the most interesting state (queued siblings
+  // mid-stall) is released the moment the stuck tab is evicted, so
+  // a one-shot end-of-call snapshot would miss the deadlock.
+  // `affinityKey` is stable for the call. A non-empty
   // `sameAffinityActivity` on a render stuck in `waiting-stability`
   // is the signature of a self-referential prerender deadlock: the
   // host is waiting on a `/_search` / definition-lookup response

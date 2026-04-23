@@ -309,6 +309,11 @@ export class Prerenderer {
       clearInterval(this.#queueSnapshotInterval);
       this.#queueSnapshotInterval = undefined;
     }
+    if (this.#peakSamplerInterval) {
+      clearInterval(this.#peakSamplerInterval);
+      this.#peakSamplerInterval = undefined;
+    }
+    this.#snapshotPeaks.clear();
     await this.#pagePool.closeAll();
     await this.#browserManager.stop();
     this.#stopped = true;
@@ -449,53 +454,88 @@ export class Prerenderer {
     };
   }
 
-  // CS-10872 (affinity-snapshot diagnostic): start a peak-tracking
-  // poll of the same affinity while a call is in flight. Reason:
-  // the self-referential deadlock's smoking gun is a sub-prerender
-  // *queued* on our tab *during* the render, but by the time the
-  // outer call returns the tab has been evicted and the queued
-  // siblings have been released — a one-shot end-of-call snapshot
-  // sees an empty affinity. Sampling periodically and keeping the
-  // peak (most same-affinity activity) catches the deadlock state
-  // as it happens.
-  #pollAffinitySnapshot(
+  // CS-10872 (affinity-snapshot diagnostic): peak-sampling state.
+  // Reason for peak sampling: the self-referential deadlock's smoking
+  // gun is a sub-prerender *queued* on our tab *during* the render,
+  // but by the time the outer call returns the tab has been evicted
+  // and the queued siblings have been released — a one-shot end-of-
+  // call snapshot sees an empty affinity. Sampling periodically and
+  // keeping the peak catches the deadlock state while it's happening.
+  //
+  // One shared timer (not one per call) iterates every active
+  // registration on each tick so that an incident-time backlog of
+  // queued calls doesn't multiply timer overhead.
+  #snapshotPeaks = new Map<
+    symbol,
+    {
+      affinityKey: string;
+      selfHandle: symbol;
+      peak: NonNullable<RenderTimeoutDiagnostics['affinitySnapshot']>;
+    }
+  >();
+  #peakSamplerInterval: NodeJS.Timeout | undefined;
+  #peakSamplerIntervalMs = 3000;
+
+  #registerPeakSampling(
     affinityKey: string,
     selfHandle: symbol,
-    intervalMs = 3000,
   ): {
     currentPeak: () => NonNullable<
       RenderTimeoutDiagnostics['affinitySnapshot']
     >;
     stop: () => void;
   } {
-    let isBetter = (
-      candidate: NonNullable<RenderTimeoutDiagnostics['affinitySnapshot']>,
-      incumbent: NonNullable<RenderTimeoutDiagnostics['affinitySnapshot']>,
-    ): boolean => {
-      let c = candidate.sameAffinityActivity.length;
-      let i = incumbent.sameAffinityActivity.length;
-      if (c !== i) return c > i;
-      return candidate.pendingTotal > incumbent.pendingTotal;
-    };
-    let peak = this.#getAffinitySnapshot(affinityKey, selfHandle)!;
-    let sample = () => {
-      let cur = this.#getAffinitySnapshot(affinityKey, selfHandle)!;
-      if (isBetter(cur, peak)) peak = cur;
-    };
-    let interval: NodeJS.Timeout | undefined = setInterval(sample, intervalMs);
-    interval.unref();
+    let id = Symbol(`peak:${affinityKey}`);
+    let initial = this.#getAffinitySnapshot(affinityKey, selfHandle)!;
+    this.#snapshotPeaks.set(id, {
+      affinityKey,
+      selfHandle,
+      peak: initial,
+    });
+    this.#ensurePeakSamplerRunning();
     return {
       currentPeak: () => {
-        sample();
-        return peak;
+        let entry = this.#snapshotPeaks.get(id);
+        if (!entry) return initial;
+        let cur = this.#getAffinitySnapshot(
+          entry.affinityKey,
+          entry.selfHandle,
+        )!;
+        if (Prerenderer.#isPeakBetter(cur, entry.peak)) entry.peak = cur;
+        return entry.peak;
       },
       stop: () => {
-        if (interval) {
-          clearInterval(interval);
-          interval = undefined;
+        this.#snapshotPeaks.delete(id);
+        if (this.#snapshotPeaks.size === 0 && this.#peakSamplerInterval) {
+          clearInterval(this.#peakSamplerInterval);
+          this.#peakSamplerInterval = undefined;
         }
       },
     };
+  }
+
+  #ensurePeakSamplerRunning(): void {
+    if (this.#peakSamplerInterval) return;
+    this.#peakSamplerInterval = setInterval(() => {
+      for (let entry of this.#snapshotPeaks.values()) {
+        let cur = this.#getAffinitySnapshot(
+          entry.affinityKey,
+          entry.selfHandle,
+        )!;
+        if (Prerenderer.#isPeakBetter(cur, entry.peak)) entry.peak = cur;
+      }
+    }, this.#peakSamplerIntervalMs);
+    this.#peakSamplerInterval.unref();
+  }
+
+  static #isPeakBetter(
+    candidate: NonNullable<RenderTimeoutDiagnostics['affinitySnapshot']>,
+    incumbent: NonNullable<RenderTimeoutDiagnostics['affinitySnapshot']>,
+  ): boolean {
+    let c = candidate.sameAffinityActivity.length;
+    let i = incumbent.sameAffinityActivity.length;
+    if (c !== i) return c > i;
+    return candidate.pendingTotal > incumbent.pendingTotal;
   }
 
   // CS-10872 (affinity-snapshot diagnostic): snapshot the same affinity,
@@ -584,7 +624,7 @@ export class Prerenderer {
     }
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     let activity = this.#affinityActivity.record(affinityKey, url, 'module');
-    let poller = this.#pollAffinitySnapshot(affinityKey, activity.handle);
+    let poller = this.#registerPeakSampling(affinityKey, activity.handle);
     try {
       let overallStart = Date.now();
       let attemptOptions = renderOptions;
@@ -608,7 +648,6 @@ export class Prerenderer {
           pool: PoolMeta;
         };
         try {
-          activity.markRunning();
           result = await this.#renderRunner.prerenderModuleAttempt({
             affinityType,
             affinityValue,
@@ -618,6 +657,7 @@ export class Prerenderer {
             opts,
             renderOptions: attemptOptions,
             signal,
+            onTabAcquired: activity.markRunning,
           });
         } catch (e) {
           // Caller cancelled — log + conditionally evict, then
@@ -646,6 +686,7 @@ export class Prerenderer {
               opts,
               renderOptions: attemptOptions,
               signal,
+              onTabAcquired: activity.markRunning,
             });
           } catch (e2) {
             if (e2 instanceof PrerenderCancelledError) {
@@ -811,7 +852,7 @@ export class Prerenderer {
     let signal = (rawArgs as { signal?: AbortSignal }).signal;
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     let activity = this.#affinityActivity.record(affinityKey, url, 'visit');
-    let poller = this.#pollAffinitySnapshot(affinityKey, activity.handle);
+    let poller = this.#registerPeakSampling(affinityKey, activity.handle);
     try {
       let overallStart = Date.now();
       let attemptOptions = renderOptions;
@@ -834,7 +875,6 @@ export class Prerenderer {
           pool: PoolMeta;
         };
         try {
-          activity.markRunning();
           result = await this.#renderRunner.prerenderVisitAttempt({
             affinityType,
             affinityValue,
@@ -846,6 +886,7 @@ export class Prerenderer {
             fileData,
             types,
             signal,
+            onTabAcquired: activity.markRunning,
           });
         } catch (e) {
           // Caller cancelled — log + conditionally evict, then
@@ -876,6 +917,7 @@ export class Prerenderer {
               fileData,
               types,
               signal,
+              onTabAcquired: activity.markRunning,
             });
           } catch (e2) {
             if (e2 instanceof PrerenderCancelledError) {
