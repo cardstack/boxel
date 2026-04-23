@@ -449,15 +449,37 @@ async function defaultWaitForSeedReadable(
   realmUrl: string,
   seedIssueId: string,
 ): Promise<void> {
-  let ready = await client.waitForFile(realmUrl, seedIssueId, {
+  // Two-stage wait:
+  //   1. Poll the card URL until the realm serves it (disk write done).
+  //   2. Poll the search index until it returns the seed (indexer done).
+  // The loop's scheduler uses `client.search` to enumerate issues; if we
+  // returned after just stage 1, the index might still be stale and
+  // `listIssues()` would come back empty, so the loop would exit before
+  // picking up the seed.
+  let readable = await client.waitForFile(realmUrl, seedIssueId, {
     timeoutMs: 15_000,
     pollMs: 250,
   });
-  if (!ready) {
+  if (!readable) {
     throw new Error(
       `Seed issue synced to realm but not readable after 15s: ${seedIssueId}`,
     );
   }
+
+  let seedCardUrl = new URL(seedIssueId, realmUrl).href;
+  let deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    let result = await client.search(realmUrl, {
+      filter: { eq: { id: seedCardUrl } },
+    });
+    if (result.ok && result.data && result.data.length > 0) {
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  throw new Error(
+    `Seed issue indexed in realm but not visible to search after 15s: ${seedIssueId}`,
+  );
 }
 
 async function defaultSyncWorkspaceToRealm(

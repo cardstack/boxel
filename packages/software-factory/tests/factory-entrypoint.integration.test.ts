@@ -180,9 +180,48 @@ module('factory-entrypoint integration', function () {
         request.url === '/hassan/personal/_search' &&
         request.method === 'QUERY'
       ) {
-        // Issue store search — return empty results so the loop exits immediately
-        response.writeHead(200, { 'content-type': SupportedMimeType.CardJson });
-        response.end(JSON.stringify({ data: [] }));
+        // Two search call sites:
+        //   (a) waitForSeedReadable filters by `eq.id` to confirm the
+        //       realm's search index sees the seed card — must return
+        //       the card once it has been pushed (is in createdCardPaths).
+        //   (b) Issue store listIssues queries by type — we want that to
+        //       return empty so the loop exits immediately.
+        let body = '';
+        request.on('data', (chunk) => (body += chunk.toString()));
+        request.on('end', () => {
+          let data: unknown[] = [];
+          try {
+            let query = JSON.parse(body) as {
+              filter?: { eq?: { id?: string } };
+            };
+            let eqId = query.filter?.eq?.id;
+            if (typeof eqId === 'string') {
+              let path = eqId.replace(`${origin}/hassan/personal/`, '');
+              if (createdCardPaths.has(path)) {
+                data = [
+                  {
+                    id: eqId,
+                    type: 'card',
+                    attributes: {},
+                    meta: {
+                      adoptsFrom: {
+                        module: `${origin}/software-factory/darkfactory`,
+                        name: 'Issue',
+                      },
+                    },
+                  },
+                ];
+              }
+            }
+          } catch {
+            // fall through to empty data
+          }
+          response.writeHead(200, {
+            'content-type': SupportedMimeType.CardJson,
+          });
+          response.end(JSON.stringify({ data }));
+        });
+        return;
       } else if (
         request.url === '/hassan/personal/_mtimes' &&
         request.method === 'GET'
