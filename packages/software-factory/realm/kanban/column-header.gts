@@ -21,7 +21,11 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
     <div class='col-header-left'>
       <span
         class='col-dot'
-        style={{cssVar col-dot-bg=(if @column.color @column.color '#94a3b8')}}
+        style={{cssVar
+          col-dot-bg=(if
+            @column.color @column.color 'var(--muted, var(--boxel-100))'
+          )
+        }}
       ></span>
       <span class='col-name'>{{if
           @column.label
@@ -62,7 +66,12 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
       flex-shrink: 0;
     }
     .col-header.is-target {
-      background: rgba(16, 185, 129, 0.06);
+      background: color-mix(
+        in oklch,
+        var(--accent, var(--boxel-highlight)) 8%,
+        transparent
+      );
+      color: var(--accent-foreground, var(--boxel-dark));
       border-radius: 8px 8px 0 0;
     }
     .col-header-left {
@@ -80,13 +89,12 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
     .col-name {
       font-size: 13px;
       font-weight: 600;
-      color: #1e293b;
       letter-spacing: -0.01em;
     }
     .col-count {
       font-size: 12px;
       font-weight: 500;
-      color: #94a3b8;
+      color: var(--muted-foreground, var(--boxel-450));
     }
     .col-header-right {
       display: flex;
@@ -95,20 +103,20 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
     }
     .col-wip {
       font-size: 10px;
-      color: #94a3b8;
-      font-family: var(--font-mono, monospace);
+      color: var(--muted-foreground);
+      font-family: var(--font-mono, var(--boxel-monospace-font-family));
     }
     .col-wip.over {
-      color: #d97706;
+      color: var(--destructive, var(--boxel-red));
       font-weight: 600;
     }
     .col-add-btn {
-      color: #94a3b8;
+      color: var(--muted-foreground, var(--boxel-450));
       opacity: 0.6;
     }
     .col-add-btn:hover {
       opacity: 1;
-      color: #1e293b;
+      color: var(--foreground, var(--boxel-dark));
     }
   </style>
 </template>;

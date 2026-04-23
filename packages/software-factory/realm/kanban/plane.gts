@@ -251,7 +251,7 @@ export class KanbanPlane extends Component<{
         outline: none;
       }
       .board:focus-visible {
-        box-shadow: inset 0 0 0 2px var(--ring, #3b82f6);
+        box-shadow: inset 0 0 0 2px var(--ring, var(--boxel-highlight));
       }
       .board.is-dragging {
         user-select: none;
@@ -267,10 +267,12 @@ export class KanbanPlane extends Component<{
         min-width: 260px;
         height: 100%;
         border-radius: 8px;
-        background: #f4f5f7;
+        background: var(--sidebar, var(--boxel-100));
+        color: var(--sidebar-foreground, var(--boxel-700));
       }
       .column.is-over-wip {
-        background: #fef3c7;
+        color: var(--destructive, var(--boxel-red));
+        background: color-mix(in oklch, currentColor 12%, transparent);
       }
 
       /* ── Column Body ────────────────────────────────────────────── */
@@ -289,9 +291,18 @@ export class KanbanPlane extends Component<{
         position: absolute;
         left: 8px;
         right: 8px;
-        border-radius: 8px;
-        background: rgba(16, 185, 129, 0.06);
-        border: 2px dashed rgba(16, 185, 129, 0.35);
+        border-radius: 0.5rem;
+        background: color-mix(
+          in oklch,
+          var(--accent, var(--boxel-dark-green)) 8%,
+          transparent
+        );
+        border: 2px dashed
+          color-mix(
+            in oklch,
+            var(--accent, var(--boxel-dark-green)) 35%,
+            transparent
+          );
         z-index: 0;
         pointer-events: none;
         transition: top 120ms ease-out;
@@ -303,7 +314,7 @@ export class KanbanPlane extends Component<{
         align-items: center;
         justify-content: center;
         padding: 32px 16px;
-        color: #cbd5e1;
+        color: var(--muted-foreground, var(--boxel-450));
         font-size: 13px;
         font-style: italic;
       }

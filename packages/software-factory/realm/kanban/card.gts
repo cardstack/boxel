@@ -38,7 +38,8 @@ const KanbanCard: TemplateOnlyComponent<Signature> = <template>
       height: 170px;
       border-radius: 8px;
       overflow: hidden;
-      background: #fff;
+      color: var(--card-foreground, var(--boxel-dark));
+      background: var(--card, var(--boxel-light));
       box-shadow:
         0 1px 2px rgba(0, 0, 0, 0.06),
         0 0 0 1px rgba(0, 0, 0, 0.04);
@@ -57,7 +58,7 @@ const KanbanCard: TemplateOnlyComponent<Signature> = <template>
     }
     .card.selected {
       box-shadow:
-        0 0 0 2px var(--primary, #3b82f6),
+        0 0 0 2px var(--ring, var(--boxel-highlight)),
         0 1px 2px rgba(0, 0, 0, 0.06);
     }
     .card.dragging {

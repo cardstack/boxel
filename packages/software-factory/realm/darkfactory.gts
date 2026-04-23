@@ -38,7 +38,7 @@ import {
   KanbanPlane,
   KanbanDragManager,
   type KanbanPlacement,
-} from './kanban';
+} from './kanban-board';
 
 const issueCodeRef = {
   // @ts-ignore this is not a CJS file, import.meta is allowed
@@ -94,7 +94,7 @@ const defaultColumns: Column[] = [
   {
     value: 'status',
     label: 'Status',
-    fieldName: 'computedStatus',
+    fieldName: 'status',
     orderField: 'statusBoardOrder',
     options: issueStatusOptions,
   },
@@ -443,22 +443,22 @@ export class Issue extends CardDef {
           font-weight: 600;
           padding: 0.125rem 0.5rem;
           border-radius: 0.25rem;
+          background: color-mix(in oklch, currentColor 12%, transparent);
         }
         .status-done {
-          color: var(--boxel-green, #16a34a);
-          background: #f0fdf4;
+          color: var(--boxel-dark-green);
         }
         .status-in_progress {
-          color: var(--boxel-blue, #2563eb);
-          background: #eff6ff;
+          color: var(--boxel-blue);
         }
         .status-backlog {
-          color: var(--boxel-400, #9ca3af);
-          background: #f9fafb;
+          color: var(--boxel-navy);
+        }
+        .status-review {
+          color: var(--boxel-orange);
         }
         .status-blocked {
-          color: var(--boxel-red, #dc2626);
-          background: #fef2f2;
+          color: var(--boxel-red);
         }
       </style>
     </template>
@@ -544,22 +544,22 @@ export class Issue extends CardDef {
           font-weight: 600;
           padding: 0.125rem 0.5rem;
           border-radius: 0.25rem;
+          background: color-mix(in oklch, currentColor 12%, transparent);
         }
         .status-done {
-          color: var(--boxel-green, #16a34a);
-          background: #f0fdf4;
+          color: var(--boxel-dark-green);
         }
         .status-in_progress {
-          color: var(--boxel-blue, #2563eb);
-          background: #eff6ff;
+          color: var(--boxel-blue);
         }
         .status-backlog {
-          color: var(--boxel-400, #9ca3af);
-          background: #f9fafb;
+          color: var(--boxel-navy);
+        }
+        .status-review {
+          color: var(--boxel-orange);
         }
         .status-blocked {
-          color: var(--boxel-red, #dc2626);
-          background: #fef2f2;
+          color: var(--boxel-red);
         }
         .comments-section {
           margin-top: 1rem;
@@ -668,13 +668,7 @@ export class Project extends CardDef {
               @model.projectCode
               'PROJECT'
             }}</strong>
-          <span
-            class='status status-{{if
-                @model.projectStatus
-                @model.projectStatus
-                "planning"
-              }}'
-          >
+          <span class='status status-{{@model.projectStatus}}'>
             {{#if @model.projectStatus}}
               <@fields.projectStatus @format='atom' />
             {{else}}
@@ -691,9 +685,6 @@ export class Project extends CardDef {
         }
         .compact {
           padding: 0.75rem;
-          border: 1px solid var(--border);
-          border-radius: 0.5rem;
-          background: var(--card);
         }
         .row {
           display: flex;
@@ -708,26 +699,21 @@ export class Project extends CardDef {
           font-weight: 600;
           padding: 0.125rem 0.5rem;
           border-radius: 0.25rem;
+          background: color-mix(in oklch, currentColor 12%, transparent);
+          border-color: currentColor;
+          color: var(--boxel-purple);
         }
         .status-active {
-          color: var(--boxel-blue, #2563eb);
-          background: #eff6ff;
-        }
-        .status-planning {
-          color: var(--boxel-400, #9ca3af);
-          background: #f9fafb;
-        }
-        .status-completed {
-          color: var(--boxel-green, #16a34a);
-          background: #f0fdf4;
-        }
-        .status-on_hold {
-          color: var(--boxel-orange, #ea580c);
-          background: #fff7ed;
+          color: var(--boxel-dark-green);
         }
         .status-archived {
-          color: var(--boxel-400, #9ca3af);
-          background: #f3f4f6;
+          color: var(--boxel-500);
+        }
+        .status-completed {
+          color: var(--boxel-dark);
+        }
+        .status-on_hold {
+          color: var(--boxel-red);
         }
       </style>
     </template>
@@ -848,6 +834,7 @@ export class Project extends CardDef {
             attributes: { [attributeName]: columnKey },
             relationships: {
               kanbanBoard: { links: { self: kanbanBoardId } },
+              project: { links: { self: kanbanBoardId } },
             },
             meta: { adoptsFrom: issueCodeRef },
           },
@@ -998,14 +985,16 @@ export class Project extends CardDef {
           <div class='toolbar-left'>
             <div class='kanban-heading'>
               <div class='kanban-meta-top'>
-                <Pill @size='extra-small' @variant='secondary'>
+                <Pill @size='extra-small'>
                   {{if @model.projectCode @model.projectCode 'BOARD'}}
                 </Pill>
-                {{#if @model.projectStatus}}
-                  <Pill @size='extra-small'>
+                <span class='status status-{{@model.projectStatus}}'>
+                  {{#if @model.projectStatus}}
                     <@fields.projectStatus @format='atom' />
-                  </Pill>
-                {{/if}}
+                  {{else}}
+                    Planning
+                  {{/if}}
+                </span>
               </div>
               <h2 class='kanban-title'>
                 <SquareKanban />
@@ -1062,7 +1051,7 @@ export class Project extends CardDef {
                 {{#let (get @fields.issues placement.index) as |CardField|}}
                   {{#if CardField}}
                     <div class='kanban-card-wrap'>
-                      <CardField @format='fitted' />
+                      <CardField @format='fitted' @displayContainer={{false}} />
                     </div>
                   {{else}}
                     <div class='card-placeholder'>Card {{placement.index}}</div>
@@ -1073,7 +1062,7 @@ export class Project extends CardDef {
                 {{#let (get @fields.issues dragIdx) as |CardField|}}
                   {{#if CardField}}
                     <div class='ghost-wrap'>
-                      <CardField @format='fitted' />
+                      <CardField @format='fitted' @displayContainer={{false}} />
                     </div>
                   {{/if}}
                 {{/let}}
@@ -1142,9 +1131,10 @@ export class Project extends CardDef {
         .kanban-surface {
           --kanban-surface-bg: var(--background, var(--boxel-200));
           --kanban-card-bg: var(--card, var(--boxel-light));
-          --kanban-foreground: var(--foreground, var(--boxel-dark));
+          --kanban-card-foreground: var(--card-foreground, var(--boxel-dark));
+          --kanban-foreground: var(--foreground, var(--boxel-700));
           --kanban-muted-bg: var(--muted, var(--boxel-100));
-          --kanban-muted-foreground: var(--muted-foreground, var(--boxel-500));
+          --kanban-muted-foreground: var(--muted-foreground, var(--boxel-450));
           --kanban-border-color: var(--border, var(--boxel-border-color));
 
           display: flex;
@@ -1160,7 +1150,8 @@ export class Project extends CardDef {
           justify-content: space-between;
           padding: 0.625rem 1rem;
           border-bottom: 1px solid var(--kanban-border-color);
-          background: var(--kanban-card-bg);
+          background: var(--popup, var(--kanban-card-bg));
+          color: var(--popup-foreground, var(--kanban-card-foreground));
           flex-shrink: 0;
         }
         .toolbar-left {
@@ -1232,6 +1223,28 @@ export class Project extends CardDef {
           padding: 0.125rem 0.5rem;
           background: var(--kanban-muted-bg);
           border-radius: 4px;
+        }
+        .status {
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          font-weight: 600;
+          padding: 0.125rem 0.5rem;
+          border-radius: 0.25rem;
+          background: color-mix(in oklch, currentColor 12%, transparent);
+          border-color: currentColor;
+          color: var(--boxel-purple);
+        }
+        .status-active {
+          color: var(--boxel-dark-green);
+        }
+        .status-archived {
+          color: var(--boxel-500);
+        }
+        .status-completed {
+          color: var(--boxel-dark);
+        }
+        .status-on_hold {
+          color: var(--boxel-red);
         }
         .settings-button {
           color: var(--kanban-muted-foreground);
@@ -1438,24 +1451,24 @@ export class Project extends CardDef {
   //         border-radius: 0.25rem;
   //       }
   //       .status-active {
-  //         color: var(--boxel-blue, #2563eb);
-  //         background: #eff6ff;
+  //         color: var(--boxel-blue);
+  //         background: color-mix(in oklch, var(--boxel-blue) 12%, transparent);
   //       }
   //       .status-planning {
-  //         color: var(--boxel-400, #9ca3af);
-  //         background: #f9fafb;
+  //         color: var(--boxel-400);
+  //         background: var(--muted);
   //       }
   //       .status-completed {
-  //         color: var(--boxel-green, #16a34a);
-  //         background: #f0fdf4;
+  //         color: var(--boxel-green);
+  //         background: color-mix(in oklch, var(--boxel-green) 12%, transparent);
   //       }
   //       .status-on_hold {
-  //         color: var(--boxel-orange, #ea580c);
-  //         background: #fff7ed;
+  //         color: var(--boxel-orange);
+  //         background: color-mix(in oklch, var(--boxel-orange) 12%, transparent);
   //       }
   //       .status-archived {
-  //         color: var(--boxel-400, #9ca3af);
-  //         background: #f3f4f6;
+  //         color: var(--boxel-400);
+  //         background: var(--muted);
   //       }
   //     </style>
   //   </template>

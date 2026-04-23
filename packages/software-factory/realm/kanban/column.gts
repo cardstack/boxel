@@ -46,17 +46,16 @@ export class KanbanColumnField extends FieldDef {
         .column-pill {
           display: inline-flex;
           align-items: center;
-          gap: 4px;
-          padding: 2px 8px;
+          gap: 0.25rem;
+          padding: 0.125rem 0.5rem;
           font-size: 11px;
-          font-family: var(--font-sans);
           color: var(--foreground);
           background: color-mix(in oklab, var(--foreground) 5%, transparent);
           border-radius: var(--boxel-border-radius-xs);
         }
         .color-dot {
-          width: 8px;
-          height: 8px;
+          width: 0.5rem;
+          height: 0.5rem;
           border-radius: 50%;
           flex-shrink: 0;
           background-color: var(--kanban-column-label-color);
@@ -67,7 +66,6 @@ export class KanbanColumnField extends FieldDef {
         .wip-badge {
           font-size: 9px;
           color: var(--muted-foreground);
-          font-weight: 400;
         }
       </style>
     </template>

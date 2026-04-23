@@ -14,22 +14,19 @@ interface Signature {
 }
 
 const KanbanGhost: TemplateOnlyComponent<Signature> = <template>
-  <div
-    class={{cn 'ghost' settling=@isSettling}}
-    style={{@style}}
-    ...attributes
-  >
+  <div class={{cn 'ghost' settling=@isSettling}} style={{@style}} ...attributes>
     {{yield}}
   </div>
 
   <style scoped>
     .ghost {
       position: fixed;
-      z-index: 999;
+      z-index: 9;
       pointer-events: none;
-      border-radius: 8px;
+      border-radius: 0.5rem;
       overflow: hidden;
-      background: #fff;
+      background: var(--card, var(--boxel-light));
+      color: var(--card-foreground, var(--boxel-dark));
       box-shadow:
         0 24px 60px rgba(0, 0, 0, 0.28),
         0 8px 20px rgba(0, 0, 0, 0.12),
