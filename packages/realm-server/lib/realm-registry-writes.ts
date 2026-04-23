@@ -105,9 +105,10 @@ export async function deleteFromRegistryByUrl(
 
 // Delete every kind='published' row whose source_url matches the given source
 // realm URL. Used by handle-delete-realm when a source realm (and all its
-// publications) is being removed. kind != 'bootstrap' is redundant here
-// (bootstrap rows never have source_url populated) but included for symmetry
-// with the other delete helper.
+// publications) is being removed. The kind='published' filter is explicit
+// even though the schema's CHECK constraint already guarantees that only
+// published rows have non-null source_url — stating the contract in the SQL
+// matches the helper's name and survives any future schema changes.
 export async function deletePublishedFromRegistryBySource(
   dbAdapter: DBAdapter,
   sourceUrl: string,
@@ -116,7 +117,7 @@ export async function deletePublishedFromRegistryBySource(
     await query(dbAdapter, [
       `DELETE FROM realm_registry WHERE source_url =`,
       param(sourceUrl),
-      ` AND kind <> 'bootstrap'`,
+      ` AND kind = 'published'`,
     ]);
   } catch (err: unknown) {
     log.warn(
