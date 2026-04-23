@@ -26,9 +26,9 @@ import * as path from 'path';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
 import {
   type LooseCardResource,
-  type RealmResourceIdentifier,
   ensureTrailingSlash,
   skillCardRef,
+  rri,
 } from '@cardstack/runtime-common';
 import {
   buildPromptForModel,
