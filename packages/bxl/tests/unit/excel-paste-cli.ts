@@ -104,21 +104,21 @@ const idiomCases: TestCase[] = [
     expression: '=IF(Subtotal <> 0, "x" & Status, 2^3)',
     expected: 'xopen',
   },
-  // `&` / `^` absorb `:pseudo` suffixes on their operands — regression
+  // `&` / `^` absorb positional selector suffixes on their operands — regression
   // for the earlier "wrap each side in parens" workaround.
   {
-    name: '& across :first and :last',
-    expression: '"Line Item":first.SKU & " through " & "Line Item":last.SKU',
+    name: '& across [#first] and [#last]',
+    expression: '"Line Item"[#first].SKU & " through " & "Line Item"[#last].SKU',
     expected: 'PAPER-01 through HARD-02',
   },
   {
-    name: '^ across :last pseudo-class',
-    expression: '"Line Item":last.Quantity ^ 2',
+    name: '^ across [#last]',
+    expression: '"Line Item"[#last].Quantity ^ 2',
     expected: 4,
   },
   {
-    name: '& chains past [#N] subscript',
-    expression: '"Line Item":first.SKU & " then " & "Line Item"[#2].SKU',
+    name: '& chains past [#N] selectors',
+    expression: '"Line Item"[#first].SKU & " then " & "Line Item"[#2].SKU',
     expected: 'PAPER-01 then BRAND-RED',
   },
   // Non-idioms: make sure regular expressions still work unchanged

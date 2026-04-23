@@ -71,9 +71,8 @@ function codeForCompileError(message: string): string {
   if (/1-based/i.test(message)) return 'human-row-zero';
   if (/must be increasing/i.test(message)) return 'descending-row-range';
   if (/Unsupported predicate operator/i.test(message)) return 'unsupported-predicate-op';
-  if (/Unsupported pseudo-class/i.test(message)) return 'unsupported-pseudo-class';
-  if (/requires an argument/i.test(message)) return 'pseudo-missing-arg';
-  if (/Expected pseudo-class name/i.test(message)) return 'malformed-pseudo-class';
+  if (/CSS-style pseudo-class syntax was removed/i.test(message)) return 'legacy-pseudo-class-removed';
+  if (/Unsupported positional selector keyword/i.test(message)) return 'unsupported-positional-selector';
   if (/Unclosed '/i.test(message)) return 'unclosed-bracket';
   if (/Unterminated string/i.test(message)) return 'unterminated-string';
   if (/Cannot tokenize character/i.test(message)) return 'untokenizable-character';

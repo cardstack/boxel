@@ -10,7 +10,7 @@
 //      comparison).
 //
 // Each test asserts both compile output (jq surface) and evaluation value.
-import { deepStrictEqual, strictEqual, ok } from 'node:assert';
+import { deepStrictEqual, strictEqual, ok, throws } from 'node:assert';
 import { compileReadableSyntax, evaluateBxl, type ReadableSchema } from '../../src/index.js';
 
 const schema: ReadableSchema = {
@@ -155,6 +155,60 @@ assertEval('(Amount = 100)', false, '#3 evaluates negative case');
 // handles `=` there natively. Verify we didn't break that path.
 const predResult = evaluateBxl('[1,2,3] | [.[] | select(. > 1)]', { x: 1 });
 ok(Array.isArray(predResult.value), '#3 predicate-bracket path still works');
+
+// CSS-style pseudo-classes are removed. Positional access must go through
+// [#...] selectors, so legacy `:first` now fails at compile time.
+throws(
+  () => compileReadableSyntax('"Line Item":first.SKU', { schema: itemScheme }),
+  /CSS-style pseudo-class syntax was removed/,
+  'Removed pseudo-class syntax produces a compile error',
+);
+
+// Forward-only anchored selector ranges stay readable without implying
+// reverse traversal semantics.
+const rangeScheme: ReadableSchema = {
+  fields: [
+    {
+      key: 'lineItems', label: 'Line Item', kind: 'array',
+      item: { fields: [{ key: 'sku', label: 'SKU' }] },
+    },
+  ],
+};
+
+const rangeInput = {
+  lineItems: [
+    { sku: 'A' },
+    { sku: 'B' },
+    { sku: 'C' },
+    { sku: 'D' },
+    { sku: 'E' },
+    { sku: 'F' },
+  ],
+};
+
+deepStrictEqual(
+  evaluateBxl('"Line Item"[#2..#last-1].SKU', rangeInput, { schema: rangeScheme }).value,
+  ['B', 'C', 'D', 'E'],
+  '#3 anchored front-to-back range evaluates',
+);
+
+deepStrictEqual(
+  evaluateBxl('"Line Item"[#last-3..#last-1].SKU', rangeInput, { schema: rangeScheme }).value,
+  ['C', 'D', 'E'],
+  '#3 anchored back-to-back range evaluates',
+);
+
+throws(
+  () => compileReadableSyntax('"Line Item"[#last-3..#4].SKU', { schema: rangeScheme }),
+  /\[#last-3\.\.#4\] range must move forward in collection order/,
+  '#3 back-to-front anchored range is rejected',
+);
+
+throws(
+  () => compileReadableSyntax('"Line Item"[#last-1..#last-3].SKU', { schema: rangeScheme }),
+  /\[#last-1\.\.#last-3\] range must move forward in collection order/,
+  '#3 reverse anchored end-relative range is rejected',
+);
 
 // ─────────────────────────────────────────────────────────────────────────
 // Bug #4 — jq string interpolation `"\(.field)"` rejected by tokenizer

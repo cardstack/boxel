@@ -44,10 +44,22 @@
       "expected": 9
     },
     {
-      "name": "Pseudo first",
-      "source": "\"Line Item\":first.SKU",
+      "name": "Positional selector first",
+      "source": "\"Line Item\"[#first].SKU",
       "canonical": ".lineItems[0].sku",
       "expected": "COPY-01"
+    },
+    {
+      "name": "Positional selector from end",
+      "source": "\"Line Item\"[#last-1].SKU",
+      "canonical": ".lineItems[-2].sku",
+      "expected": "COPY-03"
+    },
+    {
+      "name": "Anchored positional range",
+      "source": "\"Line Item\"[#2..#last-1].SKU",
+      "canonical": "[(.lineItems) as $__seq | $__seq[1:(($__seq | length) - 1)][].sku]",
+      "expected": ["BRAND-RED", "COPY-03", "COPY-04", "SRV-01"]
     },
     {
       "name": "Data-anchored predicate",

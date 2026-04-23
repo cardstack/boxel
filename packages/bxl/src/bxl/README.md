@@ -26,8 +26,9 @@ BXL imports from both `src/jqtools/` and `src/formulajs/`. The reverse is
 ## Responsibilities
 
 - **`compiler/readable-syntax.ts`** — rewrites readable BXL to canonical jqxl
-  before tokenizing. Handles label paths, pseudos (`:first`, `:last`,
-  `:nth`), row/index shortcuts (`[#N]`, `[*pred]`, `[all]`), predicate
+  before tokenizing. Handles label paths, positional selectors
+  (`[#first]`, `[#last]`, `[#last-N]`, `[#N..#last-K]`, `[#only]`, `[#odd]`, `[#even]`, `[#N]`, `[#-N]`,
+  `[*pred]`, `[all]`), predicate
   indices (`[Field = "X"]`, `[Field > 5]`), Excel preprocessor (`=`, `<>`,
   `^`, `&`, leading `=`), and formula-name lifting. Uses the schema to
   resolve quoted and bare labels to jq paths.

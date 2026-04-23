@@ -59,16 +59,16 @@ export const bxlFuzzyExamples: BxlEdgeExample[] = [
   {
     id: 6,
     level: 'fuzzy ok',
-    name: 'mixed-case pseudo-class',
-    expression: 'line item:LaSt.sku',
+    name: 'mixed-case positional selector keyword',
+    expression: 'line item[#LaSt].sku',
     expected: 'HARD-02',
   },
   {
     id: 7,
     level: 'fuzzy ok',
-    name: 'mixed-case nth-last pseudo-class',
-    expression: 'line item:NtH-LaSt(1).sku',
-    expected: 'HARD-02',
+    name: 'last-offset positional selector',
+    expression: 'line item[#last-1].sku',
+    expected: 'SRV-01',
   },
   {
     id: 8,
@@ -190,8 +190,8 @@ export const bxlWarningExamples: BxlEdgeExample[] = [
   {
     id: 7,
     level: 'fuzzy ok',
-    name: 'odd pseudo-class returns 1st, 3rd, 5th items',
-    expression: '"Line Item":odd.SKU',
+    name: '[#odd] returns 1st, 3rd, 5th items',
+    expression: '"Line Item"[#odd].SKU',
     expected: ['PAPER-01', 'COPY-03', 'SRV-01'],
   },
   {
@@ -221,43 +221,45 @@ export const bxlWarningExamples: BxlEdgeExample[] = [
   {
     id: 11,
     level: 'fuzzy ok',
-    name: 'even pseudo-class returns 2nd, 4th, 6th items',
-    expression: '"Line Item":even.SKU',
+    name: '[#even] returns 2nd, 4th, 6th items',
+    expression: '"Line Item"[#even].SKU',
     expected: ['BRAND-RED', 'COPY-04', 'HARD-02'],
   },
   {
     id: 12,
     level: 'fuzzy ok',
-    name: ':only boolean — multi-item array is false',
-    expression: '"Line Item"[all]:only',
-    expected: false,
+    name: '[#only] returns the lone shipment item',
+    expression: 'Shipment[0:1][#only].Carrier',
+    expected: 'UPS',
   },
   {
     id: 13,
     level: 'fuzzy ok',
-    name: ':empty boolean — non-empty array is false',
-    expression: '"Line Item"[all]:empty',
-    expected: false,
+    name: 'empty check uses length',
+    expression: '(Shipment[0:0] | length) = 0',
+    expected: true,
   },
   {
     id: 14,
-    level: 'fuzzy ok',
-    name: ':only boolean — singleton slice is true',
-    expression: 'Shipment[0:1]:only',
-    expected: true,
+    level: 'edge error',
+    name: 'human selector zero',
+    expression: '"Line Item"[#0].SKU',
+    expectIssueCodes: ['human-row-zero'],
+    expectError: true,
   },
   {
     id: 15,
-    level: 'fuzzy ok',
-    name: ':empty boolean — empty slice is true',
-    expression: 'Shipment[0:0]:empty',
-    expected: true,
+    level: 'edge error',
+    name: 'legacy pseudo syntax now errors',
+    expression: '"Line Item":first.SKU',
+    expectIssueCodes: ['legacy-pseudo-class-removed'],
+    expectError: true,
   },
 ];
-// Known edge: applying pseudo-classes to BARE array-literal primaries
-// (e.g. `[Subtotal]:only`, `[]:empty`) is not currently supported — the
-// compiler treats `[` at expression start as an IndexSegment requiring a
-// base path. If that becomes a real user need, widen Primary parsing to
-// recognize ArrayCtor followed by pseudo-class suffixes.
+// Known edge: applying positional selectors to bare array-literal primaries
+// (e.g. `[Subtotal][#only]`) is not currently supported — the compiler
+// treats `[` at expression start as an IndexSegment requiring a base path.
+// If that becomes a real user need, widen Primary parsing to recognize
+// ArrayCtor followed by positional selector suffixes.
 
 export const bxlEdgeExamples = [...bxlFuzzyExamples, ...bxlWarningExamples];

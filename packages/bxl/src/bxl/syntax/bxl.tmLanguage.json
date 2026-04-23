@@ -9,6 +9,9 @@
   ],
   "patterns": [
     {
+      "include": "#selectors"
+    },
+    {
       "include": "#comments"
     },
     {
@@ -36,12 +39,6 @@
       "include": "#numbers"
     },
     {
-      "include": "#selectors"
-    },
-    {
-      "include": "#pseudo-classes"
-    },
-    {
       "include": "#members"
     },
     {
@@ -56,7 +53,7 @@
       "patterns": [
         {
           "name": "comment.line.number-sign.bxl",
-          "match": "#(?!\\d).*"
+          "match": "#(?!(?:-?\\d+|first|last|only|odd|even)\\b).*"
         }
       ]
     },
@@ -161,15 +158,11 @@
         },
         {
           "name": "constant.numeric.zero-based-index.bxl",
-          "match": "#\\d+"
-        }
-      ]
-    },
-    "pseudo-classes": {
-      "patterns": [
+          "match": "#-?\\d+"
+        },
         {
-          "name": "entity.other.attribute-name.pseudo-class.bxl",
-          "match": ":(?:first|last|only|empty|nth-last|nth|odd|even|not)\\b"
+          "name": "keyword.other.selector-hash.bxl",
+          "match": "#(?:last-\\d+|first|last|only|odd|even)\\b"
         }
       ]
     },
@@ -181,7 +174,7 @@
         },
         {
           "name": "variable.other.field.bxl",
-          "match": "\\b[A-Z][A-Za-z0-9_]*(?=\\s*(?:\\.|\\[|:|\\?|==|!=|<=|>=|=|<|>|\\^=|\\$=|\\*=))"
+          "match": "\\b[A-Z][A-Za-z0-9_]*(?=\\s*(?:\\.|\\[|\\?|==|!=|<=|>=|=|<|>|\\^=|\\$=|\\*=))"
         }
       ]
     },

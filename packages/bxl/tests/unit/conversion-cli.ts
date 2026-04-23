@@ -75,7 +75,14 @@ strictEqual(
   jqToReadableBxlExpression('.lineItems[-1].lineTotal', {
     schema: bxlExampleSchema,
   }).source,
-  '"Line Item":last."Line Total"',
+  '"Line Item"[#last]."Line Total"',
+);
+
+strictEqual(
+  jqToReadableBxlExpression('.lineItems[-2].sku', {
+    schema: bxlExampleSchema,
+  }).source,
+  '"Line Item"[#last-1].SKU',
 );
 
 strictEqual(

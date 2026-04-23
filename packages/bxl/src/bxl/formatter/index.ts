@@ -737,7 +737,7 @@ function shouldInsertReadableSpace(
   }
 
   // Field access stays tight-binding — `Customer.Name`, `[all].SKU`,
-  // `:last.Field`. But `.field` after a binary arith op (`a - .foo`)
+  // `[#last].Field`. But `.field` after a binary arith op (`a - .foo`)
   // should still get a space; only suppress the space when the `.` is
   // attached to a value token or another `.` (chained field access).
   // Also: `. as $root` should stay spaced — the bare identity dot is
@@ -837,7 +837,7 @@ function formatReadableBxlSource(source: string): string {
       prevPrev = previous;
       previous = token;
     }
-    return output;
+    return output.replace(/\[#last\s*-\s*(\d+)\]/g, '[#last-$1]');
   } catch {
     return source;
   }
@@ -1037,10 +1037,14 @@ function readablePathFromParts(
       continue;
     }
 
-    if (part.value === -1) {
-      output += ':last';
+    if (part.value === 0) {
+      output += '[#first]';
+    } else if (part.value === -1) {
+      output += '[#last]';
+    } else if (part.value < 0) {
+      output += `[#last-${Math.abs(part.value) - 1}]`;
     } else {
-      output += `[row ${part.value + 1}]`;
+      output += `[#${part.value + 1}]`;
     }
     scope = pendingArrayItemScope;
     pendingArrayItemScope = undefined;

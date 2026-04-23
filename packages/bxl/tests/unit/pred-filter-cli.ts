@@ -5,6 +5,8 @@
 //                 Replaces most uses of the `_BY` builtin family.
 //   `[#N]`      — one-based single-row shortcut (was zero-based).
 //   `[#N..M]`   — one-based inclusive range.
+//   `[#N..#last-K]` / `[#last-K..#last-J]`
+//                — anchored forward ranges from the front/back.
 //   `[row N]`   — legacy one-based shortcut; still parses, solidify
 //                 rewrites to `[#N]` + linter info code.
 //   bare `[N]`  — zero-based jq-native escape hatch (info-level lint).
@@ -79,6 +81,18 @@ const cases: FilterCase[] = [
     name: '[#1..3] yields first three SKUs',
     expression: '"Line Item"[#1..3].SKU',
     expectedValue: ['PAPER-01', 'BRAND-RED', 'COPY-03'],
+  },
+  {
+    name: '[#2..#last-1] yields middle SKUs',
+    expression: '"Line Item"[#2..#last-1].SKU',
+    expectedValue: ['BRAND-RED', 'COPY-03', 'COPY-04', 'SRV-01'],
+    expectedJq: '[(.lineItems) as $__seq | $__seq[1:(($__seq | length) - 1)][].sku]',
+  },
+  {
+    name: '[#last-3..#last-1] yields forward end-anchored range',
+    expression: '"Line Item"[#last-3..#last-1].SKU',
+    expectedValue: ['COPY-03', 'COPY-04', 'SRV-01'],
+    expectedJq: '[(.lineItems) as $__seq | $__seq[(($__seq | length) - 4):(($__seq | length) - 1)][].sku]',
   },
 
   // --- Implicit [all] ---
@@ -164,6 +178,28 @@ strictEqual(
   rangeRewrite.source,
   '"Line Item"[#1..3].SKU',
   'solidify: [row N..M] -> [#N..M]',
+);
+
+// --- Anchored ranges must still move forward ---
+
+const reverseAnchored = lintBxlExpression('"Line Item"[#last-1..#last-3].SKU', {
+  schema: bxlExampleSchema,
+});
+strictEqual(reverseAnchored.ok, false, 'reverse anchored range must be rejected');
+strictEqual(
+  reverseAnchored.issues.some((i) =>
+    i.message.includes('[#last-1..#last-3] range must move forward in collection order')),
+  true,
+);
+
+const backToFrontAnchored = lintBxlExpression('"Line Item"[#last-3..#4].SKU', {
+  schema: bxlExampleSchema,
+});
+strictEqual(backToFrontAnchored.ok, false, 'back-to-front anchored range must be rejected');
+strictEqual(
+  backToFrontAnchored.issues.some((i) =>
+    i.message.includes('[#last-3..#4] range must move forward in collection order')),
+  true,
 );
 
 // --- Linter: legacy row shortcut surfaces info code ---

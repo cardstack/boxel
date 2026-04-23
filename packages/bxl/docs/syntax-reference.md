@@ -1,6 +1,6 @@
 # BXL Syntax Reference
 
-The canonical BXL syntax reference. Readable labels, one-based rows, predicates, and structural pseudo-classes on top of jq pipes and 300+ Excel formula helpers. Compiles to canonical jq; same evaluator, same AST, one language.
+The canonical BXL syntax reference. Readable labels, one-based rows, predicates, and positional selectors on top of jq pipes and 300+ Excel formula helpers. Compiles to canonical jq; same evaluator, same AST, one language.
 
 > This is the Markdown mirror of [`docs/syntax-reference.html`](./syntax-reference.html). The HTML version has syntax highlighting and a rendered layout — open it in a browser for the best reading experience.
 
@@ -21,11 +21,11 @@ If you know spreadsheets, you know the core idea. The difference: instead of cel
 | `=IFERROR(A1, 0)` | `IFERROR(Value, 0)` |
 | `=SUMIF(C:C, "Service", B:B)` | `SUM("Line Item"[*Category = "Service"].Amount)` |
 | `=VLOOKUP(E2, A:B, 2, FALSE)` | `"Line Item"[SKU = Target SKU]."Unit Price"`  — first-match predicate |
-| `=A1` (first row) | `"Line Item":first.Amount`  — pseudo-class |
-| `=INDEX(A:A, ROWS(A:A))` (last) | `"Line Item":last.Amount` |
+| `=A1` (first row) | `"Line Item"[#first].Amount` |
+| `=INDEX(A:A, ROWS(A:A))` (last) | `"Line Item"[#last].Amount` |
 | `=ROUND(B1*C1, 2)` | `ROUND(Quantity * "Unit Price", 2)` |
 
-> **Notice what changes between Excel and BXL:** no cell letters (`A1`), no absolute columns (`A:A`), no separate `ROWS()` to get the last position. Every row shows a different piece of sugar in action — labels replace cell references, implicit iteration replaces `map`, `[*pred]` replaces `SUMIF`, first-match `[pred]` replaces `VLOOKUP`, and pseudo-classes replace `INDEX`/`ROWS` arithmetic.
+> **Notice what changes between Excel and BXL:** no cell letters (`A1`), no absolute columns (`A:A`), no separate `ROWS()` to get the last position. Every row shows a different piece of sugar in action — labels replace cell references, implicit iteration replaces `map`, `[*pred]` replaces `SUMIF`, first-match `[pred]` replaces `VLOOKUP`, and positional selectors replace `INDEX`/`ROWS` arithmetic.
 
 > BXL formula arguments prefer **commas**, matching Excel style: `ROUND(.x, 2)`. Semicolons are still accepted for pasted jq-style input, but Solid and Readable BXL normalize them to commas. Compiled canonical jq keeps semicolons because jq function calls require them.  
 > Array literals also use **commas**: `[1, 2, 3]`.
@@ -53,16 +53,16 @@ If you only remember ten things about BXL, remember these. Every other section e
 | **4** | **Predicates come in two shapes.** `[pred]` returns the first match; `[*pred]` returns every match. | Scalar vs array result. `[SKU="X"]` finds one; `[*Taxable]` filters all. |
 | **5** | **Excel-style equality works:** `=` and `<>` compile to `==` and `!=`. | Paste `IF(Status="paid", …)` from Excel, no edits needed. |
 | **6** | **UPPERCASE is a promise.** `ROUND`, `SUM`, `ISBLANK` match Microsoft Excel exactly. lowercase (`present`, `when`, `words`) is BXL-native. | UPPERCASE paste-compatible with Excel cells. lowercase is BXL's own vocabulary. |
-| **7** | **`:only` and `:empty` are booleans**, not filters. They don't narrow a collection; they assert its size. | Use them inside `if` / `and` / `or`, never to pick items. Pair with `:first` if you need the item itself. |
+| **7** | **Positional selectors live in `[#...]` only.** Positive selectors are 1-based; last-relative selectors count backward from the end. | `[#1]`, `[#4]`, `[#first]`, `[#last]`, `[#last-1]`, `[#4..#last-3]`, `[#odd]`, `[#even]`, `[#only]`. |
 | **8** | **Root auto-binds across pipes.** Readable labels after `\|` resolve against the root card, not the piped-in value. | `"Line Item"."Line Total" \| add = Subtotal` — `Subtotal` reads from the root. |
 | **9** | **Presence is context-dependent.** `ISBLANK` is Excel-strict (null only). `present` is form-friendly (null or `""`). | `present(Email)` for form validation. `NOT ISBLANK(Email)` when you need Excel's semantics. |
 | **10** | **Formatters pipe and interpolate.** `\| @fmt` transforms a value; `@fmt "… \(expr) …"` escapes every interpolation into a safe sink. | `@html "Hi \(Name)"` escapes XSS. `@uri` for URLs. `@json` / `@csv` / `@base64` for machine sinks. |
 
-> **Honorable mentions.** `when(p, q)` / `implies(p, q)` for "if this, then that must hold" constraints. `nonempty(arr)` to strip `null` / `""` before counting. `words(s)` to count whitespace-separated tokens. `:not(pred)` to invert any predicate.
+> **Honorable mentions.** `when(p, q)` / `implies(p, q)` for "if this, then that must hold" constraints. `nonempty(arr)` to strip `null` / `""` before counting. `words(s)` to count whitespace-separated tokens.
 
 ## Readable Paths
 
-BXL keeps canonical jq valid and adds a schema-aware readable layer. Labels, one-based rows, predicates, and pseudo-classes compile to the same AST shape the jq evaluator already understands.
+BXL keeps canonical jq valid and adds a schema-aware readable layer. Labels, one-based rows, predicates, and positional selectors compile to the same AST shape the jq evaluator already understands.
 
 > **Runtime shape:** BXL is a compiler front-end for jq. It rewrites readable source to canonical jq, then uses the same tokenizer, parser, evaluator, formula helpers, and jq builtins.
 
@@ -92,21 +92,26 @@ BXL keeps canonical jq valid and adds a schema-aware readable layer. Labels, one
 
 > **Predicate truthiness.** `[*Taxable]` (bare field) uses Excel truthy semantics — `true` keeps, `false` / `null` / missing filter out — same as jq's native `select(.taxable)`.
 
-### Structural pseudo-classes
+### Positional selectors
 
 | Readable BXL | Canonical jq | Notes |
 | --- | --- | --- |
-| `"Line Item":first.SKU` | `.lineItems[0].sku` | First item. |
-| `"Line Item":last."Line Total"` | `.lineItems[-1].lineTotal` | Last item. |
-| `"Line Item":nth(4).Quantity` | `.lineItems[3].quantity` | 1-based literal index. |
-| `"Line Item":nth-last(1).SKU` | `.lineItems[-1].sku` | Nth from the end. |
-| `"Line Item":odd` | `[.lineItems \| .[range(0; length; 2)]]` | Positions 1, 3, 5 (1-based). |
-| `"Line Item":even` | `[.lineItems \| .[range(1; length; 2)]]` | Positions 2, 4, 6. |
-| `"Line Item":not([SKU ^= "BRAND"])` | `[.lineItems[] \| select((.sku \| startswith("BRAND")) \| not)]` | Predicate inversion. |
-| `X:only` | `(X \| length == 1)` | **Boolean.** Composes inside if / and / or. |
-| `X:empty` | `(X \| length == 0)` | **Boolean.** No downstream `.field` navigation. |
+| `"Line Item"[#first].SKU` | `.lineItems[0].sku` | First item. |
+| `"Line Item"[#last]."Line Total"` | `.lineItems[-1].lineTotal` | Last item. |
+| `"Line Item"[#last-1].SKU` | `.lineItems[-2].sku` | Second from the end. |
+| `"Line Item"[#4].Quantity` | `.lineItems[3].quantity` | Positive selectors are 1-based. |
+| `"Line Item"[#2..#last-1].SKU` | `[(.lineItems) as $__seq \| $__seq[1:(($__seq \| length) - 1)][].sku]` | Forward anchored range from the front to the back. |
+| `"Line Item"[#last-3..#last-1].SKU` | `[(.lineItems) as $__seq \| $__seq[(($__seq \| length) - 4):(($__seq \| length) - 1)][].sku]` | Forward anchored range fully from the back. |
+| `"Line Item"[#-1].SKU` | `.lineItems[-1].sku` | jq-native alias for the last item. |
+| `"Line Item"[#odd]` | `[.lineItems \| .[range(0; length; 2)]]` | Positions 1, 3, 5 (1-based). |
+| `"Line Item"[#even]` | `[.lineItems \| .[range(1; length; 2)]]` | Positions 2, 4, 6. |
+| `Shipment[0:1][#only].Carrier` | `(([.shipments[0:1][]]) as $__seq \| ($__seq \| length) as $__len \| if $__len == 1 then $__seq[0] else error(...) end).carrier` | The only element, error unless length is exactly 1. |
 
-> **`:only` and `:empty` are boolean predicates** — they yield `true` / `false` rather than filtering the collection. Use them where you'd write length assertions: `if [Clause[] | select(Type == "confidentiality")]:only then "ok" else "review" end`.
+> **Indexing asymmetry is intentional.** Positive selectors are 1-based (`[#1]` is the first row) because they are for human-authored row access. The preferred end-relative form is `[#last-N]`: `[#last]` is the last row, `[#last-1]` second-to-last, `[#last-3]` fourth-from-last. jq-native `[#-N]` aliases are still accepted (`[#-1]` = `[#last]`, `[#-2]` = `[#last-1]`) but the readable formatter prefers the `last-N` spelling.
+
+> **Anchored ranges are forward-only.** `[#4..#last-3]`, `[#first..#last]`, and `[#last-119..#last-1]` are valid because they still move left-to-right in collection order. Reversed anchored ranges such as `[#last-3..#4]` or `[#last-1..#last-119]` are rejected instead of implying reverse traversal.
+
+> **Boolean size checks are regular expressions now.** CSS-style `:only`, `:empty`, `:not`, `:has`, `:is`, and `:where` are gone. Use normal BXL instead: `(X | length) = 0`, `(X | length) = 1`, `select(not ...)`, `has("x")`, or explicit `or` chains.
 
 ### Formula composition
 
@@ -135,9 +140,9 @@ ROUND(.subtotal * .taxRate / 100; 2) == .taxAmount
 | `lintBxlExpression(source, options)` | Non-evaluating linter for readable syntax confusion, compiler warnings, and native parse errors. |
 | `tests/linter-cli.ts` | CLI coverage for edge cases the grammar allows but authors can easily misread. |
 
-> **Lint targets:** missing quotes around multi-word labels, root labels after a top-level pipe, legacy `[row N]` shortcuts, predicate selectors that return only the first match, top-level `==` (info-level `prefer-excel-equality` — BXL canonicalizes to `=`), deferred positional pseudo-classes, and helper-dependent predicates such as `IN`.
+> **Lint targets:** missing quotes around multi-word labels, root labels after a top-level pipe, legacy `[row N]` shortcuts, predicate selectors that return only the first match, top-level `==` (info-level `prefer-excel-equality` — BXL canonicalizes to `=`), removed CSS-style pseudo-classes, and helper-dependent predicates such as `IN`.
 
-> **Forgiving text fields:** BXL accepts extra whitespace, mixed capitalization for readable keywords/selectors/predicates/pseudo-classes, lowercase or mixed-case formula function names, comma-separated or semicolon-separated formula arguments, uppercase booleans, and unquoted multi-word labels when the schema resolves them unambiguously. The canonical compiler output still normalizes to jq.
+> **Forgiving text fields:** BXL accepts extra whitespace, mixed capitalization for readable keywords/selectors/predicates/positional-selector keywords, lowercase or mixed-case formula function names, comma-separated or semicolon-separated formula arguments, uppercase booleans, and unquoted multi-word labels when the schema resolves them unambiguously. The canonical compiler output still normalizes to jq.
 
 ## Excel Paste Compatibility
 
@@ -228,7 +233,7 @@ all(Payment[], "Days Late" = 0)
 _First / last_
 
 ```
-"Line Item":first.SKU & " through " & "Line Item":last.SKU
+"Line Item"[#first].SKU & " through " & "Line Item"[#last].SKU
 ```
 
 _One-based shortcut_
@@ -257,7 +262,7 @@ _Coerces numbers to strings automatically_
 Customer.Name & " (" & Customer.Tier & ") has " & (COUNTA("Line Item") | tostring) & " items"
 ```
 
-### Boolean pseudo-classes for visibility / gates
+### Visibility / gate checks without pseudo-classes
 
 _Reveal reviewer section_
 
@@ -268,13 +273,13 @@ Status = "in-review"
 _Empty check_
 
 ```
-Payment[*Status = "failed"]:empty
+(Payment[*Status = "failed"] | length) = 0
 ```
 
-_Unique match_
+_Exactly one match, then take it_
 
 ```
-"Line Item"[*Category = "Service"]:only
+"Line Item"[*Category = "Service"][#only]
 ```
 
 ### Multi-line analytics pipeline

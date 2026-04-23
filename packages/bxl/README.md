@@ -68,7 +68,7 @@ The eight design decisions that make BXL feel the way it does:
 - **1-based rows** — `"Line Item"[#4]` is the fourth row. `[3]` remains the jq-native 0-based escape hatch.
 - **Implicit iteration** — `"Line Item"."Line Total"` auto-materializes across the array. No `map` for the common case.
 - **Two predicate shapes** — `[pred]` picks the first match (scalar). `[*pred]` keeps every match (array). Replaces `VLOOKUP` / `SUMIF` without a separate builtin.
-- **Structural pseudo-classes** — `:first`, `:last`, `:nth(N)`, `:nth-last(N)`, `:odd`, `:even`, `:only`, `:empty`, `:not(…)`. CSS for your data.
+- **One positional selector family** — `[#1]`, `[#first]`, `[#last]`, `[#last-1]`, `[#4..#last-3]`, `[#odd]`, `[#even]`, `[#only]`. CSS inspired the readability; BXL keeps it all inside `[#...]`.
 - **Paste Excel unchanged** — `=`, `<>`, `^`, `&`, leading `=` all work. `ROUND`, `SUM`, `IF`, `VLOOKUP` match Microsoft Excel exactly.
 - **UPPERCASE is a promise, lowercase is a contribution** — `ROUND(x; 2)` is paste-compatible with Excel. `present(x)`, `when(p; q)`, `words(s)` are BXL-native.
 - **One sandbox, many surfaces** — the same language powers computed fields, form validation, visibility rules, workflow gates, access policies, and annotation targets.
@@ -135,10 +135,10 @@ evaluateBxl('"Line Item"[SKU = "BRAND-RED"]."Unit Price"', invoice, { schema });
 evaluateBxl('SUM("Line Item"[*Taxable]."Line Total")', invoice, { schema });
 // => 50  (only the taxable row)
 
-// 6 · Structural pseudo-classes
-evaluateBxl('"Line Item":first.SKU',           invoice, { schema }); // => 'COPY-01'
-evaluateBxl('"Line Item":last.Quantity',       invoice, { schema }); // => 5
-evaluateBxl('"Line Item":nth(2)."Unit Price"', invoice, { schema }); // => 20
+// 6 · Positional selectors
+evaluateBxl('"Line Item"[#first].SKU',         invoice, { schema }); // => 'COPY-01'
+evaluateBxl('"Line Item"[#last].Quantity',     invoice, { schema }); // => 5
+evaluateBxl('"Line Item"[#last-1]."Unit Price"', invoice, { schema }); // => 20
 
 // 7 · Paste Excel unchanged
 evaluateBxl(
@@ -357,13 +357,13 @@ BXL:         { expr: 'Total = SUM("Line Item"."Line Total")',
 
 Same pattern, JSON-native, runs in the same sandbox as your formulas.
 
-### 6 · CSS · a pseudo-class notation worth borrowing
+### 6 · CSS · selector readability, not selector syntax
 
-BXL's debt to CSS is narrow and specific: the selector pseudo-class vocabulary. `:first-child`, `:nth-of-type(2n)`, `:not(.hidden)` — CSS shipped a compact, readable notation for addressing positions in a collection, and BXL lifts it verbatim and points it at array indexes instead of DOM nodes.
+BXL still owes CSS a debt, but it is now conceptual rather than grammatical. CSS proved that position-oriented collection access can be readable. BXL keeps that spirit, but collapses everything into one positional selector family inside brackets instead of preserving CSS pseudo-class spellings.
 
 ```
-CSS:  tr:first-child, tr:nth-child(2n+1), li:not(.done)
-BXL:  "Line Item":first,  "Line Item":odd,  Task:not([Done])
+CSS:  tr:first-child, tr:last-child, tr:nth-child(2n+1)
+BXL:  "Line Item"[#first], "Line Item"[#last], "Line Item"[#odd]
 ```
 
 That's most of the debt. CSS is otherwise a different *kind* of language — a styling rule engine that runs against the DOM to produce rendered boxes, not a general expression language:
@@ -373,7 +373,7 @@ That's most of the debt. CSS is otherwise a different *kind* of language — a s
 - `var(--x, fallback)` + the cascade resolve a property by lookup-with-fallback, not by expression-level branching.
 - `counter()` and `:has()` walk the tree for rendering; they don't aggregate values in any arithmetic sense.
 
-CSS is genuinely sandboxed — it can't fetch, mutate, or call arbitrary code, and the web depends on that — but "sandboxed styling rules" isn't the same category as "sandboxed expression language." BXL borrows the position-addressing notation because it's a good notation, not because CSS solves BXL's problem.
+CSS is genuinely sandboxed — it can't fetch, mutate, or call arbitrary code, and the web depends on that — but "sandboxed styling rules" isn't the same category as "sandboxed expression language." BXL borrows the readability lesson, not the pseudo-class grammar.
 
 ### 7 · JSONata · the closest living peer
 
@@ -523,7 +523,7 @@ Full API reference in [`docs/api.md`](./docs/api.md).
 npm install --global @cardstack/bxl
 
 bxl compile  '"Line Item"[#1].SKU'
-bxl eval     '"Line Item":first.SKU'  --input invoice.json --schema invoice.schema.json
+bxl eval     '"Line Item"[#first].SKU'  --input invoice.json --schema invoice.schema.json
 bxl lint     'IF(Subtotal = 0, "empty", Subtotal)'
 bxl solidify 'subtotal * tax rate'
 ```

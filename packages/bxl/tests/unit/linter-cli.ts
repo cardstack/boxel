@@ -65,14 +65,13 @@ strictEqual(
   ),
   true,
 );
-const oddPseudo = lintBxlExpression('"Line Item":odd.SKU', {
+const removedPseudo = lintBxlExpression('"Line Item":odd.SKU', {
   schema: bxlExampleSchema,
 });
-// :odd / :even materialize-then-stride now — no deferral warning.
-strictEqual(oddPseudo.ok, true);
+strictEqual(removedPseudo.ok, false);
 strictEqual(
-  oddPseudo.issues.some((issue) => issue.code === 'positional-stream-pseudo-deferred'),
-  false,
+  removedPseudo.issues.some((issue) => issue.code === 'legacy-pseudo-class-removed'),
+  true,
 );
 
 const badRow = lintBxlExpression('"Line Item"[row 0].SKU', {

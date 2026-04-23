@@ -29,6 +29,7 @@ strictEqual(grammar.scopeName, 'source.bxl');
 deepStrictEqual(grammar.fileTypes, ['bxl', 'jqxl', 'jqxlexpr']);
 
 const requiredRepositories = [
+  'selectors',
   'comments',
   'strings',
   'variables',
@@ -38,8 +39,6 @@ const requiredRepositories = [
   'keywords',
   'constants',
   'numbers',
-  'selectors',
-  'pseudo-classes',
   'members',
   'operators',
   'punctuation',
@@ -85,7 +84,9 @@ strictEqual(firstMatch('excel-functions', 'ROUND('), 'support.function.excel.bxl
 strictEqual(firstMatch('jq-functions', 'map('), 'support.function.jq.bxl');
 strictEqual(firstMatch('selectors', 'row 4'), 'keyword.other.selector-row.bxl');
 strictEqual(firstMatch('selectors', '#3'), 'constant.numeric.zero-based-index.bxl');
-strictEqual(firstMatch('pseudo-classes', ':nth-last'), 'entity.other.attribute-name.pseudo-class.bxl');
+strictEqual(firstMatch('selectors', '#-2'), 'constant.numeric.zero-based-index.bxl');
+strictEqual(firstMatch('selectors', '#last'), 'keyword.other.selector-hash.bxl');
+strictEqual(firstMatch('selectors', '#last-3'), 'keyword.other.selector-hash.bxl');
 strictEqual(firstMatch('numbers', '89.04'), 'constant.numeric.bxl');
 strictEqual(firstMatch('keywords', 'STARTSWITH'), 'keyword.operator.predicate.bxl');
 

@@ -452,6 +452,14 @@ const PATH_RESERVED = new Set([
   'row',
 ]);
 
+const POSITIONAL_SELECTOR_KEYWORDS = new Set([
+  'first',
+  'last',
+  'only',
+  'odd',
+  'even',
+]);
+
 function normalizeLabel(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
@@ -585,6 +593,56 @@ function isIdentifierChar(char: string): boolean {
   return /[A-Za-z0-9_]/.test(char);
 }
 
+function previousNonWhitespaceChar(source: string, index: number): string | undefined {
+  for (let cursor = index - 1; cursor >= 0; cursor--) {
+    const value = source[cursor];
+    if (!/\s/.test(value)) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function previousNonWhitespaceChars(source: string, index: number, count: number): string {
+  const values: string[] = [];
+  for (let cursor = index - 1; cursor >= 0 && values.length < count; cursor--) {
+    const value = source[cursor];
+    if (!/\s/.test(value)) {
+      values.unshift(value);
+    }
+  }
+  return values.join('');
+}
+
+function startsHashSelector(source: string, index: number): boolean {
+  const previous = previousNonWhitespaceChar(source, index);
+  const previousTwo = previousNonWhitespaceChars(source, index, 2);
+  if (previous !== '[' && previousTwo !== '..') {
+    return false;
+  }
+
+  const next = source[index + 1] ?? '';
+  if (/[0-9]/.test(next)) {
+    return true;
+  }
+
+  if (next === '-' && /[0-9]/.test(source[index + 2] ?? '')) {
+    return true;
+  }
+
+  if (!isIdentifierStart(next)) {
+    return false;
+  }
+
+  let cursor = index + 1;
+  let word = '';
+  while (cursor < source.length && isIdentifierChar(source[cursor])) {
+    word += source[cursor++];
+  }
+
+  return POSITIONAL_SELECTOR_KEYWORDS.has(word.toLowerCase());
+}
+
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
   let index = 0;
@@ -597,7 +655,7 @@ function tokenize(source: string): Token[] {
       continue;
     }
 
-    if (char === '#' && !/[0-9]/.test(source[index + 1] ?? '')) {
+    if (char === '#' && !startsHashSelector(source, index) && !/[0-9]/.test(source[index + 1] ?? '')) {
       while (index < source.length && source[index] !== '\n') {
         index++;
       }
@@ -875,6 +933,18 @@ function joinParts(parts: string[]): string {
   return out.join('');
 }
 
+type SelectorRangeEndpoint =
+  | {
+      family: 'front';
+      display: string;
+      oneBased: number;
+    }
+  | {
+      family: 'back';
+      display: string;
+      offsetFromLast: number;
+    };
+
 function hasUnclosedMaterializedArray(source: string): boolean {
   const opens = [...source].filter((char) => char === '[').length;
   const closes = [...source].filter((char) => char === ']').length;
@@ -949,6 +1019,113 @@ function splitTopLevel(
 
   ranges.push([rangeStart, end]);
   return ranges;
+}
+
+function parseSelectorRangeEndpoint(tokens: Token[]): SelectorRangeEndpoint | undefined {
+  if (tokens.length === 1 && tokens[0].type === 'number') {
+    const oneBased = Number(tokens[0].value);
+    if (!Number.isInteger(oneBased) || oneBased < 1) {
+      throw new ReadableSyntaxError(
+        `[${tokens[0].value}] must be a positive 1-based row number`,
+      );
+    }
+    return {
+      family: 'front',
+      display: `#${tokens[0].value}`,
+      oneBased,
+    };
+  }
+
+  if (tokens.length === 2 && tokens[0].value === '#' && tokens[1].type === 'number') {
+    const oneBased = Number(tokens[1].value);
+    if (!Number.isInteger(oneBased) || oneBased < 1) {
+      throw new ReadableSyntaxError(
+        `[#${tokens[1].value}] must be a positive 1-based row number`,
+      );
+    }
+    return {
+      family: 'front',
+      display: `#${tokens[1].value}`,
+      oneBased,
+    };
+  }
+
+  if (tokens.length === 2 && tokens[0].value === '#' && tokens[1].type === 'ident') {
+    const keyword = tokens[1].value.toLowerCase();
+    if (keyword === 'first') {
+      return {
+        family: 'front',
+        display: '#first',
+        oneBased: 1,
+      };
+    }
+    if (keyword === 'last') {
+      return {
+        family: 'back',
+        display: '#last',
+        offsetFromLast: 0,
+      };
+    }
+    return undefined;
+  }
+
+  if (
+    tokens.length === 4 &&
+    tokens[0].value === '#' &&
+    tokens[1].type === 'ident' &&
+    tokens[1].value.toLowerCase() === 'last' &&
+    tokens[2].type === 'op' &&
+    tokens[2].value === '-' &&
+    tokens[3].type === 'number'
+  ) {
+    const offset = Number(tokens[3].value);
+    if (!Number.isInteger(offset) || offset < 1) {
+      throw new ReadableSyntaxError(
+        `[#last-${tokens[3].value}] must subtract a positive whole number`,
+      );
+    }
+    return {
+      family: 'back',
+      display: `#last-${tokens[3].value}`,
+      offsetFromLast: offset,
+    };
+  }
+
+  return undefined;
+}
+
+function selectorRangeIsIncreasing(
+  start: SelectorRangeEndpoint,
+  end: SelectorRangeEndpoint,
+): boolean {
+  if (start.family === 'front' && end.family === 'front') {
+    return start.oneBased <= end.oneBased;
+  }
+  if (start.family === 'front' && end.family === 'back') {
+    return true;
+  }
+  if (start.family === 'back' && end.family === 'back') {
+    return start.offsetFromLast >= end.offsetFromLast;
+  }
+  return false;
+}
+
+function selectorRangeStartExpr(endpoint: SelectorRangeEndpoint, seqVar: string): string {
+  if (endpoint.family === 'front') {
+    return `${endpoint.oneBased - 1}`;
+  }
+  return endpoint.offsetFromLast === 0
+    ? `((${seqVar} | length) - 1)`
+    : `((${seqVar} | length) - ${endpoint.offsetFromLast + 1})`;
+}
+
+function selectorRangeEndExpr(endpoint: SelectorRangeEndpoint, seqVar: string): string {
+  if (endpoint.family === 'front') {
+    return `${endpoint.oneBased}`;
+  }
+  return endpoint.offsetFromLast === 0
+    ? `(${seqVar} | length)`
+    : `((${seqVar} | length) - ${endpoint.offsetFromLast})`;
 }
 
 function isSimpleHumanIndex(tokens: Token[]): boolean {
@@ -1608,25 +1785,9 @@ class Compiler {
       }
 
       if (token.type === 'punc' && token.value === ':') {
-        const suffix = this.compilePseudoSuffix(
-          out,
-          valueScope,
-          arrayItemScope,
-          rootPathPrefix,
+        throw new ReadableSyntaxError(
+          'CSS-style pseudo-class syntax was removed; use [#first], [#last], [#last-N], [#only], [#odd], [#even], [#N], or [#-N].',
         );
-        out = suffix.source;
-        changed = changed || suffix.changed;
-        warnings.push(...suffix.warnings);
-        needsRootBinding = needsRootBinding || Boolean(suffix.needsRootBinding);
-        valueScope = suffix.valueScope;
-        arrayItemScope = suffix.arrayItemScope;
-        streamItemScope = suffix.streamItemScope ?? streamItemScope;
-        // Decision 1A: :odd / :even leave the materialized array open so that
-        // downstream `.field` traversal streams through; the outer loop
-        // closes the bracket at end-of-path (line ~1387).
-        materialized = suffix.openMaterialized ?? materialized;
-        pendingImplicitArray = false;
-        continue;
       }
 
       break;
@@ -1758,6 +1919,107 @@ class Compiler {
       };
     }
 
+    if (
+      inner.length === 4 &&
+      inner[0].value === '#' &&
+      inner[1].type === 'ident' &&
+      inner[1].value.toLowerCase() === 'last' &&
+      inner[2].type === 'op' &&
+      inner[2].value === '-' &&
+      inner[3].type === 'number'
+    ) {
+      const offset = Number(inner[3].value);
+      if (!Number.isInteger(offset) || offset < 1) {
+        throw new ReadableSyntaxError(
+          `[#last-${inner[3].value}] must subtract a positive whole number`,
+        );
+      }
+      return {
+        source: `${base}[-${offset + 1}]`,
+        changed: true,
+        warnings: [],
+        next: this.index,
+        valueScope: item,
+      };
+    }
+
+    if (inner.length === 2 && inner[0].value === '#' && inner[1].type === 'ident') {
+      const keyword = inner[1].value.toLowerCase();
+      const closedBase = hasUnclosedMaterializedArray(base) ? `${base}]` : base;
+
+      if (keyword === 'first') {
+        return {
+          source: `${base}[0]`,
+          changed: true,
+          warnings: [],
+          next: this.index,
+          valueScope: item,
+        };
+      }
+
+      if (keyword === 'last') {
+        return {
+          source: `${base}[-1]`,
+          changed: true,
+          warnings: [],
+          next: this.index,
+          valueScope: item,
+        };
+      }
+
+      if (keyword === 'only') {
+        return {
+          source:
+            `((${closedBase}) as $__seq | ($__seq | length) as $__len | ` +
+            `if $__len == 1 then $__seq[0] else error("expected exactly 1 element, got \\($__len)") end)`,
+          changed: true,
+          warnings: [],
+          next: this.index,
+          valueScope: item,
+        };
+      }
+
+      if (keyword === 'odd' || keyword === 'even') {
+        const start = keyword === 'odd' ? 0 : 1;
+        return {
+          source: `[${closedBase} | .[range(${start}; length; 2)]`,
+          changed: true,
+          warnings: [],
+          next: this.index,
+          valueScope: item,
+          arrayItemScope: item,
+          streamItemScope: item,
+          openMaterialized: true,
+        };
+      }
+
+      throw new ReadableSyntaxError(
+        `Unsupported positional selector keyword '#${inner[1].value}'`,
+      );
+    }
+
+    if (
+      inner.length === 3 &&
+      inner[0].value === '#' &&
+      inner[1].type === 'op' &&
+      inner[1].value === '-' &&
+      inner[2].type === 'number'
+    ) {
+      const fromEnd = Number(inner[2].value);
+      if (!Number.isInteger(fromEnd) || fromEnd < 1) {
+        throw new ReadableSyntaxError(
+          `[#-${inner[2].value}] must be a negative index with a positive magnitude`,
+        );
+      }
+      return {
+        source: `${base}[-${fromEnd}]`,
+        changed: true,
+        warnings: [],
+        next: this.index,
+        valueScope: item,
+      };
+    }
+
     if (inner.length === 2 && inner[0].value === '#' && inner[1].type === 'number') {
       // `[#N]` — one-based, human-friendly single-row selector. Compiles
       // to zero-based jq by subtracting 1.
@@ -1776,40 +2038,55 @@ class Compiler {
       };
     }
 
-    // `[#N..M]` — one-based inclusive range slice. Mirrors `[row N..M]`
-    // but uses the new `#` prefix. Compiles to zero-based jq slice
-    // `[N-1:M]` (jq slice end is exclusive, so one-based inclusive M
-    // matches directly).
-    if (
-      inner.length === 4 &&
-      inner[0].value === '#' &&
-      inner[1].type === 'number' &&
-      inner[2].type === 'op' &&
-      inner[2].value === '..' &&
-      inner[3].type === 'number'
-    ) {
-      const startOne = Number(inner[1].value);
-      const endOne = Number(inner[3].value);
-      if (!Number.isInteger(startOne) || startOne < 1) {
-        throw new ReadableSyntaxError(
-          `[#${inner[1].value}..] must start at a positive 1-based row`,
-        );
+    // `[#N..M]`, `[#4..#last-3]`, `[#last-119..#last-1]` — forward,
+    // human-authored inclusive ranges. Start/end endpoints can be
+    // anchored from the front (`#first`, `#N`) or the back (`#last`,
+    // `#last-N`), but ranges must still move forward in collection
+    // order. We deliberately reject `[#last-3..4]` rather than hiding a
+    // reverse traversal in the syntax.
+    const rangeParts = splitTopLevel(inner, 0, inner.length, '..');
+    if (rangeParts.length === 2) {
+      const startEndpoint = parseSelectorRangeEndpoint(inner.slice(...rangeParts[0]));
+      const endEndpoint = parseSelectorRangeEndpoint(inner.slice(...rangeParts[1]));
+      if (startEndpoint && endEndpoint) {
+        if (!selectorRangeIsIncreasing(startEndpoint, endEndpoint)) {
+          throw new ReadableSyntaxError(
+            `[${startEndpoint.display}..${endEndpoint.display}] range must move forward in collection order`,
+          );
+        }
+
+        if (
+          startEndpoint.family === 'front' &&
+          endEndpoint.family === 'front'
+        ) {
+          return {
+            source: `[${base}[${startEndpoint.oneBased - 1}:${endEndpoint.oneBased}][]`,
+            changed: true,
+            warnings: [],
+            next: this.index,
+            valueScope: item,
+            arrayItemScope: item,
+            streamItemScope: item,
+            openMaterialized: true,
+          };
+        }
+
+        const closedBase = hasUnclosedMaterializedArray(base) ? `${base}]` : base;
+        const seqVar = '$__seq';
+        return {
+          source:
+            `[(${closedBase}) as ${seqVar} | ` +
+            `${seqVar}[${selectorRangeStartExpr(startEndpoint, seqVar)}:` +
+            `${selectorRangeEndExpr(endEndpoint, seqVar)}][]`,
+          changed: true,
+          warnings: [],
+          next: this.index,
+          valueScope: item,
+          arrayItemScope: item,
+          streamItemScope: item,
+          openMaterialized: true,
+        };
       }
-      if (!Number.isInteger(endOne) || endOne < startOne) {
-        throw new ReadableSyntaxError(
-          '[#N..M] range must be increasing',
-        );
-      }
-      return {
-        source: `[${base}[${startOne - 1}:${endOne}][]`,
-        changed: true,
-        warnings: [],
-        next: this.index,
-        valueScope: item,
-        arrayItemScope: item,
-        streamItemScope: item,
-        openMaterialized: true,
-      };
     }
 
     const commaRanges = splitTopLevel(inner, 0, inner.length, ',');
@@ -1908,141 +2185,6 @@ class Compiler {
     };
   }
 
-  private compilePseudoSuffix(
-    base: string,
-    currentScope: ReadableSchema | undefined,
-    currentItemScope: ReadableSchema | undefined,
-    _rootPathPrefix?: string,
-  ): PathCompileResult {
-    this.index++;
-    const name = this.tokens[this.index];
-    if (!name || name.type !== 'ident') {
-      throw new ReadableSyntaxError('Expected pseudo-class name after colon');
-    }
-    this.index++;
-    let nameValue = name.value.toLowerCase();
-    if (
-      nameValue === 'nth' &&
-      this.tokens[this.index]?.value === '-' &&
-      isIdent(this.tokens[this.index + 1], 'last')
-    ) {
-      nameValue = 'nth-last';
-      this.index += 2;
-    }
-    const item = currentItemScope ?? currentScope;
-
-    if (nameValue === 'first') {
-      return {
-        source: `${base}[0]`,
-        changed: true,
-        warnings: [],
-        next: this.index,
-        valueScope: item,
-      };
-    }
-    if (nameValue === 'last') {
-      return {
-        source: `${base}[-1]`,
-        changed: true,
-        warnings: [],
-        next: this.index,
-        valueScope: item,
-      };
-    }
-    if (nameValue === 'only' || nameValue === 'empty') {
-      // Decision 2A: :only and :empty are BOOLEAN predicates, not filters.
-      // `X:only` yields true iff X has exactly one item; `X:empty` iff zero.
-      // The result is a scalar boolean — no downstream .field navigation makes sense.
-      // If the base still has an unclosed materialized-array bracket (e.g. from
-      // `[all]`), close it before piping so we produce valid jq.
-      const closedBase = hasUnclosedMaterializedArray(base) ? `${base}]` : base;
-      return {
-        source: `(${closedBase} | length == ${nameValue === 'only' ? 1 : 0})`,
-        changed: true,
-        warnings: [],
-        next: this.index,
-        valueScope: undefined,
-        arrayItemScope: undefined,
-      };
-    }
-
-    if (
-      ['odd', 'even'].includes(nameValue) ||
-      ['nth', 'nth-last', 'not'].includes(nameValue)
-    ) {
-      if (this.tokens[this.index]?.value !== '(') {
-        if (nameValue === 'odd' || nameValue === 'even') {
-          // Decision 1A: :odd and :even compile via materialize-then-stride.
-          // 1-based, matching BXL's human-row convention:
-          //   :odd  → positions 1, 3, 5  (indices 0, 2, 4)
-          //   :even → positions 2, 4, 6  (indices 1, 3, 5)
-          // We emit an OPEN materialized bracket (mirroring `[all]`) so
-          // downstream `.field` access can stream through and the outer path
-          // loop closes the bracket at the end.
-          const start = nameValue === 'odd' ? 0 : 1;
-          const closedBase = hasUnclosedMaterializedArray(base) ? `${base}]` : base;
-          return {
-            source: `[${closedBase} | .[range(${start}; length; 2)]`,
-            changed: true,
-            warnings: [],
-            next: this.index,
-            valueScope: item,
-            arrayItemScope: item,
-            streamItemScope: item,
-            openMaterialized: true,
-          };
-        }
-        throw new ReadableSyntaxError(`:${nameValue} requires an argument`);
-      }
-      const close = findMatching(this.tokens, this.index);
-      const arg = this.tokens.slice(this.index + 1, close);
-      this.index = close + 1;
-
-      if (nameValue === 'nth' || nameValue === 'nth-last') {
-        if (arg.length !== 1 || arg[0].type !== 'number') {
-          return {
-            source: base,
-            changed: false,
-            warnings: [
-              {
-                code: 'linear-nth-deferred',
-                message: `:${nameValue}(...) only supports numeric arguments in BXL.`,
-              },
-            ],
-            next: this.index,
-            valueScope: currentScope,
-            arrayItemScope: currentItemScope,
-          };
-        }
-        const number = Number(arg[0].value);
-        return {
-          source: `${base}[${nameValue === 'nth' ? number - 1 : -number}]`,
-          changed: true,
-          warnings: [],
-          next: this.index,
-          valueScope: item,
-        };
-      }
-
-      if (nameValue === 'not') {
-        const predicateTokens =
-          arg[0]?.value === '[' && arg[arg.length - 1]?.value === ']'
-            ? arg.slice(1, -1)
-            : arg;
-        const predicate = compilePredicate(predicateTokens, item);
-        return {
-          source: `[${base}[] | select((${predicate.source}) | not)]`,
-          changed: true,
-          warnings: predicate.warnings,
-          next: this.index,
-          valueScope: item,
-          streamItemScope: item,
-        };
-      }
-    }
-
-    throw new ReadableSyntaxError(`Unsupported pseudo-class ':${name.value}'`);
-  }
 }
 
 // Strip a leading `=` (Excel cell-formula prefix) so that a user can
@@ -2202,9 +2344,21 @@ function excelOperandExtent(
     } else if (!['ident', 'number', 'string'].includes(first.type)) {
       return undefined;
     }
-    // Extend left over `.field` / `.["Label"]` / `:pseudo` suffixes so
+    // Extend left over `.field` / `.["Label"]` suffixes so
     // operators like `&` / `^` absorb the full chain on their left.
     while (anchor > 0) {
+      const current = tokens[anchor];
+      if (current.type === 'punc' && (current.value === ')' || current.value === ']')) {
+        anchor = matchOpen(tokens, anchor);
+        if (anchor < 0) return undefined;
+        if (
+          anchor > 0 &&
+          ['ident', 'number', 'string'].includes(tokens[anchor - 1].type)
+        ) {
+          anchor -= 1;
+        }
+        continue;
+      }
       const prev = tokens[anchor - 1];
       if (prev.type === 'op' && (prev.value === '.' || prev.value === '?.')) {
         const beforeDot = tokens[anchor - 2];
@@ -2220,19 +2374,6 @@ function excelOperandExtent(
           continue;
         }
         anchor -= 1;
-        continue;
-      }
-      // `:pseudo` suffix — current token is the pseudo-class name (ident
-      // like `first`, `last`, `only`, `empty`, `odd`, `even`) and `prev`
-      // is the `:` punc. Absorb both so anchor lands on the base value.
-      // `:nth(N).field` form is not yet covered; users can wrap in parens.
-      if (
-        prev.type === 'punc' &&
-        prev.value === ':' &&
-        tokens[anchor - 2] &&
-        ['ident', 'number', 'string', 'punc'].includes(tokens[anchor - 2].type)
-      ) {
-        anchor -= 2;
         continue;
       }
       break;
@@ -2257,8 +2398,7 @@ function excelOperandExtent(
   } else if (!['ident', 'number', 'string'].includes(first.type)) {
     return undefined;
   }
-  // Extend right: `ident(...)` call, `foo[...]` subscript, `.field`,
-  // `:pseudo` / `:pseudo(args)` suffix.
+  // Extend right: `ident(...)` call, `foo[...]` subscript, `.field`.
   while (endIdx + 1 < tokens.length) {
     const next = tokens[endIdx + 1];
     if (next.type === 'op' && (next.value === '.' || next.value === '?.')) {
@@ -2273,21 +2413,6 @@ function excelOperandExtent(
       const close = matchClose(tokens, endIdx + 1);
       if (close < 0) break;
       endIdx = close;
-      continue;
-    }
-    // `:pseudo` — `:` then a pseudo-class name ident, optionally
-    // followed by `(args)`.
-    if (
-      next.type === 'punc' &&
-      next.value === ':' &&
-      tokens[endIdx + 2]?.type === 'ident'
-    ) {
-      endIdx += 2;
-      const maybeOpen = tokens[endIdx + 1];
-      if (maybeOpen?.type === 'punc' && maybeOpen.value === '(') {
-        const close = matchClose(tokens, endIdx + 1);
-        if (close >= 0) endIdx = close;
-      }
       continue;
     }
     break;

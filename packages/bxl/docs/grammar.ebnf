@@ -8,8 +8,8 @@
    token. In schema-aware contexts, a quoted token that matches a field label is
    resolved as a field path. Otherwise it remains a string literal.
 
-   Forgiving-input note: readable BXL keywords, selector words, predicate words,
-   pseudo-class names, booleans, null, and formula function names are accepted
+   Forgiving-input note: readable BXL keywords, selector words, positional
+   selector keywords, booleans, null, and formula function names are accepted
    case-insensitively by the compiler. Formula function calls (and the `all` /
    `any` combinators) accept either `,` or `;` as argument separator; the
    formatter normalizes those to `,` in both Solid and Readable output. Bare
@@ -32,7 +32,7 @@ AddExpr             = MultiplyExpr, { ("+" | "-"), MultiplyExpr } ;
 MultiplyExpr        = UnaryExpr, { ("*" | "/" | "%"), UnaryExpr } ;
 UnaryExpr           = "not", "(", Expr, ")" | PostfixExpr ;
 
-PostfixExpr         = PrimaryExpr, { PathStep | Selector | PseudoClass | OptionalSuffix } ;
+PostfixExpr         = PrimaryExpr, { PathStep | Selector | OptionalSuffix } ;
 PrimaryExpr         = Literal
                     | ReadablePath
                     | FunctionCall
@@ -41,7 +41,7 @@ PrimaryExpr         = Literal
                     | "(", Expr, ")"
                     | NativeExpr ;
 
-ReadablePath        = Label, { PathStep | Selector | PseudoClass | OptionalSuffix } ;
+ReadablePath        = Label, { PathStep | Selector | OptionalSuffix } ;
 PathStep            = ("." | "?."), Label ;
 OptionalSuffix      = "?" ;
 
@@ -50,7 +50,11 @@ SelectorBody        = EmptyStream
                     | AllSelector
                     | HumanIndex
                     | HumanRange
+                    | HashAnchoredRange
                     | RawIndex
+                    | HashKeyword
+                    | HashLastOffset
+                    | HashNegativeIndex
                     | LastIndex
                     | NativeIndex
                     | NativeSlice
@@ -62,7 +66,12 @@ EmptyStream         = ;
 AllSelector         = "all" | "..." ;
 HumanIndex         = ("row" | "item"), Number ;
 HumanRange         = ("row" | "item"), Number, "..", Number ;
+HashRangeEndpoint  = HashKeyword | HashLastOffset | "#", Number ;
+HashAnchoredRange  = HashRangeEndpoint, "..", HashRangeEndpoint ;
 RawIndex           = "#", Number ;
+HashNegativeIndex  = "#", "-", Number ;
+HashKeyword        = "#", ("first" | "last" | "only" | "odd" | "even") ;
+HashLastOffset     = "#", "last", "-", Number ;
 LastIndex          = "last", "(", ")", [ "-", Number ] ;
 NativeIndex        = Number ;
 NativeSlice        = [ Number ], ":", [ Number ] ;
@@ -80,11 +89,6 @@ PredicateValue     = ReadablePath | Literal | FunctionCall | "(", Expr, ")" ;
 PredicateOp        = "=" | "==" | "!=" | "<" | "<=" | ">" | ">="
                     | "^=" | "$=" | "*="
                     | "STARTSWITH" | "ENDSWITH" | "CONTAINS" | "IN" ;
-
-PseudoClass        = ":", PseudoName, [ "(", PseudoArg, ")" ] ;
-PseudoName         = "first" | "last" | "only" | "empty"
-                    | "nth" | "nth-last" | "odd" | "even" | "not" ;
-PseudoArg          = Number | Predicate ;
 
 FunctionCall       = Identifier, "(", [ FunctionArgs ], ")" ;
 FunctionArgs       = Expr, { ("," | ";"), Expr } ;

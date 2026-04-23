@@ -40,14 +40,19 @@ const cases: Array<{
     expected: 'COPY-03',
   },
   {
-    name: 'mixed-case pseudo-class',
-    expression: 'line item:LaSt.sku',
+    name: 'mixed-case hash keyword selector',
+    expression: 'line item[#LaSt].sku',
     expected: 'HARD-02',
   },
   {
-    name: 'mixed-case nth-last pseudo-class',
-    expression: 'line item:NtH-LaSt(1).sku',
-    expected: 'HARD-02',
+    name: 'mixed-case hash last-offset selector',
+    expression: 'line item[#LaSt-1].sku',
+    expected: 'SRV-01',
+  },
+  {
+    name: 'mixed-case hash odd selector',
+    expression: 'line item[#OdD].sku',
+    expected: ['PAPER-01', 'COPY-03', 'SRV-01'],
   },
   {
     name: 'uppercase all selector with unquoted child label',
