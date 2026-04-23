@@ -532,7 +532,8 @@ One-shot pipes too: `echo '{"n":42}' | bxl eval 'n * 2'` prints `84`.
 
 ## Docs
 
-- [`docs/syntax-reference.html`](./docs/syntax-reference.html) — canonical syntax reference, syntax-highlighted with runnable examples (open in a browser)
+- [`docs/syntax-reference.html`](./docs/syntax-reference.html) — canonical syntax reference, syntax-highlighted, rendered layout (open in a browser)
+- [`docs/syntax-reference.md`](./docs/syntax-reference.md) — same reference in Markdown, for GitHub browsing and plain-text viewers
 - [`docs/grammar.ebnf`](./docs/grammar.ebnf) — formal grammar
 - [`docs/sandbox.md`](./docs/sandbox.md) — sandbox contract and threat model
 - [`docs/excel-compatibility.md`](./docs/excel-compatibility.md) — what pasted Excel formulas support
