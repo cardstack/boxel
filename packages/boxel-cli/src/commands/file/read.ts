@@ -1,16 +1,17 @@
 import type { Command } from 'commander';
 import {
   getProfileManager,
+  NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from '../../lib/profile-manager';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { FG_RED, DIM, RESET } from '../../lib/colors';
 
 export interface ReadResult {
   ok: boolean;
   status?: number;
-  /** Parsed JSON document (for .json files). */
-  document?: Record<string, unknown>;
-  /** Raw text content (for non-JSON files like .gts). */
+  /** Raw text content of the file. */
   content?: string;
   error?: string;
 }
@@ -24,13 +25,9 @@ interface ReadCliOptions {
   json?: boolean;
 }
 
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
-
 /**
- * Read a file from a realm. Returns parsed JSON for .json files,
- * raw text for everything else (.gts, etc.).
+ * Read a file from a realm. Always returns the raw text content.
+ * Callers should parse the content themselves if needed (e.g. JSON).
  *
  * Uses the per-realm JWT via `ProfileManager.authedRealmFetch`.
  */
@@ -44,7 +41,7 @@ export async function read(
   if (!active) {
     return {
       ok: false,
-      error: 'No active profile. Run `boxel profile add` to create one.',
+      error: NO_ACTIVE_PROFILE_ERROR,
     };
   }
 
@@ -54,7 +51,7 @@ export async function read(
   try {
     response = await pm.authedRealmFetch(url, {
       method: 'GET',
-      headers: { Accept: 'application/vnd.card+source' },
+      headers: { Accept: SupportedMimeType.CardSource },
     });
   } catch (err) {
     return {
@@ -73,20 +70,13 @@ export async function read(
   }
 
   let text = await response.text();
-  try {
-    let document = JSON.parse(text) as Record<string, unknown>;
-    return { ok: true, status: response.status, document };
-  } catch {
-    return { ok: true, status: response.status, content: text };
-  }
+  return { ok: true, status: response.status, content: text };
 }
 
 export function registerReadCommand(parent: Command): void {
   parent
     .command('read')
-    .description(
-      'Read a file from a realm. Returns parsed JSON for .json files, raw text for everything else.',
-    )
+    .description('Read a file from a realm')
     .argument(
       '<path>',
       'Realm-relative file path (e.g., hello-world.json, Cards/my-card.gts)',
@@ -107,11 +97,7 @@ export function registerReadCommand(parent: Command): void {
       if (opts.json) {
         console.log(JSON.stringify(result, null, 2));
       } else if (result.ok) {
-        if (result.document) {
-          console.log(JSON.stringify(result.document, null, 2));
-        } else {
-          console.log(result.content ?? '');
-        }
+        console.log(result.content ?? '');
       } else {
         console.error(
           `${DIM}Status:${RESET} ${result.status ?? '(no status)'}`,

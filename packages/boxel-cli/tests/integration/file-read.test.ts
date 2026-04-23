@@ -69,14 +69,16 @@ afterAll(async () => {
 });
 
 describe('file read (integration)', () => {
-  it('reads a .json file and returns parsed document', async () => {
+  it('reads a .json file and returns raw text content', async () => {
     let result = await read(realmUrl, 'test-card.json', { profileManager });
 
     expect(result.ok, `read failed: ${JSON.stringify(result)}`).toBe(true);
     expect(result.status).toBe(200);
-    expect(result.document).toBeTruthy();
-    expect(result.document).toHaveProperty('data');
-    expect(result.content).toBeUndefined();
+    expect(result.content).toBeTruthy();
+    expect(typeof result.content).toBe('string');
+    // Caller can parse JSON themselves
+    let parsed = JSON.parse(result.content!);
+    expect(parsed).toHaveProperty('data');
   });
 
   it('reads a .gts file and returns raw text content', async () => {
@@ -88,7 +90,6 @@ describe('file read (integration)', () => {
     expect(result.status).toBe(200);
     expect(result.content).toBeTruthy();
     expect(result.content!.length).toBeGreaterThan(0);
-    expect(result.document).toBeUndefined();
   });
 
   it('returns a not-ok result with 404 status for a nonexistent file', async () => {

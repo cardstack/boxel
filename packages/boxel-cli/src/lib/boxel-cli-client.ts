@@ -135,8 +135,8 @@ export class BoxelCLIClient {
   }
 
   /**
-   * Read a file from a realm. Returns parsed JSON for .json files,
-   * raw text for everything else (.gts, etc.).
+   * Read a file from a realm. Always returns raw text content.
+   * Callers should parse the content themselves if needed (e.g. JSON).
    *
    * Delegates to the standalone `read()` in `commands/file/read.ts`
    * so the CLI and programmatic API share one implementation.
