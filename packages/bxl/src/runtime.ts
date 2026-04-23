@@ -12,6 +12,7 @@
 export {
   runNativeJq,
   parseNativeJq,
+  prepareNativeJq,
   tokenizeNativeJq,
   extractNativeJqDeps,
 } from './bxl/bridge/native.js';
@@ -19,6 +20,8 @@ export {
 export type {
   NativeDialectOptions,
   NativeDialectRun,
+  PreparedNativeJq,
+  PreparedNativeRunOptions,
   NativeToken,
   AstNode,
   NativeJqDialectError,
@@ -38,5 +41,10 @@ export type {
   ResolvedBuiltinRegistry,
 } from './bxl/registry/index.js';
 
-export { evaluateBxl, bxl } from './index.js';
-export type { BxlOptions, BxlEvaluation } from './index.js';
+export { evaluateBxl, prepareBxl, bxl } from './index.js';
+export type {
+  BxlOptions,
+  BxlEvaluation,
+  PreparedBxl,
+  PreparedBxlRunOptions,
+} from './index.js';

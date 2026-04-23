@@ -14,6 +14,7 @@ import {
   BuiltinLibraryName,
   DEFAULT_BUILTIN_LIBRARIES,
   resolveBuiltinRegistry,
+  type ResolvedBuiltinRegistry,
 } from '../registry/index.js';
 import {
   NativeRuntimeLimits,
@@ -42,11 +43,33 @@ export interface NativeDialectRun {
   haltedExitCode?: number;
 }
 
+export interface PreparedNativeRunOptions {
+  runtimeLimits?: NativeRuntimeLimits;
+}
+
+export interface PreparedNativeJq {
+  tokens: NativeToken[];
+  ast: AstNode;
+  source: string;
+  compiledSource: string;
+  readableWarnings: ReadableSyntaxWarning[];
+  deps: string[];
+  run(input: unknown, options?: PreparedNativeRunOptions): NativeDialectRun;
+}
+
 export interface NativeDialectOptions {
   libraries?: BuiltinLibraryName[];
   schema?: ReadableSchema;
   readableSyntax?: boolean;
   runtimeLimits?: NativeRuntimeLimits;
+}
+
+interface ParsedNativeProgram {
+  tokens: NativeToken[];
+  ast: AstNode;
+  source: string;
+  compiledSource: string;
+  readableWarnings: ReadableSyntaxWarning[];
 }
 
 export class NativeJqDialectError extends Error {
@@ -101,13 +124,7 @@ export function tokenizeNativeJq(
 export function parseNativeJq(
   program: string,
   options: NativeDialectOptions = {},
-): {
-  tokens: NativeToken[];
-  ast: AstNode;
-  source: string;
-  compiledSource: string;
-  readableWarnings: ReadableSyntaxWarning[];
-} {
+): ParsedNativeProgram {
   const compiled = compileProgram(program, options);
   const tokens = tokenizeNativeJq(compiled.source, {
     ...options,
@@ -126,38 +143,32 @@ export function parseNativeJq(
   }
 }
 
-export function runNativeJq(
-  program: string,
+function runParsedNativeProgram(
+  parsed: ParsedNativeProgram,
   input: unknown,
-  options: NativeDialectOptions = {},
+  registry: ResolvedBuiltinRegistry,
+  runtimeLimits?: NativeRuntimeLimits,
 ): NativeDialectRun {
-  const { tokens, ast, source, compiledSource, readableWarnings } = parseNativeJq(
-    program,
-    options,
-  );
   const outputs: unknown[] = [];
 
   try {
     const runtime = withRuntimeDiagnostics(() => {
-      const registry = resolveBuiltinRegistry(
-        options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
-      );
-      for (const value of evaluateWithRegistry(ast, [input], registry)) {
+      for (const value of evaluateWithRegistry(parsed.ast, [input], registry)) {
         recordRuntimeOutput(value);
         outputs.push(value);
       }
-    }, options.runtimeLimits);
+    }, runtimeLimits);
 
     if (runtime.error && !(runtime.error instanceof HaltSignal)) {
       throw runtime.error;
     }
 
     return {
-      tokens,
-      ast,
-      source,
-      compiledSource,
-      readableWarnings,
+      tokens: parsed.tokens,
+      ast: parsed.ast,
+      source: parsed.source,
+      compiledSource: parsed.compiledSource,
+      readableWarnings: parsed.readableWarnings,
       outputs,
       debugMessages: runtime.diagnostics.debugMessages,
       stderr: runtime.diagnostics.stderr,
@@ -166,6 +177,19 @@ export function runNativeJq(
   } catch (error) {
     throw wrapPhaseError('evaluate', error);
   }
+}
+
+export function runNativeJq(
+  program: string,
+  input: unknown,
+  options: NativeDialectOptions = {},
+): NativeDialectRun {
+  const parsed = parseNativeJq(program, options);
+  const registry = resolveBuiltinRegistry(
+    options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
+  );
+
+  return runParsedNativeProgram(parsed, input, registry, options.runtimeLimits);
 }
 
 function stringLiteralValue(node: ExpressionAst | undefined): string | undefined {
@@ -525,23 +549,51 @@ function collectExpressionDeps(
   }
 }
 
+function extractNativeJqDepsFromAst(ast: AstNode): string[] {
+  const deps = new Set<string>();
+  collectExpressionDeps(
+    ast.expr,
+    deps,
+    {
+      defs: new Map(),
+      vars: new Map(),
+    },
+    'root',
+  );
+  return [...deps];
+}
+
+export function prepareNativeJq(
+  program: string,
+  options: NativeDialectOptions = {},
+): PreparedNativeJq {
+  const parsed = parseNativeJq(program, options);
+  const registry = resolveBuiltinRegistry(
+    options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
+  );
+  const deps = extractNativeJqDepsFromAst(parsed.ast);
+
+  return {
+    ...parsed,
+    deps,
+    run(input: unknown, runOptions: PreparedNativeRunOptions = {}) {
+      return runParsedNativeProgram(
+        parsed,
+        input,
+        registry,
+        runOptions.runtimeLimits ?? options.runtimeLimits,
+      );
+    },
+  };
+}
+
 export function extractNativeJqDeps(
   program: string,
-  _options: NativeDialectOptions = {},
+  options: NativeDialectOptions = {},
 ): string[] {
   try {
-    const { ast } = parseNativeJq(program);
-    const deps = new Set<string>();
-    collectExpressionDeps(
-      ast.expr,
-      deps,
-      {
-        defs: new Map(),
-        vars: new Map(),
-      },
-      'root',
-    );
-    return [...deps];
+    const { ast } = parseNativeJq(program, options);
+    return extractNativeJqDepsFromAst(ast);
   } catch (_error) {
     const matches = program.match(/\.[a-zA-Z_][a-zA-Z0-9_]*/g) ?? [];
     return [...new Set(matches.map((entry) => entry.slice(1)))];

@@ -11,6 +11,7 @@
 
 import {
   parseNativeJq,
+  prepareNativeJq,
   runNativeJq,
   tokenizeNativeJq,
 } from './bxl/bridge/native.js';
@@ -56,6 +57,7 @@ export {
   jqToReadableBxlExpression,
   lintBxlExpression,
   parseNativeJq,
+  prepareNativeJq,
   runNativeJq,
   solidifyBxlExpression,
   tokenizeNativeJq,
@@ -92,6 +94,18 @@ export interface BxlEvaluation {
   value: unknown;
 }
 
+export interface PreparedBxlRunOptions {
+  runtimeLimits?: NativeRuntimeLimits;
+}
+
+export interface PreparedBxl {
+  source: string;
+  compiledSource: string;
+  warnings: ReadableSyntaxWarning[];
+  deps: string[];
+  evaluate(input: unknown, options?: PreparedBxlRunOptions): BxlEvaluation;
+}
+
 function normalizeBxlOutputs(outputs: unknown[]): unknown {
   if (outputs.length === 0) return null;
   if (outputs.length === 1) return outputs[0];
@@ -116,6 +130,38 @@ export function evaluateBxl(
     warnings: run.readableWarnings,
     outputs: run.outputs,
     value: normalizeBxlOutputs(run.outputs),
+  };
+}
+
+export function prepareBxl(
+  expression: string,
+  options: BxlOptions = {},
+): PreparedBxl {
+  const prepared = prepareNativeJq(expression, {
+    schema: options.schema,
+    readableSyntax: options.readableSyntax,
+    libraries: options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
+    runtimeLimits: options.runtimeLimits,
+  });
+
+  return {
+    source: prepared.source,
+    compiledSource: prepared.compiledSource,
+    warnings: prepared.readableWarnings,
+    deps: prepared.deps,
+    evaluate(input: unknown, runOptions: PreparedBxlRunOptions = {}) {
+      const run = prepared.run(input, {
+        runtimeLimits: runOptions.runtimeLimits ?? options.runtimeLimits,
+      });
+
+      return {
+        source: run.source,
+        compiledSource: run.compiledSource,
+        warnings: run.readableWarnings,
+        outputs: run.outputs,
+        value: normalizeBxlOutputs(run.outputs),
+      };
+    },
   };
 }
 

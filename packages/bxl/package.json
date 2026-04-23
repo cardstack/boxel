@@ -76,6 +76,8 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "clean": "rm -rf dist",
+    "perf:build": "node scripts/perf-browser.mjs",
+    "perf:browser": "node scripts/perf-browser.mjs --serve",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests examples",
     "test": "node scripts/run-tests.mjs",
