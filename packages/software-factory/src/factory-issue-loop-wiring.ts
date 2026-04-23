@@ -121,6 +121,7 @@ export async function runFactoryIssueLoop(
   // 2. Context builder with issue relationship loader
   let issueLoader = new RealmIssueRelationshipLoader({
     workspaceDir,
+    realmUrl: targetRealmUrl,
   });
   let contextBuilder = new ContextBuilder({
     skillResolver: new DefaultSkillResolver(),

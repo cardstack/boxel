@@ -31,6 +31,12 @@ export interface RealmIssueRelationshipLoaderConfig {
    * cards (Project, KnowledgeArticle) are read from this directory.
    */
   workspaceDir: string;
+  /**
+   * Target realm URL. Issue ids passed in from the scheduler are full
+   * URLs (that's what the search index returns); we strip this prefix
+   * before treating the id as a workspace path.
+   */
+  realmUrl: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -39,9 +45,28 @@ export interface RealmIssueRelationshipLoaderConfig {
 
 export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
   private workspaceDir: string;
+  private realmUrl: string;
 
   constructor(config: RealmIssueRelationshipLoaderConfig) {
     this.workspaceDir = config.workspaceDir;
+    this.realmUrl = config.realmUrl;
+  }
+
+  /**
+   * Convert an issue id (often a full realm URL from the search index)
+   * into a realm-relative path suitable for workspace-fs reads.
+   */
+  private toRelativePath(id: string): string {
+    if (id.startsWith(this.realmUrl)) {
+      return id.slice(this.realmUrl.length);
+    }
+    let withSlash = this.realmUrl.endsWith('/')
+      ? this.realmUrl
+      : `${this.realmUrl}/`;
+    if (id.startsWith(withSlash)) {
+      return id.slice(withSlash.length);
+    }
+    return id;
   }
 
   /**
@@ -132,7 +157,10 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
   private async fetchFullIssue(
     issueId: string,
   ): Promise<Record<string, unknown> | undefined> {
-    let result = await readCardById(this.workspaceDir, issueId);
+    let result = await readCardById(
+      this.workspaceDir,
+      this.toRelativePath(issueId),
+    );
     if (!result.ok || !result.document) {
       log.warn(
         `Could not fetch full issue "${issueId}" (status ${result.status ?? 'N/A'}): ${result.error ?? 'not found'}`,
