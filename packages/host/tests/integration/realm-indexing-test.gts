@@ -878,7 +878,7 @@ module(`Integration | realm indexing`, function (hooks) {
             `${testRealmURL}person-spec.json`,
           ),
           resourceCreatedAt: await getFileCreatedAt(realm, 'person-spec.json'),
-          realmURL: testRealmURL as RealmIdentifier,
+          realmURL: testRealmURL,
           realmInfo: {
             backgroundURL: null,
             hostHome: null,
@@ -1009,7 +1009,7 @@ module(`Integration | realm indexing`, function (hooks) {
             `${testRealmURL}person-spec.json`,
           ),
           resourceCreatedAt: await getFileCreatedAt(realm, 'person-spec.json'),
-          realmURL: testRealmURL as RealmIdentifier,
+          realmURL: testRealmURL,
           realmInfo: {
             backgroundURL: null,
             hostHome: null,
@@ -1083,7 +1083,7 @@ module(`Integration | realm indexing`, function (hooks) {
             `${testRealmURL}people-skill.json`,
           ),
           resourceCreatedAt: await getFileCreatedAt(realm, 'people-skill.json'),
-          realmURL: testRealmURL as RealmIdentifier,
+          realmURL: testRealmURL,
           realmInfo: {
             backgroundURL: null,
             hostHome: null,
@@ -1610,7 +1610,7 @@ module(`Integration | realm indexing`, function (hooks) {
             `${testRealmURL}vangogh.json`,
           ),
           resourceCreatedAt: await getFileCreatedAt(realm, 'vangogh.json'),
-          realmURL: testRealmURL as RealmIdentifier,
+          realmURL: testRealmURL,
         },
       },
       'serialized instance is correct',

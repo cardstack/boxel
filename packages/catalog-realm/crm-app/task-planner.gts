@@ -120,7 +120,7 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
       ? {
           filter: {
             on: {
-              module: this.config.taskSource.module as RealmResourceIdentifier,
+              module: this.config.taskSource.module,
               name: this.config.taskSource.name,
             },
             every: everyArr,
@@ -129,7 +129,7 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
       : {
           filter: {
             type: {
-              module: this.config.taskSource.module as RealmResourceIdentifier,
+              module: this.config.taskSource.module,
               name: this.config.taskSource.name,
             },
           },

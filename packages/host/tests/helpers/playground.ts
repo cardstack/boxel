@@ -54,7 +54,7 @@ export const createNewInstance = async () => {
 
 export const openFileInPlayground = async (
   filePath: string,
-  realmURL = testRealmURL,
+  realmURL: string = testRealmURL,
   opts?: { declaration?: string; codeSelection?: string },
 ) => {
   await visitOperatorMode({

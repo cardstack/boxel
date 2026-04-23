@@ -46,7 +46,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
       ? {
           filter: {
             on: {
-              module: this.config.taskSource.module as RealmResourceIdentifier,
+              module: this.config.taskSource.module,
               name: this.config.taskSource.name,
             },
             every: everyArr,
@@ -55,7 +55,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
       : {
           filter: {
             type: {
-              module: this.config.taskSource.module as RealmResourceIdentifier,
+              module: this.config.taskSource.module,
               name: this.config.taskSource.name,
             },
           },

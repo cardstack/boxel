@@ -14,7 +14,6 @@ import type {
   LooseSingleCardDocument,
   Relationship,
   Permissions,
-  RealmIdentifier,
   RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import {
@@ -195,14 +194,14 @@ module('Integration | serialization', function (hooks) {
             module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
             name: 'Post',
           },
-          realmURL: testRealmURL as RealmIdentifier,
+          realmURL: testRealmURL,
           fields: {
             author: {
               adoptsFrom: {
                 module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
                 name: 'Person',
               },
-              realmURL: testRealmURL as RealmIdentifier,
+              realmURL: testRealmURL,
             },
           },
         },
@@ -284,7 +283,7 @@ module('Integration | serialization', function (hooks) {
         module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
         name: 'Post',
       },
-      realmURL: testRealmURL as RealmIdentifier,
+      realmURL: testRealmURL,
     };
 
     let serialized = serializeCard(post, {
@@ -323,7 +322,7 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Post/1.json`,
       loader,
       undefined,
-      testRealmURL as RealmIdentifier,
+      testRealmURL,
     );
 
     assert.strictEqual(
@@ -361,7 +360,7 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Post/2.json`,
       loader,
       undefined,
-      testRealmURL as RealmIdentifier,
+      testRealmURL,
     );
 
     assert.deepEqual(
@@ -404,7 +403,7 @@ module('Integration | serialization', function (hooks) {
           module: `${testRealmURL}test-cards` as RealmResourceIdentifier,
           name: 'Post',
         },
-        realmURL: testRealmURL as RealmIdentifier,
+        realmURL: testRealmURL,
         fields: {
           author: {
             adoptsFrom: {
@@ -460,7 +459,7 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Post/3.json`,
       loader,
       undefined,
-      testRealmURL as RealmIdentifier,
+      testRealmURL,
     );
 
     assert.strictEqual(
@@ -497,7 +496,7 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Post/3.json`,
       loader,
       undefined,
-      testRealmURL as RealmIdentifier,
+      testRealmURL,
     );
 
     assert.deepEqual(
@@ -531,7 +530,7 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Post/4.json`,
       loader,
       undefined,
-      testRealmURL as RealmIdentifier,
+      testRealmURL,
     );
 
     assert.strictEqual(
@@ -566,7 +565,7 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Post/5.json`,
       loader,
       undefined,
-      testRealmURL as RealmIdentifier,
+      testRealmURL,
     );
 
     post.author = new Person({ firstName: 'Replacement' });

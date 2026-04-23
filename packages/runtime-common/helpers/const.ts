@@ -1,6 +1,8 @@
+import type { RealmIdentifier } from '../card-reference-resolver';
 import type { RealmInfo } from '../index';
-export const testRealmURL = `http://test-realm/test/`;
-export const testHostModeRealmURL = 'http://test-realm/user/test/';
+export const testRealmURL = 'http://test-realm/test/' as RealmIdentifier;
+export const testHostModeRealmURL =
+  'http://test-realm/user/test/' as RealmIdentifier;
 
 export const testRealmInfo: RealmInfo = {
   name: 'Unnamed Workspace',

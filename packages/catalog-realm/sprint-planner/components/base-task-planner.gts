@@ -118,7 +118,7 @@ export interface CardOperations {
 
 // Configuration for the task source
 export interface TaskSourceConfig {
-  module: string;
+  module: RealmResourceIdentifier;
   name: string;
   getQuery: () => Query;
 }
@@ -175,7 +175,7 @@ export class TaskPlanner extends GlimmerComponent<TaskPlannerArgs> {
       searchKey: string;
       label: string;
       codeRef: {
-        module: string;
+        module: RealmResourceIdentifier;
         name: string;
       };
       options: () => any[];
