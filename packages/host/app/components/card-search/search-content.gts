@@ -16,10 +16,8 @@ import {
   type CodeRef,
   type Filter,
   type getCard,
-  type getCardCollection,
   CardContextName,
   GetCardContextName,
-  GetCardCollectionContextName,
   internalKeyFor,
 } from '@cardstack/runtime-common';
 
@@ -35,14 +33,9 @@ import {
   buildSearchQuery,
   shouldSkipSearchQuery,
 } from '@cardstack/host/utils/card-search/query-builder';
-import {
-  filterRecentCards,
-  sortAndFilterRecentCards,
-} from '@cardstack/host/utils/card-search/recent-cards';
 import { SectionPagination } from '@cardstack/host/utils/card-search/section-pagination';
 import {
   assembleSections,
-  buildPrerenderedRecentsSection,
   buildQuerySections,
   buildRecentsSection,
   buildUrlSection,
@@ -160,8 +153,6 @@ export default class SearchContent extends Component<Signature> {
   @consume(CardContextName) declare private cardContext:
     | CardContext
     | undefined;
-  @consume(GetCardCollectionContextName)
-  declare private getCardCollection: getCardCollection;
 
   private get searchKeyIsURL() {
     return isURLSearchKey(this.args.searchKey);
@@ -228,52 +219,60 @@ export default class SearchContent extends Component<Signature> {
     };
   });
 
-  @cached
-  private get recentCardCollection(): ReturnType<getCardCollection> {
-    return this.getCardCollection(
-      this,
-      () => this.recentCardsService.recentCardIds,
-    );
-  }
-
   private get recentCardUrls(): string[] {
     return this.recentCardsService.recentCardIds.map((id) =>
       id.endsWith('.json') ? id : `${id}.json`,
     );
   }
 
-  // Compact-mode Recents are rendered as prerendered HTML fragments to
-  // avoid fetching card modules when the search sheet opens. Live CardDef
-  // recents are still used in full (non-compact) mode to support the
-  // sort/filter UI that depends on live card fields (cardTitle,
-  // lastModified, createdAt).
+  // Recents always render as prerendered HTML to avoid fetching card
+  // modules when the search sheet opens. Compact mode uses an empty query
+  // and reorders results client-side to localStorage timestamp order;
+  // full mode reuses the realm-section query so sort, type filter, and
+  // search-term filter all happen server-side alongside the cardUrls
+  // constraint.
   private prerenderedRecentsResource = getPrerenderedSearch(
     this,
     getOwner(this)!,
     () => {
-      let shouldRun = this.args.isCompact && this.recentCardUrls.length > 0;
+      if (this.recentCardUrls.length === 0) {
+        return {
+          query: undefined,
+          format: undefined,
+          realms: this.realms,
+          cardUrls: undefined,
+          isLive: false,
+          cardComponentModifier: this.cardComponentModifier,
+        };
+      }
+      if (this.args.isCompact) {
+        return {
+          query: {},
+          format: 'fitted' as const,
+          realms: this.realms,
+          cardUrls: this.recentCardUrls,
+          isLive: false,
+          cardComponentModifier: this.cardComponentModifier,
+        };
+      }
+      const selectedTypeIds = this.args.typeFilter.selected.map((ref) =>
+        internalKeyFor(ref, undefined),
+      );
       return {
-        query: shouldRun ? {} : undefined,
-        format: shouldRun ? ('fitted' as const) : undefined,
+        query: buildSearchQuery(
+          this.searchTerm ?? '',
+          this.args.activeSort,
+          this.args.baseFilter,
+          selectedTypeIds,
+        ),
+        format: 'fitted' as const,
         realms: this.realms,
-        cardUrls: shouldRun ? this.recentCardUrls : undefined,
-        isLive: false,
+        cardUrls: this.recentCardUrls,
+        isLive: true,
         cardComponentModifier: this.cardComponentModifier,
       };
     },
   );
-
-  private get filteredRecentCards(): CardDef[] {
-    const cards =
-      (this.recentCardCollection?.cards?.filter(Boolean) as
-        | CardDef[]
-        | undefined) ?? [];
-    return filterRecentCards(
-      cards,
-      this.args.realmFilter.selectedURLs,
-      this.args.baseFilter,
-    );
-  }
 
   private get shouldSkipQuery() {
     // In baseFilter mode (modal), only skip when search key is a URL
@@ -332,16 +331,6 @@ export default class SearchContent extends Component<Signature> {
     return `${pluralize('result', total, true)} across ${pluralize('realm', realms.length, true)}`;
   }
 
-  private get sortedRecentCards(): CardDef[] {
-    return sortAndFilterRecentCards(this.filteredRecentCards, {
-      selectedTypes: this.args.typeFilter.selected,
-      skipTypeFiltering: this.args.typeFilter.skipTypeFiltering,
-      searchTerm: this.searchTerm,
-      activeSort: this.args.activeSort,
-      isCompact: this.args.isCompact,
-    });
-  }
-
   @action
   onChangeView(id: string) {
     this.activeViewId = id;
@@ -367,20 +356,22 @@ export default class SearchContent extends Component<Signature> {
   }
 
   private get recentCardsSection() {
+    const instances = this.prerenderedRecentsResource.instances;
     if (this.args.isCompact) {
-      // Compact mode: render recents from prerendered HTML. Preserve the
-      // most-recent-first order from RecentCardsService rather than the
-      // arbitrary order the server returns.
+      // Preserve most-recent-first order from RecentCardsService rather
+      // than the arbitrary order the server returns for an unsorted query.
       let byUrl = new Map<string, PrerenderedCard>();
-      for (let card of this.prerenderedRecentsResource.instances) {
+      for (let card of instances) {
         byUrl.set(card.url, card);
       }
       let ordered = this.recentCardUrls
         .map((url) => byUrl.get(url))
         .filter((c): c is PrerenderedCard => c !== undefined);
-      return buildPrerenderedRecentsSection(ordered);
+      return buildRecentsSection(ordered);
     }
-    return buildRecentsSection(this.sortedRecentCards);
+    // Full mode: server already applied sort/filter/search, use the
+    // response order directly.
+    return buildRecentsSection([...instances]);
   }
 
   private get cardByUrlSection() {
@@ -426,10 +417,8 @@ export default class SearchContent extends Component<Signature> {
       }
     }
     // Cards from recents
-    for (const card of this.sortedRecentCards) {
-      if (card.id) {
-        urls.push(card.id.replace(/\.json$/, ''));
-      }
+    for (const card of this.prerenderedRecentsResource.instances) {
+      urls.push(card.url.replace(/\.json$/, ''));
     }
     // Card from URL section
     if (this.resolvedCard?.id) {

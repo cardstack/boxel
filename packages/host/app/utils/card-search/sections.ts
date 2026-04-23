@@ -22,21 +22,12 @@ export interface RealmSection {
   totalCount: number;
 }
 
-export type RecentsSection =
-  | {
-      sid: string;
-      type: 'recents';
-      kind: 'live';
-      cards: CardDef[];
-      totalCount: number;
-    }
-  | {
-      sid: string;
-      type: 'recents';
-      kind: 'prerendered';
-      cards: PrerenderedCard[];
-      totalCount: number;
-    };
+export interface RecentsSection {
+  sid: string;
+  type: 'recents';
+  cards: PrerenderedCard[];
+  totalCount: number;
+}
 
 export interface UrlSection {
   sid: string;
@@ -96,21 +87,6 @@ function realmUrlForCard(cardIdOrUrl: string, realmURLs: string[]): string {
 // ── Section builders ──
 
 export function buildRecentsSection(
-  cards: CardDef[],
-): RecentsSection | undefined {
-  if (cards.length === 0) {
-    return undefined;
-  }
-  return {
-    sid: 'recents',
-    type: 'recents',
-    kind: 'live',
-    cards,
-    totalCount: cards.length,
-  };
-}
-
-export function buildPrerenderedRecentsSection(
   cards: PrerenderedCard[],
 ): RecentsSection | undefined {
   if (cards.length === 0) {
@@ -119,7 +95,6 @@ export function buildPrerenderedRecentsSection(
   return {
     sid: 'recents',
     type: 'recents',
-    kind: 'prerendered',
     cards,
     totalCount: cards.length,
   };
