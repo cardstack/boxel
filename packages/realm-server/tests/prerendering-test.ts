@@ -1486,13 +1486,13 @@ module(basename(__filename), function () {
           'timeout retains page identifier',
         );
 
-        // CS-10872: the timeout error must carry the structured
-        // diagnostics block so operators reading the persisted error
-        // document see launch-vs-render breakdown + the host hooks.
-        // Diagnostics live on the inner SerializedError (RenderError
-        // → error → diagnostics) because that's what IndexWriter
-        // persists into `boxel_index.error_doc`.
-        let diagnostics = (timedOut.response.error?.error as any)?.diagnostics;
+        // The timeout error must carry the structured diagnostics
+        // block so operators can classify the stall. Diagnostics
+        // live on `response.meta.diagnostics` (the consolidated
+        // channel — the indexer reads from there and persists into
+        // `boxel_index.timing_diagnostics`, mirroring to
+        // `error_doc.diagnostics` at write time for UI compat).
+        let diagnostics = (timedOut.response as any)?.meta?.diagnostics;
         assert.strictEqual(
           typeof diagnostics,
           'object',
@@ -1604,10 +1604,11 @@ module(basename(__filename), function () {
             'error title is "Render timeout"',
           );
 
-          // Diagnostics live on the inner SerializedError (the field
-          // IndexWriter persists into `error_doc`), not on the outer
-          // RenderError wrapper.
-          let diagnostics = (timeoutError?.error as any)?.diagnostics;
+          // Diagnostics live on `response.meta.diagnostics` — the
+          // consolidated channel the indexer reads from and persists
+          // onto `boxel_index.timing_diagnostics` (mirrored to
+          // `error_doc.diagnostics` for UI compat).
+          let diagnostics = (result.response as any)?.meta?.diagnostics;
           assert.strictEqual(
             typeof diagnostics,
             'object',

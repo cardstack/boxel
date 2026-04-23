@@ -27,10 +27,12 @@ export interface SerializedError {
   isCardError?: true;
   deps?: string[];
   stack?: string;
-  // CS-10872: structured prerender-timeout diagnostics (e.g. launchMs,
-  // waits, renderStage, queryLoadsInFlight). Populated by
-  // prerender/utils.ts::withTimeout for render-timeout errors and
-  // copied into CardErrorJSONAPI.meta.diagnostics by formattedError.
+  // Structured render-timeout diagnostics (e.g. launchMs, waits,
+  // renderStage, queryLoadsInFlight). The source of truth is the
+  // `boxel_index.timing_diagnostics` column; the IndexWriter copies
+  // the payload onto this field when persisting an error row so the
+  // existing UI read path (formattedError → CardErrorJSONAPI.meta.
+  // diagnostics) continues to work unchanged.
   diagnostics?: Record<string, unknown>;
 }
 

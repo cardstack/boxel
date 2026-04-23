@@ -34,6 +34,12 @@ export interface BoxelIndexTable {
   last_modified: string | null; // pg represents big integers as strings in javascript
   resource_created_at: string | null; // pg represents big integers as strings in javascript
   is_deleted: boolean | null;
+  // Per-row render timing diagnostics (launch/waits breakdown,
+  // render elapsed, host-side renderStage, top-N module evaluations,
+  // etc.). Populated on every updateEntry — success or error — so
+  // operators can post-hoc investigate slow (but not failing)
+  // renders too.
+  timing_diagnostics: Record<string, unknown> | null;
 }
 
 export interface RealmVersionsTable {
@@ -71,6 +77,7 @@ export const coerceTypes = Object.freeze({
   resource_created_at: 'VARCHAR',
   indexed_at: 'VARCHAR',
   value: 'JSON',
+  timing_diagnostics: 'JSON',
 });
 
 export interface PublishedRealmTable {

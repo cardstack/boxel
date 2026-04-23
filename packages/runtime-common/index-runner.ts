@@ -27,6 +27,7 @@ import {
   type LocalPath,
   type Reader,
   type Stats,
+  type TimingDiagnostics,
 } from './index';
 import { moduleFrom } from './code-ref';
 import type { CacheScope, DefinitionLookup } from './definition-lookup';
@@ -522,6 +523,7 @@ export class IndexRunner {
     resourceCreatedAt,
     resource,
     renderResult,
+    timingDiagnostics,
   }: {
     path: LocalPath;
     lastModified: number;
@@ -531,6 +533,7 @@ export class IndexRunner {
     renderResult: NonNullable<
       Parameters<typeof performCardIndexing>[0]['precomputedRenderResult']
     >;
+    timingDiagnostics?: TimingDiagnostics;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let instanceURL = new URL(
@@ -556,6 +559,7 @@ export class IndexRunner {
         auth: this.#auth,
         jobInfo: this.#jobInfo,
         precomputedRenderResult: renderResult,
+        timingDiagnostics,
         dependencyResolver: this.#dependencyResolver,
         updateEntry: async (entryURL, entry) =>
           await this.updateEntry(entryURL, entry),
@@ -574,6 +578,7 @@ export class IndexRunner {
     hasModulePrerender,
     extractResult,
     renderResult,
+    timingDiagnostics,
   }: {
     path: LocalPath;
     lastModified: number;
@@ -588,6 +593,7 @@ export class IndexRunner {
     renderResult?: Parameters<
       typeof performFileIndexing
     >[0]['precomputedRenderResult'];
+    timingDiagnostics?: TimingDiagnostics;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let result = await performFileIndexing({
@@ -601,6 +607,7 @@ export class IndexRunner {
       jobInfo: this.#jobInfo,
       precomputedExtractResult: extractResult,
       precomputedRenderResult: renderResult,
+      timingDiagnostics,
       dependencyResolver: this.#dependencyResolver,
       updateEntry: async (entryURL, entry) => {
         await this.batch.updateEntry(entryURL, entry);

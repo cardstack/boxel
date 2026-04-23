@@ -1181,10 +1181,11 @@ export async function withTimeout<T>(
         ` evaluating=${richDiagnostics?.currentlyEvaluatingModule ?? 'none'}` +
         ` DOM:\n${dom?.trim()}`,
     );
-    // Diagnostics live on the inner `SerializedError` (not the outer
-    // `RenderError` wrapper) because that's what the indexer persists
-    // into `boxel_index.error_doc` — the outer wrapper is transient
-    // plumbing between the prerender response and the index writer.
+    // Diagnostics ride on the outer `RenderError.diagnostics` as a
+    // transient transport; the Prerenderer lifts them to
+    // `response.meta.diagnostics` before returning, where the indexer
+    // reads them and persists into `timing_diagnostics`. The field is
+    // dropped from the final response.
     let diagnostics: Record<string, unknown> = {
       ...(richDiagnostics?.renderStage
         ? { renderStage: richDiagnostics.renderStage }
@@ -1254,9 +1255,9 @@ export async function withTimeout<T>(
         title: 'Render timeout',
         message,
         additionalErrors: null,
-        diagnostics,
       },
       evict: true,
+      diagnostics,
     };
     if (typeof timerSummary === 'string' && timerSummary.trim()) {
       timeoutError.error.stack = timerSummary.trim();

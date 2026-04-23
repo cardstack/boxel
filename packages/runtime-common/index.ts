@@ -147,6 +147,14 @@ export interface RenderTimeoutDiagnostics {
 
 export interface RenderError extends ErrorEntry {
   evict?: boolean;
+  // Transient carrier for host-side diagnostics (render stage,
+  // in-flight loads, blocked-timer summary, etc.) produced by
+  // `withTimeout`. The Prerenderer lifts these onto
+  // `response.meta.diagnostics` before returning, where the indexer
+  // picks them up and persists them into `timing_diagnostics`. The
+  // field is dropped from the final response — callers should read
+  // `response.meta.diagnostics` instead.
+  diagnostics?: RenderTimeoutDiagnostics;
 }
 
 export interface FileExtractResponse {
@@ -199,7 +207,51 @@ export interface ModulePrerenderModel {
   error?: ErrorEntry;
 }
 
-export interface ModuleRenderResponse extends ModulePrerenderModel {}
+export interface ModuleRenderResponse extends ModulePrerenderModel {
+  // Server-observed timing breakdown, carried in the response body
+  // so the indexer can persist it onto `boxel_index.timing_diagnostics`
+  // for both in-process and remote prerender paths without needing a
+  // separate side channel.
+  meta?: PrerenderResponseMeta;
+}
+
+export interface PrerenderResponseMeta {
+  // Aggregated diagnostic payload — server-observed timings
+  // (launchMs, waits, renderElapsedMs, totalElapsedMs from
+  // `RenderTimeoutDiagnostics`) plus host-side breadcrumbs
+  // (renderStage, in-flight loads, recent module evaluations,
+  // blocked-timer summary, etc.). Populated by the Prerenderer from
+  // both its own timing measurements and any `RenderError.diagnostics`
+  // lifted out of embedded errors. The indexer picks this up, merges
+  // in the HTTP `requestId`, and persists into `timing_diagnostics`.
+  diagnostics?: RenderTimeoutDiagnostics;
+  // HTTP correlation ID stamped by the prerender server's Koa layer.
+  // Lets operators join client → manager → prerender-server logs for
+  // a single request. Absent for in-process (non-HTTP) callers.
+  requestId?: string;
+}
+
+// The shape persisted to `boxel_index.timing_diagnostics`. Extends
+// `RenderTimeoutDiagnostics` with write-side stamps applied at
+// `IndexWriter.updateEntry` time:
+//
+//   - `invalidationId` — one UUID per `Batch.invalidate()` call; every
+//     row touched by the same fan-out shares it, so operators can
+//     `SELECT ... WHERE timing_diagnostics->>'invalidationId' = '<id>'`
+//     and see the whole batch.
+//   - `indexedAt`      — wall-clock the write happened.
+//   - `requestId`      — HTTP correlation ID (HTTP path only).
+//
+// All fields are optional because writers populate incrementally:
+// render-side fields come from the Prerenderer's response meta, the
+// write-side stamps come from the IndexWriter. Any stage may skip
+// pieces that aren't applicable (e.g. non-timeout renders have no
+// `renderStage`, in-process callers have no `requestId`).
+export interface TimingDiagnostics extends RenderTimeoutDiagnostics {
+  requestId?: string;
+  invalidationId?: string;
+  indexedAt?: number;
+}
 
 export type AffinityType = 'realm' | 'user';
 
@@ -271,6 +323,10 @@ export interface RenderVisitResponse {
   fileExtract?: FileExtractResponse;
   fileRender?: FileRenderResponse;
   pageUnusableError?: RenderError;
+  // See ModuleRenderResponse.meta — server-observed timing breakdown
+  // embedded in the response so the indexer can persist it to
+  // `boxel_index.timing_diagnostics`.
+  meta?: PrerenderResponseMeta;
 }
 
 export type RunCommandArgs = {
@@ -284,6 +340,12 @@ export type RunCommandResponse = {
   status: 'ready' | 'error' | 'unusable';
   cardResultString?: string | null;
   error?: string | null;
+  // Server-observed timing meta — same channel as the visit /
+  // module responses. Unused by most callers (command results
+  // aren't persisted to `boxel_index`), but attached uniformly so
+  // `Prerenderer.decorateRenderErrorsWithTimings` can stamp it
+  // without a special-case for commands.
+  meta?: PrerenderResponseMeta;
 };
 
 export interface Prerenderer {

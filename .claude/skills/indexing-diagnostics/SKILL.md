@@ -1,38 +1,152 @@
 ---
-name: prerender-timeout-diagnostics
-description: Interpret the diagnostics attached to a prerender-timeout error document (and the matching prerender-server/manager logs) to decide which part of the pipeline stalled. Use when indexing fails with "Render timeout", when a user sees a 504 on a live render, or when investigating the CS-10820 saturation class of incidents.
+name: indexing-diagnostics
+description: Investigate slow or failing indexing using the diagnostics persisted on every `boxel_index` row (`timing_diagnostics` JSONB column, mirrored onto `error_doc.diagnostics` for error rows) plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, and (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, or when investigating the CS-10820 saturation class of incidents.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
-# Prerender timeout diagnostics
+# Indexing diagnostics
 
-A "Render timeout" error document is the persisted outcome of a prerender whose render phase (not launch, not proxy hop) blew the `RENDER_TIMEOUT_MS` budget. As of CS-10872 the error document and the accompanying log lines carry enough signal to classify the stall in a single pass, without having to re-run the scenario.
+Every indexer write (`IndexWriter.updateEntry`) persists a diagnostic blob on the row it wrote. The blob captures what the prerender pipeline spent its time on and what category of stall (if any) the render was stuck in. It's the primary tool for investigating:
 
-This skill exists because the timeout message alone — `Render timed-out after 90000 ms` — does not distinguish the four very different failure modes:
+- **A render that timed out during indexing** — classify the stall, fix the right layer. (Also applies to user-facing 504s since the UI path goes through the same prerender.)
+- **A reindex that was slow but succeeded** — attribute wall-clock across the cards that got re-rendered, find the real culprit in the fan-out.
+
+Both use cases read from the same data. The difference is the query you start with.
+
+## Where the diagnostics live
+
+Three places, all correlated:
+
+1. **`boxel_index.timing_diagnostics` (and `boxel_index_working.timing_diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth. Carries the full `RenderTimeoutDiagnostics` payload plus three write-side stamps: `invalidationId`, `indexedAt`, `requestId`.
+2. **`error_doc.diagnostics`** — derived copy of `timing_diagnostics`, written only for error rows. Exists so the existing UI read path (`error_doc` → `CardErrorJSONAPI.meta.diagnostics` via `formattedError`) keeps working without a schema rename. Non-error rows have `error_doc = null`; go to `timing_diagnostics` directly.
+3. **Logs** — `prerender-server`, `manager`, and `remote-prerenderer` lines all carry `requestId=…`. `grep requestId=<uuid>` collates one call across all three processes. For saturation incidents there's also the periodic `prerender-queue-snapshot` line on each prerender server.
+
+For UI triage you'll typically read the JSON error response (which surfaces `error_doc.diagnostics` as `meta.diagnostics`). For operator / SQL triage — especially slow non-failing reindexes — query the `timing_diagnostics` column directly.
+
+## The four stall categories
+
+Every slow or timed-out render falls into one of:
 
 - **Launch stall**: the request waited in the render-semaphore or tab queue and never got a real render attempt. Fix is capacity, not host code.
 - **Loader stall**: the render started but was still pulling `.gts` modules when the timer fired. Fix is module graph / network.
 - **Data stall**: the render got past module load but is still fetching cards, file-meta, or query-field results. Fix is the host data layer or the backend search.
 - **Render stall**: the render is in DOM rendering / stability-wait but nothing is in flight. Fix is Glimmer / template side.
 
-If you pick the wrong category you waste a day. The diagnostics below tell you which one.
+If you pick the wrong category you waste a day. The diagnostic fields in the [Classify in one pass](#classify-in-one-pass) table below pick it for you.
 
-## Where the diagnostics live
+## Mode A — a render timed out
 
-Two places, same correlation ID:
+Pull the diagnostic JSON for the erroring row:
 
-1. **The persisted error document** (`error_doc` JSONB column, e.g. `boxel_index_card` / `modules`). `error.diagnostics` was added in CS-10872.
-2. **Logs** — the `prerender-server`, `manager`, and `remote-prerenderer` lines all carry `requestId=…` after CS-10872. `grep requestId=<uuid>` collates one call across all three processes. For saturation incidents there is also the periodic `prerender-queue-snapshot` line on each prerender server.
+```sql
+SELECT timing_diagnostics
+FROM boxel_index
+WHERE url = '<errored-card-url>'
+  AND type = 'instance';
+```
 
-Expect both. If one is missing (e.g. older rollout), you can fall back to `capturedDom` / `blockedTimerSummary` which are still attached.
+(Or read `error_doc.diagnostics` from the JSON:API error response — same shape.)
+
+Walk the fields per [Classify in one pass](#classify-in-one-pass). The *first* positive signal wins; stop there.
+
+## Mode B — an incremental reindex was slow
+
+Every `Batch.invalidate(urls)` call mints a UUID stashed into `timing_diagnostics.invalidationId` for every row written during that fan-out. If a `.gts` edit invalidates 8 rows (one file + seven card instances), all eight carry the same `invalidationId` — so you can look at the whole reindex as a group.
+
+**Step 1 — find the invalidation you care about.** If you don't already have the ID, discover recent big ones:
+
+```sql
+-- Biggest fan-outs in the realm, most recent first
+SELECT
+  timing_diagnostics->>'invalidationId' AS id,
+  count(*)                              AS rows_touched,
+  to_timestamp(
+    max((timing_diagnostics->>'indexedAt')::bigint) / 1000
+  )                                     AS last_indexed_at,
+  sum((timing_diagnostics->>'renderElapsedMs')::int)
+                                        AS total_render_ms,
+  max((timing_diagnostics->>'renderElapsedMs')::int)
+                                        AS slowest_ms
+FROM boxel_index
+WHERE realm_url = 'http://localhost:4201/user/your-realm/'
+  AND timing_diagnostics->>'invalidationId' IS NOT NULL
+GROUP BY 1
+ORDER BY last_indexed_at DESC
+LIMIT 20;
+```
+
+**Step 2 — walk the fan-out.** Given an `invalidationId`, pull every row it touched, ordered by render cost:
+
+```sql
+SELECT
+  url,
+  type,
+  has_error,
+  timing_diagnostics->>'renderStage'                  AS stage,
+  (timing_diagnostics->>'renderElapsedMs')::int       AS render_ms,
+  (timing_diagnostics->>'launchMs')::int              AS launch_ms,
+  timing_diagnostics->'waits'                         AS waits,
+  jsonb_array_length(
+    COALESCE(timing_diagnostics->'queryLoadsInFlight', '[]'::jsonb)
+  )                                                   AS queries_stuck,
+  jsonb_array_length(
+    COALESCE(timing_diagnostics->'inFlightModuleImports', '[]'::jsonb)
+  )                                                   AS modules_stuck,
+  to_timestamp((timing_diagnostics->>'indexedAt')::bigint / 1000)
+                                                      AS indexed_at
+FROM boxel_index
+WHERE realm_url = 'http://localhost:4201/user/your-realm/'
+  AND timing_diagnostics->>'invalidationId' = '<uuid>'
+ORDER BY render_ms DESC NULLS LAST;
+```
+
+**Step 3 — classify each slow row.** For the top offenders, pull the full `timing_diagnostics` and apply the [Classify in one pass](#classify-in-one-pass) table to each. Common patterns:
+
+- One row dominates (e.g. a dashboard card) and the rest are cheap. The big row is the real target — investigate its `queryLoadsInFlight` / `recentModuleEvaluations` / `cardDocLoadsInFlight`.
+- All rows share a large `launchMs`. Capacity contention during the reindex, not the cards' fault.
+- The first row in the batch (min `indexedAt`) has a large `renderElapsedMs` but the rest are cheap — this is the cold-loader tax paid by whichever card was rendered first after `clearCache: true` fired. Expected on any executable invalidation; only worth chasing if the cold cost is disproportionate to the dep closure.
+- The `deps` / `types` columns on the same rows tell you *why* each row was invalidated — useful for discovering unintentionally-heavy transitive deps (e.g. a dashboard re-renders because one of its metrics modules has a runtime reference to the changed module).
+
+**Other useful queries:**
+
+```sql
+-- Slowest single renders in the realm, regardless of error state
+SELECT
+  url,
+  to_timestamp((timing_diagnostics->>'indexedAt')::bigint / 1000) AS indexed_at,
+  (timing_diagnostics->>'renderElapsedMs')::int                   AS render_ms,
+  timing_diagnostics->>'renderStage'                              AS stage,
+  timing_diagnostics->>'invalidationId'                           AS group,
+  has_error
+FROM boxel_index
+WHERE realm_url = 'http://localhost:4201/user/your-realm/'
+ORDER BY render_ms DESC NULLS LAST
+LIMIT 20;
+
+-- p95 render time by realm
+SELECT
+  realm_url,
+  avg((timing_diagnostics->>'renderElapsedMs')::int) AS avg_ms,
+  percentile_cont(0.95) WITHIN GROUP (
+    ORDER BY (timing_diagnostics->>'renderElapsedMs')::int
+  )                                                   AS p95_ms,
+  count(*)                                            AS rows
+FROM boxel_index
+WHERE timing_diagnostics->>'renderElapsedMs' IS NOT NULL
+GROUP BY 1
+ORDER BY p95_ms DESC NULLS LAST
+LIMIT 20;
+```
 
 ## Field-by-field reading
 
-`error.diagnostics` is an optional object on any `RenderError` with the shape defined in `packages/runtime-common/index.ts` (`RenderTimeoutDiagnostics`). Every field is optional — absent means the hook wasn't available in that build or the timeout killed the page before we could read it.
+`timing_diagnostics` carries `RenderTimeoutDiagnostics` (defined in `packages/runtime-common/index.ts`) plus `invalidationId` / `indexedAt` / `requestId`. Every render-side field is optional — absent means the hook wasn't available in that build or the page died before the capture could read it.
 
 ```jsonc
 {
   "requestId": "b14e…",          // single ID across client/manager/prerender-server
+  "invalidationId": "a3e1…",     // single ID across every row written by the same Batch.invalidate()
+  "indexedAt": 1776964391615,    // wall-clock ms when IndexWriter.updateEntry ran
   "launchMs": 18720,             // waiting-in-page-pool time (server-side)
   "waits": {
     "semaphoreMs": 18500,        //   └ of that, waiting on the global render semaphore
@@ -40,7 +154,7 @@ Expect both. If one is missing (e.g. older rollout), you can fall back to `captu
     "tabStartupMs": 20           //   └ warming a fresh tab / standby
   },
   "renderElapsedMs": 71280,      // time inside withTimeout()
-  "totalElapsedMs": 90000,       // launch + render (should match the timeout)
+  "totalElapsedMs": 90000,       // launch + render (matches the timeout on errored rows)
   "renderStage": "waiting-stability", // last breadcrumb set by the host route
   "stageAgeMs": 62110,           // ms since `renderStage` was last set
   "cardDocsInFlight": ["…/CardA.json", …], // URLs the store was still loading (legacy, strings only)
@@ -101,7 +215,7 @@ All ms values are server-observed walltime.
 - `cardDocLoadsInFlight[*].ageMs` / `fileMetaDocLoadsInFlight[*].ageMs` mirror the query version for linked-field (card doc) / file-meta loads. One URL with a very large `ageMs` = one slow linksTo target; many URLs with small `ageMs` = fan-out.
 - `recentCardDocLoads[*].ms` / `recentFileMetaLoads[*].ms` are the completed-load histories; same usage as `recentQueryLoads`.
 
-These field names are stable after CS-10872; the skill and the type in `packages/runtime-common/index.ts` should stay in lock-step.
+Keep the field names in lock-step with the type in `packages/runtime-common/index.ts`.
 
 ### Classify in one pass
 
@@ -122,14 +236,14 @@ Walk the fields top-down. The *first* positive signal wins; stop there.
 
 ### Special cases
 
-- **`launchMs` is tiny AND `renderElapsedMs` ≈ `totalElapsedMs` but `renderStage` is `null`** — the host's stage hook didn't install. Either the render.ts deactivate ran before the capture, or you're on a pre-CS-10872 host build. Look at `capturedDom` for the last prerender status.
-- **`totalElapsedMs` substantially less than the configured `RENDER_TIMEOUT_MS`** — the outer request aborted, not the inner render timeout. That's a client/manager timeout (remote-prerenderer's abort message includes the elapsed — see its error text). The stall is still meaningful but the budget isn't the render-timeout budget.
+- **`launchMs` is tiny AND `renderElapsedMs` ≈ `totalElapsedMs` but `renderStage` is `null`** — the host's stage hook didn't install. Either the render.ts deactivate ran before the capture, or you're on an older host build. Look at `capturedDom` for the last prerender status.
+- **`totalElapsedMs` substantially less than the configured `RENDER_TIMEOUT_MS`** — the outer request aborted, not the inner render timeout. That's a client/manager timeout (remote-prerenderer's abort message includes the elapsed). The stall is still meaningful but the budget isn't the render-timeout budget.
 - **`queryLoadsInFlight` but no `fieldName`** — this is an ad-hoc `store.search()` call, not a query field. The `source` string carries the SearchResource's `source` tag (`seed` / `search` / `live-refresh`) to help.
-- **`launchMs + renderElapsedMs ≠ totalElapsedMs`** — possible under retry, since render-runner re-enters with `clearCache: true` on known error signatures. Treat each attempt as its own story; the final error wins.
+- **`launchMs + renderElapsedMs ≠ totalElapsedMs`** — possible under retry, since render-runner re-enters with `clearCache: true` on known error signatures. Treat each attempt as its own story; the final stored attempt wins.
 
 ## Cross-referencing logs
 
-Every log line emitted after CS-10872 for an indexing/user prerender carries `requestId=<uuid>`. Join them:
+Every prerender log line carries `requestId=<uuid>`. Join them:
 
 ```sh
 # Manager proxy lines (including queueMs + target assignment)
@@ -150,7 +264,7 @@ prerender-queue-snapshot totalTabs=4 totalPending=7 affinities=3 | realm:acme(ta
 
 Read this alongside a timeout when `waits.semaphoreMs` is large. A snapshot with `totalPending >> totalTabs` near the timestamp confirms saturation.
 
-## Quick triage rubric
+## Quick triage rubric (Mode A — timeout)
 
 1. **Is `waits.semaphoreMs` > 50% of totalElapsedMs?** If yes, this is capacity. Go look at fleet snapshots, not host code.
 2. **Is `renderStage` still a `buildModel:*` stage?** If yes, the render never started real template work — it's upstream of the host.
@@ -162,9 +276,18 @@ Read this alongside a timeout when `waits.semaphoreMs` is large. A snapshot with
 
 In practice steps 1-5 catch ~90% of timeouts.
 
+## Quick triage rubric (Mode B — slow reindex)
+
+1. **Pull the fan-out with the `invalidationId` query above** — you now have every row touched.
+2. **Does one row dominate total `render_ms`?** If yes, it's the real target. Read its `timing_diagnostics` and apply Mode A's rubric to it.
+3. **Are `launch_ms` and `waits.semaphoreMs` large across all rows?** If yes, capacity contention during the reindex, not the cards' fault.
+4. **Is only the first-indexed row (min `indexedAt`) slow and the rest fast?** That's the cold-loader tax paid by the first render after a `.gts` invalidation (`clearCache: true` fired once for the batch). Expected on any executable invalidation — only worth chasing if the cold cost is disproportionate to the module graph.
+5. **Is the sum of `render_ms` wildly larger than the card count × a reasonable per-card budget?** Look for `queryLoadsInFlight` / `recentQueryLoads` entries that repeat across rows — that's a query-field that multiple dependents all wait on.
+6. **Is the fan-out bigger than you expected?** The `types` and `deps` columns on the same rows tell you *why* each row was invalidated — useful for discovering unintentionally-heavy transitive deps (e.g. a dashboard re-renders because one of its metrics modules has a runtime reference to the changed module).
+
 ## When the diagnostics disagree with each other
 
-The hooks are best-effort and the page may die mid-capture. Trust this precedence:
+The host-side hooks are best-effort and the page may die mid-capture. Trust this precedence:
 
 1. `renderStage` — set synchronously by the host.
 2. `inFlightModuleImports` — read from the loader which is still alive even after the timeout.
@@ -175,6 +298,6 @@ If `renderStage` says `buildModel:fetching-source` but `cardDocsInFlight` is emp
 
 ## Extending the diagnostics
 
-If you find you want a signal that isn't here, add it to `RenderTimeoutDiagnostics` in `packages/runtime-common/index.ts` (optional field), populate it in `packages/realm-server/prerender/utils.ts` (the `withTimeout` capture block) by evaluating a new globalThis hook on the page, and expose that hook from `packages/host/app/routes/render.ts::__boxelRenderDiagnostics`. The server-side enrichment in `packages/realm-server/prerender/prerender-app.ts::decorateRenderErrorDiagnostics` then carries it to the error document unchanged.
+If you find you want a signal that isn't here, add it to `RenderTimeoutDiagnostics` in `packages/runtime-common/index.ts` (optional field), populate it in `packages/realm-server/prerender/utils.ts` (the `withTimeout` capture block) by evaluating a new globalThis hook on the page, and expose that hook from `packages/host/app/routes/render.ts::__boxelRenderDiagnostics`. The Prerenderer decorator lifts it onto `response.meta.diagnostics` and the indexer persists it into `timing_diagnostics` unchanged.
 
 Remember to also surface it on the error log line in `withTimeout` so operators see it without opening the JSON.
