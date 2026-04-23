@@ -26,6 +26,17 @@ export function ensureJsonExtension(path: string): string {
   return path;
 }
 
+/**
+ * Strip a realm URL prefix from an id. Search-index results return
+ * `card.id` as a full URL (`http://.../Issues/foo`), but workspace-fs
+ * primitives expect a realm-relative path (`Issues/foo`). Pass the id
+ * through this helper at the boundary before treating it as a path.
+ */
+export function toRealmRelativePath(id: string, realmUrl: string): string {
+  let base = ensureTrailingSlash(realmUrl);
+  return id.startsWith(base) ? id.slice(base.length) : id;
+}
+
 // ---------------------------------------------------------------------------
 // Issue Comments (read-patch-write)
 // ---------------------------------------------------------------------------

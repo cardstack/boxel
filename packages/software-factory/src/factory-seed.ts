@@ -8,8 +8,6 @@
  * the seed issue as done.
  */
 
-import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
-
 import type { FactoryBrief } from './factory-brief';
 
 import { logger } from './logger';
@@ -36,12 +34,6 @@ export interface SeedIssueResult {
 }
 
 export interface SeedIssueOptions {
-  /**
-   * Retained for API parity with other factory primitives and for tests
-   * that assert on construction. The seed writer itself only touches the
-   * local workspace; the orchestrator syncs it to `targetRealmUrl` after.
-   */
-  client: BoxelCLIClient;
   darkfactoryModuleUrl: string;
   /**
    * Local workspace directory mirroring the target realm. The seed issue
@@ -72,7 +64,6 @@ const SEED_ISSUE_FILE = `${SEED_ISSUE_PATH}.json`;
  */
 export async function createSeedIssue(
   brief: FactoryBrief,
-  _targetRealmUrl: string,
   options: SeedIssueOptions,
 ): Promise<SeedIssueResult> {
   let { darkfactoryModuleUrl, workspaceDir } = options;

@@ -15,7 +15,11 @@ import type {
   SchedulableIssue,
 } from './factory-agent';
 
-import { ensureJsonExtension, addCommentToIssue } from './realm-operations';
+import {
+  addCommentToIssue,
+  ensureJsonExtension,
+  toRealmRelativePath,
+} from './realm-operations';
 import { readCard, writeCard } from './workspace-fs';
 import { logger } from './logger';
 
@@ -206,26 +210,6 @@ export class RealmIssueStore implements IssueStore {
     this.workspaceDir = config.workspaceDir;
   }
 
-  /**
-   * Convert an issue id to a realm-relative path. The search index
-   * returns `card.id` as a full URL (e.g. `http://.../Issues/foo`), but
-   * workspace-fs expects a relative path (`Issues/foo`). Callers always
-   * use the URL form at the IssueStore boundary, so we normalize here.
-   */
-  private toRelativePath(issueId: string): string {
-    if (issueId.startsWith(this.realmUrl)) {
-      return issueId.slice(this.realmUrl.length);
-    }
-    // Also strip a trailing slash variant in case the caller passed one.
-    let withSlash = this.realmUrl.endsWith('/')
-      ? this.realmUrl
-      : `${this.realmUrl}/`;
-    if (issueId.startsWith(withSlash)) {
-      return issueId.slice(withSlash.length);
-    }
-    return issueId;
-  }
-
   async listIssues(): Promise<SchedulableIssue[]> {
     let result = await this.client.search(this.realmUrl, {
       filter: {
@@ -264,7 +248,9 @@ export class RealmIssueStore implements IssueStore {
     issueId: string,
     updates: { status?: string; priority?: string },
   ): Promise<void> {
-    let filePath = ensureJsonExtension(this.toRelativePath(issueId));
+    let filePath = ensureJsonExtension(
+      toRealmRelativePath(issueId, this.realmUrl),
+    );
     let readResult = await readCard(this.workspaceDir, filePath);
     if (!readResult.ok || !readResult.document) {
       let reason =
@@ -310,7 +296,7 @@ export class RealmIssueStore implements IssueStore {
   ): Promise<void> {
     let result = await addCommentToIssue(
       this.workspaceDir,
-      this.toRelativePath(issueId),
+      toRealmRelativePath(issueId, this.realmUrl),
       comment,
     );
     if (!result.ok) {
@@ -339,7 +325,7 @@ export class RealmIssueStore implements IssueStore {
     }
 
     let projectId = result.data[0].id as string;
-    let relativePath = this.toRelativePath(projectId);
+    let relativePath = toRealmRelativePath(projectId, this.realmUrl);
     let filePath = ensureJsonExtension(relativePath);
 
     let readResult = await readCard(this.workspaceDir, filePath);

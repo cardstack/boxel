@@ -420,7 +420,7 @@ module('factory-entrypoint', function (hooks) {
           serverUrl: resolution.serverUrl,
           createdRealm: false,
         }),
-        createSeed: async (_brief, _url, options) => {
+        createSeed: async (_brief, options) => {
           capturedDarkfactoryModuleUrl = options.darkfactoryModuleUrl;
           return mockSeedResult;
         },

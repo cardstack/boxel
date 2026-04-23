@@ -88,20 +88,12 @@ export interface RunFactoryEntrypointDependencies {
   ) => Promise<FactoryTargetRealmBootstrapResult>;
   createSeed?: (
     brief: FactoryBrief,
-    targetRealmUrl: string,
     options: {
-      client: BoxelCLIClient;
       darkfactoryModuleUrl: string;
       workspaceDir: string;
     },
   ) => Promise<SeedIssueResult>;
   runIssueLoop?: (config: IssueLoopWiringConfig) => Promise<IssueLoopResult>;
-  /**
-   * Override the workspace directory resolution. Primarily for tests so
-   * they can point the factory at a temp dir they control. In production
-   * this defaults to `resolveWorkspaceDir(targetRealmUrl)`.
-   */
-  resolveWorkspaceDir?: (targetRealmUrl: string) => string;
   /**
    * Pull the target realm into the workspace. Tests stub this out so
    * they don't make real HTTP calls. Defaults to `client.pull`.
@@ -270,9 +262,7 @@ export async function runFactoryEntrypoint(
   // read/write against the target realm happens against this directory;
   // the realm itself is reached only via `client.pull` / `client.sync`.
   // The path is deterministic per realm so re-runs reuse state.
-  let workspaceDir = (dependencies?.resolveWorkspaceDir ?? resolveWorkspaceDir)(
-    targetRealm.url,
-  );
+  let workspaceDir = resolveWorkspaceDir(targetRealm.url);
   await ensureWorkspaceDir(workspaceDir);
   log.info(`Workspace directory: ${workspaceDir}`);
 
@@ -280,11 +270,10 @@ export async function runFactoryEntrypoint(
   await pullTargetRealm(client, targetRealm.url, workspaceDir);
 
   // Create the seed issue locally
-  let seedResult = await (dependencies?.createSeed ?? createSeedIssue)(
-    brief,
-    targetRealm.url,
-    { client, darkfactoryModuleUrl, workspaceDir },
-  );
+  let seedResult = await (dependencies?.createSeed ?? createSeedIssue)(brief, {
+    darkfactoryModuleUrl,
+    workspaceDir,
+  });
 
   // Push the freshly-written seed (and any other pre-existing workspace
   // state) to the realm so the scheduler's `listIssues()` query sees it.

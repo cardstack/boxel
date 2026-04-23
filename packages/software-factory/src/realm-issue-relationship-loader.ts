@@ -16,6 +16,7 @@ import type {
 
 import type { IssueRelationshipLoader } from './factory-context-builder';
 
+import { toRealmRelativePath } from './realm-operations';
 import { readCardById } from './workspace-fs';
 import { logger } from './logger';
 
@@ -50,23 +51,6 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
   constructor(config: RealmIssueRelationshipLoaderConfig) {
     this.workspaceDir = config.workspaceDir;
     this.realmUrl = config.realmUrl;
-  }
-
-  /**
-   * Convert an issue id (often a full realm URL from the search index)
-   * into a realm-relative path suitable for workspace-fs reads.
-   */
-  private toRelativePath(id: string): string {
-    if (id.startsWith(this.realmUrl)) {
-      return id.slice(this.realmUrl.length);
-    }
-    let withSlash = this.realmUrl.endsWith('/')
-      ? this.realmUrl
-      : `${this.realmUrl}/`;
-    if (id.startsWith(withSlash)) {
-      return id.slice(withSlash.length);
-    }
-    return id;
   }
 
   /**
@@ -159,7 +143,7 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
   ): Promise<Record<string, unknown> | undefined> {
     let result = await readCardById(
       this.workspaceDir,
-      this.toRelativePath(issueId),
+      toRealmRelativePath(issueId, this.realmUrl),
     );
     if (!result.ok || !result.document) {
       log.warn(

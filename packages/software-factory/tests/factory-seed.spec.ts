@@ -70,7 +70,6 @@ function buildSeedContext(realm: {
     darkfactoryModuleUrl,
     workspaceDir: workspace.dir,
     seedOptions: {
-      client,
       darkfactoryModuleUrl,
       workspaceDir: workspace.dir,
     },
@@ -82,11 +81,7 @@ test('creates bootstrap seed issue in a live realm', async ({ realm }) => {
     buildSeedContext(realm);
 
   try {
-    let result = await createSeedIssue(
-      stickyNoteBrief,
-      realm.realmURL.href,
-      seedOptions,
-    );
+    let result = await createSeedIssue(stickyNoteBrief, seedOptions);
 
     expect(result.issueId).toBe('Issues/bootstrap-seed');
     expect(result.status).toBe('created');
@@ -156,18 +151,10 @@ test('seed issue creation is idempotent', async ({ realm }) => {
   let { cleanup, seedOptions } = buildSeedContext(realm);
 
   try {
-    let result1 = await createSeedIssue(
-      stickyNoteBrief,
-      realm.realmURL.href,
-      seedOptions,
-    );
+    let result1 = await createSeedIssue(stickyNoteBrief, seedOptions);
     expect(result1.status).toBe('created');
 
-    let result2 = await createSeedIssue(
-      stickyNoteBrief,
-      realm.realmURL.href,
-      seedOptions,
-    );
+    let result2 = await createSeedIssue(stickyNoteBrief, seedOptions);
     expect(result2.status).toBe('existing');
     expect(result2.issueId).toBe(result1.issueId);
   } finally {

@@ -148,10 +148,6 @@ export async function deleteCard(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Card conveniences (auto .json extension)
-// ---------------------------------------------------------------------------
-
 /**
  * `readCard` with automatic `.json` extension handling. Use when you
  * have a card id (`Issues/foo`) rather than a concrete file path.
@@ -161,17 +157,6 @@ export async function readCardById(
   cardId: string,
 ): Promise<WorkspaceReadResult> {
   return readCard(workspaceDir, ensureJsonExtension(cardId));
-}
-
-/**
- * `writeCard` with automatic `.json` extension handling.
- */
-export async function writeCardById(
-  workspaceDir: string,
-  cardId: string,
-  content: string,
-): Promise<WorkspaceWriteResult> {
-  return writeCard(workspaceDir, ensureJsonExtension(cardId), content);
 }
 
 // ---------------------------------------------------------------------------
