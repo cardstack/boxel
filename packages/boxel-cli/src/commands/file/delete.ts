@@ -1,8 +1,11 @@
 import type { Command } from 'commander';
 import {
   getProfileManager,
+  NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from '../../lib/profile-manager';
+import { isProtectedFile, SupportedMimeType } from '../../lib/realm-sync-base';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { FG_RED, DIM, RESET } from '../../lib/colors';
 
 export interface DeleteResult {
@@ -17,10 +20,6 @@ export interface DeleteCommandOptions {
 interface DeleteCliOptions {
   realm: string;
   json?: boolean;
-}
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
 }
 
 /**
@@ -39,7 +38,14 @@ export async function deleteFile(
   if (!active) {
     return {
       ok: false,
-      error: 'No active profile. Run `boxel profile add` to create one.',
+      error: NO_ACTIVE_PROFILE_ERROR,
+    };
+  }
+
+  if (isProtectedFile(path)) {
+    return {
+      ok: false,
+      error: `Cannot delete protected file: ${path}`,
     };
   }
 
@@ -49,7 +55,7 @@ export async function deleteFile(
   try {
     response = await pm.authedRealmFetch(url, {
       method: 'DELETE',
-      headers: { Accept: 'application/vnd.card+source' },
+      headers: { Accept: SupportedMimeType.CardSource },
     });
   } catch (err) {
     return {

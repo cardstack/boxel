@@ -1,4 +1,4 @@
-import { deleteFile } from '../commands/file/delete';
+import { deleteFile, type DeleteResult } from '../commands/file/delete';
 import {
   readTranspiledModule,
   type ReadTranspiledResult,
@@ -62,10 +62,7 @@ export interface WriteResult {
   error?: string;
 }
 
-export interface DeleteResult {
-  ok: boolean;
-  error?: string;
-}
+export type { DeleteResult };
 
 export interface SearchResult {
   ok: boolean;
@@ -257,7 +254,7 @@ export class BoxelCLIClient {
   async delete(realmUrl: string, path: string): Promise<DeleteResult> {
     return deleteFile(realmUrl, path, {
       profileManager: this.pm,
-    }) as Promise<DeleteResult>;
+    });
   }
 
   /**
