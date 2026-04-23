@@ -898,6 +898,8 @@ module(basename(__filename), function () {
               return updatedCard?.data?.attributes?.firstName === 'Updated';
             },
             {
+              timeout: 3000,
+              interval: 50,
               timeoutMessage:
                 'updated firstName was not visible via /update-person',
             },
