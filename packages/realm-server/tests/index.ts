@@ -174,6 +174,7 @@ import './permissions/permission-checker-test';
 import './prerendering-test';
 import './prerender-server-test';
 import './prerender-manager-test';
+import './prerender-affinity-activity-test';
 import './prerender-batch-ownership-test';
 import './prerender-cancellation-test';
 import './prerender-diagnostics-persistence-test';

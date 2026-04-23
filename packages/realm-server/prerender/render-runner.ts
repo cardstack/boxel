@@ -339,6 +339,7 @@ export class RenderRunner {
     opts,
     renderOptions,
     signal,
+    onTabAcquired,
   }: {
     affinityType: AffinityType;
     affinityValue: string;
@@ -348,6 +349,13 @@ export class RenderRunner {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
     signal?: AbortSignal;
+    // Fires after `getPageForAffinity` resolves — i.e. when this
+    // attempt stops waiting on the semaphore / tab queue and actually
+    // has a page. CS-10872 diagnostic hook; used by the Prerenderer
+    // to flip `affinitySnapshot.sameAffinityActivity[*].state` from
+    // `queued` to `running`, which is what makes the deadlock
+    // fingerprint meaningful.
+    onTabAcquired?: () => void;
   }): Promise<{
     response: ModuleRenderResponse;
     timings: Timings;
@@ -361,6 +369,7 @@ export class RenderRunner {
 
     const { page, reused, launchMs, waits, pageId, release } =
       await this.#getPageForAffinity(affinityKey, auth, signal);
+    onTabAcquired?.();
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
@@ -511,9 +520,12 @@ export class RenderRunner {
     fileData,
     types,
     signal,
+    onTabAcquired,
   }: PrerenderVisitArgs & {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     signal?: AbortSignal;
+    // See the matching param on `prerenderModuleAttempt`.
+    onTabAcquired?: () => void;
   }): Promise<{
     response: RenderVisitResponse;
     timings: Timings;
@@ -533,6 +545,7 @@ export class RenderRunner {
 
     const { page, reused, launchMs, waits, pageId, release } =
       await this.#getPageForAffinity(affinityKey, auth, signal);
+    onTabAcquired?.();
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
