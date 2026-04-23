@@ -299,14 +299,23 @@ BXL:         { expr: 'Total = SUM("Line Item"."Line Total")',
 
 Same pattern, JSON-native, runs in the same sandbox as your formulas.
 
-### CSS · selector pseudo-classes for arrays
+### CSS · the most-deployed sandboxed expression language there is
 
-CSS built a compact vocabulary for addressing positions in a collection: `:first-child`, `:nth-of-type(2n)`, `:not(.hidden)`. BXL lifts the syntax and points it at array indexes instead of DOM elements.
+BXL's most visible debt to CSS is syntactic. CSS built a compact vocabulary for addressing positions in a collection: `:first-child`, `:nth-of-type(2n)`, `:not(.hidden)`. BXL lifts the syntax and points it at array indexes instead of DOM elements.
 
 ```
 CSS:  tr:first-child, tr:nth-child(2n+1), li:not(.done)
 BXL:  "Line Item":first,  "Line Item":odd,  Task:not([Done])
 ```
+
+But CSS isn't just selectors. It's also the most-deployed sandboxed expression language on Earth — every browser on every device runs billions of CSS rules a day inside a sandbox that cannot fetch, mutate, or call JavaScript. And it does more computation than people give it credit for:
+
+- **Computed values** — `calc()`, `min()`, `max()`, `clamp()`, `attr()` read data from the tree and produce numbers.
+- **Conditional defaults** — `var(--tone, black)` is a fallback expression; `@container` and `@media` gate values on context; the cascade itself is a conditional-default engine with 30 years of production miles.
+- **Validation state** — `:invalid`, `:valid`, `:required`, `:in-range`, `:out-of-range`, `:user-invalid` react to a form field's correctness without a single line of JavaScript.
+- **Aggregation, sort of** — `counter()` walks the tree and accumulates; `:has()` lets a parent assert things about its descendants.
+
+BXL isn't trying to replace CSS. It's trying to do for JSON data what CSS has been quietly doing for the DOM: declarative rules, conditional values, validation reactions, and real computation — all inside a sandbox, all serializable as strings, all readable enough that a non-engineer can write one.
 
 ### Plain JavaScript · what you'd write without BXL
 
@@ -327,18 +336,20 @@ Both answer the same question. The JS version has `fetch` and `process.env` in s
 
 Each language above is strong at one or two of the jobs a typical business app needs — validation, computed fields, data processing, conditional defaults, storage as data. No single one covers the whole set.
 
-| Role                                  | Excel  |   jq    | XPath  | XQuery  | Schematron | CSS |   JS   |  BXL   |
-| ------------------------------------- | :----: | :-----: | :----: | :-----: | :--------: | :-: | :----: | :----: |
-| Validation rules + messages           |  weak  |   ok    |   ok   |   ok    |   strong   |  —  |   ok   | strong |
-| Computed / formula fields             | strong |   ok    |   ok   |   ok    |     —      |  —  |   ok   | strong |
-| Data processing / aggregation         |  weak  | strong  |   ok   | strong  |     —      |  —  |   ok   | strong |
-| Conditional defaults                  |   ok   |    —    |   ok   |   ok    |     —      |  —  |   ok   | strong |
-| Sandbox by default (no I/O)           | strong | strong  | strong | partial |   strong   |  —  |   —    | strong |
-| Readable to non-engineers             | strong |    —    |   —    |    —    |     —      |  —  |   —    | strong |
-| Paste from spreadsheet                | strong |    —    |   —    |    —    |     —      |  —  |   —    | strong |
-| Works on JSON natively                |   —    | strong  |   —    |    —    |     —      |  —  | strong | strong |
-| Embeds in JSON as data (serializable) |   ok   | strong  |   —    |    —    |     —      |  —  |   —    | strong |
-| One language across every job         |   —    | partial |   —    | partial |     —      |  —  | strong | strong |
+| Role                                  | Excel | jq | XPath | XQuery | Schematron | CSS | JS | BXL |
+| ------------------------------------- | :---: | :-: | :---: | :----: | :--------: | :-: | :-: | :-: |
+| Validation rules + messages           |  🟠  | 🟡 |  🟡  |   🟡  |    🟢    | 🟠 | 🟡 | 🟢 |
+| Computed / formula fields             |  🟢  | 🟡 |  🟡  |   🟡  |     —     | 🟠 | 🟡 | 🟢 |
+| Data processing / aggregation         |  🟠  | 🟢 |  🟡  |   🟢  |     —     | 🟠 | 🟡 | 🟢 |
+| Conditional defaults                  |  🟡  |  — |  🟡  |   🟡  |     —     | 🟢 | 🟡 | 🟢 |
+| Sandbox by default (no I/O)           |  🟢  | 🟢 |  🟢  |   🟡  |    🟢    | 🟢 |  — | 🟢 |
+| Readable to non-engineers             |  🟢  |  — |   —  |    —  |     —     | 🟡 |  — | 🟢 |
+| Paste from spreadsheet                |  🟢  |  — |   —  |    —  |     —     |  — |  — | 🟢 |
+| Works on JSON natively                |   —  | 🟢 |   —  |    —  |     —     |  — | 🟢 | 🟢 |
+| Embeds in JSON as data (serializable) |  🟡  | 🟢 |   —  |    —  |     —     | 🟡 |  — | 🟢 |
+| One language across every job         |   —  | 🟡 |   —  |   🟡  |     —     | 🟠 | 🟢 | 🟢 |
+
+🟢 strong &nbsp;·&nbsp; 🟡 ok / partial &nbsp;·&nbsp; 🟠 weak &nbsp;·&nbsp; — none
 
 BXL didn't invent any row. It's the smallest language that covers all of them at once, because it explicitly composes the wins of the ones that came before.
 
