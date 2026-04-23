@@ -777,13 +777,17 @@ export class Prerenderer {
         let perAffinity = snap.affinities
           .map((a) => {
             let q = a.byQueue;
-            let running = q.file + q.module + q.command;
-            // Only append the per-queue breakdown when the affinity is
-            // actually running something. Idle affinities keep the
-            // compact form to preserve log scannability.
+            let busy = q.file + q.module + q.command;
+            // Only append the per-queue breakdown when the affinity has
+            // tabs checked out for work. Idle affinities keep the compact
+            // form to preserve log scannability. Labelled `busy=` (not
+            // `running=`) because a tab is tagged with its queue from
+            // acquisition until release — it may be waiting on the global
+            // render semaphore for part of that window rather than
+            // actively executing.
             let queueDetail =
-              running > 0
-                ? `, running=file:${q.file}/module:${q.module}/command:${q.command}`
+              busy > 0
+                ? `, busy=file:${q.file}/module:${q.module}/command:${q.command}`
                 : '';
             return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail})`;
           })

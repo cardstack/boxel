@@ -227,6 +227,19 @@ export class PagePool {
       envTabMax = 1;
     }
     this.#affinityTabMax = Math.min(Math.max(1, envTabMax), this.#maxPages);
+    if (this.#affinityTabMax < 2) {
+      // Degenerate configuration: with only one tab per affinity, the
+      // file-queue admission cap clamps to 1 (see `#acquireFileAdmission`)
+      // and no tab slot can be held back for module / command work.
+      // A card render that triggers a same-affinity `.gts` extraction
+      // will still deadlock — there's no room to run the extraction
+      // while the render occupies the sole tab. Bump
+      // `PRERENDER_AFFINITY_TAB_MAX` to at least 2 for the deadlock-
+      // free guarantee.
+      log.warn(
+        `PRERENDER_AFFINITY_TAB_MAX=${this.#affinityTabMax} below 2; file-queue admission can't reserve a slot for module/command work and the self-referential prerender deadlock is not prevented`,
+      );
+    }
     // Cap on total shared contexts (active + orphaned). Default to
     // 2× maxPages so there's headroom for a handful of recently-
     // evicted contexts to survive as orphans for reuse. Enforced by
@@ -573,10 +586,19 @@ export class PagePool {
     } catch (e) {
       log.warn(`onAffinityDisposed subscriber threw for ${affinityKey}:`, e);
     }
-    // Drop the file-queue admission semaphore for this affinity; a
-    // subsequent getPage call on a resurrected affinity will lazy-
-    // create a fresh one.
-    this.#fileAdmission.delete(affinityKey);
+    // Intentionally do NOT delete the file-queue admission semaphore
+    // for this affinity here. `disposeAffinity` with `awaitIdle: false`
+    // (the RenderRunner eviction path) returns before in-flight getPage
+    // callers have released their admission permits — deleting the
+    // semaphore now would let a subsequent file call on the same
+    // affinity lazy-create a fresh full-capacity semaphore concurrently
+    // with the old one's still-held permits, violating the
+    // `fileTabsBusy <= affinityTabMax - 1` invariant and reopening the
+    // deadlock. Let the existing semaphore persist; in-flight callers
+    // drain it normally via their `releaseAdmission` closures, and a
+    // resurrected affinity shares the same semaphore. Fully dead
+    // affinities leak a small constant per key; cleared on
+    // `closeAll()`.
     void this.#browserManager.cleanupUserDataDirs();
     void this.#ensureStandbyPool();
   }
@@ -610,6 +632,7 @@ export class PagePool {
     this.#standbys.clear();
     this.#sharedContexts.clear();
     this.#lru.clear();
+    this.#fileAdmission.clear();
     this.#ensuringStandbys = null;
     this.#creatingStandbys = 0;
   }

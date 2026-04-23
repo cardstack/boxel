@@ -165,11 +165,10 @@ export interface RenderTimeoutDiagnostics {
     sameAffinityActivity: Array<{
       url: string;
       kind: 'visit' | 'module';
-      // Which PagePool queue this call is on (`file` / `module` /
-      // `command` — see `PrerenderQueue`). On a deadlock fingerprint
+      // Which PagePool queue this call is on. On a deadlock fingerprint
       // you'll see `queue: 'module', state: 'queued'` entries waiting
       // on the admission-semaphore-protected file queue.
-      queue?: 'file' | 'module' | 'command';
+      queue?: PrerenderQueue;
       state: 'queued' | 'running';
       ageMs: number;
     }>;
