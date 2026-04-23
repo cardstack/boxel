@@ -122,6 +122,8 @@ module(basename(__filename), function () {
         '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-captions" viewBox="0 0 24 24"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4m4 0h2M7 11h2m4 0h4"></path></svg>';
       let chessIconHTML =
         '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-rectangle-ellipsis" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="2"></rect><path d="M12 12h.01M17 12h.01M7 12h.01"></path></svg>';
+      let mapPinnedIconHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-map-pinned" viewBox="0 0 24 24"><path d="M18 8c0 3.613-3.869 7.429-5.393 8.795a1 1 0 0 1-1.214 0C9.87 15.429 6 11.613 6 8a6 6 0 0 1 12 0"></path><circle cx="12" cy="8" r="2"></circle><path d="M8.714 14h-3.71a1 1 0 0 0-.948.683l-2.004 6A1 1 0 0 0 3 22h18a1 1 0 0 0 .948-1.316l-2-6a1 1 0 0 0-.949-.684h-3.712"></path></svg>';
       let sortCardTypeSummaries = (summaries: any[]) =>
         [...summaries].sort((a, b) => {
           let aName = a.attributes.displayName;
@@ -194,6 +196,15 @@ module(basename(__filename), function () {
             displayName: 'Person',
             total: 4,
             iconHTML,
+          },
+        },
+        {
+          type: 'card-type-summary',
+          id: 'https://cardstack.com/base/realm-config/RealmConfig',
+          attributes: {
+            displayName: 'Realm Config',
+            total: 1,
+            iconHTML: mapPinnedIconHTML,
           },
         },
         {

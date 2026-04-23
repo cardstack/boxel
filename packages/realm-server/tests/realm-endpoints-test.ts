@@ -1803,6 +1803,14 @@ module(basename(__filename), function () {
                   kind: 'file',
                 },
               },
+              'realm.json': {
+                links: {
+                  related: `${testRealmHref}realm.json`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
               'sample.md': {
                 links: {
                   related: `${testRealmHref}sample.md`,
