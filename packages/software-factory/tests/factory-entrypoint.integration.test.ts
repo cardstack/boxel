@@ -199,11 +199,15 @@ module('factory-entrypoint integration', function () {
       ) {
         // Used by client.sync to atomically push card writes. Parse the
         // atomic operations payload to register every pushed path so
-        // subsequent GETs (including the post-seed `waitForFile` poll)
-        // can resolve them.
+        // subsequent GETs (the post-seed `waitForFile` poll) resolve.
+        // The sync client requires:
+        //   - HTTP 201 (not 200) as the success status,
+        //   - each result's `data.id` matching the operation's href
+        //     (full URL), so sync can map results back to local paths.
         let body = '';
         request.on('data', (chunk) => (body += chunk.toString()));
         request.on('end', () => {
+          let results: { data: { id: string; type: string } }[] = [];
           try {
             let parsed = JSON.parse(body) as {
               'atomic:operations'?: { op: string; href?: string }[];
@@ -211,17 +215,21 @@ module('factory-entrypoint integration', function () {
             for (let op of parsed['atomic:operations'] ?? []) {
               if (op.op === 'add' || op.op === 'update') {
                 let href = op.href ?? '';
-                let path = href.replace(/^\.\/?/, '').replace(/\.json$/, '');
+                let path = href
+                  .replace(/^https?:\/\/[^/]+\/hassan\/personal\//, '')
+                  .replace(/^\.\/?/, '')
+                  .replace(/\.json$/, '');
                 createdCardPaths.add(path);
+                results.push({ data: { id: href, type: 'source' } });
               }
             }
           } catch {
             // ignore — sync will surface the parse failure
           }
-          response.writeHead(200, {
+          response.writeHead(201, {
             'content-type': SupportedMimeType.JSONAPI,
           });
-          response.end(JSON.stringify({ 'atomic:results': [] }));
+          response.end(JSON.stringify({ 'atomic:results': results }));
         });
         return;
       } else if (
