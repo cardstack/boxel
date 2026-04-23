@@ -400,11 +400,12 @@ export async function startHarnessPrerenderServer(options: {
   stop(): Promise<void>;
 }> {
   // findAvailablePort picks a port, closes its probe socket, and hands the
-  // number back. Between close and the child binding, another process in
-  // the same CI worker can snatch the port and the child dies with
-  // EADDRINUSE. Retry with a fresh port when that happens. If the caller
-  // pinned the port explicitly, don't second-guess them — try once.
-  let maxAttempts = options.port ? 1 : 4;
+  // number back. Between close and the child binding, another process on
+  // the same host can snatch the port and the child dies with EADDRINUSE.
+  // Retry on contention in either case: if the caller supplied an explicit
+  // port the collision is usually transient (another process in TIME_WAIT
+  // or a briefly-bound prober), so a short backoff is typically enough.
+  const maxAttempts = 4;
   for (let attempt = 1; ; attempt++) {
     try {
       return await attemptStartHarnessPrerenderServer(options);
@@ -416,6 +417,10 @@ export async function startHarnessPrerenderServer(options: {
         log.warn(
           `prerender server port ${err.port} contended at bind — retrying (attempt ${attempt + 1}/${maxAttempts})`,
         );
+        // Short backoff before retrying. When the port is explicit we are
+        // retrying the same port, so give any transient blocker a moment
+        // to release.
+        await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
         continue;
       }
       throw err;
