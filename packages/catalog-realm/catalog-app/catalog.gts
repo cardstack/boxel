@@ -14,11 +14,15 @@ import {
   realmURL,
 } from 'https://cardstack.com/base/card-api';
 import {
+  codeRef,
   Query,
   isCardInstance,
   AnyFilter,
   Filter,
 } from '@cardstack/runtime-common';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 import StringField from 'https://cardstack.com/base/string';
 
 import FilterSidebar, { type FilterItem } from './components/filter-section';
@@ -107,14 +111,13 @@ class Isolated extends Component<typeof Catalog> {
   get query(): Query {
     return {
       filter: {
-        on: {
-          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./listing/listing', import.meta.url).href as RealmResourceIdentifier,
-          name:
-            this.activeTabId === 'showcase'
-              ? 'Listing'
-              : `${capitalize(this.activeTabId)}Listing`,
-        },
+        on: codeRef(
+          here,
+          './listing/listing',
+          this.activeTabId === 'showcase'
+            ? 'Listing'
+            : `${capitalize(this.activeTabId)}Listing`,
+        ),
         every: [this.categoryFilter, this.tagFilter, this.searchFilter].filter(
           Boolean,
         ) as Filter[],
@@ -128,11 +131,7 @@ class Isolated extends Component<typeof Catalog> {
   get categoryQuery(): Query {
     return {
       filter: {
-        type: {
-          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./listing/category', import.meta.url).href as RealmResourceIdentifier,
-          name: 'Category',
-        },
+        type: codeRef(here, './listing/category', 'Category'),
       },
     };
   }
@@ -270,11 +269,7 @@ class Isolated extends Component<typeof Catalog> {
   get tagQuery(): Query {
     return {
       filter: {
-        type: {
-          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./listing/tag', import.meta.url).href as RealmResourceIdentifier,
-          name: 'Tag',
-        },
+        type: codeRef(here, './listing/tag', 'Tag'),
       },
     };
   }

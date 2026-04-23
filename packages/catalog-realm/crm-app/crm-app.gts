@@ -32,6 +32,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 import {
+  codeRef,
   Query,
   CardError,
   SupportedMimeType,
@@ -107,29 +108,13 @@ const TASK_SORT_OPTIONS: SortOption[] = [
   },
 ];
 
-const DEAL_CARD_REF = {
-  name: 'Deal',
-  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-  module: new URL('./deal', import.meta.url).href as RealmResourceIdentifier,
-};
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 
-const ACCOUNT_CARD_REF = {
-  name: 'Account',
-  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-  module: new URL('./account', import.meta.url).href as RealmResourceIdentifier,
-};
-
-const TASK_CARD_REF = {
-  name: 'CRMTask',
-  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-  module: new URL('./task', import.meta.url).href as RealmResourceIdentifier,
-};
-
-const CONTACT_CARD_REF = {
-  name: 'Contact',
-  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-  module: new URL('./contact', import.meta.url).href as RealmResourceIdentifier,
-};
+const DEAL_CARD_REF = codeRef(here, './deal', 'Deal');
+const ACCOUNT_CARD_REF = codeRef(here, './account', 'Account');
+const TASK_CARD_REF = codeRef(here, './task', 'CRMTask');
+const CONTACT_CARD_REF = codeRef(here, './contact', 'Contact');
 
 const CONTACT_FILTERS: LayoutFilter[] = [
   {

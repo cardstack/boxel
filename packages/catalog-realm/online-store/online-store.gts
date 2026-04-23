@@ -24,28 +24,26 @@ import { htmlSafe } from '@ember/template';
 import StoreIcon from '@cardstack/boxel-icons/store';
 
 import type { Query } from '@cardstack/runtime-common';
-import {
-  realmURL,
-  type RealmResourceIdentifier,
-} from '@cardstack/runtime-common';
+import { codeRef, realmURL } from '@cardstack/runtime-common';
 
-const productSource = {
-  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-  module: new URL('../online-product/online-product', import.meta.url).href as RealmResourceIdentifier,
-  name: 'OnlineProduct',
-};
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 
-const orderSource = {
-  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-  module: new URL('../online-order/online-order', import.meta.url).href as RealmResourceIdentifier,
-  name: 'OnlineOrder',
-};
-
-const customerSource = {
-  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-  module: new URL('../online-customer/online-customer', import.meta.url).href as RealmResourceIdentifier,
-  name: 'OnlineCustomer',
-};
+const productSource = codeRef(
+  here,
+  '../online-product/online-product',
+  'OnlineProduct',
+);
+const orderSource = codeRef(
+  here,
+  '../online-order/online-order',
+  'OnlineOrder',
+);
+const customerSource = codeRef(
+  here,
+  '../online-customer/online-customer',
+  'OnlineCustomer',
+);
 
 class IsolatedTemplate extends Component<typeof OnlineStore> {
   @tracked activeTab = 'products';
@@ -54,26 +52,12 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
 
   get productsQuery(): Query {
     return {
-      filter: {
-        type: {
-          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('../online-product/online-product', import.meta.url)
-            .href as RealmResourceIdentifier,
-          name: 'OnlineProduct',
-        },
-      },
+      filter: { type: productSource },
     };
   }
 
   get searchedProductsQuery(): Query {
-    const baseFilter = {
-      type: {
-        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-        module: new URL('../online-product/online-product', import.meta.url)
-          .href as RealmResourceIdentifier,
-        name: 'OnlineProduct',
-      },
-    };
+    const baseFilter = { type: productSource };
 
     // If no search term, return all products
     if (!this.searchTerm || this.searchTerm.trim() === '') {
@@ -82,11 +66,6 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
 
     // Create search filters for multiple fields
     const searchTerm = this.searchTerm.trim().toLowerCase();
-    const productModule = new URL(
-      '../online-product/online-product',
-      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-      import.meta.url,
-    ).href;
 
     return {
       filter: {
@@ -94,22 +73,10 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
           baseFilter,
           {
             any: [
-              {
-                on: { module: productModule as RealmResourceIdentifier, name: 'OnlineProduct' },
-                contains: { productName: searchTerm },
-              },
-              {
-                on: { module: productModule as RealmResourceIdentifier, name: 'OnlineProduct' },
-                contains: { category: searchTerm },
-              },
-              {
-                on: { module: productModule as RealmResourceIdentifier, name: 'OnlineProduct' },
-                contains: { shortDescription: searchTerm },
-              },
-              {
-                on: { module: productModule as RealmResourceIdentifier, name: 'OnlineProduct' },
-                contains: { sku: searchTerm },
-              },
+              { on: productSource, contains: { productName: searchTerm } },
+              { on: productSource, contains: { category: searchTerm } },
+              { on: productSource, contains: { shortDescription: searchTerm } },
+              { on: productSource, contains: { sku: searchTerm } },
             ],
           },
         ],
@@ -119,26 +86,13 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
 
   get ordersQuery(): Query {
     return {
-      filter: {
-        type: {
-          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('../online-order/online-order', import.meta.url).href as RealmResourceIdentifier,
-          name: 'OnlineOrder',
-        },
-      },
+      filter: { type: orderSource },
     };
   }
 
   get customersQuery(): Query {
     return {
-      filter: {
-        type: {
-          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('../online-customer/online-customer', import.meta.url)
-            .href as RealmResourceIdentifier,
-          name: 'OnlineCustomer',
-        },
-      },
+      filter: { type: customerSource },
     };
   }
 
@@ -228,8 +182,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
 
     await this.args.createCard?.(
       productSource,
-      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-      new URL('./online-store', import.meta.url),
+      new URL('./online-store', here),
       {
         realmURL: this.realmURL,
         doc,
@@ -260,8 +213,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
 
     await this.args.createCard?.(
       orderSource,
-      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-      new URL('./online-store', import.meta.url),
+      new URL('./online-store', here),
       {
         realmURL: this.realmURL,
         doc,
@@ -291,8 +243,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
 
     await this.args.createCard?.(
       customerSource,
-      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-      new URL('./online-store', import.meta.url),
+      new URL('./online-store', here),
       {
         realmURL: this.realmURL,
         doc,

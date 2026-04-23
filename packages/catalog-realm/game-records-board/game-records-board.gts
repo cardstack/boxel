@@ -18,6 +18,9 @@ import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
+
 interface GameStatusField {
   label: string;
 }
@@ -69,13 +72,10 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
 
     const adoptsFromModule = new URL(
       this.selectedGameRef.adoptsFrom.module,
-      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-      import.meta.url,
+      here,
     ).href;
     const adoptsFromName = this.selectedGameRef.adoptsFrom.name;
-    // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-    const refModule = new URL(this.selectedGameRef.ref.module, import.meta.url)
-      .href;
+    const refModule = new URL(this.selectedGameRef.ref.module, here).href;
     const refName = this.selectedGameRef.ref.name;
 
     return {

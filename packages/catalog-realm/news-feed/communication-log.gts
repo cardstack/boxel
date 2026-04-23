@@ -5,7 +5,10 @@ import MessageSquareIcon from '@cardstack/boxel-icons/message-square';
 import AlertTriangleIcon from '@cardstack/boxel-icons/alert-triangle';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 
-import { realmURL, Query } from '@cardstack/runtime-common';
+import { codeRef, realmURL, Query } from '@cardstack/runtime-common';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 
 import {
   BaseDef,
@@ -134,11 +137,7 @@ class IsolatedTemplate extends Component<typeof CommunicationLog> {
   get postsQuery(): Query {
     return {
       filter: {
-        type: {
-          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./post', import.meta.url).href as RealmResourceIdentifier,
-          name: 'Post',
-        },
+        type: codeRef(here, './post', 'Post'),
       },
       sort: [
         {

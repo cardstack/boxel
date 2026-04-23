@@ -20,6 +20,9 @@ import { fn } from '@ember/helper';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import PlayerPreview from './components/player-preview';
 
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
+
 interface GameStatusField {
   label: string;
 }
@@ -80,13 +83,10 @@ class IsolatedTemplate extends Component<typeof GameLeaderboard> {
 
     const adoptsFromModule = new URL(
       this.selectedGameRef.adoptsFrom.module,
-      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-      import.meta.url,
+      here,
     ).href;
     const adoptsFromName = this.selectedGameRef.adoptsFrom.name;
-    // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-    const refModule = new URL(this.selectedGameRef.ref.module, import.meta.url)
-      .href;
+    const refModule = new URL(this.selectedGameRef.ref.module, here).href;
     const refName = this.selectedGameRef.ref.name;
 
     return {

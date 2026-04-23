@@ -18,11 +18,14 @@ import { tracked } from '@glimmer/tracking';
 import { concat, fn } from '@ember/helper';
 import { eq, gt } from '@cardstack/boxel-ui/helpers';
 import {
+  codeRef,
   Query,
   LooseSingleCardDocument,
   realmURL,
-  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 import ExternalLinkIcon from '@cardstack/boxel-icons/external-link';
 import MessageSquareIcon from '@cardstack/boxel-icons/message-square';
@@ -848,27 +851,19 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
       },
     };
 
-    // Get the current module URL for filtering and sorting
-    // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-    const moduleUrl = new URL('./story-board', import.meta.url).href;
+    const storyRef = codeRef(here, './story-board', 'Story');
 
     // Build and return the query object
     return {
       // Filter to only show Story type cards
       filter: {
-        type: {
-          module: moduleUrl as RealmResourceIdentifier,
-          name: 'Story',
-        },
+        type: storyRef,
       },
       // Sort based on the selected view type, defaulting to 'hot'
       sort: [
         {
           by: sortConfig[this.sortBy].by,
-          on: {
-            module: moduleUrl as RealmResourceIdentifier,
-            name: 'Story',
-          },
+          on: storyRef,
           direction: sortConfig[this.sortBy].direction as 'asc' | 'desc',
         },
       ],
@@ -900,11 +895,7 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
   }
 
   private createCard = restartableTask(async () => {
-    let ref = {
-      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-      module: new URL('./story-board', import.meta.url).href as RealmResourceIdentifier,
-      name: 'Story',
-    };
+    let ref = codeRef(here, './story-board', 'Story');
 
     if (!ref) {
       throw new Error('Missing card ref');

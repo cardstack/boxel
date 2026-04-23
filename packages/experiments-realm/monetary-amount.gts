@@ -6,8 +6,14 @@ import {
   linksTo,
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
+import { codeRef } from '@cardstack/runtime-common';
 import { Currency } from './asset';
 import { action } from '@ember/object';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
+
+const currencyRef = codeRef(here, './asset', 'Currency');
 import { BoxelInputGroup } from '@cardstack/boxel-ui/components';
 import { guidFor } from '@ember/object/internals';
 import GlimmerComponent from '@glimmer/component';
@@ -39,27 +45,11 @@ class Edit extends Component<typeof MonetaryAmount> {
     this,
     () => {
       return {
-        filter: {
-          type: {
-            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL('./asset', import.meta.url).href as RealmResourceIdentifier,
-            name: 'Currency',
-          },
-        },
-        sort: [
-          {
-            on: {
-              // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-              module: new URL('./asset', import.meta.url).href as RealmResourceIdentifier,
-              name: 'Currency',
-            },
-            by: 'name',
-          },
-        ],
+        filter: { type: currencyRef },
+        sort: [{ on: currencyRef, by: 'name' }],
       };
     },
-    // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-    () => [new URL('./', import.meta.url).href],
+    () => [new URL('./', here).href],
   );
 
   @action

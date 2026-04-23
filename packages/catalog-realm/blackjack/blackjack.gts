@@ -28,7 +28,10 @@ import BooleanField from 'https://cardstack.com/base/boolean';
 import ValidationSteps, {
   type ValidationStep,
 } from '../components/validation-steps';
-import { realmURL } from '@cardstack/runtime-common';
+import { codeRef, realmURL } from '@cardstack/runtime-common';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 
 class PlayingCardField extends FieldDef {
   static displayName = 'Playing Card';
@@ -538,11 +541,11 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     const game = this.args.model;
     const createdAt = new Date();
 
-    const codeRef = {
-      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-      module: new URL('../blackjack/blackjack', import.meta.url).href as RealmResourceIdentifier,
-      name: 'BlackjackGame',
-    };
+    const blackjackRef = codeRef(
+      here,
+      '../blackjack/blackjack',
+      'BlackjackGame',
+    );
 
     const commandContext = this.args.context?.commandContext;
     if (!commandContext) {
@@ -560,7 +563,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
         }),
       }),
       createdAt,
-      ref: codeRef,
+      ref: blackjackRef,
     });
 
     // Create GameResult for dealer (opposite outcome)
@@ -574,7 +577,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
         }),
       }),
       createdAt,
-      ref: codeRef,
+      ref: blackjackRef,
     });
 
     // Record both game results

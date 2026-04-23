@@ -8,7 +8,10 @@ import {
 import { SprintTaskStatusField, Project } from './sprint-task';
 import LayoutKanbanIcon from '@cardstack/boxel-icons/layout-kanban';
 import { TaskPlanner, TaskCard } from './components/base-task-planner';
-import { LooseSingleCardDocument, type RealmResourceIdentifier } from '@cardstack/runtime-common';
+import { codeRef, LooseSingleCardDocument } from '@cardstack/runtime-common';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 import {
   AnyFilter,
   CardTypeFilter,
@@ -179,30 +182,20 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
         },
       },
       taskSource: {
-        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-        module: new URL('./sprint-task', import.meta.url).href as RealmResourceIdentifier,
-        name: 'SprintTask',
+        ...codeRef(here, './sprint-task', 'SprintTask'),
         getQuery: () => this.getTaskQuery,
       },
       filters: {
         status: {
           searchKey: 'label',
           label: 'Status',
-          codeRef: {
-            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL('./sprint-task', import.meta.url).href as RealmResourceIdentifier,
-            name: 'Status',
-          },
+          codeRef: codeRef(here, './sprint-task', 'Status'),
           options: () => SprintTaskStatusField.values,
         },
         assignee: {
           searchKey: 'name',
           label: 'Assignee',
-          codeRef: {
-            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL('./sprint-task', import.meta.url).href as RealmResourceIdentifier,
-            name: 'TeamMember',
-          },
+          codeRef: codeRef(here, './sprint-task', 'TeamMember'),
           options: () => this.assigneeCards,
         },
       },
