@@ -82,7 +82,7 @@ module(basename(__filename), function () {
       );
       assert.strictEqual(rows.length, 1, 'one bootstrap row written');
       assert.strictEqual(rows[0].url, 'https://cardstack.com/base/');
-      assert.strictEqual(rows[0].pinned, true, 'pinned=true');
+      assert.true(rows[0].pinned, 'pinned=true');
       assert.strictEqual(
         rows[0].owner_username,
         'system',
@@ -123,7 +123,7 @@ module(basename(__filename), function () {
         ],
       );
       for (const r of rows) {
-        assert.strictEqual(r.pinned, false);
+        assert.false(r.pinned);
         assert.strictEqual(r.owner_username, 'luke');
         assert.strictEqual(r.source_url, null);
         assert.strictEqual(r.last_published_at, null);
@@ -197,7 +197,7 @@ module(basename(__filename), function () {
         'http://localhost:4201/luke/src/',
       );
       assert.strictEqual(published!.last_published_at, '1700000000000');
-      assert.strictEqual(published!.pinned, false);
+      assert.false(published!.pinned);
     });
 
     test('is idempotent: running twice produces the same rows', async function (assert) {
