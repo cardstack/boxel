@@ -141,6 +141,77 @@ module('factory-tool-executor > source realm protection', function () {
     assert.strictEqual(result.exitCode, 0);
   });
 
+  test('rejects realm-read targeting the target realm (workspace-only tools)', async function (assert) {
+    let registry = new ToolRegistry();
+    let config = makeConfig({
+      fetch: createMockFetch(200, { data: [] }),
+    });
+    let executor = new ToolExecutor(registry, config);
+
+    try {
+      await executor.execute('realm-read', {
+        'realm-url': 'https://realms.example.test/user/target/',
+        path: 'foo.json',
+      });
+      assert.ok(false, 'should have thrown');
+    } catch (err) {
+      assert.true(err instanceof ToolSafetyError);
+      assert.true(
+        (err as Error).message.includes('cannot target the target realm'),
+        `error should mention target-realm rejection, got: ${(err as Error).message}`,
+      );
+    }
+  });
+
+  test('rejects realm-write targeting the target realm', async function (assert) {
+    let registry = new ToolRegistry();
+    let config = makeConfig();
+    let executor = new ToolExecutor(registry, config);
+
+    try {
+      await executor.execute('realm-write', {
+        'realm-url': 'https://realms.example.test/user/target/',
+        path: 'foo.json',
+        content: '{}',
+      });
+      assert.ok(false, 'should have thrown');
+    } catch (err) {
+      assert.true(err instanceof ToolSafetyError);
+    }
+  });
+
+  test('rejects realm-delete targeting the target realm', async function (assert) {
+    let registry = new ToolRegistry();
+    let config = makeConfig();
+    let executor = new ToolExecutor(registry, config);
+
+    try {
+      await executor.execute('realm-delete', {
+        'realm-url': 'https://realms.example.test/user/target/',
+        path: 'foo.json',
+      });
+      assert.ok(false, 'should have thrown');
+    } catch (err) {
+      assert.true(err instanceof ToolSafetyError);
+    }
+  });
+
+  test('allows realm-read targeting a scratch realm prefix', async function (assert) {
+    let registry = new ToolRegistry();
+    let config = makeConfig({
+      allowedRealmPrefixes: ['https://realms.example.test/user/scratch-'],
+      fetch: createMockFetch(200, { ok: true }),
+    });
+    let executor = new ToolExecutor(registry, config);
+
+    let result = await executor.execute('realm-read', {
+      'realm-url': 'https://realms.example.test/user/scratch-123/',
+      path: 'foo.json',
+    });
+
+    assert.strictEqual(result.exitCode, 0);
+  });
+
   test('rejects realm-api tool targeting unknown realm', async function (assert) {
     let registry = new ToolRegistry();
     let executor = new ToolExecutor(

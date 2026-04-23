@@ -13,6 +13,18 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 const DEFAULT_TIMEOUT_MS = 60_000;
 
 /**
+ * Tools that perform HTTP-direct card I/O. The executor rejects these
+ * when they target the factory's target realm — target-realm I/O must
+ * go through the workspace (via `write_file` / `read_file`) so local
+ * state stays in sync with the realm between iterations.
+ */
+const TARGET_REALM_BYPASS_TOOLS = new Set([
+  'realm-read',
+  'realm-write',
+  'realm-delete',
+]);
+
+/**
  * Map from script tool name to the script file that implements it.
  * Paths are relative to `packages/software-factory/scripts/`.
  */
@@ -253,8 +265,24 @@ export class ToolExecutor {
     let normalized = ensureTrailingSlash(realmUrl);
     let target = ensureTrailingSlash(this.config.targetRealmUrl);
 
-    // Exact realm matches (with trailing slash normalization)
-    let exactAllowed = [target];
+    // The HTTP-direct card I/O tools (realm-read / realm-write / realm-delete)
+    // must NOT target the factory's target realm — those edits would bypass
+    // the local workspace and diverge from the sync flow. The agent uses
+    // write_file / read_file (workspace-backed) for target-realm I/O and
+    // keeps these HTTP-direct tools for scratch / non-target realms.
+    if (TARGET_REALM_BYPASS_TOOLS.has(toolName) && normalized === target) {
+      throw new ToolSafetyError(
+        `Tool "${toolName}" cannot target the target realm (${realmUrl}). ` +
+          `Use write_file / read_file instead — they operate on the local ` +
+          `workspace and sync to the realm between iterations. This tool is ` +
+          `reserved for scratch / non-target realms.`,
+      );
+    }
+
+    // Exact realm matches (with trailing slash normalization). For the
+    // target-bypass tools the target is explicitly excluded from the
+    // exact-allowed set — the rejection above fires first for target hits.
+    let exactAllowed = TARGET_REALM_BYPASS_TOOLS.has(toolName) ? [] : [target];
 
     // Prefix matches (no trailing slash — these are URL path prefixes)
     let prefixAllowed = this.config.allowedRealmPrefixes ?? [];
@@ -311,6 +339,14 @@ export class ToolExecutor {
     toolName: string,
     toolArgs: Record<string, unknown>,
   ): void {
+    // Extra validation for destructive realm operations
+    if (toolName === 'realm-delete') {
+      let realmUrl = toolArgs['realm-url'];
+      if (typeof realmUrl === 'string') {
+        this.validateRealmTarget(toolName, realmUrl);
+      }
+    }
+
     // boxel-push with --delete
     if (toolName === 'boxel-push' && toolArgs['delete']) {
       let realmUrl = toolArgs['realm-url'];
@@ -406,6 +442,37 @@ export class ToolExecutor {
     let ok: boolean;
 
     switch (toolName) {
+      case 'realm-read': {
+        let result = await client.read(
+          String(toolArgs['realm-url']),
+          String(toolArgs['path']),
+        );
+        ok = result.ok;
+        output = ok ? result.document : { error: result.error };
+        break;
+      }
+
+      case 'realm-write': {
+        let result = await client.write(
+          String(toolArgs['realm-url']),
+          String(toolArgs['path']),
+          String(toolArgs['content']),
+        );
+        ok = result.ok;
+        output = ok ? result : { error: result.error };
+        break;
+      }
+
+      case 'realm-delete': {
+        let result = await client.delete(
+          String(toolArgs['realm-url']),
+          String(toolArgs['path']),
+        );
+        ok = result.ok;
+        output = ok ? result : { error: result.error };
+        break;
+      }
+
       case 'realm-search': {
         let rawQuery = toolArgs['query'];
         if (typeof rawQuery !== 'string') {
