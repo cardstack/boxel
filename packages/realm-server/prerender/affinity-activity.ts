@@ -8,12 +8,15 @@
 // is waiting on a `/_search` → `definitionLookup` response that's
 // waiting on a sub-`prerenderModule` queued behind this same call.
 
+import type { PrerenderQueue } from '@cardstack/runtime-common';
+
 export type ActivityKind = 'visit' | 'module';
 export type ActivityState = 'queued' | 'running';
 
 export interface ActivityEntry {
   url: string;
   kind: ActivityKind;
+  queue: PrerenderQueue;
   state: ActivityState;
   startedAt: number;
 }
@@ -21,6 +24,7 @@ export interface ActivityEntry {
 export interface SameAffinityActivity {
   url: string;
   kind: ActivityKind;
+  queue: PrerenderQueue;
   state: ActivityState;
   ageMs: number;
 }
@@ -39,7 +43,12 @@ export class AffinityActivityTracker {
     this.#now = options?.now ?? (() => Date.now());
   }
 
-  record(affinityKey: string, url: string, kind: ActivityKind): ActivityHandle {
+  record(
+    affinityKey: string,
+    url: string,
+    kind: ActivityKind,
+    queue: PrerenderQueue,
+  ): ActivityHandle {
     let handle = Symbol(`activity:${kind}:${url}`);
     let entries = this.#entries.get(affinityKey);
     if (!entries) {
@@ -49,6 +58,7 @@ export class AffinityActivityTracker {
     entries.set(handle, {
       url,
       kind,
+      queue,
       state: 'queued',
       startedAt: this.#now(),
     });
@@ -83,6 +93,7 @@ export class AffinityActivityTracker {
       out.push({
         url: e.url,
         kind: e.kind,
+        queue: e.queue,
         state: e.state,
         ageMs: now - e.startedAt,
       });

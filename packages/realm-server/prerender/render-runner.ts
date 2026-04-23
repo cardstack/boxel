@@ -8,6 +8,7 @@ import {
   type RenderRouteOptions,
   type RunCommandResponse,
   type AffinityType,
+  type PrerenderQueue,
   type RenderVisitResponse,
   type PrerenderVisitArgs,
   VISIT_PASS_ORDER,
@@ -94,6 +95,7 @@ export class RenderRunner {
   async #getPageForAffinity(
     affinityKey: string,
     auth: string,
+    queue: PrerenderQueue,
     signal?: AbortSignal,
   ) {
     let lastAuth = this.#lastAuthByAffinity.get(affinityKey);
@@ -110,7 +112,9 @@ export class RenderRunner {
         this.#lastAuthByAffinity.delete(affinityKey);
       }
     }
-    let pageInfo = await this.#pagePool.getPage(affinityKey, { signal });
+    let pageInfo = await this.#pagePool.getPage(affinityKey, queue, {
+      signal,
+    });
     this.#lastAuthByAffinity.set(affinityKey, auth);
     return pageInfo;
   }
@@ -156,7 +160,7 @@ export class RenderRunner {
     );
 
     const { page, reused, launchMs, waits, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth, signal);
+      await this.#getPageForAffinity(affinityKey, auth, 'command', signal);
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
@@ -368,7 +372,7 @@ export class RenderRunner {
     );
 
     const { page, reused, launchMs, waits, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth, signal);
+      await this.#getPageForAffinity(affinityKey, auth, 'module', signal);
     onTabAcquired?.();
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
@@ -544,7 +548,7 @@ export class RenderRunner {
     );
 
     const { page, reused, launchMs, waits, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth, signal);
+      await this.#getPageForAffinity(affinityKey, auth, 'file', signal);
     onTabAcquired?.();
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',

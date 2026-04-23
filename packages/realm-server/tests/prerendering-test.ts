@@ -4589,6 +4589,97 @@ module(basename(__filename), function () {
           }
         });
 
+        test('file-queue admission holds the last tab for module calls', async function (assert) {
+          // Invariant: `fileTabsBusy ≤ N − 1`. With tab-max=2, at most
+          // one file render can be admitted at a time, reserving the
+          // other tab for module calls. This prevents the self-
+          // referential prerender deadlock (a file render blocked on a
+          // module extraction that's queued behind it).
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let semaphore = new TestSemaphore(2);
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool(2, semaphore));
+            await pool.warmStandbys();
+
+            let firstFile = await pool.getPage('realm-a', 'file');
+            let secondFileAdmitted = false;
+            let secondFilePromise = pool
+              .getPage('realm-a', 'file')
+              .then((lease) => {
+                secondFileAdmitted = true;
+                return lease;
+              });
+            await new Promise((r) => setTimeout(r, 10));
+            assert.false(
+              secondFileAdmitted,
+              'second file call waits behind admission control',
+            );
+
+            let moduleLease = await pool.getPage('realm-a', 'module');
+            assert.ok(
+              moduleLease.page,
+              'module call bypasses admission and lands on a tab',
+            );
+            moduleLease.release();
+
+            firstFile.release();
+            let secondFile = await secondFilePromise;
+            assert.true(
+              secondFileAdmitted,
+              'releasing the first file frees the admission slot',
+            );
+            secondFile.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('cancelling while waiting for file admission releases cleanly', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let semaphore = new TestSemaphore(2);
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool(2, semaphore));
+            await pool.warmStandbys();
+
+            let firstFile = await pool.getPage('realm-a', 'file');
+            let controller = new AbortController();
+            let cancelled = pool.getPage('realm-a', 'file', {
+              signal: controller.signal,
+            });
+            controller.abort();
+            await assert.rejects(
+              cancelled,
+              'aborted while queued on admission',
+            );
+
+            // Subsequent module call still goes through.
+            let moduleLease = await pool.getPage('realm-a', 'module');
+            assert.ok(moduleLease.page);
+            moduleLease.release();
+
+            firstFile.release();
+            // And after releasing, a new file admission succeeds.
+            let thirdFile = await pool.getPage('realm-a', 'file');
+            thirdFile.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
         test('prefers idle tab aligned to realm over standby tabs', async function (assert) {
           let { pool } = makeStubPagePool(2);
           await pool.warmStandbys();

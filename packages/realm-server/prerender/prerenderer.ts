@@ -283,7 +283,12 @@ export class Prerenderer {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
-    let activity = this.#affinityActivity.record(affinityKey, url, 'module');
+    let activity = this.#affinityActivity.record(
+      affinityKey,
+      url,
+      'module',
+      'module',
+    );
     // Declared before the try so the finally releases both even if the
     // register call itself throws synchronously (e.g. setInterval
     // fails under pressure). Without this, `activity` would leak.
@@ -518,7 +523,12 @@ export class Prerenderer {
     } = this.#gateClearCache(rawArgs);
     let signal = (rawArgs as { signal?: AbortSignal }).signal;
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
-    let activity = this.#affinityActivity.record(affinityKey, url, 'visit');
+    let activity = this.#affinityActivity.record(
+      affinityKey,
+      url,
+      'visit',
+      'file',
+    );
     // See `prerenderModule` — declared before the try so a synchronous
     // throw from `#registerPeakSampling` can't leak the activity entry.
     let poller: PeakRegistration | undefined;
@@ -765,10 +775,18 @@ export class Prerenderer {
           return;
         }
         let perAffinity = snap.affinities
-          .map(
-            (a) =>
-              `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending})`,
-          )
+          .map((a) => {
+            let q = a.byQueue;
+            let running = q.file + q.module + q.command;
+            // Only append the per-queue breakdown when the affinity is
+            // actually running something. Idle affinities keep the
+            // compact form to preserve log scannability.
+            let queueDetail =
+              running > 0
+                ? `, running=file:${q.file}/module:${q.module}/command:${q.command}`
+                : '';
+            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail})`;
+          })
           .join(' ');
         log.info(
           'prerender-queue-snapshot totalTabs=%d totalPending=%d affinities=%d | %s',
