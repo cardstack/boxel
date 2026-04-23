@@ -820,6 +820,37 @@ export function buildPrerenderManagerApp(options?: {
       randomUUID();
     ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
     let proxyStart = now();
+    // Propagate client-disconnect into the upstream fetch so the
+    // prerender server can cancel whatever it was doing and free
+    // the tab for another request. Without this, a worker that
+    // aborts at 150 s leaves the prerender server rendering for
+    // another ~15-20 s and discards the result — ~2x render budget
+    // per timeout under saturation. `currentAc` is the attempt's
+    // live AbortController, set at the top of each retry iteration
+    // so the close listener aborts the right one.
+    let clientAborted = false;
+    let currentAc: AbortController | undefined;
+    let clientAbortAffinity: string | undefined;
+    let clientAbortTarget: string | undefined;
+    const onClientClose = () => {
+      // ServerResponse 'close' fires after the response is flushed on
+      // normal completion (writableEnded=true) OR when the connection
+      // is torn down prematurely (writableEnded=false). We want the
+      // latter. Note: we listen on `ctxt.res`, NOT `ctxt.req` — Node
+      // 17+ auto-destroys IncomingMessage after the body is consumed,
+      // firing `req.close` long before the response is sent, which
+      // would false-trigger this handler on every normal request.
+      if (ctxt.res.writableEnded) return;
+      if (clientAborted) return;
+      clientAborted = true;
+      log.info(
+        `client-aborted after ${now() - proxyStart}ms requestId=${requestId} ` +
+          `affinity=${clientAbortAffinity ?? '<unknown>'} ` +
+          `target=${clientAbortTarget ?? '<unassigned>'}`,
+      );
+      currentAc?.abort();
+    };
+    ctxt.res.on('close', onClientClose);
     try {
       if (options?.isDraining?.()) {
         ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
@@ -887,9 +918,11 @@ export function buildPrerenderManagerApp(options?: {
         return;
       }
       let affinityKey = toAffinityKey({ affinityType, affinityValue });
+      clientAbortAffinity = affinityKey;
       if (registry.servers.size === 0 && discoveryWaitMs > 0) {
         let start = now();
         while (registry.servers.size === 0 && now() - start < discoveryWaitMs) {
+          if (clientAborted) return;
           await delay(discoveryPollMs);
         }
       }
@@ -901,6 +934,10 @@ export function buildPrerenderManagerApp(options?: {
       }
       let attempts = new Set<string>();
       while (attempts.size < registry.servers.size) {
+        // Short-circuit the retry loop on client abort — the
+        // caller gave up, so don't waste another server's render
+        // budget on a retry no one is waiting for.
+        if (clientAborted) return;
         let target = chooseServerForAffinity(affinityType, affinityValue, {
           exclude: attempts,
         });
@@ -918,6 +955,7 @@ export function buildPrerenderManagerApp(options?: {
         attempts.add(target);
 
         const targetURL = `${normalizeURL(target)}/${pathSuffix}`;
+        clientAbortTarget = target;
         let logTarget = attrs.url ?? attrs.command ?? '<unknown>';
         let queueMs = now() - proxyStart;
         log.info(
@@ -925,6 +963,17 @@ export function buildPrerenderManagerApp(options?: {
         );
         let abortedDueToDrain = false;
         const ac = new AbortController();
+        // Expose this attempt's controller so the ctxt.res 'close'
+        // listener can abort the current upstream fetch
+        // immediately when the client disconnects. If the client
+        // already disconnected before we got here, abort pre-flight
+        // so the upstream server can drop the request as cheaply
+        // as possible.
+        currentAc = ac;
+        if (clientAborted) {
+          ac.abort();
+          return;
+        }
         const timer = setTimeout(() => ac.abort(), proxyTimeoutMs).unref?.();
         const drainPoll =
           options?.isDraining && proxyTimeoutMs > 50
@@ -948,6 +997,14 @@ export function buildPrerenderManagerApp(options?: {
           body: raw,
           signal: ac.signal,
         }).catch((e) => {
+          if (e?.name === 'AbortError' && clientAborted) {
+            // Client gave up — not our fault, not the upstream's
+            // fault. Don't prune, don't mark drain. The outer
+            // `if (clientAborted) return;` below will short-circuit
+            // and the client's HTTP connection is already dead so
+            // nothing we write here matters.
+            return null as any;
+          }
           if (e?.name === 'AbortError' && options?.isDraining?.()) {
             abortedDueToDrain = true;
           } else {
@@ -960,6 +1017,11 @@ export function buildPrerenderManagerApp(options?: {
         });
         clearTimeout(timer as any);
         if (drainPoll) clearInterval(drainPoll as any);
+        // If the client aborted at any point during this attempt,
+        // stop here — we've already told the upstream to bail via
+        // `currentAc.abort()` and the response socket is already
+        // closed.
+        if (clientAborted) return;
 
         let draining =
           abortedDueToDrain ||
@@ -1049,6 +1111,11 @@ export function buildPrerenderManagerApp(options?: {
       log.error(`Error in /${pathSuffix} proxy requestId=${requestId}:`, e);
       ctxt.status = 500;
       ctxt.body = { errors: [{ status: 500, message: 'Proxy error' }] };
+    } finally {
+      // Always detach the close listener; otherwise a later route
+      // on this same socket (keep-alive) would dispatch stale
+      // aborts.
+      ctxt.res.off('close', onClientClose);
     }
   }
 
