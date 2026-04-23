@@ -5,12 +5,6 @@
 **The language between data and code.**
 Spreadsheet-style formulas over JSON. Paste-compatible with Excel. Sandboxed by construction. Small enough to live inside a JSON field — powerful enough to drive constraints, formulas, defaults, and workflow gates.
 
-[![npm](https://img.shields.io/npm/v/@cardstack/bxl.svg?color=217346&labelColor=1a2e1a)](https://www.npmjs.com/package/@cardstack/bxl)
-[![license](https://img.shields.io/npm/l/@cardstack/bxl.svg?color=217346&labelColor=1a2e1a)](./LICENSE)
-[![node](https://img.shields.io/node/v/@cardstack/bxl.svg?color=217346&labelColor=1a2e1a)]()
-[![typescript](https://img.shields.io/badge/TypeScript-strict-1d4ed8?labelColor=1a2e1a)]()
-[![tests](https://img.shields.io/badge/tests-489%2B-217346?labelColor=1a2e1a)]()
-
 </div>
 
 ```bxl
