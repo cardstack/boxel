@@ -12,6 +12,7 @@ import {
   setupPermissionedRealmCached,
   createJWT,
   type RealmRequest,
+  waitUntil,
   withRealmPath,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -883,11 +884,28 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 201);
           assert.strictEqual(response.body['atomic:results'].length, 1);
 
-          let updatedCardResponse = await request
-            .get('/update-person')
-            .set('Accept', SupportedMimeType.CardJson);
-          let updatedCard = updatedCardResponse.body as LooseSingleCardDocument;
-          assert.strictEqual(updatedCard.data.attributes?.firstName, 'Updated');
+          // GET reads via the index; under load the index write can briefly
+          // lag the 201 response, so poll until it catches up.
+          let updatedCard: LooseSingleCardDocument | undefined;
+          await waitUntil(
+            async () => {
+              let updatedCardResponse = await request
+                .get('/update-person')
+                .set('Accept', SupportedMimeType.CardJson);
+              updatedCard = updatedCardResponse.body as
+                | LooseSingleCardDocument
+                | undefined;
+              return updatedCard?.data?.attributes?.firstName === 'Updated';
+            },
+            {
+              timeoutMessage:
+                'updated firstName was not visible via /update-person',
+            },
+          );
+          assert.strictEqual(
+            updatedCard?.data.attributes?.firstName,
+            'Updated',
+          );
         });
       });
       module('validation', function (hooks) {
