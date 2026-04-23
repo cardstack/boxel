@@ -92,6 +92,38 @@ module('port-allocator', function () {
     }
   });
 
+  test('IPv4 holder blocks a default (dual-stack) bind on the same port', async function (assert) {
+    // prerender-server and realm-server call .listen(port) without a host,
+    // which Node resolves to '::' (IPv6 wildcard, dual-stack on Linux). The
+    // holder must block that bind pattern, not just explicit 127.0.0.1.
+    let reservation = await allocateTestWorkerPortSet(0);
+    let port = reservation.prerenderPort;
+    let attempt = await new Promise<{ ok: boolean; code?: string }>(
+      (resolve) => {
+        let s = createServer();
+        s.once('error', (err: NodeJS.ErrnoException) =>
+          resolve({ ok: false, code: err.code }),
+        );
+        s.listen(port, () => {
+          s.close(() => resolve({ ok: true }));
+        });
+      },
+    );
+    try {
+      assert.false(
+        attempt.ok,
+        `default (::) bind to held port ${port} should fail`,
+      );
+      assert.strictEqual(
+        attempt.code,
+        'EADDRINUSE',
+        `default (::) bind fails with EADDRINUSE, got ${attempt.code}`,
+      );
+    } finally {
+      await reservation.stop();
+    }
+  });
+
   test('a dynamic (OS-assigned) port never lands inside our reserved block', async function (assert) {
     // This is the exact collision vector that caused the CI failure:
     // another worker's `findAvailablePort()` landed on a pre-reserved port.

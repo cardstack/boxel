@@ -287,11 +287,31 @@ async function startRealmProcess(
       ownerBearerToken: string;
     }>(metadataFile, child, () => logs);
   } catch (error) {
-    killProcessGroup(child.pid!, 'SIGTERM');
-    // Port holders were released just before spawn; re-acquire so we don't
-    // leave them unheld after a startup failure. Ignore any reacquire error
-    // because the original spawn error is what we want to surface.
-    await testWorkerPortSet.reacquireRealmServerPorts().catch(() => undefined);
+    // Fully tear down the half-started child before re-acquiring our port
+    // holders. Without the wait, the still-alive child can keep the ports
+    // bound and the reacquire throws, leaving the ports unheld for the
+    // rest of the worker's tests.
+    try {
+      if (child.exitCode === null) {
+        killProcessGroup(child.pid!, 'SIGTERM');
+        await new Promise<void>((resolvePromise) => {
+          let timeout = setTimeout(() => {
+            killProcessGroup(child.pid!, 'SIGKILL');
+          }, 15_000);
+          child.once('exit', () => {
+            clearTimeout(timeout);
+            resolvePromise();
+          });
+          child.once('error', () => {
+            clearTimeout(timeout);
+            resolvePromise();
+          });
+        });
+      }
+      await testWorkerPortSet.reacquireRealmServerPorts();
+    } catch {
+      // Cleanup errors must not mask the original startup failure.
+    }
     throw error;
   }
 
