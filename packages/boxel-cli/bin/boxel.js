@@ -9,7 +9,7 @@ const distEntry = path.resolve(__dirname, '..', 'dist', 'index.js');
 if (fs.existsSync(distEntry)) {
   require(distEntry);
 } else {
-  // Development fallback: run from TypeScript source via tsx
-  require('tsx/cjs');
+  // Development fallback: run from TypeScript source via ts-node
+  require('ts-node').register({ transpileOnly: true });
   require('../src/index.ts');
 }

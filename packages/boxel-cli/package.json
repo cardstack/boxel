@@ -48,6 +48,7 @@
     "eslint-plugin-n": "catalog:",
     "eslint-plugin-prettier": "catalog:",
     "prettier": "catalog:",
+    "ts-node": "^10.9.1",
     "tsx": "^4.0.0",
     "typescript": "catalog:",
     "vite": "catalog:",
@@ -56,7 +57,7 @@
   "scripts": {
     "build": "pnpm clean && tsx scripts/build.ts",
     "clean": "rm -rf dist/*",
-    "start": "tsx src/index.ts",
+    "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/index.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --report-unused-disable-directives --cache",
