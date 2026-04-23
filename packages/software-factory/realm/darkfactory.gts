@@ -28,6 +28,7 @@ import {
   Pill,
   SortDropdown,
   Switch,
+  FieldContainer,
 } from '@cardstack/boxel-ui/components';
 
 import { realmURL } from '@cardstack/runtime-common';
@@ -105,6 +106,22 @@ function findOptionColor(
     return undefined;
   }
   return options?.find((option) => option.value === value)?.color;
+}
+
+function buildIssueOptionFields(options: Option[]): IssueOptionField[] {
+  return options.map((option) => new IssueOptionField(option));
+}
+
+function buildColumnConfig(options: Option[]): KanbanColumnField[] {
+  return options.map(
+    (option, index) =>
+      new KanbanColumnField({
+        key: option.value,
+        label: option.label,
+        color: option.color,
+        sortOrder: index,
+      }),
+  );
 }
 
 const defaultColumns: Column[] = [
@@ -424,9 +441,10 @@ export class Issue extends CardDef {
 
   static fitted = class Fitted extends Component<typeof Issue> {
     get statusColor(): string | undefined {
+      let project = this.args.model?.kanbanBoard as Project | null;
       return findOptionColor(
-        ((this.args.model?.kanbanBoard?.issueStatusOptions as Option[])?.length
-          ? (this.args.model.kanbanBoard?.issueStatusOptions as Option[])
+        ((project?.issueStatusOptions as Option[])?.length
+          ? (project?.issueStatusOptions as Option[])
           : issueStatusOptions) as Option[],
         this.args.model?.status ?? 'backlog',
       );
@@ -469,9 +487,10 @@ export class Issue extends CardDef {
 
   static isolated = class Isolated extends Component<typeof Issue> {
     get statusColor(): string | undefined {
+      let project = this.args.model?.kanbanBoard as Project | null;
       return findOptionColor(
-        ((this.args.model?.kanbanBoard?.issueStatusOptions as Option[])?.length
-          ? (this.args.model.kanbanBoard?.issueStatusOptions as Option[])
+        ((project?.issueStatusOptions as Option[])?.length
+          ? (project?.issueStatusOptions as Option[])
           : issueStatusOptions) as Option[],
         this.args.model?.status ?? 'backlog',
       );
@@ -1422,6 +1441,183 @@ export class Project extends CardDef {
   //     </style>
   //   </template>
   // };
+
+  // ── Edit ───────────────────────────────────────────────────────────
+
+  static edit = class Edit extends Component<typeof Project> {
+    constructor(owner: Owner, args: any) {
+      super(owner, args);
+      Promise.resolve().then(() => {
+        let model = this.args.model as Project | undefined;
+        if (!model) return;
+
+        if (!model.issuePriorityOptions?.length) {
+          model.issuePriorityOptions =
+            buildIssueOptionFields(issuePriorityOptions);
+        }
+        if (!model.issueStatusOptions?.length) {
+          model.issueStatusOptions = buildIssueOptionFields(issueStatusOptions);
+        }
+        if (!model.issueTypeOptions?.length) {
+          model.issueTypeOptions = buildIssueOptionFields(issueTypeOptions);
+        }
+      });
+    }
+
+    get groupBy(): string {
+      return (this.args.model as any)?.groupBy ?? 'status';
+    }
+    get isStatus(): boolean {
+      return this.groupBy === 'status';
+    }
+    get isPriority(): boolean {
+      return this.groupBy === 'priority';
+    }
+    get colConfigLabel(): string {
+      if (this.groupBy === 'priority') return 'Priority Column Config';
+      if (this.groupBy === 'issueType') return 'Type Column Config';
+      return 'Status Column Config';
+    }
+
+    <template>
+      <div class='kanban-edit'>
+        <div class='row'>
+          <FieldContainer @label='Project Name' @vertical={{true}}>
+            <@fields.projectName />
+          </FieldContainer>
+          <FieldContainer @label='Project Code' @vertical={{true}}>
+            <@fields.projectCode />
+          </FieldContainer>
+        </div>
+
+        <div class='row'>
+          <FieldContainer @label='Status' @vertical={{true}}>
+            <@fields.projectStatus />
+          </FieldContainer>
+          {{!-- <FieldContainer @label='Due Date' @vertical={{true}}>
+            <@fields.dueDate />
+          </FieldContainer> --}}
+        </div>
+
+        {{!-- <FieldContainer @label='Description' @vertical={{true}}>
+          <@fields.description />
+        </FieldContainer> --}}
+
+        <div class='row'>
+          <FieldContainer @label='Theme' @vertical={{true}}>
+            <@fields.cardInfo.theme />
+          </FieldContainer>
+          <FieldContainer @label='Group By' @vertical={{true}}>
+            <@fields.groupBy />
+          </FieldContainer>
+        </div>
+
+        <div class='row'>
+          <FieldContainer @label='Hide Empty Columns' @vertical={{true}}>
+            <@fields.hideEmptyColumns />
+          </FieldContainer>
+        </div>
+
+        <section class='options-section'>
+          <div class='options-section-header'>
+            <h2 class='section-title'>Issue Configuration</h2>
+            <p class='section-copy'>
+              Define the status, priority, and type options that issues in this
+              board can use.
+            </p>
+          </div>
+
+          <div class='options-section-body'>
+            <div class='options-config-panel'>
+              <FieldContainer @label='Issue Status Options' @vertical={{true}}>
+                <@fields.issueStatusOptions />
+              </FieldContainer>
+            </div>
+
+            <div class='options-config-panel'>
+              <FieldContainer
+                @label='Issue Priority Options'
+                @vertical={{true}}
+              >
+                <@fields.issuePriorityOptions />
+              </FieldContainer>
+            </div>
+
+            <div class='options-config-panel'>
+              <FieldContainer @label='Issue Type Options' @vertical={{true}}>
+                <@fields.issueTypeOptions />
+              </FieldContainer>
+            </div>
+          </div>
+        </section>
+
+        <div class='col-config-row'>
+          <FieldContainer @label='Configured Columns' @vertical={{true}}>
+            <@fields.columns />
+          </FieldContainer>
+        </div>
+      </div>
+      <style scoped>
+        .kanban-edit {
+          display: grid;
+          gap: var(--boxel-sp-xl);
+          padding: var(--boxel-sp-xl);
+        }
+        .row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .options-section {
+          display: grid;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp-lg);
+          background: var(--card, var(--boxel-light));
+          border: 1px solid var(--border, var(--boxel-border-color));
+          border-radius: var(--boxel-border-radius-lg);
+        }
+        .options-section-header {
+          display: grid;
+          gap: var(--boxel-sp-2xs);
+        }
+        .options-section-body {
+          display: grid;
+          gap: var(--boxel-sp);
+        }
+        .options-config-panel {
+          display: grid;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp);
+          background: var(--sidebar, var(--background));
+          color: var(--sidebar-foreground, var(--foreground));
+          border: 1px solid var(--border, var(--boxel-border-color));
+          border-radius: var(--boxel-border-radius);
+          box-shadow: inset 0 1px 0
+            color-mix(in oklch, var(--card) 35%, transparent);
+        }
+        .section-title {
+          margin: 0;
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 600;
+          color: var(--foreground, var(--boxel-dark));
+        }
+        .section-copy {
+          margin: 0;
+          font-size: var(--boxel-font-size-xs);
+          line-height: 1.5;
+          color: var(--muted-foreground, var(--boxel-600));
+        }
+        .col-config-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--boxel-sp);
+          min-width: 0;
+          align-items: start;
+        }
+      </style>
+    </template>
+  };
 }
 
 export class DarkFactory extends CardDef {
