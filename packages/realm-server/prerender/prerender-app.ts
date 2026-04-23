@@ -36,15 +36,14 @@ type PrerenderServer = Server & {
 let log = logger('prerender-server');
 const defaultPrerenderServerPort = 4221;
 
-// CS-10872: walk any RenderError embedded in a response and stamp
-// the per-request `requestId` onto the inner `SerializedError`'s
-// `diagnostics` block (the outer wrapper is transient — only the
-// inner is persisted into `boxel_index.error_doc`). The
-// launch/waits/render/total timings are already attached inside
-// Prerenderer (so they land regardless of whether the caller came
-// through HTTP or in-process tests); this layer just adds the
-// HTTP-only correlation id for cross-log grepping. Exported so the
-// diagnostics-persistence regression tests can exercise it directly.
+// Stamp the per-request `requestId` onto `response.meta.requestId`
+// so it flows through the same channel as timings / host-side
+// diagnostics and ends up on `boxel_index.timing_diagnostics` for
+// cross-log grepping. The launch/waits/render/total timings are
+// already attached inside Prerenderer (regardless of HTTP vs
+// in-process); this layer just adds the HTTP-only correlation id.
+// Exported so the diagnostics-persistence regression tests can
+// exercise it directly.
 export function decorateRenderErrorDiagnostics(
   response: any,
   requestId: string,
@@ -52,23 +51,10 @@ export function decorateRenderErrorDiagnostics(
   if (!response || typeof response !== 'object') {
     return;
   }
-  let visit = (wrapper: any) => {
-    if (!wrapper || typeof wrapper !== 'object') return;
-    let inner = wrapper.error;
-    if (!inner || typeof inner !== 'object') return;
-    if (!inner.diagnostics || typeof inner.diagnostics !== 'object') {
-      inner.diagnostics = {};
-    }
-    inner.diagnostics.requestId = requestId;
+  response.meta = {
+    ...(response.meta ?? {}),
+    requestId,
   };
-  visit(response.error);
-  visit((response as any).pageUnusableError);
-  for (let key of ['card', 'fileExtract', 'fileRender'] as const) {
-    let sub = response[key];
-    if (sub && typeof sub === 'object') {
-      visit((sub as any).error);
-    }
-  }
 }
 
 export function buildPrerenderApp(options: {
@@ -415,6 +401,18 @@ export function buildPrerenderApp(options: {
           poolFlagSuffix,
         );
         decorateRenderErrorDiagnostics(response, requestId);
+        // Timings are already embedded inside `response.meta.diagnostics`
+        // by `Prerenderer.decorateRenderErrorsWithTimings` — the indexer
+        // reads them from there. Keep the envelope `meta.timing`
+        // populated (at the JSON:API envelope level) so existing
+        // log/telemetry consumers that read the envelope don't have
+        // to migrate.
+        let envelopeTiming = {
+          launchMs: timings.launchMs,
+          renderMs: timings.renderMs,
+          totalMs,
+          waits: timings.waits,
+        };
         ctxt.status = 201;
         ctxt.set('Content-Type', 'application/vnd.api+json');
         ctxt.body = {
@@ -424,12 +422,7 @@ export function buildPrerenderApp(options: {
             attributes: response,
           },
           meta: {
-            timing: {
-              launchMs: timings.launchMs,
-              renderMs: timings.renderMs,
-              totalMs,
-              waits: timings.waits,
-            },
+            timing: envelopeTiming,
             pool,
           },
         };
@@ -704,6 +697,15 @@ export function buildPrerenderApp(options: {
         poolFlagSuffix,
       );
       decorateRenderErrorDiagnostics(response, requestId);
+      // Timings are already inside `response.meta.diagnostics`. Here
+      // we just populate the JSON:API envelope `meta.timing` that
+      // existing telemetry consumers still read.
+      let envelopeTiming = {
+        launchMs: timings.launchMs,
+        renderMs: timings.renderMs,
+        totalMs,
+        waits: timings.waits,
+      };
       ctxt.status = 201;
       ctxt.set('Content-Type', 'application/vnd.api+json');
       ctxt.body = {
@@ -713,12 +715,7 @@ export function buildPrerenderApp(options: {
           attributes: response,
         },
         meta: {
-          timing: {
-            launchMs: timings.launchMs,
-            renderMs: timings.renderMs,
-            totalMs,
-            waits: timings.waits,
-          },
+          timing: envelopeTiming,
           pool,
         },
       };

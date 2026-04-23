@@ -33,11 +33,13 @@ import type { SerializedError } from './error';
 import type { DBAdapter } from './db';
 import type { RealmMetaTable } from './index-structure';
 import type { FileMetaResource } from './resource-types';
+import type { TimingDiagnostics } from './index';
 import {
   coerceTypes,
   type BoxelIndexTable,
   type RealmVersionsTable,
 } from './index-structure';
+import { v4 as uuidv4 } from '@lukeed/uuid';
 
 export class IndexWriter {
   #dbAdapter: DBAdapter;
@@ -86,6 +88,13 @@ export interface InstanceEntry {
   types: string[];
   displayNames: string[];
   deps: Set<string>;
+  // Per-row render timing diagnostics (launch/waits/render timings
+  // plus host-side breadcrumbs). Populated from the Prerenderer's
+  // `response.meta` and persisted onto `boxel_index.timing_diagnostics`.
+  // Not tied to `has_error` — we persist this for successful rows too
+  // so operators can retrospectively answer "why did this instance
+  // take N seconds on the last reindex?".
+  timingDiagnostics?: TimingDiagnostics;
 }
 
 export interface IndexErrorEntry {
@@ -94,6 +103,10 @@ export interface IndexErrorEntry {
   types?: string[];
   searchData?: Record<string, any>;
   cardType?: string;
+  // See InstanceEntry.timingDiagnostics. On the error path, the
+  // same payload is also copied into `error_doc.diagnostics` at
+  // write time so the UI read path keeps working unchanged.
+  timingDiagnostics?: TimingDiagnostics;
 }
 
 export type InstanceErrorIndexEntry = IndexErrorEntry & {
@@ -137,11 +150,23 @@ export interface FileEntry {
   atomHtml?: string;
   iconHTML?: string;
   markdown?: string;
+  // See InstanceEntry.timingDiagnostics.
+  timingDiagnostics?: TimingDiagnostics;
 }
 
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
+  // Correlation ID minted once per Batch and stamped into every row's
+  // `timing_diagnostics` via `updateEntry`, so operators can
+  // `SELECT ... WHERE timing_diagnostics->>'invalidationId' = '...'`
+  // and see every row that was part of the same indexing fan-out in
+  // one query. Minted in the constructor (not `invalidate()`) so
+  // fromScratch — which doesn't call `invalidate()` — still gets a
+  // correlation ID covering the whole rebuild. Refreshed at the top
+  // of each incremental `invalidate()` call so the ID identifies a
+  // single triggering change, not the whole batch lifetime.
+  #currentInvalidationId: string;
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
   declare private realmVersion: number;
@@ -152,11 +177,16 @@ export class Batch {
     private jobInfo?: JobInfo,
   ) {
     this.#dbAdapter = dbAdapter;
+    this.#currentInvalidationId = uuidv4();
     this.ready = this.setNextRealmVersion();
   }
 
   get invalidations() {
     return [...this.#invalidations];
+  }
+
+  get currentInvalidationId(): string {
+    return this.#currentInvalidationId;
   }
 
   // Look up created_at for a given file path from realm_file_meta
@@ -281,11 +311,46 @@ export class Batch {
       // drop this band-aid
       return;
     }
-    let errorEntry = isErrorEntry(entry)
-      ? { ...entry, error: this.normalizeErrorDoc(entry.error, url) }
-      : undefined;
     let href = url.href;
     this.#invalidations.add(url.href);
+    // Build the per-row timing_diagnostics blob. Render-side fields
+    // come from the Prerenderer's `response.meta` (already flattened
+    // in `visit-file.ts`); write-side stamps are added here:
+    //
+    //   - `invalidationId` — minted once per Batch (covers both
+    //     incremental `invalidate()` calls and fromScratch), so every
+    //     row from the same indexing pass shares a queryable
+    //     correlation key.
+    //   - `indexedAt` — wall-clock the write happened.
+    //
+    // The canonical storage is the `timing_diagnostics` column. For
+    // error rows we ALSO mirror the blob onto `error_doc.diagnostics`
+    // so the UI read path (error doc → CardErrorJSONAPI.meta.
+    // diagnostics via `formattedError`) keeps working unchanged —
+    // no schema rename needed. The column remains source of truth;
+    // the error-doc copy is derived.
+    let timingDiagnostics: TimingDiagnostics = {
+      ...(entry.timingDiagnostics ?? {}),
+      invalidationId: this.#currentInvalidationId,
+      indexedAt: Date.now(),
+    };
+    let errorEntry = isErrorEntry(entry)
+      ? {
+          ...entry,
+          error: this.normalizeErrorDoc(
+            {
+              ...entry.error,
+              // The SerializedError shape's `diagnostics` is
+              // `Record<string, unknown>` by design (it tolerates
+              // extra fields for derived / legacy payloads);
+              // `TimingDiagnostics` is structurally-compatible
+              // but needs an explicit cast across the boundary.
+              diagnostics: timingDiagnostics as Record<string, unknown>,
+            },
+            url,
+          ),
+        }
+      : undefined;
     let entryPayload;
     switch (entry.type) {
       case 'instance':
@@ -310,6 +375,7 @@ export class Batch {
           resource_created_at: entry.resourceCreatedAt,
           error_doc: null,
           has_error: false,
+          timing_diagnostics: timingDiagnostics,
         };
         break;
       case 'file':
@@ -332,6 +398,7 @@ export class Batch {
           resource_created_at: entry.resourceCreatedAt,
           error_doc: null,
           has_error: false,
+          timing_diagnostics: timingDiagnostics,
         };
         break;
       case 'instance-error':
@@ -353,6 +420,7 @@ export class Batch {
           type: baseTypeFromError(entry),
           error_doc: errorEntry?.error ?? entry.error,
           has_error: true,
+          timing_diagnostics: timingDiagnostics,
         };
         break;
       default:
@@ -612,7 +680,12 @@ export class Batch {
   }
 
   private async tombstoneEntries(invalidations: string[]) {
-    // insert tombstone into next version of the realm index
+    // insert tombstone into next version of the realm index. Stamp
+    // the current `invalidationId` + `indexedAt` on every tombstone
+    // so fan-out queries (`WHERE timing_diagnostics->>'invalidationId'
+    // = <id>`) also surface the delete rows for this pass — otherwise
+    // tombstones would inherit a stale ID from a prior write or stay
+    // NULL entirely, misattributing deletes in the grouping view.
     let existingTypes = await this.existingIndexTypes(invalidations);
     let columns = [
       'url',
@@ -621,7 +694,18 @@ export class Batch {
       'realm_version',
       'realm_url',
       'is_deleted',
+      'timing_diagnostics',
     ].map((c) => [c]);
+    let tombstoneDiagnostics: TimingDiagnostics = {
+      invalidationId: this.#currentInvalidationId,
+      indexedAt: Date.now(),
+    };
+    // `timing_diagnostics` is a jsonb column. This helper uses
+    // `upsertMultipleRows` which passes each value through `param()`
+    // as a raw `PgPrimitive`, so we pre-serialize the JSON here (the
+    // regular `updateEntry` path reaches jsonb via `asExpressions`
+    // with a `jsonFields` list, which does the same thing).
+    let tombstoneDiagnosticsJson = JSON.stringify(tombstoneDiagnostics);
     let rows = invalidations.flatMap((id) => {
       let types = existingTypes.get(id);
       if (!types || types.length === 0) {
@@ -637,6 +721,7 @@ export class Batch {
           this.realmVersion,
           this.realmURL.href,
           true,
+          tombstoneDiagnosticsJson,
         ].map((v) => [param(v)]),
       );
     });
@@ -738,6 +823,11 @@ export class Batch {
 
   async invalidate(urls: URL[]): Promise<void> {
     await this.ready;
+    // Mint a fresh correlation ID for this invalidation fan-out; every
+    // subsequent `updateEntry` on this batch stamps it into the row's
+    // `timing_diagnostics` so operators can group the rows touched by
+    // the same triggering change.
+    this.#currentInvalidationId = uuidv4();
     let start = Date.now();
     this.#perfLog.debug(
       `${jobIdentity} starting invalidation of ${urls.map((u) => u.href).join()}`,

@@ -1,6 +1,8 @@
 import {
   type AffinityType,
+  type PrerenderResponseMeta,
   type RenderRouteOptions,
+  type RenderTimeoutDiagnostics,
   type ModuleRenderResponse,
   type PrerenderVisitArgs,
   type ReleaseBatchArgs,
@@ -375,55 +377,66 @@ export class Prerenderer {
     return owner ? { batchId: owner.batchId, since: owner.since } : undefined;
   }
 
-  // CS-10872: walk any RenderError embedded in a response and merge
-  // server-observed timings into the inner `SerializedError`'s
-  // `diagnostics` block. Diagnostics must live on the inner
-  // `SerializedError` (not the outer `RenderError` wrapper) because
-  // that's what the indexer persists into `boxel_index.error_doc`.
-  // The prerender server's HTTP layer additionally attaches a
-  // `requestId` via `decorateRenderErrorDiagnostics` — this method
-  // covers the in-process path (test harnesses, co-located callers)
-  // so the diagnostics payload is consistent regardless of how the
-  // prerender was invoked.
+  // Consolidate all diagnostic payloads onto `response.meta.diagnostics`
+  // so the indexer can pick them up uniformly and persist into
+  // `boxel_index.timing_diagnostics`. We merge two sources:
+  //
+  //   - Server-observed timings (launchMs / waits / renderElapsedMs /
+  //     totalElapsedMs) from the Prerenderer's own measurements.
+  //   - Host-side breadcrumbs (renderStage, in-flight loads, etc.)
+  //     lifted out of every embedded `RenderError.diagnostics` —
+  //     the transient transport set by `withTimeout`. We delete the
+  //     outer field after lifting so nothing downstream has to know
+  //     about the two-channel layout.
+  //
+  // The HTTP response envelope also carries `meta`, but
+  // remote-prerenderer only forwards `data.attributes`, not the
+  // envelope — so the values have to live inside the response body.
   static decorateRenderErrorsWithTimings(
     response: unknown,
-    timings: { launchMs: number; renderMs: number; waits: unknown },
+    timings: {
+      launchMs: number;
+      renderMs: number;
+      waits: RenderTimeoutDiagnostics['waits'];
+    },
     totalMs: number,
   ): void {
     if (!response || typeof response !== 'object') {
       return;
     }
-    let serverContext = {
+    let r = response as Record<string, unknown>;
+    // Walk every embedded RenderError and lift its `.diagnostics` into
+    // a single aggregated block on response.meta. Typical case: one
+    // RenderError carries the full payload; aggregation covers the
+    // rare case where multiple pass errors each contributed fields.
+    let lifted: RenderTimeoutDiagnostics = {};
+    let lift = (wrapper: unknown) => {
+      if (!wrapper || typeof wrapper !== 'object') return;
+      let w = wrapper as { diagnostics?: RenderTimeoutDiagnostics };
+      if (!w.diagnostics || typeof w.diagnostics !== 'object') return;
+      lifted = { ...lifted, ...w.diagnostics };
+      delete w.diagnostics;
+    };
+    lift(r.error);
+    lift(r.pageUnusableError);
+    for (let key of ['card', 'fileExtract', 'fileRender'] as const) {
+      let sub = r[key];
+      if (sub && typeof sub === 'object') {
+        lift((sub as { error?: unknown }).error);
+      }
+    }
+    let diagnostics: RenderTimeoutDiagnostics = {
+      ...lifted,
       launchMs: timings.launchMs,
       waits: timings.waits,
       renderElapsedMs: timings.renderMs,
       totalElapsedMs: totalMs,
     };
-    // `wrapper` is a RenderError / ErrorEntry (with an inner
-    // `error: SerializedError`); attach to the inner so diagnostics
-    // survive serialization into `error_doc`.
-    // `wrapper` is a RenderError / ErrorEntry (with an inner
-    // `error: SerializedError`); attach to the inner so diagnostics
-    // survive serialization into `error_doc`.
-    let visit = (wrapper: unknown) => {
-      if (!wrapper || typeof wrapper !== 'object') return;
-      let w = wrapper as { error?: unknown };
-      if (!w.error || typeof w.error !== 'object') return;
-      let inner = w.error as { diagnostics?: Record<string, unknown> };
-      if (!inner.diagnostics || typeof inner.diagnostics !== 'object') {
-        inner.diagnostics = {};
-      }
-      Object.assign(inner.diagnostics, serverContext);
+    let existingMeta = (r.meta as PrerenderResponseMeta | undefined) ?? {};
+    r.meta = {
+      ...existingMeta,
+      diagnostics,
     };
-    let r = response as Record<string, unknown>;
-    visit(r.error);
-    visit(r.pageUnusableError);
-    for (let key of ['card', 'fileExtract', 'fileRender'] as const) {
-      let sub = r[key];
-      if (sub && typeof sub === 'object') {
-        visit((sub as { error?: unknown }).error);
-      }
-    }
   }
 
   #gateClearCache<
