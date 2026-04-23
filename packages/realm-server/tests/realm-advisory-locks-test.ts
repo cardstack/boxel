@@ -37,7 +37,8 @@ module(basename(__filename), function () {
       // Within signed int64 range: [-(2^63), 2^63 - 1]
       const MAX = 2n ** 63n - 1n;
       const MIN = -(2n ** 63n);
-      assert.ok(asBigInt <= MAX && asBigInt >= MIN, 'within int64 range');
+      assert.ok(asBigInt <= MAX, 'within int64 upper bound');
+      assert.ok(asBigInt >= MIN, 'within int64 lower bound');
     });
   });
 
