@@ -7,7 +7,6 @@ import { registerReadTranspiledCommand } from './commands/read-transpiled';
 import { registerRealmCommand } from './commands/realm/index';
 import { registerFileCommand } from './commands/file/index';
 import { registerRunCommand } from './commands/run-command';
-import { registerFileCommand } from './commands/file/index';
 
 const pkg = JSON.parse(
   readFileSync(resolve(__dirname, '../package.json'), 'utf-8'),
@@ -48,6 +47,5 @@ registerFileCommand(program);
 registerRealmCommand(program);
 registerRunCommand(program);
 registerReadTranspiledCommand(program);
-registerFileCommand(program);
 
 program.parse();

@@ -96,12 +96,14 @@ describe('file write (integration)', () => {
     let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
     let emptyManager = new ProfileManager(emptyDir);
 
-    let result = await write(realmUrl, 'test.gts', 'content', {
-      profileManager: emptyManager,
-    });
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain('No active profile');
-
-    fs.rmSync(emptyDir, { recursive: true, force: true });
+    try {
+      let result = await write(realmUrl, 'test.gts', 'content', {
+        profileManager: emptyManager,
+      });
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('No active profile');
+    } finally {
+      fs.rmSync(emptyDir, { recursive: true, force: true });
+    }
   });
 });

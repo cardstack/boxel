@@ -2,8 +2,11 @@ import type { Command } from 'commander';
 import { readFileSync } from 'fs';
 import {
   getProfileManager,
+  NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from '../../lib/profile-manager';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { FG_GREEN, FG_RED, DIM, RESET } from '../../lib/colors';
 
 export interface WriteResult {
@@ -17,13 +20,8 @@ export interface WriteCommandOptions {
 
 interface WriteCliOptions {
   realm: string;
-  content?: string;
   file?: string;
   json?: boolean;
-}
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
 }
 
 /**
@@ -43,7 +41,7 @@ export async function write(
   if (!active) {
     return {
       ok: false,
-      error: 'No active profile. Run `boxel profile add` to create one.',
+      error: NO_ACTIVE_PROFILE_ERROR,
     };
   }
 
@@ -53,14 +51,14 @@ export async function write(
     let response = await pm.authedRealmFetch(url, {
       method: 'POST',
       headers: {
-        Accept: 'application/vnd.card+source',
-        'Content-Type': 'application/vnd.card+source',
+        Accept: SupportedMimeType.CardSource,
+        'Content-Type': SupportedMimeType.CardSource,
       },
       body: content,
     });
 
     if (!response.ok) {
-      let body = await response.text();
+      let body = await response.text().catch(() => '(no body)');
       return {
         ok: false,
         error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
@@ -76,52 +74,61 @@ export async function write(
   }
 }
 
+/** Write to stderr so hints don't pollute stdout (important when piping/--json). */
+function stderr(msg: string): void {
+  process.stderr.write(msg + '\n');
+}
+
+async function readStdin(): Promise<string> {
+  let chunks: Buffer[] = [];
+  for await (let chunk of process.stdin) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('utf-8');
+}
+
 export function registerWriteCommand(parent: Command): void {
   parent
     .command('write')
-    .description('Write a file to a realm')
+    .description('Write a file to a realm (reads content from STDIN or --file)')
     .argument(
       '<path>',
       'Realm-relative file path (e.g., hello.gts, Cards/my-card.json)',
     )
     .requiredOption('--realm <realm-url>', 'The realm URL to write to')
-    .option('--content <content>', 'Inline content to write')
-    .option('--file <filepath>', 'Read content from a local file')
+    .option(
+      '--file <filepath>',
+      'Read content from a local file instead of STDIN',
+    )
     .option('--json', 'Output raw JSON response')
     .action(async (filePath: string, opts: WriteCliOptions) => {
-      if (!opts.content && !opts.file) {
-        console.error(
-          `${FG_RED}Error:${RESET} Either --content or --file must be provided`,
-        );
-        process.exit(1);
-      }
-
-      if (opts.content && opts.file) {
-        console.error(
-          `${FG_RED}Error:${RESET} Cannot specify both --content and --file`,
-        );
-        process.exit(1);
-      }
-
       let content: string;
       if (opts.file) {
         try {
           content = readFileSync(opts.file, 'utf-8');
         } catch (err) {
-          console.error(
+          stderr(
             `${FG_RED}Error:${RESET} Could not read file: ${err instanceof Error ? err.message : String(err)}`,
           );
           process.exit(1);
         }
       } else {
-        content = opts.content!;
+        if (process.stdin.isTTY) {
+          stderr(
+            `${DIM}Reading from STDIN. Type or paste content, then press Enter followed by Ctrl+D to finish.${RESET}`,
+          );
+        }
+        content = await readStdin();
+        stderr(
+          `${DIM}Received ${content.length} bytes. Writing to realm...${RESET}`,
+        );
       }
 
       let result: WriteResult;
       try {
         result = await write(opts.realm, filePath, content);
       } catch (err) {
-        console.error(
+        stderr(
           `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
         );
         process.exit(1);
@@ -134,7 +141,7 @@ export function registerWriteCommand(parent: Command): void {
           `${FG_GREEN}Written:${RESET} ${filePath} ${DIM}→${RESET} ${opts.realm}`,
         );
       } else {
-        console.error(`${FG_RED}Error:${RESET} ${result.error}`);
+        stderr(`${FG_RED}Error:${RESET} ${result.error}`);
       }
 
       if (!result.ok) {
