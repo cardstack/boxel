@@ -1,4 +1,7 @@
 export function* generateCombinations<T>(sets: T[][]) {
+  if (sets.some((set) => set.length === 0)) {
+    return;
+  }
   const counters = sets.map((_) => 0);
   do {
     yield buildCombination(sets, counters);
