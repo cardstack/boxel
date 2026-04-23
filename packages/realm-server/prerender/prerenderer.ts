@@ -34,6 +34,15 @@ type PoolMeta = {
   timedOut: boolean;
 };
 
+// CS-10872 (affinity-snapshot diagnostic): one registration with the
+// shared peak sampler. `currentPeak()` samples on demand and returns
+// the richest observation seen so far; `stop()` unregisters and, if
+// this was the last registration, tears down the shared interval.
+type PeakRegistration = {
+  currentPeak: () => NonNullable<RenderTimeoutDiagnostics['affinitySnapshot']>;
+  stop: () => void;
+};
+
 // Exported so cancellation-plumbing unit tests can drive it
 // directly — it's a pure in-memory counting semaphore with no
 // Chrome dependency.
@@ -479,12 +488,7 @@ export class Prerenderer {
   #registerPeakSampling(
     affinityKey: string,
     selfHandle: symbol,
-  ): {
-    currentPeak: () => NonNullable<
-      RenderTimeoutDiagnostics['affinitySnapshot']
-    >;
-    stop: () => void;
-  } {
+  ): PeakRegistration {
     let id = Symbol(`peak:${affinityKey}`);
     let initial = this.#getAffinitySnapshot(affinityKey, selfHandle)!;
     this.#snapshotPeaks.set(id, {
@@ -517,12 +521,22 @@ export class Prerenderer {
   #ensurePeakSamplerRunning(): void {
     if (this.#peakSamplerInterval) return;
     this.#peakSamplerInterval = setInterval(() => {
+      // Per-entry try/catch: a snapshot failure for one affinity
+      // (e.g. edge state during a concurrent restart/dispose) must
+      // not prevent the rest of this tick's entries from sampling.
       for (let entry of this.#snapshotPeaks.values()) {
-        let cur = this.#getAffinitySnapshot(
-          entry.affinityKey,
-          entry.selfHandle,
-        )!;
-        if (Prerenderer.#isPeakBetter(cur, entry.peak)) entry.peak = cur;
+        try {
+          let cur = this.#getAffinitySnapshot(
+            entry.affinityKey,
+            entry.selfHandle,
+          )!;
+          if (Prerenderer.#isPeakBetter(cur, entry.peak)) entry.peak = cur;
+        } catch (e) {
+          log.warn(
+            `affinity-snapshot peak sampler failed for ${entry.affinityKey}`,
+            e,
+          );
+        }
       }
     }, this.#peakSamplerIntervalMs);
     this.#peakSamplerInterval.unref();
@@ -624,8 +638,12 @@ export class Prerenderer {
     }
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     let activity = this.#affinityActivity.record(affinityKey, url, 'module');
-    let poller = this.#registerPeakSampling(affinityKey, activity.handle);
+    // Declared before the try so the finally releases both even if the
+    // register call itself throws synchronously (e.g. setInterval
+    // fails under pressure). Without this, `activity` would leak.
+    let poller: PeakRegistration | undefined;
     try {
+      poller = this.#registerPeakSampling(affinityKey, activity.handle);
       let overallStart = Date.now();
       let attemptOptions = renderOptions;
       let lastResult:
@@ -757,7 +775,7 @@ export class Prerenderer {
       }
       throw new Error(`module prerender attempts exhausted for ${url}`);
     } finally {
-      poller.stop();
+      poller?.stop();
       activity.release();
     }
   }
@@ -852,8 +870,11 @@ export class Prerenderer {
     let signal = (rawArgs as { signal?: AbortSignal }).signal;
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     let activity = this.#affinityActivity.record(affinityKey, url, 'visit');
-    let poller = this.#registerPeakSampling(affinityKey, activity.handle);
+    // See `prerenderModule` — declared before the try so a synchronous
+    // throw from `#registerPeakSampling` can't leak the activity entry.
+    let poller: PeakRegistration | undefined;
     try {
+      poller = this.#registerPeakSampling(affinityKey, activity.handle);
       let overallStart = Date.now();
       let attemptOptions = renderOptions;
       let lastResult:
@@ -981,7 +1002,7 @@ export class Prerenderer {
       }
       throw new Error(`visit prerender attempts exhausted for ${url}`);
     } finally {
-      poller.stop();
+      poller?.stop();
       activity.release();
     }
   }
