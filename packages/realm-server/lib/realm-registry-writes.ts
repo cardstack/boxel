@@ -13,8 +13,36 @@ import { logger, param, query } from '@cardstack/runtime-common';
 // handler mutation can never affect a bootstrap row (belt-and-suspenders: URLs
 // shouldn't match in practice, but the guard keeps that guarantee enforced at
 // the SQL layer).
+//
+// After a successful DB write, each helper emits
+// `NOTIFY realm_registry, '<op>:<url>'` so that any RealmRegistryReconciler
+// instances (CS-10890) listening on the channel can react promptly. The
+// payload is a hint only — reconcilers always re-read the DB. If the NOTIFY
+// itself fails (DB transient failure), the reconciler's 30s poll safety net
+// catches the change.
 
+const REGISTRY_CHANNEL = 'realm_registry';
 const log = logger('realm-server:registry-writes');
+
+async function notifyRegistry(
+  dbAdapter: DBAdapter,
+  op: 'upsert' | 'delete',
+  url: string,
+): Promise<void> {
+  try {
+    await query(dbAdapter, [
+      `SELECT pg_notify(`,
+      param(REGISTRY_CHANNEL),
+      `, `,
+      param(`${op}:${url}`),
+      `)`,
+    ]);
+  } catch (err: unknown) {
+    log.warn(
+      `failed to NOTIFY ${REGISTRY_CHANNEL} ${op}:${url}: ${String(err)}; reconciler poll will self-heal`,
+    );
+  }
+}
 
 // Upsert a published realm into realm_registry. Called from handle-publish-realm
 // after the legacy published_realms write succeeds.
@@ -52,7 +80,9 @@ export async function mirrorPublishedRealmToRegistry(
     log.warn(
       `failed to mirror publish to realm_registry for ${args.publishedRealmURL}: ${String(err)}; will self-heal on next boot`,
     );
+    return;
   }
+  await notifyRegistry(dbAdapter, 'upsert', args.publishedRealmURL);
 }
 
 // Insert a source realm into realm_registry. Called from server.ts:createRealm
@@ -80,7 +110,9 @@ export async function mirrorSourceRealmToRegistry(
     log.warn(
       `failed to mirror source-realm create to realm_registry for ${args.url}: ${String(err)}; will self-heal on next boot`,
     );
+    return;
   }
+  await notifyRegistry(dbAdapter, 'upsert', args.url);
 }
 
 // Delete a single row from realm_registry by url. Used by
@@ -100,7 +132,9 @@ export async function deleteFromRegistryByUrl(
     log.warn(
       `failed to delete realm_registry row for ${url}: ${String(err)}; will self-heal on next boot`,
     );
+    return;
   }
+  await notifyRegistry(dbAdapter, 'delete', url);
 }
 
 // Delete every kind='published' row whose source_url matches the given source
@@ -123,5 +157,9 @@ export async function deletePublishedFromRegistryBySource(
     log.warn(
       `failed to delete published realm_registry rows for source ${sourceUrl}: ${String(err)}; will self-heal on next boot`,
     );
+    return;
   }
+  // Single NOTIFY keyed on the source URL. Reconcilers will re-read and see
+  // all deletes; the payload is a hint, not a precise per-row signal.
+  await notifyRegistry(dbAdapter, 'delete', sourceUrl);
 }
