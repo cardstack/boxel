@@ -6,19 +6,19 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { htmlSafe, type SafeString } from '@ember/template';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
-import type { KanbanDragManager } from './kanban-drag';
+import type { SafeString } from '@ember/template';
+import { cn, eq, sanitizeHtmlSafe } from '@cardstack/boxel-ui/helpers';
+import type { KanbanDragManager } from './drag';
 import {
   type KanbanPlacement,
   cardsInColumn,
   columnCount as colCount,
-} from './kanban-engine';
-import type { KanbanColumnField } from './kanban-column';
-import { CaptureElement, BindPointerDown } from './kanban-modifiers';
-import { KanbanColumnHeader } from './kanban-column-header';
-import { KanbanCard } from './kanban-card';
-import { KanbanGhost } from './kanban-ghost';
+} from './engine';
+import type { KanbanColumnField } from './column';
+import { CaptureElement, BindPointerDown } from './modifiers';
+import { KanbanColumnHeader } from './column-header';
+import { KanbanCard } from './card';
+import { KanbanGhost } from './ghost';
 
 export class KanbanPlane extends Component<{
   Args: {
@@ -99,9 +99,9 @@ export class KanbanPlane extends Component<{
   cardShiftStyle = (p: KanbanPlacement): SafeString => {
     if (this.shouldShiftDown(p)) {
       const gap = (this.manager.dragGhostHeight || 170) + 8;
-      return htmlSafe(`transform: translateY(${gap}px)`);
+      return sanitizeHtmlSafe(`transform: translateY(${gap}px)`);
     }
-    return htmlSafe('');
+    return sanitizeHtmlSafe('');
   };
 
   showInsertionBox = (colIndex: number): boolean => {
@@ -115,14 +115,15 @@ export class KanbanPlane extends Component<{
   insertionBoxStyle = (colIndex: number): SafeString => {
     // ¹³
     if (!this.showInsertionBox(colIndex) || !this.containerElement)
-      return htmlSafe('display: none');
+      return sanitizeHtmlSafe('display: none');
     const ins = this.manager.insertion!;
     const ghostH = this.manager.dragGhostHeight || 170;
     const colCards = this.columnCards(colIndex).filter(
       (p) => p.index !== this.manager.activeDragIndex,
     );
 
-    if (colCards.length === 0) return htmlSafe(`top: 0; height: ${ghostH}px`);
+    if (colCards.length === 0)
+      return sanitizeHtmlSafe(`top: 0; height: ${ghostH}px`);
 
     const insertIdx = Math.min(ins.position - 1, colCards.length);
 
@@ -135,7 +136,7 @@ export class KanbanPlane extends Component<{
         const parentRect = lastEl.parentElement!.getBoundingClientRect();
         const cs = getComputedStyle(lastEl);
         const matrix = new DOMMatrix(cs.transform);
-        return htmlSafe(
+        return sanitizeHtmlSafe(
           `top: ${rect.bottom - matrix.m42 - parentRect.top + 6}px; height: ${ghostH}px`,
         );
       }
@@ -148,22 +149,22 @@ export class KanbanPlane extends Component<{
         const parentRect = beforeEl.parentElement!.getBoundingClientRect();
         const cs = getComputedStyle(beforeEl);
         const matrix = new DOMMatrix(cs.transform);
-        return htmlSafe(
+        return sanitizeHtmlSafe(
           `top: ${rect.top - matrix.m42 - parentRect.top - 3}px; height: ${ghostH}px`,
         );
       }
     }
-    return htmlSafe(`top: 0; height: ${ghostH}px`);
+    return sanitizeHtmlSafe(`top: 0; height: ${ghostH}px`);
   };
 
   get ghostStyle(): SafeString {
     const m = this.manager;
     if (m.isSettling) {
-      return htmlSafe(
+      return sanitizeHtmlSafe(
         `left: ${m.settleX}px; top: ${m.settleY}px; width: ${m.settleWidth}px; height: ${m.settleHeight}px`,
       );
     }
-    return htmlSafe(
+    return sanitizeHtmlSafe(
       `left: ${m.pointerClientX - m.dragOffsetX}px; top: ${m.pointerClientY - m.dragOffsetY}px; width: ${m.dragGhostWidth}px; height: ${m.dragGhostHeight}px`,
     );
   }

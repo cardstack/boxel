@@ -2,7 +2,8 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { ContextButton } from '@cardstack/boxel-ui/components';
-import type { KanbanColumnField } from './kanban-column';
+import { cn, cssVar } from '@cardstack/boxel-ui/helpers';
+import type { KanbanColumnField } from './column';
 
 interface Signature {
   Args: {
@@ -16,11 +17,11 @@ interface Signature {
 }
 
 const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
-  <div class='col-header {{if @isTarget "is-target"}}' ...attributes>
+  <div class={{cn 'col-header' is-target=@isTarget}} ...attributes>
     <div class='col-header-left'>
       <span
         class='col-dot'
-        style='background: {{if @column.color @column.color "#94a3b8"}}'
+        style={{cssVar col-dot-bg=(if @column.color @column.color '#94a3b8')}}
       ></span>
       <span class='col-name'>{{if
           @column.label
@@ -31,7 +32,7 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
     </div>
     <div class='col-header-right'>
       {{#if @column.wipLimit}}
-        <span class='col-wip {{if @isOverWip "over"}}'>
+        <span class={{cn 'col-wip' over=@isOverWip}}>
           max
           {{@column.wipLimit}}
         </span>
@@ -74,6 +75,7 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
       height: 10px;
       border-radius: 3px;
       flex-shrink: 0;
+      background: var(--col-dot-bg);
     }
     .col-name {
       font-size: 13px;

@@ -33,10 +33,12 @@ import {
 import { realmURL } from '@cardstack/runtime-common';
 
 import { IssueOptionField } from './issue-option';
-import { KanbanColumnField } from './kanban-column';
-import { KanbanPlane } from './kanban-plane';
-import { KanbanDragManager } from './kanban-drag';
-import { type KanbanPlacement } from './kanban-engine';
+import {
+  KanbanColumnField,
+  KanbanPlane,
+  KanbanDragManager,
+  type KanbanPlacement,
+} from './kanban';
 
 const issueCodeRef = {
   // @ts-ignore this is not a CJS file, import.meta is allowed

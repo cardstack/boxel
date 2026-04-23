@@ -8,7 +8,7 @@ import {
   type InsertionPoint,
   findInsertionFromPointer,
   resolveInsertion,
-} from './kanban-engine';
+} from './engine';
 
 // ── Constants ────────────────────────────────────────────────────────── //
 const DRAG_THRESHOLD_PX = 4;

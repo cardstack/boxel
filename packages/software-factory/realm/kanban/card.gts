@@ -1,7 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { SafeString } from '@ember/template';
 import { cn } from '@cardstack/boxel-ui/helpers';
-import type { KanbanPlacement } from './kanban-engine';
+import type { KanbanPlacement } from './engine';
 
 interface Signature {
   Args: {
