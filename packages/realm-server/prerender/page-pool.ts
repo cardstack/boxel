@@ -9,7 +9,9 @@ type RenderSemaphore = {
   acquire(signal?: AbortSignal): Promise<() => void>;
 };
 
-class TabQueue {
+// Exported so cancellation-plumbing unit tests can drive it
+// directly — it's a pure in-memory FIFO with no Chrome dependency.
+export class TabQueue {
   #pending: Promise<void> = Promise.resolve();
   #depth = 0;
 

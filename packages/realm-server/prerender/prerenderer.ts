@@ -31,7 +31,10 @@ type PoolMeta = {
   timedOut: boolean;
 };
 
-class AsyncSemaphore {
+// Exported so cancellation-plumbing unit tests can drive it
+// directly — it's a pure in-memory counting semaphore with no
+// Chrome dependency.
+export class AsyncSemaphore {
   #available: number;
   // `resolve` hands the acquirer the release function once a slot
   // frees. `onCancel` gives the cancellation path a way to splice
