@@ -945,6 +945,19 @@ type SelectorRangeEndpoint =
       offsetFromLast: number;
     };
 
+type SelectorUnionTerm =
+  | {
+      kind: 'single';
+      display: string;
+      indexExpr: string;
+    }
+  | {
+      kind: 'range';
+      display: string;
+      startExpr: string;
+      endExpr: string;
+    };
+
 function hasUnclosedMaterializedArray(source: string): boolean {
   const opens = [...source].filter((char) => char === '[').length;
   const closes = [...source].filter((char) => char === ']').length;
@@ -1021,8 +1034,11 @@ function splitTopLevel(
   return ranges;
 }
 
-function parseSelectorRangeEndpoint(tokens: Token[]): SelectorRangeEndpoint | undefined {
-  if (tokens.length === 1 && tokens[0].type === 'number') {
+function parseSelectorRangeEndpoint(
+  tokens: Token[],
+  options: { allowBareNumber?: boolean } = {},
+): SelectorRangeEndpoint | undefined {
+  if (options.allowBareNumber && tokens.length === 1 && tokens[0].type === 'number') {
     const oneBased = Number(tokens[0].value);
     if (!Number.isInteger(oneBased) || oneBased < 1) {
       throw new ReadableSyntaxError(
@@ -1110,22 +1126,72 @@ function selectorRangeIsIncreasing(
   return false;
 }
 
-function selectorRangeStartExpr(endpoint: SelectorRangeEndpoint, seqVar: string): string {
+function selectorEndpointIndexExpr(endpoint: SelectorRangeEndpoint, lengthExpr: string): string {
   if (endpoint.family === 'front') {
     return `${endpoint.oneBased - 1}`;
   }
   return endpoint.offsetFromLast === 0
-    ? `((${seqVar} | length) - 1)`
-    : `((${seqVar} | length) - ${endpoint.offsetFromLast + 1})`;
+    ? `(${lengthExpr} - 1)`
+    : `(${lengthExpr} - ${endpoint.offsetFromLast + 1})`;
 }
 
-function selectorRangeEndExpr(endpoint: SelectorRangeEndpoint, seqVar: string): string {
+function selectorRangeStartExpr(endpoint: SelectorRangeEndpoint, lengthExpr: string): string {
+  return selectorEndpointIndexExpr(endpoint, lengthExpr);
+}
+
+function selectorRangeEndExpr(endpoint: SelectorRangeEndpoint, lengthExpr: string): string {
   if (endpoint.family === 'front') {
     return `${endpoint.oneBased}`;
   }
   return endpoint.offsetFromLast === 0
-    ? `(${seqVar} | length)`
-    : `((${seqVar} | length) - ${endpoint.offsetFromLast})`;
+    ? `${lengthExpr}`
+    : `(${lengthExpr} - ${endpoint.offsetFromLast})`;
+}
+
+function parseSelectorUnionTerm(tokens: Token[]): SelectorUnionTerm | undefined {
+  const rangeParts = splitTopLevel(tokens, 0, tokens.length, '..');
+  if (rangeParts.length === 1) {
+    const endpoint = parseSelectorRangeEndpoint(tokens);
+    if (!endpoint) {
+      return undefined;
+    }
+    return {
+      kind: 'single',
+      display: endpoint.display,
+      indexExpr: selectorEndpointIndexExpr(endpoint, '$__len'),
+    };
+  }
+  if (rangeParts.length === 2) {
+    const startEndpoint = parseSelectorRangeEndpoint(tokens.slice(...rangeParts[0]));
+    const endEndpoint = parseSelectorRangeEndpoint(tokens.slice(...rangeParts[1]), {
+      allowBareNumber: true,
+    });
+    if (!startEndpoint || !endEndpoint) {
+      return undefined;
+    }
+    if (!selectorRangeIsIncreasing(startEndpoint, endEndpoint)) {
+      throw new ReadableSyntaxError(
+        `[${startEndpoint.display}..${endEndpoint.display}] range must move forward in collection order`,
+      );
+    }
+    return {
+      kind: 'range',
+      display: `${startEndpoint.display}..${endEndpoint.display}`,
+      startExpr: selectorRangeStartExpr(startEndpoint, '$__len'),
+      endExpr: selectorRangeEndExpr(endEndpoint, '$__len'),
+    };
+  }
+  return undefined;
+}
+
+function selectorUnionCondition(terms: SelectorUnionTerm[]): string {
+  return terms
+    .map((term) =>
+      term.kind === 'single'
+        ? `$__idx == ${term.indexExpr}`
+        : `($__idx >= ${term.startExpr} and $__idx < ${term.endExpr})`,
+    )
+    .join(' or ');
 }
 
 function isSimpleHumanIndex(tokens: Token[]): boolean {
@@ -1919,6 +1985,28 @@ class Compiler {
       };
     }
 
+    const selectorTerms = splitTopLevel(inner, 0, inner.length, ',');
+    if (selectorTerms.length > 1) {
+      const parsedTerms = selectorTerms.map(([start, end]) =>
+        parseSelectorUnionTerm(inner.slice(start, end)),
+      );
+      if (parsedTerms.every((term): term is SelectorUnionTerm => Boolean(term))) {
+        const closedBase = hasUnclosedMaterializedArray(base) ? `${base}]` : base;
+        return {
+          source:
+            `[(${closedBase}) as $__seq | ($__seq | length) as $__len | ` +
+            `range(0; $__len) as $__idx | select(${selectorUnionCondition(parsedTerms)}) | $__seq[$__idx]`,
+          changed: true,
+          warnings: [],
+          next: this.index,
+          valueScope: item,
+          arrayItemScope: item,
+          streamItemScope: item,
+          openMaterialized: true,
+        };
+      }
+    }
+
     if (
       inner.length === 4 &&
       inner[0].value === '#' &&
@@ -2047,7 +2135,9 @@ class Compiler {
     const rangeParts = splitTopLevel(inner, 0, inner.length, '..');
     if (rangeParts.length === 2) {
       const startEndpoint = parseSelectorRangeEndpoint(inner.slice(...rangeParts[0]));
-      const endEndpoint = parseSelectorRangeEndpoint(inner.slice(...rangeParts[1]));
+      const endEndpoint = parseSelectorRangeEndpoint(inner.slice(...rangeParts[1]), {
+        allowBareNumber: true,
+      });
       if (startEndpoint && endEndpoint) {
         if (!selectorRangeIsIncreasing(startEndpoint, endEndpoint)) {
           throw new ReadableSyntaxError(
@@ -2073,11 +2163,12 @@ class Compiler {
 
         const closedBase = hasUnclosedMaterializedArray(base) ? `${base}]` : base;
         const seqVar = '$__seq';
+        const lengthExpr = `(${seqVar} | length)`;
         return {
           source:
             `[(${closedBase}) as ${seqVar} | ` +
-            `${seqVar}[${selectorRangeStartExpr(startEndpoint, seqVar)}:` +
-            `${selectorRangeEndExpr(endEndpoint, seqVar)}][]`,
+            `${seqVar}[${selectorRangeStartExpr(startEndpoint, lengthExpr)}:` +
+            `${selectorRangeEndExpr(endEndpoint, lengthExpr)}][]`,
           changed: true,
           warnings: [],
           next: this.index,

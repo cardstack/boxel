@@ -48,6 +48,7 @@ OptionalSuffix      = "?" ;
 Selector            = "[", SelectorBody, "]" ;
 SelectorBody        = EmptyStream
                     | AllSelector
+                    | HashSelectorUnion
                     | HumanIndex
                     | HumanRange
                     | HashAnchoredRange
@@ -68,6 +69,8 @@ HumanIndex         = ("row" | "item"), Number ;
 HumanRange         = ("row" | "item"), Number, "..", Number ;
 HashRangeEndpoint  = HashKeyword | HashLastOffset | "#", Number ;
 HashAnchoredRange  = HashRangeEndpoint, "..", HashRangeEndpoint ;
+HashSelectorTerm   = HashAnchoredRange | HashKeyword | HashLastOffset | "#", Number ;
+HashSelectorUnion  = HashSelectorTerm, ",", HashSelectorTerm, { ",", HashSelectorTerm } ;
 RawIndex           = "#", Number ;
 HashNegativeIndex  = "#", "-", Number ;
 HashKeyword        = "#", ("first" | "last" | "only" | "odd" | "even") ;

@@ -407,7 +407,7 @@ function normalizationEdits(source: string, options: BxlConversionOptions): Edit
     }
 
     // `[row N..M]` / `[item N..M]` — legacy range form, canonicalized to
-    // `[#N..M]`.
+    // `[#N..#M]` so the inclusive end stays visually explicit.
     if (
       first?.type === 'ident' &&
       ['row', 'item'].includes(first.value.toLowerCase()) &&
@@ -421,9 +421,9 @@ function normalizationEdits(source: string, options: BxlConversionOptions): Edit
       edits.push({
         start: token.start,
         end: fifth.end,
-        text: `[#${second.value}..${fourth.value}]`,
+        text: `[#${second.value}..#${fourth.value}]`,
         code: 'row-shortcut-to-hash',
-        message: `Rewrote [${first.value} ${second.value}..${fourth.value}] to canonical [#${second.value}..${fourth.value}].`,
+        message: `Rewrote [${first.value} ${second.value}..${fourth.value}] to canonical [#${second.value}..#${fourth.value}].`,
       });
       continue;
     }
@@ -837,7 +837,9 @@ function formatReadableBxlSource(source: string): string {
       prevPrev = previous;
       previous = token;
     }
-    return output.replace(/\[#last\s*-\s*(\d+)\]/g, '[#last-$1]');
+    return output
+      .replace(/\[#last\s*-\s*(\d+)\]/g, '[#last-$1]')
+      .replace(/#(\d+)\s*\.\.\s*(\d+)(?=[,\]])/g, '#$1..#$2');
   } catch {
     return source;
   }

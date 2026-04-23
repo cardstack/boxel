@@ -62,6 +62,12 @@
       "expected": ["BRAND-RED", "COPY-03", "COPY-04", "SRV-01"]
     },
     {
+      "name": "Selector union",
+      "source": "\"Line Item\"[#1, #2, #4..#5].SKU",
+      "canonical": "[(.lineItems) as $__seq | ($__seq | length) as $__len | range(0; $__len) as $__idx | select($__idx == 0 or $__idx == 1 or ($__idx >= 3 and $__idx < 5)) | $__seq[$__idx].sku]",
+      "expected": ["PAPER-01", "BRAND-RED", "COPY-04", "SRV-01"]
+    },
+    {
       "name": "Data-anchored predicate",
       "source": "\"Line Item\"[SKU = \"COPY-04\"].Quantity",
       "canonical": "first(.lineItems[] | select(.sku == \"COPY-04\")).quantity",

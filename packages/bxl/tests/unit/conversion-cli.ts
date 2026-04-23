@@ -29,7 +29,7 @@ assertSolid(
 // canonicalises them to `[#N]`. Raw zero-based indices and slices stay
 // as-is (they're the jq-native escape hatch).
 assertSolid('"Line Item"[item 2].SKU', '"Line Item"[#2].SKU');
-assertSolid('"Line Item"[row 1..3].SKU', '"Line Item"[#1..3].SKU');
+assertSolid('"Line Item"[row 1..3].SKU', '"Line Item"[#1..#3].SKU');
 // Solid BXL canonicalizes to Excel-style `=` for equality.
 assertSolid('Subtotal == 80', 'Subtotal = 80');
 assertSolid('Subtotal = 80', 'Subtotal = 80');

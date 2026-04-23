@@ -4,9 +4,11 @@
 //   `[*pred]`   — filter-all with truthy / predicate semantics.
 //                 Replaces most uses of the `_BY` builtin family.
 //   `[#N]`      — one-based single-row shortcut (was zero-based).
-//   `[#N..M]`   — one-based inclusive range.
+//   `[#N..#M]`  — one-based inclusive range (preferred spelling).
 //   `[#N..#last-K]` / `[#last-K..#last-J]`
 //                — anchored forward ranges from the front/back.
+//   `[#1, #2, #7..#9, #11]`
+//                — ordered selector union (preserves collection order).
 //   `[row N]`   — legacy one-based shortcut; still parses, solidify
 //                 rewrites to `[#N]` + linter info code.
 //   bare `[N]`  — zero-based jq-native escape hatch (info-level lint).
@@ -78,8 +80,8 @@ const cases: FilterCase[] = [
 
   // --- [#N..M] inclusive range ---
   {
-    name: '[#1..3] yields first three SKUs',
-    expression: '"Line Item"[#1..3].SKU',
+    name: '[#1..#3] yields first three SKUs',
+    expression: '"Line Item"[#1..#3].SKU',
     expectedValue: ['PAPER-01', 'BRAND-RED', 'COPY-03'],
   },
   {
@@ -93,6 +95,23 @@ const cases: FilterCase[] = [
     expression: '"Line Item"[#last-3..#last-1].SKU',
     expectedValue: ['COPY-03', 'COPY-04', 'SRV-01'],
     expectedJq: '[(.lineItems) as $__seq | $__seq[(($__seq | length) - 4):(($__seq | length) - 1)][].sku]',
+  },
+  {
+    name: '[#1, #2, #4..#5] yields selector union in collection order',
+    expression: '"Line Item"[#1, #2, #4..#5].SKU',
+    expectedValue: ['PAPER-01', 'BRAND-RED', 'COPY-04', 'SRV-01'],
+    expectedJq:
+      '[(.lineItems) as $__seq |($__seq | length) as $__len | range(0; $__len) as $__idx | select($__idx == 0 or $__idx == 1 or ($__idx >= 3 and $__idx < 5)) | $__seq[$__idx].sku]',
+  },
+  {
+    name: '[#5, #1, #2] still returns collection order',
+    expression: '"Line Item"[#5, #1, #2].SKU',
+    expectedValue: ['PAPER-01', 'BRAND-RED', 'SRV-01'],
+  },
+  {
+    name: '[#1, #1..#2] collapses overlap naturally',
+    expression: '"Line Item"[#1, #1..#2].SKU',
+    expectedValue: ['PAPER-01', 'BRAND-RED'],
   },
 
   // --- Implicit [all] ---
@@ -176,8 +195,8 @@ const rangeRewrite = solidifyBxlExpression('"Line Item"[row 1..3].SKU', {
 });
 strictEqual(
   rangeRewrite.source,
-  '"Line Item"[#1..3].SKU',
-  'solidify: [row N..M] -> [#N..M]',
+  '"Line Item"[#1..#3].SKU',
+  'solidify: [row N..M] -> [#N..#M]',
 );
 
 // --- Anchored ranges must still move forward ---

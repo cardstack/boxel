@@ -100,6 +100,13 @@ const cases: Array<{
     compiled: '.lineItems[3].quantity',
   },
   {
+    name: 'selector union',
+    expression: '"Line Item"[#1, #2, #4..#5].SKU',
+    expected: ['COPY-01', 'BRAND-RED', 'COPY-04'],
+    compiled:
+      '[(.lineItems) as $__seq |($__seq | length) as $__len | range(0; $__len) as $__idx | select($__idx == 0 or $__idx == 1 or ($__idx >= 3 and $__idx < 5)) | $__seq[$__idx].sku]',
+  },
+  {
     name: 'one-based # shortcut',
     expression: '"Line Item"[#2].SKU',
     expected: 'BRAND-RED',

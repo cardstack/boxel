@@ -53,7 +53,7 @@ If you only remember ten things about BXL, remember these. Every other section e
 | **4** | **Predicates come in two shapes.** `[pred]` returns the first match; `[*pred]` returns every match. | Scalar vs array result. `[SKU="X"]` finds one; `[*Taxable]` filters all. |
 | **5** | **Excel-style equality works:** `=` and `<>` compile to `==` and `!=`. | Paste `IF(Status="paid", …)` from Excel, no edits needed. |
 | **6** | **UPPERCASE is a promise.** `ROUND`, `SUM`, `ISBLANK` match Microsoft Excel exactly. lowercase (`present`, `when`, `words`) is BXL-native. | UPPERCASE paste-compatible with Excel cells. lowercase is BXL's own vocabulary. |
-| **7** | **Positional selectors live in `[#...]` only.** Positive selectors are 1-based; last-relative selectors count backward from the end. | `[#1]`, `[#4]`, `[#first]`, `[#last]`, `[#last-1]`, `[#4..#last-3]`, `[#odd]`, `[#even]`, `[#only]`. |
+| **7** | **Positional selectors live in `[#...]` only.** Positive selectors are 1-based; last-relative selectors count backward from the end. | `[#1]`, `[#4]`, `[#first]`, `[#last]`, `[#last-1]`, `[#4..#last-3]`, `[#1, #2, #7..#9, #11]`, `[#odd]`, `[#even]`, `[#only]`. |
 | **8** | **Root auto-binds across pipes.** Readable labels after `\|` resolve against the root card, not the piped-in value. | `"Line Item"."Line Total" \| add = Subtotal` — `Subtotal` reads from the root. |
 | **9** | **Presence is context-dependent.** `ISBLANK` is Excel-strict (null only). `present` is form-friendly (null or `""`). | `present(Email)` for form validation. `NOT ISBLANK(Email)` when you need Excel's semantics. |
 | **10** | **Formatters pipe and interpolate.** `\| @fmt` transforms a value; `@fmt "… \(expr) …"` escapes every interpolation into a safe sink. | `@html "Hi \(Name)"` escapes XSS. `@uri` for URLs. `@json` / `@csv` / `@base64` for machine sinks. |
@@ -73,11 +73,13 @@ BXL keeps canonical jq valid and adds a schema-aware readable layer. Labels, one
 | `Total` | `.total` | Bare labels work when the schema resolves them unambiguously. |
 | `"Bill To"."Country Code"` | `.billTo.countryCode` | Quoted labels handle spaces and punctuation. |
 | `"Line Item"[#4].Quantity` | `.lineItems[3].quantity` | `[#N]` is the canonical one-based row shortcut. |
-| `"Line Item"[#1..3].SKU` | `[.lineItems[0:3][].sku]` | One-based inclusive range — first three SKUs. |
+| `"Line Item"[#1..#3].SKU` | `[.lineItems[0:3][].sku]` | One-based inclusive range — first three SKUs. |
 | `"Line Item"."Line Total"` | `[.lineItems[].lineTotal]` | **Implicit iteration** — navigating `.field` on an array field auto-materializes, just like `[all]`. |
 | `"Line Item"[all].Quantity` | `[.lineItems[].quantity]` | Explicit form remains valid. |
 
 > **Legacy row shortcuts.** `[row N]` and `[item N]` still parse but solidify rewrites them to `[#N]`. Keep `[0]` / `[0:3]` (zero-based, jq-native) as the escape hatch when you need it.
+
+> **Range translation is intentional.** The preferred readable spelling is `[#4..#6]`: inclusive, one-based rows `4, 5, 6`. jq slices are zero-based and the end is exclusive, so the correct lowering is `[3:6]`, not `[3:5]`. Shorter `[#4..6]` remains accepted as an alias.
 
 ### Predicates: first-match and filter-all
 
@@ -102,6 +104,7 @@ BXL keeps canonical jq valid and adds a schema-aware readable layer. Labels, one
 | `"Line Item"[#4].Quantity` | `.lineItems[3].quantity` | Positive selectors are 1-based. |
 | `"Line Item"[#2..#last-1].SKU` | `[(.lineItems) as $__seq \| $__seq[1:(($__seq \| length) - 1)][].sku]` | Forward anchored range from the front to the back. |
 | `"Line Item"[#last-3..#last-1].SKU` | `[(.lineItems) as $__seq \| $__seq[(($__seq \| length) - 4):(($__seq \| length) - 1)][].sku]` | Forward anchored range fully from the back. |
+| `"Line Item"[#1, #2, #7..#9, #11].SKU` | `[(.lineItems) as $__seq \| ($__seq \| length) as $__len \| range(0; $__len) as $__idx \| select($__idx == 0 or $__idx == 1 or ($__idx >= 6 and $__idx < 9) or $__idx == 10) \| $__seq[$__idx].sku]` | Selector union. Output stays in collection order and overlaps collapse naturally. |
 | `"Line Item"[#-1].SKU` | `.lineItems[-1].sku` | jq-native alias for the last item. |
 | `"Line Item"[#odd]` | `[.lineItems \| .[range(0; length; 2)]]` | Positions 1, 3, 5 (1-based). |
 | `"Line Item"[#even]` | `[.lineItems \| .[range(1; length; 2)]]` | Positions 2, 4, 6. |
@@ -110,6 +113,8 @@ BXL keeps canonical jq valid and adds a schema-aware readable layer. Labels, one
 > **Indexing asymmetry is intentional.** Positive selectors are 1-based (`[#1]` is the first row) because they are for human-authored row access. The preferred end-relative form is `[#last-N]`: `[#last]` is the last row, `[#last-1]` second-to-last, `[#last-3]` fourth-from-last. jq-native `[#-N]` aliases are still accepted (`[#-1]` = `[#last]`, `[#-2]` = `[#last-1]`) but the readable formatter prefers the `last-N` spelling.
 
 > **Anchored ranges are forward-only.** `[#4..#last-3]`, `[#first..#last]`, and `[#last-119..#last-1]` are valid because they still move left-to-right in collection order. Reversed anchored ranges such as `[#last-3..#4]` or `[#last-1..#last-119]` are rejected instead of implying reverse traversal.
+
+> **Selector unions are set-like.** `[#1, #2, #7..#9, #11]` means "include these positions." The result always comes back in collection order, not textual order, and overlapping terms do not duplicate rows.
 
 > **Boolean size checks are regular expressions now.** CSS-style `:only`, `:empty`, `:not`, `:has`, `:is`, and `:where` are gone. Use normal BXL instead: `(X | length) = 0`, `(X | length) = 1`, `select(not ...)`, `has("x")`, or explicit `or` chains.
 
@@ -245,7 +250,7 @@ _One-based shortcut_
 _Inclusive range_
 
 ```
-SUM("Line Item"[#1..3]."Line Total")
+SUM("Line Item"[#1..#3]."Line Total")
 ```
 
 ### Excel-style string composition with `&`

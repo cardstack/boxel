@@ -68,7 +68,7 @@ The eight design decisions that make BXL feel the way it does:
 - **1-based rows** — `"Line Item"[#4]` is the fourth row. `[3]` remains the jq-native 0-based escape hatch.
 - **Implicit iteration** — `"Line Item"."Line Total"` auto-materializes across the array. No `map` for the common case.
 - **Two predicate shapes** — `[pred]` picks the first match (scalar). `[*pred]` keeps every match (array). Replaces `VLOOKUP` / `SUMIF` without a separate builtin.
-- **One positional selector family** — `[#1]`, `[#first]`, `[#last]`, `[#last-1]`, `[#4..#last-3]`, `[#odd]`, `[#even]`, `[#only]`. CSS inspired the readability; BXL keeps it all inside `[#...]`.
+- **One positional selector family** — `[#1]`, `[#first]`, `[#last]`, `[#last-1]`, `[#4..#last-3]`, `[#1, #2, #7..#9, #11]`, `[#odd]`, `[#even]`, `[#only]`. CSS inspired the readability; BXL keeps it all inside `[#...]`.
 - **Paste Excel unchanged** — `=`, `<>`, `^`, `&`, leading `=` all work. `ROUND`, `SUM`, `IF`, `VLOOKUP` match Microsoft Excel exactly.
 - **UPPERCASE is a promise, lowercase is a contribution** — `ROUND(x; 2)` is paste-compatible with Excel. `present(x)`, `when(p; q)`, `words(s)` are BXL-native.
 - **One sandbox, many surfaces** — the same language powers computed fields, form validation, visibility rules, workflow gates, access policies, and annotation targets.
@@ -287,7 +287,7 @@ If you already know jq, you already know BXL. If you don't, every pipeline jq su
 
 ### 3 · XPath · tree paths with predicates
 
-XPath normalized a compact notation for walking typed trees: dot-separated names for fields, brackets for predicates, helpers for position (`last()`, `position()`). BXL borrows the mental model and drops the axis specifiers (`/`, `//`, `@`) — there's no need for them on JSON.
+XPath normalized a compact notation for walking typed trees: dot-separated names for fields, brackets for predicates, and concise positional navigation. BXL borrows the mental model and drops the axis specifiers (`/`, `//`, `@`) — there's no need for them on JSON.
 
 ```
 XPath:  /invoice/lineItem[sku='BRAND-RED']/unitPrice
@@ -363,7 +363,7 @@ BXL still owes CSS a debt, but it is now conceptual rather than grammatical. CSS
 
 ```
 CSS:  tr:first-child, tr:last-child, tr:nth-child(2n+1)
-BXL:  "Line Item"[#first], "Line Item"[#last], "Line Item"[#odd]
+BXL:  "Line Item"[#first], "Line Item"[#last], "Line Item"[#odd], "Line Item"[#1, #2, #7..#9, #11]
 ```
 
 That's most of the debt. CSS is otherwise a different *kind* of language — a styling rule engine that runs against the DOM to produce rendered boxes, not a general expression language:
