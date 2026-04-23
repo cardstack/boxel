@@ -211,7 +211,7 @@ BXL skips Excel's cell-grid functions (`OFFSET`, `INDIRECT`, `DAVERAGE`), most s
 
 ### 2 · jq · every valid jq is valid BXL
 
-[jq-tools](https://github.com/alexxander/jq-tools) is the actual runtime. BXL compiles to canonical jq before execution; the evaluator doesn't know or care whether you wrote `.lineItems[0].sku` or `"Line Item"[#1].SKU`. The Excel helpers are added as regular jq functions via jq's native extension mechanism — no parser fork, no runtime fork.
+[jq-tools](https://github.com/alexxander/jq-tools) (MIT) is the actual runtime. BXL compiles to canonical jq before execution; the evaluator doesn't know or care whether you wrote `.lineItems[0].sku` or `"Line Item"[#1].SKU`. The Excel helpers are added as regular jq functions via jq's native extension mechanism — no parser fork, no runtime fork.
 
 ```
 jq:   .lineItems | map(select(.taxable)) | map(.lineTotal) | add
@@ -219,6 +219,8 @@ BXL:  SUM("Line Item"[*Taxable]."Line Total")
 ```
 
 If you already know jq, you already know BXL. If you don't, every pipeline jq supports still works — BXL just gives you a readable shortcut when a schema is available.
+
+**One rule about labels and pipes.** BXL's readable labels (`"Line Item"`, `"Bill To".Name`, `Subtotal`) resolve against the root record at compile time. Inside a pipe stage — `map`, `select`, `sort_by`, `any`, `all`, `reduce`, `foreach` — the context is the *current item*, addressed by jq-native paths (`.sku`, `.lineTotal`). Readable labels on the top level, `.path` inside pipes. Same convention jq users already follow, just with an optional schema-aware layer on top.
 
 ### 3 · XPath · tree paths with predicates
 
@@ -272,7 +274,7 @@ BXL:
 }
 ```
 
-XQuery constructs XML trees element-by-element, with templating inline. BXL constructs JSON objects with native object-literal syntax and readable paths for the top-level labels. Different output shapes, same design premise: one language for both querying and reshaping. BXL readable labels resolve against the root record; inside a pipe stage (`map`, `select`, `sort_by`) jq-native paths like `.lineTotal` address the current item — the same convention jq users already know.
+XQuery constructs XML trees element-by-element, with templating inline. BXL constructs JSON objects with native object-literal syntax. Different output shapes, same premise: one language for both querying and reshaping. (Note the convention from §2: readable labels at the top level, jq-native `.path` inside pipe stages like `map` and `sort_by`.)
 
 ### 5 · Schematron · the validation-rule shape, newly relevant
 
