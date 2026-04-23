@@ -407,7 +407,9 @@ async function defaultPullTargetRealm(
   realmUrl: string,
   workspaceDir: string,
 ): Promise<void> {
-  let result = await client.pull(realmUrl, workspaceDir);
+  let result = await withStdoutRedirected(() =>
+    client.pull(realmUrl, workspaceDir),
+  );
   if (result.error) {
     throw new Error(
       `Failed to pull target realm into workspace ${workspaceDir}: ${result.error}`,
@@ -423,9 +425,9 @@ async function defaultSyncWorkspaceToRealm(
   realmUrl: string,
   workspaceDir: string,
 ): Promise<void> {
-  let result = await client.sync(realmUrl, workspaceDir, {
-    preferLocal: true,
-  });
+  let result = await withStdoutRedirected(() =>
+    client.sync(realmUrl, workspaceDir, { preferLocal: true }),
+  );
   if (result.error) {
     throw new Error(`Failed to sync workspace to realm: ${result.error}`);
   }
@@ -433,6 +435,25 @@ async function defaultSyncWorkspaceToRealm(
     log.warn(
       'Workspace sync completed with errors — see prior log lines for details',
     );
+  }
+}
+
+/**
+ * Run `fn` with `console.log` temporarily redirected to `console.error`.
+ *
+ * BoxelCLIClient.pull / .sync write progress banners via `console.log`,
+ * which goes to stdout. The factory CLI also writes the final JSON
+ * summary to stdout (`--debug`), so unredirected progress lines corrupt
+ * that JSON. We send the progress lines to stderr where they belong as
+ * diagnostic output.
+ */
+async function withStdoutRedirected<T>(fn: () => Promise<T>): Promise<T> {
+  let originalLog = console.log;
+  console.log = (...args: unknown[]) => console.error(...args);
+  try {
+    return await fn();
+  } finally {
+    console.log = originalLog;
   }
 }
 
