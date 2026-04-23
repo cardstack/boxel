@@ -46,6 +46,44 @@ import {
   DEFAULT_BUILTIN_LIBRARIES,
   BuiltinLibraryName,
 } from './bxl/registry/index.js';
+export {
+  __runBoxelRuntimeWorker,
+  getBoxelValue,
+  prepareBoxelGuideAsync,
+  prepareBoxelGuide,
+  prepareBoxelRuntimeAsync,
+  prepareBoxelRuntime,
+} from './boxel-runtime.js';
+export type {
+  BoxelAnnotationActor,
+  BoxelAnnotationCardDraft,
+  BoxelAnnotationEntryDraft,
+  BoxelAnnotationKind,
+  BoxelAnnotationSpec,
+  BoxelConstraintSpec,
+  BoxelExpressionValue,
+  BoxelFieldGuideSpec,
+  BoxelFieldState,
+  BoxelFieldSuggestion,
+  BoxelFormulaPatch,
+  BoxelFormulaSpec,
+  BoxelGuideExpression,
+  BoxelGuideSpec,
+  BoxelGuideViolation,
+  BoxelLiteralOrExpression,
+  BoxelRuntimeDefinition,
+  BoxelRuntimeDelta,
+  BoxelRuntimeErrorRecord,
+  BoxelRuntimeAsyncOptions,
+  BoxelRuntimeAsyncSession,
+  BoxelRuntimeOptions,
+  BoxelRuntimeResult,
+  BoxelRuntimeRuleSummary,
+  BoxelRuntimeSession,
+  BoxelRuntimeWarning,
+  PreparedBoxelRuntimeAsync,
+  PreparedBoxelRuntime,
+} from './boxel-runtime.js';
 
 export const VERSION = '0.1.0-dev.0';
 
