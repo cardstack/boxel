@@ -27,7 +27,7 @@ If you know spreadsheets, you know the core idea. The difference: instead of cel
 
 > **Notice what changes between Excel and BXL:** no cell letters (`A1`), no absolute columns (`A:A`), no separate `ROWS()` to get the last position. Every row shows a different piece of sugar in action — labels replace cell references, implicit iteration replaces `map`, `[*pred]` replaces `SUMIF`, first-match `[pred]` replaces `VLOOKUP`, and pseudo-classes replace `INDEX`/`ROWS` arithmetic.
 
-> BXL formula arguments prefer **commas**, matching Excel style: `ROUND(.x, 2)`. Semicolons are still accepted for pasted jqxl-style input, but Solid and Readable BXL normalize them to commas. Compiled canonical jqxl keeps semicolons because jq function calls require them.  
+> BXL formula arguments prefer **commas**, matching Excel style: `ROUND(.x, 2)`. Semicolons are still accepted for pasted jq-style input, but Solid and Readable BXL normalize them to commas. Compiled canonical jq keeps semicolons because jq function calls require them.  
 > Array literals also use **commas**: `[1, 2, 3]`.
 
 ### Naming convention: UPPERCASE is Excel, lowercase is BXL-native
@@ -62,13 +62,13 @@ If you only remember ten things about BXL, remember these. Every other section e
 
 ## Readable Paths
 
-BXL keeps canonical jqxl valid and adds a schema-aware readable layer. Labels, one-based rows, predicates, and pseudo-classes compile to the same AST shape the current jqxl evaluator already understands.
+BXL keeps canonical jq valid and adds a schema-aware readable layer. Labels, one-based rows, predicates, and pseudo-classes compile to the same AST shape the jq evaluator already understands.
 
-> **Runtime shape:** BXL is a compiler front-end for jqxl v1. It rewrites readable source to canonical jqxl, then uses the same tokenizer, parser, evaluator, formula helpers, and jq builtins.
+> **Runtime shape:** BXL is a compiler front-end for jq. It rewrites readable source to canonical jq, then uses the same tokenizer, parser, evaluator, formula helpers, and jq builtins.
 
 ### Labels, rows, and implicit iteration
 
-| Readable BXL | Canonical jqxl | Meaning |
+| Readable BXL | Canonical jq | Meaning |
 | --- | --- | --- |
 | `Total` | `.total` | Bare labels work when the schema resolves them unambiguously. |
 | `"Bill To"."Country Code"` | `.billTo.countryCode` | Quoted labels handle spaces and punctuation. |
@@ -81,7 +81,7 @@ BXL keeps canonical jqxl valid and adds a schema-aware readable layer. Labels, o
 
 ### Predicates: first-match and filter-all
 
-| Readable BXL | Canonical jqxl | Shape |
+| Readable BXL | Canonical jq | Shape |
 | --- | --- | --- |
 | `"Line Item"[SKU = "COPY-04"].Quantity` | `first(.lineItems[] \| select(.sku == "COPY-04")).quantity` | **First match** — scalar result. |
 | `"Line Item"[*Category = "Service"]` | `[.lineItems[] \| select(.category == "Service")]` | **Filter all** — `[*pred]` keeps every matching row. |
@@ -94,7 +94,7 @@ BXL keeps canonical jqxl valid and adds a schema-aware readable layer. Labels, o
 
 ### Structural pseudo-classes
 
-| Readable BXL | Canonical jqxl | Notes |
+| Readable BXL | Canonical jq | Notes |
 | --- | --- | --- |
 | `"Line Item":first.SKU` | `.lineItems[0].sku` | First item. |
 | `"Line Item":last."Line Total"` | `.lineItems[-1].lineTotal` | Last item. |
@@ -116,7 +116,7 @@ _Readable BXL · Excel-style comparisons_
 ROUND(Subtotal * "Tax Rate" / 100, 2) = "Tax Amount"
 ```
 
-_Canonical jqxl · runtime form_
+_Canonical jq · runtime form_
 
 ```
 ROUND(.subtotal * .taxRate / 100; 2) == .taxAmount
@@ -137,7 +137,7 @@ ROUND(.subtotal * .taxRate / 100; 2) == .taxAmount
 
 > **Lint targets:** missing quotes around multi-word labels, root labels after a top-level pipe, legacy `[row N]` shortcuts, predicate selectors that return only the first match, top-level `==` (info-level `prefer-excel-equality` — BXL canonicalizes to `=`), deferred positional pseudo-classes, and helper-dependent predicates such as `IN`.
 
-> **Forgiving text fields:** BXL accepts extra whitespace, mixed capitalization for readable keywords/selectors/predicates/pseudo-classes, lowercase or mixed-case formula function names, comma-separated or semicolon-separated formula arguments, uppercase booleans, and unquoted multi-word labels when the schema resolves them unambiguously. The canonical compiler output still normalizes to jqxl.
+> **Forgiving text fields:** BXL accepts extra whitespace, mixed capitalization for readable keywords/selectors/predicates/pseudo-classes, lowercase or mixed-case formula function names, comma-separated or semicolon-separated formula arguments, uppercase booleans, and unquoted multi-word labels when the schema resolves them unambiguously. The canonical compiler output still normalizes to jq.
 
 ## Excel Paste Compatibility
 
@@ -308,7 +308,7 @@ IF("Year End" <> "Start Year", 2 ^ 8, 0)
 
 ## Use Cases
 
-Eleven real-world patterns that combine readable labels, jq pipelines, and Excel-style formulas. Each one falls apart without all three. Expressions below are idiomatic BXL (equality is `=`, inequality `<>`); the canonical jqxl form is available through the workbench.
+Eleven real-world patterns that combine readable labels, jq pipelines, and Excel-style formulas. Each one falls apart without all three. Expressions below are idiomatic BXL (equality is `=`, inequality `<>`); the canonical jq form is available through the workbench.
 
 ### 1 · Invoice integrity auditor
 
@@ -1247,7 +1247,7 @@ In Boxel, BXL expressions live inside `computeVia` on a field definition. The fi
 _Basic pattern_
 
 ```
-import { expression } from './jqxl';
+import { expression } from '@cardstack/bxl';
 
 @field total = contains(NumberField, {
   computeVia: expression('ROUND(.subtotal * (1 + .taxRate), 2)'),
