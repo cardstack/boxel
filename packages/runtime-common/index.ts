@@ -232,15 +232,15 @@ export interface PrerenderResponseMeta {
 }
 
 // The shape persisted to `boxel_index.timing_diagnostics`. Extends
-// `RenderTimeoutDiagnostics` with write-side stamps applied at
-// `IndexWriter.updateEntry` time:
+// `RenderTimeoutDiagnostics` (which already carries `requestId`) with
+// two write-side stamps applied at `IndexWriter.updateEntry` time:
 //
-//   - `invalidationId` — one UUID per `Batch.invalidate()` call; every
-//     row touched by the same fan-out shares it, so operators can
-//     `SELECT ... WHERE timing_diagnostics->>'invalidationId' = '<id>'`
-//     and see the whole batch.
-//   - `indexedAt`      — wall-clock the write happened.
-//   - `requestId`      — HTTP correlation ID (HTTP path only).
+//   - `invalidationId` — one UUID per `Batch`; every row touched by
+//     the same indexing pass (incremental fan-out or fromScratch)
+//     shares it, so operators can `SELECT ... WHERE
+//     timing_diagnostics->>'invalidationId' = '<id>'` and see the
+//     whole batch.
+//   - `indexedAt` — wall-clock the write happened.
 //
 // All fields are optional because writers populate incrementally:
 // render-side fields come from the Prerenderer's response meta, the
@@ -248,7 +248,6 @@ export interface PrerenderResponseMeta {
 // pieces that aren't applicable (e.g. non-timeout renders have no
 // `renderStage`, in-process callers have no `requestId`).
 export interface TimingDiagnostics extends RenderTimeoutDiagnostics {
-  requestId?: string;
   invalidationId?: string;
   indexedAt?: number;
 }

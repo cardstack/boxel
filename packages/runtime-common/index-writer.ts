@@ -680,7 +680,12 @@ export class Batch {
   }
 
   private async tombstoneEntries(invalidations: string[]) {
-    // insert tombstone into next version of the realm index
+    // insert tombstone into next version of the realm index. Stamp
+    // the current `invalidationId` + `indexedAt` on every tombstone
+    // so fan-out queries (`WHERE timing_diagnostics->>'invalidationId'
+    // = <id>`) also surface the delete rows for this pass — otherwise
+    // tombstones would inherit a stale ID from a prior write or stay
+    // NULL entirely, misattributing deletes in the grouping view.
     let existingTypes = await this.existingIndexTypes(invalidations);
     let columns = [
       'url',
@@ -689,7 +694,18 @@ export class Batch {
       'realm_version',
       'realm_url',
       'is_deleted',
+      'timing_diagnostics',
     ].map((c) => [c]);
+    let tombstoneDiagnostics: TimingDiagnostics = {
+      invalidationId: this.#currentInvalidationId,
+      indexedAt: Date.now(),
+    };
+    // `timing_diagnostics` is a jsonb column. This helper uses
+    // `upsertMultipleRows` which passes each value through `param()`
+    // as a raw `PgPrimitive`, so we pre-serialize the JSON here (the
+    // regular `updateEntry` path reaches jsonb via `asExpressions`
+    // with a `jsonFields` list, which does the same thing).
+    let tombstoneDiagnosticsJson = JSON.stringify(tombstoneDiagnostics);
     let rows = invalidations.flatMap((id) => {
       let types = existingTypes.get(id);
       if (!types || types.length === 0) {
@@ -705,6 +721,7 @@ export class Batch {
           this.realmVersion,
           this.realmURL.href,
           true,
+          tombstoneDiagnosticsJson,
         ].map((v) => [param(v)]),
       );
     });

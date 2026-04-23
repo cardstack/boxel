@@ -4,6 +4,7 @@ import {
   logger,
   type PrerenderMeta,
   type RenderError,
+  type RenderTimeoutDiagnostics,
 } from '@cardstack/runtime-common';
 import { prerenderRenderTimeoutMs } from './prerender-constants';
 
@@ -1186,7 +1187,7 @@ export async function withTimeout<T>(
     // `response.meta.diagnostics` before returning, where the indexer
     // reads them and persists into `timing_diagnostics`. The field is
     // dropped from the final response.
-    let diagnostics: Record<string, unknown> = {
+    let diagnostics: RenderTimeoutDiagnostics = {
       ...(richDiagnostics?.renderStage
         ? { renderStage: richDiagnostics.renderStage }
         : {}),
