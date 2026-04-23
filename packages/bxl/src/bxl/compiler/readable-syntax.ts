@@ -2041,14 +2041,28 @@ export function rewriteWordBinaryOperators(
       // Inside predicate brackets? Let compilePredicate handle it.
       if (depthAt[i] > 0) continue;
       // Formula-call form (FUNC(...))? Let function-call compiler handle it.
+      // Distinguish `STARTSWITH(x; y)` (call — skip) from `x STARTSWITH (y)`
+      // (infix whose RHS happens to be a grouped expression — rewrite).
+      // Adjacent `(` = call; whitespace between = infix + paren group.
       const next = tokens[i + 1];
-      if (next && next.type === 'punc' && next.value === '(') continue;
+      if (
+        next &&
+        next.type === 'punc' &&
+        next.value === '(' &&
+        next.start === tok.end
+      ) {
+        continue;
+      }
       const lhs = excelOperandExtent(tokens, i, -1);
       const rhs = excelOperandExtent(tokens, i, +1);
       if (!lhs || !rhs) continue;
       const lhsText = current.slice(lhs.start, lhs.end);
       const rhsText = current.slice(rhs.start, rhs.end);
-      const replacement = `((${lhsText}) | ${jqName}(${rhsText}))`;
+      // Capture root as $__ctx so RHS-side `.field` paths resolve against
+      // root, not against the piped-in LHS value. Without this, any RHS
+      // that traverses `.foo` tries to index into the LHS string and jq
+      // throws "Cannot index string with string".
+      const replacement = `(. as $__ctx | (${lhsText}) | ${jqName}($__ctx | ${rhsText}))`;
       current = current.slice(0, lhs.start) + replacement + current.slice(rhs.end);
       changed = true;
       rewroteThisPass = true;
@@ -2132,7 +2146,14 @@ function excelOperandExtent(
       const prev = tokens[anchor - 1];
       if (prev.type === 'op' && (prev.value === '.' || prev.value === '?.')) {
         const beforeDot = tokens[anchor - 2];
-        if (beforeDot && ['ident', 'number', 'string', 'punc'].includes(beforeDot.type)) {
+        // Extend through ident/number/string (dotted chain) or a closing
+        // bracket (subscript / call chain). `;` and `,` are also `punc`
+        // tokens but they must stop the walker — they separate function
+        // args or jq generators. See bug #7 regression.
+        const okPunc =
+          beforeDot && beforeDot.type === 'punc' &&
+          (beforeDot.value === ')' || beforeDot.value === ']' || beforeDot.value === '}');
+        if (beforeDot && (okPunc || ['ident', 'number', 'string'].includes(beforeDot.type))) {
           anchor -= 2;
           continue;
         }

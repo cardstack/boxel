@@ -48,21 +48,24 @@ function assertEval(bxl: string, expected: unknown, label: string) {
 // Bug #1 — word operators STARTSWITH / ENDSWITH / CONTAINS as infix
 // ─────────────────────────────────────────────────────────────────────────
 
+// Schema-mode adds `. as $root | ...` wrapping + rewrites fields to
+// `$root.field`. The word-op rewriter's own `$__ctx` binding composes
+// with it. See Bug #6 below for the why.
 assertCompile(
   'Donor STARTSWITH "Grace"',
-  '((.donor) | startswith("Grace"))',
-  '#1 STARTSWITH infix → pipe form',
+  '. as $root |(. as $__ctx |($root.donor) | startswith($__ctx | "Grace"))',
+  '#1 STARTSWITH infix → pipe form with $__ctx binding',
 );
 
 assertCompile(
   'Campaign ENDSWITH "Drive"',
-  '((.campaign) | endswith("Drive"))',
-  '#1 ENDSWITH infix → pipe form',
+  '. as $root |(. as $__ctx |($root.campaign) | endswith($__ctx | "Drive"))',
+  '#1 ENDSWITH infix → pipe form with $__ctx binding',
 );
 
 assertCompile(
   'Email CONTAINS "@"',
-  '((.email) | contains("@"))',
+  '. as $root |(. as $__ctx |($root.email) | contains($__ctx | "@"))',
   '#1 CONTAINS infix → pipe form (arity-1, not invalid contains/2)',
 );
 
@@ -171,6 +174,78 @@ strictEqual(
   evaluateBxl('"\\(.x)/\\(.y)"', { x: 120, y: 80 }).value,
   '120/80',
   '#4 string interpolation evaluates correctly',
+);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Bug #5 — `X WORDOP (expr)` with whitespace before `(` was misread as
+// formula-call form and left as `x endswith(expr)` (invalid jq).
+// Fix: distinguish adjacent `(` (call) from separated `(` (infix RHS
+// grouping) by checking token position `next.start === tok.end`.
+// Surfaced by electric-haddock invoice's `backupCode ENDSWITH (.age | tostring)`
+// use case.
+// ─────────────────────────────────────────────────────────────────────────
+
+assertCompile(
+  'Campaign ENDSWITH ("Drive")',
+  '. as $root |(. as $__ctx |($root.campaign) | endswith($__ctx |("Drive")))',
+  '#5 ENDSWITH followed by space+( is infix, not formula call',
+);
+
+assertCompile(
+  'Campaign CONTAINS (Campaign)',
+  '. as $root |(. as $__ctx |($root.campaign) | contains($__ctx |($root.campaign)))',
+  '#5 CONTAINS followed by space+( is infix, not formula call',
+);
+
+// Adjacent `(` (no space) still means formula call — preserve that.
+assertCompile(
+  'STARTSWITH(Donor; "Grace")',
+  'startswith(.donor; "Grace")',
+  '#5 STARTSWITH( with no space = formula call form, still untouched',
+);
+
+assertEval(
+  'Campaign ENDSWITH ("Drive")',
+  true,
+  '#5 grouped-RHS evaluates (was jq parse error before fix)',
+);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Bug #6 — infix word-ops with a non-literal RHS evaluated `.field` on
+// the piped-in LHS value rather than the root. Symptom: jq threw
+// "Cannot index string with string" for `.email STARTSWITH .username`.
+// Fix: capture root as `$__ctx` before the pipe and re-apply it to RHS:
+//   (. as $__ctx | (lhs) | op($__ctx | rhs))
+// ─────────────────────────────────────────────────────────────────────────
+
+assertCompile(
+  'Email STARTSWITH Donor',
+  '. as $root |(. as $__ctx |($root.email) | startswith($__ctx | $root.donor))',
+  '#6 field-RHS binds root via $__ctx (composes with $root schema wrap)',
+);
+
+assertEval(
+  'Campaign STARTSWITH Campaign',
+  true,
+  '#6 self-reference on RHS evaluates (was "Cannot index string with string")',
+);
+
+strictEqual(
+  evaluateBxl(
+    '.bio CONTAINS .name',
+    { bio: 'hello grace', name: 'grace' },
+  ).value,
+  true,
+  '#6 cross-field RHS evaluates correctly',
+);
+
+strictEqual(
+  evaluateBxl(
+    '.code ENDSWITH (.age | tostring)',
+    { code: 'ADA42', age: 42 },
+  ).value,
+  true,
+  '#6 grouped-RHS with internal pipe evaluates correctly',
 );
 
 console.log('BXL compiler bug regressions: all checks passed');
