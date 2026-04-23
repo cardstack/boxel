@@ -884,8 +884,11 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 201);
           assert.strictEqual(response.body['atomic:results'].length, 1);
 
-          // GET reads via the index; under load the index write can briefly
-          // lag the 201 response, so poll until it catches up.
+          // GET reads via the index; under CI load the index write can
+          // lag the 201 response, so poll until it catches up. Match the
+          // 30s budget publish-unpublish-realm-test uses for prerender/index
+          // waits — the common failure mode is a slow first-instance
+          // prerender, not a stuck one.
           let updatedCard: LooseSingleCardDocument | undefined;
           await waitUntil(
             async () => {
@@ -898,8 +901,8 @@ module(basename(__filename), function () {
               return updatedCard?.data?.attributes?.firstName === 'Updated';
             },
             {
-              timeout: 3000,
-              interval: 50,
+              timeout: 30_000,
+              interval: 100,
               timeoutMessage:
                 'updated firstName was not visible via /update-person',
             },
