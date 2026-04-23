@@ -1181,6 +1181,71 @@ export async function withTimeout<T>(
         ` evaluating=${richDiagnostics?.currentlyEvaluatingModule ?? 'none'}` +
         ` DOM:\n${dom?.trim()}`,
     );
+    // Diagnostics live on the inner `SerializedError` (not the outer
+    // `RenderError` wrapper) because that's what the indexer persists
+    // into `boxel_index.error_doc` — the outer wrapper is transient
+    // plumbing between the prerender response and the index writer.
+    let diagnostics: Record<string, unknown> = {
+      ...(richDiagnostics?.renderStage
+        ? { renderStage: richDiagnostics.renderStage }
+        : {}),
+      ...(typeof richDiagnostics?.stageAgeMs === 'number'
+        ? { stageAgeMs: richDiagnostics.stageAgeMs }
+        : {}),
+      ...(Array.isArray(richDiagnostics?.cardDocsInFlight)
+        ? { cardDocsInFlight: richDiagnostics!.cardDocsInFlight }
+        : {}),
+      ...(Array.isArray(richDiagnostics?.fileMetaDocsInFlight)
+        ? { fileMetaDocsInFlight: richDiagnostics!.fileMetaDocsInFlight }
+        : {}),
+      ...(Array.isArray(richDiagnostics?.inFlightModuleImports)
+        ? { inFlightModuleImports: richDiagnostics!.inFlightModuleImports }
+        : {}),
+      ...(richDiagnostics?.currentlyEvaluatingModule !== undefined
+        ? {
+            currentlyEvaluatingModule:
+              richDiagnostics.currentlyEvaluatingModule,
+          }
+        : {}),
+      ...(Array.isArray(richDiagnostics?.recentModuleEvaluations)
+        ? {
+            recentModuleEvaluations: richDiagnostics!.recentModuleEvaluations,
+          }
+        : {}),
+      ...(Array.isArray(richDiagnostics?.queryLoadsInFlight)
+        ? {
+            queryLoadsInFlight: richDiagnostics!.queryLoadsInFlight as Array<
+              Record<string, unknown>
+            >,
+          }
+        : {}),
+      ...(Array.isArray(richDiagnostics?.recentQueryLoads)
+        ? {
+            recentQueryLoads: richDiagnostics!.recentQueryLoads as Array<
+              Record<string, unknown>
+            >,
+          }
+        : {}),
+      ...(Array.isArray(richDiagnostics?.cardDocLoadsInFlight)
+        ? { cardDocLoadsInFlight: richDiagnostics!.cardDocLoadsInFlight }
+        : {}),
+      ...(Array.isArray(richDiagnostics?.fileMetaDocLoadsInFlight)
+        ? {
+            fileMetaDocLoadsInFlight: richDiagnostics!.fileMetaDocLoadsInFlight,
+          }
+        : {}),
+      ...(Array.isArray(richDiagnostics?.recentCardDocLoads)
+        ? { recentCardDocLoads: richDiagnostics!.recentCardDocLoads }
+        : {}),
+      ...(Array.isArray(richDiagnostics?.recentFileMetaLoads)
+        ? { recentFileMetaLoads: richDiagnostics!.recentFileMetaLoads }
+        : {}),
+      ...(typeof docsInFlight === 'number' ? { docsInFlight } : {}),
+      ...(dom ? { capturedDom: dom } : {}),
+      ...(typeof timerSummary === 'string' && timerSummary.trim()
+        ? { blockedTimerSummary: timerSummary.trim() }
+        : {}),
+    };
     let timeoutError: RenderError = {
       type: 'instance-error',
       error: {
@@ -1189,70 +1254,9 @@ export async function withTimeout<T>(
         title: 'Render timeout',
         message,
         additionalErrors: null,
+        diagnostics,
       },
       evict: true,
-      diagnostics: {
-        ...(richDiagnostics?.renderStage
-          ? { renderStage: richDiagnostics.renderStage }
-          : {}),
-        ...(typeof richDiagnostics?.stageAgeMs === 'number'
-          ? { stageAgeMs: richDiagnostics.stageAgeMs }
-          : {}),
-        ...(Array.isArray(richDiagnostics?.cardDocsInFlight)
-          ? { cardDocsInFlight: richDiagnostics!.cardDocsInFlight }
-          : {}),
-        ...(Array.isArray(richDiagnostics?.fileMetaDocsInFlight)
-          ? { fileMetaDocsInFlight: richDiagnostics!.fileMetaDocsInFlight }
-          : {}),
-        ...(Array.isArray(richDiagnostics?.inFlightModuleImports)
-          ? { inFlightModuleImports: richDiagnostics!.inFlightModuleImports }
-          : {}),
-        ...(richDiagnostics?.currentlyEvaluatingModule !== undefined
-          ? {
-              currentlyEvaluatingModule:
-                richDiagnostics.currentlyEvaluatingModule,
-            }
-          : {}),
-        ...(Array.isArray(richDiagnostics?.recentModuleEvaluations)
-          ? {
-              recentModuleEvaluations: richDiagnostics!.recentModuleEvaluations,
-            }
-          : {}),
-        ...(Array.isArray(richDiagnostics?.queryLoadsInFlight)
-          ? {
-              queryLoadsInFlight: richDiagnostics!.queryLoadsInFlight as Array<
-                Record<string, unknown>
-              >,
-            }
-          : {}),
-        ...(Array.isArray(richDiagnostics?.recentQueryLoads)
-          ? {
-              recentQueryLoads: richDiagnostics!.recentQueryLoads as Array<
-                Record<string, unknown>
-              >,
-            }
-          : {}),
-        ...(Array.isArray(richDiagnostics?.cardDocLoadsInFlight)
-          ? { cardDocLoadsInFlight: richDiagnostics!.cardDocLoadsInFlight }
-          : {}),
-        ...(Array.isArray(richDiagnostics?.fileMetaDocLoadsInFlight)
-          ? {
-              fileMetaDocLoadsInFlight:
-                richDiagnostics!.fileMetaDocLoadsInFlight,
-            }
-          : {}),
-        ...(Array.isArray(richDiagnostics?.recentCardDocLoads)
-          ? { recentCardDocLoads: richDiagnostics!.recentCardDocLoads }
-          : {}),
-        ...(Array.isArray(richDiagnostics?.recentFileMetaLoads)
-          ? { recentFileMetaLoads: richDiagnostics!.recentFileMetaLoads }
-          : {}),
-        ...(typeof docsInFlight === 'number' ? { docsInFlight } : {}),
-        ...(dom ? { capturedDom: dom } : {}),
-        ...(typeof timerSummary === 'string' && timerSummary.trim()
-          ? { blockedTimerSummary: timerSummary.trim() }
-          : {}),
-      },
     };
     if (typeof timerSummary === 'string' && timerSummary.trim()) {
       timeoutError.error.stack = timerSummary.trim();

@@ -376,8 +376,11 @@ export class Prerenderer {
   }
 
   // CS-10872: walk any RenderError embedded in a response and merge
-  // server-observed timings into its `diagnostics` block. The
-  // prerender server's HTTP layer additionally attaches a
+  // server-observed timings into the inner `SerializedError`'s
+  // `diagnostics` block. Diagnostics must live on the inner
+  // `SerializedError` (not the outer `RenderError` wrapper) because
+  // that's what the indexer persists into `boxel_index.error_doc`.
+  // The prerender server's HTTP layer additionally attaches a
   // `requestId` via `decorateRenderErrorDiagnostics` — this method
   // covers the in-process path (test harnesses, co-located callers)
   // so the diagnostics payload is consistent regardless of how the
@@ -396,13 +399,21 @@ export class Prerenderer {
       renderElapsedMs: timings.renderMs,
       totalElapsedMs: totalMs,
     };
-    let visit = (err: unknown) => {
-      if (!err || typeof err !== 'object') return;
-      let e = err as { diagnostics?: Record<string, unknown> };
-      if (!e.diagnostics || typeof e.diagnostics !== 'object') {
-        e.diagnostics = {};
+    // `wrapper` is a RenderError / ErrorEntry (with an inner
+    // `error: SerializedError`); attach to the inner so diagnostics
+    // survive serialization into `error_doc`.
+    // `wrapper` is a RenderError / ErrorEntry (with an inner
+    // `error: SerializedError`); attach to the inner so diagnostics
+    // survive serialization into `error_doc`.
+    let visit = (wrapper: unknown) => {
+      if (!wrapper || typeof wrapper !== 'object') return;
+      let w = wrapper as { error?: unknown };
+      if (!w.error || typeof w.error !== 'object') return;
+      let inner = w.error as { diagnostics?: Record<string, unknown> };
+      if (!inner.diagnostics || typeof inner.diagnostics !== 'object') {
+        inner.diagnostics = {};
       }
-      Object.assign(e.diagnostics, serverContext);
+      Object.assign(inner.diagnostics, serverContext);
     };
     let r = response as Record<string, unknown>;
     visit(r.error);

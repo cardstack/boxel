@@ -36,6 +36,41 @@ type PrerenderServer = Server & {
 let log = logger('prerender-server');
 const defaultPrerenderServerPort = 4221;
 
+// CS-10872: walk any RenderError embedded in a response and stamp
+// the per-request `requestId` onto the inner `SerializedError`'s
+// `diagnostics` block (the outer wrapper is transient — only the
+// inner is persisted into `boxel_index.error_doc`). The
+// launch/waits/render/total timings are already attached inside
+// Prerenderer (so they land regardless of whether the caller came
+// through HTTP or in-process tests); this layer just adds the
+// HTTP-only correlation id for cross-log grepping. Exported so the
+// diagnostics-persistence regression tests can exercise it directly.
+export function decorateRenderErrorDiagnostics(
+  response: any,
+  requestId: string,
+): void {
+  if (!response || typeof response !== 'object') {
+    return;
+  }
+  let visit = (wrapper: any) => {
+    if (!wrapper || typeof wrapper !== 'object') return;
+    let inner = wrapper.error;
+    if (!inner || typeof inner !== 'object') return;
+    if (!inner.diagnostics || typeof inner.diagnostics !== 'object') {
+      inner.diagnostics = {};
+    }
+    inner.diagnostics.requestId = requestId;
+  };
+  visit(response.error);
+  visit((response as any).pageUnusableError);
+  for (let key of ['card', 'fileExtract', 'fileRender'] as const) {
+    let sub = response[key];
+    if (sub && typeof sub === 'object') {
+      visit((sub as any).error);
+    }
+  }
+}
+
 export function buildPrerenderApp(options: {
   serverURL: string;
   maxPages?: number;
@@ -121,36 +156,6 @@ export function buildPrerenderApp(options: {
       timedOut: boolean;
     };
   };
-
-  // CS-10872: walk any RenderError embedded in a response and stamp
-  // the per-request `requestId` onto its `diagnostics` block. The
-  // launch/waits/render/total timings are already attached inside
-  // Prerenderer (so they land regardless of whether the caller came
-  // through HTTP or in-process tests); this layer just adds the
-  // HTTP-only correlation id for cross-log grepping.
-  function decorateRenderErrorDiagnostics(
-    response: any,
-    requestId: string,
-  ): void {
-    if (!response || typeof response !== 'object') {
-      return;
-    }
-    let visit = (err: any) => {
-      if (!err || typeof err !== 'object') return;
-      if (!err.diagnostics || typeof err.diagnostics !== 'object') {
-        err.diagnostics = {};
-      }
-      err.diagnostics.requestId = requestId;
-    };
-    visit(response.error);
-    visit((response as any).pageUnusableError);
-    for (let key of ['card', 'fileExtract', 'fileRender'] as const) {
-      let sub = response[key];
-      if (sub && typeof sub === 'object') {
-        visit((sub as any).error);
-      }
-    }
-  }
 
   let isNonEmptyString = (value: unknown): value is string =>
     typeof value === 'string' && value.trim().length > 0;
