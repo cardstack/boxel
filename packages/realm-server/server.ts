@@ -918,6 +918,22 @@ export class RealmServer {
       publishable: true,
     };
     writeJSONSync(join(realmPath, '.realm.json'), info);
+    writeJSONSync(join(realmPath, 'realm.json'), {
+      data: {
+        type: 'card',
+        attributes: {
+          name,
+          ...(iconURL ? { iconURL } : {}),
+          ...(backgroundURL ? { backgroundURL } : {}),
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/realm-config',
+            name: 'RealmConfig',
+          },
+        },
+      },
+    });
     writeJSONSync(join(realmPath, 'index.json'), {
       data: {
         type: 'card',

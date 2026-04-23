@@ -198,6 +198,16 @@ export type RealmInfo = {
 
 const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
 
+// Fields owned by the RealmConfig card instance at /realm.json. Anything not
+// in this set is still written to the legacy .realm.json sidecar until
+// CS-10053 / CS-10055 move the remaining flags off-file.
+const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
+  'name',
+  'backgroundURL',
+  'iconURL',
+  'hostRoutingRules',
+]);
+
 export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
@@ -4546,24 +4556,81 @@ export class Realm {
       });
     }
 
-    let fileURL = this.paths.fileURL(`.realm.json`);
-    let realmConfigPath: LocalPath = this.paths.local(fileURL);
-    let realmConfig: Record<string, unknown> = {};
-    let existingConfig = await this.readFileAsText(realmConfigPath, undefined);
-    if (existingConfig?.content) {
-      try {
-        realmConfig = JSON.parse(existingConfig.content);
-      } catch (e: any) {
-        return systemError({
-          requestContext,
-          message: `Unable to parse existing realm config: ${e.message}`,
-        });
+    let cardAttrs: Record<string, unknown> = {};
+    let sidecarAttrs: Record<string, unknown> = {};
+    for (let [key, value] of Object.entries(attributes)) {
+      if (REALM_CONFIG_CARD_PROPERTIES.has(key)) {
+        cardAttrs[key] = value;
+      } else {
+        sidecarAttrs[key] = value;
       }
     }
 
-    Object.assign(realmConfig, attributes);
-    let serializedConfig = JSON.stringify(realmConfig, null, 2) + '\n';
-    await this.write(realmConfigPath, serializedConfig);
+    if (Object.keys(cardAttrs).length > 0) {
+      let cardPath: LocalPath = this.paths.local(
+        this.paths.fileURL('realm.json'),
+      );
+      let cardDoc: {
+        data: {
+          type: string;
+          attributes?: Record<string, unknown>;
+          meta: { adoptsFrom: { module: string; name: string } };
+        };
+      } = {
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      };
+      let existingCard = await this.readFileAsText(cardPath, undefined);
+      if (existingCard?.content) {
+        try {
+          cardDoc = JSON.parse(existingCard.content);
+          cardDoc.data = cardDoc.data ?? ({} as any);
+          cardDoc.data.attributes = cardDoc.data.attributes ?? {};
+        } catch (e: any) {
+          return systemError({
+            requestContext,
+            message: `Unable to parse existing realm config card: ${e.message}`,
+          });
+        }
+      }
+      Object.assign(cardDoc.data.attributes!, cardAttrs);
+      await this.write(cardPath, JSON.stringify(cardDoc, null, 2) + '\n');
+    }
+
+    if (Object.keys(sidecarAttrs).length > 0) {
+      let realmConfigPath: LocalPath = this.paths.local(
+        this.paths.fileURL('.realm.json'),
+      );
+      let realmConfig: Record<string, unknown> = {};
+      let existingConfig = await this.readFileAsText(
+        realmConfigPath,
+        undefined,
+      );
+      if (existingConfig?.content) {
+        try {
+          realmConfig = JSON.parse(existingConfig.content);
+        } catch (e: any) {
+          return systemError({
+            requestContext,
+            message: `Unable to parse existing realm config: ${e.message}`,
+          });
+        }
+      }
+      Object.assign(realmConfig, sidecarAttrs);
+      await this.write(
+        realmConfigPath,
+        JSON.stringify(realmConfig, null, 2) + '\n',
+      );
+    }
+
     this.#cachedRealmInfo = null;
 
     let realmInfo = await this.parseRealmInfo();
