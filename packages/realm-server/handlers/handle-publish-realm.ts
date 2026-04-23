@@ -42,6 +42,7 @@ import type { CreateRoutesArgs } from '../routes';
 import type { RealmServerTokenClaim } from '../utils/jwt';
 import { registerUser } from '../synapse';
 import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
+import { mirrorPublishedRealmToRegistry } from '../lib/realm-registry-writes';
 
 const log = logger('handle-publish');
 
@@ -438,6 +439,17 @@ export default function handlePublishRealm({
         removeSync(publishedRealmPath);
         throw dbError;
       }
+
+      // Phase 1 dual-write: mirror the published realm into realm_registry.
+      // Logs and continues on failure (shadow data; boot-time backfill
+      // re-syncs on next boot). See lib/realm-registry-writes.ts.
+      await mirrorPublishedRealmToRegistry(dbAdapter, {
+        publishedRealmURL,
+        publishedRealmId,
+        ownerUsername: realmUsername,
+        sourceRealmURL,
+        lastPublishedAt: Number(lastPublishedAt),
+      });
 
       let response = createResponse({
         body: JSON.stringify(

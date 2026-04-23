@@ -185,6 +185,7 @@ import './run-command-task-test';
 import './realm-endpoints-test';
 import './realm-endpoints/dependencies-test';
 import './realm-registry-backfill-test';
+import './realm-registry-writes-test';
 import './realm-endpoints/directory-test';
 import './realm-endpoints/info-test';
 import './realm-endpoints/invalidate-urls-test';

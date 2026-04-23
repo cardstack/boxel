@@ -23,6 +23,7 @@ import {
 import type { CreateRoutesArgs } from '../routes';
 import type { RealmServerTokenClaim } from '../utils/jwt';
 import { removeMountedRealm } from './realm-destruction-utils';
+import { deleteFromRegistryByUrl } from '../lib/realm-registry-writes';
 
 const log = logger('handle-unpublish');
 
@@ -125,6 +126,9 @@ export default function handleUnpublishRealm({
         `DELETE FROM published_realms WHERE published_realm_url =`,
         param(publishedRealmURL),
       ]);
+
+      // Phase 1 dual-write: mirror the delete into realm_registry.
+      await deleteFromRegistryByUrl(dbAdapter, publishedRealmURL);
 
       await removeRealmPermissions(dbAdapter, new URL(publishedRealmURL));
 
