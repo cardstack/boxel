@@ -30,6 +30,10 @@ import {
   destroyMountedRealm,
   removeRealmDatabaseArtifacts,
 } from './realm-destruction-utils';
+import {
+  deleteFromRegistryByUrl,
+  deletePublishedFromRegistryBySource,
+} from '../lib/realm-registry-writes';
 
 interface DeleteRealmJSON {
   data: {
@@ -184,6 +188,12 @@ export default function handleDeleteRealm({
         `DELETE FROM published_realms WHERE source_realm_url =`,
         param(realmURL),
       ]);
+
+      // Phase 1 dual-write: remove the source realm's registry row plus
+      // every published row sourced from it. Both helpers log and continue
+      // on failure; drift self-heals on next boot.
+      await deletePublishedFromRegistryBySource(dbAdapter, realmURL);
+      await deleteFromRegistryByUrl(dbAdapter, realmURL);
 
       let { nameExpressions, valueExpressions } = asExpressions({
         removed_at: Math.floor(Date.now() / 1000),
