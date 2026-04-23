@@ -13,7 +13,7 @@ import {
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
 import { RealmServer } from './server';
-import { resolve } from 'path';
+import { join, resolve } from 'path';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -31,7 +31,12 @@ import {
   deregisterEnvironment,
 } from './lib/dev-service-registry';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
-import { runRegistryBackfill } from './lib/realm-registry-backfill';
+import { runRegistryBackfillWithAdvisoryLock } from './lib/realm-registry-backfill';
+import {
+  RealmRegistryReconciler,
+  type RealmRegistryRow,
+} from './lib/realm-registry-reconciler';
+import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
 (globalThis as any).ContentTagGlobal = ContentTagGlobal;
 
@@ -273,6 +278,7 @@ const getIndexHTML = async () => {
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
+  let reconciler: RealmRegistryReconciler | undefined;
 
   if (workerManagerUrl) {
     await waitForWorkerManager(workerManagerUrl);
@@ -305,7 +311,9 @@ const getIndexHTML = async () => {
   // and on-disk published realms. Runs before Realm construction so the
   // registry reflects known state before anything mounts. Shadow data only in
   // Phase 1: no reader depends on these rows yet (see CS-10888, CS-10889).
-  await runRegistryBackfill({
+  // Guarded by a pg advisory lock so, in a future multi-instance deployment,
+  // only one process does the disk scan per startup wave (CS-10890).
+  await runRegistryBackfillWithAdvisoryLock(dbAdapter, {
     dbAdapter,
     realmsRootPath,
     serverURL: new URL(String(serverURL)),
@@ -428,13 +436,19 @@ const getIndexHTML = async () => {
     }
     httpServer.closeAllConnections();
     httpServer.close(() => {
-      queue.destroy(); // warning this is async
-      dbAdapter.close(); // warning this is async
-      console.log(`realm server on port ${stopPort} has stopped`);
-      if (notifyParent && process.send) {
-        process.send('stopped');
-      }
-      process.exit(0);
+      (async () => {
+        await reconciler?.shutDown();
+        queue.destroy(); // warning this is async
+        dbAdapter.close(); // warning this is async
+        console.log(`realm server on port ${stopPort} has stopped`);
+        if (notifyParent && process.send) {
+          process.send('stopped');
+        }
+        process.exit(0);
+      })().catch((err) => {
+        console.error('error during shutdown', err);
+        process.exit(1);
+      });
     });
   };
   process.on('message', (message) => {
@@ -477,6 +491,73 @@ const getIndexHTML = async () => {
   });
 
   await server.start();
+
+  // Start the registry reconciler after server.start() so legacy loadRealms()
+  // has already mounted everything from disk. registerExistingMounts snapshots
+  // those into the reconciler's `mounted` map so it doesn't try to re-mount
+  // them on its first reconcile pass. Phase 2 coexistence: legacy mount path
+  // and reconciler both maintain `realms[]` and `virtualNetwork` as they go.
+  // Phase 3 will remove the legacy path and the reconciler becomes the sole
+  // owner of mount/unmount.
+  reconciler = new RealmRegistryReconciler({
+    dbAdapter,
+    mountFromRow: async (row: RealmRegistryRow) => {
+      let diskPath: string;
+      if (row.kind === 'bootstrap') {
+        diskPath = row.disk_id;
+      } else if (row.kind === 'source') {
+        diskPath = join(realmsRootPath, row.disk_id);
+      } else {
+        diskPath = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME, row.disk_id);
+      }
+      const reconciledAdapter = new NodeAdapter(diskPath, ENABLE_FILE_WATCHER);
+      const reconciledRealm = new Realm(
+        {
+          url: row.url,
+          adapter: reconciledAdapter,
+          secretSeed: REALM_SECRET_SEED,
+          virtualNetwork,
+          dbAdapter,
+          queue,
+          matrixClient,
+          realmServerURL: serverURL,
+          definitionLookup,
+          cardSizeLimitBytes: Number(
+            process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+          ),
+          fileSizeLimitBytes: Number(
+            process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
+          ),
+        },
+        {
+          ...(FULL_INDEX_ON_STARTUP
+            ? { fullIndexOnStartup: true as const }
+            : {}),
+          ...(process.env.DISABLE_MODULE_CACHING === 'true'
+            ? { disableModuleCaching: true }
+            : {}),
+        },
+      );
+      // start() before push/mount: if start() throws (e.g., fullIndex fails
+      // transiently), we don't want a half-initialized Realm sitting in
+      // `realms[]` and `virtualNetwork` where the next reconcile pass would
+      // double-mount it. Wait for start to succeed, then publish.
+      await reconciledRealm.start();
+      realms.push(reconciledRealm);
+      virtualNetwork.mount(reconciledRealm.handle);
+      return reconciledRealm;
+    },
+    unmount: async (realm) => {
+      realm.unsubscribe();
+      virtualNetwork.unmount(realm.handle);
+      const idx = realms.indexOf(realm);
+      if (idx >= 0) {
+        realms.splice(idx, 1);
+      }
+    },
+  });
+  reconciler.registerExistingMounts(realms);
+  reconciler.start();
 
   let actualPort =
     (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
