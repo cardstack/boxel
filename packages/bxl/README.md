@@ -240,6 +240,112 @@ topRevenue: '
 
 ---
 
+## Comparisons & inspirations
+
+BXL doesn't invent much. It pulls ideas from six expression languages that were already solving pieces of the same problem — Excel, jq, XPath, XQuery, Schematron, and CSS — and adds a readable surface that lets them coexist in one runtime.
+
+Credit and attribution below; pick whichever section describes the language you already know.
+
+### Excel · paste-compatible where it matters
+
+The "XL" in BXL is earned. 300+ Excel helpers ship with matching semantics — paste `=IF(…)` from a spreadsheet and it runs unchanged. Current row is `.` instead of `A1`; columns are field names instead of column letters.
+
+```
+Excel:  =ROUND(B2 * C2 / 100, 2)
+BXL:    ROUND(Subtotal * "Tax Rate" / 100, 2)
+```
+
+BXL skips Excel's cell-grid functions (`OFFSET`, `INDIRECT`, `DAVERAGE`), most statistical distributions, and Bessel / regression array functions — they don't translate onto JSON. Everything that does translate is in.
+
+### jq · every valid jq is valid BXL
+
+[jq-tools](https://github.com/alexxander/jq-tools) is the actual runtime. BXL compiles to canonical jqxl before execution; the evaluator doesn't know or care whether you wrote `.lineItems[0].sku` or `"Line Item"[#1].SKU`. The Excel helpers are added as regular jq functions via jq's native extension mechanism — no parser fork, no runtime fork.
+
+```
+jq:   .lineItems | map(select(.taxable)) | map(.lineTotal) | add
+BXL:  SUM("Line Item"[*Taxable]."Line Total")
+```
+
+If you already know jq, you already know BXL. If you don't, every pipeline jq supports still works — BXL just gives you a readable shortcut when a schema is available.
+
+### XPath · tree paths with predicates
+
+XPath normalized a compact notation for walking typed trees: dot-separated names for fields, brackets for predicates, helpers for position (`last()`, `position()`). BXL borrows the mental model and drops the axis specifiers (`/`, `//`, `@`) — there's no need for them on JSON.
+
+```
+XPath:  /invoice/lineItem[sku='BRAND-RED']/unitPrice
+BXL:    "Line Item"[SKU = "BRAND-RED"]."Unit Price"
+```
+
+### XQuery · a small debt to FLWOR thinking
+
+XQuery (W3C) showed that a query grammar can grow into a full expression language — let-bindings, conditionals, sequence composition — without bolting on a separate scripting layer. BXL stays smaller (no FLWOR keywords, no XML schema types, no modules) but adopts the same premise: one language should cover computation, not just lookup.
+
+### Schematron · the validation-rule shape, newly relevant
+
+Schematron (ISO/IEC 19757-3) is the standard for rule-based tree validation: match a pattern, assert a condition, emit a message. Unlike grammar-based validators like XSD, Schematron checks *relationships between values* — "if this, then that" — using XPath expressions against the document tree.
+
+It's been quietly important since 2006, and it's back in focus because of how LLMs change the shape of incoming data. As generative tooling produces more loosely-structured documents — free-text forms filled in by an agent, invoice JSON pulled from a receipt OCR, a draft contract authored by a model — validation moves later in the pipeline. A fixed schema catches missing fields; a rule language catches *things that should be true but aren't*.
+
+BXL's validation surface reuses Schematron's shape — a rule is a boolean expression with an attached message — but the rules sit inline in form schemas and card definitions rather than a separate XML document.
+
+```xml
+Schematron:  <assert test="total = sum(lineItem/lineTotal)">Total mismatch</assert>
+```
+```ts
+BXL:         { expr: 'Total = SUM("Line Item"."Line Total")',
+               message: 'Total mismatch' }
+```
+
+Same pattern, JSON-native, runs in the same sandbox as your formulas.
+
+### CSS · selector pseudo-classes for arrays
+
+CSS built a compact vocabulary for addressing positions in a collection: `:first-child`, `:nth-of-type(2n)`, `:not(.hidden)`. BXL lifts the syntax and points it at array indexes instead of DOM elements.
+
+```
+CSS:  tr:first-child, tr:nth-child(2n+1), li:not(.done)
+BXL:  "Line Item":first,  "Line Item":odd,  Task:not([Done])
+```
+
+### Plain JavaScript · what you'd write without BXL
+
+Most BXL expressions are shorter spellings of `array.map(...).filter(...).reduce(...)`.
+
+```js
+invoice.lineItems
+  .filter(li => li.taxable)
+  .reduce((sum, li) => sum + li.lineTotal, 0);
+```
+```bxl
+SUM("Line Item"[*Taxable]."Line Total")
+```
+
+Both answer the same question. The JS version has `fetch` and `process.env` in scope and runs inside your server bundle; the BXL version refuses I/O by construction and serializes as data. Different tools for different distances from user-authored input — neither replaces the other.
+
+### Coverage across common jobs
+
+Each language above is strong at one or two of the jobs a typical business app needs — validation, computed fields, data processing, conditional defaults, storage as data. No single one covers the whole set.
+
+| Role                                  | Excel  |   jq    | XPath  | XQuery  | Schematron | CSS |   JS   |  BXL   |
+| ------------------------------------- | :----: | :-----: | :----: | :-----: | :--------: | :-: | :----: | :----: |
+| Validation rules + messages           |  weak  |   ok    |   ok   |   ok    |   strong   |  —  |   ok   | strong |
+| Computed / formula fields             | strong |   ok    |   ok   |   ok    |     —      |  —  |   ok   | strong |
+| Data processing / aggregation         |  weak  | strong  |   ok   | strong  |     —      |  —  |   ok   | strong |
+| Conditional defaults                  |   ok   |    —    |   ok   |   ok    |     —      |  —  |   ok   | strong |
+| Sandbox by default (no I/O)           | strong | strong  | strong | partial |   strong   |  —  |   —    | strong |
+| Readable to non-engineers             | strong |    —    |   —    |    —    |     —      |  —  |   —    | strong |
+| Paste from spreadsheet                | strong |    —    |   —    |    —    |     —      |  —  |   —    | strong |
+| Works on JSON natively                |   —    | strong  |   —    |    —    |     —      |  —  | strong | strong |
+| Embeds in JSON as data (serializable) |   ok   | strong  |   —    |    —    |     —      |  —  |   —    | strong |
+| One language across every job         |   —    | partial |   —    | partial |     —      |  —  | strong | strong |
+
+BXL didn't invent any row. It's the smallest language that covers all of them at once, because it explicitly composes the wins of the ones that came before.
+
+For a typical Boxel card ([BSL primer](https://bsl.staging.boxel.build) — invoices, offers, contracts, forms, tickets, events, reports) every row is a real requirement. If you're building the same kind of thing on your own JSON and you've been stitching together Ajv + jq + Formula.js + a custom rule engine, BXL is what you'd end up with after consolidating.
+
+---
+
 ## Security model
 
 BXL is a **data sandbox**, not an OS sandbox. Expressions compute over a supplied JSON snapshot and return values. They cannot fetch, persist, load modules, call arbitrary JavaScript, or mutate any external state.
