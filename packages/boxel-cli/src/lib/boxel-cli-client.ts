@@ -21,6 +21,14 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 export type { ReadResult, ListFilesResult, ReadTranspiledResult };
 
+export interface ReadCardResult {
+  ok: boolean;
+  status?: number;
+  /** Parsed JSON document (for .json card files). */
+  document?: Record<string, unknown>;
+  error?: string;
+}
+
 const MIME = {
   CardSource: 'application/vnd.card+source',
   CardJson: 'application/vnd.card+json',
@@ -142,6 +150,27 @@ export class BoxelCLIClient {
    */
   async read(realmUrl: string, path: string): Promise<ReadResult> {
     return fileRead(realmUrl, path, { profileManager: this.pm });
+  }
+
+  /**
+   * Read a JSON card file from a realm and parse it into a document.
+   * Convenience wrapper around `read()` for callers that need parsed JSON.
+   */
+  async readCard(realmUrl: string, path: string): Promise<ReadCardResult> {
+    let result = await this.read(realmUrl, path);
+    if (!result.ok) {
+      return { ok: false, status: result.status, error: result.error };
+    }
+    try {
+      let document = JSON.parse(result.content!) as Record<string, unknown>;
+      return { ok: true, status: result.status, document };
+    } catch {
+      return {
+        ok: false,
+        status: result.status,
+        error: 'Failed to parse response as JSON',
+      };
+    }
   }
 
   /**
