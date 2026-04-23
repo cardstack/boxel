@@ -125,6 +125,20 @@
    PRIMARY KEY ( realm_url, realm_version ) 
 );
 
+ CREATE TABLE IF NOT EXISTS realm_registry (
+   id DEFAULT (hex(randomblob(16))) NOT NULL,
+   url TEXT NOT NULL,
+   kind TEXT NOT NULL,
+   disk_id TEXT NOT NULL,
+   owner_username TEXT NOT NULL,
+   source_url TEXT,
+   last_published_at,
+   pinned BOOLEAN DEFAULT false NOT NULL,
+   created_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
+   updated_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
+   PRIMARY KEY ( id ) 
+);
+
  CREATE TABLE IF NOT EXISTS realm_user_permissions (
    realm_url TEXT NOT NULL,
    username TEXT NOT NULL,
