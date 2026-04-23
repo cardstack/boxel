@@ -1,3 +1,4 @@
+import { deleteFile, type DeleteResult } from '../commands/file/delete';
 import {
   readTranspiledModule,
   type ReadTranspiledResult,
@@ -61,10 +62,7 @@ export interface WriteResult {
   error?: string;
 }
 
-export interface DeleteResult {
-  ok: boolean;
-  error?: string;
-}
+export type { DeleteResult };
 
 export interface SearchResult {
   ok: boolean;
@@ -249,32 +247,14 @@ export class BoxelCLIClient {
   }
 
   /**
-   * Delete a file from a realm.
+   * Delete a file from a realm. Delegates to the standalone
+   * `deleteFile()` command in `commands/file/delete.ts` so the CLI
+   * and programmatic API share one implementation.
    */
   async delete(realmUrl: string, path: string): Promise<DeleteResult> {
-    let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
-
-    try {
-      let response = await this.pm.authedRealmFetch(url, {
-        method: 'DELETE',
-        headers: { Accept: MIME.CardSource },
-      });
-
-      if (!response.ok) {
-        let body = await response.text();
-        return {
-          ok: false,
-          error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-        };
-      }
-
-      return { ok: true };
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
+    return deleteFile(realmUrl, path, {
+      profileManager: this.pm,
+    });
   }
 
   /**

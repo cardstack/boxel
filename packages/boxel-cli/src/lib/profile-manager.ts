@@ -13,6 +13,9 @@ import {
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.boxel-cli');
 const PROFILES_FILENAME = 'profiles.json';
 
+export const NO_ACTIVE_PROFILE_ERROR =
+  'No active profile. Run `boxel profile add` to create one.';
+
 export interface Profile {
   displayName: string;
   matrixUrl: string;
