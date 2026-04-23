@@ -78,7 +78,7 @@ boxel --help
 boxel sync .
 ```
 
-The linked command automatically uses `dist/index.js` if built, or falls back to running TypeScript source via `tsx`.
+The linked command automatically uses `dist/index.js` if built, or falls back to running TypeScript source via `ts-node`.
 
 To unlink:
 
