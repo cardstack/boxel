@@ -46,6 +46,10 @@
       "types": "./dist/runtime.d.ts",
       "import": "./dist/runtime.js"
     },
+    "./boxel-runtime": {
+      "types": "./dist/boxel-runtime.d.ts",
+      "import": "./dist/boxel-runtime.js"
+    },
     "./runtime-bare": {
       "types": "./dist/runtime-bare.d.ts",
       "import": "./dist/runtime-bare.js"
@@ -81,7 +85,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests examples",
     "test": "node scripts/run-tests.mjs",
-    "test:smoke": "tsx tests/smoke/bxl-smoke.ts",
+    "test:smoke": "node scripts/run-ts-entry.mjs tests/smoke/bxl-smoke.ts",
     "test:size": "node scripts/size-report.mjs --check",
     "realm": "node scripts/build-realm-bundle.mjs",
     "realm:local": "node scripts/build-realm-bundle.mjs --no-sync",

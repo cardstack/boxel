@@ -46,12 +46,17 @@ import {
   DEFAULT_BUILTIN_LIBRARIES,
   BuiltinLibraryName,
 } from './bxl/registry/index.js';
+import { toBxlErrorRecord, type BxlErrorRecord, type BxlSafeResult } from './error-utils.js';
 export {
   __runBoxelRuntimeWorker,
   getBoxelValue,
+  prepareBoxelGuideAsyncSafe,
   prepareBoxelGuideAsync,
+  prepareBoxelGuideSafe,
   prepareBoxelGuide,
+  prepareBoxelRuntimeAsyncSafe,
   prepareBoxelRuntimeAsync,
+  prepareBoxelRuntimeSafe,
   prepareBoxelRuntime,
 } from './boxel-runtime.js';
 export type {
@@ -115,6 +120,8 @@ export type {
   NativeRuntimeLimits,
   ReadableSchema,
   ReadableSyntaxWarning,
+  BxlErrorRecord,
+  BxlSafeResult,
 };
 
 export interface BxlOptions {
@@ -171,6 +178,24 @@ export function evaluateBxl(
   };
 }
 
+export function evaluateBxlSafe(
+  expression: string,
+  input: unknown,
+  options: BxlOptions = {},
+): BxlSafeResult<BxlEvaluation> {
+  try {
+    return {
+      ok: true,
+      value: evaluateBxl(expression, input, options),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: toBxlErrorRecord(error),
+    };
+  }
+}
+
 export function prepareBxl(
   expression: string,
   options: BxlOptions = {},
@@ -201,6 +226,23 @@ export function prepareBxl(
       };
     },
   };
+}
+
+export function prepareBxlSafe(
+  expression: string,
+  options: BxlOptions = {},
+): BxlSafeResult<PreparedBxl> {
+  try {
+    return {
+      ok: true,
+      value: prepareBxl(expression, options),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: toBxlErrorRecord(error, 'prepare'),
+    };
+  }
 }
 
 export function bxl(expression: string, options: BxlOptions = {}) {

@@ -190,6 +190,18 @@ const coverageCases: TestCase[] = [
   { name: 'text: CHAR(65)', expression: 'CHAR(65)', expected: 'A' },
   { name: 'text: CODE("A")', expression: 'CODE("A")', expected: 65 },
   { name: 'text: VALUE("42.5")', expression: 'VALUE("42.5")', expected: 42.5 },
+  {
+    name: 'text: CONCAT("A", "B", 3)',
+    expression: 'CONCAT("A", "B", 3)',
+    expected: 'AB3',
+    expectedJq: 'CONCAT(["A", "B", 3])',
+  },
+  {
+    name: 'text: TEXTJOIN(" — ", true, "Ada", "", "Lovelace")',
+    expression: 'TEXTJOIN(" — ", true, "Ada", "", "Lovelace")',
+    expected: 'Ada — Lovelace',
+    expectedJq: 'TEXTJOIN(" — "; true; ["Ada", "", "Lovelace"])',
+  },
 
   // --- Logical ---
   { name: 'logic: NOT(true)', expression: 'NOT(true)', expected: false },
@@ -197,16 +209,29 @@ const coverageCases: TestCase[] = [
   { name: 'logic: IF(true, "y", "n")', expression: 'IF(true, "yes", "no")', expected: 'yes' },
   { name: 'logic: IF(5 > 3, 1, 0)', expression: 'IF(5 > 3, 1, 0)', expected: 1 },
   { name: 'logic: IFS(...)', expression: 'IFS(1 > 2, "a", 3 > 2, "b")', expected: 'b' },
-  // Note: AND/OR/XOR with variadic args not supported today — use array form
+  { name: 'logic: AND(true, true)', expression: 'AND(true, true)', expected: true, expectedJq: 'AND ([true, true])' },
   { name: 'logic: AND([true, true])', expression: 'AND([true, true])', expected: true },
   { name: 'logic: AND([true, false])', expression: 'AND([true, false])', expected: false },
   { name: 'logic: OR([true, false])', expression: 'OR([true, false])', expected: true },
   { name: 'logic: OR([false, false])', expression: 'OR([false, false])', expected: false },
   { name: 'logic: XOR([true, false])', expression: 'XOR([true, false])', expected: true },
+  {
+    name: 'logic: SWITCH(2, 1, "one", 2, "two", "other")',
+    expression: 'SWITCH(2, 1, "one", 2, "two", "other")',
+    expected: 'two',
+    expectedJq: 'SWITCH([2, 1, "one", 2, "two", "other"])',
+  },
+  {
+    name: 'logic: CHOOSE(2, "bronze", "silver", "gold")',
+    expression: 'CHOOSE(2, "bronze", "silver", "gold")',
+    expected: 'silver',
+    expectedJq: 'CHOOSE(2; ["bronze", "silver", "gold"])',
+  },
 
   // --- Statistical ---
   { name: 'stat: SUM([1, 2, 3, 4, 5])', expression: 'SUM([1, 2, 3, 4, 5])', expected: 15 },
   { name: 'stat: AVERAGE([1, 2, 3, 4, 5])', expression: 'AVERAGE([1, 2, 3, 4, 5])', expected: 3 },
+  { name: 'stat: MAX(1, 2, 3)', expression: 'MAX(1, 2, 3)', expected: 3, expectedJq: 'MAX([1, 2, 3])' },
   { name: 'stat: MAX([1, 2, 3])', expression: 'MAX([1, 2, 3])', expected: 3 },
   { name: 'stat: MIN([1, 2, 3])', expression: 'MIN([1, 2, 3])', expected: 1 },
   { name: 'stat: COUNT([1, 2, 3, "a", null])', expression: 'COUNT([1, 2, 3, "a", null])', expected: 3 },
@@ -241,7 +266,6 @@ const coverageCases: TestCase[] = [
 
 // Known gaps that formulajs covers but BXL doesn't match today. Kept for
 // visibility; not asserted. Future work to close:
-//   - AND/OR/XOR with variadic args (today only the array-arg form works)
 //   - GCD, LCM not implemented
 //   - MODE not implemented
 //   - DEC2HEX returns lowercase; Excel returns uppercase

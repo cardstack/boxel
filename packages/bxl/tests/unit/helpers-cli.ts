@@ -96,6 +96,16 @@ strictEqual(evalOn('when(Payment = "Credit card"; present("Bill To".Zip))', miss
   'when: cc + no zip → fail');
 strictEqual(evalOn('when(Payment = "Credit card"; present("Bill To".Zip))', none),    true,
   'when: not cc → vacuously pass');
+strictEqual(
+  evalOn('when(Payment = "Credit card", present("Bill To".Zip))', good),
+  true,
+  'when also accepts readable comma separators',
+);
+strictEqual(
+  evalOn('implies(Payment = "Credit card", present("Bill To".Zip))', missing),
+  false,
+  'implies also accepts readable comma separators',
+);
 
 // implies is an alias
 strictEqual(evalOn('implies(Payment = "Credit card"; present("Bill To".Zip))', good), true,
@@ -157,6 +167,16 @@ strictEqual(
   whenCompile.source,
   'when(.payment == "Credit card"; present(.billing.zip))',
   'when compiles with nested schema resolution',
+);
+
+const whenCommaCompile = compileReadableSyntax(
+  'when(Payment = "Credit card", present("Bill To".Zip))',
+  { schema },
+);
+strictEqual(
+  whenCommaCompile.source,
+  'when(.payment == "Credit card"; present(.billing.zip))',
+  'when rewrites readable comma separators to jq semicolons',
 );
 
 console.log('BXL helpers (ISBLANK, present, when, implies, words, nonempty): all checks passed');

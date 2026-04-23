@@ -364,6 +364,46 @@ const FORMULA_FUNCTIONS = new Set([
 
 export const BXL_FORMULA_FUNCTIONS = FORMULA_FUNCTIONS;
 
+const LOWERCASE_BXL_HELPERS = new Set([
+  'implies',
+  'nonempty',
+  'present',
+  'when',
+  'words',
+]);
+
+export const BXL_COMMA_ARGUMENT_HELPERS = LOWERCASE_BXL_HELPERS;
+
+const ARRAY_PACKED_VARIADIC_FORMULAS = new Set([
+  'AND',
+  'AVERAGE',
+  'CONCAT',
+  'CONCATENATE',
+  'COUNT',
+  'COUNTA',
+  'MAX',
+  'MEDIAN',
+  'MIN',
+  'OR',
+  'PRODUCT',
+  'STDEV',
+  'STDEV_P',
+  'STDEV_S',
+  'SUM',
+  'SUMPRODUCT',
+  'SUMSQ',
+  'SWITCH',
+  'VAR',
+  'VAR_P',
+  'VAR_S',
+  'XOR',
+]);
+
+const TRAILING_ARRAY_PACKED_VARIADIC_FORMULAS = new Map<string, number>([
+  ['CHOOSE', 1],
+  ['TEXTJOIN', 2],
+]);
+
 const CASE_INSENSITIVE_JQ_FUNCTIONS = new Set([
   'add',
   'all',
@@ -436,6 +476,35 @@ function canonicalFunctionName(name: string): string {
   }
 
   return name;
+}
+
+function isCommaArgumentFunction(name: string): boolean {
+  return (
+    FORMULA_FUNCTIONS.has(name.toUpperCase()) ||
+    LOWERCASE_BXL_HELPERS.has(name.toLowerCase()) ||
+    ['all', 'any'].includes(name.toLowerCase())
+  );
+}
+
+function formatFunctionCallSource(name: string, args: CompileChunk[]): string {
+  const upper = name.toUpperCase();
+  if (ARRAY_PACKED_VARIADIC_FORMULAS.has(upper) && args.length > 1) {
+    return `${name}([${args.map((arg) => arg.source).join(', ')}])`;
+  }
+
+  const trailingArrayPrefix = TRAILING_ARRAY_PACKED_VARIADIC_FORMULAS.get(upper);
+  if (trailingArrayPrefix !== undefined && args.length > trailingArrayPrefix + 1) {
+    const leading = args
+      .slice(0, trailingArrayPrefix)
+      .map((arg) => arg.source);
+    const trailing = `[${args
+      .slice(trailingArrayPrefix)
+      .map((arg) => arg.source)
+      .join(', ')}]`;
+    return `${name}(${[...leading, trailing].join('; ')})`;
+  }
+
+  return `${name}(${args.map((arg) => arg.source).join('; ')})`;
 }
 
 function canonicalTokenSource(token: Token): string {
@@ -1352,8 +1421,7 @@ class Compiler {
     const close = findMatching(this.tokens, open);
     const semicolonRanges = splitTopLevel(this.tokens, open + 1, close, ';');
     const useCommaArgs =
-      semicolonRanges.length === 1 &&
-      (FORMULA_FUNCTIONS.has(name) || ['all', 'any'].includes(name));
+      semicolonRanges.length === 1 && isCommaArgumentFunction(name);
     const ranges = useCommaArgs
       ? splitTopLevel(this.tokens, open + 1, close, ',')
       : semicolonRanges;
@@ -1386,11 +1454,13 @@ class Compiler {
     }
 
     this.index = close + 1;
+    const source = formatFunctionCallSource(name, args);
     return {
-      source: `${name}(${args.map((arg) => arg.source).join('; ')})`,
+      source,
       changed:
         originalName !== name ||
         useCommaArgs ||
+        source !== `${name}(${args.map((arg) => arg.source).join('; ')})` ||
         args.some((arg) => arg.changed),
       warnings: args.flatMap((arg) => arg.warnings),
       streamItemScope: args[0]?.streamItemScope,

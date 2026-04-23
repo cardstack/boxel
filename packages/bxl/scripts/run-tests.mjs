@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Run every test suite under tests/unit/ and tests/smoke/ through tsx.
+ * Run every test suite under tests/unit/ and tests/smoke/ through Node's
+ * tsx loader hook, not the tsx CLI.
  * Prints a summary line from each and a final pass/fail count.
  * Exits non-zero if any suite fails.
  */
@@ -23,7 +24,7 @@ const suites = [
 
 let failures = 0;
 for (const suite of suites) {
-  const result = spawnSync('npx', ['tsx', suite], {
+  const result = spawnSync(process.execPath, [join(repoRoot, 'scripts/run-ts-entry.mjs'), suite], {
     cwd: repoRoot,
     encoding: 'utf8',
   });

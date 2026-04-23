@@ -41,10 +41,12 @@ export type {
   ResolvedBuiltinRegistry,
 } from './bxl/registry/index.js';
 
-export { evaluateBxl, prepareBxl, bxl } from './index.js';
+export { evaluateBxl, evaluateBxlSafe, prepareBxl, prepareBxlSafe, bxl } from './index.js';
 export type {
+  BxlErrorRecord,
   BxlOptions,
   BxlEvaluation,
+  BxlSafeResult,
   PreparedBxl,
   PreparedBxlRunOptions,
 } from './index.js';
@@ -52,9 +54,13 @@ export type {
 export {
   __runBoxelRuntimeWorker,
   getBoxelValue,
+  prepareBoxelGuideAsyncSafe,
   prepareBoxelGuideAsync,
+  prepareBoxelGuideSafe,
   prepareBoxelGuide,
+  prepareBoxelRuntimeAsyncSafe,
   prepareBoxelRuntimeAsync,
+  prepareBoxelRuntimeSafe,
   prepareBoxelRuntime,
 } from './boxel-runtime.js';
 export type {

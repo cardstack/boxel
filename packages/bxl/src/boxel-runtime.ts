@@ -12,6 +12,7 @@ import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.js';
 import { getPath } from './jqtools/evaluate/utils/getPath.js';
 import { setPath } from './jqtools/evaluate/utils/setPath.js';
 import type { Path } from './jqtools/evaluate/utils/utils.js';
+import { toBxlErrorRecord, type BxlSafeResult } from './error-utils.js';
 
 export interface BoxelExpressionValue {
   expression: string;
@@ -1662,6 +1663,30 @@ export function prepareBoxelGuide(
   return prepareBoxelRuntime({ guide }, options);
 }
 
+export function prepareBoxelRuntimeSafe(
+  definition: BoxelRuntimeDefinition,
+  options: BoxelRuntimeOptions = {},
+): BxlSafeResult<PreparedBoxelRuntime> {
+  try {
+    return {
+      ok: true,
+      value: prepareBoxelRuntime(definition, options),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: toBxlErrorRecord(error, 'prepare'),
+    };
+  }
+}
+
+export function prepareBoxelGuideSafe(
+  guide: BoxelGuideSpec,
+  options: BoxelRuntimeOptions = {},
+): BxlSafeResult<PreparedBoxelRuntime> {
+  return prepareBoxelRuntimeSafe({ guide }, options);
+}
+
 export function getBoxelValue(input: unknown, path: string): unknown {
   return getPath(input, parsePath(path));
 }
@@ -2465,4 +2490,28 @@ export function prepareBoxelGuideAsync(
   options: BoxelRuntimeAsyncOptions = {},
 ): Promise<PreparedBoxelRuntimeAsync> {
   return prepareBoxelRuntimeAsync({ guide }, options);
+}
+
+export async function prepareBoxelRuntimeAsyncSafe(
+  definition: BoxelRuntimeDefinition,
+  options: BoxelRuntimeAsyncOptions = {},
+): Promise<BxlSafeResult<PreparedBoxelRuntimeAsync>> {
+  try {
+    return {
+      ok: true,
+      value: await prepareBoxelRuntimeAsync(definition, options),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: toBxlErrorRecord(error, 'prepare'),
+    };
+  }
+}
+
+export function prepareBoxelGuideAsyncSafe(
+  guide: BoxelGuideSpec,
+  options: BoxelRuntimeAsyncOptions = {},
+): Promise<BxlSafeResult<PreparedBoxelRuntimeAsync>> {
+  return prepareBoxelRuntimeAsyncSafe({ guide }, options);
 }

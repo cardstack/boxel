@@ -1,4 +1,5 @@
 import {
+  BXL_COMMA_ARGUMENT_HELPERS,
   BXL_FORMULA_FUNCTIONS,
   compileReadableSyntax,
   preprocessReadableSource,
@@ -457,10 +458,11 @@ function normalizationEdits(source: string, options: BxlConversionOptions): Edit
     }
   }
 
-  // Prefer comma as the argument separator inside fixed-arity formula calls
-  // and the `all` / `any` combinators. Keeps `;` for anything the parser
-  // doesn't recognise as a comma-safe name (unknown identifiers, raw jq
-  // constructs, etc.) so we don't break edge cases.
+  // Prefer comma as the argument separator inside readable formula calls,
+  // BXL-native lowercase helper calls, and the `all` / `any` combinators.
+  // Keeps `;` for anything the parser doesn't recognise as a comma-safe
+  // name (unknown identifiers, raw jq constructs, etc.) so we don't break
+  // edge cases.
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index];
     if (token.type !== 'ident') {
@@ -469,8 +471,9 @@ function normalizationEdits(source: string, options: BxlConversionOptions): Edit
     const upper = token.value.toUpperCase();
     const lower = token.value.toLowerCase();
     const isFormula = BXL_FORMULA_FUNCTIONS.has(upper);
+    const isHelper = BXL_COMMA_ARGUMENT_HELPERS.has(lower);
     const isAllAny = lower === 'all' || lower === 'any';
-    if (!isFormula && !isAllAny) {
+    if (!isFormula && !isHelper && !isAllAny) {
       continue;
     }
 
