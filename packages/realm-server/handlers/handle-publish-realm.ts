@@ -43,6 +43,7 @@ import type { RealmServerTokenClaim } from '../utils/jwt';
 import { registerUser } from '../synapse';
 import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 import { mirrorPublishedRealmToRegistry } from '../lib/realm-registry-writes';
+import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
 const log = logger('handle-publish');
 
@@ -341,115 +342,128 @@ export default function handlePublishRealm({
       let sourceRealmPath = sourceRealm.dir;
       let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
       let publishedRealmPath = join(publishedDir, publishedRealmId);
-      // Copy source to a temporary directory first, then swap it into
-      // place so that a failed copy doesn't destroy the existing
-      // published realm (e.g. due to disk-full or permission errors).
-      let tempCopyPath = `${publishedRealmPath}.tmp`;
-      let backupPath = `${publishedRealmPath}.backup`;
-      removeSync(tempCopyPath);
-      removeSync(backupPath);
-      copySync(sourceRealmPath, tempCopyPath);
-      // Unmount the existing published realm before swapping the
-      // directory so it can't serve requests from a partially
-      // replaced filesystem.
-      if (existingPublishedRealm) {
-        realms.splice(realms.indexOf(existingPublishedRealm), 1);
-        virtualNetwork.unmount(existingPublishedRealm.handle);
-      }
-      try {
-        if (existsSync(publishedRealmPath)) {
-          moveSync(publishedRealmPath, backupPath);
-        }
-        moveSync(tempCopyPath, publishedRealmPath);
-        removeSync(backupPath);
-      } catch (swapError) {
-        // Restore the old published realm if the swap failed
-        if (!existsSync(publishedRealmPath) && existsSync(backupPath)) {
-          moveSync(backupPath, publishedRealmPath);
-        }
-        removeSync(tempCopyPath);
-        throw swapError;
-      }
-
-      let newlyPublishedRealmConfig = readJsonSync(
-        join(publishedRealmPath, '.realm.json'),
-      );
-      newlyPublishedRealmConfig.publishable = false;
-      let rewrittenHostHome = rewriteHostHomeForPublishedRealm(
-        newlyPublishedRealmConfig.hostHome,
-        sourceRealmURL,
+      // Serialize concurrent publishers of the same published realm URL.
+      // The lock wraps the FS swap, the legacy DB writes, and the CS-10889
+      // dual-write, so two in-flight publishes to the same URL never
+      // interleave. The lock is released on function exit (success or
+      // throw) via the finally block in withRealmWriteLock.
+      let { realm, lastPublishedAt } = await withRealmWriteLock(
+        dbAdapter,
         publishedRealmURL,
-      );
-      if (rewrittenHostHome) {
-        newlyPublishedRealmConfig.hostHome = rewrittenHostHome;
-      }
-      writeJsonSync(
-        join(publishedRealmPath, '.realm.json'),
-        newlyPublishedRealmConfig,
-      );
+        async () => {
+          // Copy source to a temporary directory first, then swap it into
+          // place so that a failed copy doesn't destroy the existing
+          // published realm (e.g. due to disk-full or permission errors).
+          let tempCopyPath = `${publishedRealmPath}.tmp`;
+          let backupPath = `${publishedRealmPath}.backup`;
+          removeSync(tempCopyPath);
+          removeSync(backupPath);
+          copySync(sourceRealmPath, tempCopyPath);
+          // Unmount the existing published realm before swapping the
+          // directory so it can't serve requests from a partially
+          // replaced filesystem.
+          if (existingPublishedRealm) {
+            realms.splice(realms.indexOf(existingPublishedRealm), 1);
+            virtualNetwork.unmount(existingPublishedRealm.handle);
+          }
+          try {
+            if (existsSync(publishedRealmPath)) {
+              moveSync(publishedRealmPath, backupPath);
+            }
+            moveSync(tempCopyPath, publishedRealmPath);
+            removeSync(backupPath);
+          } catch (swapError) {
+            // Restore the old published realm if the swap failed
+            if (!existsSync(publishedRealmPath) && existsSync(backupPath)) {
+              moveSync(backupPath, publishedRealmPath);
+            }
+            removeSync(tempCopyPath);
+            throw swapError;
+          }
 
-      // Clear stale modules cache for the published realm so that
-      // error entries from a previous publish don't persist
-      await query(dbAdapter, [
-        `DELETE FROM modules WHERE resolved_realm_url =`,
-        param(publishedRealmURL),
-      ]);
+          let newlyPublishedRealmConfig = readJsonSync(
+            join(publishedRealmPath, '.realm.json'),
+          );
+          newlyPublishedRealmConfig.publishable = false;
+          let rewrittenHostHome = rewriteHostHomeForPublishedRealm(
+            newlyPublishedRealmConfig.hostHome,
+            sourceRealmURL,
+            publishedRealmURL,
+          );
+          if (rewrittenHostHome) {
+            newlyPublishedRealmConfig.hostHome = rewrittenHostHome;
+          }
+          writeJsonSync(
+            join(publishedRealmPath, '.realm.json'),
+            newlyPublishedRealmConfig,
+          );
 
-      let realm = createAndMountRealm(
-        publishedRealmPath,
-        publishedRealmURL,
-        new URL(sourceRealmURL),
-        false,
-      );
-      await realm.start();
-
-      // reindexing is to ensure that prerendered templates that get copied over
-      // to the published realm get regenerated - we want this so that the
-      // places in the templates that refer to model.id are updated to the new
-      // published realm URL (for example in the og:url meta tag).
-      await realm.fullIndex(userInitiatedPriority);
-
-      let lastPublishedAt = Date.now().toString();
-      try {
-        if (existingPublishedRealm) {
+          // Clear stale modules cache for the published realm so that
+          // error entries from a previous publish don't persist
           await query(dbAdapter, [
-            `UPDATE published_realms SET last_published_at =`,
-            param(lastPublishedAt),
-            `WHERE published_realm_url =`,
+            `DELETE FROM modules WHERE resolved_realm_url =`,
             param(publishedRealmURL),
           ]);
-        } else {
-          let { valueExpressions, nameExpressions } = asExpressions({
-            id: publishedRealmId,
-            owner_username: realmUsername,
-            source_realm_url: sourceRealmURL,
-            published_realm_url: publishedRealmURL,
-            last_published_at: lastPublishedAt,
-          });
-          await query(
-            dbAdapter,
-            insert('published_realms', nameExpressions, valueExpressions),
-          );
-        }
-      } catch (dbError: any) {
-        // Clean up the mounted realm so we don't leave an orphan
-        // without a corresponding published_realms DB record
-        realms.splice(realms.indexOf(realm), 1);
-        virtualNetwork.unmount(realm.handle);
-        removeSync(publishedRealmPath);
-        throw dbError;
-      }
 
-      // Phase 1 dual-write: mirror the published realm into realm_registry.
-      // Logs and continues on failure (shadow data; boot-time backfill
-      // re-syncs on next boot). See lib/realm-registry-writes.ts.
-      await mirrorPublishedRealmToRegistry(dbAdapter, {
-        publishedRealmURL,
-        publishedRealmId,
-        ownerUsername: realmUsername,
-        sourceRealmURL,
-        lastPublishedAt: Number(lastPublishedAt),
-      });
+          let mountedRealm = createAndMountRealm(
+            publishedRealmPath,
+            publishedRealmURL,
+            new URL(sourceRealmURL),
+            false,
+          );
+          await mountedRealm.start();
+
+          // reindexing is to ensure that prerendered templates that get copied over
+          // to the published realm get regenerated - we want this so that the
+          // places in the templates that refer to model.id are updated to the new
+          // published realm URL (for example in the og:url meta tag).
+          await mountedRealm.fullIndex(userInitiatedPriority);
+
+          let lastPublishedAt = Date.now().toString();
+          try {
+            if (existingPublishedRealm) {
+              await query(dbAdapter, [
+                `UPDATE published_realms SET last_published_at =`,
+                param(lastPublishedAt),
+                `WHERE published_realm_url =`,
+                param(publishedRealmURL),
+              ]);
+            } else {
+              let { valueExpressions, nameExpressions } = asExpressions({
+                id: publishedRealmId,
+                owner_username: realmUsername,
+                source_realm_url: sourceRealmURL,
+                published_realm_url: publishedRealmURL,
+                last_published_at: lastPublishedAt,
+              });
+              await query(
+                dbAdapter,
+                insert('published_realms', nameExpressions, valueExpressions),
+              );
+            }
+          } catch (dbError: any) {
+            // Clean up the mounted realm so we don't leave an orphan
+            // without a corresponding published_realms DB record
+            realms.splice(realms.indexOf(mountedRealm), 1);
+            virtualNetwork.unmount(mountedRealm.handle);
+            removeSync(publishedRealmPath);
+            throw dbError;
+          }
+
+          // Phase 1 dual-write: mirror the published realm into realm_registry.
+          // Logs and continues on failure (shadow data; boot-time backfill
+          // re-syncs on next boot). See lib/realm-registry-writes.ts.
+          await mirrorPublishedRealmToRegistry(dbAdapter, {
+            publishedRealmURL,
+            publishedRealmId,
+            ownerUsername: realmUsername,
+            sourceRealmURL,
+            lastPublishedAt: Number(lastPublishedAt),
+          });
+
+          return { realm: mountedRealm, lastPublishedAt };
+        },
+      );
 
       let response = createResponse({
         body: JSON.stringify(
