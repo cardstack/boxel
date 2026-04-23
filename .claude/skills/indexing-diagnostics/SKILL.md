@@ -184,6 +184,21 @@ LIMIT 20;
       "ageMs": 71000
     }
   ],
+  "affinitySnapshot": {          // server-side: what else was on this tab's affinity
+    "affinityKey": "realm:…/my-realm/",
+    "tabCount": 1,
+    "pendingTotal": 7,           // peak across periodic samples during this call
+    "maxPending": 7,
+    "sameAffinityActivity": [    // excludes self. A non-empty list on a
+                                 // `waiting-stability` stall is the
+                                 // self-referential prerender deadlock
+                                 // signature — the render is waiting on a
+                                 // `/_search` → `definitionLookup` response
+                                 // whose sub-prerender is queued here.
+      { "url": "…/customer.gts", "kind": "module", "state": "queued", "ageMs": 68000 },
+      { "url": "…/order.gts",    "kind": "module", "state": "queued", "ageMs": 66500 }
+    ]
+  },
   "recentQueryLoads": [          // top-N slowest completed query loads
     {
       "meta": {
@@ -230,6 +245,7 @@ Walk the fields top-down. The *first* positive signal wins; stop there.
 | `inFlightModuleImports.length > 0` | **Loader stall** | Each URL is a `.gts` / `.ts` we'd already started a `fetchModule(...)` for. Confirm the realm serves those URLs and that there's no import cycle. Often resolves with `clearCache: true` on retry (already in place) — if that's failing check for 500s on the module URL. |
 | `queryLoadsInFlight.length > 0` with `fieldName` set | **Query-field stall** | This is the CS-10820 field-driven hot path. Look at the `query`/`realms` fields — is the search hitting a remote realm server that's slow? Check `_federated-search` latency for that realm on the realm-server side. |
 | `cardDocsInFlight.length > 0` or `fileMetaDocsInFlight.length > 0` (no query fields) | **Data stall** | Usually linksTo targets that the template pulled on. Prefer `cardDocLoadsInFlight[*].ageMs` / `fileMetaDocLoadsInFlight[*].ageMs` — they tell you which individual URL is the slow one vs. a fan-out. If it's a card from a different realm, that realm may be slow or misconfigured. Also check `recentCardDocLoads` for loads that completed just before the timer fired but still dominated the budget. |
+| `renderStage` = `waiting-stability` **AND** `queryLoadsInFlight` has a `search-resource:*` entry **AND** `affinitySnapshot.sameAffinityActivity` contains `{ kind: 'module', state: 'queued' }` entries | **Self-referential prerender deadlock (definition-lookup fan-out)** | The search can't resolve a `_cardType` filter without a card definition; `CachingDefinitionLookup` fires a same-affinity `prerenderModule` to extract it; that sub-prerender queues behind the very render that's waiting on its result. Cold `modules` table / fresh realm-server restart / post-`clearAllModules` reindex makes it hit. Fix path: route `definition-lookup` extractions off the card-render affinity. |
 | `renderStage` = `waiting-stability` with empty in-flight arrays | **Render stall** | Nothing is loading but settlement never finishes. Classic Glimmer tracking loop — template is invalidating itself. `capturedDom` usually shows the partially-rendered component. `blockedTimerSummary` will list swallowed timers that may hint at a scheduling loop. |
 | `currentlyEvaluatingModule` non-null, or `stageAgeMs` large with empty in-flight arrays | **Synchronous browser stall (typically Glimmer compile during module eval)** | `recentModuleEvaluations` shows the worst offenders. A single URL with `ms > 5000` usually means "this module has a giant template that takes forever to compile". Many small entries (say 50+ at 100–500 ms each) summing into the stall budget mean card fan-out where each dependent card contributes a compile. Split the module, lazy-load the template, or reduce the component fan-out. |
 | `blockedTimerSummary` populated | Supplementary. Tells you which timer-driven code is fighting the render. Not a root cause on its own. |
@@ -295,6 +311,185 @@ The host-side hooks are best-effort and the page may die mid-capture. Trust this
 4. `docsInFlight` number — legacy, only use if none of the above are present.
 
 If `renderStage` says `buildModel:fetching-source` but `cardDocsInFlight` is empty, trust `renderStage` — the store clears its in-flight map once a load resolves, including failed loads, but the stage isn't touched until the next stage sets it.
+
+## Reproducing a render interactively
+
+Sometimes the written diagnostics aren't enough — you want to replay the exact render the indexer saw in a real browser (Chrome MCP, Puppeteer, or your own tab) to step through it, watch network, edit source and reload, etc. Every ingredient is already in the system; you just have to wire them up.
+
+Two separate tokens are involved; keep them straight up front:
+
+- **User JWT** — a *realm-scoped* token you mint yourself, used to call the authenticated reindex endpoint (`POST <realm-url>_full-reindex` or `_reindex`). Without this you can't trigger the reindex, which means you don't get the artifacts below. This is the only reason you'll do the Matrix dance by hand.
+- **Indexer session JWT** — a separate token the indexer mints internally for its own prerender visits. You never construct this yourself; you read it out of the `prerenderer-reproduce` log line for the card you want to replay, and paste it into the browser's `localStorage['boxel-session']` so the prerender tab authenticates as the indexer did.
+
+So the end-to-end flow is: mint user JWT → call `_full-reindex` with it → indexer runs → log emits render URLs + indexer session JWTs → paste into browser. Mint-your-own-JWT and read-JWT-from-log are *both* needed; they're not alternatives.
+
+### The `prerenderer-reproduce` log channel
+
+`packages/realm-server/prerender/render-runner.ts` defines a dedicated logger `prerenderer-reproduce` that emits a line **per card render** with a ready-to-use URL and the exact `boxel-session` JWT the indexer used:
+
+```
+manually visit prerendered url <card-id> at: <boxel-host>/render/<encoded-card-id>/<nonce>/<encoded-options>/html/isolated/0 with boxel-session = <JWT>
+```
+
+This channel is **off** by default. Turn it on by adding `prerenderer-reproduce=debug` to `LOG_LEVELS` when starting the realm server. Example:
+
+```sh
+LOG_LEVELS='prerenderer-reproduce=debug' pnpm start-all
+# or, alongside other levels:
+LOG_LEVELS='*=info,prerenderer-reproduce=debug' pnpm start-all
+```
+
+Then trigger the render you care about (see [Triggering a reindex](#triggering-a-reindex) below — this is where your user JWT gets used) and grep the realm-server log for `manually visit prerendered url`. You get two things: the URL and the *indexer's* session JWT. Paste that JWT into `localStorage['boxel-session']` on the host tab and navigate to the URL.
+
+### Minting the user JWT to trigger the reindex
+
+The per-realm reindex endpoints (`POST <realm>_reindex`, `POST <realm>_full-reindex`) are authenticated — they require a realm-scoped JWT on the `Authorization` header. Mint one the same way the UI does, in two hops:
+
+1. **Matrix login**, user/password → Matrix access token, then request an OpenID token:
+
+   ```sh
+   # Step 1a: Matrix password login
+   curl -s -X POST "$MATRIX_URL/_matrix/client/v3/login" \
+     -H 'Content-Type: application/json' \
+     -d '{"type":"m.login.password","identifier":{"type":"m.id.user","user":"<user>"},"password":"<pw>"}' \
+     | jq -r .access_token
+
+   # Step 1b: trade for an OpenID token
+   curl -s -X POST "$MATRIX_URL/_matrix/client/v3/user/<@user:server>/openid/request_token" \
+     -H "Authorization: Bearer <access_token>" \
+     -d '{}'
+   ```
+
+2. **Realm-auth exchange**, OpenID token → realm-scoped JWT:
+
+   ```sh
+   curl -s -X POST "$REALM_SERVER/_realm-auth" \
+     -H 'Authorization: <realm-server-JWT or matrix-openid-token, per handler>' \
+     -H 'Content-Type: application/json' \
+     -d '{ "user": "@user:server", "realms": ["<realm-url>/"] }'
+   ```
+
+   The response carries a map of `{ <realm-url>: <realm-JWT> }`. **That** is the token you pass on `Authorization` when calling the reindex endpoint in the next section. It's *not* the token the prerender tab uses — that one comes from the `prerenderer-reproduce` log.
+
+Three different JWTs float around in this area, so always be explicit about which one you mean:
+
+| Token | Who mints it | Used for |
+|---|---|---|
+| Realm-server-level JWT | `/_realm-auth` top-level, signed by server secret seed | Server admin endpoints (publish, etc.); *not* accepted by card endpoints |
+| Realm-scoped JWT (this section) | Same `/_realm-auth` call, one per realm in the response map | Authenticating as a user to a specific realm — including `POST <realm>_full-reindex` |
+| Indexer session JWT (from `prerenderer-reproduce`) | Minted internally by the indexer per visit | Seeding `localStorage['boxel-session']` in the prerender tab |
+
+Mix them up and you get 401s with no obvious reason.
+
+### Visiting a render page
+
+The render URL format is what the indexer uses and what `prerenderer-reproduce` logs:
+
+```
+<boxel-host>/render/<encoded-card-id>/<nonce>/<encoded-options>/html/isolated/0
+```
+
+- `<boxel-host>` — `HOST_URL` / whichever host the realm server points its prerender at (usually `http://localhost:4200` locally).
+- `<encoded-card-id>` — `encodeURIComponent(url)`; e.g. `http%3A%2F%2Flocalhost%3A4201%2Fuser%2Fmyrealm%2FProduct%2F1.json`.
+- `<nonce>` — monotonically-incremented per prerender call; `1` is fine for manual replays.
+- `<encoded-options>` — `encodeURIComponent(JSON.stringify(renderOptions))`; `%7B%7D` (`{}`) works.
+- `html/isolated/0` — format / format-variant / recursion-depth; what card rendering uses.
+
+Before navigating, set `localStorage['boxel-session']` to the realm JWT (from either path above). Without it the page sees an unauthenticated load and the store fails to fetch anything.
+
+### Chrome MCP / headful replay recipe
+
+```
+1. mcp__chrome-devtools__navigate_page → <boxel-host>  (any page under the host so we can set its localStorage)
+2. mcp__chrome-devtools__evaluate_script → localStorage.setItem('boxel-session', '<JWT>')
+3. mcp__chrome-devtools__navigate_page → <render-url from the log>
+4. mcp__chrome-devtools__wait_for   → text like the card's title, or poll data-prerender-status
+5. mcp__chrome-devtools__evaluate_script → document.querySelector('[data-prerender]').dataset.prerenderStatus
+   // returns 'loading' | 'ready' | 'error' | 'unusable'
+6. Once 'ready', inspect the DOM, the console, the network tab — anything the indexer would have seen.
+```
+
+The container's `data-prerender-status` attribute is the authoritative "the page is done" signal for manual replays — same one the indexer waits on. `ready` means the snapshot would have been taken; `error` / `unusable` means the indexer would have captured the error state.
+
+For slow-load investigation you can also grab live diagnostics with the same hook the indexer uses:
+
+```js
+(globalThis as any).__boxelRenderDiagnostics?.()
+```
+
+It returns the current `RenderTimeoutDiagnostics` blob — `renderStage`, in-flight arrays, etc. Evaluate it repeatedly while the page is stuck to see which array is growing / which stage is stalled.
+
+### Triggering a reindex
+
+There are two families of reindex endpoints. Pick based on what auth you have:
+
+**Per-realm, user-authenticated** (the common case — use the realm-scoped JWT you minted above):
+
+```sh
+# Default reindex: refreshes stale entries based on mtime / error state.
+curl -X POST \
+  -H "Authorization: $REALM_SCOPED_JWT" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{}' \
+  "<realm-url>_reindex"
+
+# Full reindex: clears last-modified state so every file is revisited.
+curl -X POST \
+  -H "Authorization: $REALM_SCOPED_JWT" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{}' \
+  "<realm-url>_full-reindex"
+```
+
+Both return `204 No Content` and enqueue `userInitiatedPriority` jobs. The caller must have realm-owner or similar write permission on that realm — the server checks the JWT against the realm's permission table. This is the path the in-browser "reindex" / "full reindex" commands take.
+
+**Gotcha**: the realm router matches routes by MIME, not just path — these endpoints are registered with `SupportedMimeType.JSON`, so omitting `Accept: application/json` makes the request fall through to the card-GET/POST handler and you get a confusing `404 not found` against a phantom card at `/_full-reindex`. Always send the Accept header and a JSON body (even `{}`).
+
+**Grafana shared-secret** (admin / ops path — only works if `GRAFANA_SECRET` is configured on the server):
+
+```sh
+# Single realm
+curl -H "Authorization: $GRAFANA_SECRET" \
+  "$REALM_SERVER/_grafana-reindex?realm=<realm-path-without-leading-or-trailing-slash>"
+
+# Full server (enqueues one full-reindex job covering every realm on this server)
+curl -H "Authorization: $GRAFANA_SECRET" "$REALM_SERVER/_grafana-full-reindex"
+```
+
+`GET` (because grafana-driven), takes the secret as a bare `Authorization` header with no `Bearer` prefix. Clears module caches before enqueuing. Use when you don't have a user account on the realm but do have access to the server's grafana secret.
+
+A single card (not a whole realm) re-renders the moment you save its backing file, so "reindex one card" usually means "save the file, then watch the next log lines and DB rows for that card" — no endpoint call needed.
+
+### Putting it together — a full reproduction
+
+Locally on a private realm where indexing is flaky:
+
+```sh
+# Terminal 1 — realm server with reproduce channel on
+LOG_LEVELS='*=info,prerenderer-reproduce=debug' pnpm start-all
+
+# Terminal 2 — mint the realm-scoped user JWT (matrix-login → /_realm-auth),
+# save it as $REALM_SCOPED_JWT. See "Minting the user JWT" above.
+
+# Terminal 2 — kick off a full reindex using that JWT
+curl -X POST -H "Authorization: $REALM_SCOPED_JWT" \
+  "http://localhost:4201/user/<realm>/_full-reindex"
+
+# Terminal 1 — grep for the indexer's reproduce line for the card you're chasing
+grep 'manually visit prerendered url .*<card-id>' realm-server.log | tail -1
+# The line hands you: a render URL, and a separate indexer-minted session JWT.
+
+# Now paste the URL + that session JWT into Chrome MCP (or any real browser),
+# set localStorage['boxel-session'] = <session JWT>, navigate to the URL,
+# poll data-prerender-status, call __boxelRenderDiagnostics() while the page
+# is stuck.
+```
+
+Two JWTs, two jobs: the realm-scoped one got you the reindex, the indexer-session one gets the browser tab past its auth check.
+
+If `GRAFANA_SECRET` is configured on your server, you can skip the user-JWT step and use `curl -H "Authorization: $GRAFANA_SECRET" http://localhost:4201/_grafana-full-reindex` instead. In dev the per-realm JWT path is almost always easier.
 
 ## Extending the diagnostics
 
