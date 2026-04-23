@@ -5,54 +5,20 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { concat, fn } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { htmlSafe, type SafeString } from '@ember/template';
-import { ContextButton } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
-import Modifier from 'ember-modifier';
-import { KanbanDragManager } from './kanban-drag';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import type { KanbanDragManager } from './kanban-drag';
 import {
   type KanbanPlacement,
   cardsInColumn,
   columnCount as colCount,
 } from './kanban-engine';
-import { KanbanColumnField } from './kanban-column';
-
-class CaptureElement extends Modifier<{
-  Element: HTMLElement;
-  Args: {
-    Positional: [(el: HTMLElement) => void];
-  };
-}> {
-  modify(el: HTMLElement, [callback]: [(el: HTMLElement) => void]) {
-    callback(el);
-  }
-}
-
-class BindPointerDown extends Modifier<{
-  Element: HTMLElement;
-  Args: {
-    Positional: [(event: PointerEvent) => void];
-  };
-}> {
-  #element: HTMLElement | null = null;
-  #handler: ((event: PointerEvent) => void) | null = null;
-
-  modify(el: HTMLElement, [handler]: [(event: PointerEvent) => void]) {
-    if (this.#element && this.#handler) {
-      this.#element.removeEventListener('pointerdown', this.#handler);
-    }
-    el.addEventListener('pointerdown', handler);
-    this.#element = el;
-    this.#handler = handler;
-  }
-
-  willRemove() {
-    if (this.#element && this.#handler) {
-      this.#element.removeEventListener('pointerdown', this.#handler);
-    }
-  }
-}
+import type { KanbanColumnField } from './kanban-column';
+import { CaptureElement, BindPointerDown } from './kanban-modifiers';
+import { KanbanColumnHeader } from './kanban-column-header';
+import { KanbanCard } from './kanban-card';
+import { KanbanGhost } from './kanban-ghost';
 
 export class KanbanPlane extends Component<{
   Args: {
@@ -190,9 +156,6 @@ export class KanbanPlane extends Component<{
     return htmlSafe(`top: 0; height: ${ghostH}px`);
   };
 
-  columnDotStyle = (column: KanbanColumnField): SafeString =>
-    htmlSafe(`background: ${column.color ?? '#94a3b8'}`);
-
   get ghostStyle(): SafeString {
     const m = this.manager;
     if (m.isSettling) {
@@ -224,48 +187,20 @@ export class KanbanPlane extends Component<{
       {{#each this.columns as |column colIdx|}}
         {{#if (this.isColumnVisible column colIdx)}}
           <div
-            class='column
-              {{if (this.isTargetColumn colIdx) "is-target"}}
-              {{if (this.isOverWip column colIdx) "is-over-wip"}}'
+            class={{cn
+              'column'
+              is-target=(this.isTargetColumn colIdx)
+              is-over-wip=(this.isOverWip column colIdx)
+            }}
             data-kanban-column={{colIdx}}
           >
-            <div class='col-header'>
-              <div class='col-header-left'>
-                <span
-                  class='col-dot'
-                  style={{this.columnDotStyle column}}
-                ></span>
-                <span class='col-name'>{{if
-                    column.label
-                    column.label
-                    'Untitled'
-                  }}</span>
-                <span class='col-count'>{{this.columnCardCount colIdx}}</span>
-              </div>
-              <div class='col-header-right'>
-                {{#if column.wipLimit}}
-                  <span
-                    class='col-wip {{if (this.isOverWip column colIdx) "over"}}'
-                  >
-                    max
-                    {{column.wipLimit}}
-                  </span>
-                {{/if}}
-                {{#if @onAddCard}}
-                  <ContextButton
-                    class='col-add-btn'
-                    @label={{if
-                      column.label
-                      (concat 'Add card to ' column.label)
-                      'Add card to column'
-                    }}
-                    @icon='add'
-                    @variant='ghost'
-                    {{on 'click' (fn @onAddCard column.key)}}
-                  />
-                {{/if}}
-              </div>
-            </div>
+            <KanbanColumnHeader
+              @column={{column}}
+              @cardCount={{this.columnCardCount colIdx}}
+              @isOverWip={{this.isOverWip column colIdx}}
+              @isTarget={{this.isTargetColumn colIdx}}
+              @onAddCard={{if @onAddCard (fn @onAddCard column.key)}}
+            />
 
             <div class='col-body'>
               {{#if (this.showInsertionBox colIdx)}}
@@ -276,18 +211,15 @@ export class KanbanPlane extends Component<{
               {{/if}}
 
               {{#each (this.columnCards colIdx) as |placement|}}
-                <div
-                  class='card
-                    {{if
-                      (eq placement.index this.manager.selectedIndex)
-                      "selected"
-                    }}
-                    {{if (this.isSource placement) "dragging"}}'
-                  style={{this.cardShiftStyle placement}}
-                  data-card-index={{placement.index}}
+                <KanbanCard
+                  @placement={{placement}}
+                  @isSelected={{eq placement.index this.manager.selectedIndex}}
+                  @isSource={{this.isSource placement}}
+                  @shiftStyle={{this.cardShiftStyle placement}}
+                  @isDragging={{this.isDragging}}
                 >
                   {{yield placement to='card'}}
-                </div>
+                </KanbanCard>
               {{/each}}
 
               {{#unless (this.columnCardCount colIdx)}}
@@ -302,12 +234,9 @@ export class KanbanPlane extends Component<{
     </div>
 
     {{#if this.showGhost}}
-      <div
-        class='ghost {{if this.isSettling "settling"}}'
-        style={{this.ghostStyle}}
-      >
+      <KanbanGhost @style={{this.ghostStyle}} @isSettling={{this.isSettling}}>
         {{yield this.ghostIndex to='ghost'}}
-      </div>
+      </KanbanGhost>
     {{/if}}
 
     <style scoped>
@@ -343,65 +272,6 @@ export class KanbanPlane extends Component<{
         background: #fef3c7;
       }
 
-      /* ── Column Header ──────────────────────────────────────────── */
-      .col-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 12px 14px 8px;
-        flex-shrink: 0;
-      }
-      .col-header-left {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .col-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 3px;
-        flex-shrink: 0;
-      }
-      .col-name {
-        font-size: 13px;
-        font-weight: 600;
-        color: #1e293b;
-        letter-spacing: -0.01em;
-      }
-      .col-count {
-        font-size: 12px;
-        font-weight: 500;
-        color: #94a3b8;
-      }
-      .col-header-right {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-      }
-      .col-wip {
-        font-size: 10px;
-        color: #94a3b8;
-        font-family: var(--font-mono, monospace);
-      }
-      .col-wip.over {
-        color: #d97706;
-        font-weight: 600;
-      }
-      .col-add-btn {
-        color: #94a3b8;
-        opacity: 0.6;
-      }
-      .col-add-btn:hover {
-        opacity: 1;
-        color: #1e293b;
-      }
-
-      /* Target column during drag */
-      .column.is-target .col-header {
-        background: rgba(16, 185, 129, 0.06);
-        border-radius: 8px 8px 0 0;
-      }
-
       /* ── Column Body ────────────────────────────────────────────── */
       .col-body {
         flex: 1;
@@ -411,43 +281,6 @@ export class KanbanPlane extends Component<{
         gap: 6px;
         padding: 4px 8px 8px;
         position: relative;
-      }
-
-      /* ── Card ───────────────────────────────────────────────────── */
-      .card {
-        flex-shrink: 0;
-        height: 170px;
-        border-radius: 8px;
-        overflow: hidden;
-        background: #fff;
-        box-shadow:
-          0 1px 2px rgba(0, 0, 0, 0.06),
-          0 0 0 1px rgba(0, 0, 0, 0.04);
-        cursor: grab;
-        transition: box-shadow 120ms ease-out;
-      }
-      /* Only animate shift transforms during active drag */
-      .board.is-dragging .card {
-        transition:
-          transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
-          box-shadow 120ms ease-out;
-      }
-      .card:hover {
-        box-shadow:
-          0 2px 8px rgba(0, 0, 0, 0.08),
-          0 0 0 1px rgba(0, 0, 0, 0.06);
-      }
-      .card.selected {
-        box-shadow:
-          0 0 0 2px var(--primary, #3b82f6),
-          0 1px 2px rgba(0, 0, 0, 0.06);
-      }
-      .card.dragging {
-        opacity: 0;
-        height: 0;
-        min-height: 0;
-        overflow: hidden;
-        margin: -3px 0;
       }
 
       /* ── Insertion Box ──────────────────────────────────────────── */
@@ -472,35 +305,6 @@ export class KanbanPlane extends Component<{
         color: #cbd5e1;
         font-size: 13px;
         font-style: italic;
-      }
-
-      /* ── Ghost ──────────────────────────────────────────────────── */
-      .ghost {
-        position: fixed;
-        z-index: 999;
-        pointer-events: none;
-        border-radius: 8px;
-        overflow: hidden;
-        background: #fff;
-        box-shadow:
-          0 24px 60px rgba(0, 0, 0, 0.28),
-          0 8px 20px rgba(0, 0, 0, 0.12),
-          0 2px 6px rgba(0, 0, 0, 0.06);
-        opacity: 0.97;
-        transform: rotate(-2.5deg) scale(1.03);
-      }
-      .ghost.settling {
-        transition:
-          left 180ms cubic-bezier(0.4, 0, 0.2, 1),
-          top 180ms cubic-bezier(0.4, 0, 0.2, 1),
-          width 180ms cubic-bezier(0.4, 0, 0.2, 1),
-          height 180ms cubic-bezier(0.4, 0, 0.2, 1),
-          transform 180ms ease-out,
-          box-shadow 180ms ease-out;
-        transform: rotate(0deg) scale(1);
-        box-shadow:
-          0 1px 2px rgba(0, 0, 0, 0.06),
-          0 0 0 1px rgba(0, 0, 0, 0.04);
       }
     </style>
   </template>

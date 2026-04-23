@@ -121,7 +121,8 @@ export class KanbanDragManager {
     container.setPointerCapture(e.pointerId);
   };
 
-  onPointerMove = (e: PointerEvent): void => {
+  onPointerMove = (event: Event): void => {
+    const e = event as PointerEvent;
     if (e.pointerId !== this.activePointerId || this.interactionMode === 'idle')
       return;
 
@@ -155,8 +156,9 @@ export class KanbanDragManager {
     this.insertion = point;
   };
 
-  onPointerUp = (e: PointerEvent): void => {
+  onPointerUp = (event: Event): void => {
     // ¹⁶
+    const e = event as PointerEvent;
     if (e.pointerId !== this.activePointerId) return;
 
     const container = this.containerFn();
@@ -214,8 +216,9 @@ export class KanbanDragManager {
 
   // ── Keyboard ───────────────────────────────────────────────────────
 
-  onKeyDown = (e: KeyboardEvent): void => {
+  onKeyDown = (event: Event): void => {
     // ¹⁷
+    const e = event as KeyboardEvent;
     if (e.key === 'Escape') {
       if (this.interactionMode !== 'idle') {
         e.preventDefault();
