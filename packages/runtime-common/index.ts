@@ -71,8 +71,83 @@ export interface ErrorEntry {
   cardType?: string;
 }
 
+// CS-10872: attached to timeout-class RenderErrors so the persisted
+// error document tells operators *where* the time went. All fields
+// are optional — this is a best-effort diagnostic payload and older
+// code paths that don't populate them still work.
+export interface RenderTimeoutDiagnostics {
+  // Correlation ID threaded from the client-side remote-prerenderer
+  // through manager and prerender-server. Paste into a log search to
+  // join all three stacks for this call.
+  requestId?: string;
+  // Total wall time spent in `PagePool.getPage` before render work
+  // began. The three `waits` sub-fields below each cover a specific
+  // await; `launchMs` is measured around the full method and so is
+  // typically >= `semaphoreMs + tabQueueMs + tabStartupMs` — the
+  // residual is synchronous bookkeeping (affinity reassignment,
+  // LRU touch, standby top-up kickoff) that doesn't fall into any
+  // of the three buckets. For triage the sub-field breakdown is
+  // what matters: which *await* dominated launch time.
+  launchMs?: number;
+  waits?: {
+    semaphoreMs?: number;
+    tabQueueMs?: number;
+    tabStartupMs?: number;
+  };
+  // Elapsed between render start and the timeout. If ~= timeoutMs the
+  // render itself stalled; if << timeoutMs the launch dominated.
+  renderElapsedMs?: number;
+  // Sum of launch + render elapsed (server-observed).
+  totalElapsedMs?: number;
+  // Render-phase breadcrumb set by the host app as it progresses. If
+  // missing, we never reached the host route (stalled in launch/fetch).
+  renderStage?: string;
+  // Ms since `renderStage` was last set. Large values with empty
+  // in-flight arrays are the signature of a synchronous stall
+  // (e.g. Glimmer compile during module evaluation).
+  stageAgeMs?: number;
+  // URL lists of host-side docs that were still in flight at timeout.
+  cardDocsInFlight?: string[];
+  fileMetaDocsInFlight?: string[];
+  // Per-URL `ageMs` for the same loads, so operators can tell which
+  // single URL has been hanging the longest vs. a fan-out of many.
+  cardDocLoadsInFlight?: Array<{ url: string; ageMs: number }>;
+  fileMetaDocLoadsInFlight?: Array<{ url: string; ageMs: number }>;
+  // Bounded top-N histories of slow *completed* loads. The store
+  // keeps these across the whole attempt so the post-timeout
+  // diagnostic can still see which card docs / file metas / queries
+  // dominated wall time even if they completed just before the
+  // timer fired.
+  recentCardDocLoads?: Array<{ url: string; ms: number }>;
+  recentFileMetaLoads?: Array<{ url: string; ms: number }>;
+  recentQueryLoads?: Array<Record<string, unknown>>;
+  // Module URLs that the Loader had started fetching but not yet
+  // resolved. Each URL is a `.gts` / `.ts` cache miss in flight.
+  inFlightModuleImports?: string[];
+  // Module URL whose synchronous body (Glimmer compile, side-effect
+  // initialisation) is currently running when the diagnostic read
+  // happened. Null if evaluate isn't re-entered at the moment.
+  currentlyEvaluatingModule?: string | null;
+  // Top-N slowest module evaluations observed so far on this page
+  // (a rolling window maintained by the Loader). Useful when the
+  // stall is "many cheap compiles" rather than one slow one.
+  recentModuleEvaluations?: Array<{ url: string; ms: number }>;
+  // Legacy counter (kept for back-compat when the older host build
+  // only exposes `__docsInFlight()`).
+  docsInFlight?: number;
+  // DOM snapshot from the page at timeout (prefix of outerHTML).
+  capturedDom?: string | null;
+  // Stack-ish summary from the blocked-timer shim.
+  blockedTimerSummary?: string | null;
+  // Outstanding SearchResource / query-field loads at timeout. The
+  // shape mirrors QueryLoadInfo from `base/card-api.gts` but is
+  // kept loose here to avoid a runtime/base circular type import.
+  queryLoadsInFlight?: Array<Record<string, unknown>>;
+}
+
 export interface RenderError extends ErrorEntry {
   evict?: boolean;
+  diagnostics?: RenderTimeoutDiagnostics;
 }
 
 export interface FileExtractResponse {

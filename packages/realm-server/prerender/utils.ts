@@ -1102,6 +1102,21 @@ export async function withTimeout<T>(
     // Capture diagnostics only if the page is still alive; timeouts can close the target.
     let dom: string | null = null;
     let docsInFlight: number | null = null;
+    let richDiagnostics: {
+      cardDocsInFlight?: string[];
+      fileMetaDocsInFlight?: string[];
+      cardDocLoadsInFlight?: Array<{ url: string; ageMs: number }>;
+      fileMetaDocLoadsInFlight?: Array<{ url: string; ageMs: number }>;
+      recentCardDocLoads?: Array<{ url: string; ms: number }>;
+      recentFileMetaLoads?: Array<{ url: string; ms: number }>;
+      renderStage?: string;
+      stageAgeMs?: number;
+      inFlightModuleImports?: string[];
+      currentlyEvaluatingModule?: string | null;
+      recentModuleEvaluations?: Array<{ url: string; ms: number }>;
+      queryLoadsInFlight?: unknown[];
+      recentQueryLoads?: unknown[];
+    } | null = null;
     let timerSummary: string | null = null;
     if (!page.isClosed()) {
       try {
@@ -1112,6 +1127,21 @@ export async function withTimeout<T>(
           }
           let err = document.querySelector('[data-prerender-error]');
           return err?.outerHTML ?? null;
+        });
+        // CS-10872: prefer the richer per-URL diagnostic hook when the
+        // host exposes it; fall back to the count-only `__docsInFlight`
+        // so the old host build path still produces a sensible log.
+        richDiagnostics = await page.evaluate(() => {
+          try {
+            let diag = (globalThis as any).__boxelRenderDiagnostics;
+            if (typeof diag === 'function') {
+              let result = diag();
+              return result && typeof result === 'object' ? result : null;
+            }
+          } catch {
+            return null;
+          }
+          return null;
         });
         docsInFlight = await page.evaluate(() => {
           try {
@@ -1137,11 +1167,19 @@ export async function withTimeout<T>(
       } catch {
         dom = null;
         docsInFlight = null;
+        richDiagnostics = null;
         timerSummary = null;
       }
     }
     log.warn(
-      `render of ${id} timed out with DOM:\n${dom?.trim()}\nDocs in flight: ${docsInFlight}`,
+      `render of ${id} timed out after ${timeoutMs}ms` +
+        ` stage=${richDiagnostics?.renderStage ?? '<unknown>'}` +
+        ` stageAgeMs=${richDiagnostics?.stageAgeMs ?? '<unknown>'}` +
+        ` cardDocsInFlight=${richDiagnostics?.cardDocsInFlight?.length ?? docsInFlight ?? 0}` +
+        ` fileMetaDocsInFlight=${richDiagnostics?.fileMetaDocsInFlight?.length ?? 0}` +
+        ` inFlightModuleImports=${richDiagnostics?.inFlightModuleImports?.length ?? 0}` +
+        ` evaluating=${richDiagnostics?.currentlyEvaluatingModule ?? 'none'}` +
+        ` DOM:\n${dom?.trim()}`,
     );
     let timeoutError: RenderError = {
       type: 'instance-error',
@@ -1153,6 +1191,68 @@ export async function withTimeout<T>(
         additionalErrors: null,
       },
       evict: true,
+      diagnostics: {
+        ...(richDiagnostics?.renderStage
+          ? { renderStage: richDiagnostics.renderStage }
+          : {}),
+        ...(typeof richDiagnostics?.stageAgeMs === 'number'
+          ? { stageAgeMs: richDiagnostics.stageAgeMs }
+          : {}),
+        ...(Array.isArray(richDiagnostics?.cardDocsInFlight)
+          ? { cardDocsInFlight: richDiagnostics!.cardDocsInFlight }
+          : {}),
+        ...(Array.isArray(richDiagnostics?.fileMetaDocsInFlight)
+          ? { fileMetaDocsInFlight: richDiagnostics!.fileMetaDocsInFlight }
+          : {}),
+        ...(Array.isArray(richDiagnostics?.inFlightModuleImports)
+          ? { inFlightModuleImports: richDiagnostics!.inFlightModuleImports }
+          : {}),
+        ...(richDiagnostics?.currentlyEvaluatingModule !== undefined
+          ? {
+              currentlyEvaluatingModule:
+                richDiagnostics.currentlyEvaluatingModule,
+            }
+          : {}),
+        ...(Array.isArray(richDiagnostics?.recentModuleEvaluations)
+          ? {
+              recentModuleEvaluations: richDiagnostics!.recentModuleEvaluations,
+            }
+          : {}),
+        ...(Array.isArray(richDiagnostics?.queryLoadsInFlight)
+          ? {
+              queryLoadsInFlight: richDiagnostics!.queryLoadsInFlight as Array<
+                Record<string, unknown>
+              >,
+            }
+          : {}),
+        ...(Array.isArray(richDiagnostics?.recentQueryLoads)
+          ? {
+              recentQueryLoads: richDiagnostics!.recentQueryLoads as Array<
+                Record<string, unknown>
+              >,
+            }
+          : {}),
+        ...(Array.isArray(richDiagnostics?.cardDocLoadsInFlight)
+          ? { cardDocLoadsInFlight: richDiagnostics!.cardDocLoadsInFlight }
+          : {}),
+        ...(Array.isArray(richDiagnostics?.fileMetaDocLoadsInFlight)
+          ? {
+              fileMetaDocLoadsInFlight:
+                richDiagnostics!.fileMetaDocLoadsInFlight,
+            }
+          : {}),
+        ...(Array.isArray(richDiagnostics?.recentCardDocLoads)
+          ? { recentCardDocLoads: richDiagnostics!.recentCardDocLoads }
+          : {}),
+        ...(Array.isArray(richDiagnostics?.recentFileMetaLoads)
+          ? { recentFileMetaLoads: richDiagnostics!.recentFileMetaLoads }
+          : {}),
+        ...(typeof docsInFlight === 'number' ? { docsInFlight } : {}),
+        ...(dom ? { capturedDom: dom } : {}),
+        ...(typeof timerSummary === 'string' && timerSummary.trim()
+          ? { blockedTimerSummary: timerSummary.trim() }
+          : {}),
+      },
     };
     if (typeof timerSummary === 'string' && timerSummary.trim()) {
       timeoutError.error.stack = timerSummary.trim();

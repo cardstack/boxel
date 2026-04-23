@@ -18,6 +18,12 @@ import {
 type FetchingModule = {
   state: 'fetching';
   deferred: Deferred<void>;
+  // CS-10872: retain the full requested module URL (with extension)
+  // since `setModule` stores modules under a trimmed identifier for
+  // cache purposes. The diagnostic getter returns this string instead
+  // of the trimmed map key so timeout diagnostics point at a real,
+  // resolvable URL.
+  originalURL: string;
 };
 
 type RegisteredModule = {
@@ -222,6 +228,54 @@ export class Loader {
 
   get fetch() {
     return this.fetchImplementation;
+  }
+
+  // CS-10872: diagnostic accessor — module URLs currently in the
+  // 'fetching' state. Used by the prerender server to populate a
+  // Render-timeout error document with "what the loader was waiting
+  // on". Returns [] when the loader is quiescent. Intentionally read-
+  // only; do not use for control flow.
+  //
+  // Note: we iterate the modules map but return each FetchingModule's
+  // stored `originalURL`, not the trimmed map key. The cache keys have
+  // executable extensions stripped (see `trimModuleIdentifier`), so a
+  // naive key read would conflate `.gts` / `.ts` / `.js` siblings and
+  // surface unresolvable identifiers in the timeout diagnostics.
+  get inFlightModuleImports(): string[] {
+    let urls: string[] = [];
+    for (let mod of this.modules.values()) {
+      if (mod.state === 'fetching') {
+        urls.push(mod.originalURL);
+      }
+    }
+    return urls;
+  }
+
+  // CS-10872: module-evaluation instrumentation. Each `evaluate()`
+  // call synchronously runs `module.implementation(...)`, which is
+  // where Glimmer template compilation and other sync work lives.
+  // When the main thread is blocked inside that call nothing async
+  // can run — so we set a breadcrumb *before* the call (so any
+  // post-stall diagnostic read names the stuck module) and keep a
+  // bounded top-N history of the worst evaluations (so fan-out of
+  // many cheap-but-not-free compiles becomes visible as a sum).
+  #currentlyEvaluatingModule: string | null = null;
+  #moduleEvaluationHistory: Array<{ url: string; ms: number }> = [];
+  static #MAX_MODULE_EVAL_HISTORY = 30;
+  get currentlyEvaluatingModule(): string | null {
+    return this.#currentlyEvaluatingModule;
+  }
+  get recentModuleEvaluations(): Array<{ url: string; ms: number }> {
+    return [...this.#moduleEvaluationHistory];
+  }
+  private recordModuleEvaluation(url: string, ms: number): void {
+    let hist = this.#moduleEvaluationHistory;
+    hist.push({ url, ms });
+    // Keep only the slowest N. Sort desc by ms and truncate.
+    if (hist.length > Loader.#MAX_MODULE_EVAL_HISTORY) {
+      hist.sort((a, b) => b.ms - a.ms);
+      hist.length = Loader.#MAX_MODULE_EVAL_HISTORY;
+    }
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
@@ -736,6 +790,7 @@ export class Loader {
     let module = {
       state: 'fetching' as const,
       deferred: new Deferred<void>(),
+      originalURL: moduleIdentifier,
     };
     this.setModule(moduleIdentifier, module);
 
@@ -898,7 +953,33 @@ export class Loader {
             throw assertNever(entry);
         }
       });
-      module.implementation(...dependencies);
+      // CS-10872: timed + breadcrumbed so a Glimmer-compile-heavy
+      // module that blocks the event loop is identifiable after
+      // the fact (or mid-stall, if a diagnostic read happens to
+      // squeeze in between two evaluate() calls in a fan-out).
+      // `performance.now()` isn't universally available in every
+      // runtime this code runs in (e.g. older Node test harness);
+      // fall back to Date.now() which is always present and still
+      // gives ms-accuracy — good enough for "this eval took 40s".
+      let previouslyEvaluating = this.#currentlyEvaluatingModule;
+      this.#currentlyEvaluatingModule = moduleIdentifier;
+      let evalStart =
+        typeof performance !== 'undefined' && performance.now
+          ? performance.now()
+          : Date.now();
+      try {
+        module.implementation(...dependencies);
+      } finally {
+        let evalEnd =
+          typeof performance !== 'undefined' && performance.now
+            ? performance.now()
+            : Date.now();
+        this.recordModuleEvaluation(
+          moduleIdentifier,
+          Math.round(evalEnd - evalStart),
+        );
+        this.#currentlyEvaluatingModule = previouslyEvaluating;
+      }
       this.captureIdentitiesOfModuleExports(moduleProxy, moduleIdentifier);
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
