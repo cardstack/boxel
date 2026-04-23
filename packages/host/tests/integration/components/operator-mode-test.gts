@@ -4,11 +4,8 @@ import GlimmerComponent from '@glimmer/component';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { Deferred, localId } from '@cardstack/runtime-common';
-import type {
-  LooseSingleCardDocument,
-  RealmResourceIdentifier,
-} from '@cardstack/runtime-common';
+import { Deferred, localId, rri } from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type StoreService from '@cardstack/host/services/store';
@@ -124,7 +121,7 @@ module('Integration | operator-mode | basics', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: '../friend-with-css.gts' as RealmResourceIdentifier,
+                  module: rri('../friend-with-css.gts'),
                   name: 'FriendWithCSS',
                 },
               },

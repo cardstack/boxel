@@ -12,8 +12,8 @@ import type {
   ResolvedCodeRef,
   LooseSingleCardDocument,
   Relationship,
-  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 
 import { logger } from './logger';
 
@@ -112,7 +112,7 @@ export function buildCardDocument(
       attributes,
       meta: {
         adoptsFrom: {
-          module: moduleUrl as RealmResourceIdentifier,
+          module: rri(moduleUrl),
           name: cardName,
         },
       },

@@ -13,7 +13,7 @@
 import { test } from './fixtures';
 import { expect } from '@playwright/test';
 
-import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { fetchCardTypeSchema } from '../src/darkfactory-schemas';
@@ -88,7 +88,7 @@ test('fetches Issue schema with enum fields', async ({ realm }) => {
       realmServerUrl,
       sourceRealmUrl,
       {
-        module: `${sourceRealmUrl}darkfactory` as RealmResourceIdentifier,
+        module: rri(`${sourceRealmUrl}darkfactory`),
         name: 'Issue',
       },
     );
@@ -127,7 +127,7 @@ test('fetches KnowledgeArticle schema', async ({ realm }) => {
       realmServerUrl,
       sourceRealmUrl,
       {
-        module: `${sourceRealmUrl}darkfactory` as RealmResourceIdentifier,
+        module: rri(`${sourceRealmUrl}darkfactory`),
         name: 'KnowledgeArticle',
       },
     );

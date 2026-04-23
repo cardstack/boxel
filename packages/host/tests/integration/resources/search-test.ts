@@ -5,14 +5,11 @@ import { settled, waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import type {
-  Loader,
-  Query,
-  RealmResourceIdentifier,
-} from '@cardstack/runtime-common';
+import type { Loader, Query } from '@cardstack/runtime-common';
 import {
   baseRealm,
   isFileDefInstance,
+  rri,
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -127,7 +124,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}article` as RealmResourceIdentifier,
+              module: rri(`${testRealmURL}article`),
               name: 'Article',
             },
           },
@@ -143,7 +140,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book` as RealmResourceIdentifier,
+              module: rri(`${testRealmURL}book`),
               name: 'Book',
             },
           },
@@ -165,7 +162,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}post` as RealmResourceIdentifier,
+              module: rri(`${testRealmURL}post`),
               name: 'Post',
             },
           },
@@ -187,7 +184,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}article` as RealmResourceIdentifier,
+              module: rri(`${testRealmURL}article`),
               name: 'Article',
             },
           },
@@ -206,7 +203,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book` as RealmResourceIdentifier,
+              module: rri(`${testRealmURL}book`),
               name: 'Book',
             },
           },
@@ -225,7 +222,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book` as RealmResourceIdentifier,
+              module: rri(`${testRealmURL}book`),
               name: 'Book',
             },
           },
@@ -244,7 +241,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book` as RealmResourceIdentifier,
+              module: rri(`${testRealmURL}book`),
               name: 'Book',
             },
           },
@@ -258,13 +255,13 @@ module(`Integration | search resource`, function (hooks) {
             cardDescription: 'A card that represents a blog post',
             specType: 'card',
             ref: {
-              module: `${testRealmURL}post` as RealmResourceIdentifier,
+              module: rri(`${testRealmURL}post`),
               name: 'Post',
             },
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}spec` as RealmResourceIdentifier,
+              module: rri(`${baseRealm.url}spec`),
               name: 'Spec',
             },
           },
@@ -278,13 +275,13 @@ module(`Integration | search resource`, function (hooks) {
             cardDescription: 'A card that represents an online article ',
             specType: 'card',
             ref: {
-              module: `${testRealmURL}article` as RealmResourceIdentifier,
+              module: rri(`${testRealmURL}article`),
               name: 'Article',
             },
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}spec` as RealmResourceIdentifier,
+              module: rri(`${baseRealm.url}spec`),
               name: 'Spec',
             },
           },
@@ -310,7 +307,7 @@ module(`Integration | search resource`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: `${testRealmURL}book` as RealmResourceIdentifier,
+          module: rri(`${testRealmURL}book`),
           name: 'Book',
         },
         eq: {
@@ -347,7 +344,7 @@ module(`Integration | search resource`, function (hooks) {
       let query: Query = {
         filter: {
           on: {
-            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}book`),
             name: 'Book',
           },
           eq: {
@@ -389,7 +386,7 @@ module(`Integration | search resource`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: `${testRealmURL}book` as RealmResourceIdentifier,
+          module: rri(`${testRealmURL}book`),
           name: 'Book',
         },
         eq: {
@@ -427,7 +424,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book` as RealmResourceIdentifier,
+              module: rri(`${testRealmURL}book`),
               name: 'Book',
             },
           },
@@ -447,7 +444,7 @@ module(`Integration | search resource`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: `${testRealmURL}book` as RealmResourceIdentifier,
+          module: rri(`${testRealmURL}book`),
           name: 'Book',
         },
         eq: {
@@ -484,7 +481,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book` as RealmResourceIdentifier,
+              module: rri(`${testRealmURL}book`),
               name: 'Book',
             },
           },
@@ -507,7 +504,7 @@ module(`Integration | search resource`, function (hooks) {
     let query: Query = {
       filter: {
         type: {
-          module: `${testRealmURL}book` as RealmResourceIdentifier,
+          module: rri(`${testRealmURL}book`),
           name: 'Book',
         },
       },
@@ -519,7 +516,7 @@ module(`Integration | search resource`, function (hooks) {
         {
           by: 'author.firstName',
           on: {
-            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}book`),
             name: 'Book',
           },
           direction: 'asc',
@@ -602,7 +599,7 @@ module(`Integration | search resource`, function (hooks) {
     let query: Query = {
       filter: {
         type: {
-          module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+          module: rri(`${baseRealm.url}card-api`),
           name: 'FileDef',
         },
       },
@@ -641,7 +638,7 @@ module(`Integration | search resource`, function (hooks) {
     let query: Query = {
       filter: {
         type: {
-          module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+          module: rri(`${baseRealm.url}card-api`),
           name: 'FileDef',
         },
       },

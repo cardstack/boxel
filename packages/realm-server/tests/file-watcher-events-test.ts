@@ -4,7 +4,8 @@ import { join, basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
 import { removeSync, writeJSONSync, writeFileSync } from 'fs-extra';
-import type { Realm, RealmResourceIdentifier } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
   setupMatrixRoom,
@@ -95,7 +96,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './person' as RealmResourceIdentifier,
+                module: rri('./person'),
                 name: 'Person',
               },
             },

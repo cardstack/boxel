@@ -27,6 +27,7 @@ import {
   identifyCard,
   specRef,
   resolveCardReference,
+  rri,
   type CodeRef,
   type RealmResourceIdentifier,
   isCardInstance,
@@ -129,7 +130,7 @@ export default class EditFieldModal extends Component<Signature> {
     if (!field) {
       let ref = {
         module:
-          'https://cardstack.com/base/card-api' as RealmResourceIdentifier, // This seems fundamental enough to be hardcoded
+          rri('https://cardstack.com/base/card-api'), // This seems fundamental enough to be hardcoded
         name: 'StringField',
       };
       this.isFieldDef = true;

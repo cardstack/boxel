@@ -10,20 +10,20 @@ import StringField from 'https://cardstack.com/base/string';
 import enumField from 'https://cardstack.com/base/enum';
 import { FileDef } from 'https://cardstack.com/base/file-api';
 
-import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 
 const fileSearchQuery = {
   filter: {
     every: [
       {
         type: {
-          module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+          module: rri('https://cardstack.com/base/card-api'),
           name: 'FileDef',
         },
       },
       {
         on: {
-          module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+          module: rri('https://cardstack.com/base/card-api'),
           name: 'FileDef',
         },
         contains: {

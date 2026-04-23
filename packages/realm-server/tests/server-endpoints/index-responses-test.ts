@@ -9,7 +9,7 @@ import {
   systemInitiatedPriority,
   type DBAdapter,
   type Realm,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { testRealmURL } from './helpers';
@@ -52,7 +52,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: './home.gts' as RealmResourceIdentifier,
+                  module: rri('./home.gts'),
                   name: 'Home',
                 },
               },
@@ -96,7 +96,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: '../person.gts' as RealmResourceIdentifier,
+                  module: rri('../person.gts'),
                   name: 'Person',
                 },
               },
@@ -119,7 +119,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: './isolated-card.gts' as RealmResourceIdentifier,
+                  module: rri('./isolated-card.gts'),
                   name: 'IsolatedCard',
                 },
               },
@@ -144,7 +144,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: './dollar-sign-card.gts' as RealmResourceIdentifier,
+                  module: rri('./dollar-sign-card.gts'),
                   name: 'DollarSignCard',
                 },
               },
@@ -175,7 +175,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: './head-card.gts' as RealmResourceIdentifier,
+                  module: rri('./head-card.gts'),
                   name: 'HeadCard',
                 },
               },
@@ -210,7 +210,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: './unsafe-head-card.gts' as RealmResourceIdentifier,
+                  module: rri('./unsafe-head-card.gts'),
                   name: 'UnsafeHeadCard',
                 },
               },
@@ -239,7 +239,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: './scoped-css-card.gts' as RealmResourceIdentifier,
+                  module: rri('./scoped-css-card.gts'),
                   name: 'ScopedCssCard',
                 },
               },
@@ -313,7 +313,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: './linked-css-child.gts' as RealmResourceIdentifier,
+                  module: rri('./linked-css-child.gts'),
                   name: 'LinkedCssChild',
                 },
               },
@@ -333,7 +333,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './linked-css-parent.gts' as RealmResourceIdentifier,
+                  module: rri('./linked-css-parent.gts'),
                   name: 'LinkedCssParent',
                 },
               },
@@ -352,7 +352,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               meta: {
                 adoptsFrom: {
                   module:
-                    'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+                    rri('https://cardstack.com/base/card-api'),
                   name: 'Theme',
                 },
               },
@@ -370,7 +370,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               meta: {
                 adoptsFrom: {
                   module:
-                    'https://cardstack.com/base/brand-guide' as RealmResourceIdentifier,
+                    rri('https://cardstack.com/base/brand-guide'),
                   name: 'default',
                 },
               },

@@ -8,8 +8,8 @@ import type {
   QueuePublisher,
   QueueRunner,
   Realm,
-  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import type { FederatedCardTypeSummaryEntry } from '@cardstack/runtime-common/document-types';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
@@ -53,7 +53,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           meta: {
             adoptsFrom: {
               module:
-                'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+                rri('https://cardstack.com/base/card-api'),
               name: 'CardDef',
             },
           },

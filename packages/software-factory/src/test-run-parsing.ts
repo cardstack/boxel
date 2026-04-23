@@ -1,4 +1,4 @@
-import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 
 import type { TestResult } from './factory-agent';
 import type {
@@ -65,7 +65,7 @@ export function parseQunitResults(results: QunitResults): TestRunAttributes {
   for (let [moduleName, testResults] of moduleMap) {
     moduleResults.push({
       moduleRef: {
-        module: moduleName as RealmResourceIdentifier,
+        module: rri(moduleName),
         name: 'default',
       },
       results: testResults,

@@ -3,7 +3,7 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -81,7 +81,7 @@ module('Integration | loading', function (hooks) {
         meta: {
           adoptsFrom: {
             module:
-              `${testRealmURL}card-with-broken-icon` as RealmResourceIdentifier,
+              rri(`${testRealmURL}card-with-broken-icon`),
             name: 'CardWithBrokenIcon',
           },
         },

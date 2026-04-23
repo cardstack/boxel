@@ -6,9 +6,8 @@ import type {
   LooseSingleCardDocument,
   Realm,
   Loader,
-  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, rri } from '@cardstack/runtime-common';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -499,7 +498,7 @@ export function setupOperatorModeTests(
               },
               meta: {
                 adoptsFrom: {
-                  module: '../spec-card-linker.gts' as RealmResourceIdentifier,
+                  module: rri('../spec-card-linker.gts'),
                   name: 'SpecCardLinker',
                 },
               },
@@ -534,7 +533,7 @@ export function setupOperatorModeTests(
               },
               meta: {
                 adoptsFrom: {
-                  module: '../person' as RealmResourceIdentifier,
+                  module: rri('../person'),
                   name: 'Person',
                 },
               },
@@ -559,7 +558,7 @@ export function setupOperatorModeTests(
               },
               meta: {
                 adoptsFrom: {
-                  module: '../friend-with-css.gts' as RealmResourceIdentifier,
+                  module: rri('../friend-with-css.gts'),
                   name: 'FriendWithCSS',
                 },
               },
@@ -579,7 +578,7 @@ export function setupOperatorModeTests(
               },
               meta: {
                 adoptsFrom: {
-                  module: '../friend-with-css.gts' as RealmResourceIdentifier,
+                  module: rri('../friend-with-css.gts'),
                   name: 'FriendWithCSS',
                 },
               },
@@ -599,7 +598,7 @@ export function setupOperatorModeTests(
               },
               meta: {
                 adoptsFrom: {
-                  module: '../friend-with-css.gts' as RealmResourceIdentifier,
+                  module: rri('../friend-with-css.gts'),
                   name: 'FriendWithCSS',
                 },
               },

@@ -1,10 +1,7 @@
 import { module, test } from 'qunit';
 
-import type {
-  LooseCardResource,
-  RealmResourceIdentifier,
-} from '@cardstack/runtime-common';
-import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common';
+import type { LooseCardResource } from '@cardstack/runtime-common';
+import { codeRefWithAbsoluteURL, rri } from '@cardstack/runtime-common';
 import {
   getValueForResourcePath,
   normalizeQueryDefinition,
@@ -16,7 +13,7 @@ module('normalizeQueryDefinition', function () {
     isPrimitive: false,
     isComputed: false,
     fieldOrCard: {
-      module: 'https://example.com/test' as RealmResourceIdentifier,
+      module: rri('https://example.com/test'),
       name: 'Test',
     },
   } as const;
@@ -27,7 +24,7 @@ module('normalizeQueryDefinition', function () {
       id: 'https://realm.example/cards/1',
       meta: {
         adoptsFrom: {
-          module: 'https://example.com/base' as RealmResourceIdentifier,
+          module: rri('https://example.com/base'),
           name: 'BaseCard',
         },
       },
@@ -194,7 +191,7 @@ module('normalizeQueryDefinition', function () {
       relativeTo,
     );
     let typeRef = {
-      module: 'https://example.com/other' as RealmResourceIdentifier,
+      module: rri('https://example.com/other'),
       name: 'Other',
     };
 
@@ -221,7 +218,7 @@ module('normalizeQueryDefinition', function () {
     let realmURL = new URL('https://realm.example/');
     let relativeTo = new URL('https://realm.example/cards/1');
     let existingOn = {
-      module: 'https://example.com/custom' as RealmResourceIdentifier,
+      module: rri('https://example.com/custom'),
       name: 'Custom',
     };
 

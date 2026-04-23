@@ -28,7 +28,7 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import {
   baseCardRef,
   trimExecutableExtension,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 import {
   installDelayedRuntimeRealmSearchPatch,
@@ -241,7 +241,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person' as RealmResourceIdentifier,
+                    module: rri('./person'),
                     name: 'Person',
                   },
                 },
@@ -287,7 +287,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './person' as RealmResourceIdentifier,
+                  module: rri('./person'),
                   name: 'Person',
                 },
               },
@@ -440,7 +440,7 @@ module(basename(__filename), function () {
         renderOptions: {
           fileExtract: true,
           fileDefCodeRef: {
-            module: `${realmURL}filedef-mismatch` as RealmResourceIdentifier,
+            module: rri(`${realmURL}filedef-mismatch`),
             name: 'FileDef',
           },
         },
@@ -537,7 +537,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person' as RealmResourceIdentifier,
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -563,7 +563,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './no-icon' as RealmResourceIdentifier,
+                      module: rri('./no-icon'),
                       name: 'NoIcon',
                     },
                   },
@@ -587,7 +587,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './bad-icon-import' as RealmResourceIdentifier,
+                      module: rri('./bad-icon-import'),
                       name: 'BadIconImport',
                     },
                   },
@@ -598,7 +598,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './broken' as RealmResourceIdentifier,
+                      module: rri('./broken'),
                       name: 'Broken',
                     },
                   },
@@ -620,7 +620,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './rejects' as RealmResourceIdentifier,
+                      module: rri('./rejects'),
                       name: 'Rejects',
                     },
                   },
@@ -643,7 +643,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './rsvp-rejects' as RealmResourceIdentifier,
+                      module: rri('./rsvp-rejects'),
                       name: 'RsvpRejects',
                     },
                   },
@@ -664,7 +664,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './throws' as RealmResourceIdentifier,
+                      module: rri('./throws'),
                       name: 'Throws',
                     },
                   },
@@ -686,7 +686,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './console-error' as RealmResourceIdentifier,
+                      module: rri('./console-error'),
                       name: 'ConsoleError',
                     },
                   },
@@ -708,7 +708,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './console-no-error' as RealmResourceIdentifier,
+                      module: rri('./console-no-error'),
                       name: 'ConsoleNoError',
                     },
                   },
@@ -844,7 +844,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query' as RealmResourceIdentifier,
+                      module: rri('./directory-query'),
                       name: 'Directory',
                     },
                   },
@@ -859,7 +859,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query' as RealmResourceIdentifier,
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -881,7 +881,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query' as RealmResourceIdentifier,
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -903,7 +903,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query' as RealmResourceIdentifier,
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -925,7 +925,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query' as RealmResourceIdentifier,
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -947,7 +947,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query' as RealmResourceIdentifier,
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -1617,7 +1617,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dep-reset-consumer' as RealmResourceIdentifier,
+                      module: rri('./dep-reset-consumer'),
                       name: 'DepResetConsumer',
                     },
                   },
@@ -1634,7 +1634,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dep-reset-consumer' as RealmResourceIdentifier,
+                      module: rri('./dep-reset-consumer'),
                       name: 'DepResetConsumer',
                     },
                   },
@@ -1647,7 +1647,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person' as RealmResourceIdentifier,
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -1660,7 +1660,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person' as RealmResourceIdentifier,
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -1877,7 +1877,7 @@ module(basename(__filename), function () {
                   meta: {
                     adoptsFrom: {
                       module:
-                        './prerendered-search-live' as RealmResourceIdentifier,
+                        rri('./prerendered-search-live'),
                       name: 'LiveSearchHost',
                     },
                   },
@@ -1888,7 +1888,7 @@ module(basename(__filename), function () {
                   meta: {
                     adoptsFrom: {
                       module:
-                        './prerendered-search-live' as RealmResourceIdentifier,
+                        rri('./prerendered-search-live'),
                       name: 'LiveSearchInner',
                     },
                   },
@@ -1902,7 +1902,7 @@ module(basename(__filename), function () {
                   meta: {
                     adoptsFrom: {
                       module:
-                        './prerendered-search-live' as RealmResourceIdentifier,
+                        rri('./prerendered-search-live'),
                       name: 'LiveSearchResult',
                     },
                   },
@@ -1926,7 +1926,7 @@ module(basename(__filename), function () {
                     return {
                       filter: {
                         on: {
-                          module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+                          module: rri('https://cardstack.com/base/card-api'),
                           name: 'FileDef',
                         },
                         eq: {
@@ -1997,7 +1997,7 @@ module(basename(__filename), function () {
                   meta: {
                     adoptsFrom: {
                       module:
-                        './live-file-search-card' as RealmResourceIdentifier,
+                        rri('./live-file-search-card'),
                       name: 'LiveFileSearchHost',
                     },
                   },
@@ -2008,7 +2008,7 @@ module(basename(__filename), function () {
                   meta: {
                     adoptsFrom: {
                       module:
-                        './live-file-search-card' as RealmResourceIdentifier,
+                        rri('./live-file-search-card'),
                       name: 'LiveFileSearchInner',
                     },
                   },
@@ -2206,7 +2206,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './article' as RealmResourceIdentifier,
+                    module: rri('./article'),
                     name: 'Article',
                   },
                 },
@@ -2233,7 +2233,7 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: './website' as RealmResourceIdentifier,
+                    module: rri('./website'),
                     name: 'Website',
                   },
                 },
@@ -2272,7 +2272,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './auth-proxy' as RealmResourceIdentifier,
+                    module: rri('./auth-proxy'),
                     name: 'AuthProxy',
                   },
                 },
@@ -2462,7 +2462,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './person' as RealmResourceIdentifier,
+              module: rri('./person'),
               name: 'Person',
             },
           },
@@ -2475,7 +2475,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './person' as RealmResourceIdentifier,
+              module: rri('./person'),
               name: 'Person',
             },
           },
@@ -2512,7 +2512,7 @@ module(basename(__filename), function () {
           attributes: {},
           meta: {
             adoptsFrom: {
-              module: './query-directory' as RealmResourceIdentifier,
+              module: rri('./query-directory'),
               name: 'QueryDirectory',
             },
           },
@@ -2544,7 +2544,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './query-directory-proxy' as RealmResourceIdentifier,
+              module: rri('./query-directory-proxy'),
               name: 'QueryDirectoryProxy',
             },
           },
@@ -2657,7 +2657,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './person' as RealmResourceIdentifier,
+                module: rri('./person'),
                 name: 'Person',
               },
             },
@@ -2670,7 +2670,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './person' as RealmResourceIdentifier,
+                module: rri('./person'),
                 name: 'Person',
               },
             },
@@ -2707,7 +2707,7 @@ module(basename(__filename), function () {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: './query-directory' as RealmResourceIdentifier,
+                module: rri('./query-directory'),
                 name: 'QueryDirectory',
               },
             },
@@ -2739,7 +2739,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './query-directory-proxy' as RealmResourceIdentifier,
+                module: rri('./query-directory-proxy'),
                 name: 'QueryDirectoryProxy',
               },
             },
@@ -2889,7 +2889,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person' as RealmResourceIdentifier,
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -2902,7 +2902,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person' as RealmResourceIdentifier,
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -2926,7 +2926,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './broken-card' as RealmResourceIdentifier,
+                      module: rri('./broken-card'),
                       name: 'Broken',
                     },
                   },
@@ -3042,7 +3042,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './cat' as RealmResourceIdentifier,
+                      module: rri('./cat'),
                       name: 'Cat',
                     },
                   },
@@ -3060,7 +3060,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog' as RealmResourceIdentifier,
+                      module: rri('./dog'),
                       name: 'Dog',
                     },
                   },
@@ -3081,7 +3081,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog-many' as RealmResourceIdentifier,
+                      module: rri('./dog-many'),
                       name: 'DogMany',
                     },
                   },
@@ -3106,7 +3106,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog-profile' as RealmResourceIdentifier,
+                      module: rri('./dog-profile'),
                       name: 'DogProfile',
                     },
                   },
@@ -3150,7 +3150,7 @@ module(basename(__filename), function () {
                   meta: {
                     adoptsFrom: {
                       module:
-                        './non-isolated-links-card' as RealmResourceIdentifier,
+                        rri('./non-isolated-links-card'),
                       name: 'NonIsolatedLinks',
                     },
                   },
@@ -3168,7 +3168,7 @@ module(basename(__filename), function () {
                   meta: {
                     adoptsFrom: {
                       module:
-                        'https://cardstack.com/base/brand-guide' as RealmResourceIdentifier,
+                        rri('https://cardstack.com/base/brand-guide'),
                       name: 'default',
                     },
                   },
@@ -3186,7 +3186,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './cat' as RealmResourceIdentifier,
+                      module: rri('./cat'),
                       name: 'Cat',
                     },
                   },
@@ -3206,7 +3206,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './cat' as RealmResourceIdentifier,
+                      module: rri('./cat'),
                       name: 'Cat',
                     },
                   },
@@ -3236,7 +3236,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './intentional-error' as RealmResourceIdentifier,
+                      module: rri('./intentional-error'),
                       name: 'IntentionalError',
                     },
                   },
@@ -3265,7 +3265,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './timer-error-card' as RealmResourceIdentifier,
+                      module: rri('./timer-error-card'),
                       name: 'TimerError',
                     },
                   },
@@ -3296,7 +3296,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './timer-timeout-card' as RealmResourceIdentifier,
+                      module: rri('./timer-timeout-card'),
                       name: 'TimerTimeout',
                     },
                   },
@@ -3327,7 +3327,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './unusable-error' as RealmResourceIdentifier,
+                      module: rri('./unusable-error'),
                       name: 'UnusableError',
                     },
                   },
@@ -3361,7 +3361,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './embedded-error' as RealmResourceIdentifier,
+                      module: rri('./embedded-error'),
                       name: 'EmbeddedError',
                     },
                   },
@@ -3391,7 +3391,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog' as RealmResourceIdentifier,
+                      module: rri('./dog'),
                       name: 'Dog',
                     },
                   },
@@ -5373,7 +5373,7 @@ module(basename(__filename), function () {
             attributes: { info: `Detail ${i}` },
             meta: {
               adoptsFrom: {
-                module: '../detail' as RealmResourceIdentifier,
+                module: rri('../detail'),
                 name: 'Detail',
               },
             },
@@ -5430,7 +5430,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: '../child-config' as RealmResourceIdentifier,
+                module: rri('../child-config'),
                 name: 'ChildConfig',
               },
             },
@@ -5450,7 +5450,7 @@ module(basename(__filename), function () {
           relationships: childRelationships,
           meta: {
             adoptsFrom: {
-              module: './parent-card' as RealmResourceIdentifier,
+              module: rri('./parent-card'),
               name: 'ParentCard',
             },
           },
@@ -5594,7 +5594,7 @@ module(basename(__filename), function () {
                 attributes: { name: 'Maple' },
                 meta: {
                   adoptsFrom: {
-                    module: './person' as RealmResourceIdentifier,
+                    module: rri('./person'),
                     name: 'Person',
                   },
                 },
@@ -5695,7 +5695,7 @@ module(basename(__filename), function () {
           fileExtract: true,
           fileRender: true,
           fileDefCodeRef: {
-            module: `${baseRealm.url}json-file-def` as RealmResourceIdentifier,
+            module: rri(`${baseRealm.url}json-file-def`),
             name: 'JsonFileDef',
           },
         },

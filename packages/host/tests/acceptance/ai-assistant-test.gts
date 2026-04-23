@@ -20,7 +20,7 @@ import {
   Deferred,
   baseRealm,
   skillCardRef,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 
 import {
@@ -1999,7 +1999,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.deepEqual(
       contextSent.codeMode!.selectedCodeRef,
       {
-        module: 'http://test-realm/test/plant' as RealmResourceIdentifier,
+        module: rri('http://test-realm/test/plant'),
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',
@@ -2012,7 +2012,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.deepEqual(
       contextSent.codeMode!.inheritanceChain![0].codeRef,
       {
-        module: 'http://test-realm/test/plant' as RealmResourceIdentifier,
+        module: rri('http://test-realm/test/plant'),
         name: 'Plant',
       },
       'First item in inheritanceChain is the Plant card',
@@ -2159,7 +2159,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.deepEqual(
       contextSent.codeMode!.selectedCodeRef,
       {
-        module: 'http://test-realm/test/plant' as RealmResourceIdentifier,
+        module: rri('http://test-realm/test/plant'),
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',
@@ -2230,7 +2230,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.deepEqual(
       contextSent.codeMode!.selectedCodeRef,
       {
-        module: 'http://test-realm/test/plant' as RealmResourceIdentifier,
+        module: rri('http://test-realm/test/plant'),
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',

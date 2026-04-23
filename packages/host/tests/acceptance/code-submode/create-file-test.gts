@@ -14,7 +14,7 @@ import {
   Deferred,
   registerCardReferencePrefix,
   unregisterCardReferencePrefix,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 
 import type FileUploadService from '@cardstack/host/services/file-upload';
@@ -504,7 +504,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         assert.deepEqual(
           json.data.meta.adoptsFrom,
           {
-            module: '../person' as RealmResourceIdentifier,
+            module: rri('../person'),
             name: 'Person',
           },
           'adoptsFrom is correct',
@@ -601,7 +601,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         assert.deepEqual(
           json.data.meta.adoptsFrom,
           {
-            module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+            module: rri(`${baseRealm.url}card-api`),
             name: 'CardDef',
           },
           'adoptsFrom is correct',
@@ -663,7 +663,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         assert.deepEqual(
           json.data.meta.adoptsFrom,
           {
-            module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+            module: rri(`${baseRealm.url}card-api`),
             name: 'CardDef',
           },
           'adoptsFrom is correct',
@@ -731,7 +731,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         assert.deepEqual(
           json.data.meta.adoptsFrom,
           {
-            module: `${testRealmURL}person` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}person`),
             name: 'Person',
           },
           'adoptsFrom is correct',

@@ -10,8 +10,8 @@
 
 import type {
   LooseSingleCardDocument,
-  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 
 import { test } from './fixtures';
 import { expect } from '@playwright/test';
@@ -283,7 +283,7 @@ async function buildToolsForRealm(
       client,
       realm.realmServerURL.href,
       realm.realmURL.href,
-      { module: darkfactoryModule as RealmResourceIdentifier, name },
+      { module: rri(darkfactoryModule), name },
     );
     if (schema) {
       cardTypeSchemas.set(name, schema);
@@ -297,7 +297,7 @@ async function buildToolsForRealm(
     realm.realmServerURL.href,
     baseRealmUrl,
     {
-      module: 'https://cardstack.com/base/spec' as RealmResourceIdentifier,
+      module: rri('https://cardstack.com/base/spec'),
       name: 'Spec',
     },
   );

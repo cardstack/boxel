@@ -13,7 +13,8 @@ import {
   removeSync,
   writeFileSync,
 } from 'fs-extra';
-import type { Realm, RealmResourceIdentifier } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import {
   baseRealm,
   CachingDefinitionLookup,
@@ -227,7 +228,7 @@ module(basename(__filename), function () {
       assert.strictEqual(json.data.type, 'file-meta');
       assert.strictEqual(json.data.attributes?.name, 'person.gts');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
-        module: `${baseRealm.url}gts-file-def` as RealmResourceIdentifier,
+        module: rri(`${baseRealm.url}gts-file-def`),
         name: 'GtsFileDef',
       });
     });
@@ -257,7 +258,7 @@ module(basename(__filename), function () {
       assert.strictEqual(json.data.type, 'file-meta');
       assert.strictEqual(json.data.attributes?.name, 'guide.md');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
-        module: `${baseRealm.url}markdown-file-def` as RealmResourceIdentifier,
+        module: rri(`${baseRealm.url}markdown-file-def`),
         name: 'MarkdownDef',
       });
     });

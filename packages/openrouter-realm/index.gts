@@ -16,7 +16,7 @@ import DateTimeField from 'https://cardstack.com/base/datetime';
 import {
   type Query,
   type Filter,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 
 import CardList from 'https://cardstack.com/base/components/card-list';
@@ -30,7 +30,7 @@ class Isolated extends Component<typeof OpenRouterIndex> {
 
   get modelRef() {
     return {
-      module: `${this.realmHref}openrouter-model` as RealmResourceIdentifier,
+      module: rri(`${this.realmHref}openrouter-model`),
       name: 'OpenRouterModel',
     };
   }

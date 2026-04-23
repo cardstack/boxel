@@ -4,7 +4,7 @@ import { module, test } from 'qunit';
 import {
   baseRealm,
   type Query,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -136,7 +136,7 @@ module('Integration | commands | search', function (hooks) {
       filter: {
         eq: { firstName: 'R2-D2' },
         on: {
-          module: 'http://test-realm/test/author' as RealmResourceIdentifier,
+          module: rri('http://test-realm/test/author'),
           name: 'Author',
         },
       },
@@ -161,7 +161,7 @@ module('Integration | commands | search', function (hooks) {
     let result = await runQuerySearch({
       filter: {
         on: {
-          module: 'http://test-realm/test/author' as RealmResourceIdentifier,
+          module: rri('http://test-realm/test/author'),
           name: 'Author',
         },
         every: [{ matches: 'droid' }, { eq: { firstName: 'R2-D2' } }],

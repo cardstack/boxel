@@ -7,11 +7,11 @@ import { module, test } from 'qunit';
 import type {
   Loader,
   LooseCardResource,
-  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import {
   baseRealm,
   loadCardDef,
+  rri,
   visitModuleDeps,
 } from '@cardstack/runtime-common';
 import * as CodeRefSerializer from '@cardstack/runtime-common/serializers/code-ref';
@@ -78,7 +78,7 @@ module('code-ref', function (hooks) {
 
   test('can dynamically load a card definition', async function (assert) {
     let ref = {
-      module: `${testRealmURL}person` as RealmResourceIdentifier,
+      module: rri(`${testRealmURL}person`),
       name: 'Person',
     };
     await loadCardDef(ref, { loader });
@@ -97,12 +97,12 @@ module('code-ref', function (hooks) {
 
   test('can instantiate a card that uses a code-ref field', async function (assert) {
     let adoptsFrom = {
-      module: `${testRealmURL}code-ref-test` as RealmResourceIdentifier,
+      module: rri(`${testRealmURL}code-ref-test`),
       name: 'TestCard',
     };
     await loadCardDef(adoptsFrom, { loader });
     let ref = {
-      module: `${testRealmURL}person` as RealmResourceIdentifier,
+      module: rri(`${testRealmURL}person`),
       name: 'Person',
     };
     let doc = {
@@ -126,7 +126,7 @@ module('code-ref', function (hooks) {
     let json: LooseCardResource = {
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}code-ref-test` as RealmResourceIdentifier,
+          module: rri(`${testRealmURL}code-ref-test`),
           name: 'TestCard',
         },
         fields: {
@@ -135,7 +135,7 @@ module('code-ref', function (hooks) {
               type: 'ancestorOf',
               card: {
                 module:
-                  `${testRealmURL}code-ref-test-1` as RealmResourceIdentifier,
+                  rri(`${testRealmURL}code-ref-test-1`),
                 name: 'TestCard1',
               },
             },
@@ -146,7 +146,7 @@ module('code-ref', function (hooks) {
                 type: 'fieldOf',
                 card: {
                   module:
-                    `${testRealmURL}code-ref-test-3` as RealmResourceIdentifier,
+                    rri(`${testRealmURL}code-ref-test-3`),
                   name: 'TestCard3',
                 },
                 field: 'someField',
@@ -157,17 +157,12 @@ module('code-ref', function (hooks) {
       },
     };
     visitModuleDeps(json, (moduleURL, setModuleURL) => {
-      setModuleURL(
-        moduleURL.replace(
-          'code-ref-test',
-          'foo-bar',
-        ) as RealmResourceIdentifier,
-      );
+      setModuleURL(rri(moduleURL.replace('code-ref-test', 'foo-bar')));
     });
     assert.deepEqual(json, {
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}foo-bar` as RealmResourceIdentifier,
+          module: rri(`${testRealmURL}foo-bar`),
           name: 'TestCard',
         },
         fields: {
@@ -175,7 +170,7 @@ module('code-ref', function (hooks) {
             adoptsFrom: {
               type: 'ancestorOf',
               card: {
-                module: `${testRealmURL}foo-bar-1` as RealmResourceIdentifier,
+                module: rri(`${testRealmURL}foo-bar-1`),
                 name: 'TestCard1',
               },
             },
@@ -185,7 +180,7 @@ module('code-ref', function (hooks) {
               adoptsFrom: {
                 type: 'fieldOf',
                 card: {
-                  module: `${testRealmURL}foo-bar-3` as RealmResourceIdentifier,
+                  module: rri(`${testRealmURL}foo-bar-3`),
                   name: 'TestCard3',
                 },
                 field: 'someField',

@@ -3,11 +3,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import type {
-  Loader,
-  RealmResourceIdentifier,
-} from '@cardstack/runtime-common';
-import { baseRealm } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
+import { baseRealm, rri } from '@cardstack/runtime-common';
 
 import {
   suggestCardChooserTitle,
@@ -89,7 +86,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   test('filter on', async function (assert) {
     let filter = {
       on: {
-        module: `${testRealmURL}booking` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}booking`),
         name: 'Booking',
       },
       eq: { booker: 'Arthur' },
@@ -106,7 +103,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   test('filter by type', async function (assert) {
     let filter = {
       type: {
-        module: `${testRealmURL}booking` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}booking`),
         name: 'Booking',
       },
     };
@@ -124,14 +121,14 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
       every: [
         {
           on: {
-            module: `${testRealmURL}article` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}article`),
             name: 'Article',
           },
           eq: { author: 'Kafka' },
         },
         {
           on: {
-            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}book`),
             name: 'Book',
           },
           eq: { author: 'Kafka' },
@@ -156,14 +153,14 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
       any: [
         {
           on: {
-            module: `${testRealmURL}article` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}article`),
             name: 'Article',
           },
           eq: { author: 'Kafka' },
         },
         {
           on: {
-            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}book`),
             name: 'Book',
           },
           eq: { author: 'Kafka' },
@@ -179,20 +176,20 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
       every: [
         {
           type: {
-            module: `${testRealmURL}booking` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}booking`),
             name: 'Booking',
           },
         },
         {
           on: {
-            module: `${testRealmURL}article` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}article`),
             name: 'Article',
           },
           eq: { author: 'Kafka' },
         },
         {
           on: {
-            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}book`),
             name: 'Book',
           },
           eq: { author: 'Kafka' },
@@ -219,7 +216,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   test('filter by not', async function (assert) {
     let filter = {
       on: {
-        module: `${testRealmURL}article` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}article`),
         name: 'Article',
       },
       not: { eq: { author: 'Carl' } },
@@ -236,7 +233,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   test('filter by range', async function (assert) {
     let filter = {
       on: {
-        module: `${testRealmURL}post` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}post`),
         name: 'Post',
       },
       range: { views: { lte: 10, gt: 5 }, 'author.posts': { gte: 1 } },
@@ -253,7 +250,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   test('filter by card instance', async function (assert) {
     let filter = {
       type: {
-        module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+        module: rri(`${baseRealm.url}card-api`),
         name: 'CardDef',
       },
     };
@@ -279,7 +276,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
         { not: { eq: { 'author.firstName': 'Cardy' } } },
       ],
       type: {
-        module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+        module: rri(`${baseRealm.url}card-api`),
         name: 'CardDef',
       },
     };
@@ -305,19 +302,19 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
       every: [
         {
           type: {
-            module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+            module: rri(`${baseRealm.url}card-api`),
             name: 'CardDef',
           },
         },
         {
           on: {
-            module: `${testRealmURL}post` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}post`),
             name: 'Post',
           },
           every: [
             {
               type: {
-                module: `${testRealmURL}article` as RealmResourceIdentifier,
+                module: rri(`${testRealmURL}article`),
                 name: 'Article',
               },
             },
@@ -345,7 +342,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   test('filter with on specifying multiSelect option', async function (assert) {
     let filter = {
       on: {
-        module: `${testRealmURL}booking` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}booking`),
         name: 'Booking',
       },
       eq: { booker: 'Arthur' },
@@ -365,7 +362,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   test('filter with on but checking for "an"', async function (assert) {
     let filter = {
       on: {
-        module: `${testRealmURL}article` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}article`),
         name: 'Article',
       },
       eq: { author: 'Kafka' },
@@ -383,7 +380,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
     let filter = {
       type: {
         card: {
-          module: `${testRealmURL}post` as RealmResourceIdentifier,
+          module: rri(`${testRealmURL}post`),
           name: 'Post',
         },
         type: 'fieldOf',
@@ -404,7 +401,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
     let filter = {
       type: {
         card: {
-          module: `${testRealmURL}blog-post` as RealmResourceIdentifier,
+          module: rri(`${testRealmURL}blog-post`),
           name: 'BlogPost',
         },
         type: 'ancestorOf',

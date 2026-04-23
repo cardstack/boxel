@@ -3,7 +3,7 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -128,7 +128,7 @@ export class TestSpec extends Spec {
   test('creates spec with correct type for card definition', async function (assert) {
     const result = await createSpecCommand.execute({
       codeRef: {
-        module: `${testRealmURL}test-card.gts` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}test-card.gts`),
         name: 'TestCard',
       },
       targetRealm: testRealmURL,
@@ -162,7 +162,7 @@ export class TestSpec extends Spec {
   test('creates spec with correct type for field definition', async function (assert) {
     const result = await createSpecCommand.execute({
       codeRef: {
-        module: `${testRealmURL}test-field.gts` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}test-field.gts`),
         name: 'TestField',
       },
       targetRealm: testRealmURL,
@@ -179,7 +179,7 @@ export class TestSpec extends Spec {
   test('creates spec with correct type for app definition', async function (assert) {
     const result = await createSpecCommand.execute({
       codeRef: {
-        module: `${testRealmURL}app-card.gts` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}app-card.gts`),
         name: 'AppCard',
       },
       targetRealm: testRealmURL,
@@ -196,7 +196,7 @@ export class TestSpec extends Spec {
   test('creates spec with correct type for component definition', async function (assert) {
     const result = await createSpecCommand.execute({
       codeRef: {
-        module: `${testRealmURL}test-component.gts` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}test-component.gts`),
         name: 'TestComponent',
       },
       targetRealm: testRealmURL,
@@ -217,7 +217,7 @@ export class TestSpec extends Spec {
   test('creates spec with correct type for command definition', async function (assert) {
     const result = await createSpecCommand.execute({
       codeRef: {
-        module: `${testRealmURL}test-command.gts` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}test-command.gts`),
         name: 'TestCommand',
       },
       targetRealm: testRealmURL,
@@ -240,7 +240,7 @@ export class TestSpec extends Spec {
     try {
       await createSpecCommand.execute({
         codeRef: {
-          module: `${testRealmURL}test-card.gts` as RealmResourceIdentifier,
+          module: rri(`${testRealmURL}test-card.gts`),
           name: 'NonExistentExport', // Export that doesn't exist
         },
         targetRealm: testRealmURL,
@@ -261,7 +261,7 @@ export class TestSpec extends Spec {
     try {
       await createSpecCommand.execute({
         codeRef: {
-          module: `${testRealmURL}test-spec.gts` as RealmResourceIdentifier,
+          module: rri(`${testRealmURL}test-spec.gts`),
           name: 'TestSpec',
         },
         targetRealm: testRealmURL,
@@ -302,7 +302,7 @@ export class TestSpec extends Spec {
 
   test('returns empty specs array when trying to create spec with duplicate code ref', async function (assert) {
     const codeRef = {
-      module: `${testRealmURL}test-card` as RealmResourceIdentifier, // remember NO .gts extension
+      module: rri(`${testRealmURL}test-card`), // remember NO .gts extension
       name: 'TestCard',
     };
 
@@ -351,7 +351,7 @@ export class TestSpec extends Spec {
   test('auto generates README on initial spec creation when autoGenerateReadme is true', async function (assert) {
     const result = await createSpecCommand.execute({
       codeRef: {
-        module: `${testRealmURL}test-card.gts` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}test-card.gts`),
         name: 'TestCard',
       },
       targetRealm: testRealmURL,

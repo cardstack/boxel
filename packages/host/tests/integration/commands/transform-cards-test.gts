@@ -7,7 +7,7 @@ import { module, skip, test } from 'qunit';
 import {
   baseRealm,
   Command,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -250,13 +250,13 @@ module('Integration | commands | transform-cards', function (hooks) {
       query: {
         filter: {
           type: {
-            module: `${testRealmURL}person` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}person`),
             name: 'Person',
           },
         },
       },
       commandRef: {
-        module: `${testRealmURL}prefix-name-command` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}prefix-name-command`),
         name: 'default',
       },
     });
@@ -273,7 +273,7 @@ module('Integration | commands | transform-cards', function (hooks) {
       query: {
         filter: {
           type: {
-            module: `${testRealmURL}person` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}person`),
             name: 'Person',
           },
         },
@@ -305,14 +305,14 @@ module('Integration | commands | transform-cards', function (hooks) {
         filter: {
           contains: { cardTitle: 'Alice' },
           on: {
-            module: `${testRealmURL}person` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}person`),
             name: 'Person',
           },
         },
       },
       commandRef: {
         module:
-          `${testRealmURL}uppercase-name-command` as RealmResourceIdentifier,
+          rri(`${testRealmURL}uppercase-name-command`),
         name: 'default',
       },
     });
@@ -346,14 +346,14 @@ module('Integration | commands | transform-cards', function (hooks) {
       query: {
         filter: {
           type: {
-            module: `${testRealmURL}pet` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}pet`),
             name: 'Pet',
           },
         },
       },
       commandRef: {
         module:
-          `${testRealmURL}add-metadata-command` as RealmResourceIdentifier,
+          rri(`${testRealmURL}add-metadata-command`),
         name: 'default',
       },
     });
@@ -396,7 +396,7 @@ module('Integration | commands | transform-cards', function (hooks) {
         },
       },
       commandRef: {
-        module: `${testRealmURL}prefix-name-command` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}prefix-name-command`),
         name: 'default',
       },
     });
@@ -425,13 +425,13 @@ module('Integration | commands | transform-cards', function (hooks) {
         filter: {
           contains: { cardTitle: 'Alice' },
           on: {
-            module: `${testRealmURL}person` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}person`),
             name: 'Person',
           },
         },
       },
       commandRef: {
-        module: `${testRealmURL}prefix-name-command` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}prefix-name-command`),
         name: 'default',
       },
     });
@@ -471,7 +471,7 @@ module('Integration | commands | transform-cards', function (hooks) {
         },
         commandRef: {
           module:
-            `${testRealmURL}non-existent-command` as RealmResourceIdentifier,
+            rri(`${testRealmURL}non-existent-command`),
           name: 'default',
         },
       });

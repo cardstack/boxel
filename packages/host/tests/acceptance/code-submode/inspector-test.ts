@@ -21,7 +21,7 @@ import {
   baseRealm,
   Deferred,
   type ResolvedCodeRef,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
@@ -934,7 +934,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           'the name field is correct',
         );
         assert.deepEqual(json.data.meta.adoptsFrom, {
-          module: '../pet' as RealmResourceIdentifier,
+          module: rri('../pet'),
           name: 'Pet',
         });
         assert.strictEqual(json.data.meta.realmURL, testRealmURL);
@@ -996,7 +996,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         'the name field is correct',
       );
       assert.deepEqual(json.data.meta.adoptsFrom, {
-        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}pet`),
         name: 'Pet',
       });
       assert.strictEqual(json.data.meta.realmURL, testRealmURL2);
@@ -2382,7 +2382,7 @@ export class ExportedCard extends ExportedCardParent {
       assert.deepEqual(
         json.data.meta.adoptsFrom,
         {
-          module: '../in-this-file' as RealmResourceIdentifier,
+          module: rri('../in-this-file'),
           name: 'ExportedCard',
         },
         'adoptsFrom is correct',

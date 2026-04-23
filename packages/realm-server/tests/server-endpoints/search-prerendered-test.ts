@@ -8,9 +8,12 @@ import type {
   QueuePublisher,
   QueueRunner,
   Realm,
-  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
-import { baseCardRef, buildQueryParamValue } from '@cardstack/runtime-common';
+import {
+  baseCardRef,
+  buildQueryParamValue,
+  rri,
+} from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
@@ -49,7 +52,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
             meta: {
               adoptsFrom: {
                 module:
-                  'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+                  rri('https://cardstack.com/base/card-api'),
                 name: 'CardDef',
               },
             },
@@ -66,7 +69,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
             meta: {
               adoptsFrom: {
                 module:
-                  'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+                  rri('https://cardstack.com/base/card-api'),
                 name: 'CardDef',
               },
             },

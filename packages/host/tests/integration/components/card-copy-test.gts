@@ -11,7 +11,7 @@ import {
   baseRealm,
   type SingleCardDocument,
   type LooseSingleCardDocument,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
@@ -328,7 +328,7 @@ module('Integration | card-copy', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `../person` as RealmResourceIdentifier,
+              module: rri(`../person`),
               name: 'Person',
             },
           },
@@ -745,7 +745,7 @@ module('Integration | card-copy', function (hooks) {
       assert.strictEqual(json.data.id, `${testRealm2URL}Pet/${id}`);
       assert.strictEqual(json.data.attributes?.firstName, 'Mango');
       assert.deepEqual(json.data.meta.adoptsFrom, {
-        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}pet`),
         name: 'Pet',
       });
       assert.strictEqual(json.data.meta.realmURL, testRealm2URL);
@@ -1004,7 +1004,7 @@ module('Integration | card-copy', function (hooks) {
       assert.strictEqual(json.data.id, `${testRealm2URL}Person/${id}`);
       assert.strictEqual(json.data.attributes?.firstName, 'Hassan');
       assert.deepEqual(json.data.meta.adoptsFrom, {
-        module: `${testRealmURL}person` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}person`),
         name: 'Person',
       });
       assert.strictEqual(json.data.meta.realmURL, testRealm2URL);
@@ -1025,7 +1025,7 @@ module('Integration | card-copy', function (hooks) {
       let included = json.included?.[0]!;
       assert.strictEqual(included.id, `${testRealmURL}Pet/mango`);
       assert.deepEqual(included.meta.adoptsFrom, {
-        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}pet`),
         name: 'Pet',
       });
       assert.deepEqual(included.meta.realmURL, testRealmURL);
@@ -1139,7 +1139,7 @@ module('Integration | card-copy', function (hooks) {
       assert.strictEqual(json.data.id, `${testRealm2URL}Person/${id}`);
       assert.strictEqual(json.data.attributes?.firstName, 'Sakura');
       assert.deepEqual(json.data.meta.adoptsFrom, {
-        module: `${testRealmURL}person` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}person`),
         name: 'Person',
       });
       assert.strictEqual(json.data.meta.realmURL, testRealm2URL);
@@ -1160,7 +1160,7 @@ module('Integration | card-copy', function (hooks) {
       let included = json.included?.[0]!;
       assert.strictEqual(included.id, `${testRealm2URL}Pet/paper`);
       assert.deepEqual(included.meta.adoptsFrom, {
-        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}pet`),
         name: 'Pet',
       });
       assert.deepEqual(included.meta.realmURL, testRealm2URL);

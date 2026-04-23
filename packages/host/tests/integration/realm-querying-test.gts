@@ -6,7 +6,7 @@ import { module, test } from 'qunit';
 import {
   baseRealm,
   baseCardRef,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
@@ -60,7 +60,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}article` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}article`),
             name: 'Article',
           },
         },
@@ -76,7 +76,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}book`),
             name: 'Book',
           },
         },
@@ -98,7 +98,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}post` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}post`),
             name: 'Post',
           },
         },
@@ -120,7 +120,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}article` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}article`),
             name: 'Article',
           },
         },
@@ -139,7 +139,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}book`),
             name: 'Book',
           },
         },
@@ -158,7 +158,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}book`),
             name: 'Book',
           },
         },
@@ -177,7 +177,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}book`),
             name: 'Book',
           },
         },
@@ -191,13 +191,13 @@ module(`Integration | realm querying`, function (hooks) {
           cardDescription: 'A card that represents a blog post',
           specType: 'card',
           ref: {
-            module: `${testModuleRealm}post` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}post`),
             name: 'Post',
           },
         },
         meta: {
           adoptsFrom: {
-            module: `${baseRealm.url}spec` as RealmResourceIdentifier,
+            module: rri(`${baseRealm.url}spec`),
             name: 'Spec',
           },
         },
@@ -211,13 +211,13 @@ module(`Integration | realm querying`, function (hooks) {
           cardDescription: 'A card that represents an online article ',
           specType: 'card',
           ref: {
-            module: `${testModuleRealm}article` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}article`),
             name: 'Article',
           },
         },
         meta: {
           adoptsFrom: {
-            module: `${baseRealm.url}spec` as RealmResourceIdentifier,
+            module: rri(`${baseRealm.url}spec`),
             name: 'Spec',
           },
         },
@@ -233,7 +233,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}event` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}event`),
             name: 'Event',
           },
         },
@@ -249,7 +249,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}event` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}event`),
             name: 'Event',
           },
         },
@@ -264,7 +264,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}dog` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}dog`),
             name: 'Dog',
           },
         },
@@ -279,7 +279,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}dog` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}dog`),
             name: 'Dog',
           },
         },
@@ -294,7 +294,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}dog` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}dog`),
             name: 'Dog',
           },
         },
@@ -315,7 +315,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}friend` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}friend`),
             name: 'Friend',
           },
         },
@@ -336,7 +336,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}friend` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}friend`),
             name: 'Friend',
           },
         },
@@ -371,7 +371,7 @@ module(`Integration | realm querying`, function (hooks) {
         relationships: {},
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}booking`),
             name: 'Booking',
           },
         },
@@ -421,7 +421,7 @@ module(`Integration | realm querying`, function (hooks) {
         relationships: {},
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}booking`),
             name: 'Booking',
           },
         },
@@ -436,7 +436,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}person` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}person`),
             name: 'Person',
           },
         },
@@ -451,7 +451,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}person` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}person`),
             name: 'Person',
           },
         },
@@ -477,7 +477,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}friends` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}friends`),
             name: 'Friends',
           },
         },
@@ -491,7 +491,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}friends` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}friends`),
             name: 'Friends',
           },
         },
@@ -512,7 +512,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}friends` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}friends`),
             name: 'Friends',
           },
         },
@@ -528,7 +528,7 @@ module(`Integration | realm querying`, function (hooks) {
         meta: {
           adoptsFrom: {
             module:
-              `${testModuleRealm}type-examples` as RealmResourceIdentifier,
+              rri(`${testModuleRealm}type-examples`),
             name: 'TypeExamples',
           },
         },
@@ -544,7 +544,7 @@ module(`Integration | realm querying`, function (hooks) {
         meta: {
           adoptsFrom: {
             module:
-              `${testModuleRealm}type-examples` as RealmResourceIdentifier,
+              rri(`${testModuleRealm}type-examples`),
             name: 'TypeExamples',
           },
         },
@@ -559,7 +559,7 @@ module(`Integration | realm querying`, function (hooks) {
         meta: {
           adoptsFrom: {
             module:
-              `${testModuleRealm}type-examples` as RealmResourceIdentifier,
+              rri(`${testModuleRealm}type-examples`),
             name: 'TypeExamples',
           },
         },
@@ -574,7 +574,7 @@ module(`Integration | realm querying`, function (hooks) {
         meta: {
           adoptsFrom: {
             module:
-              `${testModuleRealm}type-examples` as RealmResourceIdentifier,
+              rri(`${testModuleRealm}type-examples`),
             name: 'TypeExamples',
           },
         },
@@ -603,7 +603,7 @@ module(`Integration | realm querying`, function (hooks) {
               meta: {
                 adoptsFrom: {
                   module:
-                    `${testModuleRealm}file-query-card` as RealmResourceIdentifier,
+                    rri(`${testModuleRealm}file-query-card`),
                   name: 'FileQueryCard',
                 },
               },
@@ -619,7 +619,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}post` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}post`),
           name: 'Post',
         },
         eq: { cardTitle: 'Card 1', cardDescription: 'Sample post' },
@@ -635,7 +635,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}booking`),
           name: 'Booking',
         },
         eq: { 'posts.author.lastName': null },
@@ -651,7 +651,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}type-examples` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}type-examples`),
           name: 'TypeExamples',
         },
         eq: { stringField: null },
@@ -667,7 +667,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}type-examples` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}type-examples`),
           name: 'TypeExamples',
         },
         eq: { stringArrayField: null },
@@ -683,7 +683,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}friends` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}friends`),
           name: 'Friends',
         },
         eq: { friends: null },
@@ -699,7 +699,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}friend` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}friend`),
           name: 'Friend',
         },
         every: [{ eq: { firstName: 'Mango' } }, { eq: { friend: null } }],
@@ -715,7 +715,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}post` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}post`),
           name: 'Post',
         },
         eq: { 'author.fullName': 'Carl Stack' },
@@ -731,7 +731,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}friend` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}friend`),
           name: 'Friend',
         },
         eq: { 'friend.firstName': 'Mango' },
@@ -747,12 +747,12 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${baseRealm.url}spec` as RealmResourceIdentifier,
+          module: rri(`${baseRealm.url}spec`),
           name: 'Spec',
         },
         eq: {
           ref: {
-            module: `${testModuleRealm}post` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}post`),
             name: 'Post',
           },
         },
@@ -766,7 +766,7 @@ module(`Integration | realm querying`, function (hooks) {
 
   test('can search for file-meta entries by FileDef type', async function (assert) {
     let fileDefRef = {
-      module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+      module: rri(`${baseRealm.url}card-api`),
       name: 'FileDef',
     };
     let result = (await queryEngine.searchCards({
@@ -789,7 +789,7 @@ module(`Integration | realm querying`, function (hooks) {
 
   test('can search for file-meta entries by url', async function (assert) {
     let fileDefRef = {
-      module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+      module: rri(`${baseRealm.url}card-api`),
       name: 'FileDef',
     };
     let targetUrl = `${testRealmURL}files/sample.txt`;
@@ -815,7 +815,7 @@ module(`Integration | realm querying`, function (hooks) {
 
   test('can search for file-meta entries by FileDef subclass type', async function (assert) {
     let markdownRef = {
-      module: `${baseRealm.url}markdown-file-def` as RealmResourceIdentifier,
+      module: rri(`${baseRealm.url}markdown-file-def`),
       name: 'MarkdownDef',
     };
     let result = (await queryEngine.searchCards({
@@ -837,7 +837,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}post` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}post`),
           name: 'Post',
         },
         every: [
@@ -854,7 +854,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}post` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}post`),
           name: 'Post',
         },
         not: { not: { not: { eq: { 'author.firstName': 'Carl' } } } },
@@ -870,7 +870,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         type: {
-          module: `${testModuleRealm}article` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}article`),
           name: 'Article',
         },
       },
@@ -885,7 +885,7 @@ module(`Integration | realm querying`, function (hooks) {
       await queryEngine.searchCards({
         filter: {
           type: {
-            module: `${testModuleRealm}post` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}post`),
             name: 'Post',
           },
         },
@@ -902,7 +902,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}post` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}post`),
           name: 'Post',
         },
         range: {
@@ -922,7 +922,7 @@ module(`Integration | realm querying`, function (hooks) {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: {
-            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}booking`),
             name: 'Booking',
           },
           range: {
@@ -940,7 +940,7 @@ module(`Integration | realm querying`, function (hooks) {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: {
-            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}booking`),
             name: 'Booking',
           },
           range: {
@@ -959,7 +959,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}event` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}event`),
           name: 'Event',
         },
         eq: {
@@ -977,7 +977,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}post` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}post`),
           name: 'Post',
         },
         eq: { 'author.firstName': 'Carl' },
@@ -994,7 +994,7 @@ module(`Integration | realm querying`, function (hooks) {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: {
-            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}booking`),
             name: 'Booking',
           },
           eq: { 'hosts.firstName': 'Arthur' },
@@ -1010,7 +1010,7 @@ module(`Integration | realm querying`, function (hooks) {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: {
-            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}booking`),
             name: 'Booking',
           },
           eq: { 'hosts.firstName': null },
@@ -1022,7 +1022,7 @@ module(`Integration | realm querying`, function (hooks) {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: {
-            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}booking`),
             name: 'Booking',
           },
           eq: {
@@ -1041,7 +1041,7 @@ module(`Integration | realm querying`, function (hooks) {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: {
-            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}booking`),
             name: 'Booking',
           },
           eq: {
@@ -1063,7 +1063,7 @@ module(`Integration | realm querying`, function (hooks) {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: {
-            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}booking`),
             name: 'Booking',
           },
           eq: { sponsors: 'Nintendo' },
@@ -1079,7 +1079,7 @@ module(`Integration | realm querying`, function (hooks) {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: {
-            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}booking`),
             name: 'Booking',
           },
           eq: { sponsors: 'Playstation' },
@@ -1095,7 +1095,7 @@ module(`Integration | realm querying`, function (hooks) {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: {
-            module: `${testModuleRealm}booking` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}booking`),
             name: 'Booking',
           },
           eq: {
@@ -1116,7 +1116,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}article` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}article`),
           name: 'Article',
         },
         not: { eq: { 'author.firstName': 'Carl' } },
@@ -1134,14 +1134,14 @@ module(`Integration | realm querying`, function (hooks) {
         any: [
           {
             on: {
-              module: `${testModuleRealm}article` as RealmResourceIdentifier,
+              module: rri(`${testModuleRealm}article`),
               name: 'Article',
             },
             eq: { 'author.firstName': 'Cardy' },
           },
           {
             on: {
-              module: `${testModuleRealm}book` as RealmResourceIdentifier,
+              module: rri(`${testModuleRealm}book`),
               name: 'Book',
             },
             eq: { 'author.firstName': 'Cardy' },
@@ -1162,14 +1162,14 @@ module(`Integration | realm querying`, function (hooks) {
         {
           by: 'author.lastName',
           on: {
-            module: `${testModuleRealm}article` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}article`),
             name: 'Article',
           },
         },
       ],
       filter: {
         type: {
-          module: `${testModuleRealm}article` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}article`),
           name: 'Article',
         },
       },
@@ -1186,7 +1186,7 @@ module(`Integration | realm querying`, function (hooks) {
         {
           by: 'author.firstName',
           on: {
-            module: `${testModuleRealm}article` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}article`),
             name: 'Article',
           },
           direction: 'desc',
@@ -1194,7 +1194,7 @@ module(`Integration | realm querying`, function (hooks) {
       ],
       filter: {
         type: {
-          module: `${testModuleRealm}post` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}post`),
           name: 'Post',
         },
       },
@@ -1262,7 +1262,7 @@ module(`Integration | realm querying`, function (hooks) {
         {
           by: 'author.lastName',
           on: {
-            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}book`),
             name: 'Book',
           },
           direction: 'asc',
@@ -1270,7 +1270,7 @@ module(`Integration | realm querying`, function (hooks) {
         {
           by: 'author.firstName',
           on: {
-            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}book`),
             name: 'Book',
           },
           direction: 'desc',
@@ -1278,7 +1278,7 @@ module(`Integration | realm querying`, function (hooks) {
       ],
       filter: {
         type: {
-          module: `${testModuleRealm}book` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}book`),
           name: 'Book',
         },
       },
@@ -1300,21 +1300,21 @@ module(`Integration | realm querying`, function (hooks) {
         {
           by: 'editions',
           on: {
-            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}book`),
             name: 'Book',
           },
         },
         {
           by: 'author.lastName',
           on: {
-            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}book`),
             name: 'Book',
           },
         },
       ],
       filter: {
         type: {
-          module: `${testModuleRealm}book` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}book`),
           name: 'Book',
         },
       },
@@ -1336,14 +1336,14 @@ module(`Integration | realm querying`, function (hooks) {
         {
           by: 'pubDate',
           on: {
-            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}book`),
             name: 'Book',
           },
         },
       ],
       filter: {
         type: {
-          module: `${testModuleRealm}book` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}book`),
           name: 'Book',
         },
       },
@@ -1370,7 +1370,7 @@ module(`Integration | realm querying`, function (hooks) {
         {
           by: 'editions',
           on: {
-            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}book`),
             name: 'Book',
           },
           direction: 'desc',
@@ -1378,14 +1378,14 @@ module(`Integration | realm querying`, function (hooks) {
         {
           by: 'author.lastName',
           on: {
-            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}book`),
             name: 'Book',
           },
         },
       ],
       filter: {
         type: {
-          module: `${testModuleRealm}book` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}book`),
           name: 'Book',
         },
       },
@@ -1407,14 +1407,14 @@ module(`Integration | realm querying`, function (hooks) {
         {
           by: 'author.lastName',
           on: {
-            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}book`),
             name: 'Book',
           },
         },
         {
           by: 'author.firstName',
           on: {
-            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}book`),
             name: 'Book',
           },
           direction: 'desc',
@@ -1424,13 +1424,13 @@ module(`Integration | realm querying`, function (hooks) {
         any: [
           {
             type: {
-              module: `${testModuleRealm}book` as RealmResourceIdentifier,
+              module: rri(`${testModuleRealm}book`),
               name: 'Book',
             },
           },
           {
             type: {
-              module: `${testModuleRealm}article` as RealmResourceIdentifier,
+              module: rri(`${testModuleRealm}article`),
               name: 'Article',
             },
           },
@@ -1456,7 +1456,7 @@ module(`Integration | realm querying`, function (hooks) {
         {
           by: 'author.firstName',
           on: {
-            module: `${testModuleRealm}book` as RealmResourceIdentifier,
+            module: rri(`${testModuleRealm}book`),
             name: 'Book',
           },
           direction: 'desc',
@@ -1466,14 +1466,14 @@ module(`Integration | realm querying`, function (hooks) {
         every: [
           {
             on: {
-              module: `${testModuleRealm}book` as RealmResourceIdentifier,
+              module: rri(`${testModuleRealm}book`),
               name: 'Book',
             },
             not: { eq: { 'author.lastName': 'Aguilar' } },
           },
           {
             on: {
-              module: `${testModuleRealm}book` as RealmResourceIdentifier,
+              module: rri(`${testModuleRealm}book`),
               name: 'Book',
             },
             eq: { editions: 10 },
@@ -1514,7 +1514,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: personMatchingByTitle } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}person` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}person`),
           name: 'Person',
         },
         contains: { cardTitle: 'ca' },
@@ -1529,7 +1529,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: dogMatchingByFirstName } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}dog` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}dog`),
           name: 'Dog',
         },
         contains: { firstName: 'go' },
@@ -1546,7 +1546,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}dog` as RealmResourceIdentifier,
+          module: rri(`${testModuleRealm}dog`),
           name: 'Dog',
         },
         contains: { cardTitle: null },

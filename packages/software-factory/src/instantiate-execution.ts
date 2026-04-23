@@ -15,8 +15,8 @@
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type {
   LooseSingleCardDocument,
-  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import {
   isResolvedCodeRef,
   isSingleCardDocument,
@@ -492,8 +492,7 @@ async function prepareExampleInstance(
     };
   }
 
-  let moduleUrl = new URL(adoptsFrom.module, exampleCardUrl)
-    .href as RealmResourceIdentifier;
+  let moduleUrl = rri(new URL(adoptsFrom.module, exampleCardUrl).href);
   document.data.meta!.adoptsFrom = { module: moduleUrl, name: adoptsFrom.name };
   document.data.id = exampleCardUrl;
 

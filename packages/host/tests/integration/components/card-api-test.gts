@@ -14,7 +14,7 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 import {
   CardContextName,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 
 import type StoreService from '@cardstack/host/services/store';
@@ -104,7 +104,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}author` as RealmResourceIdentifier,
+                module: rri(`${testRealmURL}author`),
                 name: 'Author',
               },
             },
@@ -119,7 +119,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}author` as RealmResourceIdentifier,
+                module: rri(`${testRealmURL}author`),
                 name: 'Author',
               },
             },
@@ -134,7 +134,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}author` as RealmResourceIdentifier,
+                module: rri(`${testRealmURL}author`),
                 name: 'Author',
               },
             },
@@ -157,7 +157,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
           return {
             filter: {
               on: {
-                module: `${testRealmURL}author` as RealmResourceIdentifier,
+                module: rri(`${testRealmURL}author`),
                 name: 'Author',
               },
               eq: {

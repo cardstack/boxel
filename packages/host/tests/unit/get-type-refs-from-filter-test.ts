@@ -3,23 +3,23 @@ import { module, test } from 'qunit';
 import {
   getTypeRefsFromFilter,
   type Filter,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 
 const typeRef = {
-  module: 'https://example.com/card' as RealmResourceIdentifier,
+  module: rri('https://example.com/card'),
   name: 'MyCard',
 };
 const typeRef2 = {
-  module: 'https://example.com/card' as RealmResourceIdentifier,
+  module: rri('https://example.com/card'),
   name: 'OtherCard',
 };
 const typeRef3 = {
-  module: 'https://example.com/card' as RealmResourceIdentifier,
+  module: rri('https://example.com/card'),
   name: 'ThirdCard',
 };
 const typeRef4 = {
-  module: 'https://example.com/card' as RealmResourceIdentifier,
+  module: rri('https://example.com/card'),
   name: 'FourthCard',
 };
 

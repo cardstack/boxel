@@ -4,7 +4,7 @@ import type { LooseSingleFileMetaDocument } from '@cardstack/runtime-common';
 import {
   baseRealm,
   isSingleFileMetaDocument,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 
 import {
@@ -53,7 +53,7 @@ module('Integration | serializeFileDef', function (hooks) {
     let doc = serializeFileDef(fileDef);
 
     assert.deepEqual(doc.data.meta.adoptsFrom, {
-      module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+      module: rri(`${baseRealm.url}card-api`),
       name: 'FileDef',
     });
   });

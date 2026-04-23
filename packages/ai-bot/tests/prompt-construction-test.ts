@@ -217,14 +217,14 @@ Current date and time: 2025-06-11T11:43:00.533Z
                 currentFile: 'http://localhost:4201/experiments/author.gts',
                 selectedCodeRef: {
                   module:
-                    'http://localhost:4201/experiments/author' as RealmResourceIdentifier,
+                    rri('http://localhost:4201/experiments/author'),
                   name: 'Address',
                 },
                 inheritanceChain: [
                   {
                     codeRef: {
                       module:
-                        'http://localhost:4201/experiments/author' as RealmResourceIdentifier,
+                        rri('http://localhost:4201/experiments/author'),
                       name: 'Address',
                     },
                     fields: ['street', 'city', 'state'],
@@ -232,7 +232,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
                   {
                     codeRef: {
                       module:
-                        'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+                        rri('https://cardstack.com/base/card-api'),
                       name: 'CardDef',
                     },
                     fields: [],
@@ -404,7 +404,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
                   'http://localhost:4201/experiments/Spec/author-spec-1',
                 selectedCodeRef: {
                   module:
-                    'http://localhost:4201/experiments/author' as RealmResourceIdentifier,
+                    rri('http://localhost:4201/experiments/author'),
                   name: 'Author',
                 },
               },

@@ -1,33 +1,34 @@
 import CodeRefField from 'https://cardstack.com/base/code-ref';
-import type { ResolvedCodeRef, RealmResourceIdentifier } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
+import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 
 const THEME_CODE_REF_OPTIONS: Array<{ label: string; ref: ResolvedCodeRef }> = [
   {
     label: 'Theme',
     ref: {
-      module: 'https://cardstack.com/base/theme' as RealmResourceIdentifier,
+      module: rri('https://cardstack.com/base/theme'),
       name: 'default',
     },
   },
   {
     label: 'Style Reference',
     ref: {
-      module: 'https://cardstack.com/base/style-reference' as RealmResourceIdentifier,
+      module: rri('https://cardstack.com/base/style-reference'),
       name: 'default',
     },
   },
   {
     label: 'Brand Guide',
     ref: {
-      module: 'https://cardstack.com/base/brand-guide' as RealmResourceIdentifier,
+      module: rri('https://cardstack.com/base/brand-guide'),
       name: 'default',
     },
   },
   {
     label: 'Structured Theme',
     ref: {
-      module: 'https://cardstack.com/base/structured-theme' as RealmResourceIdentifier,
+      module: rri('https://cardstack.com/base/structured-theme'),
       name: 'default',
     },
   },

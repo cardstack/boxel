@@ -3,7 +3,7 @@ import GlimmerComponent from '@glimmer/component';
 
 import { module, test } from 'qunit';
 
-import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
@@ -26,7 +26,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
 
     ctx.operatorModeStateService.showCreateListingModal({
       codeRef: {
-        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}pet`),
         name: 'Pet',
       },
       targetRealm: testRealmURL,
@@ -50,7 +50,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
 
     ctx.operatorModeStateService.showCreateListingModal({
       codeRef: {
-        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}pet`),
         name: 'Pet',
       },
       targetRealm: testRealmURL,
@@ -73,7 +73,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
 
     ctx.operatorModeStateService.showCreateListingModal({
       codeRef: {
-        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}pet`),
         name: 'Pet',
       },
       targetRealm: testRealmURL,
@@ -94,7 +94,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
 
     ctx.operatorModeStateService.showCreateListingModal({
       codeRef: {
-        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}pet`),
         name: 'Pet',
       },
       targetRealm: testRealmURL,
@@ -117,7 +117,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
 
     ctx.operatorModeStateService.showCreateListingModal({
       codeRef: {
-        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}pet`),
         name: 'Pet',
       },
       targetRealm: testRealmURL,
@@ -153,7 +153,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
 
     ctx.operatorModeStateService.showCreateListingModal({
       codeRef: {
-        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}pet`),
         name: 'Pet',
       },
       targetRealm: testRealmURL,
@@ -185,7 +185,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
 
     ctx.operatorModeStateService.showCreateListingModal({
       codeRef: {
-        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}pet`),
         name: 'PetName',
       },
       targetRealm: testRealmURL,

@@ -37,6 +37,7 @@ import {
   type Prerenderer,
   type RealmAction,
   type RealmAdapter,
+  ri,
   type RealmInfo,
   type RealmPermissions,
   type RenderError,
@@ -94,7 +95,7 @@ export { setupOperatorModeStateCleanup } from './operator-mode-state';
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
 
-export const testModuleRealm = 'http://localhost:4202/test/' as RealmIdentifier;
+export const testModuleRealm = ri('http://localhost:4202/test/');
 
 export {
   catalogRealm,

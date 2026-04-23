@@ -16,7 +16,7 @@ import {
   hasExecutableExtension,
   trimJsonExtension,
   type Realm,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -1404,7 +1404,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       let { data: results } = await realm.realmIndexQueryEngine.searchCards({
         filter: {
           type: {
-            module: `${testRealmURL}person` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}person`),
             name: 'Person',
           },
         },
@@ -1435,7 +1435,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       ({ data: results } = await realm.realmIndexQueryEngine.searchCards({
         filter: {
           type: {
-            module: `${testRealmURL}person` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}person`),
             name: 'Person',
           },
         },
@@ -1450,7 +1450,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       let { data: results } = await realm.realmIndexQueryEngine.searchCards({
         filter: {
           type: {
-            module: `${testRealmURL}person` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}person`),
             name: 'Pet',
           },
         },
@@ -1474,7 +1474,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       ({ data: results } = await realm.realmIndexQueryEngine.searchCards({
         filter: {
           type: {
-            module: `${testRealmURL}person` as RealmResourceIdentifier,
+            module: rri(`${testRealmURL}person`),
             name: 'Pet',
           },
         },

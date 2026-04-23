@@ -9,7 +9,7 @@ import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
   isCardInstance,
-  type RealmResourceIdentifier,
+  rri,
 } from '@cardstack/runtime-common';
 
 import type RealmService from '@cardstack/host/services/realm';
@@ -42,7 +42,7 @@ interface Signature {
 // Render CardDef default fitted template for visual consistency of cards in search results
 let resultsCardRef = {
   name: 'CardDef',
-  module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+  module: rri('https://cardstack.com/base/card-api'),
 };
 
 function isNewCardArgs(item: ItemType): item is NewCardArgs {

@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 import type { TestResult } from '../src/factory-agent';
@@ -375,7 +375,7 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
       testRealmOptions.testResultsModuleUrl,
       {
         moduleRef: {
-          module: './test-spec' as RealmResourceIdentifier,
+          module: rri('./test-spec'),
           name: 'default',
         },
       },

@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 
 import OpenCreateListingModalCommand from '@cardstack/host/commands/open-create-listing-modal';
 
@@ -82,7 +82,7 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
 
     assert.deepEqual(operatorModeStateService.createListingModalPayload, {
       codeRef: {
-        module: `${testRealmURL}pet` as RealmResourceIdentifier,
+        module: rri(`${testRealmURL}pet`),
         name: 'Pet',
       },
       targetRealm: testRealmURL,
@@ -109,7 +109,7 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
 
     let payload = operatorModeStateService.createListingModalPayload;
     assert.deepEqual(payload?.codeRef, {
-      module: `${testRealmURL}pet` as RealmResourceIdentifier,
+      module: rri(`${testRealmURL}pet`),
       name: 'Pet',
     });
     assert.strictEqual(payload?.targetRealm, testRealmURL);

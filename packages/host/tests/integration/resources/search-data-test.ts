@@ -9,10 +9,10 @@ import type {
   DataQuery,
   Loader,
   Realm,
-  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import {
   baseRealm,
+  rri,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
@@ -104,7 +104,7 @@ module(`Integration | search data resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book` as RealmResourceIdentifier,
+              module: rri(`${testRealmURL}book`),
               name: 'Book',
             },
           },
@@ -123,7 +123,7 @@ module(`Integration | search data resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book` as RealmResourceIdentifier,
+              module: rri(`${testRealmURL}book`),
               name: 'Book',
             },
           },
@@ -146,7 +146,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         type: {
-          module: `${testRealmURL}book` as RealmResourceIdentifier,
+          module: rri(`${testRealmURL}book`),
           name: 'Book',
         },
       },
@@ -178,7 +178,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         on: {
-          module: `${testRealmURL}book` as RealmResourceIdentifier,
+          module: rri(`${testRealmURL}book`),
           name: 'Book',
         },
         eq: {
@@ -212,7 +212,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         type: {
-          module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+          module: rri(`${baseRealm.url}card-api`),
           name: 'FileDef',
         },
       },
@@ -248,7 +248,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         type: {
-          module: `${testRealmURL}book` as RealmResourceIdentifier,
+          module: rri(`${testRealmURL}book`),
           name: 'Book',
         },
       },
@@ -281,7 +281,7 @@ module(`Integration | search data resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}book` as RealmResourceIdentifier,
+              module: rri(`${testRealmURL}book`),
               name: 'Book',
             },
           },
@@ -298,7 +298,7 @@ module(`Integration | search data resource`, function (hooks) {
     );
     let ids = search.resources.map((r) => r.id);
     assert.ok(
-      ids.includes(`${testRealmURL}books/3` as RealmResourceIdentifier),
+      ids.includes(rri(`${testRealmURL}books/3`)),
       'new book appears in results',
     );
   });
@@ -307,7 +307,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         type: {
-          module: `${testRealmURL}book` as RealmResourceIdentifier,
+          module: rri(`${testRealmURL}book`),
           name: 'Book',
         },
       },

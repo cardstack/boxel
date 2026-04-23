@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 
 import { GenerateExampleCardsOneShotCommand } from '@cardstack/host/commands/generate-example-cards';
 
@@ -100,7 +100,7 @@ export class TestCard extends CardDef {
     test('creates a new card instance from LLM output', async function (assert) {
       const result = await generateExampleCommand.execute({
         codeRef: {
-          module: `${testRealmURL}test-card.gts` as RealmResourceIdentifier,
+          module: rri(`${testRealmURL}test-card.gts`),
           name: 'TestCard',
         },
         realm: testRealmURL,

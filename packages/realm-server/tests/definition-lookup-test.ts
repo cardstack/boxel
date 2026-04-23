@@ -9,7 +9,7 @@ import {
   type ModulePrerenderArgs,
   type ModuleRenderResponse,
   type Prerenderer,
-  type RealmResourceIdentifier,
+  rri,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
@@ -30,7 +30,7 @@ function buildDefinition(
     definition: {
       type: 'card-def',
       codeRef: {
-        module: moduleAlias as RealmResourceIdentifier,
+        module: rri(moduleAlias),
         name,
       },
       displayName: name,
@@ -66,7 +66,7 @@ function buildModuleResponse(
   error?: ErrorEntry,
 ): ModuleRenderResponse {
   let definitionId = internalKeyFor(
-    { module: moduleURL as RealmResourceIdentifier, name },
+    { module: rri(moduleURL), name },
     undefined,
   );
   let definitions = error
@@ -123,7 +123,7 @@ module(basename(__filename), function () {
                 definition: {
                   type: 'card-def',
                   codeRef: {
-                    module: moduleURL.href as RealmResourceIdentifier,
+                    module: rri(moduleURL.href),
                     name: 'Person',
                   },
                   displayName: 'Person',
@@ -134,7 +134,7 @@ module(basename(__filename), function () {
                       isComputed: false,
                       fieldOrCard: {
                         module:
-                          'https://cardstack.com/base/string' as RealmResourceIdentifier,
+                          rri('https://cardstack.com/base/string'),
                         name: 'default',
                       },
                       serializerName: undefined,
@@ -195,7 +195,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person' as RealmResourceIdentifier,
+                    module: rri('./person'),
                     name: 'Person',
                   },
                 },
@@ -226,7 +226,7 @@ module(basename(__filename), function () {
 
     test('lookupDefinition', async function (assert) {
       let definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts` as RealmResourceIdentifier,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -238,7 +238,7 @@ module(basename(__filename), function () {
 
       // second call should hit the cache and not call prerenderModule again
       definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts` as RealmResourceIdentifier,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -251,7 +251,7 @@ module(basename(__filename), function () {
 
     test('invalidation', async function (assert) {
       let definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts` as RealmResourceIdentifier,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -264,7 +264,7 @@ module(basename(__filename), function () {
       await definitionLookup.invalidate('http://some-realm-url/person.gts');
 
       definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts` as RealmResourceIdentifier,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -277,7 +277,7 @@ module(basename(__filename), function () {
       await definitionLookup.invalidate(`${realmURL}person.gts`);
 
       definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts` as RealmResourceIdentifier,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -290,7 +290,7 @@ module(basename(__filename), function () {
 
     test('invalidates module cache entries without file extensions', async function (assert) {
       let definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts` as RealmResourceIdentifier,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -303,7 +303,7 @@ module(basename(__filename), function () {
       await definitionLookup.invalidate(`${realmURL}person`);
 
       definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts` as RealmResourceIdentifier,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -332,7 +332,7 @@ module(basename(__filename), function () {
           calls++;
           let moduleAlias = trimExecutableExtension(new URL(args.url)).href;
           let definitionId = internalKeyFor(
-            { module: args.url as RealmResourceIdentifier, name: 'Person' },
+            { module: rri(args.url), name: 'Person' },
             undefined,
           );
           return {
@@ -350,7 +350,7 @@ module(basename(__filename), function () {
                 definition: {
                   type: 'card-def',
                   codeRef: {
-                    module: moduleAlias as RealmResourceIdentifier,
+                    module: rri(moduleAlias),
                     name: 'Person',
                   },
                   displayName: `Person v${version}`,
@@ -380,7 +380,7 @@ module(basename(__filename), function () {
       });
 
       let definition = await lookup.lookupDefinition({
-        module: moduleURL as RealmResourceIdentifier,
+        module: rri(moduleURL),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person v1');
@@ -390,7 +390,7 @@ module(basename(__filename), function () {
       await lookup.invalidate(moduleURL);
 
       definition = await lookup.lookupDefinition({
-        module: moduleURL as RealmResourceIdentifier,
+        module: rri(moduleURL),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person v2');
@@ -446,7 +446,7 @@ module(basename(__filename), function () {
       });
 
       let definition = await lookup.lookupDefinition({
-        module: moduleURL as RealmResourceIdentifier,
+        module: rri(moduleURL),
         name: 'DeletedCard',
       });
       assert.ok(definition, 'definition is cached before deletion');
@@ -457,7 +457,7 @@ module(basename(__filename), function () {
 
       await assert.rejects(
         lookup.lookupDefinition({
-          module: moduleURL as RealmResourceIdentifier,
+          module: rri(moduleURL),
           name: 'DeletedCard',
         }),
         'lookup fails after module deletion invalidation',
@@ -527,19 +527,19 @@ module(basename(__filename), function () {
       });
 
       await lookup.lookupDefinition({
-        module: deepModule as RealmResourceIdentifier,
+        module: rri(deepModule),
         name: 'DeepCard',
       });
       await lookup.lookupDefinition({
-        module: middleModule as RealmResourceIdentifier,
+        module: rri(middleModule),
         name: 'MiddleField',
       });
       await lookup.lookupDefinition({
-        module: leafModule as RealmResourceIdentifier,
+        module: rri(leafModule),
         name: 'LeafField',
       });
       await lookup.lookupDefinition({
-        module: otherModule as RealmResourceIdentifier,
+        module: rri(otherModule),
         name: 'OtherCard',
       });
 
@@ -597,7 +597,7 @@ module(basename(__filename), function () {
       );
 
       await lookup.lookupDefinition({
-        module: deepModule as RealmResourceIdentifier,
+        module: rri(deepModule),
         name: 'DeepCard',
       });
       assert.strictEqual(
@@ -675,23 +675,23 @@ module(basename(__filename), function () {
       });
 
       await lookup.lookupDefinition({
-        module: blogAppModule as RealmResourceIdentifier,
+        module: rri(blogAppModule),
         name: 'BlogApp',
       });
       await lookup.lookupDefinition({
-        module: authorModule as RealmResourceIdentifier,
+        module: rri(authorModule),
         name: 'Author',
       });
       await lookup.lookupDefinition({
-        module: blogCategoryModule as RealmResourceIdentifier,
+        module: rri(blogCategoryModule),
         name: 'BlogCategory',
       });
       await lookup.lookupDefinition({
-        module: blogPostModule as RealmResourceIdentifier,
+        module: rri(blogPostModule),
         name: 'BlogPost',
       });
       await lookup.lookupDefinition({
-        module: otherModule as RealmResourceIdentifier,
+        module: rri(otherModule),
         name: 'OtherCard',
       });
 
@@ -755,7 +755,7 @@ module(basename(__filename), function () {
       );
 
       await lookup.lookupDefinition({
-        module: blogPostModule as RealmResourceIdentifier,
+        module: rri(blogPostModule),
         name: 'BlogPost',
       });
       assert.strictEqual(
@@ -869,7 +869,7 @@ module(basename(__filename), function () {
 
       await assert.rejects(
         lookup.lookupDefinition({
-          module: deepModule as RealmResourceIdentifier,
+          module: rri(deepModule),
           name: 'DeepCard',
         }),
         'deep-card errors when missing',
@@ -880,14 +880,14 @@ module(basename(__filename), function () {
 
       await assert.rejects(
         lookup.lookupDefinition({
-          module: middleModule as RealmResourceIdentifier,
+          module: rri(middleModule),
           name: 'MiddleField',
         }),
         'middle-field errors when missing',
       );
       await assert.rejects(
         lookup.lookupDefinition({
-          module: deepModule as RealmResourceIdentifier,
+          module: rri(deepModule),
           name: 'DeepCard',
         }),
         'deep-card errors when middle-field is missing',
@@ -923,21 +923,21 @@ module(basename(__filename), function () {
 
       await assert.rejects(
         lookup.lookupDefinition({
-          module: leafModule as RealmResourceIdentifier,
+          module: rri(leafModule),
           name: 'LeafField',
         }),
         'leaf-field errors when missing',
       );
       await assert.rejects(
         lookup.lookupDefinition({
-          module: middleModule as RealmResourceIdentifier,
+          module: rri(middleModule),
           name: 'MiddleField',
         }),
         'middle-field errors when leaf-field is missing',
       );
       await assert.rejects(
         lookup.lookupDefinition({
-          module: deepModule as RealmResourceIdentifier,
+          module: rri(deepModule),
           name: 'DeepCard',
         }),
         'deep-card errors when leaf-field is missing',
@@ -967,15 +967,15 @@ module(basename(__filename), function () {
       await lookup.invalidate(leafModule);
 
       await lookup.lookupDefinition({
-        module: leafModule as RealmResourceIdentifier,
+        module: rri(leafModule),
         name: 'LeafField',
       });
       await lookup.lookupDefinition({
-        module: middleModule as RealmResourceIdentifier,
+        module: rri(middleModule),
         name: 'MiddleField',
       });
       await lookup.lookupDefinition({
-        module: deepModule as RealmResourceIdentifier,
+        module: rri(deepModule),
         name: 'DeepCard',
       });
 
@@ -1017,7 +1017,7 @@ module(basename(__filename), function () {
       });
 
       await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts` as RealmResourceIdentifier,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
 
@@ -1034,7 +1034,7 @@ module(basename(__filename), function () {
       await dbAdapter.execute('DELETE FROM modules');
 
       await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts` as RealmResourceIdentifier,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
 
@@ -1078,7 +1078,7 @@ module(basename(__filename), function () {
         });
 
         await scopedLookup.lookupDefinition({
-          module: remoteModuleURL as RealmResourceIdentifier,
+          module: rri(remoteModuleURL),
           name: 'Person',
         });
 
@@ -1126,7 +1126,7 @@ module(basename(__filename), function () {
         });
 
         await scopedLookup.lookupDefinition({
-          module: remoteModuleURL as RealmResourceIdentifier,
+          module: rri(remoteModuleURL),
           name: 'Person',
         });
 
@@ -1194,7 +1194,7 @@ module(basename(__filename), function () {
       // 1. First lookup caches the error
       await assert.rejects(
         lookup.lookupDefinition({
-          module: moduleURL as RealmResourceIdentifier,
+          module: rri(moduleURL),
           name: 'TransientError',
         }),
         /nonexistent type/,
@@ -1206,7 +1206,7 @@ module(basename(__filename), function () {
       shouldError = false;
       await assert.rejects(
         lookup.lookupDefinition({
-          module: moduleURL as RealmResourceIdentifier,
+          module: rri(moduleURL),
           name: 'TransientError',
         }),
         /nonexistent type/,
@@ -1226,7 +1226,7 @@ module(basename(__filename), function () {
 
       // 4. Now the stale error should trigger a re-prerender which succeeds
       let definition = await lookup.lookupDefinition({
-        module: moduleURL as RealmResourceIdentifier,
+        module: rri(moduleURL),
         name: 'TransientError',
       });
       assert.ok(
@@ -1242,7 +1242,7 @@ module(basename(__filename), function () {
 
       // 5. Subsequent lookups should use the now-healthy cache
       definition = await lookup.lookupDefinition({
-        module: moduleURL as RealmResourceIdentifier,
+        module: rri(moduleURL),
         name: 'TransientError',
       });
       assert.ok(definition, 'lookup succeeds from healthy cache');

@@ -9,13 +9,13 @@ import type {
   Command,
   CommandContext,
   CommandInvocation,
-  RealmResourceIdentifier,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import {
   CommandContextStamp,
   getClass,
   parseBoxelHostCommandSpecifier,
+  rri,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -234,7 +234,7 @@ function parseCommandParam(
     }
     return {
       module:
-        `${url.origin}${pathname.slice(0, index)}` as RealmResourceIdentifier,
+        rri(`${url.origin}${pathname.slice(0, index)}`),
       name: pathname.slice(index + 1),
     };
   } catch {
@@ -246,7 +246,7 @@ function parseCommandParam(
     return undefined;
   }
   return {
-    module: value.slice(0, index) as RealmResourceIdentifier,
+    module: rri(value.slice(0, index)),
     name: value.slice(index + 1),
   };
 }
