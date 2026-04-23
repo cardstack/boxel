@@ -8,9 +8,7 @@
  * that happen to use the Playwright test runner for harness management.
  */
 
-import type {
-  LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { rri } from '@cardstack/runtime-common';
 
 import { test } from './fixtures';

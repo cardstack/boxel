@@ -13,9 +13,7 @@
  */
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
-import type {
-  LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { rri } from '@cardstack/runtime-common';
 import {
   isResolvedCodeRef,

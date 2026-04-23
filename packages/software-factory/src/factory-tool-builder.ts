@@ -604,8 +604,7 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
           attributes,
           meta: {
             adoptsFrom: {
-              module:
-                rri('https://cardstack.com/base/spec'),
+              module: rri('https://cardstack.com/base/spec'),
               name: 'Spec',
             },
           },
