@@ -100,6 +100,59 @@ type BxlSafeResult<T> =
 For cards, guides, annotations, suggestions, and formula fields, use the Boxel
 runtime APIs instead of evaluating many isolated expressions yourself.
 
+## Browser Application View
+
+From a browser app perspective, BXL should behave like a runtime service with
+three phases:
+
+1. Prepare a content-addressed plan for a guide/schema pair.
+2. Bind a live session to one card or one mutable form state object.
+3. Stream user edits through `applyPatch()` and render the returned result.
+
+The app should treat compilation and recompute as runtime infrastructure, not
+something a component does inline during render.
+
+### Main Thread vs Worker
+
+In a browser application, the recommended split is:
+
+- Main thread:
+  - fetch card data, guide data, and schema data
+  - build the `BoxelRuntimeDefinition`
+  - call `prepareBoxelRuntimeAsyncSafe(...)`
+  - create sessions, forward input changes, and render results
+- Worker:
+  - compile the prepared plan
+  - cache prepared plans
+  - run incremental recompute for sessions
+
+That keeps the UI layer focused on rendering while the worker owns expensive
+expression work.
+
+## Runtime Lifecycle
+
+This is the intended runtime flow for a browser-hosted form or card editor:
+
+```mermaid
+flowchart TD
+  A["Load card JSON, guide JSON, and schema"] --> B["Build BoxelRuntimeDefinition and hashes"]
+  B --> C["prepareBoxelRuntimeAsyncSafe(definition, options)"]
+  C -->|"prepare error"| D["Render inline runtime error state"]
+  C -->|"ok"| E["Worker cache hit or compile prepared plan"]
+  E --> F["prepared.createSession(cardData)"]
+  F --> G["await session.ready"]
+  G --> H["session.evaluate()"]
+  H --> I["Render state, fieldState, violations, annotations, runtimeErrors"]
+  I --> J{"User edits field?"}
+  J -->|"yes"| K["session.applyPatch(path, value)"]
+  K --> I
+  I --> L{"Guide or rules changed?"}
+  L -->|"yes"| M["prepareBoxelRuntimeAsyncSafe(nextDefinition, nextOptions)"]
+  M -->|"ok"| N["session.swapPlan(nextPrepared)"]
+  N --> I
+  M -->|"prepare error"| D
+```
+
 ### Synchronous Prepared Runtime
 
 `prepareBoxelRuntime()` is useful for tests, Node, or very small browser cases.
@@ -163,6 +216,112 @@ const rebound = await session.swapPlan(nextPrepared);
 
 `swapPlan()` keeps the current `session.source`, rebinds the session to the new
 prepared runtime, and immediately recomputes the result under the new plan.
+
+## Recommended Application Shape
+
+For a browser app, the cleanest integration is usually a small runtime service
+that sits between your data store and your UI components.
+
+```ts
+import {
+  prepareBoxelRuntimeAsyncSafe,
+  type BoxelRuntimeAsyncSession,
+  type BoxelRuntimeDefinition,
+  type BoxelRuntimeResult,
+} from 'bxl';
+
+export class BrowserBxlRuntime {
+  #session: BoxelRuntimeAsyncSession | null = null;
+  #result: BoxelRuntimeResult | null = null;
+
+  get result() {
+    return this.#result;
+  }
+
+  async mount(
+    definition: BoxelRuntimeDefinition,
+    cardData: unknown,
+    options: {
+      guideUrl?: string;
+      guideHash?: string;
+      schema?: BoxelRuntimeDefinition['schema'];
+    },
+  ) {
+    const prepared = await prepareBoxelRuntimeAsyncSafe(definition, {
+      schema: options.schema,
+      guideUrl: options.guideUrl,
+      cacheKey: options.guideUrl ?? 'inline-guide',
+      contentHash: options.guideHash,
+    });
+
+    if (!prepared.ok) {
+      return {
+        ok: false as const,
+        error: prepared.error,
+      };
+    }
+
+    this.#session = prepared.value.createSession(cardData);
+    await this.#session.ready;
+    this.#result = await this.#session.evaluate();
+
+    return {
+      ok: true as const,
+      result: this.#result,
+      session: this.#session,
+    };
+  }
+
+  async update(path: string, value: unknown) {
+    if (!this.#session) {
+      throw new Error('BXL runtime session is not mounted.');
+    }
+    this.#result = await this.#session.applyPatch(path, value);
+    return this.#result;
+  }
+
+  async swap(definition: BoxelRuntimeDefinition, options: {
+    guideUrl?: string;
+    guideHash?: string;
+    schema?: BoxelRuntimeDefinition['schema'];
+  }) {
+    if (!this.#session) {
+      throw new Error('BXL runtime session is not mounted.');
+    }
+
+    const prepared = await prepareBoxelRuntimeAsyncSafe(definition, {
+      schema: options.schema,
+      guideUrl: options.guideUrl,
+      cacheKey: options.guideUrl ?? 'inline-guide',
+      contentHash: options.guideHash,
+    });
+
+    if (!prepared.ok) {
+      return {
+        ok: false as const,
+        error: prepared.error,
+      };
+    }
+
+    this.#result = await this.#session.swapPlan(prepared.value);
+    return {
+      ok: true as const,
+      result: this.#result,
+    };
+  }
+}
+```
+
+The main point is to centralize:
+
+- prepare/cache behavior
+- session lifecycle
+- patch application
+- authoring-time plan swaps
+- error handling
+
+That keeps components dumb: they receive a `BoxelRuntimeResult`, render it, and
+send edits back as `(path, value)` events.
 
 ### Content-Addressed Plan Keys
 
@@ -313,6 +472,40 @@ This is the recommended browser flow for a card or form component:
    - `result.violations` for guide constraints
    - `result.annotationCards` for annotation drafts
    - `result.runtimeErrors` for per-rule execution failures
+
+## Common Browser Flows
+
+### Cold Load
+
+Use this when a card or form first opens:
+
+1. Fetch the card data, guide data, and schema.
+2. Build `definition`.
+3. Resolve a stable namespace and content hash.
+4. Call `prepareBoxelRuntimeAsyncSafe(...)`.
+5. If prepare succeeds, create a session and evaluate once.
+6. Render from `BoxelRuntimeResult`.
+
+### User Typing
+
+Use this for ordinary field edits:
+
+1. Update the local form field value immediately in the UI.
+2. Call `session.applyPatch(path, value)`.
+3. Re-render from the returned `result`.
+
+Do not rebuild the definition or re-prepare the runtime for ordinary typing.
+
+### Guide Authoring / Rule Editing
+
+Use this when the guide itself changes:
+
+1. Build a revised `definition`.
+2. Prepare the revised plan with `prepareBoxelRuntimeAsyncSafe(...)`.
+3. If prepare succeeds, call `session.swapPlan(nextPrepared)`.
+4. Re-render from the recomputed result.
+
+That preserves the current card data while swapping the compiled rule set.
 
 ## Example
 
