@@ -48,7 +48,7 @@ evaluateBxl('ROUND(Subtotal * "Tax Rate" / 100, 2)', invoice, { schema });
 
 Every app has two kinds of logic. There's **code** — arbitrary, Turing-complete, deployed with seat belts loosened — and there's **data** — inert, schematized, shipped in configs and forms. Real applications need a third kind: something in between. Something a domain expert can author, git can diff, a catalog can ship, and a sandbox can trust.
 
-BXL is that third kind, scoped deliberately. It's jq pipes plus Excel helpers — `SUM`, `ROUND`, `IF`, `VLOOKUP`, `XIRR` — evaluated against the current card (`.` is the model). It cannot fetch. It cannot write. It cannot call an LLM, open a file, or mutate shared state. Those four "cannots" are what let a platform embed BXL inside validation rules, computed fields, workflow gates, and query transforms without worrying that a schema author just drilled a hole into production.
+BXL is that third kind, scoped deliberately. It's jq pipes plus Excel helpers — `SUM`, `ROUND`, `IF`, `VLOOKUP`, `XIRR` — evaluated against a JSON snapshot (the bare `.` is the current input, same as jq). It cannot fetch. It cannot write. It cannot call an LLM, open a file, or mutate shared state. Those four "cannots" are what let a platform embed BXL inside validation rules, computed fields, workflow gates, and query transforms without worrying that a schema author just drilled a hole into production.
 
 If you've been stitching together Ajv + jq + Formula.js + a custom rule engine, BXL is what that stack looks like after it consolidates into a single dependency.
 
@@ -171,7 +171,7 @@ BXL is evaluated from eight distinct positions in a typical application. Each us
 
 | Position                | What it does                      | Example                                                 |
 | ----------------------- | --------------------------------- | ------------------------------------------------------- |
-| **Formula field**       | Computed value on a card          | `SUM("Line Item"."Line Total")`                         |
+| **Formula field**       | Computed value on a record        | `SUM("Line Item"."Line Total")`                         |
 | **Constraint**          | Validation rule with a message    | `"End Date" > "Start Date"`                             |
 | **Visible-when**        | Conditional field rendering       | `Status = "in-review"`                                  |
 | **Autofill / default**  | Computed initial value            | `slugify(Title)`                                        |
@@ -180,15 +180,15 @@ BXL is evaluated from eight distinct positions in a typical application. Each us
 | **Reactive predicate**  | Watch-and-fire rule               | `age("Last Heartbeat") > DURATION("60s")`               |
 | **Query transform**     | Bulk derivation over an array     | <code>"Line Item" &#124; map(Quantity * "Unit Price")</code> |
 
-### Where logic lives — three places, one rule each
+### Where expressions live — three layers, one rule each
 
-BXL is one of three places logic belongs in a typical application. The boundaries aren't stylistic; they're mechanical — each place has different constraints and different audit characteristics.
+BXL is one of three layers where logic lives in a typical application. Each layer has different constraints, different audit characteristics, and different change cycles.
 
-- **BXL** — logic that is *data*: constraints, formulas, predicates, defaults, visibility, transforms. Authored inside cards, shipped through catalogs, editable by agents.
-- **`computeVia`** — logic that is *schema*: derived fields the type itself knows how to compute. Ships with the module definition.
-- **Commands & Reflex** — side effects: writes, deletes, LLM calls, external APIs. Attributable, auditable, one layer up from BXL.
+- **BXL expressions** — logic that is *data*: constraints, formulas, predicates, defaults, visibility, transforms. Stored as strings, shipped alongside records, editable at runtime without a redeploy.
+- **Class methods and computed properties** — logic that is *code compiled with the type*: getters, `@computed` columns on an ORM model, derived fields declared on a class. Ships with the module; changes require a redeploy.
+- **Application code with side effects** — controllers, handlers, services: writes, deletes, network calls, LLM invocations, external APIs. Full language power, attributable, auditable.
 
-One-line rule: **BXL for logic-as-data · `computeVia` for logic-as-schema · Commands for changes-to-the-world.** BXL never writes. Commands never embed in cards. When in doubt, ask *"could a stranger run this expression a million times against my data?"* — if yes, it's BXL; if no, it's a Command.
+One-line rule: **BXL for logic-as-data · class methods for logic-as-type · application code for changes-to-the-world.** BXL never writes. Application code never embeds in records. When in doubt, ask *"could a stranger run this expression a million times against my data?"* — if yes, it's BXL; if no, it's application code.
 
 ---
 
@@ -200,7 +200,7 @@ Credit and attribution below; pick whichever section describes the language you 
 
 ### 1 · Excel · paste-compatible where it matters
 
-The "XL" in BXL is earned. 300+ Excel helpers ship with matching semantics — paste `=IF(…)` from a spreadsheet and it runs unchanged. Current row is `.` instead of `A1`; columns are field names instead of column letters.
+The "XL" in BXL is earned. 300+ Excel helpers — sourced from [Formula.js](https://github.com/formulajs/formulajs) (MIT) and wired into the jq runtime as native functions — ship with matching Microsoft Excel semantics. Paste `=IF(…)` from a spreadsheet and it runs unchanged. Current row is the bare `.` (a lone dot, same as jq) instead of `A1`; columns are field names instead of column letters.
 
 ```
 Excel:  =ROUND(B2 * C2 / 100, 2)
@@ -233,13 +233,24 @@ BXL:    "Line Item"[SKU = "BRAND-RED"]."Unit Price"
 
 XQuery (W3C) showed that a query grammar can grow into a full expression language — let-bindings, conditionals, sequence composition — without bolting on a separate scripting layer. BXL stays smaller (no FLWOR keywords, no XML schema types, no modules) but adopts the same premise: one language should cover computation, not just lookup.
 
+```xquery
+XQuery:  sum(for $li in $invoice/lineItem
+             where $li/taxable = "true"
+             return $li/lineTotal)
+```
+```bxl
+BXL:     SUM("Line Item"[*Taxable]."Line Total")
+```
+
+Four lines of FLWOR compress into one BXL expression. FLWOR is more explicit about each step (filter, compute, return); BXL is more compact because implicit iteration and predicate-indexed arrays do the work silently. Different tastes, same answer.
+
 ### 5 · Schematron · the validation-rule shape, newly relevant
 
 Schematron (ISO/IEC 19757-3) is the standard for rule-based tree validation: match a pattern, assert a condition, emit a message. Unlike grammar-based validators like XSD, Schematron checks *relationships between values* — "if this, then that" — using XPath expressions against the document tree.
 
 It's been quietly important since 2006, and it's back in focus because of how LLMs change the shape of incoming data. As generative tooling produces more loosely-structured documents — free-text forms filled in by an agent, invoice JSON pulled from a receipt OCR, a draft contract authored by a model — validation moves later in the pipeline. A fixed schema catches missing fields; a rule language catches *things that should be true but aren't*.
 
-BXL's validation surface reuses Schematron's shape — a rule is a boolean expression with an attached message — but the rules sit inline in form schemas and card definitions rather than a separate XML document.
+BXL's validation surface reuses Schematron's shape — a rule is a boolean expression with an attached message — but the rules sit inline in form schemas and data-model definitions rather than a separate XML document.
 
 ```xml
 Schematron:  <assert test="total = sum(lineItem/lineTotal)">Total mismatch</assert>
@@ -292,8 +303,10 @@ Pick JSONata when your authors are engineers and your data is already JSON-shape
 
 ```
 CEL:  has(request.auth.claims.role) && request.auth.claims.role == "admin"
-BXL:  present(Request.Auth.Claims.Role) and Request.Auth.Claims.Role = "admin"
+BXL:  NOT ISBLANK(Request.Auth.Claims.Role) and Request.Auth.Claims.Role = "admin"
 ```
+
+(CEL's `has()` tests whether a field is *set* — null-only. BXL's exact match is `NOT ISBLANK(x)`. BXL's `present(x)` is stricter — null *or* empty string — which is usually what you want on a form, not on an auth claim.)
 
 CEL is stronger than BXL at pure policy and authorization — its type system is designed for predicate evaluation and its tooling is mature. BXL is stronger at the spreadsheet side of the house (Excel paste, formula helpers, the VLOOKUP-shape predicate). The two share a philosophical parent: a tiny, safe, embeddable DSL beats a general-purpose sandbox every time.
 
@@ -337,7 +350,7 @@ Each language above is strong at one or two of the jobs a typical business app n
 
 BXL didn't invent any row. It's the smallest language that covers all of them at once, because it explicitly composes the wins of the ones that came before.
 
-For a typical Boxel card ([BSL primer](https://bsl.staging.boxel.build) — invoices, offers, contracts, forms, tickets, events, reports) every row is a real requirement. If you're building the same kind of thing on your own JSON and you've been stitching together Ajv + jq + Formula.js + a custom rule engine, BXL is what you'd end up with after consolidating.
+For a typical business record — invoices, offers, contracts, forms, tickets, events, reports — every row in that table is a real requirement. BXL covers all of them with one parser, one evaluator, and one sandbox, because it explicitly composes the wins of the languages that came before.
 
 ---
 
@@ -351,10 +364,10 @@ Not warnings. Enforced by the evaluator at parse or at runtime:
 
 - **No side effects.** No writes, no deletes, no messages sent.
 - **No network.** No `fetch`, no external APIs, no URLs opened.
-- **No LLM calls.** Those live in Commands, one layer up.
+- **No LLM calls.** Those live in your application code, one layer up.
 - **No unbounded loops.** Op budget + wall-clock ceiling → `#LIMIT!` error.
-- **No closures or shared state.** Same input, same card state, same result — always.
-- **No direct card mutation.** BXL reads; Commands write.
+- **No closures or shared state.** Same input, same data, same result — always.
+- **No direct data mutation.** BXL reads; your application code writes.
 
 These six guarantees are what let the platform embed BXL inside Guides, workflows, notifications, and queries without worrying that a schema author just drilled a hole into production.
 
