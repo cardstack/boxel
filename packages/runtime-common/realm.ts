@@ -1163,7 +1163,7 @@ export class Realm {
 
     if (addedFiles.length > 0 || updatedFiles.length > 0) {
       if (
-        [...addedFiles, ...updatedFiles].some((f) => f.endsWith('.realm.json'))
+        [...addedFiles, ...updatedFiles].some((f) => f.endsWith('realm.json'))
       ) {
         this.#cachedRealmInfo = null;
       }
@@ -4412,7 +4412,7 @@ export class Realm {
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath, undefined);
     let lastPublishedAt = await this.getLastPublishedAt();
-    let realmInfo = {
+    let realmInfo: RealmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,
       iconURL: null,
@@ -4456,6 +4456,34 @@ export class Realm {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
     }
+
+    // Overlay from the RealmConfig card instance at /realm.json when it has
+    // been indexed. Uses instance() rather than cardDocument() to avoid
+    // recursing through attachRealmInfo → getRealmInfo → parseRealmInfo.
+    try {
+      let cardURL = new URL(
+        this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+      );
+      let indexEntry = await this.#realmIndexQueryEngine.instance(cardURL);
+      if (indexEntry?.type === 'instance') {
+        let attrs = (indexEntry.instance.attributes ?? {}) as Record<
+          string,
+          unknown
+        >;
+        if (typeof attrs.name === 'string') {
+          realmInfo.name = attrs.name;
+        }
+        if (typeof attrs.backgroundURL === 'string') {
+          realmInfo.backgroundURL = attrs.backgroundURL;
+        }
+        if (typeof attrs.iconURL === 'string') {
+          realmInfo.iconURL = attrs.iconURL;
+        }
+      }
+    } catch (e) {
+      this.#log.warn(`failed to read RealmConfig card from index: ${e}`);
+    }
+
     return realmInfo;
   }
 
