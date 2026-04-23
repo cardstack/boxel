@@ -1,6 +1,6 @@
 <div align="center">
 
-# BXL
+# BXL — Boxel Expression Language
 
 **The language between data and code.**
 Spreadsheet-style formulas over JSON. Paste-compatible with Excel. Sandboxed by construction. Small enough to live inside a JSON field — powerful enough to drive constraints, formulas, defaults, and workflow gates.
