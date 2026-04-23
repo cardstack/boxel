@@ -10,7 +10,7 @@
 //      comparison).
 //
 // Each test asserts both compile output (jq surface) and evaluation value.
-import { strictEqual, ok } from 'node:assert';
+import { deepStrictEqual, strictEqual, ok } from 'node:assert';
 import { compileReadableSyntax, evaluateBxl, type ReadableSchema } from '../../src/index.js';
 
 const schema: ReadableSchema = {
@@ -246,6 +246,71 @@ strictEqual(
   ).value,
   true,
   '#6 grouped-RHS with internal pipe evaluates correctly',
+);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Bug #7 — `=` inside array/comprehension brackets was skipped by the
+// readable preprocessor because every `[...]` was treated like a path
+// predicate bracket. That left jq assignment semantics in place for
+// `range(...) as $var | ...` comprehensions.
+// ─────────────────────────────────────────────────────────────────────────
+
+assertCompile(
+  '[range(0; 3) as $r | ($r = 0)]',
+  '[range(0; 3) as $r |($r == 0)]',
+  '#7 comprehension equality converts `=` to `==`',
+);
+
+deepStrictEqual(
+  evaluateBxl('[range(0; 3) as $r | ($r = 0)]', {}).value,
+  [true, false, false],
+  '#7 equality inside range-bound comprehension evaluates correctly',
+);
+
+deepStrictEqual(
+  evaluateBxl('[range(0; 5) as $r | IF($r = 0, 99, 1)]', {}).value,
+  [99, 1, 1, 1, 1],
+  '#7 IF branch over range-bound equality no longer matches every row',
+);
+
+deepStrictEqual(
+  evaluateBxl(
+    '5 as $R | [range(0; 5) as $r | IF($r = $R - 1, "last", "other")]',
+    {},
+  ).value,
+  ['other', 'other', 'other', 'other', 'last'],
+  '#7 RHS arithmetic + bound variable still compare correctly in range scope',
+);
+
+deepStrictEqual(
+  evaluateBxl(
+    '[range(0; 3) as $r | [range(0; 3) as $c | IF($r = 0 OR $r = 2 OR $c = 0 OR $c = 2, "edge", "mid")]]',
+    {},
+  ).value,
+  [
+    ['edge', 'edge', 'edge'],
+    ['edge', 'mid', 'edge'],
+    ['edge', 'edge', 'edge'],
+  ],
+  '#7 nested range scopes keep `=` as comparison in OR chains',
+);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Bug #8 — infix word operators inside array/comprehension brackets were
+// skipped for the same reason. Predicate suffix brackets should be
+// exempt, but array literals/comprehensions still need the rewrite.
+// ─────────────────────────────────────────────────────────────────────────
+
+assertCompile(
+  '[range(0; 2) as $r | ("abc" STARTSWITH "a")]',
+  '[range(0; 2) as $r |((. as $__ctx |("abc") | startswith($__ctx | "a")))]',
+  '#8 STARTSWITH infix rewrites inside comprehensions',
+);
+
+deepStrictEqual(
+  evaluateBxl('[range(0; 2) as $r | ("abc" STARTSWITH "a")]', {}).value,
+  [true, true],
+  '#8 STARTSWITH infix evaluates inside comprehensions',
 );
 
 console.log('BXL compiler bug regressions: all checks passed');

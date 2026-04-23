@@ -67,6 +67,26 @@ try {
   );
   deepStrictEqual(readableResult.value, 59.04);
 
+  const scopedEqualsCompile = bundle.compileReadableSyntax(
+    '[range(0; 3) as $r | ($r = 0)]',
+  );
+  deepStrictEqual(
+    scopedEqualsCompile.source,
+    '[range(0; 3) as $r |($r == 0)]',
+  );
+
+  const scopedEqualsResult = bundle.evaluateBxl(
+    '[range(0; 3) as $r | ($r = 0)]',
+    {},
+  );
+  deepStrictEqual(scopedEqualsResult.value, [true, false, false]);
+
+  const wordOpInComprehension = bundle.evaluateBxl(
+    '[range(0; 2) as $r | ("abc" STARTSWITH "a")]',
+    {},
+  );
+  deepStrictEqual(wordOpInComprehension.value, [true, true]);
+
   console.log('bundled first(filter()).field chain works');
 } finally {
   rmSync(tempDir, { recursive: true, force: true });

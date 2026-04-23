@@ -2069,8 +2069,10 @@ export function stripExcelCellPrefix(source: string): { source: string; changed:
  *   .donor STARTSWITH "Mr."   →   ((.donor) | startswith("Mr."))
  *   .email CONTAINS "@"       →   ((.email) | contains("@"))
  *
- * The word forms compile correctly inside predicate brackets (`[X STARTSWITH Y]`)
- * via compilePredicate, so this pass is careful to skip inside `[...]`.
+ * The word forms compile correctly inside predicate suffix brackets
+ * (`Foo[Bar STARTSWITH "X"]`) via compilePredicate, so this pass skips only
+ * those bracket contexts. Array literals/comprehensions like
+ * `[range(...) as $r | "abc" STARTSWITH "a"]` still need rewriting.
  * Formula-call form (`STARTSWITH(x; y)`) is already handled by the
  * function-call compiler — we only rewrite when the word is followed by an
  * atom, not `(`.
@@ -2091,24 +2093,14 @@ export function rewriteWordBinaryOperators(
     if (!tokens) break;
     let rewroteThisPass = false;
     // Walk right-to-left so indices on the left remain valid between passes.
-    // Track predicate-bracket depth so `[Field STARTSWITH "X"]` is skipped
-    // (compilePredicate handles it natively).
-    const depthAt = new Array<number>(tokens.length).fill(0);
-    {
-      let depth = 0;
-      for (let i = 0; i < tokens.length; i++) {
-        const t = tokens[i];
-        if (t.type === 'punc' && t.value === '[') depth++;
-        depthAt[i] = depth;
-        if (t.type === 'punc' && t.value === ']') depth--;
-      }
-    }
+    // Track only predicate suffix brackets, not array/comprehension brackets.
+    const depthAt = predicateBracketDepths(tokens);
     for (let i = tokens.length - 1; i >= 0; i--) {
       const tok = tokens[i];
       if (tok.type !== 'ident') continue;
       const jqName = WORD_OPS[tok.value.toUpperCase()];
       if (!jqName) continue;
-      // Inside predicate brackets? Let compilePredicate handle it.
+      // Inside predicate suffix brackets? Let compilePredicate handle it.
       if (depthAt[i] > 0) continue;
       // Formula-call form (FUNC(...))? Let function-call compiler handle it.
       // Distinguish `STARTSWITH(x; y)` (call — skip) from `x STARTSWITH (y)`
@@ -2336,6 +2328,86 @@ function matchClose(tokens: Token[], openIndex: number): number {
   return -1;
 }
 
+function opensSuffixBracketContext(tokens: Token[], openIndex: number): boolean {
+  const previous = tokens[openIndex - 1];
+  if (!previous) {
+    return false;
+  }
+
+  if (['ident', 'number', 'string', 'var', 'format'].includes(previous.type)) {
+    return true;
+  }
+
+  if (previous.type === 'punc' && [')', ']', '}'].includes(previous.value)) {
+    return true;
+  }
+
+  if (previous.type === 'op' && ['.', '?.', '?'].includes(previous.value)) {
+    return true;
+  }
+
+  return false;
+}
+
+function isPredicateBracketContext(tokens: Token[], openIndex: number): boolean {
+  if (!opensSuffixBracketContext(tokens, openIndex)) {
+    return false;
+  }
+
+  const close = matchClose(tokens, openIndex);
+  if (close < 0) {
+    return false;
+  }
+
+  const inner = tokens.slice(openIndex + 1, close);
+  if (inner.length === 0) {
+    return false;
+  }
+
+  if (inner[0]?.type === 'op' && inner[0].value === '*') {
+    return true;
+  }
+
+  const commaRanges = splitTopLevel(inner, 0, inner.length, ',');
+  if (
+    commaRanges.length === 2 &&
+    isSimpleHumanIndex(inner.slice(...commaRanges[0]))
+  ) {
+    return true;
+  }
+
+  return isPredicateLike(inner);
+}
+
+function predicateBracketDepths(tokens: Token[]): number[] {
+  const depths = new Array<number>(tokens.length).fill(0);
+  let depth = 0;
+  const stack: boolean[] = [];
+
+  for (let index = 0; index < tokens.length; index++) {
+    depths[index] = depth;
+    const token = tokens[index];
+
+    if (token.type === 'punc' && token.value === '[') {
+      const isPredicate = isPredicateBracketContext(tokens, index);
+      stack.push(isPredicate);
+      if (isPredicate) {
+        depth++;
+      }
+      continue;
+    }
+
+    if (token.type === 'punc' && token.value === ']') {
+      const wasPredicate = stack.pop();
+      if (wasPredicate) {
+        depth--;
+      }
+    }
+  }
+
+  return depths;
+}
+
 // Rewrite `<>` (Excel inequality) to canonical `!=` at the source level,
 // skipping occurrences inside string literals. Done via the tokenizer so
 // string boundaries are handled for free.
@@ -2365,39 +2437,25 @@ function rewriteInequality(source: string): { source: string; changed: boolean }
   return { source: out, changed: true };
 }
 
-// Rewrite a SOLO top-level `=` to `==`. In BXL the single-equals is
-// universally a comparison (Excel convention); in raw jq it's an
-// assignment. We only rewrite at depth 0 — `=` inside a predicate
-// (`[SKU = "X"]`) keeps its readable-predicate meaning, and `[attr = val]`
-// slicing isn't confused either because that lives inside `[]`.
+// Rewrite readable-BXL `=` comparisons to canonical `==`, except inside
+// predicate suffix brackets where compilePredicate already treats bare `=`
+// as equality.
+//
+// A prior version skipped *all* square-bracket contexts, which broke array
+// literals/comprehensions like `[range(...) as $r | ($r = 0)]` by leaving
+// jq assignment semantics in place.
 // Pre-existing `==`, `!=`, `<=`, `>=`, `^=`, `$=`, `*=`, `/=`, `%=`,
 // `+=`, `-=`, `|=`, `//=` stay untouched — the tokenizer emits those as
 // separate multi-char ops, so our scan only ever sees the bare `=`.
 function rewriteTopLevelEquals(source: string): { source: string; changed: boolean } {
-  // BXL treats `=` as comparison (Excel convention). Convert every `=`
-  // token to `==` so jq's parser sees comparison instead of assignment.
-  //
-  // We skip inside `[ ]` only because the predicate compiler accepts
-  // raw `=` there (and treating `[Field = X]` identically to
-  // `[Field == X]` is handled downstream). Inside `(...)` and `{...}`
-  // we DO convert — a prior version kept depth===0 only, which broke
-  // expressions like `NOT (Amount = 0 AND Flag = true)` because the
-  // inner `=` never became `==`.
   const tokens = tokenizeQuietly(source);
   if (!tokens) return { source, changed: false };
+  const predicateDepths = predicateBracketDepths(tokens);
   const edits: Array<[number, number]> = [];
-  let bracketDepth = 0;
-  for (const tok of tokens) {
-    if (tok.type === 'punc' && tok.value === '[') {
-      bracketDepth++;
-      continue;
-    }
-    if (tok.type === 'punc' && tok.value === ']') {
-      bracketDepth--;
-      continue;
-    }
+  for (let index = 0; index < tokens.length; index++) {
+    const tok = tokens[index];
     if (
-      bracketDepth === 0 &&
+      predicateDepths[index] === 0 &&
       tok.type === 'op' &&
       tok.value === '=' &&
       tok.start !== undefined &&
