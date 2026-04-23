@@ -184,6 +184,47 @@ module('factory-entrypoint integration', function () {
         response.writeHead(200, { 'content-type': SupportedMimeType.CardJson });
         response.end(JSON.stringify({ data: [] }));
       } else if (
+        request.url === '/hassan/personal/_mtimes' &&
+        request.method === 'GET'
+      ) {
+        // Used by client.pull / client.sync to list remote state. The
+        // factory pulls on startup and syncs the seed — an empty manifest
+        // is enough for the pull path, and sync treats every local file
+        // as a push.
+        response.writeHead(200, { 'content-type': SupportedMimeType.JSONAPI });
+        response.end(JSON.stringify({ data: { attributes: { mtimes: {} } } }));
+      } else if (
+        request.url === '/hassan/personal/_atomic' &&
+        request.method === 'POST'
+      ) {
+        // Used by client.sync to atomically push card writes. Parse the
+        // atomic operations payload to register every pushed path so
+        // subsequent GETs (including the post-seed `waitForFile` poll)
+        // can resolve them.
+        let body = '';
+        request.on('data', (chunk) => (body += chunk.toString()));
+        request.on('end', () => {
+          try {
+            let parsed = JSON.parse(body) as {
+              'atomic:operations'?: { op: string; href?: string }[];
+            };
+            for (let op of parsed['atomic:operations'] ?? []) {
+              if (op.op === 'add' || op.op === 'update') {
+                let href = op.href ?? '';
+                let path = href.replace(/^\.\/?/, '').replace(/\.json$/, '');
+                createdCardPaths.add(path);
+              }
+            }
+          } catch {
+            // ignore — sync will surface the parse failure
+          }
+          response.writeHead(200, {
+            'content-type': SupportedMimeType.JSONAPI,
+          });
+          response.end(JSON.stringify({ 'atomic:results': [] }));
+        });
+        return;
+      } else if (
         request.url === '/hassan/personal/_readiness-check' &&
         request.method === 'GET'
       ) {

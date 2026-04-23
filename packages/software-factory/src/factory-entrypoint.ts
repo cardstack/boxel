@@ -120,6 +120,17 @@ export interface RunFactoryEntrypointDependencies {
     realmUrl: string,
     workspaceDir: string,
   ) => Promise<void>;
+  /**
+   * After the post-seed sync, wait for the realm to serve the seed card
+   * over HTTP so the scheduler's `listIssues()` doesn't race with the
+   * realm's search index. Tests stub this out. Defaults to
+   * `client.waitForFile`.
+   */
+  waitForSeedReadable?: (
+    client: BoxelCLIClient,
+    realmUrl: string,
+    seedIssueId: string,
+  ) => Promise<void>;
 }
 export { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
@@ -300,15 +311,9 @@ export async function runFactoryEntrypoint(
   // same mechanism the pre-CS-10882 factory used (via waitForFile inside
   // createSeedIssue) to bridge that race.
   if (seedResult.status === 'created') {
-    let ready = await client.waitForFile(targetRealm.url, seedResult.issueId, {
-      timeoutMs: 15_000,
-      pollMs: 250,
-    });
-    if (!ready) {
-      throw new Error(
-        `Seed issue synced to realm but not readable after 15s: ${seedResult.issueId}`,
-      );
-    }
+    let waitForSeedReadable =
+      dependencies?.waitForSeedReadable ?? defaultWaitForSeedReadable;
+    await waitForSeedReadable(client, targetRealm.url, seedResult.issueId);
   }
 
   let summary = buildFactoryEntrypointSummary(
@@ -437,6 +442,22 @@ async function defaultPullTargetRealm(
   log.info(
     `Pulled ${result.files.length} file(s) from target realm into workspace`,
   );
+}
+
+async function defaultWaitForSeedReadable(
+  client: BoxelCLIClient,
+  realmUrl: string,
+  seedIssueId: string,
+): Promise<void> {
+  let ready = await client.waitForFile(realmUrl, seedIssueId, {
+    timeoutMs: 15_000,
+    pollMs: 250,
+  });
+  if (!ready) {
+    throw new Error(
+      `Seed issue synced to realm but not readable after 15s: ${seedIssueId}`,
+    );
+  }
 }
 
 async function defaultSyncWorkspaceToRealm(
