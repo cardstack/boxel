@@ -92,7 +92,7 @@ See [`docs/sandbox.md`](./docs/sandbox.md) for the full contract.
 
 ## Docs
 
-- [`docs/syntax-reference.md`](./docs/syntax-reference.md) — canonical syntax
+- [`docs/syntax-reference.html`](./docs/syntax-reference.html) — canonical syntax reference, rendered guide with syntax-highlighted examples (open in a browser)
 - [`docs/grammar.ebnf`](./docs/grammar.ebnf) — formal grammar
 - [`docs/sandbox.md`](./docs/sandbox.md) — sandbox contract
 - [`docs/excel-compatibility.md`](./docs/excel-compatibility.md) — what
