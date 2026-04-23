@@ -292,6 +292,25 @@ export async function runFactoryEntrypoint(
     dependencies?.syncWorkspaceToRealm ?? defaultSyncWorkspaceToRealm;
   await syncWorkspaceToRealm(client, targetRealm.url, workspaceDir);
 
+  // Wait for the seed card to be readable from the realm. `client.sync`
+  // returns when the HTTP POST completes, but the realm's indexer runs
+  // asynchronously — if the scheduler's `listIssues()` (which hits the
+  // realm's search index) races with indexing, it returns empty and the
+  // loop exits without picking up the seed. Polling the card URL is the
+  // same mechanism the pre-CS-10882 factory used (via waitForFile inside
+  // createSeedIssue) to bridge that race.
+  if (seedResult.status === 'created') {
+    let ready = await client.waitForFile(targetRealm.url, seedResult.issueId, {
+      timeoutMs: 15_000,
+      pollMs: 250,
+    });
+    if (!ready) {
+      throw new Error(
+        `Seed issue synced to realm but not readable after 15s: ${seedResult.issueId}`,
+      );
+    }
+  }
+
   let summary = buildFactoryEntrypointSummary(
     options,
     brief,
