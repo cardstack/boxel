@@ -55,7 +55,6 @@ export interface PullResult {
   error?: string;
 }
 
-
 export type { DeleteResult };
 export type { WriteResult };
 
