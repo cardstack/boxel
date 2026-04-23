@@ -147,7 +147,6 @@ export interface RenderTimeoutDiagnostics {
 
 export interface RenderError extends ErrorEntry {
   evict?: boolean;
-  diagnostics?: RenderTimeoutDiagnostics;
 }
 
 export interface FileExtractResponse {
