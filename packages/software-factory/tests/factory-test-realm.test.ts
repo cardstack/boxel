@@ -413,7 +413,7 @@ module('factory-test-realm > createTestRun', function () {
     );
 
     // The card lives on local disk — the orchestrator syncs it to the
-    // realm between iterations (see CS-10882).
+    // realm between iterations.
     let written = workspace.read('Validations/test_define-sticky-note-1.json');
     let body = JSON.parse(written);
     assert.strictEqual(body.data.meta.adoptsFrom.name, 'TestRun');

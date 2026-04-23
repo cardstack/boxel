@@ -279,9 +279,9 @@ module('factory-tool-registry > built-in manifests', function () {
 
   test('expected realm-api tools are registered', function (assert) {
     let registry = new ToolRegistry();
-    // realm-read/realm-write/realm-delete are scoped to non-target
-    // realms in CS-10882 — target-realm I/O goes through the workspace
-    // (see executor safety check).
+    // realm-read/realm-write/realm-delete are scoped to non-target realms
+    // by the executor's safety check; target-realm I/O goes through the
+    // workspace.
     assert.true(registry.has('realm-read'));
     assert.true(registry.has('realm-write'));
     assert.true(registry.has('realm-delete'));

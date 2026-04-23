@@ -107,9 +107,6 @@ export async function createSeedIssue(
     );
   }
 
-  // No post-write readability poll — the file is on local disk the
-  // moment `writeCard` returns. The orchestrator syncs to the realm
-  // before the scheduler enumerates issues.
   log.info(`Seed issue created: ${SEED_ISSUE_PATH}`);
   return { issueId: SEED_ISSUE_PATH, status: 'created' };
 }

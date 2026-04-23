@@ -25,10 +25,6 @@ import {
 import { buildTestClient } from './helpers/test-client';
 import { createTestWorkspace } from './helpers/workspace-fixture';
 
-// realm-read/realm-write/realm-delete tools retired in CS-10882 — the
-// agent no longer performs target-realm I/O over HTTP. Tests for those
-// tools have been removed accordingly.
-
 test('realm-search returns results from the test realm', async ({ realm }) => {
   let { client, cleanup } = buildTestClient({
     realmUrl: realm.realmURL.href,
@@ -460,9 +456,8 @@ test.describe('realm-search with seeded fixture data', () => {
       });
 
       // Discover the darkfactory module URL by reading a known card's
-      // adoptsFrom. The realm-read tool is retired, so read via the
-      // BoxelCLIClient directly — this is setup for the realm-search
-      // assertions below.
+      // adoptsFrom via the BoxelCLIClient — this is setup for the
+      // realm-search assertions below.
       let projectRead = await client.read(
         realm.realmURL.href,
         'project-demo.json',
@@ -558,7 +553,7 @@ test.describe('realm-search on a private realm', () => {
         client: ownerSetup.client,
       });
 
-      // realm-read is retired — discover the module URL via the client.
+      // Discover the module URL via the client for the search assertions below.
       let projectRead = await ownerSetup.client.read(
         realm.realmURL.href,
         'project-demo.json',

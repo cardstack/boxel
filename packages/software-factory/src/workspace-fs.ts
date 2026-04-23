@@ -1,24 +1,20 @@
 /**
  * Local-filesystem primitives for the factory's target-realm I/O.
  *
- * After CS-10882, every target-realm read/write/delete happens against a
- * local workspace directory. Actual realm synchronization is done via
- * `client.pull` / `client.sync` at well-defined points in the loop — the
- * factory never calls `client.read(targetRealmUrl, ...)` /
- * `client.write(targetRealmUrl, ...)` / `client.delete(targetRealmUrl, ...)`.
+ * Every target-realm read/write/delete happens against a local workspace
+ * directory; synchronization with the realm is done via `client.pull` /
+ * `client.sync` at well-defined points in the loop.
  *
  * Result shapes mirror `BoxelCLIClient.ReadResult` / `WriteResult` /
- * `DeleteResult` so the migration is minimally invasive at call sites:
+ * `DeleteResult`:
  * - `readCard` returns `{ ok: false, status: 404 }` when the file is
- *   missing, matching client.read's 404 convention that existing call
- *   sites branch on.
+ *   missing.
  * - Non-JSON payloads surface via `content`; parseable JSON surfaces via
- *   `document`, same as client.read.
+ *   `document`.
  *
- * Workspace directories are derived deterministically from realm URL and
- * are stable across factory runs (`os.tmpdir() + /boxel-factory-workspaces/
- * <slug>`), so re-runs against the same realm reuse the same pulled state
- * rather than re-downloading every file.
+ * Workspace directories are derived deterministically from the realm URL
+ * (`os.tmpdir() + /boxel-factory-workspaces/<slug>`), so re-runs against
+ * the same realm reuse the same on-disk state.
  */
 
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
@@ -133,9 +129,8 @@ export async function writeCard(
 }
 
 /**
- * Delete a file from the local workspace. Treats missing files as a
- * successful delete (idempotent), matching the behavior of a
- * post-sync `realm-delete` call.
+ * Delete a file from the local workspace. Idempotent — treats missing
+ * files as a successful delete.
  */
 export async function deleteCard(
   workspaceDir: string,

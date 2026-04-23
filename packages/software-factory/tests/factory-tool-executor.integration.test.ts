@@ -77,11 +77,11 @@ function stopServer(server: Server): Promise<void> {
 // ---------------------------------------------------------------------------
 
 module('factory-tool-executor integration > realm-api requests', function () {
-  // The realm-read/realm-write/realm-delete tools are now restricted to
-  // non-target realms (target-realm I/O must go through the workspace —
-  // see CS-10882). Each test sets `targetRealmUrl` to a distinct path and
-  // whitelists the scratch realm via `allowedRealmPrefixes` so the HTTP
-  // behavior of the tool can still be verified.
+  // realm-read/realm-write/realm-delete are restricted to non-target
+  // realms (target-realm I/O goes through the workspace). Each test sets
+  // `targetRealmUrl` to a distinct path and whitelists a scratch realm
+  // via `allowedRealmPrefixes` so the tool's HTTP behavior can still be
+  // verified.
   test('realm-read sends correct GET with Authorization and Accept headers', async function (assert) {
     let captured: CapturedRequest | undefined;
 

@@ -136,7 +136,7 @@ export function getFactoryEntrypointUsage(): string {
     '  --realm-server-url <url>   Realm server URL (default: from active Boxel profile)',
     '  --no-retry-blocked          Skip retrying blocked issues (by default, blocked issues are reset to backlog)',
     '  --agent <provider>          LLM backend: "claude" (default, uses Claude Code Agent SDK),',
-    '                              "codex" (not yet implemented — tracked in CS-10594),',
+    '                              "codex" (not yet implemented),',
     '                              "openrouter" (defaults to anthropic/claude-opus-4),',
     '                              or "openrouter=<model-id>" to pick a specific OpenRouter model',
     '                              (e.g., "openrouter=anthropic/claude-sonnet-4").',

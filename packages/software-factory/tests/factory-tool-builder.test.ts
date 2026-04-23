@@ -1031,7 +1031,7 @@ module(
 );
 
 // ---------------------------------------------------------------------------
-// run_tests tool (in-memory validation — CS-10777)
+// run_tests tool (in-memory validation)
 // ---------------------------------------------------------------------------
 
 module('buildFactoryTools — run_tests', function () {
@@ -1127,7 +1127,7 @@ module('buildFactoryTools — run_tests', function () {
 });
 
 // ---------------------------------------------------------------------------
-// run_lint tool (in-memory validation — CS-10776)
+// run_lint tool (in-memory validation)
 // ---------------------------------------------------------------------------
 
 module('buildFactoryTools — run_lint', function () {
@@ -1579,7 +1579,7 @@ module('factory-tool-builder > add_comment', function () {
   });
 });
 
-// run_evaluate tool (in-memory validation — CS-10779)
+// run_evaluate tool (in-memory validation)
 // ---------------------------------------------------------------------------
 
 module('buildFactoryTools — run_evaluate', function () {
@@ -1763,7 +1763,7 @@ module('buildFactoryTools — run_evaluate', function () {
   });
 });
 
-// run_parse tool (in-memory validation — CS-10778)
+// run_parse tool (in-memory validation)
 // ---------------------------------------------------------------------------
 
 module('buildFactoryTools — run_parse', function () {
@@ -1945,7 +1945,7 @@ module('buildFactoryTools — run_parse', function () {
 });
 
 // ---------------------------------------------------------------------------
-// run_instantiate tool (in-memory validation — CS-10823)
+// run_instantiate tool (in-memory validation)
 // ---------------------------------------------------------------------------
 
 module('buildFactoryTools — run_instantiate', function () {

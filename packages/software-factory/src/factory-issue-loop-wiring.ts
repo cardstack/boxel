@@ -272,7 +272,7 @@ export function assertAgentProviderImplemented(
   if (provider === 'codex') {
     throw new Error(
       'Codex CLI native agent is not yet implemented. ' +
-        'Re-run with --agent openrouter (tracked in CS-10594).',
+        'Re-run with --agent openrouter.',
     );
   }
 }
