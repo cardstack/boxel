@@ -1,4 +1,5 @@
 import { existsSync, readdirSync } from 'fs';
+import { access } from 'fs/promises';
 import { join, resolve } from 'path';
 import {
   PUBLISHED_DIRECTORY_NAME,
@@ -52,18 +53,53 @@ export async function runRegistryBackfill(
   const started = Date.now();
   log.info('starting registry backfill');
 
-  const bootstrapUrls = await upsertBootstrapRealms(opts);
-  const sourceCount = await upsertSourceRealms(opts);
-  const publishedCount = await upsertPublishedRealms(opts);
+  // Each sub-routine is wrapped independently so a failure in one (e.g.,
+  // EACCES during a disk scan) doesn't prevent the others from running.
+  // This is Phase 1 shadow data — any drift self-heals on next boot, so
+  // "log and continue" is the right posture.
+  const bootstrapUrls = await safeStep('bootstrap', () =>
+    upsertBootstrapRealms(opts),
+  );
+  const sourceDiscovered = await safeStep('source', () =>
+    upsertSourceRealms(opts),
+  );
+  const publishedDiscovered = await safeStep('published', () =>
+    upsertPublishedRealms(opts),
+  );
+  await safeStep('orphan-check', () => warnOnOrphans(opts));
+  await safeStep('stale-bootstrap-check', () =>
+    warnOnStaleBootstrapRows(opts, bootstrapUrls ?? new Set()),
+  );
 
-  await warnOnOrphans(opts);
-  await warnOnStaleBootstrapRows(opts, bootstrapUrls);
-
+  // Note: `sourceDiscovered` / `publishedDiscovered` are the number of
+  // realm directories seen on disk, not the number of INSERTs actually
+  // executed. Under ON CONFLICT DO NOTHING, a second run reports the same
+  // counts even if no rows change. That's intentional — the count is a
+  // measure of the scan, not the diff.
   log.info(
     `registry backfill complete in ${Date.now() - started}ms ` +
-      `(bootstrap=${bootstrapUrls.size}, source=${sourceCount}, ` +
-      `published=${publishedCount})`,
+      `(bootstrap=${bootstrapUrls?.size ?? 0}, ` +
+      `sourceDiscovered=${sourceDiscovered ?? 0}, ` +
+      `publishedDiscovered=${publishedDiscovered ?? 0})`,
   );
+}
+
+// Run a sub-routine with a catch-all that logs and swallows. Returns the
+// sub-routine's resolved value, or undefined if it threw. The per-step
+// isolation is deliberate: shadow data in Phase 1 doesn't warrant crashing
+// realm-server boot on a transient FS error or DB blip.
+async function safeStep<T>(
+  name: string,
+  fn: () => Promise<T>,
+): Promise<T | undefined> {
+  try {
+    return await fn();
+  } catch (err: unknown) {
+    log.warn(
+      `registry backfill step "${name}" failed; continuing: ${String(err)}`,
+    );
+    return undefined;
+  }
 }
 
 async function upsertBootstrapRealms(
@@ -208,7 +244,18 @@ async function upsertPublishedRealms(
   return count;
 }
 
+// One fs.access call per row, run in parallel (bounded concurrency); avoids
+// blocking the event loop for the duration of a blocking existsSync sweep.
+// Each call is latency-bound on EFS, so parallelism materially reduces wall
+// time. Gated by REALM_REGISTRY_SKIP_ORPHAN_CHECK so an operator running at
+// very large registry size can disable the sweep entirely.
+const ORPHAN_CHECK_CONCURRENCY = 32;
+
 async function warnOnOrphans(opts: RegistryBackfillOpts): Promise<void> {
+  if (process.env.REALM_REGISTRY_SKIP_ORPHAN_CHECK === 'true') {
+    log.info('orphan check skipped (REALM_REGISTRY_SKIP_ORPHAN_CHECK=true)');
+    return;
+  }
   // disk_id means something different for each kind — see the column comment
   // in the realm_registry migration — so the check is kind-specific.
   const rows = (await query(opts.dbAdapter, [
@@ -216,22 +263,29 @@ async function warnOnOrphans(opts: RegistryBackfillOpts): Promise<void> {
   ])) as Array<{ url: string; kind: string; disk_id: string }>;
   const publishedRoot = join(opts.realmsRootPath, PUBLISHED_DIRECTORY_NAME);
 
-  for (const { url, kind, disk_id } of rows) {
+  async function checkOne(row: { url: string; kind: string; disk_id: string }) {
     let realmJson: string;
-    if (kind === 'source') {
-      realmJson = join(opts.realmsRootPath, disk_id, '.realm.json');
-    } else if (kind === 'published') {
-      realmJson = join(publishedRoot, disk_id, '.realm.json');
-    } else if (kind === 'bootstrap') {
-      realmJson = join(disk_id, '.realm.json');
+    if (row.kind === 'source') {
+      realmJson = join(opts.realmsRootPath, row.disk_id, '.realm.json');
+    } else if (row.kind === 'published') {
+      realmJson = join(publishedRoot, row.disk_id, '.realm.json');
+    } else if (row.kind === 'bootstrap') {
+      realmJson = join(row.disk_id, '.realm.json');
     } else {
-      continue;
+      return;
     }
-    if (!existsSync(realmJson)) {
+    try {
+      await access(realmJson);
+    } catch {
       log.warn(
-        `registry row ${url} (kind=${kind}) is missing its disk path at ${realmJson}`,
+        `registry row ${row.url} (kind=${row.kind}) is missing its disk path at ${realmJson}`,
       );
     }
+  }
+
+  for (let i = 0; i < rows.length; i += ORPHAN_CHECK_CONCURRENCY) {
+    const slice = rows.slice(i, i + ORPHAN_CHECK_CONCURRENCY);
+    await Promise.all(slice.map(checkOne));
   }
 }
 
