@@ -2,8 +2,8 @@
 
 # BXL
 
-**The Boxel Expression Language.**
-Spreadsheet-style formulas over your JSON — sandboxed by default, paste-compatible with Excel, readable by your users.
+**The language between data and code.**
+Spreadsheet-style formulas over JSON. Paste-compatible with Excel. Sandboxed by construction. Small enough to live inside a JSON field — powerful enough to drive constraints, formulas, defaults, and workflow gates.
 
 [![npm](https://img.shields.io/npm/v/@cardstack/bxl.svg?color=217346&labelColor=1a2e1a)](https://www.npmjs.com/package/@cardstack/bxl)
 [![license](https://img.shields.io/npm/l/@cardstack/bxl.svg?color=217346&labelColor=1a2e1a)](./LICENSE)
@@ -18,6 +18,18 @@ Spreadsheet-style formulas over your JSON — sandboxed by default, paste-compat
 SUM("Line Item"[*Taxable]."Line Total")              -- SUMIF without the _BY
 ROUND(Subtotal * "Tax Rate" / 100, 2) = "Tax Amount" -- paste from Excel, it runs
 ```
+
+<div align="center">
+
+| Looks like data        | Acts like code                   |
+| ---------------------- | -------------------------------- |
+| Serialized as a string | Executes, returns a typed result |
+| Diffable in git        | Has local scope (`as $x`)        |
+| Ships in catalogs      | Tracks dependencies              |
+| Reviewable by humans   | Bounded op budget                |
+| No compile step        | Sandboxed (zero I/O)             |
+
+</div>
 
 ---
 
@@ -38,22 +50,11 @@ evaluateBxl('ROUND(Subtotal * "Tax Rate" / 100, 2)', invoice, { schema });
 
 ## Why BXL?
 
-Every business application runs on small expressions — invoice totals, form validation, access rules, notification triggers, report filters. These expressions live close to the user, so they need to be **readable**, **safe**, and **composable across every surface**.
+Every app has two kinds of logic. There's **code** — arbitrary, Turing-complete, deployed with seat belts loosened — and there's **data** — inert, schematized, shipped in configs and forms. Real applications need a third kind: something in between. Something a domain expert can author, git can diff, a catalog can ship, and a sandbox can trust.
 
-No existing option delivers all three:
+BXL is that third kind, scoped deliberately. It's jq pipes plus Excel helpers — `SUM`, `ROUND`, `IF`, `VLOOKUP`, `XIRR` — evaluated against the current card (`.` is the model). It cannot fetch. It cannot write. It cannot call an LLM, open a file, or mutate shared state. Those four "cannots" are what let a platform embed BXL inside validation rules, computed fields, workflow gates, and query transforms without worrying that a schema author just drilled a hole into production.
 
-|                                       | JavaScript | jq  | Excel | JSONPath | **BXL** |
-| ------------------------------------- | :--------: | :-: | :---: | :------: | :-----: |
-| Readable to non-engineers             |     −      |  −  |   ✓   |    −     |  **✓**  |
-| Safe to run on user input             |     −      |  ✓  |   ✓   |    ✓     |  **✓**  |
-| Walks nested JSON                     |     ✓      |  ✓  |   −   |    ✓     |  **✓**  |
-| Paste Excel formulas directly         |     −      |  −  |   ✓   |    −     |  **✓**  |
-| 300+ built-in formula helpers         |     −      |  −  |   ✓   |    −     |  **✓**  |
-| Sandboxed by default (no I/O)         |     −      |  ✓  |   ✓   |    ✓     |  **✓**  |
-| Schema-aware — labels, not key paths  |     −      |  −  |   −   |    −     |  **✓**  |
-| Serializes as data (diffable, cache)  |     −      |  ✓  |   ✓   |    ✓     |  **✓**  |
-
-If you're building CRUD apps with form validation, you've probably hand-rolled this half a dozen times. BXL is what you'd end up with after round six, given a year and someone to own the tests.
+If you've been stitching together Ajv + jq + Formula.js + a custom rule engine, BXL is what that stack looks like after it consolidates into a single dependency.
 
 ---
 
@@ -170,83 +171,38 @@ evaluateBxl('NOT ISBLANK("Tax Amount")', invoice, { schema }); // => true (Excel
 
 ## Where BXL earns its keep
 
-BXL shines in places where expressions are authored near the user, stored as data, and run on every read or save.
+BXL is evaluated from eight distinct positions in a typical application. Each uses the same parser, the same dependency tracker, and the same sandbox — so a field constraint, a workflow gate, and a reactive predicate all share a vocabulary the author learns once.
 
-<table>
-<tr><td valign="top" width="50%">
+| Position                | What it does                      | Example                                                 |
+| ----------------------- | --------------------------------- | ------------------------------------------------------- |
+| **Formula field**       | Computed value on a card          | `SUM("Line Item"."Line Total")`                         |
+| **Constraint**          | Validation rule with a message    | `"End Date" > "Start Date"`                             |
+| **Visible-when**        | Conditional field rendering       | `Status = "in-review"`                                  |
+| **Autofill / default**  | Computed initial value            | `slugify(Title)`                                        |
+| **Workflow gate**       | Advance condition                 | `all(Steps[…]; Status = "done")`                        |
+| **Notification trigger**| Fire when threshold crossed       | `"Budget Remaining" < 1000`                             |
+| **Reactive predicate**  | Watch-and-fire rule               | `age("Last Heartbeat") > DURATION("60s")`               |
+| **Query transform**     | Bulk derivation over an array     | `"Line Item" \| map(Quantity * "Unit Price")`           |
 
-**Computed fields**
+### Where logic lives — three places, one rule each
 
-```ts
-// In a card definition:
-lineTotal: computed('Quantity * "Unit Price"')
-total: computed('Subtotal + "Tax Amount"')
-letterGrade: computed(`
-  IF(Score >= 90, "A",
-  IF(Score >= 80, "B",
-  IF(Score >= 70, "C", "F")))
-`)
-```
+BXL is one of three places logic belongs in a typical application. The boundaries aren't stylistic; they're mechanical — each place has different constraints and different audit characteristics.
 
-</td><td valign="top" width="50%">
+- **BXL** — logic that is *data*: constraints, formulas, predicates, defaults, visibility, transforms. Authored inside cards, shipped through catalogs, editable by agents.
+- **`computeVia`** — logic that is *schema*: derived fields the type itself knows how to compute. Ships with the module definition.
+- **Commands & Reflex** — side effects: writes, deletes, LLM calls, external APIs. Attributable, auditable, one layer up from BXL.
 
-**Form validation**
-
-```ts
-// Per-field, schema-authored:
-{ when: 'present("Bill To".Email)',
-  constraint: '"Bill To".Email CONTAINS "@"',
-  message: 'Email must contain @' }
-
-{ when: 'Payment = "Credit card"',
-  constraint: 'present("Bill To".Zip)',
-  message: 'Zip required for card payments' }
-```
-
-</td></tr>
-<tr><td valign="top" width="50%">
-
-**Access rules**
-
-```ts
-// In a guide / policy:
-visibleWhen: `
-  Role = "admin" OR
-  (Owner.Id = $user.Id AND Status <> "archived")
-`
-
-editableWhen: `
-  Status = "draft" AND
-  present("Assigned To")
-`
-```
-
-</td><td valign="top" width="50%">
-
-**Report filters / aggregates**
-
-```ts
-// In a dashboard card:
-total: 'SUM(Order[*Status = "shipped"].Amount)'
-topRevenue: '
-  Order[*Status = "paid"]
-    | group_by(.customer)
-    | max_by(SUM(.[].Amount))
-'
-```
-
-</td></tr>
-</table>
+One-line rule: **BXL for logic-as-data · `computeVia` for logic-as-schema · Commands for changes-to-the-world.** BXL never writes. Commands never embed in cards. When in doubt, ask *"could a stranger run this expression a million times against my data?"* — if yes, it's BXL; if no, it's a Command.
 
 ---
 
 ## Comparisons & inspirations
 
-BXL doesn't invent much. It pulls ideas from six expression languages that were already solving pieces of the same problem — Excel, jq, XPath, XQuery, Schematron, and CSS — and adds a readable surface that lets them coexist in one runtime.
+BXL doesn't invent much. It pulls ideas from eight expression languages that were already solving pieces of the same problem, and adds a readable surface that lets them coexist in one runtime.
 
 Credit and attribution below; pick whichever section describes the language you already know.
 
-### Excel · paste-compatible where it matters
+### 1 · Excel · paste-compatible where it matters
 
 The "XL" in BXL is earned. 300+ Excel helpers ship with matching semantics — paste `=IF(…)` from a spreadsheet and it runs unchanged. Current row is `.` instead of `A1`; columns are field names instead of column letters.
 
@@ -257,7 +213,7 @@ BXL:    ROUND(Subtotal * "Tax Rate" / 100, 2)
 
 BXL skips Excel's cell-grid functions (`OFFSET`, `INDIRECT`, `DAVERAGE`), most statistical distributions, and Bessel / regression array functions — they don't translate onto JSON. Everything that does translate is in.
 
-### jq · every valid jq is valid BXL
+### 2 · jq · every valid jq is valid BXL
 
 [jq-tools](https://github.com/alexxander/jq-tools) is the actual runtime. BXL compiles to canonical jqxl before execution; the evaluator doesn't know or care whether you wrote `.lineItems[0].sku` or `"Line Item"[#1].SKU`. The Excel helpers are added as regular jq functions via jq's native extension mechanism — no parser fork, no runtime fork.
 
@@ -268,7 +224,7 @@ BXL:  SUM("Line Item"[*Taxable]."Line Total")
 
 If you already know jq, you already know BXL. If you don't, every pipeline jq supports still works — BXL just gives you a readable shortcut when a schema is available.
 
-### XPath · tree paths with predicates
+### 3 · XPath · tree paths with predicates
 
 XPath normalized a compact notation for walking typed trees: dot-separated names for fields, brackets for predicates, helpers for position (`last()`, `position()`). BXL borrows the mental model and drops the axis specifiers (`/`, `//`, `@`) — there's no need for them on JSON.
 
@@ -277,11 +233,11 @@ XPath:  /invoice/lineItem[sku='BRAND-RED']/unitPrice
 BXL:    "Line Item"[SKU = "BRAND-RED"]."Unit Price"
 ```
 
-### XQuery · a small debt to FLWOR thinking
+### 4 · XQuery · a small debt to FLWOR thinking
 
 XQuery (W3C) showed that a query grammar can grow into a full expression language — let-bindings, conditionals, sequence composition — without bolting on a separate scripting layer. BXL stays smaller (no FLWOR keywords, no XML schema types, no modules) but adopts the same premise: one language should cover computation, not just lookup.
 
-### Schematron · the validation-rule shape, newly relevant
+### 5 · Schematron · the validation-rule shape, newly relevant
 
 Schematron (ISO/IEC 19757-3) is the standard for rule-based tree validation: match a pattern, assert a condition, emit a message. Unlike grammar-based validators like XSD, Schematron checks *relationships between values* — "if this, then that" — using XPath expressions against the document tree.
 
@@ -299,27 +255,59 @@ BXL:         { expr: 'Total = SUM("Line Item"."Line Total")',
 
 Same pattern, JSON-native, runs in the same sandbox as your formulas.
 
-### CSS · the most-deployed sandboxed expression language there is
+### 6 · CSS · a pseudo-class notation worth borrowing
 
-BXL's most visible debt to CSS is syntactic. CSS built a compact vocabulary for addressing positions in a collection: `:first-child`, `:nth-of-type(2n)`, `:not(.hidden)`. BXL lifts the syntax and points it at array indexes instead of DOM elements.
+BXL's debt to CSS is narrow and specific: the selector pseudo-class vocabulary. `:first-child`, `:nth-of-type(2n)`, `:not(.hidden)` — CSS shipped a compact, readable notation for addressing positions in a collection, and BXL lifts it verbatim and points it at array indexes instead of DOM nodes.
 
 ```
 CSS:  tr:first-child, tr:nth-child(2n+1), li:not(.done)
 BXL:  "Line Item":first,  "Line Item":odd,  Task:not([Done])
 ```
 
-But CSS isn't just selectors. It's also the most-deployed sandboxed expression language on Earth — every browser on every device runs billions of CSS rules a day inside a sandbox that cannot fetch, mutate, or call JavaScript. And it does more computation than people give it credit for:
+That's most of the debt. CSS is otherwise a different *kind* of language — a styling rule engine that runs against the DOM to produce rendered boxes, not a general expression language:
 
-- **Computed values** — `calc()`, `min()`, `max()`, `clamp()`, `attr()` read data from the tree and produce numbers.
-- **Conditional defaults** — `var(--tone, black)` is a fallback expression; `@container` and `@media` gate values on context; the cascade itself is a conditional-default engine with 30 years of production miles.
-- **Validation state** — `:invalid`, `:valid`, `:required`, `:in-range`, `:out-of-range`, `:user-invalid` react to a form field's correctness without a single line of JavaScript.
-- **Aggregation, sort of** — `counter()` walks the tree and accumulates; `:has()` lets a parent assert things about its descendants.
+- `calc()`, `clamp()`, `attr()` compute values, but only CSS-legal typed values (lengths, numbers, colors) for layout. You can't propagate the result into business logic.
+- `:invalid`, `:required`, `:user-invalid` *react* to validation state defined in HTML attributes or JavaScript; CSS doesn't author the rules.
+- `var(--x, fallback)` + the cascade resolve a property by lookup-with-fallback, not by expression-level branching.
+- `counter()` and `:has()` walk the tree for rendering; they don't aggregate values in any arithmetic sense.
 
-BXL isn't trying to replace CSS. It's trying to do for JSON data what CSS has been quietly doing for the DOM: declarative rules, conditional values, validation reactions, and real computation — all inside a sandbox, all serializable as strings, all readable enough that a non-engineer can write one.
+CSS is genuinely sandboxed — it can't fetch, mutate, or call arbitrary code, and the web depends on that — but "sandboxed styling rules" isn't the same category as "sandboxed expression language." BXL borrows the position-addressing notation because it's a good notation, not because CSS solves BXL's problem.
 
-### Plain JavaScript · what you'd write without BXL
+### 7 · JSONata · the closest living peer
 
-Most BXL expressions are shorter spellings of `array.map(...).filter(...).reduce(...)`.
+[JSONata](https://jsonata.org) (MIT, IBM + community) is a full expression language over JSON, built for the same job BXL is aimed at: embed in config, evaluate sandboxed, transform and validate data. It's widely used in low-code platforms — node-RED, OpenEPCIS, several integration tools. If you've already picked JSONata and it's working, most of this README's pitch is already solved for you.
+
+```
+JSONata:  $sum(lineItems[taxable].lineTotal)
+BXL:      SUM("Line Item"[*Taxable]."Line Total")
+```
+
+The differences, honestly:
+
+- **JSONata** has its own evaluator, its own path grammar, and its own function library. BXL has jq underneath and Formula.js wired in, which means `VLOOKUP`, `XIRR`, `ROMAN`, and 300+ other Excel helpers work out of the box with Excel semantics.
+- **JSONata** uses raw key paths (`lineItems.lineTotal`); BXL resolves quoted display-name labels (`"Line Item"."Line Total"`) against a schema.
+- **JSONata** doesn't accept pasted Excel formulas; BXL does.
+
+Pick JSONata when your authors are engineers and your data is already JSON-shaped. Pick BXL when your authors think in Excel formulas and display names, and when the data-processing pipe story matters (because jq is right there).
+
+### 8 · CEL · policy-language credentials
+
+[CEL (Common Expression Language)](https://cel.dev) is Google's sandboxed embeddable expression language. Apache-2.0, production-deployed in Kubernetes admission control, Google Cloud IAM conditions, Firebase Security Rules, AIP policies, Envoy's RBAC filter — roughly "the sandbox expression language of record" in cloud infrastructure. Syntax reads JS-ish; semantics are strictly sandboxed.
+
+```
+CEL:  has(request.auth.claims.role) && request.auth.claims.role == "admin"
+BXL:  present(Request.Auth.Claims.Role) and Request.Auth.Claims.Role = "admin"
+```
+
+CEL is stronger than BXL at pure policy and authorization — its type system is designed for predicate evaluation and its tooling is mature. BXL is stronger at the spreadsheet side of the house (Excel paste, formula helpers, the VLOOKUP-shape predicate). The two share a philosophical parent: a tiny, safe, embeddable DSL beats a general-purpose sandbox every time.
+
+Different readership. If you're building an authorization layer, look at CEL first. If you're building a business app with computed fields and validation rules near the user, BXL is closer.
+
+---
+
+### Plain JavaScript · the baseline
+
+For the common case — map / filter / reduce over an array — BXL is a shorter spelling. For everything else, BXL adds validation with attached messages, a sandbox, and serializability as data.
 
 ```js
 invoice.lineItems
@@ -336,20 +324,20 @@ Both answer the same question. The JS version has `fetch` and `process.env` in s
 
 Each language above is strong at one or two of the jobs a typical business app needs — validation, computed fields, data processing, conditional defaults, storage as data. No single one covers the whole set.
 
-| Role                                  | Excel | jq | XPath | XQuery | Schematron | CSS | JS | BXL |
-| ------------------------------------- | :---: | :-: | :---: | :----: | :--------: | :-: | :-: | :-: |
-| Validation rules + messages           |  🟠  | 🟡 |  🟡  |   🟡  |    🟢    | 🟠 | 🟡 | 🟢 |
-| Computed / formula fields             |  🟢  | 🟡 |  🟡  |   🟡  |     —     | 🟠 | 🟡 | 🟢 |
-| Data processing / aggregation         |  🟠  | 🟢 |  🟡  |   🟢  |     —     | 🟠 | 🟡 | 🟢 |
-| Conditional defaults                  |  🟡  |  — |  🟡  |   🟡  |     —     | 🟢 | 🟡 | 🟢 |
-| Sandbox by default (no I/O)           |  🟢  | 🟢 |  🟢  |   🟡  |    🟢    | 🟢 |  — | 🟢 |
-| Readable to non-engineers             |  🟢  |  — |   —  |    —  |     —     | 🟡 |  — | 🟢 |
-| Paste from spreadsheet                |  🟢  |  — |   —  |    —  |     —     |  — |  — | 🟢 |
-| Works on JSON natively                |   —  | 🟢 |   —  |    —  |     —     |  — | 🟢 | 🟢 |
-| Embeds in JSON as data (serializable) |  🟡  | 🟢 |   —  |    —  |     —     | 🟡 |  — | 🟢 |
-| One language across every job         |   —  | 🟡 |   —  |   🟡  |     —     | 🟠 | 🟢 | 🟢 |
+| Role                                  | Excel | jq | XPath | XQuery | Schematron | CSS | JSONata | CEL | JS | BXL |
+| ------------------------------------- | :---: | :-: | :---: | :----: | :--------: | :-: | :-----: | :-: | :-: | :-: |
+| Validation rules + messages           |  🟡  | ⚪ |  ⚪  |   ⚪   |    🟢     |  — |   ⚪   | 🟢 | 🟡 | 🟢 |
+| Computed / formula fields             |  🟢  | 🟡 |  🟡  |   🟡   |     —     | ⚪ |   🟢   | 🟡 | 🟡 | 🟢 |
+| Data processing / aggregation         |  ⚪  | 🟢 |  🟡  |   🟢   |     —     |  — |   🟢   | 🟡 | 🟡 | 🟢 |
+| Conditional defaults                  |  🟡  | 🟡 |  🟡  |   🟡   |     —     | 🟡 |   🟡   | 🟡 | 🟡 | 🟢 |
+| Sandbox by default (no I/O)           |  🟢  | 🟢 |  🟢  |   🟡   |    🟢     | 🟢 |   🟢   | 🟢 |  — | 🟢 |
+| Readable to non-engineers             |  🟢  |  — |   —  |    —   |     —     | ⚪ |   ⚪   | ⚪ |  — | 🟢 |
+| Paste from spreadsheet                |  🟢  |  — |   —  |    —   |     —     |  — |    —   |  — |  — | 🟢 |
+| Works on JSON natively                |   —  | 🟢 |   —  |    —   |     —     |  — |   🟢   | 🟡 | 🟢 | 🟢 |
+| Embeds in JSON as data (serializable) |  🟡  | 🟢 |  🟡  |   🟡   |    ⚪    | 🟡 |   🟢   | 🟢 | ⚪ | 🟢 |
+| One language across every job         |  ⚪  | 🟡 |  ⚪  |   🟡   |     —     |  — |   🟡   | 🟡 | 🟢 | 🟢 |
 
-🟢 strong &nbsp;·&nbsp; 🟡 ok / partial &nbsp;·&nbsp; 🟠 weak &nbsp;·&nbsp; — none
+🟢 strong &nbsp;·&nbsp; 🟡 ok / partial &nbsp;·&nbsp; ⚪ weak &nbsp;·&nbsp; — none
 
 BXL didn't invent any row. It's the smallest language that covers all of them at once, because it explicitly composes the wins of the ones that came before.
 
@@ -359,12 +347,26 @@ For a typical Boxel card ([BSL primer](https://bsl.staging.boxel.build) — invo
 
 ## Security model
 
-BXL is a **data sandbox**, not an OS sandbox. Expressions compute over a supplied JSON snapshot and return values. They cannot fetch, persist, load modules, call arbitrary JavaScript, or mutate any external state.
+BXL is a **data sandbox**, not an OS sandbox. Expressions compute over a supplied JSON snapshot and return values. They do not escape.
 
-- **No ambient I/O.** `env()` is blocked and hidden from `builtins()`.
-- **Runtime budgets on by default** — step count, output count, output bytes, wall-clock. Hosts may tighten via `runtimeLimits`.
-- **Deterministic** for the same input — no clock or random unless the host injects them.
-- **Worker-safe.** For hard memory ceilings or non-cooperative cancellation, run BXL in a Worker or isolate and terminate from the host.
+### What BXL will never do
+
+Not warnings. Enforced by the evaluator at parse or at runtime:
+
+- **No side effects.** No writes, no deletes, no messages sent.
+- **No network.** No `fetch`, no external APIs, no URLs opened.
+- **No LLM calls.** Those live in Commands, one layer up.
+- **No unbounded loops.** Op budget + wall-clock ceiling → `#LIMIT!` error.
+- **No closures or shared state.** Same input, same card state, same result — always.
+- **No direct card mutation.** BXL reads; Commands write.
+
+These six guarantees are what let the platform embed BXL inside Guides, workflows, notifications, and queries without worrying that a schema author just drilled a hole into production.
+
+### Runtime knobs
+
+- **Budgets on by default** — step count, output count, output bytes, wall-clock. Hosts tighten via `runtimeLimits`.
+- **Deterministic** — no clock or random unless the host injects them.
+- **Worker-safe** — for hard memory ceilings or non-cooperative cancellation, run BXL in a Worker or isolate and terminate from the host.
 
 See [`docs/sandbox.md`](./docs/sandbox.md) for the full threat model and contract.
 
@@ -418,7 +420,7 @@ npm install --global @cardstack/bxl
 
 bxl compile  '"Line Item"[#1].SKU'
 bxl eval     '"Line Item":first.SKU'  --input invoice.json --schema invoice.schema.json
-bxl lint     'Subtotal = 0 ? "empty" : Subtotal'
+bxl lint     'IF(Subtotal = 0, "empty", Subtotal)'
 bxl solidify 'subtotal * tax rate'
 ```
 
