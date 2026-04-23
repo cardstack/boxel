@@ -19,26 +19,46 @@ export function hashRealmUrlForAdvisoryLock(url: string): string {
   return digest.readBigInt64BE(0).toString();
 }
 
-// Run `fn` while holding a per-realm session-scoped Postgres advisory lock.
-// The lock is acquired on a pinned pool connection (via PgAdapter.withConnection)
-// and explicitly released in a finally block before the connection returns
-// to the pool to avoid lock leaks.
+// Run `fn` while holding a per-realm transaction-scoped Postgres advisory
+// lock. The lock is taken with `pg_advisory_xact_lock` inside an explicit
+// BEGIN / COMMIT on a pinned pool connection (via PgAdapter.withConnection),
+// so the lock is automatically released by the transaction's commit or
+// rollback — there is no "unlock failed → stale lock on pooled connection"
+// failure mode that a session-scoped `pg_advisory_lock` + `pg_advisory_unlock`
+// pattern would expose.
 //
 // Concurrent callers for the same realm URL serialize (the second call
-// blocks until the first releases). Callers for different URLs run in
-// parallel — the hash key space ensures that.
+// blocks on the xact-lock until the first's transaction commits/rolls
+// back). Callers for different URLs run in parallel — the hash key space
+// ensures that.
 //
 // Reads are NOT gated by this lock; reads hit the DB directly (or go
 // through in-memory caches on the realm-server) without acquiring it.
 // Read-heavy paths should never call this helper.
 //
-// Why session-scoped rather than transaction-scoped: the realm-server's
-// mutation handlers (Phase 1) don't wrap their FS + DB writes in a single
-// Postgres transaction (that's CS-10898's territory). An xact-scoped lock
-// would only protect the enclosed transaction's lifetime, which would
-// cover just a subset of the handler's critical section. The session-
-// scoped lock held across the whole callback closure covers the entire
-// write (FS ops + DB writes + any enqueues).
+// Note on the enclosing transaction: `fn` runs inside BEGIN/COMMIT here
+// only so the advisory lock is correctly scoped. Queries that `fn` issues
+// through the shared `dbAdapter` (not the pinned `queryFn`) go via
+// separate pool connections and are NOT part of this transaction — that's
+// unchanged from the session-scoped version. The realm-server's mutation
+// handlers (Phase 1) are not yet transactional across FS + DB; making
+// them so is CS-10898's territory. The xact-lock pattern here buys correct
+// lock release without requiring the handler bodies themselves to be
+// transactional.
+//
+// Pool-exhaustion caveat: the callback continues to perform DB work via
+// the shared `dbAdapter`, each call of which checks out its own pool
+// client. `withRealmWriteLock` pins one extra client for the lock-holder
+// transaction. Under N concurrent same-URL writers, N-1 block on the
+// advisory lock before doing anything — so this helper does not itself
+// amplify pool pressure. Under N concurrent different-URL writers, each
+// pins one client; if the pool ceiling is less than the realistic write
+// concurrency, callbacks that need additional pool clients could deadlock
+// waiting on the pool. The full fix is threading the pinned `queryFn`
+// through every helper so a single connection serves the whole critical
+// section; that's a larger refactor deferred alongside CS-10898. For
+// current scope (low realistic write concurrency, pool size >= concurrent
+// writers + headroom) this is acceptable.
 //
 // Deadlock note: callers should never acquire a second write lock for a
 // different URL while holding one — that's the only way a cycle could
@@ -58,30 +78,29 @@ export async function withRealmWriteLock<T>(
   const pg = dbAdapter as unknown as PgAdapter;
   const lockKey = hashRealmUrlForAdvisoryLock(realmUrl);
   return await pg.withConnection(async (queryFn) => {
-    await queryFn([`SELECT pg_advisory_lock(`, param(lockKey), `::bigint)`]);
+    await queryFn(['BEGIN']);
     try {
-      return await fn();
-    } finally {
+      await queryFn([
+        `SELECT pg_advisory_xact_lock(`,
+        param(lockKey),
+        `::bigint)`,
+      ]);
+      const result = await fn();
+      await queryFn(['COMMIT']);
+      return result;
+    } catch (err: unknown) {
       try {
-        await queryFn([
-          `SELECT pg_advisory_unlock(`,
-          param(lockKey),
-          `::bigint)`,
-        ]);
-      } catch (err: unknown) {
-        // Explicit unlock failed — likely a transient DB issue. The session
-        // will end when withConnection releases the client, but node-pg
-        // pools keep connections alive, so the lock could persist for the
-        // life of the connection. This is a real concern for long-lived
-        // pools; in practice the lock's hashed-URL key space is large
-        // enough that a stale lock is unlikely to collide with a future
-        // legitimate acquirer, and the server boots without locks held.
-        // If this warning fires repeatedly, investigate the underlying DB
-        // error.
+        await queryFn(['ROLLBACK']);
+      } catch (rollbackErr: unknown) {
+        // Rollback failed — the xact-lock is still released when the
+        // connection's transaction is aborted (pg will auto-rollback on
+        // client release), so we don't have a stale-lock problem. Log for
+        // visibility and rethrow the original error.
         log.warn(
-          `failed to release advisory lock for ${realmUrl}: ${String(err)}`,
+          `ROLLBACK after withRealmWriteLock error for ${realmUrl} failed: ${String(rollbackErr)}`,
         );
       }
+      throw err;
     }
   });
 }
