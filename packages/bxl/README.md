@@ -192,6 +192,73 @@ One-line rule: **BXL for logic-as-data · class methods for logic-as-type · app
 
 ---
 
+## One example, many jobs
+
+A single form definition typically exercises several of the 8 positions at once. Every BXL fragment below is just a string inside a standard data object — nothing special, no build step, diffable in code review, parseable without the evaluator.
+
+```ts
+// In a form definition:
+export const donationForm = {
+  name: 'Donation',
+  fields: [
+    { key: 'firstName', label: 'First Name', required: true },
+    { key: 'lastName',  label: 'Last Name',  required: true },
+
+    { key: 'email', label: 'Email',
+      validate: [
+        { expr: 'Email CONTAINS "@"',
+          message: 'Must be a valid email' },
+      ],
+    },
+
+    { key: 'amount', label: 'Donation Amount', type: 'number',
+      validate: [
+        { expr: '"Donation Amount" > 0',
+          message: 'Amount must be positive' },
+      ],
+    },
+
+    // Visible-when: only show employer field for gifts over the match threshold
+    { key: 'employer', label: 'Employer',
+      visibleWhen: '"Donation Amount" >= 250' },
+
+    // Conditional default: prefill matching program IF employer is filled
+    { key: 'matchingProgram', label: 'Matching Program',
+      visibleWhen: 'present(Employer)',
+      defaultFrom:  'Employer."Matching Program"' },
+
+    { key: 'recurring',     label: 'Make Recurring',  type: 'boolean' },
+    { key: 'paymentMethod', label: 'Payment Method',
+      visibleWhen: 'Recurring' },
+
+    // Computed field: total annual gift via IF branching
+    { key: 'totalAnnual', label: 'Total Annual Gift',
+      computedVia: 'IF(Recurring, "Donation Amount" * 12, "Donation Amount")' },
+  ],
+
+  // Record-level constraints — run on save, cross-field
+  constraints: [
+    { expr: 'when(Recurring, present("Payment Method"))',
+      message: 'Recurring donations require a payment method on file' },
+
+    { expr: 'when(present("Matching Program"), "Donation Amount" >= "Matching Program"."Minimum")',
+      message: 'Gift below employer matching minimum' },
+  ],
+};
+```
+
+Every expression above fires at a different point in the form's lifecycle, and each maps to one row of the 8-position grid:
+
+- `Email CONTAINS "@"` · `"Donation Amount" > 0` → **constraint**, per-field on input
+- `"Donation Amount" >= 250` · `present(Employer)` · `Recurring` → **visible-when**, recalculated as other fields change
+- `Employer."Matching Program"` → **autofill / default**, applied on field focus or record load
+- `IF(Recurring, "Donation Amount" * 12, "Donation Amount")` → **formula field**, recomputed on every change
+- `when(Recurring, present("Payment Method"))` and the matching-minimum rule → **record-level constraint**, run on save with cross-field access
+
+Same string language everywhere. Each slot in the object is a plain string; the compiler parses them with the same grammar, resolves labels against the same schema, and evaluates them in the same sandbox. The container object's shape (`fields[].validate[]`, `fields[].visibleWhen`, etc.) is up to your framework — BXL is agnostic to that; it only parses the expression strings inside.
+
+---
+
 ## Comparisons & inspirations
 
 BXL doesn't invent much. It pulls ideas from eight expression languages that were already solving pieces of the same problem, and adds a readable surface that lets them coexist in one runtime.
