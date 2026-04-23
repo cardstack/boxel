@@ -39,6 +39,13 @@ import {
   KanbanDragManager,
   type KanbanPlacement,
 } from './kanban-board';
+import { StatusPill } from './status-pill';
+
+interface Option {
+  value: string;
+  label: string;
+  color?: string;
+}
 
 const issueCodeRef = {
   // @ts-ignore this is not a CJS file, import.meta is allowed
@@ -46,15 +53,19 @@ const issueCodeRef = {
   name: 'Issue',
 };
 
-const issueStatusOptions = [
-  { value: 'backlog', label: 'Backlog' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'blocked', label: 'Blocked' },
-  { value: 'review', label: 'In Review' },
-  { value: 'done', label: 'Done' },
+const issueStatusOptions: Option[] = [
+  { value: 'backlog', label: 'Backlog', color: 'var(--boxel-navy)' },
+  {
+    value: 'in_progress',
+    label: 'In Progress',
+    color: 'var(--boxel-warning-200)',
+  },
+  { value: 'blocked', label: 'Blocked', color: 'var(--boxel-red)' },
+  { value: 'review', label: 'In Review', color: 'var(--boxel-dark-green)' },
+  { value: 'done', label: 'Done', color: 'var(--boxel-purple)' },
 ];
 
-const issueTypeOptions = [
+const issueTypeOptions: Option[] = [
   { value: 'bootstrap', label: 'Bootstrap' },
   { value: 'feature', label: 'Feature' },
   { value: 'bug', label: 'Bug' },
@@ -63,31 +74,37 @@ const issueTypeOptions = [
   { value: 'infrastructure', label: 'Infrastructure' },
 ];
 
-const issuePriorityOptions = [
+const issuePriorityOptions: Option[] = [
   { value: 'critical', label: 'Critical' },
   { value: 'high', label: 'High' },
   { value: 'medium', label: 'Medium' },
   { value: 'low', label: 'Low' },
 ];
 
-const projectStatusOptions = [
-  { value: 'planning', label: 'Planning' },
-  { value: 'active', label: 'Active' },
-  { value: 'on_hold', label: 'On Hold' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'archived', label: 'Archived' },
+const projectStatusOptions: Option[] = [
+  { value: 'planning', label: 'Planning', color: 'var(--boxel-navy)' },
+  { value: 'active', label: 'Active', color: 'var(--boxel-dark-green)' },
+  { value: 'on_hold', label: 'On Hold', color: 'var(--boxel-orange)' },
+  { value: 'completed', label: 'Completed', color: 'var(--boxel-purple)' },
+  { value: 'archived', label: 'Archived', color: 'var(--boxel-500)' },
 ];
 
-interface ColumnOption {
-  value: string;
-  label: string;
-}
 interface Column {
   value: string;
   label: string;
   fieldName: string;
   orderField: string;
-  options: ColumnOption[];
+  options: Option[];
+}
+
+function findOptionColor(
+  options: Option[] | undefined,
+  value: string | null | undefined,
+): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return options?.find((option) => option.value === value)?.color;
 }
 
 const defaultColumns: Column[] = [
@@ -406,19 +423,26 @@ export class Issue extends CardDef {
   });
 
   static fitted = class Fitted extends Component<typeof Issue> {
+    get statusColor(): string | undefined {
+      return findOptionColor(
+        ((this.args.model?.kanbanBoard?.issueStatusOptions as Option[])?.length
+          ? (this.args.model.kanbanBoard?.issueStatusOptions as Option[])
+          : issueStatusOptions) as Option[],
+        this.args.model?.status ?? 'backlog',
+      );
+    }
+
     <template>
       <div class='issue-card compact'>
         <div class='row'>
           <strong>{{if @model.issueId @model.issueId 'ISSUE'}}</strong>
-          <span
-            class='status status-{{if @model.status @model.status "backlog"}}'
-          >
+          <StatusPill @color={{this.statusColor}}>
             {{#if @model.status}}
               <@fields.status @format='atom' />
             {{else}}
               Backlog
             {{/if}}
-          </span>
+          </StatusPill>
         </div>
         <div><@fields.cardTitle /></div>
       </div>
@@ -437,29 +461,6 @@ export class Issue extends CardDef {
           gap: 0.75rem;
           font-size: 0.8rem;
         }
-        .status {
-          font-size: 0.75rem;
-          text-transform: uppercase;
-          font-weight: 600;
-          padding: 0.125rem 0.5rem;
-          border-radius: 0.25rem;
-          background: color-mix(in oklch, currentColor 12%, transparent);
-        }
-        .status-done {
-          color: var(--boxel-dark-green);
-        }
-        .status-in_progress {
-          color: var(--boxel-blue);
-        }
-        .status-backlog {
-          color: var(--boxel-navy);
-        }
-        .status-review {
-          color: var(--boxel-orange);
-        }
-        .status-blocked {
-          color: var(--boxel-red);
-        }
       </style>
     </template>
   };
@@ -467,20 +468,27 @@ export class Issue extends CardDef {
   static embedded = this.fitted;
 
   static isolated = class Isolated extends Component<typeof Issue> {
+    get statusColor(): string | undefined {
+      return findOptionColor(
+        ((this.args.model?.kanbanBoard?.issueStatusOptions as Option[])?.length
+          ? (this.args.model.kanbanBoard?.issueStatusOptions as Option[])
+          : issueStatusOptions) as Option[],
+        this.args.model?.status ?? 'backlog',
+      );
+    }
+
     <template>
       <article class='surface'>
         <header>
           <div class='row'>
             <strong>{{if @model.issueId @model.issueId 'ISSUE'}}</strong>
-            <span
-              class='status status-{{if @model.status @model.status "backlog"}}'
-            >
+            <StatusPill @color={{this.statusColor}}>
               {{#if @model.status}}
                 <@fields.status @format='atom' />
               {{else}}
                 Backlog
               {{/if}}
-            </span>
+            </StatusPill>
           </div>
           <h1><@fields.cardTitle /></h1>
         </header>
@@ -538,29 +546,6 @@ export class Issue extends CardDef {
           align-items: center;
           gap: 0.75rem;
         }
-        .status {
-          font-size: 0.75rem;
-          text-transform: uppercase;
-          font-weight: 600;
-          padding: 0.125rem 0.5rem;
-          border-radius: 0.25rem;
-          background: color-mix(in oklch, currentColor 12%, transparent);
-        }
-        .status-done {
-          color: var(--boxel-dark-green);
-        }
-        .status-in_progress {
-          color: var(--boxel-blue);
-        }
-        .status-backlog {
-          color: var(--boxel-navy);
-        }
-        .status-review {
-          color: var(--boxel-orange);
-        }
-        .status-blocked {
-          color: var(--boxel-red);
-        }
         .comments-section {
           margin-top: 1rem;
         }
@@ -617,17 +602,11 @@ export class Project extends CardDef {
         defaultColumns[0]!;
       const boardOptions =
         source.value === 'priority'
-          ? (this.issuePriorityOptions as
-              | { value: string; label: string }[]
-              | undefined)
+          ? (this.issuePriorityOptions as Option[] | undefined)
           : source.value === 'issueType'
-            ? (this.issueTypeOptions as
-                | { value: string; label: string }[]
-                | undefined)
+            ? (this.issueTypeOptions as Option[] | undefined)
             : source.value === 'status'
-              ? (this.issueStatusOptions as
-                  | { value: string; label: string }[]
-                  | undefined)
+              ? (this.issueStatusOptions as Option[] | undefined)
               : null;
       const options = boardOptions?.length ? boardOptions : source.options;
       const config = ((source.value === 'issueType'
@@ -641,7 +620,7 @@ export class Project extends CardDef {
           return new KanbanColumnField({
             key: o.value,
             label: o.label,
-            color: stored?.color,
+            color: stored?.color ?? o.color,
             wipLimit: stored?.wipLimit ?? null,
             collapsed: stored?.collapsed ?? null,
             sortOrder: stored?.sortOrder ?? i,
@@ -660,6 +639,13 @@ export class Project extends CardDef {
   });
 
   static fitted = class Fitted extends Component<typeof Project> {
+    get statusColor(): string | undefined {
+      return findOptionColor(
+        projectStatusOptions,
+        this.args.model?.projectStatus ?? 'planning',
+      );
+    }
+
     <template>
       <div class='project-card compact'>
         <div class='row'>
@@ -668,13 +654,13 @@ export class Project extends CardDef {
               @model.projectCode
               'PROJECT'
             }}</strong>
-          <span class='status status-{{@model.projectStatus}}'>
+          <StatusPill @color={{this.statusColor}}>
             {{#if @model.projectStatus}}
               <@fields.projectStatus @format='atom' />
             {{else}}
               Planning
             {{/if}}
-          </span>
+          </StatusPill>
         </div>
         <div><@fields.cardTitle /></div>
       </div>
@@ -692,28 +678,6 @@ export class Project extends CardDef {
           align-items: center;
           gap: 0.75rem;
           font-size: 0.8rem;
-        }
-        .status {
-          font-size: 0.75rem;
-          text-transform: uppercase;
-          font-weight: 600;
-          padding: 0.125rem 0.5rem;
-          border-radius: 0.25rem;
-          background: color-mix(in oklch, currentColor 12%, transparent);
-          border-color: currentColor;
-          color: var(--boxel-purple);
-        }
-        .status-active {
-          color: var(--boxel-dark-green);
-        }
-        .status-archived {
-          color: var(--boxel-500);
-        }
-        .status-completed {
-          color: var(--boxel-dark);
-        }
-        .status-on_hold {
-          color: var(--boxel-red);
         }
       </style>
     </template>
@@ -977,6 +941,13 @@ export class Project extends CardDef {
       this.setColumnConfig(b.key!, { sortOrder: aOrder });
     };
 
+    get statusColor() {
+      return findOptionColor(
+        projectStatusOptions,
+        this.args.model.projectStatus ?? 'planning',
+      );
+    }
+
     // ── Template ─────────────────────────────────────────────────────
 
     <template>
@@ -988,13 +959,13 @@ export class Project extends CardDef {
                 <Pill @size='extra-small'>
                   {{if @model.projectCode @model.projectCode 'BOARD'}}
                 </Pill>
-                <span class='status status-{{@model.projectStatus}}'>
+                <StatusPill @color={{this.statusColor}}>
                   {{#if @model.projectStatus}}
                     <@fields.projectStatus @format='atom' />
                   {{else}}
                     Planning
                   {{/if}}
-                </span>
+                </StatusPill>
               </div>
               <h2 class='kanban-title'>
                 <SquareKanban />
@@ -1223,28 +1194,6 @@ export class Project extends CardDef {
           padding: 0.125rem 0.5rem;
           background: var(--kanban-muted-bg);
           border-radius: 4px;
-        }
-        .status {
-          font-size: 0.75rem;
-          text-transform: uppercase;
-          font-weight: 600;
-          padding: 0.125rem 0.5rem;
-          border-radius: 0.25rem;
-          background: color-mix(in oklch, currentColor 12%, transparent);
-          border-color: currentColor;
-          color: var(--boxel-purple);
-        }
-        .status-active {
-          color: var(--boxel-dark-green);
-        }
-        .status-archived {
-          color: var(--boxel-500);
-        }
-        .status-completed {
-          color: var(--boxel-dark);
-        }
-        .status-on_hold {
-          color: var(--boxel-red);
         }
         .settings-button {
           color: var(--kanban-muted-foreground);

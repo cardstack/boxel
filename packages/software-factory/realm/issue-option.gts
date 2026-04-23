@@ -7,11 +7,13 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { StatusPill } from './status-pill';
 
 export class IssueOptionField extends FieldDef {
   static displayName = 'Issue Option';
   @field value = contains(StringField);
   @field label = contains(StringField);
+  @field color = contains(StringField);
 
   static edit = class Edit extends Component<typeof IssueOptionField> {
     <template>
@@ -22,11 +24,14 @@ export class IssueOptionField extends FieldDef {
         <FieldContainer @label='ID' @vertical={{true}}>
           <@fields.value />
         </FieldContainer>
+        <FieldContainer @label='Color' @vertical={{true}}>
+          <@fields.color />
+        </FieldContainer>
       </div>
       <style scoped>
         .option-edit {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: var(--boxel-sp);
         }
       </style>
@@ -36,7 +41,13 @@ export class IssueOptionField extends FieldDef {
   static embedded = class Embedded extends Component<typeof IssueOptionField> {
     <template>
       <span class='option-item'>
-        <span class='option-label'>{{if @model.label @model.label '—'}}</span>
+        {{#if @model.color}}
+          <StatusPill @color={{@model.color}}>
+            {{if @model.label @model.label '—'}}
+          </StatusPill>
+        {{else}}
+          <span class='option-label'>{{if @model.label @model.label '—'}}</span>
+        {{/if}}
         <span class='option-value'>{{@model.value}}</span>
       </span>
       <style scoped>
