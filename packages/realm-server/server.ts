@@ -54,6 +54,7 @@ import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/
 import type { Prerenderer } from '@cardstack/runtime-common';
 import { retrieveScopedCSS } from './lib/retrieve-scoped-css';
 import { mirrorSourceRealmToRegistry } from './lib/realm-registry-writes';
+import { withRealmWriteLock } from './lib/realm-advisory-locks';
 import {
   indexURLCandidates,
   indexCandidateExpressions,
@@ -908,35 +909,43 @@ export class RealmServer {
     let realmPath = resolve(join(this.realmsRootPath, ownerUsername, endpoint));
     ensureDirSync(realmPath);
 
-    await insertPermissions(this.dbAdapter, new URL(url), {
-      [ownerUserId]: DEFAULT_PERMISSIONS,
-    });
-
     let info = {
       name,
       ...(iconURL ? { iconURL } : {}),
       ...(backgroundURL ? { backgroundURL } : {}),
       publishable: true,
     };
-    writeJSONSync(join(realmPath, '.realm.json'), info);
-    writeJSONSync(join(realmPath, 'index.json'), {
-      data: {
-        type: 'card',
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/cards-grid',
-            name: 'CardsGrid',
+
+    // Serialize concurrent creations of the same realm URL. This is almost
+    // never a real concurrency concern — the endpoint was already checked
+    // above for collision — but the lock also serializes against a
+    // concurrent realm.write() or /_atomic targeting the same URL, which
+    // matters more under multi-instance.
+    await withRealmWriteLock(this.dbAdapter, url, async () => {
+      await insertPermissions(this.dbAdapter, new URL(url), {
+        [ownerUserId]: DEFAULT_PERMISSIONS,
+      });
+
+      writeJSONSync(join(realmPath, '.realm.json'), info);
+      writeJSONSync(join(realmPath, 'index.json'), {
+        data: {
+          type: 'card',
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/cards-grid',
+              name: 'CardsGrid',
+            },
           },
         },
-      },
-    });
+      });
 
-    // Phase 1 dual-write: register the source realm in realm_registry after
-    // its on-disk representation is in place. Logs and continues on failure.
-    await mirrorSourceRealmToRegistry(this.dbAdapter, {
-      url,
-      diskId: `${ownerUsername}/${endpoint}`,
-      ownerUsername,
+      // Phase 1 dual-write: register the source realm in realm_registry after
+      // its on-disk representation is in place. Logs and continues on failure.
+      await mirrorSourceRealmToRegistry(this.dbAdapter, {
+        url,
+        diskId: `${ownerUsername}/${endpoint}`,
+        ownerUsername,
+      });
     });
 
     let realm = this.createAndMountRealm(

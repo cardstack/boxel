@@ -34,6 +34,7 @@ import {
   deleteFromRegistryByUrl,
   deletePublishedFromRegistryBySource,
 } from '../lib/realm-registry-writes';
+import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
 interface DeleteRealmJSON {
   data: {
@@ -142,83 +143,94 @@ export default function handleDeleteRealm({
         return;
       }
 
-      let publishedRealms = (await query(dbAdapter, [
-        `SELECT id, published_realm_url FROM published_realms WHERE source_realm_url =`,
-        param(realmURL),
-      ])) as Pick<PublishedRealmTable, 'id' | 'published_realm_url'>[];
+      // Serialize concurrent writers for this source realm. Lock is on the
+      // source URL — a concurrent unpublish of one of the associated
+      // published realms uses a different lock key (its own published URL),
+      // so in the rare case of overlap, the handlers interleave at the
+      // per-URL granularity rather than globally. Pragmatic for this PR;
+      // multi-instance hardening could tighten this later.
+      await withRealmWriteLock(dbAdapter, realmURL, async () => {
+        let publishedRealms = (await query(dbAdapter, [
+          `SELECT id, published_realm_url FROM published_realms WHERE source_realm_url =`,
+          param(realmURL),
+        ])) as Pick<PublishedRealmTable, 'id' | 'published_realm_url'>[];
 
-      for (let publishedRealm of publishedRealms) {
-        let mountedPublishedRealm = realms.find(
-          (realm) =>
-            ensureTrailingSlash(realm.url) ===
-            ensureTrailingSlash(publishedRealm.published_realm_url),
-        );
-        let publishedRealmPath = join(
-          realmsRootPath,
-          PUBLISHED_DIRECTORY_NAME,
-          publishedRealm.id,
-        );
-        if (mountedPublishedRealm) {
-          destroyMountedRealm({
-            realm: mountedPublishedRealm,
-            realmPath: publishedRealmPath,
-            realms,
-            virtualNetwork,
-          });
-        } else {
-          try {
-            if (pathExistsSync(publishedRealmPath)) {
-              removeSync(publishedRealmPath);
+        for (let publishedRealm of publishedRealms) {
+          let mountedPublishedRealm = realms.find(
+            (realm) =>
+              ensureTrailingSlash(realm.url) ===
+              ensureTrailingSlash(publishedRealm.published_realm_url),
+          );
+          let publishedRealmPath = join(
+            realmsRootPath,
+            PUBLISHED_DIRECTORY_NAME,
+            publishedRealm.id,
+          );
+          if (mountedPublishedRealm) {
+            destroyMountedRealm({
+              realm: mountedPublishedRealm,
+              realmPath: publishedRealmPath,
+              realms,
+              virtualNetwork,
+            });
+          } else {
+            try {
+              if (pathExistsSync(publishedRealmPath)) {
+                removeSync(publishedRealmPath);
+              }
+            } catch (error) {
+              Sentry.captureException(error);
             }
-          } catch (error) {
-            Sentry.captureException(error);
           }
+          await removeRealmPermissions(
+            dbAdapter,
+            new URL(publishedRealm.published_realm_url),
+          );
+          await removeRealmDatabaseArtifacts({
+            dbAdapter,
+            realmURL: publishedRealm.published_realm_url,
+          });
         }
-        await removeRealmPermissions(
-          dbAdapter,
-          new URL(publishedRealm.published_realm_url),
-        );
+
+        await query(dbAdapter, [
+          `DELETE FROM published_realms WHERE source_realm_url =`,
+          param(realmURL),
+        ]);
+
+        // Phase 1 dual-write: remove the source realm's registry row plus
+        // every published row sourced from it. Both helpers log and continue
+        // on failure; drift self-heals on next boot.
+        await deletePublishedFromRegistryBySource(dbAdapter, realmURL);
+        await deleteFromRegistryByUrl(dbAdapter, realmURL);
+
+        let { nameExpressions, valueExpressions } = asExpressions({
+          removed_at: Math.floor(Date.now() / 1000),
+        });
+        await query(dbAdapter, [
+          ...update(
+            'claimed_domains_for_sites',
+            nameExpressions,
+            valueExpressions,
+          ),
+          ` WHERE source_realm_url = `,
+          param(realmURL),
+          ` AND removed_at IS NULL`,
+        ]);
+
+        destroyMountedRealm({
+          realm: sourceRealm,
+          // Non-null assertion: we early-returned above if sourceRealm.dir was
+          // undefined. TS narrowing doesn't propagate into this async closure,
+          // so we reassert.
+          realmPath: sourceRealm.dir!,
+          realms,
+          virtualNetwork,
+        });
+        await removeRealmPermissions(dbAdapter, parsedRealmURL);
         await removeRealmDatabaseArtifacts({
           dbAdapter,
-          realmURL: publishedRealm.published_realm_url,
+          realmURL,
         });
-      }
-
-      await query(dbAdapter, [
-        `DELETE FROM published_realms WHERE source_realm_url =`,
-        param(realmURL),
-      ]);
-
-      // Phase 1 dual-write: remove the source realm's registry row plus
-      // every published row sourced from it. Both helpers log and continue
-      // on failure; drift self-heals on next boot.
-      await deletePublishedFromRegistryBySource(dbAdapter, realmURL);
-      await deleteFromRegistryByUrl(dbAdapter, realmURL);
-
-      let { nameExpressions, valueExpressions } = asExpressions({
-        removed_at: Math.floor(Date.now() / 1000),
-      });
-      await query(dbAdapter, [
-        ...update(
-          'claimed_domains_for_sites',
-          nameExpressions,
-          valueExpressions,
-        ),
-        ` WHERE source_realm_url = `,
-        param(realmURL),
-        ` AND removed_at IS NULL`,
-      ]);
-
-      destroyMountedRealm({
-        realm: sourceRealm,
-        realmPath: sourceRealm.dir,
-        realms,
-        virtualNetwork,
-      });
-      await removeRealmPermissions(dbAdapter, parsedRealmURL);
-      await removeRealmDatabaseArtifacts({
-        dbAdapter,
-        realmURL,
       });
 
       await setContextResponse(
