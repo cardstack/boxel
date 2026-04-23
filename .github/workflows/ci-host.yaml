@@ -406,7 +406,14 @@ jobs:
     # Intentionally scoped to push-to-main only so the job only runs in a
     # context where the PR workflow file cannot be modified by an untrusted
     # branch — this is the one job that holds `contents: write`.
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.host-test.result == 'success' }}
+    #
+    # We refresh the baseline whenever host-test completes (success OR failure),
+    # not only on full green. An unrelated shard flake otherwise freezes the
+    # baseline indefinitely, which then blocks downstream PRs on drift that has
+    # nothing to do with their diffs. Modules missing from the current reports
+    # (because a shard failed to upload) keep their prior baseline values —
+    # the merge is handled in update-memory-baseline.mjs.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled() && (needs.host-test.result == 'success' || needs.host-test.result == 'failure') }}
     concurrency:
       group: host-memory-baseline-update-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
