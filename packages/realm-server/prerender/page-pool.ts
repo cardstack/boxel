@@ -32,9 +32,11 @@ class TabQueue {
       onAbortPromise = new Promise<never>((_, reject) => {
         let onAbort = () => {
           reject(
-            new PrerenderCancelledError(
-              typeof signal.reason === 'string' ? signal.reason : undefined,
-            ),
+            new PrerenderCancelledError({
+              state: 'queued',
+              reason:
+                typeof signal.reason === 'string' ? signal.reason : undefined,
+            }),
           );
         };
         signal.addEventListener('abort', onAbort, { once: true });

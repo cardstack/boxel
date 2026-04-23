@@ -14,10 +14,33 @@
 // through eviction" rather than "this is a hard error, propagate
 // up".
 
+// Which phase of the render the cancellation interrupted. `queued`
+// is the saturation win — the render never started, so the only
+// cost was the time spent waiting on the semaphore/tab queue.
+// `rendering` means we already had a page and were inside the
+// render body; the tab state is uncertain and the Prerenderer will
+// dispose the affinity so the next render starts clean.
+// `releasing` is the narrow window after render completed but
+// before we serialized the response; the result is still valid,
+// but the client isn't listening, so we just drop the bytes.
+export type PrerenderCancelState = 'queued' | 'rendering' | 'releasing';
+
 export class PrerenderCancelledError extends Error {
   name = 'PrerenderCancelledError';
-  constructor(reason?: string) {
+  state: PrerenderCancelState;
+  constructor(
+    opts?: { state?: PrerenderCancelState; reason?: string } | string,
+  ) {
+    let reason: string | undefined;
+    let state: PrerenderCancelState = 'queued';
+    if (typeof opts === 'string') {
+      reason = opts;
+    } else if (opts) {
+      reason = opts.reason;
+      state = opts.state ?? 'queued';
+    }
     super(reason ? `prerender cancelled: ${reason}` : 'prerender cancelled');
+    this.state = state;
   }
 }
 
@@ -25,10 +48,14 @@ export function isPrerenderCancellation(err: unknown): boolean {
   return err instanceof PrerenderCancelledError;
 }
 
-export function throwIfAborted(signal: AbortSignal | undefined): void {
+export function throwIfAborted(
+  signal: AbortSignal | undefined,
+  state: PrerenderCancelState = 'queued',
+): void {
   if (signal?.aborted) {
-    throw new PrerenderCancelledError(
-      typeof signal.reason === 'string' ? signal.reason : undefined,
-    );
+    throw new PrerenderCancelledError({
+      state,
+      reason: typeof signal.reason === 'string' ? signal.reason : undefined,
+    });
   }
 }

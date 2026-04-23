@@ -73,9 +73,11 @@ class AsyncSemaphore {
           let idx = this.#queue.indexOf(entry);
           if (idx !== -1) this.#queue.splice(idx, 1);
           reject(
-            new PrerenderCancelledError(
-              typeof signal?.reason === 'string' ? signal!.reason : undefined,
-            ),
+            new PrerenderCancelledError({
+              state: 'queued',
+              reason:
+                typeof signal?.reason === 'string' ? signal!.reason : undefined,
+            }),
           );
         },
       };
@@ -311,6 +313,37 @@ export class Prerenderer {
     await this.#pagePool.disposeAffinity(affinityKey);
   }
 
+  // Emit the `render cancelled` log line (format from CS-10872)
+  // and, on a `rendering`-state cancel, tear down the affinity so
+  // the next request gets a fresh tab rather than one whose
+  // Puppeteer ops are still running from the cancelled render.
+  // Best-effort: disposal failure is logged but not propagated —
+  // the caller already left, there's no response to fail.
+  async #handlePrerenderCancel(
+    err: PrerenderCancelledError,
+    affinityKey: string,
+    startedAt: number,
+    target: string,
+  ): Promise<void> {
+    let elapsed = Date.now() - startedAt;
+    log.info(
+      `render cancelled after ${elapsed}ms in state=${err.state} ` +
+        `affinity=${affinityKey} target=${target}`,
+    );
+    if (err.state === 'rendering') {
+      try {
+        await this.#pagePool.disposeAffinity(affinityKey);
+        this.#renderRunner.clearAuthCache(affinityKey);
+      } catch (disposeErr: any) {
+        log.warn(
+          `failed to dispose affinity ${affinityKey} after cancel: ${
+            disposeErr?.message ?? disposeErr
+          }`,
+        );
+      }
+    }
+  }
+
   // Release this batch's ownership of an affinity's warm loader (CS-10758
   // step 3). Called from `IndexRunner`'s `finally` blocks and via the
   // `/release-batch` HTTP endpoint. No-ops if the caller isn't the current
@@ -431,6 +464,8 @@ export class Prerenderer {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
+    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let overallStart = Date.now();
     let attemptOptions = renderOptions;
     let lastResult:
       | {
@@ -463,9 +498,12 @@ export class Prerenderer {
           signal,
         });
       } catch (e) {
-        // Caller cancelled — don't restart the browser for the
-        // next-attempt retry, just propagate.
-        if (e instanceof PrerenderCancelledError) throw e;
+        // Caller cancelled — log + conditionally evict, then
+        // propagate. Don't restart the browser.
+        if (e instanceof PrerenderCancelledError) {
+          await this.#handlePrerenderCancel(e, affinityKey, overallStart, url);
+          throw e;
+        }
         log.error(
           `module prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
           e,
@@ -483,7 +521,15 @@ export class Prerenderer {
             signal,
           });
         } catch (e2) {
-          if (e2 instanceof PrerenderCancelledError) throw e2;
+          if (e2 instanceof PrerenderCancelledError) {
+            await this.#handlePrerenderCancel(
+              e2,
+              affinityKey,
+              overallStart,
+              url,
+            );
+            throw e2;
+          }
           log.error(
             `module prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
             e2,
@@ -565,6 +611,10 @@ export class Prerenderer {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
     let commandStart = Date.now();
+    let affinityKey = toAffinityKey({
+      affinityType: 'user',
+      affinityValue: userId,
+    });
     try {
       let result = await this.#renderRunner.runCommandAttempt({
         affinityType: 'user',
@@ -582,6 +632,15 @@ export class Prerenderer {
       );
       return result;
     } catch (e) {
+      if (e instanceof PrerenderCancelledError) {
+        await this.#handlePrerenderCancel(
+          e,
+          affinityKey,
+          commandStart,
+          command,
+        );
+        throw e;
+      }
       log.error(`command run attempt failed (user ${userId})`, e);
       throw e;
     }
@@ -617,6 +676,8 @@ export class Prerenderer {
       opts,
     } = this.#gateClearCache(rawArgs);
     let signal = (rawArgs as { signal?: AbortSignal }).signal;
+    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let overallStart = Date.now();
     let attemptOptions = renderOptions;
     let lastResult:
       | {
@@ -650,9 +711,12 @@ export class Prerenderer {
           signal,
         });
       } catch (e) {
-        // Caller cancelled — don't restart the browser for a retry
-        // on behalf of a caller that left.
-        if (e instanceof PrerenderCancelledError) throw e;
+        // Caller cancelled — log + conditionally evict, then
+        // propagate. Don't restart the browser.
+        if (e instanceof PrerenderCancelledError) {
+          await this.#handlePrerenderCancel(e, affinityKey, overallStart, url);
+          throw e;
+        }
         log.error(
           `visit prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
           e,
@@ -672,7 +736,15 @@ export class Prerenderer {
             signal,
           });
         } catch (e2) {
-          if (e2 instanceof PrerenderCancelledError) throw e2;
+          if (e2 instanceof PrerenderCancelledError) {
+            await this.#handlePrerenderCancel(
+              e2,
+              affinityKey,
+              overallStart,
+              url,
+            );
+            throw e2;
+          }
           log.error(
             `visit prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
             e2,
