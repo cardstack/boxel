@@ -54,6 +54,7 @@ export type {
 export {
   __runBoxelRuntimeWorker,
   getBoxelValue,
+  invalidateBoxelRuntimeAsyncCache,
   prepareBoxelGuideAsyncSafe,
   prepareBoxelGuideAsync,
   prepareBoxelGuideSafe,

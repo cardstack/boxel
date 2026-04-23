@@ -253,6 +253,9 @@ export interface BoxelRuntimeAsyncSession {
 
 export interface PreparedBoxelRuntimeAsync {
   cacheKey: string;
+  cacheNamespace: string;
+  contentHash: string;
+  guideUrl?: string;
   schema: ReadableSchema;
   warnings: BoxelRuntimeWarning[];
   rules: BoxelRuntimeRuleSummary[];
@@ -1707,6 +1710,9 @@ interface SerializedWorkerError {
 
 interface PreparedPlanMetadata {
   cacheKey: string;
+  cacheNamespace: string;
+  contentHash: string;
+  guideUrl?: string;
   schema: ReadableSchema;
   warnings: BoxelRuntimeWarning[];
   rules: BoxelRuntimeRuleSummary[];
@@ -1714,12 +1720,21 @@ interface PreparedPlanMetadata {
 
 interface PreparePlanPayload {
   cacheKey: string;
+  cacheNamespace: string;
+  contentHash: string;
+  guideUrl?: string;
   definition: BoxelRuntimeDefinition;
   options: BoxelRuntimeOptions;
 }
 
 type WorkerRequest =
   | ({ requestId: string; type: 'ensure-plan' } & PreparePlanPayload)
+  | ({
+      requestId: string;
+      type: 'invalidate-plans';
+      cacheKey?: string;
+      cacheNamespace?: string;
+    })
   | ({ requestId: string; type: 'evaluate-plan'; cacheKey: string; input: unknown })
   | ({
       requestId: string;
@@ -1746,6 +1761,7 @@ type WorkerRequest =
 
 type WorkerRequestWithoutId =
   | ({ type: 'ensure-plan' } & PreparePlanPayload)
+  | ({ type: 'invalidate-plans'; cacheKey?: string; cacheNamespace?: string })
   | ({ type: 'evaluate-plan'; cacheKey: string; input: unknown })
   | ({
       type: 'create-session';
@@ -1790,6 +1806,24 @@ interface WorkerConstructorLike {
     scriptURL: string,
     options?: { name?: string; type?: 'module' | 'classic' },
   ): WorkerLike;
+}
+
+interface PreparedPlanIdentity {
+  cacheKey: string;
+  cacheNamespace: string;
+  contentHash: string;
+  guideUrl?: string;
+}
+
+interface AsyncPreparedRuntimeCacheEntry {
+  cacheKey: string;
+  cacheNamespace: string;
+  promise: Promise<PreparedBoxelRuntimeAsync>;
+}
+
+interface WorkerPlanEntry {
+  prepared: PreparedBoxelRuntime;
+  metadata: PreparedPlanMetadata;
 }
 
 function cloneValue<T>(value: T): T {
@@ -1861,22 +1895,41 @@ function buildPreparedContentHash(
   );
 }
 
+function buildPreparedCacheNamespace(
+  options: BoxelRuntimeAsyncOptions,
+): string {
+  return options.cacheKey ?? options.guideUrl ?? 'inline';
+}
+
+function createPreparedPlanIdentity(
+  definition: BoxelRuntimeDefinition,
+  options: BoxelRuntimeAsyncOptions,
+): PreparedPlanIdentity {
+  const contentHash =
+    options.contentHash ?? buildPreparedContentHash(definition, options);
+  const cacheNamespace = buildPreparedCacheNamespace(options);
+  const cacheKey = [
+    BOXEL_RUNTIME_ASYNC_PROTOCOL,
+    cacheNamespace,
+    contentHash,
+  ].join('::');
+
+  return {
+    cacheKey,
+    cacheNamespace,
+    contentHash,
+    guideUrl: options.guideUrl,
+  };
+}
+
 function createPreparedPlanPayload(
   definition: BoxelRuntimeDefinition,
   options: BoxelRuntimeAsyncOptions,
 ): PreparePlanPayload {
-  const contentHash =
-    options.contentHash ?? buildPreparedContentHash(definition, options);
-  const cacheKey =
-    options.cacheKey ??
-    [
-      BOXEL_RUNTIME_ASYNC_PROTOCOL,
-      options.guideUrl ?? 'inline',
-      contentHash,
-    ].join('::');
+  const identity = createPreparedPlanIdentity(definition, options);
 
   return {
-    cacheKey,
+    ...identity,
     definition: cloneValue(definition),
     options: {
       schema: cloneValue(options.schema),
@@ -1975,16 +2028,28 @@ export function __runBoxelRuntimeWorker() {
   }
   scope.__boxelRuntimeWorkerStarted = true;
 
-  const plans = new Map<string, PreparedBoxelRuntime>();
+  const plans = new Map<string, WorkerPlanEntry>();
   const sessions = new Map<string, BoxelRuntimeSession>();
 
-  const ensurePlan = (payload: PreparePlanPayload): PreparedBoxelRuntime => {
-    let prepared = plans.get(payload.cacheKey);
-    if (!prepared) {
-      prepared = prepareBoxelRuntime(payload.definition, payload.options);
-      plans.set(payload.cacheKey, prepared);
+  const ensurePlan = (payload: PreparePlanPayload): WorkerPlanEntry => {
+    let entry = plans.get(payload.cacheKey);
+    if (!entry) {
+      const prepared = prepareBoxelRuntime(payload.definition, payload.options);
+      entry = {
+        prepared,
+        metadata: {
+          cacheKey: payload.cacheKey,
+          cacheNamespace: payload.cacheNamespace,
+          contentHash: payload.contentHash,
+          guideUrl: payload.guideUrl,
+          schema: cloneValue(prepared.schema),
+          warnings: cloneValue(prepared.warnings),
+          rules: cloneValue(prepared.rules),
+        },
+      };
+      plans.set(payload.cacheKey, entry);
     }
-    return prepared;
+    return entry;
   };
 
   scope.addEventListener('message', (event) => {
@@ -1994,37 +2059,56 @@ export function __runBoxelRuntimeWorker() {
       switch (request.type) {
         case 'ensure-plan': {
           const prepared = ensurePlan(request);
-          const metadata: PreparedPlanMetadata = {
-            cacheKey: request.cacheKey,
-            schema: cloneValue(prepared.schema),
-            warnings: cloneValue(prepared.warnings),
-            rules: cloneValue(prepared.rules),
-          };
           scope.postMessage({
             requestId: request.requestId,
             ok: true,
-            value: metadata,
+            value: cloneValue(prepared.metadata),
+          });
+          return;
+        }
+        case 'invalidate-plans': {
+          let removed = 0;
+
+          if (request.cacheKey) {
+            removed = plans.delete(request.cacheKey) ? 1 : 0;
+          } else if (request.cacheNamespace) {
+            for (const [cacheKey, entry] of plans.entries()) {
+              if (entry.metadata.cacheNamespace !== request.cacheNamespace) {
+                continue;
+              }
+              plans.delete(cacheKey);
+              removed += 1;
+            }
+          } else {
+            removed = plans.size;
+            plans.clear();
+          }
+
+          scope.postMessage({
+            requestId: request.requestId,
+            ok: true,
+            value: removed,
           });
           return;
         }
         case 'evaluate-plan': {
-          const prepared = plans.get(request.cacheKey);
-          if (!prepared) {
+          const entry = plans.get(request.cacheKey);
+          if (!entry) {
             throw new Error(`No prepared Boxel runtime plan for ${request.cacheKey}`);
           }
           scope.postMessage({
             requestId: request.requestId,
             ok: true,
-            value: cloneValue(prepared.evaluate(request.input)),
+            value: cloneValue(entry.prepared.evaluate(request.input)),
           });
           return;
         }
         case 'create-session': {
-          const prepared = plans.get(request.cacheKey);
-          if (!prepared) {
+          const entry = plans.get(request.cacheKey);
+          if (!entry) {
             throw new Error(`No prepared Boxel runtime plan for ${request.cacheKey}`);
           }
-          const session = prepared.createSession(request.initialInput);
+          const session = entry.prepared.createSession(request.initialInput);
           sessions.set(request.sessionId, session);
           scope.postMessage({
             requestId: request.requestId,
@@ -2169,6 +2253,14 @@ class BoxelRuntimeWorkerManager {
     });
   }
 
+  invalidatePlans(cacheKey?: string, cacheNamespace?: string) {
+    return this.request<number>({
+      type: 'invalidate-plans',
+      cacheKey,
+      cacheNamespace,
+    });
+  }
+
   evaluate(cacheKey: string, input: unknown) {
     return this.request<BoxelRuntimeResult>({
       type: 'evaluate-plan',
@@ -2221,7 +2313,7 @@ class BoxelRuntimeWorkerManager {
 let boxelRuntimeWorkerManager: BoxelRuntimeWorkerManager | null = null;
 const preparedAsyncRuntimeCache = new Map<
   string,
-  Promise<PreparedBoxelRuntimeAsync>
+  AsyncPreparedRuntimeCacheEntry
 >();
 let boxelRuntimeSessionCounter = 0;
 
@@ -2235,6 +2327,42 @@ function getBoxelRuntimeWorkerManager(): BoxelRuntimeWorkerManager {
 function nextAsyncSessionId(): string {
   boxelRuntimeSessionCounter += 1;
   return `boxel-runtime-session-${boxelRuntimeSessionCounter}`;
+}
+
+function getCachedPreparedAsyncRuntime(cacheKey: string) {
+  return preparedAsyncRuntimeCache.get(cacheKey)?.promise;
+}
+
+function setCachedPreparedAsyncRuntime(entry: AsyncPreparedRuntimeCacheEntry) {
+  preparedAsyncRuntimeCache.set(entry.cacheKey, entry);
+}
+
+function deleteCachedPreparedAsyncRuntime(cacheKey: string) {
+  preparedAsyncRuntimeCache.delete(cacheKey);
+}
+
+function invalidateLocalPreparedAsyncRuntimeCache(
+  cacheKeyOrNamespace?: string,
+): number {
+  if (!cacheKeyOrNamespace) {
+    const removed = preparedAsyncRuntimeCache.size;
+    preparedAsyncRuntimeCache.clear();
+    return removed;
+  }
+
+  let removed = 0;
+  for (const [cacheKey, entry] of preparedAsyncRuntimeCache.entries()) {
+    if (
+      cacheKey !== cacheKeyOrNamespace &&
+      entry.cacheNamespace !== cacheKeyOrNamespace
+    ) {
+      continue;
+    }
+    preparedAsyncRuntimeCache.delete(cacheKey);
+    removed += 1;
+  }
+
+  return removed;
 }
 
 abstract class BaseAsyncBoxelRuntimeSession implements BoxelRuntimeAsyncSession {
@@ -2418,6 +2546,9 @@ function createLocalAsyncPreparedBoxelRuntime(
   const prepared = prepareBoxelRuntime(payload.definition, payload.options);
   return {
     cacheKey: payload.cacheKey,
+    cacheNamespace: payload.cacheNamespace,
+    contentHash: payload.contentHash,
+    guideUrl: payload.guideUrl,
     schema: prepared.schema,
     warnings: prepared.warnings,
     rules: prepared.rules,
@@ -2439,6 +2570,9 @@ function createWorkerBackedPreparedBoxelRuntime(
 ): PreparedBoxelRuntimeAsync {
   return {
     cacheKey: metadata.cacheKey,
+    cacheNamespace: metadata.cacheNamespace,
+    contentHash: metadata.contentHash,
+    guideUrl: metadata.guideUrl,
     schema: metadata.schema,
     warnings: metadata.warnings,
     rules: metadata.rules,
@@ -2460,7 +2594,7 @@ export async function prepareBoxelRuntimeAsync(
   options: BoxelRuntimeAsyncOptions = {},
 ): Promise<PreparedBoxelRuntimeAsync> {
   const payload = createPreparedPlanPayload(definition, options);
-  const cached = preparedAsyncRuntimeCache.get(payload.cacheKey);
+  const cached = getCachedPreparedAsyncRuntime(payload.cacheKey);
   if (cached) {
     return cached;
   }
@@ -2475,14 +2609,41 @@ export async function prepareBoxelRuntimeAsync(
     return createWorkerBackedPreparedBoxelRuntime(manager, metadata);
   })();
 
-  preparedAsyncRuntimeCache.set(payload.cacheKey, preparedPromise);
+  setCachedPreparedAsyncRuntime({
+    cacheKey: payload.cacheKey,
+    cacheNamespace: payload.cacheNamespace,
+    promise: preparedPromise,
+  });
 
   try {
     return await preparedPromise;
   } catch (error) {
-    preparedAsyncRuntimeCache.delete(payload.cacheKey);
+    deleteCachedPreparedAsyncRuntime(payload.cacheKey);
     throw error;
   }
+}
+
+export async function invalidateBoxelRuntimeAsyncCache(
+  cacheKeyOrNamespace?: string,
+): Promise<number> {
+  const exactCacheKey = cacheKeyOrNamespace?.startsWith(
+    `${BOXEL_RUNTIME_ASYNC_PROTOCOL}::`,
+  )
+    ? cacheKeyOrNamespace
+    : undefined;
+  const localInvalidated = invalidateLocalPreparedAsyncRuntimeCache(
+    cacheKeyOrNamespace,
+  );
+
+  let workerInvalidated = 0;
+  if (boxelRuntimeWorkerManager) {
+    workerInvalidated = await boxelRuntimeWorkerManager.invalidatePlans(
+      exactCacheKey,
+      cacheKeyOrNamespace,
+    );
+  }
+
+  return Math.max(localInvalidated, workerInvalidated);
 }
 
 export function prepareBoxelGuideAsync(

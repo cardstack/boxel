@@ -50,6 +50,7 @@ import { toBxlErrorRecord, type BxlErrorRecord, type BxlSafeResult } from './err
 export {
   __runBoxelRuntimeWorker,
   getBoxelValue,
+  invalidateBoxelRuntimeAsyncCache,
   prepareBoxelGuideAsyncSafe,
   prepareBoxelGuideAsync,
   prepareBoxelGuideSafe,

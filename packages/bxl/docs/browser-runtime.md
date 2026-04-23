@@ -16,6 +16,7 @@ Use the root package for the public browser-safe APIs:
 import {
   evaluateBxl,
   evaluateBxlSafe,
+  invalidateBoxelRuntimeAsyncCache,
   prepareBxl,
   prepareBxlSafe,
   prepareBoxelRuntime,
@@ -28,6 +29,7 @@ If you want the Boxel runtime surface directly, the package also exports:
 
 ```ts
 import {
+  invalidateBoxelRuntimeAsyncCache,
   prepareBoxelRuntime,
   prepareBoxelRuntimeAsync,
   prepareBoxelRuntimeAsyncSafe,
@@ -123,7 +125,8 @@ When workers are available, it:
 
 - prepares the runtime plan off the main thread
 - keeps a worker-owned prepared-plan cache
-- reuses that cache across multiple sessions with the same `cacheKey`
+- reuses that cache across multiple sessions with the same content-addressed
+  plan identity
 - runs recompute through async sessions
 
 When workers are unavailable, it falls back to a local async wrapper.
@@ -134,7 +137,7 @@ import { prepareBoxelRuntimeAsync } from 'bxl';
 const prepared = await prepareBoxelRuntimeAsync(definition, {
   schema,
   guideUrl: 'https://example.com/realms/procurement-guide',
-  cacheKey: 'procurement-guide::v3',
+  cacheKey: 'procurement-guide',
 });
 
 const session = prepared.createSession(initialCardData);
@@ -144,12 +147,44 @@ const first = await session.evaluate();
 const next = await session.applyPatch('.amount', 1200);
 ```
 
-### Recommended Cache Keys
+### Content-Addressed Plan Keys
 
-In browser apps, do not create a fresh runtime key for every render. Reuse a
-stable key for the same guide/schema content.
+`prepareBoxelRuntimeAsync()` now resolves the actual prepared-plan cache key
+from both stable identity and content:
 
-Good cache-key inputs:
+- `cacheNamespace` comes from `cacheKey ?? guideUrl ?? "inline"`
+- `contentHash` comes from the runtime definition and compile options, unless
+  you pass one explicitly
+- `cacheKey` on the returned prepared runtime is the resolved plan key:
+  `boxel-runtime::<cacheNamespace>::<contentHash>`
+
+That means:
+
+- same namespace + same content => cache hit
+- same namespace + changed content => new prepared plan
+- callers can reuse a stable namespace without pinning stale compiled output
+
+You can inspect those values directly:
+
+```ts
+const prepared = await prepareBoxelRuntimeAsync(definition, {
+  schema,
+  guideUrl,
+  cacheKey: 'procurement-guide',
+});
+
+console.log(prepared.cacheNamespace); // "procurement-guide"
+console.log(prepared.contentHash);    // stable content hash
+console.log(prepared.cacheKey);       // resolved content-addressed plan key
+```
+
+### Recommended Cache Inputs
+
+In browser apps, do not create a fresh namespace for every render. Reuse a
+stable namespace for the same guide family, and let the content hash separate
+revisions.
+
+Good namespace/hash inputs:
 
 - guide URL
 - guide content hash
@@ -163,9 +198,44 @@ const prepared = await prepareBoxelRuntimeAsync(definition, {
   schema,
   guideUrl,
   contentHash: guideHash,
-  cacheKey: `boxel-runtime::${guideUrl}::${guideHash}`,
+  cacheKey: guideUrl,
 });
 ```
+
+If you already have a durable guide identifier, use that as the namespace and
+pass the guide hash separately:
+
+```ts
+const prepared = await prepareBoxelRuntimeAsync(definition, {
+  schema,
+  cacheKey: 'procurement-guide',
+  contentHash: guideHash,
+});
+```
+
+### Cache Invalidation
+
+Use `invalidateBoxelRuntimeAsyncCache()` when the browser needs to drop cached
+prepared plans explicitly.
+
+```ts
+import { invalidateBoxelRuntimeAsyncCache } from 'bxl';
+
+// Drop one exact resolved plan key.
+await invalidateBoxelRuntimeAsyncCache(prepared.cacheKey);
+
+// Drop all revisions under one namespace.
+await invalidateBoxelRuntimeAsyncCache('procurement-guide');
+
+// Drop every cached async runtime plan.
+await invalidateBoxelRuntimeAsyncCache();
+```
+
+The argument can be:
+
+- an exact resolved `prepared.cacheKey`
+- a stable namespace such as `cacheKey` / `guideUrl`
+- omitted, to clear the whole async prepared-plan cache
 
 ### Async Safe Variant
 
@@ -178,7 +248,7 @@ import { prepareBoxelRuntimeAsyncSafe } from 'bxl';
 const prepared = await prepareBoxelRuntimeAsyncSafe(definition, {
   schema,
   guideUrl,
-  cacheKey,
+  cacheKey: guideUrl,
 });
 
 if (!prepared.ok) {
@@ -217,7 +287,7 @@ This is the recommended browser flow for a card or form component:
 
 1. Load the card JSON and guide JSON.
 2. Build a `BoxelRuntimeDefinition`.
-3. Call `prepareBoxelRuntimeAsync()` once per guide/schema version.
+3. Call `prepareBoxelRuntimeAsync()` once per guide family/version boundary.
 4. Create a session for the current card data.
 5. On input changes, call `session.applyPatch(path, value)`.
 6. Render:
@@ -233,7 +303,8 @@ This is the recommended browser flow for a card or form component:
 const prepared = await prepareBoxelRuntimeAsyncSafe(definition, {
   schema,
   guideUrl,
-  cacheKey: `guide::${guideUrl}::${guideHash}`,
+  cacheKey: guideUrl,
+  contentHash: guideHash,
 });
 
 if (!prepared.ok) {
