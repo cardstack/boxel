@@ -344,10 +344,9 @@ ${REPLACE_MARKER}\n\`\`\``;
           },
         ],
       ],
+      aiAssistantOpen: true,
     });
     assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
-
-    await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
 
     await addSkillToAiAssistant(`${testRealmURL}Skill/useful-commands`);
@@ -599,10 +598,9 @@ ${REPLACE_MARKER}\n\`\`\``;
           },
         ],
       ],
+      aiAssistantOpen: true,
     });
     assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
-
-    await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
 
     await addSkillToAiAssistant(`${testRealmURL}Skill/useful-commands`);

@@ -388,7 +388,10 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
             APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
           )?.enabledSkillCards?.some((card: any) => card.sourceUrl === skillId),
         ),
-      { timeoutMessage: `timed out waiting for ${skillId} to be enabled` },
+      {
+        timeout: 5000,
+        timeoutMessage: `timed out waiting for ${skillId} to be enabled`,
+      },
     );
     await click('[data-test-skill-menu]');
     assert
