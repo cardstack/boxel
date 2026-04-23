@@ -104,7 +104,9 @@ module(basename(__filename), function () {
         reconciler.knownByUrl.get('https://cardstack.com/base/')?.kind,
         'bootstrap',
       );
-      assert.true(reconciler.knownByUrl.get('https://cardstack.com/base/')!.pinned);
+      assert.true(
+        reconciler.knownByUrl.get('https://cardstack.com/base/')!.pinned,
+      );
     });
 
     test('reconcile mounts rows absent from the mounted map', async function (assert) {
@@ -151,7 +153,11 @@ module(basename(__filename), function () {
         owner_username: 'luke',
       });
       await reconciler.reconcile();
-      assert.strictEqual(reconciler.mounted.size, 1, 'mounted after first reconcile');
+      assert.strictEqual(
+        reconciler.mounted.size,
+        1,
+        'mounted after first reconcile',
+      );
 
       await deleteRow(dbAdapter, url);
       await reconciler.reconcile();
@@ -186,12 +192,24 @@ module(basename(__filename), function () {
       };
       const p1 = localReconciler.ensureMounted(row);
       const p2 = localReconciler.ensureMounted(row);
-      assert.strictEqual(mountInvocations, 1, 'only one mount invocation in flight');
+      assert.strictEqual(
+        mountInvocations,
+        1,
+        'only one mount invocation in flight',
+      );
 
       resolveMount!(makeFakeRealm(row.url));
       const [r1, r2] = await Promise.all([p1, p2]);
-      assert.strictEqual(r1, r2, 'both callers receive the same Realm instance');
-      assert.strictEqual(mountInvocations, 1, 'still only one mount invocation after settle');
+      assert.strictEqual(
+        r1,
+        r2,
+        'both callers receive the same Realm instance',
+      );
+      assert.strictEqual(
+        mountInvocations,
+        1,
+        'still only one mount invocation after settle',
+      );
     });
 
     test('ensureMounted clears pendingMounts so a retry after failure fires a fresh mount', async function (assert) {
@@ -219,8 +237,15 @@ module(basename(__filename), function () {
         pinned: false,
       };
 
-      await assert.rejects(localReconciler.ensureMounted(row), /transient failure/);
-      assert.strictEqual(localReconciler.pendingMounts.size, 0, 'pendingMounts cleared after failure');
+      await assert.rejects(
+        localReconciler.ensureMounted(row),
+        /transient failure/,
+      );
+      assert.strictEqual(
+        localReconciler.pendingMounts.size,
+        0,
+        'pendingMounts cleared after failure',
+      );
 
       const realm = await localReconciler.ensureMounted(row);
       assert.ok(realm, 'retry succeeded');
