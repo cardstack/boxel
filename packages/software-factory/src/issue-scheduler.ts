@@ -71,25 +71,9 @@ export class IssueScheduler {
     this.issueStore = issueStore;
   }
 
-  /**
-   * Load (or reload) the full issue list from the store.
-   *
-   * Retries briefly when the initial query returns empty: after a sync
-   * push, the realm's search index runs asynchronously, so the first
-   * `listIssues()` call right after `client.sync` can race with indexing
-   * and come back empty even though the card is already on disk. A small
-   * bounded retry bridges that window without changing the outcome for
-   * legitimately empty projects (they still return empty, just ~1s later).
-   */
+  /** Load (or reload) the full issue list from the store. */
   async loadIssues(): Promise<void> {
-    let maxAttempts = 4;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      this.issues = await this.issueStore.listIssues();
-      if (this.issues.length > 0 || attempt === maxAttempts) {
-        break;
-      }
-      await new Promise((r) => setTimeout(r, 400));
-    }
+    this.issues = await this.issueStore.listIssues();
     log.info(`Loaded ${this.issues.length} issue(s) from store`);
   }
 

@@ -292,11 +292,6 @@ export async function runFactoryEntrypoint(
     dependencies?.syncWorkspaceToRealm ?? defaultSyncWorkspaceToRealm;
   await syncWorkspaceToRealm(client, targetRealm.url, workspaceDir);
 
-  // Note: the realm's search index runs asynchronously, so the
-  // scheduler's first `listIssues()` call right after the post-seed sync
-  // can race with indexing. `IssueScheduler.loadIssues` handles that
-  // with a short bounded retry — no orchestrator-level polling needed.
-
   let summary = buildFactoryEntrypointSummary(
     options,
     brief,

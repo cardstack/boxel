@@ -180,10 +180,8 @@ module('factory-entrypoint integration', function () {
         request.url === '/hassan/personal/_search' &&
         request.method === 'QUERY'
       ) {
-        // Issue store search — return empty so the loop exits cleanly.
-        // The scheduler's `loadIssues` retries on empty to handle the
-        // post-sync index race with real realms; eventually it returns
-        // empty here and the loop reports 'all_issues_done'.
+        // Issue store search — return empty so the loop exits cleanly
+        // and reports 'all_issues_done'.
         response.writeHead(200, { 'content-type': SupportedMimeType.CardJson });
         response.end(JSON.stringify({ data: [] }));
       } else if (
