@@ -65,18 +65,22 @@ class TestSemaphore {
   };
 }
 
-function makeStubPagePool(
-  maxPages: number,
-  renderSemaphore?: { acquire(): Promise<() => void> },
-  createContextDelay?: (contextNumber: number) => Promise<void>,
-  options?: {
-    disableStandbyRefill?: boolean;
-    standbyTimeoutMs?: number;
-    closeContextDelay?: (id: string) => Promise<void>;
-    onContextCreated?: (id: string) => void;
-    onContextClosed?: (id: string) => void;
-  },
-) {
+interface StubPagePoolOptions {
+  maxPages: number;
+  renderSemaphore?: { acquire(): Promise<() => void> };
+  createContextDelay?: (contextNumber: number) => Promise<void>;
+  disableStandbyRefill?: boolean;
+  standbyTimeoutMs?: number;
+  closeContextDelay?: (id: string) => Promise<void>;
+  onContextCreated?: (id: string) => void;
+  onContextClosed?: (id: string) => void;
+  // Default `true` for back-compat with existing tab-routing unit
+  // tests that predate the admission feature. Admission-control
+  // tests opt in by passing `false`.
+  disableFileAdmission?: boolean;
+}
+
+function makeStubPagePool(opts: StubPagePoolOptions) {
   function makeStorage(): Storage {
     let values: Record<string, string> = {};
     return {
@@ -107,12 +111,12 @@ function makeStubPagePool(
   let browser = {
     async createBrowserContext() {
       let counter = ++contextCounter;
-      if (createContextDelay) {
-        await createContextDelay(counter);
+      if (opts.createContextDelay) {
+        await opts.createContextDelay(counter);
       }
       let id = `ctx-${counter}`;
       contextsCreated.push(id);
-      options?.onContextCreated?.(id);
+      opts.onContextCreated?.(id);
       let localStorage = makeStorage();
       let context = {
         async newPage() {
@@ -132,6 +136,13 @@ function makeStubPagePool(
                 (globalThis as any).localStorage = originalLocalStorage;
               }
             },
+            async close() {
+              // CS-10817 step 3: PagePool closes individual pool pages
+              // (without closing the shared context) on entry
+              // disposal. Context-level bookkeeping still runs via
+              // the context.close() hook above.
+              return;
+            },
             browserContext() {
               return context;
             },
@@ -144,11 +155,11 @@ function makeStubPagePool(
           } as any;
         },
         async close() {
-          if (options?.closeContextDelay) {
-            await options.closeContextDelay(id);
+          if (opts.closeContextDelay) {
+            await opts.closeContextDelay(id);
           }
           contextsClosed.push(id);
-          options?.onContextClosed?.(id);
+          opts.onContextClosed?.(id);
           return;
         },
       } as any;
@@ -164,13 +175,14 @@ function makeStubPagePool(
     },
   };
   let pool = new PagePool({
-    maxPages,
+    maxPages: opts.maxPages,
     serverURL: 'http://localhost',
     browserManager: browserManager as any,
     boxelHostURL: 'http://localhost:4200',
-    standbyTimeoutMs: options?.standbyTimeoutMs ?? 500,
-    renderSemaphore,
-    disableStandbyRefill: options?.disableStandbyRefill,
+    standbyTimeoutMs: opts.standbyTimeoutMs ?? 500,
+    renderSemaphore: opts.renderSemaphore,
+    disableStandbyRefill: opts.disableStandbyRefill,
+    disableFileAdmission: opts.disableFileAdmission ?? true,
   });
   return { pool, contextsCreated, contextsClosed };
 }
@@ -1480,6 +1492,66 @@ module(basename(__filename), function () {
           'timeout retains page identifier',
         );
 
+        // The timeout error must carry the structured diagnostics
+        // block so operators can classify the stall. Diagnostics
+        // live on `response.meta.diagnostics` (the consolidated
+        // channel — the indexer reads from there and persists into
+        // `boxel_index.timing_diagnostics`, mirroring to
+        // `error_doc.diagnostics` at write time for UI compat).
+        let diagnostics = (timedOut.response as any)?.meta?.diagnostics;
+        assert.strictEqual(
+          typeof diagnostics,
+          'object',
+          'timeout error includes diagnostics object',
+        );
+        assert.notStrictEqual(diagnostics, null, 'diagnostics is not null');
+        assert.strictEqual(
+          typeof diagnostics?.launchMs,
+          'number',
+          'diagnostics.launchMs is populated by server-side enrichment',
+        );
+        let waitsShape =
+          typeof diagnostics?.waits?.semaphoreMs === 'number' &&
+          typeof diagnostics?.waits?.admissionMs === 'number' &&
+          typeof diagnostics?.waits?.tabQueueMs === 'number' &&
+          typeof diagnostics?.waits?.tabStartupMs === 'number';
+        assert.true(
+          waitsShape,
+          'diagnostics.waits carries per-stage breakdown',
+        );
+        assert.strictEqual(
+          typeof diagnostics?.renderElapsedMs,
+          'number',
+          'diagnostics.renderElapsedMs is populated',
+        );
+        assert.strictEqual(
+          typeof diagnostics?.totalElapsedMs,
+          'number',
+          'diagnostics.totalElapsedMs is populated',
+        );
+        // Note: diagnostics.requestId is only populated on the HTTP
+        // path (prerender-app stamps it from x-boxel-prerender-request-id).
+        // The in-process Prerenderer call used by this test doesn't
+        // have one, so we don't assert it here. See the separate
+        // prerender-server-test for the HTTP-path requestId coverage.
+        // Host-side fields (recentModuleEvaluations / cardDocsInFlight
+        // / queryLoadsInFlight) are also best-effort: the withTimeout
+        // capture at `timeoutMs:1` races the page teardown, so the
+        // page may already be closed by the time we attempt the
+        // diagnostic page.evaluate(). When present, their shape must
+        // be { url, ms } — when absent, the server-side timings
+        // above are sufficient to classify the stall as a timeout.
+        let moduleEvals = diagnostics?.recentModuleEvaluations;
+        if (Array.isArray(moduleEvals) && moduleEvals.length > 0) {
+          let allShaped = moduleEvals.every(
+            (e: any) => typeof e?.url === 'string' && typeof e?.ms === 'number',
+          );
+          assert.true(
+            allShaped,
+            `diagnostics.recentModuleEvaluations entries carry { url, ms }`,
+          );
+        }
+
         let afterTimeout = await prerenderer.prerenderModule({
           affinityType: 'realm',
           affinityValue: realmURL,
@@ -1501,6 +1573,132 @@ module(basename(__filename), function () {
           'ready',
           'subsequent render succeeds',
         );
+      });
+
+      test('card prerender timeout surfaces query-field and linked-field load timings in diagnostics', async function (assert) {
+        // CS-10872: exercise a card render that depends on a
+        // `linksToMany` query field (which itself fans out into
+        // per-row `linksTo` loads). We slow the server-side search
+        // enough that a tight render timeout catches the render with
+        // a pending query-field load and/or its linked-field loads.
+        // The assertions below require the diagnostics to name the
+        // individual query and linked-field URLs, not just a count.
+        const cardURL = `${realmURL}directory-ops`;
+        let realmServerPatch =
+          installRealmServerAssertOwnRealmServerBypassPatch();
+        let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(8_000);
+        try {
+          let result = await prerenderer.prerenderVisit({
+            affinityType: 'realm',
+            affinityValue: realmURL,
+            realm: realmURL,
+            url: cardURL,
+            auth: auth(),
+            renderOptions: { cardRender: true },
+            opts: { timeoutMs: 2_000 },
+          });
+
+          let timeoutError =
+            (result.response.card?.error as any) ??
+            (result.response.pageUnusableError as any);
+          assert.ok(
+            timeoutError,
+            'timed-out card render surfaces a RenderError',
+          );
+          assert.strictEqual(
+            timeoutError?.error?.title,
+            'Render timeout',
+            'error title is "Render timeout"',
+          );
+
+          // Diagnostics live on `response.meta.diagnostics` — the
+          // consolidated channel the indexer reads from and persists
+          // onto `boxel_index.timing_diagnostics` (mirrored to
+          // `error_doc.diagnostics` for UI compat).
+          let diagnostics = (result.response as any)?.meta?.diagnostics;
+          assert.strictEqual(
+            typeof diagnostics,
+            'object',
+            'timeout error carries diagnostics block',
+          );
+          assert.notStrictEqual(diagnostics, null, 'diagnostics is not null');
+
+          // Server-side launch / render breakdown must always be present.
+          assert.strictEqual(
+            typeof diagnostics?.launchMs,
+            'number',
+            'diagnostics.launchMs populated',
+          );
+          let waitsShape =
+            typeof diagnostics?.waits?.semaphoreMs === 'number' &&
+            typeof diagnostics?.waits?.admissionMs === 'number' &&
+            typeof diagnostics?.waits?.tabQueueMs === 'number' &&
+            typeof diagnostics?.waits?.tabStartupMs === 'number';
+          assert.true(waitsShape, 'diagnostics.waits breakdown populated');
+          assert.strictEqual(
+            typeof diagnostics?.renderElapsedMs,
+            'number',
+            'diagnostics.renderElapsedMs populated',
+          );
+
+          // Render-stage breadcrumb: we got past route setup, so the
+          // stage should name *something* from buildModel:* or later.
+          assert.strictEqual(
+            typeof diagnostics?.renderStage,
+            'string',
+            `diagnostics.renderStage populated (got ${JSON.stringify(
+              diagnostics?.renderStage,
+            )})`,
+          );
+
+          // The core assertion: the in-flight OR recent query-load
+          // list must name at least one entry. Whether it's still
+          // pending or just completed depends on exact timing of the
+          // delayed search vs. the 2s timeout, so we accept either.
+          let queryLoads: Array<Record<string, unknown>> = [
+            ...(Array.isArray(diagnostics?.queryLoadsInFlight)
+              ? diagnostics.queryLoadsInFlight
+              : []),
+            ...(Array.isArray(diagnostics?.recentQueryLoads)
+              ? diagnostics.recentQueryLoads
+              : []),
+          ];
+          assert.true(
+            queryLoads.length > 0,
+            `diagnostics surface at least one query load (in-flight or recent): ${JSON.stringify(
+              diagnostics,
+            )}`,
+          );
+          // Every tracked query load should be tagged with a source
+          // string (SearchResource annotates seed/search/live-refresh).
+          let allTagged = queryLoads.every((entry) => {
+            let meta = (entry as any)?.meta ?? entry;
+            return typeof meta?.source === 'string';
+          });
+          assert.true(
+            allTagged,
+            'each query load entry is tagged with a `source` identifier',
+          );
+
+          // Loader must have recorded at least one module evaluation
+          // for the directory-query module (or its dependencies). The
+          // history is bounded and captures Glimmer-compile cost.
+          let moduleEvals = diagnostics?.recentModuleEvaluations;
+          let moduleEvalsShape =
+            Array.isArray(moduleEvals) &&
+            moduleEvals.length > 0 &&
+            moduleEvals.every(
+              (e: any) =>
+                typeof e?.url === 'string' && typeof e?.ms === 'number',
+            );
+          assert.true(
+            moduleEvalsShape,
+            'diagnostics.recentModuleEvaluations names compiled modules with ms timings',
+          );
+        } finally {
+          await realmServerPatch.restore();
+          delayedSearchPatch.restore();
+        }
       });
 
       test('file prerender returns extracted metadata', async function (assert) {
@@ -4333,7 +4531,10 @@ module(basename(__filename), function () {
 
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '1';
-            ({ pool } = makeStubPagePool(1, semaphore));
+            ({ pool } = makeStubPagePool({
+              maxPages: 1,
+              renderSemaphore: semaphore,
+            }));
             await pool.warmStandbys();
 
             let run = async (realm: string) => {
@@ -4371,7 +4572,10 @@ module(basename(__filename), function () {
 
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
-            ({ pool } = makeStubPagePool(2, semaphore));
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              renderSemaphore: semaphore,
+            }));
             await pool.warmStandbys();
 
             let run = async (realm: string) => {
@@ -4400,8 +4604,312 @@ module(basename(__filename), function () {
           }
         });
 
+        test('file-queue admission holds the last tab for module calls', async function (assert) {
+          // Invariant: `fileTabsBusy ≤ N − 1`. With tab-max=2, at most
+          // one file render can be admitted at a time, reserving the
+          // other tab for module calls. This prevents the self-
+          // referential prerender deadlock (a file render blocked on a
+          // module extraction that's queued behind it).
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let semaphore = new TestSemaphore(2);
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              renderSemaphore: semaphore,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            let firstFile = await pool.getPage('realm-a', 'file');
+            let secondFileAdmitted = false;
+            let secondFilePromise = pool
+              .getPage('realm-a', 'file')
+              .then((lease) => {
+                secondFileAdmitted = true;
+                return lease;
+              });
+            await new Promise((r) => setTimeout(r, 10));
+            assert.false(
+              secondFileAdmitted,
+              'second file call waits behind admission control',
+            );
+
+            let moduleLease = await pool.getPage('realm-a', 'module');
+            assert.ok(
+              moduleLease.page,
+              'module call bypasses admission and lands on a tab',
+            );
+            moduleLease.release();
+
+            firstFile.release();
+            let secondFile = await secondFilePromise;
+            assert.true(
+              secondFileAdmitted,
+              'releasing the first file frees the admission slot',
+            );
+            secondFile.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('cancelling while waiting for file admission releases cleanly', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let semaphore = new TestSemaphore(2);
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              renderSemaphore: semaphore,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            let firstFile = await pool.getPage('realm-a', 'file');
+            let controller = new AbortController();
+            let cancelled = pool.getPage('realm-a', 'file', {
+              signal: controller.signal,
+            });
+            controller.abort();
+            await assert.rejects(
+              cancelled,
+              'aborted while queued on admission',
+            );
+
+            // Subsequent module call still goes through.
+            let moduleLease = await pool.getPage('realm-a', 'module');
+            assert.ok(moduleLease.page);
+            moduleLease.release();
+
+            firstFile.release();
+            // And after releasing, a new file admission succeeds.
+            let thirdFile = await pool.getPage('realm-a', 'file');
+            thirdFile.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('waits.admissionMs reports time spent in the file-admission queue', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            let first = await pool.getPage('realm-a', 'file');
+            assert.strictEqual(
+              first.waits.admissionMs,
+              0,
+              'first file call does not wait for admission (slot available)',
+            );
+
+            // Second file call blocks on the admission semaphore (cap=1
+            // at tabMax=2). Release the first after a short hold; the
+            // second's admissionMs should reflect that hold.
+            let holdMs = 20;
+            let secondPromise = pool.getPage('realm-a', 'file');
+            setTimeout(() => first.release(), holdMs);
+            let second = await secondPromise;
+            assert.ok(
+              second.waits.admissionMs >= holdMs - 5,
+              `second file call reports admissionMs ≥ ${holdMs}ms (actual: ${second.waits.admissionMs})`,
+            );
+            second.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('module / command calls bypass admission, waits.admissionMs is zero', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            // Hold the only admission slot with a file call.
+            let fileLease = await pool.getPage('realm-a', 'file');
+
+            // Module / command calls bypass admission and land immediately.
+            let moduleLease = await pool.getPage('realm-a', 'module');
+            assert.strictEqual(
+              moduleLease.waits.admissionMs,
+              0,
+              'module call skips admission entirely',
+            );
+            moduleLease.release();
+
+            let commandLease = await pool.getPage('realm-a', 'command');
+            assert.strictEqual(
+              commandLease.waits.admissionMs,
+              0,
+              'command call skips admission entirely',
+            );
+            commandLease.release();
+
+            fileLease.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('getQueueDepthSnapshot reports per-affinity admission pending/cap', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            // Before any file call has hit this affinity, admission
+            // semaphore hasn't been lazily created. Snapshot reports
+            // cap=0, pending=0 so operators can distinguish "admission
+            // not configured for this affinity yet" from "cap is 0".
+            let first = await pool.getPage('realm-a', 'file');
+            let snap1 = pool.getQueueDepthSnapshot();
+            let a1 = snap1.affinities.find((a) => a.affinityKey === 'realm-a');
+            assert.ok(a1, 'realm-a shows up in snapshot');
+            assert.strictEqual(
+              a1!.admission.cap,
+              1,
+              'admission cap = affinityTabMax − 1',
+            );
+            assert.strictEqual(
+              a1!.admission.pending,
+              0,
+              'no admission waiters when only caller holds the slot',
+            );
+
+            // Second file call blocks on admission. Snapshot should
+            // report one pending waiter.
+            let secondPromise = pool.getPage('realm-a', 'file');
+            await new Promise((r) => setTimeout(r, 10));
+            let snap2 = pool.getQueueDepthSnapshot();
+            let a2 = snap2.affinities.find((a) => a.affinityKey === 'realm-a');
+            assert.strictEqual(
+              a2!.admission.pending,
+              1,
+              'one waiter queued behind the exhausted admission semaphore',
+            );
+
+            first.release();
+            let second = await secondPromise;
+            second.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('idle file-admission semaphore is dropped so the map does not grow unbounded', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            // While a file call holds admission, the semaphore is
+            // present in the snapshot with a non-zero cap.
+            let lease = await pool.getPage('realm-a', 'file');
+            let busySnap = pool.getQueueDepthSnapshot();
+            let busyAffinity = busySnap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              busyAffinity!.admission.cap,
+              1,
+              'semaphore is present while a file call holds admission',
+            );
+
+            // After release and with no waiters, the semaphore is
+            // idle. It should be dropped so the map stays bounded by
+            // affinities currently serving a file call, not by total
+            // affinities ever seen.
+            lease.release();
+            let idleSnap = pool.getQueueDepthSnapshot();
+            let idleAffinity = idleSnap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              idleAffinity!.admission.cap,
+              0,
+              'semaphore is dropped once in-use and pending both return to 0',
+            );
+            assert.strictEqual(
+              idleAffinity!.admission.pending,
+              0,
+              'no waiters on the dropped semaphore',
+            );
+
+            // A fresh file call on the same affinity lazy-creates a
+            // new semaphore — cheap, and the admission cap is
+            // recomputed from the current affinityTabMax.
+            let next = await pool.getPage('realm-a', 'file');
+            let reusedSnap = pool.getQueueDepthSnapshot();
+            let reusedAffinity = reusedSnap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              reusedAffinity!.admission.cap,
+              1,
+              'subsequent file call lazy-creates a fresh semaphore',
+            );
+            next.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
         test('prefers idle tab aligned to realm over standby tabs', async function (assert) {
-          let { pool } = makeStubPagePool(2);
+          let { pool } = makeStubPagePool({ maxPages: 2 });
           await pool.warmStandbys();
 
           let first = await pool.getPage('realm-a');
@@ -4424,7 +4932,7 @@ module(basename(__filename), function () {
           let originalNow = Date.now;
           let now = 1000;
           (Date as any).now = () => now;
-          let { pool } = makeStubPagePool(1);
+          let { pool } = makeStubPagePool({ maxPages: 1 });
 
           try {
             await pool.warmStandbys(); // standby at t=1000
@@ -4458,7 +4966,7 @@ module(basename(__filename), function () {
 
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '1';
-            ({ pool } = makeStubPagePool(2));
+            ({ pool } = makeStubPagePool({ maxPages: 2 }));
             await pool.warmStandbys();
 
             let first = await pool.getPage('realm-a');
@@ -4500,7 +5008,7 @@ module(basename(__filename), function () {
 
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
-            ({ pool } = makeStubPagePool(2));
+            ({ pool } = makeStubPagePool({ maxPages: 2 }));
             await pool.warmStandbys();
 
             let first = await pool.getPage('realm-a');
@@ -4556,7 +5064,7 @@ module(basename(__filename), function () {
         });
 
         test('queued cross-realm requests realign the tab per request', async function (assert) {
-          let { pool } = makeStubPagePool(1);
+          let { pool } = makeStubPagePool({ maxPages: 1 });
           await pool.warmStandbys();
 
           let first = await pool.getPage('realm-a');
@@ -4600,7 +5108,8 @@ module(basename(__filename), function () {
         });
 
         test('does not reassign a busy tab with queued work across realms', async function (assert) {
-          let { pool } = makeStubPagePool(1, undefined, undefined, {
+          let { pool } = makeStubPagePool({
+            maxPages: 1,
             disableStandbyRefill: true,
           });
 
@@ -4637,7 +5146,8 @@ module(basename(__filename), function () {
         });
 
         test('queues same-realm request when tab is transitioning', async function (assert) {
-          let { pool } = makeStubPagePool(1, undefined, undefined, {
+          let { pool } = makeStubPagePool({
+            maxPages: 1,
             disableStandbyRefill: true,
           });
 
@@ -4705,7 +5215,8 @@ module(basename(__filename), function () {
 
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
-            ({ pool } = makeStubPagePool(2, undefined, undefined, {
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
               closeContextDelay: async () => closeGate,
               onContextCreated() {
                 active++;
@@ -4746,7 +5257,7 @@ module(basename(__filename), function () {
         });
 
         test('creates spare standby when pool is at capacity', async function (assert) {
-          let { pool, contextsCreated } = makeStubPagePool(1);
+          let { pool, contextsCreated } = makeStubPagePool({ maxPages: 1 });
           await pool.warmStandbys();
           assert.strictEqual(
             contextsCreated.length,
@@ -4768,7 +5279,7 @@ module(basename(__filename), function () {
         });
 
         test('standby pages bind to the first realm they serve', async function (assert) {
-          let { pool } = makeStubPagePool(2);
+          let { pool } = makeStubPagePool({ maxPages: 2 });
           await pool.warmStandbys(); // fill initial standbys
 
           let realmAFirst = await pool.getPage('realm-a');
@@ -4808,7 +5319,7 @@ module(basename(__filename), function () {
         });
 
         test('each tab uses a separate browser context', async function (assert) {
-          let { pool } = makeStubPagePool(2);
+          let { pool } = makeStubPagePool({ maxPages: 2 });
           await pool.warmStandbys();
 
           let first = await pool.getPage('realm-a');
@@ -4849,7 +5360,9 @@ module(basename(__filename), function () {
         });
 
         test('evicts idle realms without touching standbys', async function (assert) {
-          let { pool, contextsCreated, contextsClosed } = makeStubPagePool(2);
+          let { pool, contextsCreated, contextsClosed } = makeStubPagePool({
+            maxPages: 2,
+          });
           await pool.warmStandbys();
 
           assert.strictEqual(
@@ -4892,7 +5405,9 @@ module(basename(__filename), function () {
         });
 
         test('idle eviction skips unassigned standbys', async function (assert) {
-          let { pool, contextsCreated, contextsClosed } = makeStubPagePool(1);
+          let { pool, contextsCreated, contextsClosed } = makeStubPagePool({
+            maxPages: 1,
+          });
           await pool.warmStandbys();
 
           let createdBeforeSweep = contextsCreated.length;
@@ -4911,6 +5426,246 @@ module(basename(__filename), function () {
             'no contexts closed when only standbys are present',
           );
           await pool.closeAll();
+        });
+      });
+
+      module('shared BrowserContext (CS-10817)', function () {
+        test('disposeAffinity with retainSharedContext keeps an orphan for re-warm', async function (assert) {
+          let { pool } = makeStubPagePool({ maxPages: 2 });
+          await pool.warmStandbys();
+
+          let first = await pool.getPage('realm-a');
+          let firstContext = first.page.browserContext();
+          first.release();
+          // Simulates the eviction path in render-runner.ts (unusable
+          // / retry) — the page is dead but the realm's warm cache
+          // in the BrowserContext is still valid.
+          await pool.disposeAffinity('realm-a', {
+            awaitIdle: true,
+            retainSharedContext: true,
+          });
+
+          let snapshot = pool.getSharedContextSnapshot();
+          let orphan = snapshot.entries.find(
+            (e) => e.affinityKey === 'realm-a',
+          );
+          assert.ok(orphan, 'shared context row kept for realm-a');
+          assert.strictEqual(
+            orphan?.pageCount,
+            0,
+            'pageCount is zero (orphan)',
+          );
+          assert.false(
+            orphan?.closing,
+            'orphan is not marked closing until cap evicts or explicit close',
+          );
+          // Subsequent getPage for the same affinity must reuse the
+          // orphan context, not spawn a fresh one.
+          let second = await pool.getPage('realm-a');
+          assert.strictEqual(
+            second.page.browserContext(),
+            firstContext,
+            're-warm spawns the new page in the orphan BrowserContext',
+          );
+          second.release();
+          await pool.closeAll();
+        });
+
+        test('disposeAffinity without retainSharedContext closes the context', async function (assert) {
+          let { pool } = makeStubPagePool({ maxPages: 2 });
+          await pool.warmStandbys();
+
+          let first = await pool.getPage('realm-a');
+          let firstContext = first.page.browserContext();
+          first.release();
+          await pool.disposeAffinity('realm-a');
+
+          assert.strictEqual(
+            pool
+              .getSharedContextSnapshot()
+              .entries.find((e) => e.affinityKey === 'realm-a'),
+            undefined,
+            'dispose without retain tears the shared-context row down',
+          );
+
+          let second = await pool.getPage('realm-a');
+          assert.notStrictEqual(
+            second.page.browserContext(),
+            firstContext,
+            'post-dispose visit gets a fresh BrowserContext',
+          );
+          second.release();
+          await pool.closeAll();
+        });
+
+        test('LRU evicts the oldest orphan when #sharedContextCap is exceeded', async function (assert) {
+          let originalNow = Date.now;
+          let now = 1000;
+          (Date as any).now = () => now;
+          let previousCap = process.env.PRERENDER_SHARED_CONTEXT_CAP;
+          process.env.PRERENDER_SHARED_CONTEXT_CAP = '2';
+          let { pool, contextsClosed } = makeStubPagePool({
+            maxPages: 3,
+            disableStandbyRefill: true,
+          });
+          let orphanFor = async (affinityKey: string) => {
+            let lease = await pool.getPage(affinityKey);
+            lease.release();
+            await pool.disposeAffinity(affinityKey, {
+              awaitIdle: true,
+              retainSharedContext: true,
+            });
+            now += 10;
+          };
+          try {
+            await pool.warmStandbys();
+
+            await orphanFor('realm-a'); // t=1000
+            await orphanFor('realm-b'); // t=1010
+            // size = 2 so far; still within cap=2.
+            assert.strictEqual(
+              pool.getSharedContextSnapshot().entries.length,
+              2,
+              'two orphans retained under the cap',
+            );
+
+            // Creating a third orphan pushes total to 3 > cap=2 —
+            // oldest orphan (realm-a) evicted.
+            await orphanFor('realm-c');
+            let snapshot = pool.getSharedContextSnapshot();
+            assert.false(
+              snapshot.entries.some((e) => e.affinityKey === 'realm-a'),
+              'oldest orphan evicted by LRU when cap exceeded',
+            );
+            assert.true(
+              snapshot.entries.some((e) => e.affinityKey === 'realm-b'),
+              'newer orphan retained',
+            );
+            assert.true(
+              snapshot.entries.some((e) => e.affinityKey === 'realm-c'),
+              'most-recent orphan retained',
+            );
+            assert.ok(
+              contextsClosed.length >= 1,
+              'evicted orphan context was closed by LRU sweep',
+            );
+          } finally {
+            await pool.closeAll();
+            (Date as any).now = originalNow;
+            if (previousCap === undefined) {
+              delete process.env.PRERENDER_SHARED_CONTEXT_CAP;
+            } else {
+              process.env.PRERENDER_SHARED_CONTEXT_CAP = previousCap;
+            }
+          }
+        });
+
+        test('LRU does not evict active (in-use) shared contexts', async function (assert) {
+          let previousCap = process.env.PRERENDER_SHARED_CONTEXT_CAP;
+          process.env.PRERENDER_SHARED_CONTEXT_CAP = '1';
+          let { pool } = makeStubPagePool({
+            maxPages: 3,
+            disableStandbyRefill: true,
+          });
+          try {
+            await pool.warmStandbys();
+
+            // realm-a is held — active (pageCount=1). Exceeding cap
+            // must NOT evict it.
+            let first = await pool.getPage('realm-a');
+
+            // Orphan realm-b.
+            let second = await pool.getPage('realm-b');
+            second.release();
+            await pool.disposeAffinity('realm-b', {
+              awaitIdle: true,
+              retainSharedContext: true,
+            });
+
+            // Claim realm-c — two shared contexts exist (realm-a
+            // active, realm-b orphan). Claiming realm-c pushes total
+            // to 3 > cap=1; sweep should close realm-b, leave realm-a.
+            let third = await pool.getPage('realm-c');
+
+            let snapshot = pool.getSharedContextSnapshot();
+            assert.true(
+              snapshot.entries.some((e) => e.affinityKey === 'realm-a'),
+              'active realm-a context survives LRU sweep',
+            );
+            assert.false(
+              snapshot.entries.some((e) => e.affinityKey === 'realm-b'),
+              'orphan realm-b evicted to make room under cap',
+            );
+
+            first.release();
+            third.release();
+          } finally {
+            await pool.closeAll();
+            if (previousCap === undefined) {
+              delete process.env.PRERENDER_SHARED_CONTEXT_CAP;
+            } else {
+              process.env.PRERENDER_SHARED_CONTEXT_CAP = previousCap;
+            }
+          }
+        });
+
+        test('additional tabs at tabMax > 1 do not leak their BrowserContext on close', async function (assert) {
+          // Regression guard: when a second/third getPage takes
+          // another standby, that standby's BrowserContext is
+          // different from the one recorded in `#sharedContexts` for
+          // the affinity. `#closeEntry` has to notice the mismatch
+          // and close the entry's own context — otherwise the
+          // shared-context bookkeeping would only tear down the
+          // first-registered context and leak the rest.
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          process.env.PRERENDER_AFFINITY_TAB_MAX = '3';
+          let { pool, contextsCreated, contextsClosed } = makeStubPagePool({
+            maxPages: 3,
+          });
+          try {
+            await pool.warmStandbys();
+
+            let createdBefore = contextsCreated.length;
+            let first = await pool.getPage('realm-a');
+            let second = await pool.getPage('realm-a');
+            let third = await pool.getPage('realm-a');
+
+            // First page adopts a standby's context; subsequent tabs
+            // take another standby, so the contexts differ —
+            // #closeEntry's mismatch branch is what guarantees no
+            // leak.
+            assert.notStrictEqual(
+              first.page.browserContext(),
+              second.page.browserContext(),
+              'second tab uses the next standby BrowserContext',
+            );
+            assert.strictEqual(
+              pool.getSharedContextSnapshot().entries.length,
+              1,
+              'sharedContexts tracks exactly one context for the affinity',
+            );
+
+            let closedBefore = contextsClosed.length;
+            first.release();
+            second.release();
+            third.release();
+            await pool.disposeAffinity('realm-a');
+
+            let netCreated = contextsCreated.length - createdBefore;
+            let netClosed = contextsClosed.length - closedBefore;
+            assert.strictEqual(
+              netClosed,
+              netCreated,
+              'every BrowserContext opened during the test was closed — no leak',
+            );
+          } finally {
+            await pool.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
         });
       });
     });
@@ -4964,7 +5719,16 @@ module(basename(__filename), function () {
 
           return {
             response,
-            timings: { launchMs: 0, renderMs: 1 },
+            timings: {
+              launchMs: 0,
+              renderMs: 1,
+              waits: {
+                semaphoreMs: 0,
+                admissionMs: 0,
+                tabQueueMs: 0,
+                tabStartupMs: 0,
+              },
+            },
             pool: {
               pageId: `page-${attemptCount}`,
               affinityType,
@@ -5061,7 +5825,16 @@ module(basename(__filename), function () {
 
           return {
             response: { fileExtract },
-            timings: { launchMs: 0, renderMs: 1 },
+            timings: {
+              launchMs: 0,
+              renderMs: 1,
+              waits: {
+                semaphoreMs: 0,
+                admissionMs: 0,
+                tabQueueMs: 0,
+                tabStartupMs: 0,
+              },
+            },
             pool: {
               pageId: `page-${attemptCount}`,
               affinityType,
@@ -5167,7 +5940,16 @@ module(basename(__filename), function () {
 
           return {
             response: { card },
-            timings: { launchMs: 0, renderMs: 1 },
+            timings: {
+              launchMs: 0,
+              renderMs: 1,
+              waits: {
+                semaphoreMs: 0,
+                admissionMs: 0,
+                tabQueueMs: 0,
+                tabStartupMs: 0,
+              },
+            },
             pool: {
               pageId: `page-${attemptCount}`,
               affinityType,

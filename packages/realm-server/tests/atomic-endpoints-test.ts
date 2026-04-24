@@ -12,6 +12,7 @@ import {
   setupPermissionedRealmCached,
   createJWT,
   type RealmRequest,
+  waitUntil,
   withRealmPath,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -883,11 +884,35 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 201);
           assert.strictEqual(response.body['atomic:results'].length, 1);
 
-          let updatedCardResponse = await request
-            .get('/update-person')
-            .set('Accept', SupportedMimeType.CardJson);
-          let updatedCard = updatedCardResponse.body as LooseSingleCardDocument;
-          assert.strictEqual(updatedCard.data.attributes?.firstName, 'Updated');
+          // The atomic POST awaits indexing, so by 201 boxel_index should
+          // be updated. The remaining CI flake is read-path readiness —
+          // most often a slow first-instance prerender / module-cache
+          // populate that the GET is waiting on. Match the 30s budget
+          // publish-unpublish-realm-test uses for the same class of wait.
+          let updatedCard: LooseSingleCardDocument | undefined;
+          let lastStatus: number | undefined;
+          await waitUntil(
+            async () => {
+              let updatedCardResponse = await request
+                .get('/update-person')
+                .set('Accept', SupportedMimeType.CardJson);
+              lastStatus = updatedCardResponse.status;
+              updatedCard = updatedCardResponse.body as
+                | LooseSingleCardDocument
+                | undefined;
+              return updatedCard?.data?.attributes?.firstName === 'Updated';
+            },
+            {
+              timeout: 30_000,
+              interval: 100,
+              timeoutMessage: () =>
+                `updated firstName was not visible via /update-person (last GET status=${lastStatus}, last firstName=${JSON.stringify(updatedCard?.data?.attributes?.firstName)})`,
+            },
+          );
+          assert.strictEqual(
+            updatedCard?.data.attributes?.firstName,
+            'Updated',
+          );
         });
       });
       module('validation', function (hooks) {

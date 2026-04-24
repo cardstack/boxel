@@ -51,6 +51,7 @@ import type { SearchCardsByTypeAndTitleInput } from 'https://cardstack.com/base/
 import type { Skill } from 'https://cardstack.com/base/skill';
 
 import {
+  addSkillToAiAssistant,
   setupLocalIndexing,
   setupOnSave,
   testRealmURL,
@@ -650,19 +651,10 @@ module('Acceptance | Commands tests', function (hooks) {
           },
         ],
       ],
+      aiAssistantOpen: true,
     });
-    // open assistant
-    await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
-    // open skill menu
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-
-    // add useful-commands skill, which includes the switch-submode command
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/useful-commands"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/useful-commands`);
 
     // simulate message
     let roomId = getRoomIds().pop()!;
@@ -740,18 +732,10 @@ module('Acceptance | Commands tests', function (hooks) {
           },
         ],
       ],
+      aiAssistantOpen: true,
     });
-    // open assistant
-    await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
-    // open skill menu
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    // add useful-commands skill, which includes the switch-submode command
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/useful-commands"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/useful-commands`);
     // simulate message
     let roomId = getRoomIds().pop()!;
     simulateRemoteMessage(roomId, '@aibot:localhost', {
@@ -818,18 +802,10 @@ module('Acceptance | Commands tests', function (hooks) {
           },
         ],
       ],
+      aiAssistantOpen: true,
     });
-    // open assistant
-    await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
-    // open skill menu
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    // add useful-commands skill, which includes the switch-submode command
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/useful-commands"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/useful-commands`);
     // simulate message
     let roomId = getRoomIds().pop()!;
     simulateRemoteMessage(roomId, '@aibot:localhost', {
@@ -870,15 +846,10 @@ module('Acceptance | Commands tests', function (hooks) {
           },
         ],
       ],
+      aiAssistantOpen: true,
     });
-    await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/useful-commands"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/useful-commands`);
 
     let roomId = getRoomIds().pop()!;
     let description = 'Switching to code submode during preparation';
@@ -920,11 +891,10 @@ module('Acceptance | Commands tests', function (hooks) {
           },
         ],
       ],
+      aiAssistantOpen: true,
     });
     let roomId = getRoomIds().pop()!;
-    // open assistant, ShowCard command is part of default CardEditing skill
-    await click('[data-test-open-ai-assistant]');
-
+    // ShowCard command is part of default CardEditing skill
     // Need to create a new room so this new room will include skills card
     await waitFor('[data-test-message-field]');
     await fillIn(
@@ -949,7 +919,7 @@ module('Acceptance | Commands tests', function (hooks) {
             description:
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
-              cardId: 'http://test-realm/test/Person/hassan',
+              cardId: `${testRealmURL}Person/hassan`,
               cardInfo: { name: 'Asclepias' },
             },
           }),
@@ -1010,12 +980,10 @@ module('Acceptance | Commands tests', function (hooks) {
           },
         ],
       ],
+      aiAssistantOpen: true,
     });
     let roomId = getRoomIds().pop()!;
-    // open assistant, ShowCard command is part of default CardEditing skill
-    await click('[data-test-open-ai-assistant]');
-    await waitFor('[data-test-message-field]');
-
+    // ShowCard command is part of default CardEditing skill
     // Need to create a new room so this new room will include skills card
     await waitFor('[data-test-message-field]');
     await fillIn(
@@ -1040,7 +1008,7 @@ module('Acceptance | Commands tests', function (hooks) {
             description:
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
-              id: 'http://test-realm/test/Person/hassan',
+              id: `${testRealmURL}Person/hassan`,
               title: 'Asclepias',
             },
           }),
@@ -1065,16 +1033,10 @@ module('Acceptance | Commands tests', function (hooks) {
   test('multiple commands can be requested in a single aibot message', async function (assert) {
     await visitOperatorMode({
       stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+      aiAssistantOpen: true,
     });
-    await click('[data-test-open-ai-assistant]');
-    // open skill menu
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/useful-commands"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await waitFor('[data-room-settled]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/useful-commands`);
 
     // simulate message
     let roomId = getRoomIds().pop()!;
@@ -1115,20 +1077,13 @@ module('Acceptance | Commands tests', function (hooks) {
           },
         ],
       ],
+      aiAssistantOpen: true,
     });
 
-    await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
-    // open skill menu
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-
-    // add useful-commands skill, which includes the switch-submode command
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/useful-commands"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/useful-commands`);
+    await click('[data-test-skill-menu]');
     await click(
       '[data-test-skill-menu] [data-test-pill-menu-header] [data-test-pill-menu-button]',
     );
@@ -1329,7 +1284,7 @@ module('Acceptance | Commands tests', function (hooks) {
             description:
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
-              id: 'http://test-realm/test/Person/hassan',
+              id: `${testRealmURL}Person/hassan`,
               title: 'Asclepias',
             },
           }),

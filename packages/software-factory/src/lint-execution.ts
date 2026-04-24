@@ -154,9 +154,7 @@ export async function lintRealmFiles(
       let result = await options.client.read(realmUrl, path);
       return {
         ok: result.ok,
-        content:
-          result.content ??
-          (result.document ? JSON.stringify(result.document) : undefined),
+        content: result.content,
         error: result.error,
       };
     });
@@ -188,7 +186,7 @@ export async function lintRealmFiles(
         file,
       );
 
-      let violations: LintViolationData[] = lintResponse.messages.map(
+      let violations: LintViolationData[] = (lintResponse.messages ?? []).map(
         (msg) => ({
           rule: msg.ruleId ?? 'unknown',
           file,

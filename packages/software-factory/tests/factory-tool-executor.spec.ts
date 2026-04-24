@@ -245,7 +245,7 @@ import type { FactoryTool } from '../src/factory-tool-builder';
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
 type CardWriteResult = { ok: boolean; error?: string };
-type CardReadResult = { ok: boolean; document?: LooseSingleCardDocument };
+type CardReadResult = { ok: boolean; content?: string };
 
 async function buildToolsForRealm(
   realm: {
@@ -348,7 +348,8 @@ test('update_project writes and reads back a project card', async ({
     })) as CardReadResult;
 
     expect(readResult.ok).toBe(true);
-    expect(readResult.document!.data.attributes!.objective).toBe(
+    let doc = JSON.parse(readResult.content!) as LooseSingleCardDocument;
+    expect(doc.data.attributes!.objective).toBe(
       'Test project for update_project tool',
     );
   } finally {
@@ -387,10 +388,11 @@ test('update_issue writes and reads back an issue card', async ({ realm }) => {
     })) as CardReadResult;
 
     expect(readResult.ok).toBe(true);
-    expect(readResult.document!.data.attributes!.summary).toBe(
+    let doc = JSON.parse(readResult.content!) as LooseSingleCardDocument;
+    expect(doc.data.attributes!.summary).toBe(
       'Test issue for update_issue tool',
     );
-    expect(readResult.document!.data.attributes!.status).toBe('blocked');
+    expect(doc.data.attributes!.status).toBe('blocked');
   } finally {
     cleanup();
   }
@@ -453,7 +455,8 @@ test('add_comment appends a comment to an existing issue without changing other 
     })) as CardReadResult;
 
     expect(readResult.ok).toBe(true);
-    let attrs = readResult.document!.data.attributes!;
+    let doc = JSON.parse(readResult.content!) as LooseSingleCardDocument;
+    let attrs = doc.data.attributes!;
     // Original fields unchanged
     expect(attrs.summary).toBe('Issue for comment test');
     expect(attrs.description).toBe('Original description that must not change');
@@ -508,9 +511,8 @@ test('create_knowledge writes and reads back a knowledge article', async ({
     })) as CardReadResult;
 
     expect(readResult.ok).toBe(true);
-    expect(readResult.document!.data.attributes!.articleTitle).toBe(
-      'Test Knowledge Article',
-    );
+    let doc = JSON.parse(readResult.content!) as LooseSingleCardDocument;
+    expect(doc.data.attributes!.articleTitle).toBe('Test Knowledge Article');
   } finally {
     cleanup();
   }
@@ -551,8 +553,9 @@ test('create_catalog_spec writes and reads back a Spec card', async ({
     })) as CardReadResult;
 
     expect(readResult.ok).toBe(true);
-    expect(readResult.document!.data.attributes!.specType).toBe('card');
-    let adoptsFrom = readResult.document!.data.meta.adoptsFrom as {
+    let doc = JSON.parse(readResult.content!) as LooseSingleCardDocument;
+    expect(doc.data.attributes!.specType).toBe('card');
+    let adoptsFrom = doc.data.meta.adoptsFrom as {
       module: string;
       name: string;
     };

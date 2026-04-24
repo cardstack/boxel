@@ -241,17 +241,17 @@ export class RealmIssueStore implements IssueStore {
       this.realmUrl,
       ensureJsonExtension(issueId),
     );
-    if (!readResult.ok || !readResult.document) {
+    if (!readResult.ok || !readResult.content) {
       let reason =
         readResult.status === 404
           ? 'issue not found'
-          : (readResult.error ?? 'no document returned');
+          : (readResult.error ?? 'no content returned');
       throw new Error(
         `Failed to read issue "${issueId}" for update: ${reason}`,
       );
     }
 
-    let doc = readResult.document as unknown as LooseSingleCardDocument;
+    let doc = JSON.parse(readResult.content) as LooseSingleCardDocument;
     let attrs = (doc.data.attributes ?? {}) as Record<string, unknown>;
 
     if (updates.status != null) {
@@ -321,14 +321,14 @@ export class RealmIssueStore implements IssueStore {
       this.realmUrl,
       ensureJsonExtension(relativePath),
     );
-    if (!readResult.ok || !readResult.document) {
+    if (!readResult.ok || !readResult.content) {
       log.warn(
-        `Failed to read project "${relativePath}" for status update (status ${readResult.status ?? 'N/A'}): ${readResult.error ?? 'no document'}`,
+        `Failed to read project "${relativePath}" for status update (status ${readResult.status ?? 'N/A'}): ${readResult.error ?? 'no content'}`,
       );
       return;
     }
 
-    let doc = readResult.document as unknown as LooseSingleCardDocument;
+    let doc = JSON.parse(readResult.content) as LooseSingleCardDocument;
     let attrs = (doc.data.attributes ?? {}) as Record<string, unknown>;
     attrs.projectStatus = projectStatus;
     attrs.updatedAt = new Date().toISOString();

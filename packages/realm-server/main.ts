@@ -31,6 +31,7 @@ import {
   deregisterEnvironment,
 } from './lib/dev-service-registry';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
+import { runRegistryBackfill } from './lib/realm-registry-backfill';
 
 (globalThis as any).ContentTagGlobal = ContentTagGlobal;
 
@@ -299,6 +300,20 @@ const getIndexHTML = async () => {
 
   log.info('Clearing modules cache...');
   await definitionLookup.clearAllModules();
+
+  // Backfill realm_registry from CLI args (bootstrap), on-disk source realms,
+  // and on-disk published realms. Runs before Realm construction so the
+  // registry reflects known state before anything mounts. Shadow data only in
+  // Phase 1: no reader depends on these rows yet (see CS-10888, CS-10889).
+  await runRegistryBackfill({
+    dbAdapter,
+    realmsRootPath,
+    serverURL: new URL(String(serverURL)),
+    bootstrapRealms: paths.map((p, i) => ({
+      diskPath: String(p),
+      url: hrefs[i][0],
+    })),
+  });
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];

@@ -29,6 +29,10 @@ export default class CardErrorDetail extends Component<Signature> {
     return this.args.error.meta.stack ?? undefined;
   }
 
+  private get diagnostics() {
+    return this.args.error.meta.diagnostics ?? undefined;
+  }
+
   <template>
     <div class='error-detail' ...attributes>
       <ErrorDisplay
@@ -36,6 +40,7 @@ export default class CardErrorDetail extends Component<Signature> {
         @headerText={{@headerText}}
         @message={{if this.message this.message @error.title}}
         @stack={{this.stack}}
+        @diagnostics={{this.diagnostics}}
         @fileToAttach={{@fileToFixWithAi}}
         @viewInCodeMode={{@viewInCodeMode}}
         @cardId={{@error.id}}

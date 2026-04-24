@@ -57,6 +57,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
   private _instances = new TrackedArray<PrerenderedCard>();
   @tracked private _meta: QueryResultsMeta = { page: { total: 0 } };
   @tracked private _hasSearchRun = false;
+  @tracked private _lastSearchErrored = false;
 
   // Plain Set for storage + a tracked signal counter for reactivity.
   // Using TrackedSet would cause a Glimmer backtracking assertion because
@@ -94,6 +95,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
       this._instances = new TrackedArray();
       this._meta = { page: { total: 0 } };
       this._hasSearchRun = false;
+      this._lastSearchErrored = false;
     });
   }
 
@@ -125,6 +127,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
       this.subscriptions = [];
       this._instances = new TrackedArray();
       this._meta = { page: { total: 0 } };
+      this._lastSearchErrored = false;
       return;
     }
 
@@ -230,6 +233,13 @@ export class PrerenderedSearchResource extends Resource<Args> {
   // render cycle that reads it.
   get hasSearchRun() {
     return this._hasSearchRun;
+  }
+
+  // True when the most recent fetch attempt threw. Reset to false when a
+  // subsequent fetch succeeds. Consumers can use this to fall back to an
+  // alternate data source when the prerendered search is broken.
+  get lastSearchErrored() {
+    return this._lastSearchErrored;
   }
 
   get isLive() {
@@ -379,6 +389,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
 
         // Clear refresh flags
         this.realmsNeedingRefreshSet.clear();
+        this._lastSearchErrored = false;
       } catch (e) {
         console.error(
           `Failed to search prerendered for realms ${Array.from(
@@ -388,6 +399,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
         );
         this._instances.splice(0, this._instances.length);
         this._meta = { page: { total: 0 } };
+        this._lastSearchErrored = true;
       } finally {
         this._hasSearchRun = true;
         waiter.endAsync(token);
