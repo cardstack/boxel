@@ -27,8 +27,7 @@ If you know spreadsheets, you know the core idea. The difference: instead of cel
 
 > **Notice what changes between Excel and BXL:** no cell letters (`A1`), no absolute columns (`A:A`), no separate `ROWS()` to get the last position. Every row shows a different piece of sugar in action — labels replace cell references, implicit iteration replaces `map`, `[*pred]` replaces `SUMIF`, first-match `[pred]` replaces `VLOOKUP`, and positional selectors replace `INDEX`/`ROWS` arithmetic.
 
-> BXL formula arguments prefer **commas**, matching Excel style: `ROUND(.x, 2)`. Semicolons are still accepted for pasted jq-style input, but Solid and Readable BXL normalize them to commas. Compiled canonical jq keeps semicolons because jq function calls require them.  
-> Array literals also use **commas**: `[1, 2, 3]`.
+> **Commas for Excel, semicolons for `def`.** Built-in Excel formulas take commas to match spreadsheet paste: `ROUND("Unit Price", 2)`, `SUM(a, b, c)`. BXL rewrites the comma-separated argument list to jq's `;` form during compile so the runtime sees valid jq — that rewrite happens under the hood; `ROUND("Unit Price"; 2)` is not paste-compatible with Excel and is not a form authors write. The rewrite applies **only** to built-in Excel formulas: user-defined `def` helpers must use `;` at both the definition (`def clamp(lo; hi; x): …`) and the call (`clamp(0; 100; .score)`). Array literals also use **commas**: `[1, 2, 3]`.
 
 ### Naming convention: UPPERCASE is Excel, lowercase is BXL-native
 
@@ -826,7 +825,7 @@ Any BXL expression can open with its own named helpers. Syntax and scoping match
 | --- | --- |
 | `def name: body;` | Zero-arg helper. Applied as a pipeline filter: `.items \| map(name)`. |
 | `def name(arg): body;` | One-arg helper. Call site: `name(value)`. |
-| `def name(a; b; c): body;` | Multi-arg helper. **Definition and call both use `;`** to separate arguments — BXL's comma→semicolon rewrite applies to built-in Excel formulas, not to user `def`. |
+| `def name(a; b; c): body;` | Multi-arg helper. **Definition and call both use `;`.** BXL's comma-to-`;` rewrite is a convenience for Excel built-ins only — paste `ROUND("Unit Price", 2)` from a spreadsheet and BXL handles the translation to jq behind the scenes. User `def` calls don't get that rewrite; `clamp(0, 100, x)` won't resolve. |
 
 _Single-arg helper next to a built-in:_
 
