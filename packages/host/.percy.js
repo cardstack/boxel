@@ -15,6 +15,20 @@ module.exports = {
       .actions-overlay.selected {
         box-shadow: none !important;
       }
+      /*
+       * Land every CSS animation and transition on its final state so Percy
+       * captures aren't racing the animation clock. Negative delay + 1ms
+       * duration fast-forwards each animation past its last keyframe before
+       * the snapshot is taken, which removes the "sending message muted"
+       * and "retry button" opacity/colour mid-transition false positives.
+       */
+      *, *::before, *::after {
+        animation-delay: -1ms !important;
+        animation-duration: 1ms !important;
+        animation-iteration-count: 1 !important;
+        transition-delay: -1ms !important;
+        transition-duration: 1ms !important;
+      }
     `,
   },
 };
