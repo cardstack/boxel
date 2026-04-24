@@ -5,7 +5,6 @@ import Owner from '@ember/owner';
 
 import {
   CardDef,
-  FieldDef,
   Component,
   field,
   contains,
@@ -19,7 +18,6 @@ import NumberField from 'https://cardstack.com/base/number';
 import DateTimeField from 'https://cardstack.com/base/datetime';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import TextAreaField from 'https://cardstack.com/base/text-area';
-import enumField from 'https://cardstack.com/base/enum';
 
 import SquareKanban from '@cardstack/boxel-icons/square-kanban';
 
@@ -39,14 +37,31 @@ import {
   KanbanPlane,
   KanbanDragManager,
   type KanbanPlacement,
-} from './kanban-board';
+} from './kanban/index';
 import { StatusPill } from './status-pill';
 
-interface Option {
-  value: string;
-  label: string;
-  color?: string;
-}
+import {
+  type Option,
+  issueStatusOptions,
+  issueTypeOptions,
+  issuePriorityOptions,
+  defaultColumns,
+  findOptionColor,
+  buildIssueOptionFields,
+  IssueStatusField,
+  IssueTypeField,
+  IssuePriorityField,
+  ProjectStatusField,
+  GroupByField,
+  projectStatusOptions,
+} from './kanban-config';
+import { Comment } from './comment';
+import { KnowledgeArticle } from './knowledge-article';
+
+export { AgentProfile } from './agent-profile';
+export { KnowledgeArticle } from './knowledge-article';
+export { Comment } from './comment';
+export { KnowledgeTypeField } from './knowledge-article';
 
 const issueCodeRef = {
   // @ts-ignore this is not a CJS file, import.meta is allowed
@@ -54,359 +69,14 @@ const issueCodeRef = {
   name: 'Issue',
 };
 
-const issueStatusOptions: Option[] = [
-  { value: 'backlog', label: 'Backlog', color: 'var(--boxel-navy)' },
-  {
-    value: 'in_progress',
-    label: 'In Progress',
-    color: 'var(--boxel-warning-200)',
-  },
-  { value: 'blocked', label: 'Blocked', color: 'var(--boxel-red)' },
-  { value: 'review', label: 'In Review', color: 'var(--boxel-dark-green)' },
-  { value: 'done', label: 'Done', color: 'var(--boxel-purple)' },
-];
-
-const issueTypeOptions: Option[] = [
-  { value: 'bootstrap', label: 'Bootstrap' },
-  { value: 'feature', label: 'Feature' },
-  { value: 'bug', label: 'Bug' },
-  { value: 'task', label: 'Task' },
-  { value: 'research', label: 'Research' },
-  { value: 'infrastructure', label: 'Infrastructure' },
-];
-
-const issuePriorityOptions: Option[] = [
-  { value: 'critical', label: 'Critical' },
-  { value: 'high', label: 'High' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'low', label: 'Low' },
-];
-
-const projectStatusOptions: Option[] = [
-  { value: 'planning', label: 'Planning', color: 'var(--boxel-navy)' },
-  { value: 'active', label: 'Active', color: 'var(--boxel-dark-green)' },
-  { value: 'on_hold', label: 'On Hold', color: 'var(--boxel-orange)' },
-  { value: 'completed', label: 'Completed', color: 'var(--boxel-purple)' },
-  { value: 'archived', label: 'Archived', color: 'var(--boxel-500)' },
-];
-
-interface Column {
-  value: string;
-  label: string;
-  fieldName: string;
-  orderField: string;
-  options: Option[];
-}
-
-function findOptionColor(
-  options: Option[] | undefined,
-  value: string | null | undefined,
+function issueStatusColor(
+  statusOptions: IssueOptionField[] | undefined,
+  status: string | null | undefined,
 ): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-  return options?.find((option) => option.value === value)?.color;
-}
-
-function buildIssueOptionFields(options: Option[]): IssueOptionField[] {
-  return options.map((option) => new IssueOptionField(option));
-}
-
-function buildColumnConfig(options: Option[]): KanbanColumnField[] {
-  return options.map(
-    (option, index) =>
-      new KanbanColumnField({
-        key: option.value,
-        label: option.label,
-        color: option.color,
-        sortOrder: index,
-      }),
+  return findOptionColor(
+    statusOptions?.length ? (statusOptions as Option[]) : issueStatusOptions,
+    status ?? 'backlog',
   );
-}
-
-const defaultColumns: Column[] = [
-  {
-    value: 'status',
-    label: 'Status',
-    fieldName: 'status',
-    orderField: 'statusBoardOrder',
-    options: issueStatusOptions,
-  },
-  {
-    value: 'priority',
-    label: 'Priority',
-    fieldName: 'priority',
-    orderField: 'priorityBoardOrder',
-    options: issuePriorityOptions,
-  },
-  {
-    value: 'issueType',
-    label: 'Type',
-    fieldName: 'issueType',
-    orderField: 'issueTypeBoardOrder',
-    options: issueTypeOptions,
-  },
-];
-
-const IssueStatusField = enumField(StringField, {
-  options: function (this: any) {
-    const opts = this.kanbanBoard?.issueStatusOptions;
-    return opts?.length ? opts : issueStatusOptions;
-  },
-});
-
-const IssueTypeField = enumField(StringField, {
-  options: function (this: any) {
-    const opts = this.kanbanBoard?.issueTypeOptions;
-    return opts?.length ? opts : issueTypeOptions;
-  },
-});
-
-const IssuePriorityField = enumField(StringField, {
-  options: function (this: any) {
-    const opts = this.kanbanBoard?.issuePriorityOptions;
-    return opts?.length ? opts : issuePriorityOptions;
-  },
-});
-
-const ProjectStatusField = enumField(StringField, {
-  options: projectStatusOptions,
-});
-
-export const KnowledgeTypeField = enumField(StringField, {
-  options: [
-    { value: 'architecture', label: 'Architecture' },
-    { value: 'decision', label: 'Decision (ADR)' },
-    { value: 'runbook', label: 'Runbook' },
-    { value: 'context', label: 'Context' },
-    { value: 'api', label: 'API Reference' },
-    { value: 'onboarding', label: 'Onboarding' },
-  ],
-});
-
-export class AgentProfile extends CardDef {
-  static displayName = 'Agent Profile';
-
-  @field agentId = contains(StringField);
-  @field capabilities = containsMany(StringField);
-  @field specialization = contains(StringField);
-  @field notes = contains(MarkdownField);
-
-  @field cardTitle = contains(StringField, {
-    computeVia: function (this: AgentProfile) {
-      return this.cardInfo.name?.trim()?.length
-        ? this.cardInfo.name
-        : (this.agentId ?? 'Unnamed Agent');
-    },
-  });
-
-  static fitted = class Fitted extends Component<typeof AgentProfile> {
-    <template>
-      <div class='agent-card compact'>
-        <strong>{{if @model.agentId @model.agentId 'Unknown Agent'}}</strong>
-        {{#if @model.specialization}}
-          <span>{{@model.specialization}}</span>
-        {{/if}}
-      </div>
-      <style scoped>
-        .agent-card {
-          display: grid;
-          gap: 0.25rem;
-        }
-        .compact {
-          padding: 0.75rem;
-          border: 1px solid var(--border);
-          border-radius: 0.5rem;
-          background: var(--card);
-        }
-      </style>
-    </template>
-  };
-
-  static embedded = this.fitted;
-
-  static isolated = class Isolated extends Component<typeof AgentProfile> {
-    <template>
-      <article class='surface'>
-        <h1>{{if @model.agentId @model.agentId 'Unknown Agent'}}</h1>
-        {{#if @model.specialization}}<p>{{@model.specialization}}</p>{{/if}}
-        {{#if @model.capabilities.length}}
-          <section>
-            <h2>Capabilities</h2>
-            <ul>
-              {{#each @model.capabilities as |capability|}}
-                <li>{{capability}}</li>
-              {{/each}}
-            </ul>
-          </section>
-        {{/if}}
-        {{#if @model.notes}}
-          <section>
-            <h2>Notes</h2>
-            <@fields.notes />
-          </section>
-        {{/if}}
-      </article>
-      <style scoped>
-        .surface {
-          padding: 1.5rem;
-          display: grid;
-          gap: 1rem;
-        }
-      </style>
-    </template>
-  };
-}
-
-export class KnowledgeArticle extends CardDef {
-  static displayName = 'Knowledge Article';
-
-  @field articleTitle = contains(StringField);
-  @field articleType = contains(KnowledgeTypeField);
-  @field content = contains(MarkdownField);
-  @field tags = containsMany(StringField);
-  @field lastUpdatedBy = linksTo(() => AgentProfile);
-  @field updatedAt = contains(DateTimeField);
-
-  @field cardTitle = contains(StringField, {
-    computeVia: function (this: KnowledgeArticle) {
-      return this.cardInfo.name?.trim()?.length
-        ? this.cardInfo.name
-        : (this.articleTitle ?? 'Untitled Article');
-    },
-  });
-
-  static fitted = class Fitted extends Component<typeof KnowledgeArticle> {
-    <template>
-      <div class='knowledge-card compact'>
-        <div class='kicker'>{{if
-            @model.articleType
-            @model.articleType
-            'article'
-          }}</div>
-        <strong>{{if
-            @model.articleTitle
-            @model.articleTitle
-            'Untitled Article'
-          }}</strong>
-      </div>
-      <style scoped>
-        .knowledge-card {
-          display: grid;
-          gap: 0.25rem;
-        }
-        .compact {
-          padding: 0.75rem;
-          border: 1px solid var(--border);
-          border-radius: 0.5rem;
-          background: var(--card);
-        }
-        .kicker {
-          font-size: 0.75rem;
-          text-transform: uppercase;
-          color: var(--muted-foreground);
-        }
-      </style>
-    </template>
-  };
-
-  static embedded = this.fitted;
-
-  static isolated = class Isolated extends Component<typeof KnowledgeArticle> {
-    <template>
-      <article class='surface'>
-        <header>
-          <div class='kicker'>{{if
-              @model.articleType
-              @model.articleType
-              'article'
-            }}</div>
-          <h1>{{if
-              @model.articleTitle
-              @model.articleTitle
-              'Untitled Article'
-            }}</h1>
-        </header>
-        {{#if @model.tags.length}}
-          <section>
-            <h2>Tags</h2>
-            <ul>
-              {{#each @model.tags as |tag|}}
-                <li>{{tag}}</li>
-              {{/each}}
-            </ul>
-          </section>
-        {{/if}}
-        {{#if @model.content}}
-          <section>
-            <h2>Content</h2>
-            <@fields.content />
-          </section>
-        {{/if}}
-      </article>
-      <style scoped>
-        .surface {
-          padding: 1.5rem;
-          display: grid;
-          gap: 1rem;
-        }
-        .kicker {
-          font-size: 0.75rem;
-          text-transform: uppercase;
-          color: var(--muted-foreground);
-        }
-      </style>
-    </template>
-  };
-}
-
-export class Comment extends FieldDef {
-  static displayName = 'Comment';
-  @field body = contains(MarkdownField);
-  @field author = contains(StringField);
-  @field datetime = contains(DateTimeField);
-
-  static embedded = class Embedded extends Component<typeof Comment> {
-    <template>
-      <div class='comment'>
-        <div class='comment-header'>
-          <span class='comment-author'>{{@model.author}}</span>
-          {{#if @model.datetime}}
-            <span class='comment-date'><@fields.datetime /></span>
-          {{/if}}
-        </div>
-        <div class='comment-body'>
-          <@fields.body />
-        </div>
-      </div>
-      <style scoped>
-        .comment {
-          padding: 12px 0;
-          border-bottom: 1px solid var(--boxel-200);
-        }
-        .comment:last-child {
-          border-bottom: none;
-        }
-        .comment-header {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin-bottom: 4px;
-        }
-        .comment-author {
-          font-weight: 600;
-          font-size: var(--boxel-font-size-sm);
-        }
-        .comment-date {
-          color: var(--boxel-400);
-          font-size: var(--boxel-font-size-xs);
-        }
-        .comment-body {
-          font-size: var(--boxel-font-size-sm);
-        }
-      </style>
-    </template>
-  };
 }
 
 export class Issue extends CardDef {
@@ -441,12 +111,10 @@ export class Issue extends CardDef {
 
   static fitted = class Fitted extends Component<typeof Issue> {
     get statusColor(): string | undefined {
-      let project = this.args.model?.kanbanBoard as Project | null;
-      return findOptionColor(
-        ((project?.issueStatusOptions as Option[])?.length
-          ? (project?.issueStatusOptions as Option[])
-          : issueStatusOptions) as Option[],
-        this.args.model?.status ?? 'backlog',
+      const project = this.args.model?.kanbanBoard as Project | null;
+      return issueStatusColor(
+        project?.issueStatusOptions,
+        this.args.model?.status,
       );
     }
 
@@ -487,12 +155,10 @@ export class Issue extends CardDef {
 
   static isolated = class Isolated extends Component<typeof Issue> {
     get statusColor(): string | undefined {
-      let project = this.args.model?.kanbanBoard as Project | null;
-      return findOptionColor(
-        ((project?.issueStatusOptions as Option[])?.length
-          ? (project?.issueStatusOptions as Option[])
-          : issueStatusOptions) as Option[],
-        this.args.model?.status ?? 'backlog',
+      const project = this.args.model?.kanbanBoard as Project | null;
+      return issueStatusColor(
+        project?.issueStatusOptions,
+        this.args.model?.status,
       );
     }
 
@@ -600,14 +266,7 @@ export class Project extends CardDef {
   @field successCriteria = contains(MarkdownField);
   @field testArtifactsRealmUrl = contains(StringField);
   @field hideEmptyColumns = contains(BooleanField);
-  @field groupBy = contains(
-    enumField(StringField, {
-      options: defaultColumns.map(({ value, label }) => ({
-        value,
-        label,
-      })),
-    }),
-  );
+  @field groupBy = contains(GroupByField);
   @field issuePriorityOptions = containsMany(IssueOptionField);
   @field issueStatusOptions = containsMany(IssueOptionField);
   @field issueTypeOptions = containsMany(IssueOptionField);
@@ -619,20 +278,21 @@ export class Project extends CardDef {
       const source =
         defaultColumns.find((o) => o.value === this.groupBy) ??
         defaultColumns[0]!;
-      const boardOptions =
-        source.value === 'priority'
-          ? (this.issuePriorityOptions as Option[] | undefined)
-          : source.value === 'issueType'
-            ? (this.issueTypeOptions as Option[] | undefined)
-            : source.value === 'status'
-              ? (this.issueStatusOptions as Option[] | undefined)
-              : null;
-      const options = boardOptions?.length ? boardOptions : source.options;
-      const config = ((source.value === 'issueType'
-        ? this.typeColumnConfig
-        : source.value === 'priority'
-          ? this.priorityColumnConfig
-          : this.statusColumnConfig) ?? []) as KanbanColumnField[];
+      const boardOptionsByGroup: Record<string, IssueOptionField[]> = {
+        priority: this.issuePriorityOptions,
+        issueType: this.issueTypeOptions,
+        status: this.issueStatusOptions,
+      };
+      const configByGroup: Record<string, KanbanColumnField[]> = {
+        issueType: this.typeColumnConfig ?? [],
+        priority: this.priorityColumnConfig ?? [],
+        status: this.statusColumnConfig ?? [],
+      };
+      const boardOptions = boardOptionsByGroup[source.value];
+      const options: Option[] = boardOptions?.length
+        ? (boardOptions as Option[])
+        : source.options;
+      const config: KanbanColumnField[] = configByGroup[source.value] ?? [];
       return options
         .map((o, i) => {
           const stored = config.find((c) => c.key === o.value);
@@ -734,7 +394,7 @@ export class Project extends CardDef {
     get kanbanPlacements(): KanbanPlacement[] {
       const cards = this.args.model?.issues ?? [];
       const columns = this.args.model?.columns ?? [];
-      if ((cards as any[]).length === 0) return [];
+      if (cards.length === 0) return [];
       const maxSortOrder: Record<number, number> = {};
       const groupBy = this.args.model?.groupBy;
       const source =
@@ -757,7 +417,6 @@ export class Project extends CardDef {
         return { index, column, sortOrder };
       });
 
-      // Persist default order for cards that don't have one yet (e.g. newly added).
       // Deferred so the write doesn't happen during rendering.
       const uninitialized = placements.filter(
         (p) => (cards as any[])[p.index]?.[source.orderField] == null,
@@ -835,18 +494,13 @@ export class Project extends CardDef {
     get selectedGroupByOption():
       | { displayName: string; sort: string }
       | undefined {
-      let groupBy = (this.args.model as any)?.groupBy ?? 'status';
-      return (
-        this.groupByOptions.find((option) => option.sort === groupBy) ??
-        undefined
-      );
+      const groupBy = (this.args.model as any)?.groupBy ?? 'status';
+      return this.groupByOptions.find((option) => option.sort === groupBy);
     }
 
     onGroupByChange = (option: { displayName: string; sort: string }): void => {
-      let model = this.args.model as any;
-      if (!model || model.groupBy === option.sort) {
-        return;
-      }
+      const model = this.args.model as any;
+      if (!model || model.groupBy === option.sort) return;
       model.groupBy = option.sort;
     };
 
@@ -855,10 +509,8 @@ export class Project extends CardDef {
     }
 
     toggleHideEmptyColumns = (): void => {
-      let model = this.args.model as any;
-      if (!model) {
-        return;
-      }
+      const model = this.args.model as any;
+      if (!model) return;
       model.hideEmptyColumns = !this.hideEmptyColumns;
     };
 
@@ -893,7 +545,7 @@ export class Project extends CardDef {
       const groupBy = model.groupBy ?? 'status';
       const configField =
         groupBy === 'issueType'
-          ? 'issueColumnConfig'
+          ? 'typeColumnConfig'
           : groupBy === 'priority'
             ? 'priorityColumnConfig'
             : 'statusColumnConfig';
@@ -990,12 +642,6 @@ export class Project extends CardDef {
                 <SquareKanban />
                 <@fields.cardTitle />
               </h2>
-              {{!-- {{#if @model.dueDate}}
-              <div class='kanban-project'>
-                <span class='dim-label'>Due Date</span>
-                <@fields.dueDate @format='atom' />
-              </div>
-            {{/if}} --}}
             </div>
             <div>
               <span class='card-count'>{{this.cardCount}} cards</span>
@@ -1195,18 +841,6 @@ export class Project extends CardDef {
           margin: 0;
           letter-spacing: -0.01em;
         }
-        .kanban-project {
-          display: flex;
-          align-items: center;
-          gap: 0.375rem;
-        }
-        .dim-label {
-          font-size: 0.75rem;
-          font-weight: 500;
-          color: var(--kanban-muted-foreground);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
         .card-count {
           font-size: 0.75rem;
           color: var(--kanban-muted-foreground);
@@ -1338,109 +972,6 @@ export class Project extends CardDef {
       </style>
     </template>
   };
-  // static isolated = class Isolated extends Component<typeof Project> {
-  //   <template>
-  //     <article class='surface'>
-  //       <header>
-  //         <div class='row'>
-  //           <strong>{{if
-  //               @model.projectCode
-  //               @model.projectCode
-  //               'PROJECT'
-  //             }}</strong>
-  //           <span
-  //             class='status status-{{if
-  //                 @model.projectStatus
-  //                 @model.projectStatus
-  //                 "planning"
-  //               }}'
-  //           >{{if @model.projectStatus @model.projectStatus 'planning'}}</span>
-  //         </div>
-  //         <h1>{{if
-  //             @model.projectName
-  //             @model.projectName
-  //             'Untitled Project'
-  //           }}</h1>
-  //       </header>
-  //       {{#if @model.objective}}
-  //         <section>
-  //           <h2>Objective</h2>
-  //           <p>{{@model.objective}}</p>
-  //         </section>
-  //       {{/if}}
-  //       {{#if @model.scope}}
-  //         <section>
-  //           <h2>Scope</h2>
-  //           <@fields.scope />
-  //         </section>
-  //       {{/if}}
-  //       {{#if @model.technicalContext}}
-  //         <section>
-  //           <h2>Technical Context</h2>
-  //           <@fields.technicalContext />
-  //         </section>
-  //       {{/if}}
-  //       {{#if @model.successCriteria}}
-  //         <section>
-  //           <h2>Success Criteria</h2>
-  //           <@fields.successCriteria />
-  //         </section>
-  //       {{/if}}
-  //       {{#if @model.issues.length}}
-  //         <section>
-  //           <h2>Issues</h2>
-  //           <@fields.issues />
-  //         </section>
-  //       {{/if}}
-  //       {{#if @model.knowledgeBase.length}}
-  //         <section>
-  //           <h2>Knowledge Base</h2>
-  //           <@fields.knowledgeBase />
-  //         </section>
-  //       {{/if}}
-  //     </article>
-  //     <style scoped>
-  //       .surface {
-  //         padding: 1.5rem;
-  //         display: grid;
-  //         gap: 1rem;
-  //       }
-  //       .row {
-  //         display: flex;
-  //         justify-content: space-between;
-  //         align-items: center;
-  //         gap: 0.75rem;
-  //       }
-  //       .status {
-  //         font-size: 0.75rem;
-  //         text-transform: uppercase;
-  //         font-weight: 600;
-  //         padding: 0.125rem 0.5rem;
-  //         border-radius: 0.25rem;
-  //       }
-  //       .status-active {
-  //         color: var(--boxel-blue);
-  //         background: color-mix(in oklch, var(--boxel-blue) 12%, transparent);
-  //       }
-  //       .status-planning {
-  //         color: var(--boxel-400);
-  //         background: var(--muted);
-  //       }
-  //       .status-completed {
-  //         color: var(--boxel-green);
-  //         background: color-mix(in oklch, var(--boxel-green) 12%, transparent);
-  //       }
-  //       .status-on_hold {
-  //         color: var(--boxel-orange);
-  //         background: color-mix(in oklch, var(--boxel-orange) 12%, transparent);
-  //       }
-  //       .status-archived {
-  //         color: var(--boxel-400);
-  //         background: var(--muted);
-  //       }
-  //     </style>
-  //   </template>
-  // };
 
   // ── Edit ───────────────────────────────────────────────────────────
 
@@ -1448,7 +979,7 @@ export class Project extends CardDef {
     constructor(owner: Owner, args: any) {
       super(owner, args);
       Promise.resolve().then(() => {
-        let model = this.args.model as Project | undefined;
+        const model = this.args.model as Project | undefined;
         if (!model) return;
 
         if (!model.issuePriorityOptions?.length) {
@@ -1467,17 +998,6 @@ export class Project extends CardDef {
     get groupBy(): string {
       return (this.args.model as any)?.groupBy ?? 'status';
     }
-    get isStatus(): boolean {
-      return this.groupBy === 'status';
-    }
-    get isPriority(): boolean {
-      return this.groupBy === 'priority';
-    }
-    get colConfigLabel(): string {
-      if (this.groupBy === 'priority') return 'Priority Column Config';
-      if (this.groupBy === 'issueType') return 'Type Column Config';
-      return 'Status Column Config';
-    }
 
     <template>
       <div class='kanban-edit'>
@@ -1494,14 +1014,7 @@ export class Project extends CardDef {
           <FieldContainer @label='Status' @vertical={{true}}>
             <@fields.projectStatus />
           </FieldContainer>
-          {{!-- <FieldContainer @label='Due Date' @vertical={{true}}>
-            <@fields.dueDate />
-          </FieldContainer> --}}
         </div>
-
-        {{!-- <FieldContainer @label='Description' @vertical={{true}}>
-          <@fields.description />
-        </FieldContainer> --}}
 
         <div class='row'>
           <FieldContainer @label='Theme' @vertical={{true}}>
@@ -1627,7 +1140,7 @@ export class DarkFactory extends CardDef {
   @field description = contains(MarkdownField);
   @field activeProjects = linksToMany(() => Project);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: DarkFactory) {
       return this.cardInfo.name?.trim()?.length
         ? this.cardInfo.name
@@ -1638,18 +1151,11 @@ export class DarkFactory extends CardDef {
   static fitted = class Fitted extends Component<typeof DarkFactory> {
     <template>
       <div class='compact'>
-        <strong>{{if
-            @model.factoryName
-            @model.factoryName
-            'Dark Factory'
-          }}</strong>
+        <strong><@fields.cardTitle /></strong>
       </div>
       <style scoped>
         .compact {
           padding: 0.75rem;
-          border: 1px solid var(--border);
-          border-radius: 0.5rem;
-          background: var(--card);
         }
       </style>
     </template>
@@ -1660,7 +1166,7 @@ export class DarkFactory extends CardDef {
   static isolated = class Isolated extends Component<typeof DarkFactory> {
     <template>
       <article class='surface'>
-        <h1>{{if @model.factoryName @model.factoryName 'Dark Factory'}}</h1>
+        <h1><@fields.cardTitle /></h1>
         {{#if @model.description}}
           <section>
             <h2>Description</h2>
