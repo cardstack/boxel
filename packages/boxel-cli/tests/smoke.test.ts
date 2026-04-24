@@ -96,13 +96,29 @@ describe('boxel profile add (non-interactive)', () => {
     ).toBe(false);
   });
 
-  it('derives URLs from BOXEL_ENVIRONMENT when no URL flags are given', () => {
-    run(['-u', '@alice:my.server'], { BOXEL_ENVIRONMENT: 'production' });
+  it('derives URLs from the BOXEL_ENVIRONMENT slug', () => {
+    run(['-u', '@alice:cs-10998-foo.localhost'], {
+      BOXEL_ENVIRONMENT: 'cs-10998-foo',
+    });
 
     const config = readProfiles();
-    expect(config.profiles['@alice:my.server']).toMatchObject({
-      matrixUrl: 'https://matrix.boxel.ai',
-      realmServerUrl: 'https://app.boxel.ai/',
+    expect(config.profiles['@alice:cs-10998-foo.localhost']).toMatchObject({
+      matrixUrl: 'http://matrix.cs-10998-foo.localhost',
+      realmServerUrl: 'http://realm-server.cs-10998-foo.localhost/',
+    });
+  });
+
+  it('slugifies BOXEL_ENVIRONMENT like env-slug.sh (case, /, special chars)', () => {
+    // 'My/Branch_Name!' → lowercase 'my/branch_name!' → '/' becomes '-' →
+    // '_' and '!' are stripped (not in [a-z0-9-]) → 'my-branchname'.
+    run(['-u', '@alice:my-branchname.localhost'], {
+      BOXEL_ENVIRONMENT: 'My/Branch_Name!',
+    });
+
+    const config = readProfiles();
+    expect(config.profiles['@alice:my-branchname.localhost']).toMatchObject({
+      matrixUrl: 'http://matrix.my-branchname.localhost',
+      realmServerUrl: 'http://realm-server.my-branchname.localhost/',
     });
   });
 
@@ -116,7 +132,7 @@ describe('boxel profile add (non-interactive)', () => {
         '-r',
         'https://realms.my.server/',
       ],
-      { BOXEL_ENVIRONMENT: 'production' },
+      { BOXEL_ENVIRONMENT: 'cs-10998-foo' },
     );
 
     const config = readProfiles();
@@ -126,17 +142,15 @@ describe('boxel profile add (non-interactive)', () => {
     });
   });
 
-  it('exits 1 on an unknown BOXEL_ENVIRONMENT value', () => {
+  it('exits 1 when BOXEL_ENVIRONMENT slugifies to empty', () => {
     try {
-      run(['-u', '@alice:stack.cards'], { BOXEL_ENVIRONMENT: 'bogus' });
+      run(['-u', '@alice:stack.cards'], { BOXEL_ENVIRONMENT: '!!!' });
       throw new Error('expected command to exit non-zero');
     } catch (err) {
       const e = err as { status?: number; stderr?: string };
       expect(e.status).toBe(1);
-      expect(e.stderr).toMatch(/Unknown BOXEL_ENVIRONMENT/);
-      expect(e.stderr).toMatch(/staging/);
-      expect(e.stderr).toMatch(/production/);
-      expect(e.stderr).toMatch(/local/);
+      expect(e.stderr).toMatch(/BOXEL_ENVIRONMENT="!!!"/);
+      expect(e.stderr).toMatch(/no slug characters/);
     }
 
     expect(

@@ -109,7 +109,13 @@ export interface ProfileCommandOptions {
   realmServerUrl?: string;
 }
 
-const ENVIRONMENT_DEFAULTS = {
+interface EnvironmentDefaults {
+  domain: string;
+  matrixUrl: string;
+  realmServerUrl: string;
+}
+
+const MENU_ENVIRONMENTS: Record<'staging' | 'production' | 'local', EnvironmentDefaults> = {
   staging: {
     domain: 'stack.cards',
     matrixUrl: 'https://matrix-staging.stack.cards',
@@ -125,27 +131,36 @@ const ENVIRONMENT_DEFAULTS = {
     matrixUrl: 'http://localhost:8008',
     realmServerUrl: 'http://localhost:4201/',
   },
-} as const;
+};
 
-type EnvironmentDefaults =
-  (typeof ENVIRONMENT_DEFAULTS)[keyof typeof ENVIRONMENT_DEFAULTS];
+// Matches scripts/env-slug.sh: lowercase, "/" -> "-", strip chars outside
+// [a-z0-9-], collapse runs of "-", trim leading/trailing "-".
+function computeEnvSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\//g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
+// Derive URLs from BOXEL_ENVIRONMENT using the same ".${slug}.localhost"
+// pattern that mise-tasks/lib/env-vars.sh produces for env-mode local dev.
 function resolveBoxelEnvironment(): EnvironmentDefaults | null {
   const raw = process.env.BOXEL_ENVIRONMENT;
   if (!raw || !raw.trim()) return null;
-  const key = raw.trim().toLowerCase();
-  const defaults = (
-    ENVIRONMENT_DEFAULTS as Record<string, EnvironmentDefaults>
-  )[key];
-  if (!defaults) {
+  const slug = computeEnvSlug(raw);
+  if (!slug) {
     console.error(
-      `${FG_RED}Error:${RESET} Unknown BOXEL_ENVIRONMENT "${raw}". Expected one of: ${Object.keys(
-        ENVIRONMENT_DEFAULTS,
-      ).join(', ')}.`,
+      `${FG_RED}Error:${RESET} BOXEL_ENVIRONMENT="${raw}" contains no slug characters (expected letters, digits, or "-").`,
     );
     process.exit(1);
   }
-  return defaults;
+  return {
+    domain: `${slug}.localhost`,
+    matrixUrl: `http://matrix.${slug}.localhost`,
+    realmServerUrl: `http://realm-server.${slug}.localhost/`,
+  };
 }
 
 export async function profileCommand(
@@ -302,12 +317,12 @@ async function promptEnvironmentMenu(): Promise<{
   }
 
   if (envChoice === '3') {
-    return { ...ENVIRONMENT_DEFAULTS.local };
+    return { ...MENU_ENVIRONMENTS.local };
   }
   if (envChoice === '2') {
-    return { ...ENVIRONMENT_DEFAULTS.production };
+    return { ...MENU_ENVIRONMENTS.production };
   }
-  return { ...ENVIRONMENT_DEFAULTS.staging };
+  return { ...MENU_ENVIRONMENTS.staging };
 }
 
 async function addProfile(

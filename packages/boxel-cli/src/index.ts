@@ -40,9 +40,10 @@ program
     `
 Environment variables (for 'add'):
   BOXEL_PASSWORD       Password; preferred over -p to avoid shell history.
-  BOXEL_ENVIRONMENT    One of: staging, production, local. When set, Matrix
-                       and realm server URLs (and the default domain for
-                       the interactive flow) are derived from it. Overridden
+  BOXEL_ENVIRONMENT    An env-mode slug (e.g. a branch name), interpreted
+                       like mise-tasks/lib/env-vars.sh: URLs are derived
+                       as http://matrix.<slug>.localhost and
+                       http://realm-server.<slug>.localhost/. Overridden
                        by --matrix-url / --realm-server-url if provided.`,
   )
   .action(
