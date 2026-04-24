@@ -24,3 +24,4 @@ import './eval-execution.test';
 import './instantiate-step.test';
 import './parse-step.test';
 import './port-allocator.test';
+import './kanban-engine.test';
