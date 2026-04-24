@@ -1301,8 +1301,11 @@ module(basename(__filename), function () {
         name: 'CoalesceSame',
       });
 
-      // Flush queued microtasks so all three calls reach the in-flight gate
-      // before the prerender resolves.
+      // Yield to the event loop so all three calls drain through the
+      // buildLookupContext awaits and reach the in-flight gate before we
+      // release it. setTimeout(0) crosses the macrotask boundary, which
+      // drains every pending microtask — more reliable than a single
+      // `await Promise.resolve()` when there are several chained awaits.
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       releaseGate();
@@ -1505,6 +1508,105 @@ module(basename(__filename), function () {
         2,
         'stale cached error triggers a fresh prerender — in-flight slot was released after prior failure',
       );
+    });
+
+    test('invalidate drops in-flight entries so post-invalidation lookups do not join the stale promise', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+
+      let moduleURL = `${realmURL}coalesce-invalidate.gts`;
+      let calls = 0;
+      let releaseGate!: () => void;
+      let gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          let version = calls;
+          await gate;
+          let definitionId = internalKeyFor(
+            { module: args.url, name: 'CoalesceInvalidate' },
+            undefined,
+          );
+          let moduleAlias = trimExecutableExtension(new URL(args.url)).href;
+          return {
+            id: args.url,
+            status: 'ready',
+            nonce: 'test-nonce',
+            isShimmed: false,
+            lastModified: Date.now(),
+            createdAt: Date.now(),
+            deps: [],
+            definitions: {
+              [definitionId]: {
+                type: 'definition',
+                moduleURL: moduleAlias,
+                definition: {
+                  type: 'card-def',
+                  codeRef: {
+                    module: moduleAlias,
+                    name: 'CoalesceInvalidate',
+                  },
+                  displayName: `CoalesceInvalidate v${version}`,
+                  fields: {},
+                },
+                types: [],
+              },
+            },
+          };
+        },
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      // Caller A starts the prerender and parks at the gate.
+      let pA = lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'CoalesceInvalidate',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Invalidate while A is still in flight; this must drop the in-flight
+      // slot so caller B doesn't piggyback on A's pre-invalidation promise.
+      await lookup.invalidate(moduleURL);
+
+      let pB = lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'CoalesceInvalidate',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      releaseGate();
+      let [dA, dB] = await Promise.all([pA, pB]);
+
+      assert.strictEqual(
+        calls,
+        2,
+        'invalidate dropped the in-flight entry so caller B triggered its own prerender',
+      );
+      assert.strictEqual(dA?.displayName, 'CoalesceInvalidate v1');
+      assert.strictEqual(dB?.displayName, 'CoalesceInvalidate v2');
     });
   });
 });

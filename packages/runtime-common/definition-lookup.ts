@@ -77,10 +77,13 @@ function normalizeExecutableURL(url: string): string {
   }
 }
 
-// Dedup key matches the module cache row's identity:
-// (resolved_realm_url, cache_scope, auth_user_id, moduleURL). Two concurrent
-// callers that would hit the same row share one in-flight promise; callers
-// that would hit different rows do not collapse.
+// Application-level dedup key. Coalesces two concurrent lookups only when
+// they would hit the same (resolvedRealmURL, cache_scope, auth_user_id,
+// moduleURL) lookup context. This does NOT mirror the modules-table primary
+// key exactly: file_alias variants are intentionally not coalesced, because
+// a caller asking for an extensionless path walks a different
+// populationCandidates loop than a caller asking for `foo.gts` directly —
+// coalescing them could strand one behind the other's narrower search.
 function inFlightKey(args: {
   resolvedRealmURL: string;
   moduleURL: string;
@@ -499,6 +502,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     }
     let uniqueInvalidations = [...new Set(invalidations)];
     await this.deleteModuleAliases(resolvedRealmURL, uniqueInvalidations);
+    this.dropInFlightForRealm(resolvedRealmURL, uniqueInvalidations);
     return uniqueInvalidations;
   }
 
@@ -509,10 +513,47 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       'WHERE',
       ...(every([['resolved_realm_url =', param(realmURL)]]) as Expression),
     ]);
+    this.dropInFlightForRealm(realmURL);
   }
 
   async clearAllModules(): Promise<void> {
     await this.query(['DELETE FROM', MODULES_TABLE]);
+    this.#inFlight.clear();
+  }
+
+  // Drops in-flight entries whose pending prerender result would no longer
+  // be valid after a cache wipe, so post-invalidation callers don't join a
+  // pre-invalidation promise. If `moduleURLs` is provided, only entries
+  // under that realm matching one of those URLs are dropped; otherwise every
+  // in-flight entry for the realm is dropped. The already-running promises
+  // still complete (we can't cancel the prerender) and may re-persist a now-
+  // stale row, but that race is narrower than before and self-heals on the
+  // next fresh prerender. What this fully prevents is waiters joining the
+  // stale promise after the invalidation returned.
+  private dropInFlightForRealm(
+    resolvedRealmURL: string,
+    moduleURLs?: string[],
+  ): void {
+    if (this.#inFlight.size === 0) {
+      return;
+    }
+    if (!moduleURLs) {
+      let prefix = `${resolvedRealmURL}|`;
+      for (let key of [...this.#inFlight.keys()]) {
+        if (key.startsWith(prefix)) {
+          this.#inFlight.delete(key);
+        }
+      }
+      return;
+    }
+    for (let moduleURL of moduleURLs) {
+      let prefix = `${resolvedRealmURL}|${moduleURL}|`;
+      for (let key of [...this.#inFlight.keys()]) {
+        if (key.startsWith(prefix)) {
+          this.#inFlight.delete(key);
+        }
+      }
+    }
   }
 
   registerRealm(realm: LocalRealm): void {
