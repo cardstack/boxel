@@ -1608,5 +1608,286 @@ module(basename(__filename), function () {
       assert.strictEqual(dA?.displayName, 'CoalesceInvalidate v1');
       assert.strictEqual(dB?.displayName, 'CoalesceInvalidate v2');
     });
+
+    test('in-flight prerender result is dropped when invalidate runs concurrently', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+
+      let moduleURL = `${realmURL}stale-persist-invalidate.gts`;
+      let calls = 0;
+      let releaseGate!: () => void;
+      let gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          await gate;
+          return buildModuleResponse(args.url, 'StalePersist', []);
+        },
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      // Caller A starts the prerender and parks at the gate.
+      let pA = lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'StalePersist',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Invalidate while A is mid-prerender.
+      await lookup.invalidate(moduleURL);
+
+      // Release A's prerender. Without the generation guard, A would
+      // INSERT ... ON CONFLICT DO UPDATE and re-create the row that
+      // invalidate just deleted.
+      releaseGate();
+      let result = await Promise.allSettled([pA]);
+      assert.strictEqual(
+        result[0].status,
+        'rejected',
+        'A rejects because the post-skip readFromDatabaseCache misses (row was deleted)',
+      );
+      assert.strictEqual(
+        calls,
+        1,
+        'prerenderModule was still called once (no double-prerender)',
+      );
+
+      let rows = (await dbAdapter.execute(
+        `SELECT url FROM modules WHERE url = $1`,
+        { bind: [moduleURL] },
+      )) as { url: string }[];
+      assert.strictEqual(
+        rows.length,
+        0,
+        'invalidate is honored — no zombie row from A persist',
+      );
+    });
+
+    test('in-flight prerender result is dropped when clearRealmCache runs concurrently', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+
+      let moduleURL = `${realmURL}stale-persist-clear-realm.gts`;
+      let calls = 0;
+      let releaseGate!: () => void;
+      let gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          await gate;
+          return buildModuleResponse(args.url, 'StalePersistClearRealm', []);
+        },
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      let pA = lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'StalePersistClearRealm',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      await lookup.clearRealmCache(realmURL);
+
+      releaseGate();
+      let result = await Promise.allSettled([pA]);
+      assert.strictEqual(
+        result[0].status,
+        'rejected',
+        'A rejects after clearRealmCache leaves an empty cache',
+      );
+      assert.strictEqual(calls, 1);
+
+      let rows = (await dbAdapter.execute(
+        `SELECT url FROM modules WHERE url = $1`,
+        { bind: [moduleURL] },
+      )) as { url: string }[];
+      assert.strictEqual(
+        rows.length,
+        0,
+        'clearRealmCache is honored — A did not re-insert the row',
+      );
+    });
+
+    test('in-flight prerender result is dropped when clearAllModules runs concurrently', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+
+      // clearAllModules drains state for every realm — including realms
+      // that have never been individually invalidated. Use a fresh module
+      // URL so the realm has no #generations entry going in; this guards
+      // against the per-realm map missing the realm at clear time.
+      let moduleURL = `${realmURL}stale-persist-clear-all.gts`;
+      let calls = 0;
+      let releaseGate!: () => void;
+      let gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          await gate;
+          return buildModuleResponse(args.url, 'StalePersistClearAll', []);
+        },
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      let pA = lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'StalePersistClearAll',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      await lookup.clearAllModules();
+
+      releaseGate();
+      let result = await Promise.allSettled([pA]);
+      assert.strictEqual(
+        result[0].status,
+        'rejected',
+        'A rejects after clearAllModules leaves an empty cache',
+      );
+      assert.strictEqual(calls, 1);
+
+      let rows = (await dbAdapter.execute(
+        `SELECT url FROM modules WHERE url = $1`,
+        { bind: [moduleURL] },
+      )) as { url: string }[];
+      assert.strictEqual(
+        rows.length,
+        0,
+        'clearAllModules is honored — A did not re-insert the row',
+      );
+    });
+
+    test('in-flight prerender persists normally when no invalidate runs', async function (assert) {
+      // Regression guard against the generation check skipping persist
+      // in the happy path (no concurrent invalidation).
+      await dbAdapter.execute('DELETE FROM modules');
+
+      let moduleURL = `${realmURL}stale-persist-happy-path.gts`;
+      let calls = 0;
+      let releaseGate!: () => void;
+      let gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          await gate;
+          return buildModuleResponse(args.url, 'StalePersistHappy', []);
+        },
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      let pA = lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'StalePersistHappy',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      releaseGate();
+      let definition = await pA;
+      assert.strictEqual(definition?.displayName, 'StalePersistHappy');
+      assert.strictEqual(calls, 1);
+
+      let rows = (await dbAdapter.execute(
+        `SELECT url FROM modules WHERE url = $1`,
+        { bind: [moduleURL] },
+      )) as { url: string }[];
+      assert.strictEqual(
+        rows.length,
+        1,
+        'persist proceeded normally when nothing invalidated mid-flight',
+      );
+    });
   });
 });

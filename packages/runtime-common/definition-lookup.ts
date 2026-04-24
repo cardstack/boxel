@@ -199,6 +199,19 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   // cache row so a single prerenderer round-trip is shared by all waiters
   // instead of each caller racing to the prerenderer independently.
   #inFlight = new Map<string, Promise<ModuleCacheEntry | undefined>>();
+  // Invalidation generations. Bumped synchronously by invalidate /
+  // clearRealmCache / clearAllModules before the DB delete.
+  // loadModuleCacheEntryUncached snapshots both values at entry and
+  // re-checks them just before persist; if either changed, the in-flight
+  // prerender's result is discarded rather than re-inserted, so the cache
+  // wipe isn't undone by a prerender that started against pre-invalidation
+  // state. Two scopes:
+  //   - #generations: per-realm; bumped by per-realm invalidation paths.
+  //   - #globalGeneration: bumped only by clearAllModules so an in-flight
+  //     for a realm that hasn't been invalidated individually still
+  //     observes the wipe (the per-realm counter would miss it).
+  #generations = new Map<string, number>();
+  #globalGeneration = 0;
 
   constructor(
     dbAdapter: DBAdapter,
@@ -330,6 +343,13 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       return cached;
     }
 
+    // Snapshot the realm's invalidation generation before we kick off the
+    // prerender. If invalidate / clearRealmCache / clearAllModules runs while
+    // we're prerendering, the generation will bump synchronously (before the
+    // DB delete commits), and the check just before persist below will skip
+    // re-inserting a result that reflects pre-invalidation state.
+    let startSnapshot = this.snapshotGeneration(resolvedRealmURL);
+
     for (let candidateURL of this.populationCandidates(moduleURL)) {
       if (candidateURL !== moduleURL) {
         let candidateCached = await this.readFromDatabaseCache(
@@ -353,6 +373,19 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       ) {
         continue;
       }
+      if (this.generationChanged(resolvedRealmURL, startSnapshot)) {
+        // Invalidate (or a wider cache wipe) ran while we were prerendering.
+        // Discard our now-stale result rather than re-inserting it. Fall
+        // back to whatever the DB currently has — undefined if the wipe
+        // just deleted, or a fresher row if a peer has already
+        // re-prerendered post-invalidation.
+        return await this.readFromDatabaseCache(
+          candidateURL,
+          cacheScope,
+          cacheUserId,
+          resolvedRealmURL,
+        );
+      }
       return await this.persistModuleCacheEntry(
         candidateURL,
         response,
@@ -362,6 +395,33 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       );
     }
     return undefined;
+  }
+
+  private snapshotGeneration(resolvedRealmURL: string): {
+    perRealm: number;
+    global: number;
+  } {
+    return {
+      perRealm: this.#generations.get(resolvedRealmURL) ?? 0,
+      global: this.#globalGeneration,
+    };
+  }
+
+  private generationChanged(
+    resolvedRealmURL: string,
+    snapshot: { perRealm: number; global: number },
+  ): boolean {
+    return (
+      (this.#generations.get(resolvedRealmURL) ?? 0) !== snapshot.perRealm ||
+      this.#globalGeneration !== snapshot.global
+    );
+  }
+
+  private bumpGeneration(resolvedRealmURL: string): void {
+    this.#generations.set(
+      resolvedRealmURL,
+      (this.#generations.get(resolvedRealmURL) ?? 0) + 1,
+    );
   }
 
   // Returns true if the cached entry has a top-level error and has exceeded
@@ -501,12 +561,20 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       );
     }
     let uniqueInvalidations = [...new Set(invalidations)];
-    await this.deleteModuleAliases(resolvedRealmURL, uniqueInvalidations);
+    // Order matters: bump generation + drop in-flight synchronously BEFORE
+    // awaiting the DB delete. Any in-flight prerender that completes
+    // between this point and the DELETE commit will see the new generation
+    // when it's about to persist and will discard its result instead of
+    // re-inserting a row that this invalidation just removed.
+    this.bumpGeneration(resolvedRealmURL);
     this.dropInFlightForRealm(resolvedRealmURL, uniqueInvalidations);
+    await this.deleteModuleAliases(resolvedRealmURL, uniqueInvalidations);
     return uniqueInvalidations;
   }
 
   async clearRealmCache(resolvedRealmURL: string): Promise<void> {
+    this.bumpGeneration(resolvedRealmURL);
+    this.dropInFlightForRealm(resolvedRealmURL);
     await this.query([
       'DELETE FROM',
       MODULES_TABLE,
@@ -515,12 +583,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         ['resolved_realm_url =', param(resolvedRealmURL)],
       ]) as Expression),
     ]);
-    this.dropInFlightForRealm(resolvedRealmURL);
   }
 
   async clearAllModules(): Promise<void> {
-    await this.query(['DELETE FROM', MODULES_TABLE]);
+    this.#globalGeneration += 1;
     this.#inFlight.clear();
+    await this.query(['DELETE FROM', MODULES_TABLE]);
   }
 
   // Drops in-flight entries whose pending prerender result would no longer
