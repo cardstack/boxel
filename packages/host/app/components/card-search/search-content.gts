@@ -226,6 +226,23 @@ export default class SearchContent extends Component<Signature> {
     );
   }
 
+  // Only query realms that actually host one of the recent cards. The main
+  // searchResource hits every available realm (good for free-text search),
+  // but for Recents we already know the exact URL of each card, so searching
+  // realms that can't possibly contain them is pointless — and in tests
+  // that mix origins (e.g. baseRealm + testRealm + testModuleRealm at a
+  // different server), assertOwnRealmServer throws on the mixed set.
+  private get recentsSearchRealms(): string[] {
+    const realms = new Set<string>();
+    for (const url of this.recentCardUrls) {
+      const realm = this.realms.find((r) => url.startsWith(r));
+      if (realm) {
+        realms.add(realm);
+      }
+    }
+    return [...realms];
+  }
+
   // Recents always render as prerendered HTML to avoid fetching card
   // modules when the search sheet opens. Compact mode uses an empty query
   // and reorders results client-side to localStorage timestamp order;
@@ -267,7 +284,7 @@ export default class SearchContent extends Component<Signature> {
           selectedTypeIds,
         ),
         format: 'fitted' as const,
-        realms: this.realms,
+        realms: this.recentsSearchRealms,
         cardUrls: this.recentCardUrls,
         isLive: true,
         cardComponentModifier: this.cardComponentModifier,
