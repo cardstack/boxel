@@ -298,6 +298,8 @@ BXL:    "Line Item"[SKU = "BRAND-RED"]."Unit Price"
 
 XQuery (W3C) showed that a query grammar can grow into a full expression language — let-bindings, conditionals, sequence composition, and data reshape — without bolting on a separate scripting layer. BXL stays smaller (no FLWOR keywords, no XML schema types, no modules) but adopts the same premise: one language should cover computation *and* reshape, not just lookup.
 
+FLWOR is XQuery's five-clause expression: **F**or (iterate) · **L**et (bind) · **W**here (filter) · **O**rder by (sort) · **R**eturn (shape).
+
 **Filter and aggregate:**
 
 ```xquery
@@ -319,25 +321,32 @@ XQuery:
   <customer>{ $inv/billTo/name/text() }</customer>
   <subtotal>{ sum($inv/lineItem/lineTotal) }</subtotal>
   <top-items>{
-    for $li in $inv/lineItem
-    order by $li/lineTotal descending
-    return <item sku="{$li/@sku}" total="{$li/lineTotal}"/>
+    for $li in $inv/lineItem                          (: F · for each line item :)
+    let $total := $li/lineTotal                       (: L · let :)
+    where $total > 0                                  (: W · where positive :)
+    order by $total descending                        (: O · order by (desc) :)
+    return <item sku="{$li/@sku}" total="{$total}"/>  (: R · return shape :)
   }</top-items>
 </summary>
 ```
 ```bxl
-BXL:
+BXL (jq, plus SUM from the Excel layer):
+. as $inv |                                       # bind root (XQuery's $inv)
 {
-  id:         Id,
-  customer:   "Bill To".Name,
-  subtotal:   SUM("Line Item"."Line Total"),
-  top_items:  "Line Item"[all]
-              | sort_by(.lineTotal) | reverse
-              | map({sku: .sku, total: .lineTotal})
+  id:         $inv.id,
+  customer:   $inv.billTo.name,
+  subtotal:   SUM([$inv.lineItem[].lineTotal]),
+  top_items:  [ $inv.lineItem[]                   # F · for each line item
+                | .lineTotal as $total            # L · let
+                | select($total > 0)              # W · where positive
+                | {sku: .sku, total: $total} ]    # R · return shape
+              | sort_by(.total) | reverse         # O · order by (desc)
 }
 ```
 
-XQuery constructs XML trees element-by-element, with templating inline. BXL constructs JSON objects with native object-literal syntax. Different output shapes, same premise: one language for both querying and reshaping. (Note the convention from §2: readable labels at the top level, jq-native `.path` inside pipe stages like `map` and `sort_by`.)
+This port is almost entirely jq — `. as $inv | {...}`, `.lineItem[]`, `as $total`, `select`, `sort_by` are all stock jq; only `SUM(...)` is borrowed from BXL's Excel layer (pure jq would write `add` instead). BXL inherits jq's `#` line comments and `as $var` bindings, so each FLWOR clause has a line-for-line twin. Iteration and `return` sit inside the `[ ... ]` comprehension; `order by` applies to the collected list after. (Readable Excel-style labels like `"Line Item"` are available too — see §2 — but this example stays in jq flavor for XQuery parity.)
+
+XQuery constructs XML trees element-by-element, with templating inline. BXL constructs JSON objects with native object-literal syntax. Different output shapes, same premise: one language for both querying and reshaping. (Note the convention from §2: readable labels at the top level, jq-native `.path` inside pipe stages like `map`, `select`, and `sort_by`.)
 
 ### 5 · Schematron · the validation-rule shape, newly relevant
 
