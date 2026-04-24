@@ -1,7 +1,6 @@
 import { tracked } from '@glimmer/tracking';
 import { dropTask } from 'ember-concurrency';
-import { fn, get } from '@ember/helper';
-import { on } from '@ember/modifier';
+import { get } from '@ember/helper';
 import Owner from '@ember/owner';
 
 import {
@@ -20,34 +19,23 @@ import DateTimeField from 'https://cardstack.com/base/datetime';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import TextAreaField from 'https://cardstack.com/base/text-area';
 
-import SquareKanban from '@cardstack/boxel-icons/square-kanban';
-
-import {
-  ContextButton,
-  Pill,
-  SortDropdown,
-  Switch,
-  FieldContainer,
-} from '@cardstack/boxel-ui/components';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import { realmURL } from '@cardstack/runtime-common';
 
 import { IssueOptionField } from './issue-option';
 import { KanbanColumnField } from './kanban-column';
-import {
-  KanbanPlane,
-  KanbanDragManager,
-  type KanbanColumnConfig,
-  type KanbanPlacement,
-} from '@cardstack/boxel-ui/components';
+import { KanbanPlane } from '@cardstack/boxel-ui/components';
 import { StatusPill } from './status-pill';
+import { ProjectKanbanController } from './project-kanban-controller';
+import { ProjectKanbanSettingsPanel } from './project-kanban-settings-panel';
+import { ProjectKanbanToolbar } from './project-kanban-toolbar';
 
 import {
   type Option,
   issueStatusOptions,
   issueTypeOptions,
   issuePriorityOptions,
-  defaultColumns,
   findOptionColor,
   buildIssueOptionFields,
   IssueStatusField,
@@ -66,7 +54,7 @@ export { Comment } from './comment';
 export { KnowledgeTypeField } from './knowledge-article';
 
 const issueCodeRef = {
-  // @ts-ignore this is not a CJS file, import.meta is allowed
+  // @ts-expect-error this is not a CJS file, import.meta is allowed
   module: new URL('./darkfactory', import.meta.url).href,
   name: 'Issue',
 };
@@ -248,277 +236,98 @@ export class Issue extends CardDef {
 class ProjectIsolated extends Component<typeof Project> {
   @tracked selectedCardIndex: number | null = null;
   @tracked showSettings = false;
-  dragManager: KanbanDragManager | null = null;
-  private orderInitPending = false;
+  board: ProjectKanbanController;
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
-    this.initManager();
-  }
-
-  initManager(): void {
-    this.dragManager = new KanbanDragManager({
-      placements: () => this.kanbanPlacements,
-      columnCount: () => this.kanbanColumns.length || 4,
-      containerElement: () => null,
-      onChange: (newPlacements) => this.commitPlacements(newPlacements),
-      onSelect: (index) => {
+    this.board = new ProjectKanbanController(
+      () => this.args.model,
+      () => this.realmURL,
+      issueCodeRef,
+      this.args.createCard,
+      this.args.viewCard,
+      (index) => {
         this.selectedCardIndex = index;
       },
-      onOpen: (index) => {
-        const card = this.args.model?.issues?.[index];
-        if (card) this.args.viewCard?.(card, 'isolated');
-      },
-    });
-  }
-
-  get kanbanPlacements(): KanbanPlacement[] {
-    const placements = this.computePlacements();
-    this.scheduleOrderInit(placements);
-    return placements;
-  }
-
-  private computePlacements(): KanbanPlacement[] {
-    const cards = this.args.model?.issues ?? [];
-    const columns = this.kanbanColumns;
-    if (cards.length === 0) return [];
-    const maxSortOrder: Record<number, number> = {};
-    const source = this.groupBySource;
-    return cards.map((card: any, index: number) => {
-      const value = card[source.fieldName];
-      const colIndex = columns.findIndex((col) => col.key === value);
-      const column = colIndex >= 0 ? colIndex : 0;
-      const stored = card[source.orderField];
-      if (stored != null) {
-        maxSortOrder[column] = Math.max(maxSortOrder[column] ?? 0, stored);
-        return { index, column, sortOrder: stored };
-      }
-      maxSortOrder[column] = (maxSortOrder[column] ?? 0) + 1;
-      return { index, column, sortOrder: maxSortOrder[column]! };
-    });
-  }
-
-  // Deferred so the write doesn't happen during rendering.
-  private scheduleOrderInit(placements: KanbanPlacement[]): void {
-    if (this.orderInitPending) return;
-    const cards = this.args.model?.issues ?? [];
-    const orderField = this.groupBySource.orderField;
-    const uninitialized = placements.filter(
-      (p) => (cards[p.index] as any)?.[orderField] == null,
     );
-    if (uninitialized.length === 0) return;
-    this.orderInitPending = true;
-    Promise.resolve().then(() => {
-      this.orderInitPending = false;
-      for (const p of uninitialized) {
-        const card = cards[p.index] as any;
-        if (card?.[orderField] == null) card[orderField] = p.sortOrder;
-      }
-    });
   }
 
-  get manager(): KanbanDragManager {
-    return this.dragManager!;
+  get manager() {
+    return this.board.manager;
   }
 
-  get kanbanColumns(): KanbanColumnConfig[] {
-    const model = this.args.model;
-    if (!model) return [];
-    const source =
-      defaultColumns.find((o) => o.value === model.groupBy) ??
-      defaultColumns[0]!;
-    const boardOptionsByGroup: Record<string, IssueOptionField[]> = {
-      priority: model.issuePriorityOptions ?? [],
-      issueType: model.issueTypeOptions ?? [],
-      status: model.issueStatusOptions ?? [],
-    };
-    const configByGroup: Record<string, KanbanColumnField[]> = {
-      issueType: model.typeColumnConfig ?? [],
-      priority: model.priorityColumnConfig ?? [],
-      status: model.statusColumnConfig ?? [],
-    };
-    const boardOptions = boardOptionsByGroup[source.value];
-    const options: Option[] = boardOptions?.length
-      ? (boardOptions as Option[])
-      : source.options;
-    const config: KanbanColumnField[] = configByGroup[source.value] ?? [];
-    return options
-      .map((o, i) => {
-        const stored = config.find((c) => c.key === o.value);
-        return {
-          key: o.value,
-          label: o.label,
-          color: stored?.color ?? o.color ?? null,
-          wipLimit: stored?.wipLimit ?? null,
-          collapsed: stored?.collapsed ?? null,
-          sortOrder: stored?.sortOrder ?? i,
-        };
-      })
-      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  get kanbanPlacements() {
+    return this.board.kanbanPlacements;
+  }
+
+  get kanbanColumns() {
+    return this.board.kanbanColumns;
   }
 
   get cardCount(): number {
-    return this.args.model?.issues?.length ?? 0;
+    return this.board.cardCount;
   }
 
   get realmURL(): URL | undefined {
     return (this.args.model as any)[realmURL];
   }
 
-  get groupBySource() {
-    const groupBy = this.args.model?.groupBy;
-    return defaultColumns.find((o) => o.value === groupBy) ?? defaultColumns[0]!;
-  }
-
-  private get activeColumnConfig(): KanbanColumnField[] {
-    const model = this.args.model;
-    if (!model) return [];
-    const groupBy = model.groupBy ?? 'status';
-    if (groupBy === 'issueType') return model.typeColumnConfig ?? [];
-    if (groupBy === 'priority') return model.priorityColumnConfig ?? [];
-    return model.statusColumnConfig ?? [];
-  }
-
   addCardToColumn = dropTask(async (columnKey: string | null | undefined) => {
-    if (!columnKey) return;
-    const model = this.args.model;
-    if (!model) return;
-
-    const source = this.groupBySource;
-    const attributeName = source.fieldName;
-    const projectCardId = model.id ?? null;
-
-    await this.args.createCard?.(issueCodeRef, new URL(issueCodeRef.module), {
-      realmURL: this.realmURL,
-      doc: {
-        data: {
-          type: 'card',
-          attributes: { [attributeName]: columnKey },
-          relationships: {
-            project: { links: { self: projectCardId } },
-          },
-          meta: { adoptsFrom: issueCodeRef },
-        },
-      },
-    });
+    await this.board.addCardToColumn(columnKey);
   });
 
   get groupByOptions(): { displayName: string; sort: string }[] {
-    return defaultColumns.map(({ value, label }) => ({
-      displayName: label,
-      sort: value,
-    }));
+    return this.board.groupByOptions;
   }
 
   get selectedGroupByOption():
     | { displayName: string; sort: string }
     | undefined {
-    const groupBy = this.args.model?.groupBy ?? 'status';
-    return this.groupByOptions.find((option) => option.sort === groupBy);
+    return this.board.selectedGroupByOption;
   }
 
   onGroupByChange = (option: { displayName: string; sort: string }): void => {
-    if (!this.args.model || this.args.model.groupBy === option.sort) return;
-    this.args.model.groupBy = option.sort;
+    this.board.setGroupBy(option.sort);
   };
 
   get hideEmptyColumns(): boolean {
-    return Boolean(this.args.model?.hideEmptyColumns);
+    return this.board.hideEmptyColumns;
   }
 
   toggleHideEmptyColumns = (): void => {
-    const model = this.args.model;
-    if (!model) return;
-    model.hideEmptyColumns = !this.hideEmptyColumns;
-  };
-
-  // ── Persistence ──────────────────────────────────────────────────
-
-  commitPlacements = (newPlacements: KanbanPlacement[]): void => {
-    const model = this.args.model;
-    if (!model) return;
-    const cards = model.issues;
-    const columns = this.kanbanColumns;
-    if (!cards) return;
-    const source = this.groupBySource;
-    for (const np of newPlacements) {
-      const card = cards[np.index] as any;
-      const col = columns[np.column];
-      if (card && col) {
-        if (card[source.fieldName] !== col.key)
-          card[source.fieldName] = col.key;
-        if (card[source.orderField] !== np.sortOrder)
-          card[source.orderField] = np.sortOrder;
-      }
-    }
+    this.board.toggleHideEmptyColumns();
   };
 
   // ── Settings ─────────────────────────────────────────────────────
-
-  setColumnConfig = (key: string, patch: Record<string, unknown>): void => {
-    const model = this.args.model;
-    if (!model) return;
-    const cols = this.activeColumnConfig;
-    const cfg = cols.find((c) => c.key === key) as any;
-    if (cfg) {
-      for (const [k, v] of Object.entries(patch)) {
-        cfg[k] = v;
-      }
-    } else {
-      cols.push(new KanbanColumnField({ key, ...patch }));
-    }
-  };
 
   toggleSettings = (): void => {
     this.showSettings = !this.showSettings;
   };
 
   onColorChange = (key: string | null | undefined, event: Event): void => {
-    if (!key) return;
-    this.setColumnConfig(key, {
-      color: (event.target as HTMLInputElement).value,
-    });
+    this.board.setColumnColor(key, (event.target as HTMLInputElement).value);
   };
 
   onWipChange = (key: string | null | undefined, event: Event): void => {
-    if (!key) return;
-    const raw = (event.target as HTMLInputElement).valueAsNumber;
-    this.setColumnConfig(key, {
-      wipLimit: isNaN(raw) || raw <= 0 ? null : raw,
-    });
+    this.board.setColumnWipLimit(
+      key,
+      (event.target as HTMLInputElement).valueAsNumber,
+    );
   };
 
   onCollapseChange = (key: string | null | undefined, event: Event): void => {
-    if (!key) return;
-    this.setColumnConfig(key, {
-      collapsed: (event.target as HTMLInputElement).checked,
-    });
+    this.board.setColumnCollapsed(
+      key,
+      (event.target as HTMLInputElement).checked,
+    );
   };
 
   moveColUp = (key: string | null | undefined, _event: Event): void => {
-    if (!key) return;
-    const cols = this.kanbanColumns;
-    const idx = cols.findIndex((c) => c.key === key);
-    if (idx <= 0) return;
-    const a = cols[idx]!;
-    const b = cols[idx - 1]!;
-    const aOrder = a.sortOrder ?? idx;
-    const bOrder = b.sortOrder ?? idx - 1;
-    this.setColumnConfig(a.key!, { sortOrder: bOrder });
-    this.setColumnConfig(b.key!, { sortOrder: aOrder });
+    this.board.moveColUp(key);
   };
 
   moveColDown = (key: string | null | undefined, _event: Event): void => {
-    if (!key) return;
-    const cols = this.kanbanColumns;
-    const idx = cols.findIndex((c) => c.key === key);
-    if (idx < 0 || idx >= cols.length - 1) return;
-    const a = cols[idx]!;
-    const b = cols[idx + 1]!;
-    const aOrder = a.sortOrder ?? idx;
-    const bOrder = b.sortOrder ?? idx + 1;
-    this.setColumnConfig(a.key!, { sortOrder: bOrder });
-    this.setColumnConfig(b.key!, { sortOrder: aOrder });
+    this.board.moveColDown(key);
   };
 
   get statusColor() {
@@ -532,55 +341,19 @@ class ProjectIsolated extends Component<typeof Project> {
 
   <template>
     <div class='kanban-surface'>
-      <header class='kanban-toolbar'>
-        <div class='toolbar-left'>
-          <div class='kanban-heading'>
-            <div class='kanban-meta-top'>
-              <Pill @size='extra-small'>
-                {{if @model.projectCode @model.projectCode 'BOARD'}}
-              </Pill>
-              <StatusPill @color={{this.statusColor}}>
-                {{#if @model.projectStatus}}
-                  <@fields.projectStatus @format='atom' />
-                {{else}}
-                  Planning
-                {{/if}}
-              </StatusPill>
-            </div>
-            <h2 class='kanban-title'>
-              <SquareKanban />
-              <@fields.cardTitle />
-            </h2>
-          </div>
-          <div>
-            <span class='card-count'>{{this.cardCount}} cards</span>
-          </div>
-        </div>
-        <div class='toolbar-right'>
-          <div class='column-visibility-toggle'>
-            <span class='group-by-label'>Hide empty</span>
-            <Switch
-              @isEnabled={{this.hideEmptyColumns}}
-              @onChange={{this.toggleHideEmptyColumns}}
-              @label='Hide empty columns'
-            />
-          </div>
-          <div class='group-by-picker'>
-            <SortDropdown
-              @options={{this.groupByOptions}}
-              @selectedOption={{this.selectedGroupByOption}}
-              @onSelect={{this.onGroupByChange}}
-            />
-          </div>
-          <ContextButton
-            class='settings-button'
-            @label='Toggle column settings'
-            @icon='context-menu-vertical'
-            @variant='ghost'
-            {{on 'click' this.toggleSettings}}
-          />
-        </div>
-      </header>
+      <ProjectKanbanToolbar
+        @model={{@model}}
+        @cardCount={{this.cardCount}}
+        @hideEmptyColumns={{this.hideEmptyColumns}}
+        @groupByOptions={{this.groupByOptions}}
+        @selectedGroupByOption={{this.selectedGroupByOption}}
+        @statusColor={{this.statusColor}}
+        @onToggleHideEmptyColumns={{this.toggleHideEmptyColumns}}
+        @onGroupByChange={{this.onGroupByChange}}
+        @onToggleSettings={{this.toggleSettings}}
+        @projectStatusField={{@fields.projectStatus}}
+        @cardTitleField={{@fields.cardTitle}}
+      />
 
       <div class='kanban-main'>
         <div class='kanban-body'>
@@ -616,58 +389,14 @@ class ProjectIsolated extends Component<typeof Project> {
         </div>
 
         {{#if this.showSettings}}
-          <aside class='settings-panel'>
-            <div class='settings-header'>Column Settings</div>
-            {{#each this.kanbanColumns as |col|}}
-              <div class='settings-row'>
-                <div class='settings-top'>
-                  <span class='settings-name'>{{col.label}}</span>
-                  <div class='settings-order'>
-                    <button
-                      type='button'
-                      class='order-btn'
-                      {{on 'click' (fn this.moveColUp col.key)}}
-                    >↑</button>
-                    <button
-                      type='button'
-                      class='order-btn'
-                      {{on 'click' (fn this.moveColDown col.key)}}
-                    >↓</button>
-                  </div>
-                </div>
-                <div class='settings-controls'>
-                  <label class='settings-field'>
-                    <span class='field-label'>Color</span>
-                    <input
-                      type='color'
-                      class='color-input'
-                      value={{if col.color col.color '#6366f1'}}
-                      {{on 'change' (fn this.onColorChange col.key)}}
-                    />
-                  </label>
-                  <label class='settings-field'>
-                    <span class='field-label'>WIP</span>
-                    <input
-                      type='number'
-                      class='wip-input'
-                      value={{col.wipLimit}}
-                      min='0'
-                      placeholder='∞'
-                      {{on 'change' (fn this.onWipChange col.key)}}
-                    />
-                  </label>
-                  <label class='settings-field'>
-                    <input
-                      type='checkbox'
-                      checked={{col.collapsed}}
-                      {{on 'change' (fn this.onCollapseChange col.key)}}
-                    />
-                    <span class='field-label'>Collapse</span>
-                  </label>
-                </div>
-              </div>
-            {{/each}}
-          </aside>
+          <ProjectKanbanSettingsPanel
+            @columns={{this.kanbanColumns}}
+            @onColorChange={{this.onColorChange}}
+            @onWipChange={{this.onWipChange}}
+            @onCollapseChange={{this.onCollapseChange}}
+            @onMoveColUp={{this.moveColUp}}
+            @onMoveColDown={{this.moveColDown}}
+          />
         {{/if}}
       </div>
     </div>
@@ -688,77 +417,6 @@ class ProjectIsolated extends Component<typeof Project> {
         min-height: 100%;
         background: var(--kanban-surface-bg);
         color: var(--kanban-foreground);
-      }
-      .kanban-toolbar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0.625rem 1rem;
-        border-bottom: 1px solid var(--kanban-border-color);
-        background: var(--popup, var(--kanban-card-bg));
-        color: var(--popup-foreground, var(--kanban-card-foreground));
-        flex-shrink: 0;
-      }
-      .toolbar-left {
-        display: flex;
-        gap: 0.5rem;
-      }
-      .kanban-heading {
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
-      }
-      .kanban-meta-top {
-        display: flex;
-        align-items: center;
-        gap: 0.375rem;
-      }
-      .toolbar-right {
-        display: flex;
-        align-items: center;
-        gap: 0.375rem;
-      }
-      .group-by-picker {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        min-width: 11rem;
-      }
-      .column-visibility-toggle {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-      .group-by-label {
-        font-size: 0.75rem;
-        color: var(--kanban-muted-foreground);
-        white-space: nowrap;
-      }
-      .group-by-picker :deep(.sort-options-label) {
-        color: var(--kanban-muted-foreground);
-        font-size: 0.75rem;
-      }
-      .group-by-picker :deep(.sort-button) {
-        min-width: 8rem;
-      }
-      .kanban-title {
-        display: flex;
-        align-items: center;
-        gap: 0.375rem;
-        font-size: 0.875rem;
-        font-weight: 600;
-        margin: 0;
-        letter-spacing: -0.01em;
-      }
-      .card-count {
-        font-size: 0.75rem;
-        color: var(--kanban-muted-foreground);
-        padding: 0.125rem 0.5rem;
-        background: var(--kanban-muted-bg);
-        border-radius: 4px;
-      }
-      .settings-button {
-        color: var(--kanban-muted-foreground);
       }
       .kanban-main {
         flex: 1;
@@ -790,93 +448,6 @@ class ProjectIsolated extends Component<typeof Project> {
         height: 100%;
         font-size: 0.75rem;
         color: var(--kanban-muted-foreground);
-      }
-      /* ── Settings panel ── */
-      .settings-panel {
-        width: 15rem;
-        flex-shrink: 0;
-        background: var(--kanban-card-bg);
-        border-left: 1px solid var(--kanban-border-color);
-        display: flex;
-        flex-direction: column;
-        overflow-y: auto;
-      }
-      .settings-header {
-        padding: 0.5rem 0.75rem;
-        border-bottom: 1px solid var(--kanban-border-color);
-        font-size: 0.6875rem;
-        font-weight: 600;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        color: var(--kanban-muted-foreground);
-        flex-shrink: 0;
-      }
-      .settings-row {
-        padding: 0.625rem 0.75rem;
-        border-bottom: 1px solid var(--kanban-border-color);
-        display: flex;
-        flex-direction: column;
-        gap: 0.375rem;
-      }
-      .settings-top {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-      .settings-name {
-        font-size: 0.8125rem;
-        font-weight: 600;
-        color: var(--kanban-foreground);
-      }
-      .settings-order {
-        display: flex;
-        gap: 0.125rem;
-      }
-      .order-btn {
-        padding: 0.0625rem 0.3125rem;
-        font-size: 0.6875rem;
-        line-height: 1.4;
-        background: var(--kanban-muted-bg);
-        border: 1px solid var(--kanban-border-color);
-        border-radius: 3px;
-        cursor: pointer;
-        color: var(--kanban-foreground);
-      }
-      .order-btn:hover {
-        background: var(--kanban-border-color);
-      }
-      .settings-controls {
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
-        flex-wrap: wrap;
-      }
-      .settings-field {
-        display: flex;
-        align-items: center;
-        gap: 0.25rem;
-        cursor: pointer;
-      }
-      .field-label {
-        font-size: 0.6875rem;
-        color: var(--kanban-muted-foreground);
-      }
-      .color-input {
-        width: 1.5rem;
-        height: 1.125rem;
-        padding: 0;
-        border: 1px solid var(--kanban-border-color);
-        border-radius: 3px;
-        cursor: pointer;
-      }
-      .wip-input {
-        width: 2.75rem;
-        padding: 0.125rem 0.25rem;
-        font-size: 0.6875rem;
-        border: 1px solid var(--kanban-border-color);
-        border-radius: 3px;
-        background: var(--kanban-muted-bg);
-        color: var(--kanban-foreground);
       }
     </style>
   </template>
