@@ -818,6 +818,46 @@ _Bind and reuse_
 
 > **Tip:** When in doubt, bind it. `$subtotal` is clearer than repeating the pipeline three times, and safer than threading it through pipes that might break when edited later.
 
+## User-defined helpers (`def`)
+
+Any BXL expression can open with its own named helpers. Syntax and scoping match jq's `def`. Because user helpers aren't from Excel, they follow the lowercase naming convention — a `def UPPERCASE` would lie about paste-compatibility. (See [UPPERCASE is Excel, lowercase is BXL-native](#naming-convention-uppercase-is-excel-lowercase-is-bxl-native).)
+
+| Form | Meaning |
+| --- | --- |
+| `def name: body;` | Zero-arg helper. Applied as a pipeline filter: `.items \| map(name)`. |
+| `def name(arg): body;` | One-arg helper. Call site: `name(value)`. |
+| `def name(a; b; c): body;` | Multi-arg helper. **Definition and call both use `;`** to separate arguments — BXL's comma→semicolon rewrite applies to built-in Excel formulas, not to user `def`. |
+
+_Single-arg helper next to a built-in:_
+
+```
+def emoji(w): ["🐕", "🐈", "🦊", "🐸", "🦉"][w | explode | add % 5];
+def triple(x): x * 3;
+
+{
+  pet:     emoji(.name),
+  tripled: triple(.score),
+  total:   SUM([.items[].price])
+}
+```
+
+_Recursion:_
+
+```
+def fact: if . <= 1 then 1 else . * (. - 1 | fact) end;
+5 | fact
+```
+→ `120`
+
+_Multi-arg (semicolons required at both sides):_
+
+```
+def clamp(lo; hi; x): (x | if . < lo then lo elif . > hi then hi else . end);
+clamp(0; 100; .score)
+```
+
+Helpers are **scoped to the expression**. There is no module system, and that's deliberate: a BXL expression is a self-contained, serializable piece of data, not a program that imports from other files. If you need the same helper in ten expressions, prepend the `def` to each one at build time, or materialize a single larger expression that holds them together.
+
 ## Control Flow
 
 | Pattern | Syntax |
@@ -826,7 +866,7 @@ _Bind and reuse_
 | Try/catch | `try (.x / .y) catch "division error"` |
 | Reduce | `reduce .items[] as $i (0; . + $i.amount)` |
 | Foreach | `foreach .items[] as $i (0; . + $i.amount)` |
-| Define function | `def double: . * 2; .values \| map(double)` |
+| Define function | `def double: . * 2; .values \| map(double)` — see [User-defined helpers](#user-defined-helpers-def) for full syntax. |
 | Label/break | `label $out \| foreach .[] as $x (0; .+$x; if .>100 then ., break $out else . end)` |
 
 * * *

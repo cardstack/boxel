@@ -186,6 +186,25 @@ BXL is one of three layers where logic lives in a typical application. Each laye
 
 One-line rule: **BXL for logic-as-data · class methods for logic-as-type · application code for changes-to-the-world.** BXL never writes. Application code never embeds in records. When in doubt, ask *"could a stranger run this expression a million times against my data?"* — if yes, it's BXL; if no, it's application code.
 
+### User-defined helpers live inside the expression
+
+An expression can open with its own named helpers — BXL inherits jq's `def`. Because user helpers aren't from Excel, they follow the lowercase convention (`UPPERCASE` stays reserved for paste-compatible Excel functions):
+
+```bxl
+def emoji(w): ["🐕", "🐈", "🦊", "🐸", "🦉"][w | explode | add % 5];
+def triple(x): x * 3;
+
+{
+  pet:     emoji(.name),
+  tripled: triple(.score),
+  total:   SUM([.items[].price])
+}
+```
+
+Call sites are indistinguishable from built-ins — `emoji(.name)` sits next to `SUM(...)` with no syntactic ceremony. Recursion works (`def fact: if . <= 1 then 1 else . * (. - 1 | fact) end`). There's no module system: a BXL expression is a self-contained, serializable piece of data, and helpers are scoped to the expression that defines them. If a helper earns its way into every record, lift it into the built-in library instead of duplicating the `def`.
+
+See the [User-defined helpers](docs/syntax-reference.md#user-defined-helpers-def) section of the syntax reference for multi-arg and zero-arg forms.
+
 ---
 
 ## One example, many jobs
@@ -442,6 +461,10 @@ Each language above is strong at one or two of the jobs a typical business app n
 | Validation rules + messages           |  🟡  | ⚪ |  ⚪  |   ⚪   |    🟢     |  — |   ⚪   | 🟢 | 🟡 | 🟢 |
 | Computed / formula fields             |  🟢  | 🟡 |  🟡  |   🟡   |     —     | ⚪ |   🟢   | 🟡 | 🟡 | 🟢 |
 | Data processing / aggregation         |  ⚪  | 🟢 |  🟡  |   🟢   |     —     |  — |   🟢   | 🟡 | 🟡 | 🟢 |
+| Streaming over huge inputs            |  ⚪  | 🟢 |  🟡  |   🟢   |    ⚪     |  — |   ⚪   | ⚪ | 🟡 | 🟡 |
+| Descendant + ancestor tree nav        |   —  | 🟡 |  🟢  |   🟢   |    🟢     | 🟡 |   🟡   |  — | ⚪ | 🟡 |
+| User-defined functions / recursion    |  🟡  | 🟢 |  ⚪  |   🟢   |     —     |  — |   🟡   | ⚪ | 🟢 | 🟢 |
+| Modules / code reuse across files     |  ⚪  | 🟡 |   —  |   🟢   |    🟡     | 🟡 |   ⚪   | ⚪ | 🟢 |  — |
 | Conditional defaults                  |  🟡  | 🟡 |  🟡  |   🟡   |     —     | 🟡 |   🟡   | 🟡 | 🟡 | 🟢 |
 | Sandbox by default (no I/O)           |  🟢  | 🟢 |  🟢  |   🟡   |    🟢     | 🟢 |   🟢   | 🟢 |  — | 🟢 |
 | Readable to non-engineers             |  🟢  |  — |   —  |    —   |     —     | ⚪ |   ⚪   | ⚪ |  — | 🟢 |
@@ -452,9 +475,9 @@ Each language above is strong at one or two of the jobs a typical business app n
 
 🟢 strong &nbsp;·&nbsp; 🟡 ok / partial &nbsp;·&nbsp; ⚪ weak &nbsp;·&nbsp; — none
 
-BXL didn't invent any row. It's the smallest language that covers all of them at once, because it explicitly composes the wins of the ones that came before.
+BXL didn't invent any row. It's the smallest language that covers the everyday-business rows at once — validation, computed fields, data processing, defaults, readability, paste-from-spreadsheet — by composing the wins of the ones that came before. User-defined functions coexist with the Excel layer: `def EMOJI(w): ...; EMOJI("cat")` sits next to `SUM(...)` in the same expression, so custom helpers feel like Excel formulas. The XPath-family specialties (ancestor axes, upward tree walking) stay specialties: BXL traverses *down* into nested data via jq's `..`, but it doesn't carry a `parent::` axis. Streaming over huge inputs inherits what jq offers (lazy enough in practice, but not BXL-level streaming), and there is no module system — BXL is one expression, not a programming environment.
 
-For a typical business record — invoices, offers, contracts, forms, tickets, events, reports — every row in that table is a real requirement. BXL covers all of them with one parser, one evaluator, and one sandbox, because it explicitly composes the wins of the languages that came before.
+For a typical business record — invoices, offers, contracts, forms, tickets, events, reports — the common rows in that table are real daily requirements. BXL covers them with one parser, one evaluator, and one sandbox.
 
 ---
 
