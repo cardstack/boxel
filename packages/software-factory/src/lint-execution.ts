@@ -188,7 +188,7 @@ export async function lintRealmFiles(
         file,
       );
 
-      let violations: LintViolationData[] = lintResponse.messages.map(
+      let violations: LintViolationData[] = (lintResponse.messages ?? []).map(
         (msg) => ({
           rule: msg.ruleId ?? 'unknown',
           file,
