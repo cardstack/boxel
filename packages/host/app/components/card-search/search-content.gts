@@ -392,14 +392,15 @@ export default class SearchContent extends Component<Signature> {
   }
 
   private get needsLiveRecentsFallback(): boolean {
-    // Use the live CardDef path when prerendered has finished but didn't
-    // return anything for the known recents — typically a fetch failure
-    // in a multi-realm test setup. Keeping Recents visible matters more
-    // than the "zero card-module fetches" goal in that rare case.
-    const hasRecents = this.recentCardUrls.length > 0;
-    const ran = this.prerenderedRecentsResource.hasSearchRun;
-    const gotSomething = this.prerenderedRecentsResource.instances.length > 0;
-    return hasRecents && ran && !gotSomething;
+    // Use the live CardDef path only when the prerendered fetch threw —
+    // e.g. a multi-realm test setup where federated search can't be
+    // authorized. An empty prerendered result is legitimate (filter/realm
+    // excluded all recents) and must NOT trigger the fallback, or we'd
+    // resurrect cards the user filtered out.
+    return (
+      this.recentCardUrls.length > 0 &&
+      this.prerenderedRecentsResource.lastSearchErrored
+    );
   }
 
   private get liveRecentCards(): CardDef[] {
@@ -411,7 +412,7 @@ export default class SearchContent extends Component<Signature> {
   private get recentCardsSection() {
     const instances = this.prerenderedRecentsResource.instances;
 
-    if (instances.length === 0 && this.needsLiveRecentsFallback) {
+    if (this.needsLiveRecentsFallback) {
       return buildLiveRecentsSection(this.liveRecentCards);
     }
 
