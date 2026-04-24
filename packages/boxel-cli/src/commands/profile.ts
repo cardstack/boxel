@@ -1,5 +1,3 @@
-import * as readline from 'readline';
-import { Writable } from 'stream';
 import type { ProfileManager } from '../lib/profile-manager';
 import {
   getProfileManager,
@@ -8,6 +6,7 @@ import {
   getEnvironmentLabel,
   getUsernameFromMatrixId,
 } from '../lib/profile-manager';
+import { prompt, promptPassword } from '../lib/prompt';
 import {
   FG_GREEN,
   FG_YELLOW,
@@ -18,88 +17,6 @@ import {
   BOLD,
   RESET,
 } from '../lib/colors';
-
-function prompt(question: string): Promise<string> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer.trim());
-    });
-  });
-}
-
-function promptPassword(question: string): Promise<string> {
-  const mutableOutput = new Writable({
-    write: (_chunk, _encoding, callback) => callback(),
-  });
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: mutableOutput,
-    terminal: true,
-  });
-
-  return new Promise((resolve, reject) => {
-    const stdin = process.stdin;
-    const wasFlowing = stdin.readableFlowing;
-
-    if (stdin.isTTY) {
-      stdin.setRawMode(true);
-    }
-
-    const cleanup = () => {
-      stdin.removeListener('data', onData);
-      if (stdin.isTTY) {
-        stdin.setRawMode(false);
-      }
-      rl.close();
-      if (!wasFlowing) {
-        stdin.pause();
-      }
-    };
-
-    const onData = (char: Buffer) => {
-      try {
-        const c = char.toString();
-        if (c === '\n' || c === '\r') {
-          cleanup();
-          process.stdout.write('\n');
-          resolve(password);
-        } else if (c === '\u0003') {
-          // Ctrl+C
-          cleanup();
-          process.exit();
-        } else if (c === '\u007F' || c === '\b') {
-          // Backspace
-          if (password.length > 0) {
-            password = password.slice(0, -1);
-            process.stdout.write('\b \b');
-          }
-        } else {
-          password += c;
-          process.stdout.write('*');
-        }
-      } catch (e) {
-        cleanup();
-        reject(e);
-      }
-    };
-
-    let password = '';
-    try {
-      process.stdout.write(question);
-      stdin.on('data', onData);
-      stdin.resume();
-    } catch (e) {
-      cleanup();
-      reject(e);
-    }
-  });
-}
 
 export interface ProfileCommandOptions {
   user?: string;
