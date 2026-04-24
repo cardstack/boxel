@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
 import { getProfileManager, type ProfileManager } from '../lib/profile-manager';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { FG_RED, DIM, RESET } from '../lib/colors';
 
 export interface ReadTranspiledResult {
@@ -17,10 +18,6 @@ export interface ReadTranspiledOptions {
 interface ReadTranspiledCliOptions {
   realm: string;
   json?: boolean;
-}
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
 }
 
 /**

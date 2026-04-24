@@ -16,6 +16,7 @@ import { write as coreWrite, type WriteResult } from '../commands/file/write';
 import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { pull as realmPull } from '../commands/realm/pull';
 import { getProfileManager, type ProfileManager } from './profile-manager';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 export type { ListFilesResult, ReadTranspiledResult };
 
@@ -25,10 +26,6 @@ const MIME = {
   JSON: 'application/json',
   JSONAPI: 'application/vnd.api+json',
 } as const;
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
 
 export interface CreateRealmOptions {
   /** URL slug for the realm (lowercase, numbers, hyphens). */

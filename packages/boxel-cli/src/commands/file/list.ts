@@ -1,8 +1,11 @@
 import type { Command } from 'commander';
 import {
   getProfileManager,
+  NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from '../../lib/profile-manager';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { FG_RED, DIM, RESET } from '../../lib/colors';
 
 export interface ListFilesResult {
@@ -19,10 +22,6 @@ interface ListFilesCliOptions {
   json?: boolean;
 }
 
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
-
 /**
  * List all file paths in a realm via the `_mtimes` endpoint.
  * Returns relative paths (e.g., `hello.gts`, `Cards/my-card.json`).
@@ -36,7 +35,7 @@ export async function listFiles(
   if (!active) {
     return {
       filenames: [],
-      error: 'No active profile. Run `boxel profile add` to create one.',
+      error: NO_ACTIVE_PROFILE_ERROR,
     };
   }
 
@@ -46,11 +45,11 @@ export async function listFiles(
   try {
     let response = await pm.authedRealmFetch(mtimesUrl, {
       method: 'GET',
-      headers: { Accept: 'application/vnd.api+json' },
+      headers: { Accept: SupportedMimeType.Mtimes },
     });
 
     if (!response.ok) {
-      let body = await response.text();
+      let body = await response.text().catch(() => '(no body)');
       return {
         filenames: [],
         error: `_mtimes returned HTTP ${response.status}: ${body.slice(0, 300)}`,
