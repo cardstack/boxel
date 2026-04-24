@@ -5043,9 +5043,9 @@ module(basename(__filename), function () {
             process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '5';
-            // Includes the empty-string case, which hits the
-            // `raw !== ''` guard and falls through to the ceiling
-            // without warning (same outcome as unset).
+            // Includes the empty-string case: it fails the
+            // `raw !== ''` guard in the constructor and is treated
+            // like unset — no warning, falls through to the ceiling.
             for (let badValue of ['0', '-1', '3.5', 'abc', 'NaN', '']) {
               process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY = badValue;
               let { pool } = makeStubPagePool({

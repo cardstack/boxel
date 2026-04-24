@@ -907,11 +907,13 @@ export class PagePool {
   }
 
   // File-queue admission control: per-affinity semaphore with capacity
-  // `#affinityTabMax - 1`. Guarantees at least one tab slot is always
-  // available to module / command calls on a given affinity, which is
-  // what breaks the self-referential prerender deadlock where a file
-  // render's search is waiting on a module extraction that's queued
-  // behind it. Lazy-initialized per affinity.
+  // `#fileAdmissionCap` (default = `max(1, affinityTabMax − 1)`,
+  // lowerable via `PRERENDER_AFFINITY_FILE_CONCURRENCY` but always
+  // clamped at that ceiling). Guarantees at least one tab slot is
+  // always available to module / command calls on a given affinity,
+  // which is what breaks the self-referential prerender deadlock where
+  // a file render's search is waiting on a module extraction that's
+  // queued behind it. Lazy-initialized per affinity.
   async #acquireFileAdmission(
     affinityKey: string,
     signal?: AbortSignal,
