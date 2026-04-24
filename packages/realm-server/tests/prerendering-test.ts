@@ -1876,8 +1876,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('./prerendered-search-live'),
+                      module: rri('./prerendered-search-live'),
                       name: 'LiveSearchHost',
                     },
                   },
@@ -1887,8 +1886,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('./prerendered-search-live'),
+                      module: rri('./prerendered-search-live'),
                       name: 'LiveSearchInner',
                     },
                   },
@@ -1901,8 +1899,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('./prerendered-search-live'),
+                      module: rri('./prerendered-search-live'),
                       name: 'LiveSearchResult',
                     },
                   },
@@ -1997,8 +1994,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('./live-file-search-card'),
+                      module: rri('./live-file-search-card'),
                       name: 'LiveFileSearchHost',
                     },
                   },
@@ -2008,8 +2004,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('./live-file-search-card'),
+                      module: rri('./live-file-search-card'),
                       name: 'LiveFileSearchInner',
                     },
                   },
@@ -3150,8 +3145,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('./non-isolated-links-card'),
+                      module: rri('./non-isolated-links-card'),
                       name: 'NonIsolatedLinks',
                     },
                   },
@@ -3168,8 +3162,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('https://cardstack.com/base/brand-guide'),
+                      module: rri('https://cardstack.com/base/brand-guide'),
                       name: 'default',
                     },
                   },
