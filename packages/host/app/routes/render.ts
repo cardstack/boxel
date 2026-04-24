@@ -166,8 +166,25 @@ export default class RenderRoute extends Route<Model> {
     ) {
       return;
     }
-    let context = this.#deriveErrorContext();
+    // Dedupe: when a revalidating template returns a fresh rejected Promise
+    // on every read (e.g. `get foo() { return Promise.reject(...); }`), each
+    // revalidation fires another unhandledrejection and re-enters this
+    // handler. Without this guard we'd queue a transition-to-error-route
+    // for every rejection, which re-triggers revalidation and starves the
+    // outer data-prerender-status commit. `lastRenderErrorSignature` is the
+    // same slot processRenderError uses; both paths share the signature so
+    // a later RSVP-path error for the same payload also no-ops.
     let errorText = elements.errorElement?.textContent ?? '';
+    let context = this.#deriveErrorContext();
+    let signature = JSON.stringify({
+      reason: errorText,
+      cardId: context.cardId ?? null,
+      nonce: context.nonce ?? null,
+    });
+    if (signature === this.lastRenderErrorSignature) {
+      return;
+    }
+    this.lastRenderErrorSignature = signature;
     this.renderErrorState.setError({
       reason: errorText,
       cardId: context.cardId,
