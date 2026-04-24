@@ -165,9 +165,7 @@ export async function lintRealmFiles(
       let result = await readCard(options.workspaceDir, path);
       return {
         ok: result.ok,
-        content:
-          result.content ??
-          (result.document ? JSON.stringify(result.document) : undefined),
+        content: result.content,
         error: result.error,
       };
     });

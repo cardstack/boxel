@@ -467,11 +467,13 @@ async function prepareExampleInstance(
     };
   }
 
-  if (!rawRead.ok || !rawRead.document) {
+  if (!rawRead.ok || !rawRead.content) {
     return {
       error: `Failed to read example "${exampleUrl}": ${rawRead.error ?? (rawRead.status === 404 ? 'not found in workspace' : 'unknown error')}`,
     };
   }
+
+  let parsedDoc = JSON.parse(rawRead.content) as Record<string, unknown>;
 
   // A readable `.json` file isn't guaranteed to be a card document — a
   // malformed fixture or a raw JSON payload could be missing `data`,
@@ -487,13 +489,13 @@ async function prepareExampleInstance(
   // this module is exercised by the software-factory Playwright harness,
   // which can't compile the `@Memoize()` decorators reachable through
   // the heavier runtime-common entry points.
-  if (!isSingleCardDocument(rawRead.document)) {
+  if (!isSingleCardDocument(parsedDoc)) {
     return {
       error: `Example "${exampleUrl}" is not a valid card document (missing or malformed "data" / "data.meta.adoptsFrom").`,
     };
   }
 
-  let document = rawRead.document as unknown as LooseSingleCardDocument;
+  let document = parsedDoc as unknown as LooseSingleCardDocument;
   // Boxel card IDs are extensionless — the `id` is the resource URL, not
   // the .json file path. Strip any trailing `.json` so the id matches what
   // the prerender sandbox expects (and what the pre-refactor validation

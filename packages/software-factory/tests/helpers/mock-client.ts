@@ -69,13 +69,8 @@ export function createMockClient(options?: MockClientOptions): BoxelCLIClient {
             error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
           };
         }
-        let text = await response.text();
-        try {
-          let document = JSON.parse(text) as Record<string, unknown>;
-          return { ok: true, status: response.status, document };
-        } catch {
-          return { ok: true, status: response.status, content: text };
-        }
+        let content = await response.text();
+        return { ok: true, status: response.status, content };
       } catch (err) {
         return {
           ok: false,

@@ -85,7 +85,7 @@ test.describe('factory-test-realm e2e', () => {
       let testRunCard = await client.read(realmUrl, handle.testRunId);
       expect(testRunCard.ok).toBe(true);
       let attrs = (
-        testRunCard.document as unknown as {
+        JSON.parse(testRunCard.content!) as {
           data?: { attributes?: Record<string, unknown> };
         }
       )?.data?.attributes;
@@ -160,7 +160,7 @@ test.describe('factory-test-realm e2e', () => {
       let testRunCard = await client.read(realmUrl, handle.testRunId);
       expect(testRunCard.ok).toBe(true);
       let attrs = (
-        testRunCard.document as unknown as {
+        JSON.parse(testRunCard.content!) as {
           data?: { attributes?: Record<string, unknown> };
         }
       )?.data?.attributes;

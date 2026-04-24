@@ -360,8 +360,8 @@ async function readPatchDocument(
 ): Promise<LooseSingleCardDocument> {
   let existing = await readCard(workspaceDir, path);
 
-  if (existing.ok && existing.document) {
-    let doc = existing.document as unknown as LooseSingleCardDocument;
+  if (existing.ok && existing.content) {
+    let doc = JSON.parse(existing.content) as LooseSingleCardDocument;
     let existingAttrs = (doc.data.attributes ?? {}) as Record<string, unknown>;
     doc.data.attributes = { ...existingAttrs, ...attributes };
     if (relationships && Object.keys(relationships).length > 0) {

@@ -150,7 +150,9 @@ test.describe('parse-validation e2e', () => {
       expect(cardRead.ok).toBe(true);
 
       let attrs = (
-        cardRead.document as { data?: { attributes?: Record<string, unknown> } }
+        JSON.parse(cardRead.content!) as {
+          data?: { attributes?: Record<string, unknown> };
+        }
       )?.data?.attributes;
       expect(attrs).toBeTruthy();
       expect(attrs?.status).toBe('passed');
@@ -228,7 +230,9 @@ test.describe('parse-validation e2e', () => {
       expect(cardRead.ok).toBe(true);
 
       let attrs = (
-        cardRead.document as { data?: { attributes?: Record<string, unknown> } }
+        JSON.parse(cardRead.content!) as {
+          data?: { attributes?: Record<string, unknown> };
+        }
       )?.data?.attributes;
       expect(attrs).toBeTruthy();
       expect(attrs?.status).toBe('failed');

@@ -78,14 +78,14 @@ export async function completeEvalResult(
 ): Promise<{ updated: boolean; error?: string }> {
   let readResult = await readCard(options.workspaceDir, `${evalResultId}.json`);
 
-  if (!readResult.ok || !readResult.document) {
+  if (!readResult.ok || !readResult.content) {
     return {
       updated: false,
       error: `Failed to read EvalResult: ${readResult.error ?? 'not found'}`,
     };
   }
 
-  let document = readResult.document as unknown as LooseSingleCardDocument;
+  let document = JSON.parse(readResult.content) as LooseSingleCardDocument;
   let completionAttrs: Record<string, unknown> = {
     status: attrs.status,
     completedAt: new Date().toISOString(),

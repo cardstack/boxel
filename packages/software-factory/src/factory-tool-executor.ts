@@ -448,7 +448,7 @@ export class ToolExecutor {
           String(toolArgs['path']),
         );
         ok = result.ok;
-        output = ok ? result.document : { error: result.error };
+        output = ok ? JSON.parse(result.content!) : { error: result.error };
         break;
       }
 
