@@ -150,6 +150,7 @@ LIMIT 20;
   "launchMs": 18720,             // waiting-in-page-pool time (server-side)
   "waits": {
     "semaphoreMs": 18500,        //   └ of that, waiting on the global render semaphore
+    "admissionMs": 0,            //   └ waiting on the per-affinity file-admission cap (= affinity tab max − 1)
     "tabQueueMs": 200,           //   └ waiting behind a same-affinity tab already rendering
     "tabStartupMs": 20           //   └ warming a fresh tab / standby
   },

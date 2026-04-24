@@ -338,11 +338,12 @@ export class PagePool {
       // are idle. The counts sum to ≤ tabCount.
       byQueue: { file: number; module: number; command: number };
       // Per-affinity file-admission state. `cap` is the semaphore's
-      // capacity (= affinity tab max − 1, so at least one tab is
-      // always reserved for module/command work); `pending` is the
-      // number of file callers currently queued behind an exhausted
-      // semaphore waiting for a slot. Both are 0 when no file call
-      // has ever been made on this affinity (lazy creation).
+      // capacity (= max(1, affinity tab max − 1); when affinity tab
+      // max ≥ 2 this leaves at least one tab reserved for
+      // module/command work). `pending` is the number of file callers
+      // currently queued behind an exhausted semaphore waiting for a
+      // slot. Both are 0 when the semaphore hasn't been lazily created
+      // yet, or was deleted once it returned to idle.
       admission: { pending: number; cap: number };
     }>;
   } {
@@ -454,11 +455,12 @@ export class PagePool {
     // bypass admission — they're the ones a stuck file caller may be
     // waiting on.
     let releaseAdmission: (() => void) | undefined;
-    let admissionStart = Date.now();
+    let admissionMs = 0;
     if (queue === 'file') {
+      let admissionStart = Date.now();
       releaseAdmission = await this.#acquireFileAdmission(affinityKey, signal);
+      admissionMs = Date.now() - admissionStart;
     }
-    let admissionMs = Date.now() - admissionStart;
     let startupStart = Date.now();
     try {
       await this.#ensureStandbyPool();
@@ -536,6 +538,15 @@ export class PagePool {
       entry.currentQueue = undefined;
       entry.lastUsedAt = Date.now();
       releaseAdmission?.();
+      // Drop the admission semaphore once it returns to idle so the
+      // map doesn't grow monotonically across realm affinities this
+      // server sees over its lifetime. A subsequent file call on the
+      // same affinity lazy-creates a fresh one (cheap). Skipped when
+      // `#disableFileAdmission` is set — no semaphore was created in
+      // the first place.
+      if (queue === 'file' && !this.#disableFileAdmission) {
+        this.#maybeDropIdleFileAdmission(affinityKey);
+      }
     };
     return {
       page: entry.page,
@@ -885,6 +896,20 @@ export class PagePool {
       this.#fileAdmission.set(affinityKey, semaphore);
     }
     return semaphore.acquire(signal);
+  }
+
+  // Called after each file release. Drops the semaphore entry for
+  // `affinityKey` only when no callers hold permits and no waiters
+  // are queued — safe because a subsequent file call on the same
+  // affinity lazy-creates a new semaphore with the same capacity.
+  // Keeps `#fileAdmission` bounded by the number of affinities
+  // currently serving a file call, not by total affinities ever seen.
+  #maybeDropIdleFileAdmission(affinityKey: string): void {
+    let semaphore = this.#fileAdmission.get(affinityKey);
+    if (!semaphore) return;
+    if (semaphore.inUseCount === 0 && semaphore.pendingCount === 0) {
+      this.#fileAdmission.delete(affinityKey);
+    }
   }
 
   #poolEntryCount(): number {

@@ -92,11 +92,11 @@ export interface RenderTimeoutDiagnostics {
   waits?: {
     semaphoreMs?: number;
     // Wall time spent waiting on the per-affinity file-admission
-    // semaphore in PagePool (capacity = affinity tab max − 1, so at
-    // least one tab is always reserved for module/command work).
-    // `admissionMs` ≈ `launchMs` means this realm hit its own
-    // file-admission cap; `semaphoreMs` ≈ `launchMs` means the whole
-    // server is saturated.
+    // semaphore in PagePool (capacity = max(1, affinity tab max − 1);
+    // when affinity tab max ≥ 2 this leaves at least one tab reserved
+    // for module/command work). `admissionMs` ≈ `launchMs` means this
+    // realm hit its own file-admission cap; `semaphoreMs` ≈ `launchMs`
+    // means the whole server is saturated.
     admissionMs?: number;
     tabQueueMs?: number;
     tabStartupMs?: number;

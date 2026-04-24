@@ -32,6 +32,13 @@ export class AsyncSemaphore {
     return this.#queue.length;
   }
 
+  // Slots currently held by callers that have acquired but not yet
+  // released. `inUseCount === 0 && pendingCount === 0` means the
+  // semaphore is idle and safe for a caller to drop.
+  get inUseCount(): number {
+    return this.#capacity - this.#available;
+  }
+
   async acquire(signal?: AbortSignal): Promise<() => void> {
     throwIfAborted(signal);
     if (this.#available > 0) {
