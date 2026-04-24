@@ -1910,6 +1910,7 @@ module(basename(__filename), function () {
               },
               'live-file-search-card.gts': `
               import { CardDef, Component, field, contains, StringField, linksTo } from 'https://cardstack.com/base/card-api';
+              import { rri } from '@cardstack/runtime-common';
 
               export class LiveFileSearchInner extends CardDef {
                 static displayName = 'Live File Search Inner';
