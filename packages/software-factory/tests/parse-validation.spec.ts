@@ -138,7 +138,7 @@ test.describe('parse-validation e2e', () => {
       expect(details.filesWithErrors).toBe(0);
 
       // Read back the ParseResult card to verify persistence
-      let cardRead = await client.read(realmUrl, details.parseResultId);
+      let cardRead = await client.readCard(realmUrl, details.parseResultId);
       expect(cardRead.ok).toBe(true);
 
       let attrs = (
@@ -209,7 +209,7 @@ test.describe('parse-validation e2e', () => {
       expect(details.filesWithErrors).toBeGreaterThan(0);
 
       // Read back the ParseResult card to verify it was persisted as failed
-      let cardRead = await client.read(realmUrl, details.parseResultId);
+      let cardRead = await client.readCard(realmUrl, details.parseResultId);
       expect(cardRead.ok).toBe(true);
 
       let attrs = (

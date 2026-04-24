@@ -54,9 +54,9 @@ export async function completeTestRun(
 ): Promise<{ updated: boolean; error?: string }> {
   // Retry the read — after a long spawnSync (Playwright), TCP connections
   // may be stale causing the first fetch to fail with "fetch failed".
-  let readResult: Awaited<ReturnType<typeof options.client.read>> | undefined;
+  let readResult: Awaited<ReturnType<typeof options.client.readCard>> | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
-    readResult = await options.client.read(options.targetRealmUrl, testRunId);
+    readResult = await options.client.readCard(options.targetRealmUrl, testRunId);
     if (readResult.ok && readResult.document) {
       break;
     }

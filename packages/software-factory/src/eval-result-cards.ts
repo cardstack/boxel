@@ -72,7 +72,7 @@ export async function completeEvalResult(
   attrs: EvalResultAttributes,
   options: EvalResultRealmOptions & { projectCardUrl?: string },
 ): Promise<{ updated: boolean; error?: string }> {
-  let readResult = await options.client.read(
+  let readResult = await options.client.readCard(
     options.targetRealmUrl,
     evalResultId,
   );

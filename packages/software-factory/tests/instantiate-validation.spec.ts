@@ -63,7 +63,7 @@ test.describe('instantiate-validation e2e', () => {
       expect(details.cardsWithErrors).toBe(0);
 
       // Read back the InstantiateResult card to verify persistence
-      let cardRead = await client.read(realmUrl, details.instantiateResultId);
+      let cardRead = await client.readCard(realmUrl, details.instantiateResultId);
       expect(cardRead.ok).toBe(true);
 
       let attrs = (
@@ -118,7 +118,7 @@ test.describe('instantiate-validation e2e', () => {
       expect(details.cardsWithErrors).toBeGreaterThan(0);
 
       // Read back the InstantiateResult card to verify it was persisted as failed
-      let cardRead = await client.read(realmUrl, details.instantiateResultId);
+      let cardRead = await client.readCard(realmUrl, details.instantiateResultId);
       expect(cardRead.ok).toBe(true);
 
       let attrs = (

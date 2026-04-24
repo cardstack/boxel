@@ -355,7 +355,7 @@ async function readPatchDocument(
   attributes: Record<string, unknown>,
   relationships: Record<string, unknown> | undefined,
 ): Promise<LooseSingleCardDocument> {
-  let existing = await client.read(realmUrl, path);
+  let existing = await client.readCard(realmUrl, path);
 
   if (existing.ok && existing.document) {
     let doc = existing.document as unknown as LooseSingleCardDocument;
