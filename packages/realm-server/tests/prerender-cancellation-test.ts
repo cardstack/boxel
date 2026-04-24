@@ -6,7 +6,7 @@ import {
   throwIfAborted,
 } from '../prerender/prerender-cancel';
 import { TabQueue } from '../prerender/page-pool';
-import { AsyncSemaphore } from '../prerender/prerenderer';
+import { AsyncSemaphore } from '../prerender/async-semaphore';
 
 // These tests cover the cancellation plumbing added in CS-10873 at the
 // level closest to the logic — no Chrome, no HTTP. They pin down the

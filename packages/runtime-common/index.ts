@@ -165,6 +165,10 @@ export interface RenderTimeoutDiagnostics {
     sameAffinityActivity: Array<{
       url: string;
       kind: 'visit' | 'module';
+      // Which PagePool queue this call is on. On a deadlock fingerprint
+      // you'll see `queue: 'module', state: 'queued'` entries waiting
+      // on the admission-semaphore-protected file queue.
+      queue?: PrerenderQueue;
       state: 'queued' | 'running';
       ageMs: number;
     }>;
@@ -279,6 +283,16 @@ export interface TimingDiagnostics extends RenderTimeoutDiagnostics {
 }
 
 export type AffinityType = 'realm' | 'user';
+
+// Routing dimension orthogonal to `AffinityType`. Inside one
+// realm affinity, calls are split into two queues (`file` for card
+// renders via `prerenderVisit`, `module` for definition extractions
+// via `prerenderModule`) so a file render blocked on a module can't
+// starve the module that would unblock it. `command` is the only
+// queue on user affinities — `runCommand` uses it and the split is
+// a no-op there. Tabs themselves stay generic: any tab can serve
+// any queue; the split only governs admission ordering.
+export type PrerenderQueue = 'file' | 'module' | 'command';
 
 export type AffinityArgs = {
   affinityType: AffinityType;

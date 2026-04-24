@@ -189,14 +189,20 @@ LIMIT 20;
     "tabCount": 1,
     "pendingTotal": 7,           // peak across periodic samples during this call
     "maxPending": 7,
-    "sameAffinityActivity": [    // excludes self. A non-empty list on a
-                                 // `waiting-stability` stall is the
-                                 // self-referential prerender deadlock
-                                 // signature — the render is waiting on a
-                                 // `/_search` → `definitionLookup` response
-                                 // whose sub-prerender is queued here.
-      { "url": "…/customer.gts", "kind": "module", "state": "queued", "ageMs": 68000 },
-      { "url": "…/order.gts",    "kind": "module", "state": "queued", "ageMs": 66500 }
+    "sameAffinityActivity": [    // excludes self. Module sub-prerenders
+                                 // run on their own tab via the queue
+                                 // split — entries here during healthy
+                                 // operation show concurrent work on
+                                 // the *other* queue (e.g. a `module`
+                                 // call running alongside a `file`
+                                 // render). A non-empty list with
+                                 // `queue: 'module', state: 'queued'`
+                                 // on a `waiting-stability` stall is a
+                                 // regression signal — see the
+                                 // "Classify in one pass" table row
+                                 // below.
+      { "url": "…/customer.gts", "kind": "module", "queue": "module", "state": "running", "ageMs": 68000 },
+      { "url": "…/order.gts",    "kind": "module", "queue": "module", "state": "running", "ageMs": 66500 }
     ]
   },
   "recentQueryLoads": [          // top-N slowest completed query loads
@@ -245,7 +251,7 @@ Walk the fields top-down. The *first* positive signal wins; stop there.
 | `inFlightModuleImports.length > 0` | **Loader stall** | Each URL is a `.gts` / `.ts` we'd already started a `fetchModule(...)` for. Confirm the realm serves those URLs and that there's no import cycle. Often resolves with `clearCache: true` on retry (already in place) — if that's failing check for 500s on the module URL. |
 | `queryLoadsInFlight.length > 0` with `fieldName` set | **Query-field stall** | This is the CS-10820 field-driven hot path. Look at the `query`/`realms` fields — is the search hitting a remote realm server that's slow? Check `_federated-search` latency for that realm on the realm-server side. |
 | `cardDocsInFlight.length > 0` or `fileMetaDocsInFlight.length > 0` (no query fields) | **Data stall** | Usually linksTo targets that the template pulled on. Prefer `cardDocLoadsInFlight[*].ageMs` / `fileMetaDocLoadsInFlight[*].ageMs` — they tell you which individual URL is the slow one vs. a fan-out. If it's a card from a different realm, that realm may be slow or misconfigured. Also check `recentCardDocLoads` for loads that completed just before the timer fired but still dominated the budget. |
-| `renderStage` = `waiting-stability` **AND** `queryLoadsInFlight` has a `search-resource:*` entry **AND** `affinitySnapshot.sameAffinityActivity` contains `{ kind: 'module', state: 'queued' }` entries | **Self-referential prerender deadlock (definition-lookup fan-out)** | The search can't resolve a `_cardType` filter without a card definition; `CachingDefinitionLookup` fires a same-affinity `prerenderModule` to extract it; that sub-prerender queues behind the very render that's waiting on its result. Cold `modules` table / fresh realm-server restart / post-`clearAllModules` reindex makes it hit. Fix path: route `definition-lookup` extractions off the card-render affinity. |
+| `renderStage` = `waiting-stability` **AND** `queryLoadsInFlight` has a `search-resource:*` entry **AND** `affinitySnapshot.sameAffinityActivity` contains `{ queue: 'module', state: 'queued' }` entries **on the same affinity as the stuck render** | **Self-referential prerender deadlock — admission invariant broken** | A search that can't resolve a `_cardType` filter without a card definition causes `CachingDefinitionLookup` to fire a same-affinity `prerenderModule` to extract it. The queue-split + admission cap in PagePool is supposed to reserve at least one tab per affinity for `module` / `command` work precisely to prevent this sub-prerender from queuing behind the render that needs it. **Seeing this fingerprint means the invariant didn't hold**: check `PRERENDER_AFFINITY_TAB_MAX >= 2` (PagePool logs a warning at startup if not), verify the admission semaphore is acquired on `'file'` calls (`PagePool.#acquireFileAdmission`), and confirm `disposeAffinity` isn't dropping the admission semaphore mid-flight. |
 | `renderStage` = `waiting-stability` with empty in-flight arrays | **Render stall** | Nothing is loading but settlement never finishes. Classic Glimmer tracking loop — template is invalidating itself. `capturedDom` usually shows the partially-rendered component. `blockedTimerSummary` will list swallowed timers that may hint at a scheduling loop. |
 | `currentlyEvaluatingModule` non-null, or `stageAgeMs` large with empty in-flight arrays | **Synchronous browser stall (typically Glimmer compile during module eval)** | `recentModuleEvaluations` shows the worst offenders. A single URL with `ms > 5000` usually means "this module has a giant template that takes forever to compile". Many small entries (say 50+ at 100–500 ms each) summing into the stall budget mean card fan-out where each dependent card contributes a compile. Split the module, lazy-load the template, or reduce the component fan-out. |
 | `blockedTimerSummary` populated | Supplementary. Tells you which timer-driven code is fighting the render. Not a root cause on its own. |
@@ -275,7 +281,7 @@ grep "requestId=b14e" realm-server.log
 The periodic `prerender-queue-snapshot` line does NOT carry requestId (it's a fleet snapshot):
 
 ```
-prerender-queue-snapshot totalTabs=4 totalPending=7 affinities=3 | realm:acme(tabs=1, pending=5, max=5) realm:lib(tabs=2, pending=2, max=1) user:u-123(tabs=1, pending=0, max=0)
+prerender-queue-snapshot totalTabs=5 totalPending=7 affinities=3 | realm:acme(tabs=2, pending=5, max=5, busy=file:1/module:1/command:0) realm:lib(tabs=2, pending=2, max=1, busy=file:1/module:0/command:0) user:u-123(tabs=1, pending=0, max=0)
 ```
 
 Read this alongside a timeout when `waits.semaphoreMs` is large. A snapshot with `totalPending >> totalTabs` near the timestamp confirms saturation.

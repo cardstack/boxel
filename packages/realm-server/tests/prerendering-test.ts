@@ -64,18 +64,22 @@ class TestSemaphore {
   };
 }
 
-function makeStubPagePool(
-  maxPages: number,
-  renderSemaphore?: { acquire(): Promise<() => void> },
-  createContextDelay?: (contextNumber: number) => Promise<void>,
-  options?: {
-    disableStandbyRefill?: boolean;
-    standbyTimeoutMs?: number;
-    closeContextDelay?: (id: string) => Promise<void>;
-    onContextCreated?: (id: string) => void;
-    onContextClosed?: (id: string) => void;
-  },
-) {
+interface StubPagePoolOptions {
+  maxPages: number;
+  renderSemaphore?: { acquire(): Promise<() => void> };
+  createContextDelay?: (contextNumber: number) => Promise<void>;
+  disableStandbyRefill?: boolean;
+  standbyTimeoutMs?: number;
+  closeContextDelay?: (id: string) => Promise<void>;
+  onContextCreated?: (id: string) => void;
+  onContextClosed?: (id: string) => void;
+  // Default `true` for back-compat with existing tab-routing unit
+  // tests that predate the admission feature. Admission-control
+  // tests opt in by passing `false`.
+  disableFileAdmission?: boolean;
+}
+
+function makeStubPagePool(opts: StubPagePoolOptions) {
   function makeStorage(): Storage {
     let values: Record<string, string> = {};
     return {
@@ -106,12 +110,12 @@ function makeStubPagePool(
   let browser = {
     async createBrowserContext() {
       let counter = ++contextCounter;
-      if (createContextDelay) {
-        await createContextDelay(counter);
+      if (opts.createContextDelay) {
+        await opts.createContextDelay(counter);
       }
       let id = `ctx-${counter}`;
       contextsCreated.push(id);
-      options?.onContextCreated?.(id);
+      opts.onContextCreated?.(id);
       let localStorage = makeStorage();
       let context = {
         async newPage() {
@@ -150,11 +154,11 @@ function makeStubPagePool(
           } as any;
         },
         async close() {
-          if (options?.closeContextDelay) {
-            await options.closeContextDelay(id);
+          if (opts.closeContextDelay) {
+            await opts.closeContextDelay(id);
           }
           contextsClosed.push(id);
-          options?.onContextClosed?.(id);
+          opts.onContextClosed?.(id);
           return;
         },
       } as any;
@@ -170,13 +174,14 @@ function makeStubPagePool(
     },
   };
   let pool = new PagePool({
-    maxPages,
+    maxPages: opts.maxPages,
     serverURL: 'http://localhost',
     browserManager: browserManager as any,
     boxelHostURL: 'http://localhost:4200',
-    standbyTimeoutMs: options?.standbyTimeoutMs ?? 500,
-    renderSemaphore,
-    disableStandbyRefill: options?.disableStandbyRefill,
+    standbyTimeoutMs: opts.standbyTimeoutMs ?? 500,
+    renderSemaphore: opts.renderSemaphore,
+    disableStandbyRefill: opts.disableStandbyRefill,
+    disableFileAdmission: opts.disableFileAdmission ?? true,
   });
   return { pool, contextsCreated, contextsClosed };
 }
@@ -4522,7 +4527,10 @@ module(basename(__filename), function () {
 
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '1';
-            ({ pool } = makeStubPagePool(1, semaphore));
+            ({ pool } = makeStubPagePool({
+              maxPages: 1,
+              renderSemaphore: semaphore,
+            }));
             await pool.warmStandbys();
 
             let run = async (realm: string) => {
@@ -4560,7 +4568,10 @@ module(basename(__filename), function () {
 
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
-            ({ pool } = makeStubPagePool(2, semaphore));
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              renderSemaphore: semaphore,
+            }));
             await pool.warmStandbys();
 
             let run = async (realm: string) => {
@@ -4589,8 +4600,107 @@ module(basename(__filename), function () {
           }
         });
 
+        test('file-queue admission holds the last tab for module calls', async function (assert) {
+          // Invariant: `fileTabsBusy ≤ N − 1`. With tab-max=2, at most
+          // one file render can be admitted at a time, reserving the
+          // other tab for module calls. This prevents the self-
+          // referential prerender deadlock (a file render blocked on a
+          // module extraction that's queued behind it).
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let semaphore = new TestSemaphore(2);
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              renderSemaphore: semaphore,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            let firstFile = await pool.getPage('realm-a', 'file');
+            let secondFileAdmitted = false;
+            let secondFilePromise = pool
+              .getPage('realm-a', 'file')
+              .then((lease) => {
+                secondFileAdmitted = true;
+                return lease;
+              });
+            await new Promise((r) => setTimeout(r, 10));
+            assert.false(
+              secondFileAdmitted,
+              'second file call waits behind admission control',
+            );
+
+            let moduleLease = await pool.getPage('realm-a', 'module');
+            assert.ok(
+              moduleLease.page,
+              'module call bypasses admission and lands on a tab',
+            );
+            moduleLease.release();
+
+            firstFile.release();
+            let secondFile = await secondFilePromise;
+            assert.true(
+              secondFileAdmitted,
+              'releasing the first file frees the admission slot',
+            );
+            secondFile.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('cancelling while waiting for file admission releases cleanly', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let semaphore = new TestSemaphore(2);
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              renderSemaphore: semaphore,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            let firstFile = await pool.getPage('realm-a', 'file');
+            let controller = new AbortController();
+            let cancelled = pool.getPage('realm-a', 'file', {
+              signal: controller.signal,
+            });
+            controller.abort();
+            await assert.rejects(
+              cancelled,
+              'aborted while queued on admission',
+            );
+
+            // Subsequent module call still goes through.
+            let moduleLease = await pool.getPage('realm-a', 'module');
+            assert.ok(moduleLease.page);
+            moduleLease.release();
+
+            firstFile.release();
+            // And after releasing, a new file admission succeeds.
+            let thirdFile = await pool.getPage('realm-a', 'file');
+            thirdFile.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
         test('prefers idle tab aligned to realm over standby tabs', async function (assert) {
-          let { pool } = makeStubPagePool(2);
+          let { pool } = makeStubPagePool({ maxPages: 2 });
           await pool.warmStandbys();
 
           let first = await pool.getPage('realm-a');
@@ -4613,7 +4723,7 @@ module(basename(__filename), function () {
           let originalNow = Date.now;
           let now = 1000;
           (Date as any).now = () => now;
-          let { pool } = makeStubPagePool(1);
+          let { pool } = makeStubPagePool({ maxPages: 1 });
 
           try {
             await pool.warmStandbys(); // standby at t=1000
@@ -4647,7 +4757,7 @@ module(basename(__filename), function () {
 
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '1';
-            ({ pool } = makeStubPagePool(2));
+            ({ pool } = makeStubPagePool({ maxPages: 2 }));
             await pool.warmStandbys();
 
             let first = await pool.getPage('realm-a');
@@ -4689,7 +4799,7 @@ module(basename(__filename), function () {
 
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
-            ({ pool } = makeStubPagePool(2));
+            ({ pool } = makeStubPagePool({ maxPages: 2 }));
             await pool.warmStandbys();
 
             let first = await pool.getPage('realm-a');
@@ -4745,7 +4855,7 @@ module(basename(__filename), function () {
         });
 
         test('queued cross-realm requests realign the tab per request', async function (assert) {
-          let { pool } = makeStubPagePool(1);
+          let { pool } = makeStubPagePool({ maxPages: 1 });
           await pool.warmStandbys();
 
           let first = await pool.getPage('realm-a');
@@ -4789,7 +4899,8 @@ module(basename(__filename), function () {
         });
 
         test('does not reassign a busy tab with queued work across realms', async function (assert) {
-          let { pool } = makeStubPagePool(1, undefined, undefined, {
+          let { pool } = makeStubPagePool({
+            maxPages: 1,
             disableStandbyRefill: true,
           });
 
@@ -4826,7 +4937,8 @@ module(basename(__filename), function () {
         });
 
         test('queues same-realm request when tab is transitioning', async function (assert) {
-          let { pool } = makeStubPagePool(1, undefined, undefined, {
+          let { pool } = makeStubPagePool({
+            maxPages: 1,
             disableStandbyRefill: true,
           });
 
@@ -4894,7 +5006,8 @@ module(basename(__filename), function () {
 
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
-            ({ pool } = makeStubPagePool(2, undefined, undefined, {
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
               closeContextDelay: async () => closeGate,
               onContextCreated() {
                 active++;
@@ -4935,7 +5048,7 @@ module(basename(__filename), function () {
         });
 
         test('creates spare standby when pool is at capacity', async function (assert) {
-          let { pool, contextsCreated } = makeStubPagePool(1);
+          let { pool, contextsCreated } = makeStubPagePool({ maxPages: 1 });
           await pool.warmStandbys();
           assert.strictEqual(
             contextsCreated.length,
@@ -4957,7 +5070,7 @@ module(basename(__filename), function () {
         });
 
         test('standby pages bind to the first realm they serve', async function (assert) {
-          let { pool } = makeStubPagePool(2);
+          let { pool } = makeStubPagePool({ maxPages: 2 });
           await pool.warmStandbys(); // fill initial standbys
 
           let realmAFirst = await pool.getPage('realm-a');
@@ -4997,7 +5110,7 @@ module(basename(__filename), function () {
         });
 
         test('each tab uses a separate browser context', async function (assert) {
-          let { pool } = makeStubPagePool(2);
+          let { pool } = makeStubPagePool({ maxPages: 2 });
           await pool.warmStandbys();
 
           let first = await pool.getPage('realm-a');
@@ -5038,7 +5151,9 @@ module(basename(__filename), function () {
         });
 
         test('evicts idle realms without touching standbys', async function (assert) {
-          let { pool, contextsCreated, contextsClosed } = makeStubPagePool(2);
+          let { pool, contextsCreated, contextsClosed } = makeStubPagePool({
+            maxPages: 2,
+          });
           await pool.warmStandbys();
 
           assert.strictEqual(
@@ -5081,7 +5196,9 @@ module(basename(__filename), function () {
         });
 
         test('idle eviction skips unassigned standbys', async function (assert) {
-          let { pool, contextsCreated, contextsClosed } = makeStubPagePool(1);
+          let { pool, contextsCreated, contextsClosed } = makeStubPagePool({
+            maxPages: 1,
+          });
           await pool.warmStandbys();
 
           let createdBeforeSweep = contextsCreated.length;
@@ -5105,7 +5222,7 @@ module(basename(__filename), function () {
 
       module('shared BrowserContext (CS-10817)', function () {
         test('disposeAffinity with retainSharedContext keeps an orphan for re-warm', async function (assert) {
-          let { pool } = makeStubPagePool(2);
+          let { pool } = makeStubPagePool({ maxPages: 2 });
           await pool.warmStandbys();
 
           let first = await pool.getPage('realm-a');
@@ -5146,7 +5263,7 @@ module(basename(__filename), function () {
         });
 
         test('disposeAffinity without retainSharedContext closes the context', async function (assert) {
-          let { pool } = makeStubPagePool(2);
+          let { pool } = makeStubPagePool({ maxPages: 2 });
           await pool.warmStandbys();
 
           let first = await pool.getPage('realm-a');
@@ -5178,12 +5295,10 @@ module(basename(__filename), function () {
           (Date as any).now = () => now;
           let previousCap = process.env.PRERENDER_SHARED_CONTEXT_CAP;
           process.env.PRERENDER_SHARED_CONTEXT_CAP = '2';
-          let { pool, contextsClosed } = makeStubPagePool(
-            3,
-            undefined,
-            undefined,
-            { disableStandbyRefill: true },
-          );
+          let { pool, contextsClosed } = makeStubPagePool({
+            maxPages: 3,
+            disableStandbyRefill: true,
+          });
           let orphanFor = async (affinityKey: string) => {
             let lease = await pool.getPage(affinityKey);
             lease.release();
@@ -5239,7 +5354,8 @@ module(basename(__filename), function () {
         test('LRU does not evict active (in-use) shared contexts', async function (assert) {
           let previousCap = process.env.PRERENDER_SHARED_CONTEXT_CAP;
           process.env.PRERENDER_SHARED_CONTEXT_CAP = '1';
-          let { pool } = makeStubPagePool(3, undefined, undefined, {
+          let { pool } = makeStubPagePool({
+            maxPages: 3,
             disableStandbyRefill: true,
           });
           try {
@@ -5294,7 +5410,9 @@ module(basename(__filename), function () {
           // first-registered context and leak the rest.
           let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
           process.env.PRERENDER_AFFINITY_TAB_MAX = '3';
-          let { pool, contextsCreated, contextsClosed } = makeStubPagePool(3);
+          let { pool, contextsCreated, contextsClosed } = makeStubPagePool({
+            maxPages: 3,
+          });
           try {
             await pool.warmStandbys();
 
