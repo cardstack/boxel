@@ -219,6 +219,21 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
         }
       };
 
+      const releaseAfterTokenPaint = () => {
+        // forceFullTokenization updates the model synchronously, but Monaco
+        // paints the resulting coloured spans on its next animation frame.
+        // Releasing the waiter before that paint lets Percy capture the
+        // intermediate plain-text state — exactly the "syntax highlighting
+        // on one side but not the other" false positive seen on main-branch
+        // codeblocks snapshots. Two RAFs covers Monaco's own
+        // scheduleAtNextAnimationFrame plus the browser's paint step.
+        // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- Monaco paints tokens on its next rAF; the waiter must span that frame
+        requestAnimationFrame(() =>
+          // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- second frame to cover the paint following Monaco's layout
+          requestAnimationFrame(() => this.endAsync(operationId)),
+        );
+      };
+
       const checkInitComplete = () => {
         if (isInitialized) return;
 
@@ -228,7 +243,7 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
 
         ensureTokenization();
         isInitialized = true;
-        this.endAsync(operationId);
+        releaseAfterTokenPaint();
       };
 
       // Listen for layout changes to detect when initialization is complete
@@ -279,7 +294,7 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
           contentSizeDisposable.dispose();
           diffDisposable?.dispose();
           decorationsDisposable.dispose();
-          this.endAsync(operationId);
+          releaseAfterTokenPaint();
         }
       }, 2000);
 

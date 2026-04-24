@@ -5,7 +5,11 @@ module.exports = {
     percyCSS: `
       [data-test-percy-hide],
       .monaco-editor .decorationsOverviewRuler,
-      .monaco-editor .margin-view-overlays {
+      .monaco-editor .margin-view-overlays,
+      .monaco-editor .view-overlays .core-guide,
+      .monaco-editor .view-overlays .core-guide-indent,
+      .monaco-editor .view-overlays .bracket-indent-guide,
+      .monaco-editor .cursors-layer {
         visibility: hidden;
       }
       .actions-overlay.selected {
