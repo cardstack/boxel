@@ -74,7 +74,7 @@ jobs:
 
       - name: Build host dist (test assets)
         if: steps.restore.outputs.cache-hit != 'true'
-        run: NODE_OPTIONS="--max_old_space_size=6144" pnpm build
+        run: NODE_OPTIONS="--max_old_space_size=4096" pnpm build
         working-directory: packages/host
         env:
           SKIP_CATALOG: ${{ inputs.skip_catalog }}
