@@ -185,8 +185,7 @@ export async function profileCommand(
         // supplied by a flag — otherwise an invalid env var (e.g. slugs to
         // empty) would kill a fully-specified invocation where the env var
         // would have been overridden anyway.
-        const needsEnvDefaults =
-          !options.matrixUrl || !options.realmServerUrl;
+        const needsEnvDefaults = !options.matrixUrl || !options.realmServerUrl;
         const envDefaults = needsEnvDefaults ? resolveBoxelEnvironment() : null;
         await addProfileNonInteractive(
           manager,
