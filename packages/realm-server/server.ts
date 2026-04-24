@@ -54,6 +54,7 @@ import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/
 import type { Prerenderer } from '@cardstack/runtime-common';
 import { retrieveScopedCSS } from './lib/retrieve-scoped-css';
 import { mirrorSourceRealmToRegistry } from './lib/realm-registry-writes';
+import { withRealmWriteLock } from './lib/realm-advisory-locks';
 import {
   indexURLCandidates,
   indexCandidateExpressions,
@@ -908,35 +909,46 @@ export class RealmServer {
     let realmPath = resolve(join(this.realmsRootPath, ownerUsername, endpoint));
     ensureDirSync(realmPath);
 
-    await insertPermissions(this.dbAdapter, new URL(url), {
-      [ownerUserId]: DEFAULT_PERMISSIONS,
-    });
-
     let info = {
       name,
       ...(iconURL ? { iconURL } : {}),
       ...(backgroundURL ? { backgroundURL } : {}),
       publishable: true,
     };
-    writeJSONSync(join(realmPath, '.realm.json'), info);
-    writeJSONSync(join(realmPath, 'index.json'), {
-      data: {
-        type: 'card',
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/cards-grid',
-            name: 'CardsGrid',
+
+    // Serialize against any other caller of withRealmWriteLock for this
+    // same URL (concurrent createRealm for the same endpoint, or a
+    // concurrent publish/unpublish/delete). This is almost never a real
+    // concurrency concern — the endpoint was already checked above for
+    // collision. realm.write() and /_atomic are NOT yet wired into
+    // withRealmWriteLock (that requires moving the lock primitive into
+    // runtime-common or threading it through the Realm constructor — a
+    // deferred follow-up tracked alongside CS-10898).
+    await withRealmWriteLock(this.dbAdapter, url, async () => {
+      await insertPermissions(this.dbAdapter, new URL(url), {
+        [ownerUserId]: DEFAULT_PERMISSIONS,
+      });
+
+      writeJSONSync(join(realmPath, '.realm.json'), info);
+      writeJSONSync(join(realmPath, 'index.json'), {
+        data: {
+          type: 'card',
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/cards-grid',
+              name: 'CardsGrid',
+            },
           },
         },
-      },
-    });
+      });
 
-    // Phase 1 dual-write: register the source realm in realm_registry after
-    // its on-disk representation is in place. Logs and continues on failure.
-    await mirrorSourceRealmToRegistry(this.dbAdapter, {
-      url,
-      diskId: `${ownerUsername}/${endpoint}`,
-      ownerUsername,
+      // Phase 1 dual-write: register the source realm in realm_registry after
+      // its on-disk representation is in place. Logs and continues on failure.
+      await mirrorSourceRealmToRegistry(this.dbAdapter, {
+        url,
+        diskId: `${ownerUsername}/${endpoint}`,
+        ownerUsername,
+      });
     });
 
     let realm = this.createAndMountRealm(

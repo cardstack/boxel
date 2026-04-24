@@ -43,6 +43,7 @@ import type { RealmServerTokenClaim } from '../utils/jwt';
 import { registerUser } from '../synapse';
 import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 import { mirrorPublishedRealmToRegistry } from '../lib/realm-registry-writes';
+import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
 const log = logger('handle-publish');
 
@@ -288,168 +289,180 @@ export default function handlePublishRealm({
         );
       }
 
-      let existingPublishedRealm = realms.find(
-        (r) => r.url === publishedRealmURL,
-      );
-
-      let userId;
-      let realmUsername;
-      let publishedRealmId: string;
-
-      if (existingPublishedRealm) {
-        let results = (await query(dbAdapter, [
-          `SELECT id, owner_username FROM published_realms WHERE published_realm_url =`,
-          param(publishedRealmURL),
-        ])) as Pick<PublishedRealmTable, 'id' | 'owner_username'>[];
-        if (!results.length) {
-          throw new Error(
-            `Published realm record not found for ${publishedRealmURL}`,
+      // Acquire the per-realm write lock early — before the existing-realm
+      // check, Matrix user registration, and permissions insert — so that
+      // two concurrent publishes for the same publishedRealmURL cannot
+      // race through those pre-lock steps (which would otherwise orphan a
+      // Matrix user / permissions row when one of them fails on the
+      // published_realms insert).
+      let { realm, lastPublishedAt, publishedRealmId } =
+        await withRealmWriteLock(dbAdapter, publishedRealmURL, async () => {
+          let existingPublishedRealm = realms.find(
+            (r) => r.url === publishedRealmURL,
           );
-        }
-        publishedRealmId = results[0].id;
-        realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
-      } else {
-        publishedRealmId = uuidv4();
-        realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
 
-        let { userId: newUserId } = await registerUser({
-          matrixURL: matrixClient.matrixURL,
-          displayname: realmUsername,
-          username: realmUsername,
-          password: await passwordFromSeed(realmUsername, realmSecretSeed),
-          registrationSecret: await getMatrixRegistrationSecret(),
-        });
-        userId = newUserId;
+          let userId;
+          let realmUsername;
+          let publishedRealmId: string;
 
-        await insertPermissions(dbAdapter, new URL(publishedRealmURL), {
-          [userId]: ['read', 'realm-owner'],
-          [ownerUserId]: ['read', 'realm-owner'],
-          '*': ['read'],
-        });
-      }
+          if (existingPublishedRealm) {
+            let results = (await query(dbAdapter, [
+              `SELECT id, owner_username FROM published_realms WHERE published_realm_url =`,
+              param(publishedRealmURL),
+            ])) as Pick<PublishedRealmTable, 'id' | 'owner_username'>[];
+            if (!results.length) {
+              throw new Error(
+                `Published realm record not found for ${publishedRealmURL}`,
+              );
+            }
+            publishedRealmId = results[0].id;
+            realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
+          } else {
+            publishedRealmId = uuidv4();
+            realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
 
-      let sourceRealm = realms.find((r) => r.url === sourceRealmURL);
-      if (!sourceRealm?.dir) {
-        throw new Error(
-          `Could not determine filesystem path for source realm ${sourceRealmURL}`,
-        );
-      }
-      // Publishing copies index state from the source realm, so we need to
-      // wait for any in-flight indexing/update propagation to settle first.
-      await sourceRealm.indexing();
-      await sourceRealm.flushUpdateEvents();
-      let sourceRealmPath = sourceRealm.dir;
-      let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
-      let publishedRealmPath = join(publishedDir, publishedRealmId);
-      // Copy source to a temporary directory first, then swap it into
-      // place so that a failed copy doesn't destroy the existing
-      // published realm (e.g. due to disk-full or permission errors).
-      let tempCopyPath = `${publishedRealmPath}.tmp`;
-      let backupPath = `${publishedRealmPath}.backup`;
-      removeSync(tempCopyPath);
-      removeSync(backupPath);
-      copySync(sourceRealmPath, tempCopyPath);
-      // Unmount the existing published realm before swapping the
-      // directory so it can't serve requests from a partially
-      // replaced filesystem.
-      if (existingPublishedRealm) {
-        realms.splice(realms.indexOf(existingPublishedRealm), 1);
-        virtualNetwork.unmount(existingPublishedRealm.handle);
-      }
-      try {
-        if (existsSync(publishedRealmPath)) {
-          moveSync(publishedRealmPath, backupPath);
-        }
-        moveSync(tempCopyPath, publishedRealmPath);
-        removeSync(backupPath);
-      } catch (swapError) {
-        // Restore the old published realm if the swap failed
-        if (!existsSync(publishedRealmPath) && existsSync(backupPath)) {
-          moveSync(backupPath, publishedRealmPath);
-        }
-        removeSync(tempCopyPath);
-        throw swapError;
-      }
+            let { userId: newUserId } = await registerUser({
+              matrixURL: matrixClient.matrixURL,
+              displayname: realmUsername,
+              username: realmUsername,
+              password: await passwordFromSeed(realmUsername, realmSecretSeed),
+              registrationSecret: await getMatrixRegistrationSecret(),
+            });
+            userId = newUserId;
 
-      let newlyPublishedRealmConfig = readJsonSync(
-        join(publishedRealmPath, '.realm.json'),
-      );
-      newlyPublishedRealmConfig.publishable = false;
-      let rewrittenHostHome = rewriteHostHomeForPublishedRealm(
-        newlyPublishedRealmConfig.hostHome,
-        sourceRealmURL,
-        publishedRealmURL,
-      );
-      if (rewrittenHostHome) {
-        newlyPublishedRealmConfig.hostHome = rewrittenHostHome;
-      }
-      writeJsonSync(
-        join(publishedRealmPath, '.realm.json'),
-        newlyPublishedRealmConfig,
-      );
+            await insertPermissions(dbAdapter, new URL(publishedRealmURL), {
+              [userId]: ['read', 'realm-owner'],
+              [ownerUserId]: ['read', 'realm-owner'],
+              '*': ['read'],
+            });
+          }
 
-      // Clear stale modules cache for the published realm so that
-      // error entries from a previous publish don't persist
-      await query(dbAdapter, [
-        `DELETE FROM modules WHERE resolved_realm_url =`,
-        param(publishedRealmURL),
-      ]);
+          let sourceRealm = realms.find((r) => r.url === sourceRealmURL);
+          if (!sourceRealm?.dir) {
+            throw new Error(
+              `Could not determine filesystem path for source realm ${sourceRealmURL}`,
+            );
+          }
+          // Publishing copies index state from the source realm, so we need to
+          // wait for any in-flight indexing/update propagation to settle first.
+          await sourceRealm.indexing();
+          await sourceRealm.flushUpdateEvents();
+          let sourceRealmPath = sourceRealm.dir;
+          let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
+          let publishedRealmPath = join(publishedDir, publishedRealmId);
 
-      let realm = createAndMountRealm(
-        publishedRealmPath,
-        publishedRealmURL,
-        new URL(sourceRealmURL),
-        false,
-      );
-      await realm.start();
+          // Copy source to a temporary directory first, then swap it into
+          // place so that a failed copy doesn't destroy the existing
+          // published realm (e.g. due to disk-full or permission errors).
+          let tempCopyPath = `${publishedRealmPath}.tmp`;
+          let backupPath = `${publishedRealmPath}.backup`;
+          removeSync(tempCopyPath);
+          removeSync(backupPath);
+          copySync(sourceRealmPath, tempCopyPath);
+          // Unmount the existing published realm before swapping the
+          // directory so it can't serve requests from a partially
+          // replaced filesystem.
+          if (existingPublishedRealm) {
+            realms.splice(realms.indexOf(existingPublishedRealm), 1);
+            virtualNetwork.unmount(existingPublishedRealm.handle);
+          }
+          try {
+            if (existsSync(publishedRealmPath)) {
+              moveSync(publishedRealmPath, backupPath);
+            }
+            moveSync(tempCopyPath, publishedRealmPath);
+            removeSync(backupPath);
+          } catch (swapError) {
+            // Restore the old published realm if the swap failed
+            if (!existsSync(publishedRealmPath) && existsSync(backupPath)) {
+              moveSync(backupPath, publishedRealmPath);
+            }
+            removeSync(tempCopyPath);
+            throw swapError;
+          }
 
-      // reindexing is to ensure that prerendered templates that get copied over
-      // to the published realm get regenerated - we want this so that the
-      // places in the templates that refer to model.id are updated to the new
-      // published realm URL (for example in the og:url meta tag).
-      await realm.fullIndex(userInitiatedPriority);
+          let newlyPublishedRealmConfig = readJsonSync(
+            join(publishedRealmPath, '.realm.json'),
+          );
+          newlyPublishedRealmConfig.publishable = false;
+          let rewrittenHostHome = rewriteHostHomeForPublishedRealm(
+            newlyPublishedRealmConfig.hostHome,
+            sourceRealmURL,
+            publishedRealmURL,
+          );
+          if (rewrittenHostHome) {
+            newlyPublishedRealmConfig.hostHome = rewrittenHostHome;
+          }
+          writeJsonSync(
+            join(publishedRealmPath, '.realm.json'),
+            newlyPublishedRealmConfig,
+          );
 
-      let lastPublishedAt = Date.now().toString();
-      try {
-        if (existingPublishedRealm) {
+          // Clear stale modules cache for the published realm so that
+          // error entries from a previous publish don't persist
           await query(dbAdapter, [
-            `UPDATE published_realms SET last_published_at =`,
-            param(lastPublishedAt),
-            `WHERE published_realm_url =`,
+            `DELETE FROM modules WHERE resolved_realm_url =`,
             param(publishedRealmURL),
           ]);
-        } else {
-          let { valueExpressions, nameExpressions } = asExpressions({
-            id: publishedRealmId,
-            owner_username: realmUsername,
-            source_realm_url: sourceRealmURL,
-            published_realm_url: publishedRealmURL,
-            last_published_at: lastPublishedAt,
-          });
-          await query(
-            dbAdapter,
-            insert('published_realms', nameExpressions, valueExpressions),
-          );
-        }
-      } catch (dbError: any) {
-        // Clean up the mounted realm so we don't leave an orphan
-        // without a corresponding published_realms DB record
-        realms.splice(realms.indexOf(realm), 1);
-        virtualNetwork.unmount(realm.handle);
-        removeSync(publishedRealmPath);
-        throw dbError;
-      }
 
-      // Phase 1 dual-write: mirror the published realm into realm_registry.
-      // Logs and continues on failure (shadow data; boot-time backfill
-      // re-syncs on next boot). See lib/realm-registry-writes.ts.
-      await mirrorPublishedRealmToRegistry(dbAdapter, {
-        publishedRealmURL,
-        publishedRealmId,
-        ownerUsername: realmUsername,
-        sourceRealmURL,
-        lastPublishedAt: Number(lastPublishedAt),
-      });
+          let mountedRealm = createAndMountRealm(
+            publishedRealmPath,
+            publishedRealmURL,
+            new URL(sourceRealmURL),
+            false,
+          );
+          await mountedRealm.start();
+
+          // reindexing is to ensure that prerendered templates that get copied over
+          // to the published realm get regenerated - we want this so that the
+          // places in the templates that refer to model.id are updated to the new
+          // published realm URL (for example in the og:url meta tag).
+          await mountedRealm.fullIndex(userInitiatedPriority);
+
+          let lastPublishedAt = Date.now().toString();
+          try {
+            if (existingPublishedRealm) {
+              await query(dbAdapter, [
+                `UPDATE published_realms SET last_published_at =`,
+                param(lastPublishedAt),
+                `WHERE published_realm_url =`,
+                param(publishedRealmURL),
+              ]);
+            } else {
+              let { valueExpressions, nameExpressions } = asExpressions({
+                id: publishedRealmId,
+                owner_username: realmUsername,
+                source_realm_url: sourceRealmURL,
+                published_realm_url: publishedRealmURL,
+                last_published_at: lastPublishedAt,
+              });
+              await query(
+                dbAdapter,
+                insert('published_realms', nameExpressions, valueExpressions),
+              );
+            }
+          } catch (dbError: any) {
+            // Clean up the mounted realm so we don't leave an orphan
+            // without a corresponding published_realms DB record
+            realms.splice(realms.indexOf(mountedRealm), 1);
+            virtualNetwork.unmount(mountedRealm.handle);
+            removeSync(publishedRealmPath);
+            throw dbError;
+          }
+
+          // Phase 1 dual-write: mirror the published realm into realm_registry.
+          // Logs and continues on failure (shadow data; boot-time backfill
+          // re-syncs on next boot). See lib/realm-registry-writes.ts.
+          await mirrorPublishedRealmToRegistry(dbAdapter, {
+            publishedRealmURL,
+            publishedRealmId,
+            ownerUsername: realmUsername,
+            sourceRealmURL,
+            lastPublishedAt: Number(lastPublishedAt),
+          });
+
+          return { realm: mountedRealm, lastPublishedAt, publishedRealmId };
+        });
 
       let response = createResponse({
         body: JSON.stringify(
