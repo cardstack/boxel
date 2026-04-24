@@ -117,12 +117,15 @@ export default defineConfig(({ mode }) => ({
   // against the document origin, so they 404 on the realm-server origin.
   // Emit a runtime expression for JS asset references so they resolve
   // against a globally-configured assets URL set by the inline bootstrap
-  // script in index.html.
+  // script in index.html. When the global is unset (testem test runner,
+  // vite dev server, any host that doesn't inject the bootstrap), fall
+  // back to `/` so URLs stay root-absolute and resolve against the
+  // document origin as Vite would by default.
   experimental: {
     renderBuiltUrl(filename, { hostType }) {
       if (hostType === 'js') {
         return {
-          runtime: `globalThis.__boxelAssetsURL+${JSON.stringify(filename)}`,
+          runtime: `(globalThis.__boxelAssetsURL||"/")+${JSON.stringify(filename)}`,
         };
       }
       // Leave HTML/CSS references alone (root-absolute `/assets/...`) so
