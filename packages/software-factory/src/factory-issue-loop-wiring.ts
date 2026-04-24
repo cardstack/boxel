@@ -15,7 +15,7 @@
 import { resolve } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
-import { rri } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { logger } from './logger';

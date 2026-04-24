@@ -12,7 +12,7 @@ import type {
   LooseSingleCardDocument,
   Relationship,
 } from '@cardstack/runtime-common';
-import { rri } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 
 import { buildCardDocument } from './darkfactory-schemas';
 import {

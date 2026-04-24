@@ -13,7 +13,7 @@
 import { test } from './fixtures';
 import { expect } from '@playwright/test';
 
-import { rri } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { fetchCardTypeSchema } from '../src/darkfactory-schemas';

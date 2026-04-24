@@ -9,7 +9,7 @@
  */
 
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-import { rri } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 
 import { test } from './fixtures';
 import { expect } from '@playwright/test';
