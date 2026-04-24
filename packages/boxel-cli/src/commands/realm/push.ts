@@ -8,10 +8,9 @@ import {
   CheckpointManager,
   type CheckpointChange,
 } from '../../lib/checkpoint-manager';
-import {
-  getProfileManager,
-  type ProfileManager,
-} from '../../lib/profile-manager';
+import type { ProfileManager } from '../../lib/profile-manager';
+import type { RealmAuthenticator } from '../../lib/realm-authenticator';
+import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
 import {
   type SyncManifest,
   computeFileHash,
@@ -30,9 +29,9 @@ class RealmPusher extends RealmSyncBase {
 
   constructor(
     private pushOptions: PushOptions,
-    profileManager: ProfileManager,
+    authenticator: RealmAuthenticator,
   ) {
-    super(pushOptions, profileManager);
+    super(pushOptions, authenticator);
   }
 
   async sync(): Promise<void> {
@@ -308,6 +307,16 @@ export interface PushCommandOptions {
   dryRun?: boolean;
   force?: boolean;
   profileManager?: ProfileManager;
+  /**
+   * Realm secret seed for administrative access. When set, the CLI mints a
+   * JWT locally and skips Matrix login + /_server-session + /_realm-auth.
+   * Falls back to the BOXEL_REALM_SECRET_SEED env var.
+   */
+  realmSecretSeed?: string;
+  /**
+   * Escape hatch for tests: supply an already-constructed authenticator.
+   */
+  authenticator?: RealmAuthenticator;
 }
 
 export function registerPushCommand(realm: Command): void {
@@ -322,11 +331,20 @@ export function registerPushCommand(realm: Command): void {
     .option('--delete', 'Delete remote files that do not exist locally')
     .option('--dry-run', 'Show what would be done without making changes')
     .option('--force', 'Upload all files, even if unchanged')
+    .option(
+      '--realm-secret-seed <seed>',
+      'Administrative auth: mint a realm JWT locally using the given seed instead of a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+    )
     .action(
       async (
         localDir: string,
         realmUrl: string,
-        options: { delete?: boolean; dryRun?: boolean; force?: boolean },
+        options: {
+          delete?: boolean;
+          dryRun?: boolean;
+          force?: boolean;
+          realmSecretSeed?: string;
+        },
       ) => {
         await pushCommand(localDir, realmUrl, options);
       },
@@ -338,13 +356,22 @@ export async function pushCommand(
   realmUrl: string,
   options: PushCommandOptions,
 ): Promise<void> {
-  let pm = options.profileManager ?? getProfileManager();
-  let active = pm.getActiveProfile();
-  if (!active) {
-    console.error(
-      'Error: no active profile. Run `boxel profile add` to create one.',
-    );
-    process.exit(1);
+  let authenticator: RealmAuthenticator;
+  if (options.authenticator) {
+    authenticator = options.authenticator;
+  } else {
+    const resolution = resolveRealmAuthenticator({
+      realmUrl,
+      realmSecretSeed: options.realmSecretSeed,
+      profileManager: options.profileManager,
+    });
+    if (!resolution.ok) {
+      console.error(
+        `Error: ${resolution.error.charAt(0).toLowerCase()}${resolution.error.slice(1)}`,
+      );
+      process.exit(1);
+    }
+    authenticator = resolution.authenticator;
   }
 
   if (!(await pathExists(localDir))) {
@@ -361,7 +388,7 @@ export async function pushCommand(
         dryRun: options.dryRun,
         force: options.force,
       },
-      pm,
+      authenticator,
     );
 
     await pusher.sync();

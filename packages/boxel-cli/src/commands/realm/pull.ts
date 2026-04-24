@@ -4,10 +4,9 @@ import {
   CheckpointManager,
   type CheckpointChange,
 } from '../../lib/checkpoint-manager';
-import {
-  getProfileManager,
-  type ProfileManager,
-} from '../../lib/profile-manager';
+import type { ProfileManager } from '../../lib/profile-manager';
+import type { RealmAuthenticator } from '../../lib/realm-authenticator';
+import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -21,9 +20,9 @@ class RealmPuller extends RealmSyncBase {
 
   constructor(
     private pullOptions: PullOptions,
-    profileManager: ProfileManager,
+    authenticator: RealmAuthenticator,
   ) {
-    super(pullOptions, profileManager);
+    super(pullOptions, authenticator);
   }
 
   async sync(): Promise<void> {
@@ -171,6 +170,17 @@ export interface PullCommandOptions {
   delete?: boolean;
   dryRun?: boolean;
   profileManager?: ProfileManager;
+  /**
+   * Realm secret seed for administrative access. When set, the CLI mints a
+   * JWT locally and skips Matrix login + /_server-session + /_realm-auth.
+   * Falls back to the BOXEL_REALM_SECRET_SEED env var.
+   */
+  realmSecretSeed?: string;
+  /**
+   * Escape hatch for tests: supply an already-constructed authenticator,
+   * bypassing both seed resolution and the profile flow.
+   */
+  authenticator?: RealmAuthenticator;
 }
 
 export function registerPullCommand(realm: Command): void {
@@ -184,11 +194,19 @@ export function registerPullCommand(realm: Command): void {
     .argument('<local-dir>', 'The local directory to sync files to')
     .option('--delete', 'Delete local files that do not exist in the realm')
     .option('--dry-run', 'Show what would be done without making changes')
+    .option(
+      '--realm-secret-seed <seed>',
+      'Administrative auth: mint a realm JWT locally using the given seed instead of a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+    )
     .action(
       async (
         realmUrl: string,
         localDir: string,
-        options: { delete?: boolean; dryRun?: boolean },
+        options: {
+          delete?: boolean;
+          dryRun?: boolean;
+          realmSecretSeed?: string;
+        },
       ) => {
         let result = await pull(realmUrl, localDir, options);
         if (result.error) {
@@ -205,13 +223,19 @@ export async function pull(
   localDir: string,
   options: PullCommandOptions,
 ): Promise<{ files: string[]; error?: string }> {
-  let pm = options.profileManager ?? getProfileManager();
-  let active = pm.getActiveProfile();
-  if (!active) {
-    return {
-      files: [],
-      error: 'No active profile. Run `boxel profile add` to create one.',
-    };
+  let authenticator: RealmAuthenticator;
+  if (options.authenticator) {
+    authenticator = options.authenticator;
+  } else {
+    const resolution = resolveRealmAuthenticator({
+      realmUrl,
+      realmSecretSeed: options.realmSecretSeed,
+      profileManager: options.profileManager,
+    });
+    if (!resolution.ok) {
+      return { files: [], error: resolution.error };
+    }
+    authenticator = resolution.authenticator;
   }
 
   try {
@@ -222,7 +246,7 @@ export async function pull(
         deleteLocal: options.delete,
         dryRun: options.dryRun,
       },
-      pm,
+      authenticator,
     );
 
     await puller.sync();

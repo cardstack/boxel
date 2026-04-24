@@ -8,10 +8,9 @@ import {
   CheckpointManager,
   type CheckpointChange,
 } from '../../lib/checkpoint-manager';
-import {
-  getProfileManager,
-  type ProfileManager,
-} from '../../lib/profile-manager';
+import type { ProfileManager } from '../../lib/profile-manager';
+import type { RealmAuthenticator } from '../../lib/realm-authenticator';
+import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
 import {
   type SyncManifest,
   computeFileHash,
@@ -49,9 +48,9 @@ class RealmSyncer extends RealmSyncBase {
 
   constructor(
     private syncOptions: BiSyncOptions,
-    profileManager: ProfileManager,
+    authenticator: RealmAuthenticator,
   ) {
-    super(syncOptions, profileManager);
+    super(syncOptions, authenticator);
   }
 
   private get conflictStrategy(): ConflictStrategy | null {
@@ -491,6 +490,16 @@ export interface SyncCommandOptions {
   delete?: boolean;
   dryRun?: boolean;
   profileManager?: ProfileManager;
+  /**
+   * Realm secret seed for administrative access. When set, the CLI mints a
+   * JWT locally and skips Matrix login + /_server-session + /_realm-auth.
+   * Falls back to the BOXEL_REALM_SECRET_SEED env var.
+   */
+  realmSecretSeed?: string;
+  /**
+   * Escape hatch for tests: supply an already-constructed authenticator.
+   */
+  authenticator?: RealmAuthenticator;
 }
 
 export function registerSyncCommand(realm: Command): void {
@@ -509,6 +518,10 @@ export function registerSyncCommand(realm: Command): void {
     .option('--prefer-newest', 'Resolve conflicts by keeping newest version')
     .option('--delete', 'Sync deletions both ways')
     .option('--dry-run', 'Preview without making changes')
+    .option(
+      '--realm-secret-seed <seed>',
+      'Administrative auth: mint a realm JWT locally using the given seed instead of a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+    )
     .action(
       async (
         localDir: string,
@@ -519,6 +532,7 @@ export function registerSyncCommand(realm: Command): void {
           preferNewest?: boolean;
           delete?: boolean;
           dryRun?: boolean;
+          realmSecretSeed?: string;
         },
       ) => {
         await syncCommand(localDir, realmUrl, options);
@@ -531,13 +545,22 @@ export async function syncCommand(
   realmUrl: string,
   options: SyncCommandOptions,
 ): Promise<void> {
-  let pm = options.profileManager ?? getProfileManager();
-  let active = pm.getActiveProfile();
-  if (!active) {
-    console.error(
-      'Error: no active profile. Run `boxel profile add` to create one.',
-    );
-    process.exit(1);
+  let authenticator: RealmAuthenticator;
+  if (options.authenticator) {
+    authenticator = options.authenticator;
+  } else {
+    const resolution = resolveRealmAuthenticator({
+      realmUrl,
+      realmSecretSeed: options.realmSecretSeed,
+      profileManager: options.profileManager,
+    });
+    if (!resolution.ok) {
+      console.error(
+        `Error: ${resolution.error.charAt(0).toLowerCase()}${resolution.error.slice(1)}`,
+      );
+      process.exit(1);
+    }
+    authenticator = resolution.authenticator;
   }
 
   // Validate mutually exclusive strategies
@@ -569,7 +592,7 @@ export async function syncCommand(
         deleteSync: options.delete,
         dryRun: options.dryRun,
       },
-      pm,
+      authenticator,
     );
 
     await syncer.sync();
