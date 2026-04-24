@@ -408,12 +408,7 @@ module(basename(__filename), function () {
           'response includes updated realm info',
         );
         // backgroundURL is owned by the RealmConfig card, not the sidecar.
-        let cardPath = join(
-          dir.name,
-          'realm_server_1',
-          'test',
-          'realm.json',
-        );
+        let cardPath = join(dir.name, 'realm_server_1', 'test', 'realm.json');
         let cardDoc = readJSONSync(cardPath);
         assert.strictEqual(
           cardDoc.data.attributes.backgroundURL,
