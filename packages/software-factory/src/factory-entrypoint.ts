@@ -22,7 +22,11 @@ import {
 import type { IssueLoopResult } from './issue-loop';
 import { logger } from './logger';
 import { withStdoutRedirected } from './redirect-stdout';
-import { ensureWorkspaceDir, resolveWorkspaceDir } from './workspace-fs';
+import {
+  ensureWorkspaceDir,
+  resetWorkspaceDir,
+  resolveWorkspaceDir,
+} from './workspace-fs';
 
 let log = logger('factory-entrypoint');
 
@@ -263,9 +267,20 @@ export async function runFactoryEntrypoint(
   // read/write against the target realm happens against this directory;
   // the realm itself is reached only via `client.pull` / `client.sync`.
   // The path is deterministic per realm so re-runs reuse state.
+  //
+  // When the realm was just created by bootstrap, any pre-existing
+  // workspace state is guaranteed to be orphaned (the remote has only
+  // index.json, so local files from a prior run would fail the
+  // subsequent atomic sync). Reset in that case so users don't need to
+  // `rm -rf` by hand when iterating against a recreated realm.
   let workspaceDir = resolveWorkspaceDir(targetRealm.url);
-  await ensureWorkspaceDir(workspaceDir);
-  log.info(`Workspace directory: ${workspaceDir}`);
+  if (targetRealm.createdRealm) {
+    await resetWorkspaceDir(workspaceDir);
+    log.info(`Reset workspace for freshly-created realm: ${workspaceDir}`);
+  } else {
+    await ensureWorkspaceDir(workspaceDir);
+    log.info(`Workspace directory: ${workspaceDir}`);
+  }
 
   let pullTargetRealm = dependencies?.pullTargetRealm ?? defaultPullTargetRealm;
   await pullTargetRealm(client, targetRealm.url, workspaceDir);

@@ -187,3 +187,14 @@ export async function workspaceFileExists(
 export async function ensureWorkspaceDir(workspaceDir: string): Promise<void> {
   await mkdir(workspaceDir, { recursive: true });
 }
+
+/**
+ * Remove the workspace directory and everything under it, then recreate
+ * it empty. Used when the target realm is known to be fresh (e.g. just
+ * created by `bootstrapFactoryTargetRealm`), so any pre-existing local
+ * state from a prior run is guaranteed to be orphaned.
+ */
+export async function resetWorkspaceDir(workspaceDir: string): Promise<void> {
+  await rm(workspaceDir, { recursive: true, force: true });
+  await mkdir(workspaceDir, { recursive: true });
+}
