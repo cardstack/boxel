@@ -49,26 +49,39 @@ export function promptPassword(question: string): Promise<string> {
       }
     };
 
-    const onData = (char: Buffer) => {
+    const onData = (chunk: Buffer) => {
       try {
-        const c = char.toString();
-        if (c === '\n' || c === '\r') {
-          cleanup();
-          process.stdout.write('\n');
-          resolve(password);
-        } else if (c === '\u0003') {
-          // Ctrl+C
-          cleanup();
-          process.exit();
-        } else if (c === '\u007F' || c === '\b') {
-          // Backspace
-          if (password.length > 0) {
-            password = password.slice(0, -1);
-            process.stdout.write('\b \b');
+        // Pastes arrive as a single data event containing many characters.
+        // Strip bracketed-paste markers if the terminal sent them, then walk
+        // the chunk one code point at a time so newlines, backspace, and
+        // Ctrl+C inside a paste still work.
+        const raw = chunk
+          .toString()
+          .split('[200~')
+          .join('')
+          .split('[201~')
+          .join('');
+        for (const c of raw) {
+          if (c === '\n' || c === '\r') {
+            cleanup();
+            process.stdout.write('\n');
+            resolve(password);
+            return;
+          } else if (c === '\u0003') {
+            // Ctrl+C
+            cleanup();
+            process.exit();
+          } else if (c === '\u007F' || c === '\b') {
+            // Backspace
+            if (password.length > 0) {
+              password = password.slice(0, -1);
+              process.stdout.write('\b \b');
+            }
+          } else if (c >= ' ') {
+            // Printable character; suppress other control bytes entirely.
+            password += c;
+            process.stdout.write('*');
           }
-        } else {
-          password += c;
-          process.stdout.write('*');
         }
       } catch (e) {
         cleanup();
