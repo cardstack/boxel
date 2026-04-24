@@ -142,6 +142,29 @@ describe('boxel profile add (non-interactive)', () => {
     });
   });
 
+  it('ignores an invalid BOXEL_ENVIRONMENT when both URL flags are supplied', () => {
+    // If both URLs are explicit, BOXEL_ENVIRONMENT is never consulted,
+    // so even a value that would normally exit 1 (slugifies to empty)
+    // must not block the command.
+    run(
+      [
+        '-u',
+        '@alice:my.server',
+        '-m',
+        'https://matrix.my.server',
+        '-r',
+        'https://realms.my.server/',
+      ],
+      { BOXEL_ENVIRONMENT: '!!!' },
+    );
+
+    const config = readProfiles();
+    expect(config.profiles['@alice:my.server']).toMatchObject({
+      matrixUrl: 'https://matrix.my.server',
+      realmServerUrl: 'https://realms.my.server/',
+    });
+  });
+
   it('exits 1 when BOXEL_ENVIRONMENT slugifies to empty', () => {
     try {
       run(['-u', '@alice:stack.cards'], { BOXEL_ENVIRONMENT: '!!!' });

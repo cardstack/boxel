@@ -179,9 +179,15 @@ export async function profileCommand(
       break;
 
     case 'add': {
-      const envDefaults = resolveBoxelEnvironment();
       const password = options?.password || process.env.BOXEL_PASSWORD;
       if (options?.user && password) {
+        // Only consult BOXEL_ENVIRONMENT when at least one URL isn't already
+        // supplied by a flag — otherwise an invalid env var (e.g. slugs to
+        // empty) would kill a fully-specified invocation where the env var
+        // would have been overridden anyway.
+        const needsEnvDefaults =
+          !options.matrixUrl || !options.realmServerUrl;
+        const envDefaults = needsEnvDefaults ? resolveBoxelEnvironment() : null;
         await addProfileNonInteractive(
           manager,
           options.user,
@@ -191,7 +197,7 @@ export async function profileCommand(
           options.realmServerUrl ?? envDefaults?.realmServerUrl,
         );
       } else {
-        await addProfile(manager, envDefaults);
+        await addProfile(manager, resolveBoxelEnvironment());
       }
       break;
     }
