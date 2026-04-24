@@ -109,6 +109,45 @@ export interface ProfileCommandOptions {
   realmServerUrl?: string;
 }
 
+const ENVIRONMENT_DEFAULTS = {
+  staging: {
+    domain: 'stack.cards',
+    matrixUrl: 'https://matrix-staging.stack.cards',
+    realmServerUrl: 'https://realms-staging.stack.cards/',
+  },
+  production: {
+    domain: 'boxel.ai',
+    matrixUrl: 'https://matrix.boxel.ai',
+    realmServerUrl: 'https://app.boxel.ai/',
+  },
+  local: {
+    domain: 'localhost',
+    matrixUrl: 'http://localhost:8008',
+    realmServerUrl: 'http://localhost:4201/',
+  },
+} as const;
+
+type EnvironmentDefaults =
+  (typeof ENVIRONMENT_DEFAULTS)[keyof typeof ENVIRONMENT_DEFAULTS];
+
+function resolveBoxelEnvironment(): EnvironmentDefaults | null {
+  const raw = process.env.BOXEL_ENVIRONMENT;
+  if (!raw || !raw.trim()) return null;
+  const key = raw.trim().toLowerCase();
+  const defaults = (
+    ENVIRONMENT_DEFAULTS as Record<string, EnvironmentDefaults>
+  )[key];
+  if (!defaults) {
+    console.error(
+      `${FG_RED}Error:${RESET} Unknown BOXEL_ENVIRONMENT "${raw}". Expected one of: ${Object.keys(
+        ENVIRONMENT_DEFAULTS,
+      ).join(', ')}.`,
+    );
+    process.exit(1);
+  }
+  return defaults;
+}
+
 export async function profileCommand(
   subcommand?: string,
   arg?: string,
@@ -122,6 +161,7 @@ export async function profileCommand(
       break;
 
     case 'add': {
+      const envDefaults = resolveBoxelEnvironment();
       const password = options?.password || process.env.BOXEL_PASSWORD;
       if (options?.user && password) {
         await addProfileNonInteractive(
@@ -129,11 +169,11 @@ export async function profileCommand(
           options.user,
           password,
           options.name,
-          options.matrixUrl,
-          options.realmServerUrl,
+          options.matrixUrl ?? envDefaults?.matrixUrl,
+          options.realmServerUrl ?? envDefaults?.realmServerUrl,
         );
       } else {
-        await addProfile(manager);
+        await addProfile(manager, envDefaults);
       }
       break;
     }
@@ -221,9 +261,11 @@ async function listProfiles(manager: ProfileManager): Promise<void> {
   }
 }
 
-async function addProfile(manager: ProfileManager): Promise<void> {
-  console.log(`\n${BOLD}Add New Profile${RESET}\n`);
-
+async function promptEnvironmentMenu(): Promise<{
+  domain: string;
+  matrixUrl: string;
+  realmServerUrl: string;
+}> {
   console.log(`Which environment?`);
   console.log(`  ${FG_CYAN}1${RESET}) Staging (realms-staging.stack.cards)`);
   console.log(`  ${FG_MAGENTA}2${RESET}) Production (app.boxel.ai)`);
@@ -231,49 +273,65 @@ async function addProfile(manager: ProfileManager): Promise<void> {
   console.log(`  ${FG_YELLOW}4${RESET}) Custom (enter your own URLs)`);
 
   const envChoice = await prompt('\nChoice [1/2/3/4]: ');
-  const isProduction = envChoice === '2';
-  const isLocal = envChoice === '3';
-  const isCustom = envChoice === '4';
 
-  let domain: string;
-  let defaultMatrixUrl: string;
-  let defaultRealmUrl: string;
-
-  if (isCustom) {
-    const matrixUrlInput = await prompt('Matrix server URL: ');
-    if (!matrixUrlInput) {
+  if (envChoice === '4') {
+    const matrixUrl = await prompt('Matrix server URL: ');
+    if (!matrixUrl) {
       console.error(`${FG_RED}Error:${RESET} Matrix server URL is required.`);
       process.exit(1);
     }
-    const realmUrlInput = await prompt('Realm server URL: ');
-    if (!realmUrlInput) {
+    const realmServerUrl = await prompt('Realm server URL: ');
+    if (!realmServerUrl) {
       console.error(`${FG_RED}Error:${RESET} Realm server URL is required.`);
       process.exit(1);
     }
     let defaultDomain = 'custom';
     try {
-      defaultDomain = new URL(matrixUrlInput).hostname || defaultDomain;
+      defaultDomain = new URL(matrixUrl).hostname || defaultDomain;
     } catch {
       // fall back to 'custom'
     }
     const domainInput = await prompt(
       `Domain for Matrix ID [${defaultDomain}]: `,
     );
-    domain = domainInput || defaultDomain;
-    defaultMatrixUrl = matrixUrlInput;
-    defaultRealmUrl = realmUrlInput;
-  } else if (isLocal) {
-    domain = 'localhost';
-    defaultMatrixUrl = 'http://localhost:8008';
-    defaultRealmUrl = 'http://localhost:4201/';
-  } else if (isProduction) {
-    domain = 'boxel.ai';
-    defaultMatrixUrl = 'https://matrix.boxel.ai';
-    defaultRealmUrl = 'https://app.boxel.ai/';
+    return {
+      domain: domainInput || defaultDomain,
+      matrixUrl,
+      realmServerUrl,
+    };
+  }
+
+  if (envChoice === '3') {
+    return { ...ENVIRONMENT_DEFAULTS.local };
+  }
+  if (envChoice === '2') {
+    return { ...ENVIRONMENT_DEFAULTS.production };
+  }
+  return { ...ENVIRONMENT_DEFAULTS.staging };
+}
+
+async function addProfile(
+  manager: ProfileManager,
+  envDefaults?: EnvironmentDefaults | null,
+): Promise<void> {
+  console.log(`\n${BOLD}Add New Profile${RESET}\n`);
+
+  let domain: string;
+  let defaultMatrixUrl: string;
+  let defaultRealmUrl: string;
+
+  if (envDefaults) {
+    console.log(
+      `${DIM}Using BOXEL_ENVIRONMENT=${process.env.BOXEL_ENVIRONMENT}${RESET}`,
+    );
+    domain = envDefaults.domain;
+    defaultMatrixUrl = envDefaults.matrixUrl;
+    defaultRealmUrl = envDefaults.realmServerUrl;
   } else {
-    domain = 'stack.cards';
-    defaultMatrixUrl = 'https://matrix-staging.stack.cards';
-    defaultRealmUrl = 'https://realms-staging.stack.cards/';
+    const menuResult = await promptEnvironmentMenu();
+    domain = menuResult.domain;
+    defaultMatrixUrl = menuResult.matrixUrl;
+    defaultRealmUrl = menuResult.realmServerUrl;
   }
 
   console.log(`\nEnter your Boxel username (without @ or domain)`);

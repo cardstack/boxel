@@ -34,10 +34,15 @@ describe('boxel profile add (non-interactive)', () => {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
-  const run = (args: string[]) =>
+  const run = (args: string[], extraEnv: NodeJS.ProcessEnv = {}) =>
     execFileSync(process.execPath, [cliEntry, 'profile', 'add', ...args], {
       encoding: 'utf8',
-      env: { ...process.env, HOME: tmpHome, BOXEL_PASSWORD: 'hunter2' },
+      env: {
+        ...process.env,
+        HOME: tmpHome,
+        BOXEL_PASSWORD: 'hunter2',
+        ...extraEnv,
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -84,6 +89,54 @@ describe('boxel profile add (non-interactive)', () => {
       expect(e.stderr).toMatch(/Unknown domain/);
       expect(e.stderr).toMatch(/--matrix-url/);
       expect(e.stderr).toMatch(/--realm-server-url/);
+    }
+
+    expect(
+      fs.existsSync(join(tmpHome, '.boxel-cli', 'profiles.json')),
+    ).toBe(false);
+  });
+
+  it('derives URLs from BOXEL_ENVIRONMENT when no URL flags are given', () => {
+    run(['-u', '@alice:my.server'], { BOXEL_ENVIRONMENT: 'production' });
+
+    const config = readProfiles();
+    expect(config.profiles['@alice:my.server']).toMatchObject({
+      matrixUrl: 'https://matrix.boxel.ai',
+      realmServerUrl: 'https://app.boxel.ai/',
+    });
+  });
+
+  it('lets --matrix-url and --realm-server-url override BOXEL_ENVIRONMENT', () => {
+    run(
+      [
+        '-u',
+        '@alice:my.server',
+        '-m',
+        'https://matrix.my.server',
+        '-r',
+        'https://realms.my.server/',
+      ],
+      { BOXEL_ENVIRONMENT: 'production' },
+    );
+
+    const config = readProfiles();
+    expect(config.profiles['@alice:my.server']).toMatchObject({
+      matrixUrl: 'https://matrix.my.server',
+      realmServerUrl: 'https://realms.my.server/',
+    });
+  });
+
+  it('exits 1 on an unknown BOXEL_ENVIRONMENT value', () => {
+    try {
+      run(['-u', '@alice:stack.cards'], { BOXEL_ENVIRONMENT: 'bogus' });
+      throw new Error('expected command to exit non-zero');
+    } catch (err) {
+      const e = err as { status?: number; stderr?: string };
+      expect(e.status).toBe(1);
+      expect(e.stderr).toMatch(/Unknown BOXEL_ENVIRONMENT/);
+      expect(e.stderr).toMatch(/staging/);
+      expect(e.stderr).toMatch(/production/);
+      expect(e.stderr).toMatch(/local/);
     }
 
     expect(
