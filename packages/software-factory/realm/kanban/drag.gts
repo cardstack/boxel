@@ -67,7 +67,6 @@ export class KanbanDragManager {
   containerRef: HTMLElement | null = null;
 
   constructor(opts: KanbanDragManagerOptions) {
-    // ¹³
     this.placementsFn = opts.placements;
     this.columnCountFn = opts.columnCount;
     this.containerFn = () => this.containerRef ?? opts.containerElement();
@@ -157,7 +156,6 @@ export class KanbanDragManager {
   };
 
   onPointerUp = (event: Event): void => {
-    // ¹⁶
     const e = event as PointerEvent;
     if (e.pointerId !== this.activePointerId) return;
 
@@ -217,7 +215,6 @@ export class KanbanDragManager {
   // ── Keyboard ───────────────────────────────────────────────────────
 
   onKeyDown = (event: Event): void => {
-    // ¹⁷
     const e = event as KeyboardEvent;
     if (e.key === 'Escape') {
       if (this.interactionMode !== 'idle') {
@@ -321,7 +318,6 @@ export class KanbanDragManager {
   }
 
   private cancelDrag(): void {
-    // ²¹
     if (this.snapshotPlacements) {
       this.onChangeFn(this.snapshotPlacements);
     }
@@ -337,7 +333,6 @@ export class KanbanDragManager {
   }
 
   private resetSession(): void {
-    // ²²
     this.activePointerId = null;
     this.activeDragIndex = null;
     this.insertion = null;

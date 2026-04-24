@@ -89,7 +89,6 @@ export class KanbanPlane extends Component<{
   };
 
   shouldShiftDown = (p: KanbanPlacement): boolean => {
-    // ¹²
     const ins = this.manager.insertion;
     if (!ins || !this.isDragging || p.column !== ins.column) return false;
     if (p.index === this.manager.activeDragIndex) return false;
@@ -113,7 +112,6 @@ export class KanbanPlane extends Component<{
   };
 
   insertionBoxStyle = (colIndex: number): SafeString => {
-    // ¹³
     if (!this.showInsertionBox(colIndex) || !this.containerElement)
       return sanitizeHtmlSafe('display: none');
     const ins = this.manager.insertion!;
