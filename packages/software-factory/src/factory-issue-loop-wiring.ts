@@ -50,6 +50,7 @@ import {
 import { RealmIssueStore, type IssueStore } from './issue-scheduler';
 import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader';
 import { fetchCardTypeSchema } from './darkfactory-schemas';
+import { withStdoutRedirected } from './redirect-stdout';
 
 let log = logger('factory-issue-loop-wiring');
 
@@ -341,9 +342,9 @@ export async function syncWorkspaceToRealm(
   workspaceDir: string,
 ): Promise<void> {
   try {
-    let result = await client.sync(targetRealmUrl, workspaceDir, {
-      preferLocal: true,
-    });
+    let result = await withStdoutRedirected(() =>
+      client.sync(targetRealmUrl, workspaceDir, { preferLocal: true }),
+    );
     if (result.error) {
       log.warn(`Workspace sync error: ${result.error}`);
     } else if (result.hasError) {

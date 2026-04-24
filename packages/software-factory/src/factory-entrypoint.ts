@@ -21,6 +21,7 @@ import {
 } from './factory-target-realm';
 import type { IssueLoopResult } from './issue-loop';
 import { logger } from './logger';
+import { withStdoutRedirected } from './redirect-stdout';
 import { ensureWorkspaceDir, resolveWorkspaceDir } from './workspace-fs';
 
 let log = logger('factory-entrypoint');
@@ -420,29 +421,16 @@ async function defaultSyncWorkspaceToRealm(
   if (result.error) {
     throw new Error(`Failed to sync workspace to realm: ${result.error}`);
   }
+  // The initial post-seed sync is load-bearing: if any file failed to
+  // upload, the seed issue isn't actually on the realm, and the loop
+  // would immediately exit with `all_issues_done` and zero iterations —
+  // silently masking the real failure. Fail fast instead.
   if (result.hasError) {
-    log.warn(
-      'Workspace sync completed with errors — see prior log lines for details',
+    throw new Error(
+      'Initial workspace sync completed with per-file errors — see prior log lines. ' +
+        'The seed issue and any other workspace state may not have reached the realm, ' +
+        'which would cause the issue loop to exit immediately with zero issues.',
     );
-  }
-}
-
-/**
- * Run `fn` with `console.log` temporarily redirected to `console.error`.
- *
- * BoxelCLIClient.pull / .sync write progress banners via `console.log`,
- * which goes to stdout. The factory CLI also writes the final JSON
- * summary to stdout (`--debug`), so unredirected progress lines corrupt
- * that JSON. We send the progress lines to stderr where they belong as
- * diagnostic output.
- */
-async function withStdoutRedirected<T>(fn: () => Promise<T>): Promise<T> {
-  let originalLog = console.log;
-  console.log = (...args: unknown[]) => console.error(...args);
-  try {
-    return await fn();
-  } finally {
-    console.log = originalLog;
   }
 }
 
