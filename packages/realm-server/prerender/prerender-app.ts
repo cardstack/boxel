@@ -930,10 +930,18 @@ export function createPrerenderHttpServer(options?: {
     Number(process.env.PRERENDER_SHUTDOWN_GRACE_MS ?? 10000),
   );
 
+  // Report the same pool size the PagePool was actually constructed
+  // with. `buildPrerenderApp` resolves `maxPages` using the same
+  // precedence (explicit option → env → default), so sharing the
+  // resolved value keeps the heartbeat honest when the default or
+  // env var changes.
+  const resolvedMaxPages =
+    options?.maxPages ?? Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 5);
+
   async function sendHeartbeat(status?: 'active' | 'draining') {
     try {
       const managerURL = resolvePrerenderManagerURL();
-      const capacity = Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
+      const capacity = resolvedMaxPages;
       let body = {
         data: {
           type: 'prerender-server',
