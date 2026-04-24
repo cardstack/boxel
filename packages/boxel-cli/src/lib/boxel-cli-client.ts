@@ -1,8 +1,14 @@
 import { deleteFile, type DeleteResult } from '../commands/file/delete';
 import {
+  lint as coreLint,
+  type LintResult,
+  type LintMessage,
+} from '../commands/file/lint';
+import {
   readTranspiledModule,
   type ReadTranspiledResult,
 } from '../commands/read-transpiled';
+import { write as coreWrite, type WriteResult } from '../commands/file/write';
 import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { pull as realmPull } from '../commands/realm/pull';
 import { sync as realmSync, type SyncResult } from '../commands/realm/sync';
@@ -71,12 +77,8 @@ export interface ReadResult {
   error?: string;
 }
 
-export interface WriteResult {
-  ok: boolean;
-  error?: string;
-}
-
 export type { DeleteResult };
+export type { WriteResult };
 
 export interface SearchResult {
   ok: boolean;
@@ -97,21 +99,7 @@ export interface RunCommandResult {
   error?: string | null;
 }
 
-export interface LintMessage {
-  ruleId: string | null;
-  severity: 1 | 2;
-  message: string;
-  line: number;
-  column: number;
-  endLine?: number;
-  endColumn?: number;
-}
-
-export interface LintResult {
-  fixed: boolean;
-  output: string;
-  messages: LintMessage[];
-}
+export type { LintMessage, LintResult };
 
 export interface WaitForReadyResult {
   ready: boolean;
@@ -225,39 +213,16 @@ export class BoxelCLIClient {
   /**
    * Write a file to a realm. Content is sent as-is with card+source MIME type.
    * Path should include the file extension.
+   *
+   * Delegates to `write()` in `commands/file/write.ts` so the CLI and
+   * programmatic API share one implementation.
    */
   async write(
     realmUrl: string,
     path: string,
     content: string,
   ): Promise<WriteResult> {
-    let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
-
-    try {
-      let response = await this.pm.authedRealmFetch(url, {
-        method: 'POST',
-        headers: {
-          Accept: MIME.CardSource,
-          'Content-Type': MIME.CardSource,
-        },
-        body: content,
-      });
-
-      if (!response.ok) {
-        let body = await response.text();
-        return {
-          ok: false,
-          error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-        };
-      }
-
-      return { ok: true };
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
+    return coreWrite(realmUrl, path, content, { profileManager: this.pm });
   }
 
   /**
@@ -427,32 +392,14 @@ export class BoxelCLIClient {
 
   /**
    * Lint a single file's source code via the realm's `_lint` endpoint.
+   * Delegates to the standalone `lint()` in `commands/file/lint.ts`.
    */
   async lint(
     realmUrl: string,
     source: string,
     filename: string,
   ): Promise<LintResult> {
-    let lintUrl = `${ensureTrailingSlash(realmUrl)}_lint`;
-    let response = await this.pm.authedRealmFetch(lintUrl, {
-      method: 'POST',
-      headers: {
-        Accept: MIME.JSON,
-        'Content-Type': MIME.CardSource,
-        'X-Filename': filename,
-        'X-HTTP-Method-Override': 'QUERY',
-      },
-      body: source,
-    });
-
-    if (!response.ok) {
-      let body = await response.text().catch(() => '(no body)');
-      throw new Error(
-        `_lint returned HTTP ${response.status}: ${body.slice(0, 300)}`,
-      );
-    }
-
-    return (await response.json()) as LintResult;
+    return coreLint(realmUrl, source, filename, { profileManager: this.pm });
   }
 
   /**

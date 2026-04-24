@@ -71,8 +71,116 @@ export interface ErrorEntry {
   cardType?: string;
 }
 
+// CS-10872: attached to timeout-class RenderErrors so the persisted
+// error document tells operators *where* the time went. All fields
+// are optional — this is a best-effort diagnostic payload and older
+// code paths that don't populate them still work.
+export interface RenderTimeoutDiagnostics {
+  // Correlation ID threaded from the client-side remote-prerenderer
+  // through manager and prerender-server. Paste into a log search to
+  // join all three stacks for this call.
+  requestId?: string;
+  // Total wall time spent in `PagePool.getPage` before render work
+  // began. The three `waits` sub-fields below each cover a specific
+  // await; `launchMs` is measured around the full method and so is
+  // typically >= `semaphoreMs + tabQueueMs + tabStartupMs` — the
+  // residual is synchronous bookkeeping (affinity reassignment,
+  // LRU touch, standby top-up kickoff) that doesn't fall into any
+  // of the three buckets. For triage the sub-field breakdown is
+  // what matters: which *await* dominated launch time.
+  launchMs?: number;
+  waits?: {
+    semaphoreMs?: number;
+    tabQueueMs?: number;
+    tabStartupMs?: number;
+  };
+  // Elapsed between render start and the timeout. If ~= timeoutMs the
+  // render itself stalled; if << timeoutMs the launch dominated.
+  renderElapsedMs?: number;
+  // Sum of launch + render elapsed (server-observed).
+  totalElapsedMs?: number;
+  // Render-phase breadcrumb set by the host app as it progresses. If
+  // missing, we never reached the host route (stalled in launch/fetch).
+  renderStage?: string;
+  // Ms since `renderStage` was last set. Large values with empty
+  // in-flight arrays are the signature of a synchronous stall
+  // (e.g. Glimmer compile during module evaluation).
+  stageAgeMs?: number;
+  // URL lists of host-side docs that were still in flight at timeout.
+  cardDocsInFlight?: string[];
+  fileMetaDocsInFlight?: string[];
+  // Per-URL `ageMs` for the same loads, so operators can tell which
+  // single URL has been hanging the longest vs. a fan-out of many.
+  cardDocLoadsInFlight?: Array<{ url: string; ageMs: number }>;
+  fileMetaDocLoadsInFlight?: Array<{ url: string; ageMs: number }>;
+  // Bounded top-N histories of slow *completed* loads. The store
+  // keeps these across the whole attempt so the post-timeout
+  // diagnostic can still see which card docs / file metas / queries
+  // dominated wall time even if they completed just before the
+  // timer fired.
+  recentCardDocLoads?: Array<{ url: string; ms: number }>;
+  recentFileMetaLoads?: Array<{ url: string; ms: number }>;
+  recentQueryLoads?: Array<Record<string, unknown>>;
+  // Module URLs that the Loader had started fetching but not yet
+  // resolved. Each URL is a `.gts` / `.ts` cache miss in flight.
+  inFlightModuleImports?: string[];
+  // Module URL whose synchronous body (Glimmer compile, side-effect
+  // initialisation) is currently running when the diagnostic read
+  // happened. Null if evaluate isn't re-entered at the moment.
+  currentlyEvaluatingModule?: string | null;
+  // Top-N slowest module evaluations observed so far on this page
+  // (a rolling window maintained by the Loader). Useful when the
+  // stall is "many cheap compiles" rather than one slow one.
+  recentModuleEvaluations?: Array<{ url: string; ms: number }>;
+  // Legacy counter (kept for back-compat when the older host build
+  // only exposes `__docsInFlight()`).
+  docsInFlight?: number;
+  // DOM snapshot from the page at timeout (prefix of outerHTML).
+  capturedDom?: string | null;
+  // Stack-ish summary from the blocked-timer shim.
+  blockedTimerSummary?: string | null;
+  // Outstanding SearchResource / query-field loads at timeout. The
+  // shape mirrors QueryLoadInfo from `base/card-api.gts` but is
+  // kept loose here to avoid a runtime/base circular type import.
+  queryLoadsInFlight?: Array<Record<string, unknown>>;
+  // Prerender-server view of the same affinity observed during the
+  // call. `pendingTotal` / `maxPending` / `sameAffinityActivity`
+  // represent the **peak** observed while the call was in flight —
+  // the Prerenderer samples periodically and keeps the richest
+  // snapshot, because the most interesting state (queued siblings
+  // mid-stall) is released the moment the stuck tab is evicted, so
+  // a one-shot end-of-call snapshot would miss the deadlock.
+  // `affinityKey` is stable for the call. A non-empty
+  // `sameAffinityActivity` on a render stuck in `waiting-stability`
+  // is the signature of a self-referential prerender deadlock: the
+  // host is waiting on a `/_search` / definition-lookup response
+  // that's waiting on a sub-prerender queued behind this very call.
+  // Populated server-side, so it's available on both timed-out and
+  // slow-but-succeeded rows.
+  affinitySnapshot?: {
+    affinityKey: string;
+    tabCount: number;
+    pendingTotal: number;
+    maxPending: number;
+    sameAffinityActivity: Array<{
+      url: string;
+      kind: 'visit' | 'module';
+      state: 'queued' | 'running';
+      ageMs: number;
+    }>;
+  };
+}
+
 export interface RenderError extends ErrorEntry {
   evict?: boolean;
+  // Transient carrier for host-side diagnostics (render stage,
+  // in-flight loads, blocked-timer summary, etc.) produced by
+  // `withTimeout`. The Prerenderer lifts these onto
+  // `response.meta.diagnostics` before returning, where the indexer
+  // picks them up and persists them into `timing_diagnostics`. The
+  // field is dropped from the final response — callers should read
+  // `response.meta.diagnostics` instead.
+  diagnostics?: RenderTimeoutDiagnostics;
 }
 
 export interface FileExtractResponse {
@@ -125,7 +233,50 @@ export interface ModulePrerenderModel {
   error?: ErrorEntry;
 }
 
-export interface ModuleRenderResponse extends ModulePrerenderModel {}
+export interface ModuleRenderResponse extends ModulePrerenderModel {
+  // Server-observed timing breakdown, carried in the response body
+  // so the indexer can persist it onto `boxel_index.timing_diagnostics`
+  // for both in-process and remote prerender paths without needing a
+  // separate side channel.
+  meta?: PrerenderResponseMeta;
+}
+
+export interface PrerenderResponseMeta {
+  // Aggregated diagnostic payload — server-observed timings
+  // (launchMs, waits, renderElapsedMs, totalElapsedMs from
+  // `RenderTimeoutDiagnostics`) plus host-side breadcrumbs
+  // (renderStage, in-flight loads, recent module evaluations,
+  // blocked-timer summary, etc.). Populated by the Prerenderer from
+  // both its own timing measurements and any `RenderError.diagnostics`
+  // lifted out of embedded errors. The indexer picks this up, merges
+  // in the HTTP `requestId`, and persists into `timing_diagnostics`.
+  diagnostics?: RenderTimeoutDiagnostics;
+  // HTTP correlation ID stamped by the prerender server's Koa layer.
+  // Lets operators join client → manager → prerender-server logs for
+  // a single request. Absent for in-process (non-HTTP) callers.
+  requestId?: string;
+}
+
+// The shape persisted to `boxel_index.timing_diagnostics`. Extends
+// `RenderTimeoutDiagnostics` (which already carries `requestId`) with
+// two write-side stamps applied at `IndexWriter.updateEntry` time:
+//
+//   - `invalidationId` — one UUID per `Batch`; every row touched by
+//     the same indexing pass (incremental fan-out or fromScratch)
+//     shares it, so operators can `SELECT ... WHERE
+//     timing_diagnostics->>'invalidationId' = '<id>'` and see the
+//     whole batch.
+//   - `indexedAt` — wall-clock the write happened.
+//
+// All fields are optional because writers populate incrementally:
+// render-side fields come from the Prerenderer's response meta, the
+// write-side stamps come from the IndexWriter. Any stage may skip
+// pieces that aren't applicable (e.g. non-timeout renders have no
+// `renderStage`, in-process callers have no `requestId`).
+export interface TimingDiagnostics extends RenderTimeoutDiagnostics {
+  invalidationId?: string;
+  indexedAt?: number;
+}
 
 export type AffinityType = 'realm' | 'user';
 
@@ -197,6 +348,10 @@ export interface RenderVisitResponse {
   fileExtract?: FileExtractResponse;
   fileRender?: FileRenderResponse;
   pageUnusableError?: RenderError;
+  // See ModuleRenderResponse.meta — server-observed timing breakdown
+  // embedded in the response so the indexer can persist it to
+  // `boxel_index.timing_diagnostics`.
+  meta?: PrerenderResponseMeta;
 }
 
 export type RunCommandArgs = {
@@ -210,6 +365,12 @@ export type RunCommandResponse = {
   status: 'ready' | 'error' | 'unusable';
   cardResultString?: string | null;
   error?: string | null;
+  // Server-observed timing meta — same channel as the visit /
+  // module responses. Unused by most callers (command results
+  // aren't persisted to `boxel_index`), but attached uniformly so
+  // `Prerenderer.decorateRenderErrorsWithTimings` can stamp it
+  // without a special-case for commands.
+  meta?: PrerenderResponseMeta;
 };
 
 export interface Prerenderer {

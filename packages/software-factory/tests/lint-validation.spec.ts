@@ -43,7 +43,7 @@ test.describe('lint-validation e2e', () => {
       );
 
       // The fixture's hello.gts should be clean
-      let errors = lintResult.messages.filter((m) => m.severity === 2);
+      let errors = (lintResult.messages ?? []).filter((m) => m.severity === 2);
       expect(errors).toEqual([]);
     } finally {
       cleanup();
@@ -86,7 +86,7 @@ test.describe('lint-validation e2e', () => {
       );
 
       // Should have at least one error (unused variable)
-      let errors = lintResult.messages.filter((m) => m.severity === 2);
+      let errors = (lintResult.messages ?? []).filter((m) => m.severity === 2);
       expect(errors.length).toBeGreaterThan(0);
 
       // Verify the message shape

@@ -17,6 +17,7 @@ import {
 import type { SerializedError } from '@cardstack/runtime-common/error';
 import type { ConsoleErrorEntry, PagePool } from './page-pool';
 import { toAffinityKey } from './affinity';
+import { throwIfAborted } from './prerender-cancel';
 import {
   captureResult,
   captureModule,
@@ -43,6 +44,31 @@ const log = logger('prerenderer');
 const reproduceLog = logger('prerenderer-reproduce');
 const commandRequestStorageKeyPrefix = 'boxel-command-request:';
 
+// CS-10872: surfaces the per-stage wait breakdown from PagePool.getPage so
+// operators can tell "waited for the render semaphore" (saturation) apart
+// from "waited for an affinity tab" (warm-tab serialization) apart from
+// "warmed a new tab". All three arrive tagged on every prerender response.
+export type LaunchWaits = {
+  semaphoreMs: number;
+  tabQueueMs: number;
+  tabStartupMs: number;
+};
+
+export type Timings = {
+  launchMs: number;
+  renderMs: number;
+  waits: LaunchWaits;
+};
+
+type PoolInfo = {
+  pageId: string;
+  affinityType: AffinityType;
+  affinityValue: string;
+  reused: boolean;
+  evicted: boolean;
+  timedOut: boolean;
+};
+
 const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
   // this is a side effect of glimmer scoped styles moving a DOM node that
   // glimmer is tracking. when we go to teardown the component glimmer gets mad
@@ -65,7 +91,11 @@ export class RenderRunner {
     this.#boxelHostURL = options.boxelHostURL;
   }
 
-  async #getPageForAffinity(affinityKey: string, auth: string) {
+  async #getPageForAffinity(
+    affinityKey: string,
+    auth: string,
+    signal?: AbortSignal,
+  ) {
     let lastAuth = this.#lastAuthByAffinity.get(affinityKey);
     if (lastAuth) {
       let lastKeys = this.#authKeys(lastAuth);
@@ -80,7 +110,7 @@ export class RenderRunner {
         this.#lastAuthByAffinity.delete(affinityKey);
       }
     }
-    let pageInfo = await this.#pagePool.getPage(affinityKey);
+    let pageInfo = await this.#pagePool.getPage(affinityKey, { signal });
     this.#lastAuthByAffinity.set(affinityKey, auth);
     return pageInfo;
   }
@@ -105,6 +135,7 @@ export class RenderRunner {
     command,
     commandInput,
     opts,
+    signal,
   }: {
     affinityType: AffinityType;
     affinityValue: string;
@@ -112,17 +143,11 @@ export class RenderRunner {
     command: string;
     commandInput?: Record<string, unknown> | null;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    signal?: AbortSignal;
   }): Promise<{
     response: RunCommandResponse;
-    timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      affinityType: AffinityType;
-      affinityValue: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
+    timings: Timings;
+    pool: PoolInfo;
   }> {
     this.#nonce++;
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
@@ -130,9 +155,9 @@ export class RenderRunner {
       `running command ${command ?? '<unknown>'}, nonce=${this.#nonce} affinity=${affinityKey}`,
     );
 
-    const { page, reused, launchMs, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth);
-    const poolInfo = {
+    const { page, reused, launchMs, waits, pageId, release } =
+      await this.#getPageForAffinity(affinityKey, auth, signal);
+    const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
       affinityValue,
@@ -147,6 +172,13 @@ export class RenderRunner {
       }
     };
     try {
+      // Page acquired but untouched — a cancel in this window doesn't
+      // need eviction (the tab is still clean), so tag it `'queued'`.
+      // Once `page.evaluate` runs below, any further cancel becomes a
+      // `'rendering'` cancel and does trigger affinity disposal. The
+      // check lives inside the try so `finally { release() }` frees the
+      // tab slot if the caller aborted during the getPage handoff.
+      throwIfAborted(signal, 'queued');
       let renderStart = Date.now();
       let requestId = randomUUID();
       let nonce = String(this.#nonce);
@@ -246,7 +278,7 @@ export class RenderRunner {
         markTimeout(response.status);
         return {
           response,
-          timings: { launchMs, renderMs: Date.now() - renderStart },
+          timings: { launchMs, renderMs: Date.now() - renderStart, waits },
           pool: poolInfo,
         };
       }
@@ -279,7 +311,7 @@ export class RenderRunner {
 
       return {
         response,
-        timings: { launchMs, renderMs: Date.now() - renderStart },
+        timings: { launchMs, renderMs: Date.now() - renderStart, waits },
         pool: poolInfo,
       };
     } catch (e) {
@@ -290,7 +322,7 @@ export class RenderRunner {
       };
       return {
         response,
-        timings: { launchMs, renderMs: 0 },
+        timings: { launchMs, renderMs: 0, waits },
         pool: poolInfo,
       };
     } finally {
@@ -306,6 +338,8 @@ export class RenderRunner {
     auth,
     opts,
     renderOptions,
+    signal,
+    onTabAcquired,
   }: {
     affinityType: AffinityType;
     affinityValue: string;
@@ -314,17 +348,18 @@ export class RenderRunner {
     auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
+    signal?: AbortSignal;
+    // Fires after `getPageForAffinity` resolves — i.e. when this
+    // attempt stops waiting on the semaphore / tab queue and actually
+    // has a page. CS-10872 diagnostic hook; used by the Prerenderer
+    // to flip `affinitySnapshot.sameAffinityActivity[*].state` from
+    // `queued` to `running`, which is what makes the deadlock
+    // fingerprint meaningful.
+    onTabAcquired?: () => void;
   }): Promise<{
     response: ModuleRenderResponse;
-    timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      affinityType: AffinityType;
-      affinityValue: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
+    timings: Timings;
+    pool: PoolInfo;
   }> {
     this.#nonce++;
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
@@ -332,9 +367,10 @@ export class RenderRunner {
       `module prerendering url ${url}, nonce=${this.#nonce} affinity=${affinityKey} realm=${realm}`,
     );
 
-    const { page, reused, launchMs, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth);
-    const poolInfo = {
+    const { page, reused, launchMs, waits, pageId, release } =
+      await this.#getPageForAffinity(affinityKey, auth, signal);
+    onTabAcquired?.();
+    const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
       affinityValue,
@@ -349,6 +385,10 @@ export class RenderRunner {
       }
     };
     try {
+      // See runCommandAttempt: tag as 'queued' and keep the check
+      // inside the try so `finally { release() }` frees the tab slot
+      // if the caller aborted during the getPage handoff.
+      throwIfAborted(signal, 'queued');
       await page.evaluate((sessionAuth) => {
         localStorage.setItem('boxel-session', sessionAuth);
       }, auth);
@@ -457,7 +497,7 @@ export class RenderRunner {
       response.error = this.#mergeConsoleErrors(pageId, response.error);
       return {
         response,
-        timings: { launchMs, renderMs: Date.now() - renderStart },
+        timings: { launchMs, renderMs: Date.now() - renderStart, waits },
         pool: poolInfo,
       };
     } finally {
@@ -479,19 +519,17 @@ export class RenderRunner {
     renderOptions,
     fileData,
     types,
+    signal,
+    onTabAcquired,
   }: PrerenderVisitArgs & {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    signal?: AbortSignal;
+    // See the matching param on `prerenderModuleAttempt`.
+    onTabAcquired?: () => void;
   }): Promise<{
     response: RenderVisitResponse;
-    timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      affinityType: AffinityType;
-      affinityValue: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
+    timings: Timings;
+    pool: PoolInfo;
   }> {
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     let requested = {
@@ -505,9 +543,10 @@ export class RenderRunner {
       ).join(',')}`,
     );
 
-    const { page, reused, launchMs, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth);
-    const poolInfo = {
+    const { page, reused, launchMs, waits, pageId, release } =
+      await this.#getPageForAffinity(affinityKey, auth, signal);
+    onTabAcquired?.();
+    const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
       affinityValue,
@@ -528,6 +567,11 @@ export class RenderRunner {
     let didStashFileRenderData = false;
 
     try {
+      // Page acquired but untouched — tag as 'queued'. The between-pass
+      // checks below use 'rendering' since by then page.evaluate has run.
+      // The check lives inside the try so `finally { release() }` frees
+      // the tab slot if the caller aborted during the getPage handoff.
+      throwIfAborted(signal, 'queued');
       await page.evaluate((sessionAuth) => {
         localStorage.setItem('boxel-session', sessionAuth);
       }, auth);
@@ -628,6 +672,7 @@ export class RenderRunner {
               pageId,
               renderStart,
               launchMs,
+              waits,
               poolInfo,
             );
           }
@@ -642,6 +687,7 @@ export class RenderRunner {
               pageId,
               renderStart,
               launchMs,
+              waits,
               poolInfo,
             );
           }
@@ -715,12 +761,14 @@ export class RenderRunner {
             pageId,
             renderStart,
             launchMs,
+            waits,
             poolInfo,
           );
         }
       }
 
       // ── cardRender pass ────────────────────────────────────────────────
+      throwIfAborted(signal, 'rendering');
       if (requested.cardRender) {
         let cardOptions = optionsForPass('cardRender');
         let serializedOptions = serializeRenderRouteOptions(cardOptions);
@@ -933,12 +981,14 @@ export class RenderRunner {
             pageId,
             renderStart,
             launchMs,
+            waits,
             poolInfo,
           );
         }
       }
 
       // ── fileRender pass ────────────────────────────────────────────────
+      throwIfAborted(signal, 'rendering');
       if (requested.fileRender) {
         // If fileExtract ran earlier in this visit and produced a resource,
         // use it to populate fileData/types so the caller doesn't need to
@@ -1178,6 +1228,7 @@ export class RenderRunner {
         pageId,
         renderStart,
         launchMs,
+        waits,
         poolInfo,
       );
     } finally {
@@ -1199,25 +1250,12 @@ export class RenderRunner {
     pageId: string,
     renderStart: number,
     launchMs: number,
-    poolInfo: {
-      pageId: string;
-      affinityType: AffinityType;
-      affinityValue: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    },
+    waits: LaunchWaits,
+    poolInfo: PoolInfo,
   ): {
     response: RenderVisitResponse;
-    timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      affinityType: AffinityType;
-      affinityValue: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
+    timings: Timings;
+    pool: PoolInfo;
   } {
     if (response.pageUnusableError) {
       response.pageUnusableError = this.#mergeConsoleErrors(
@@ -1227,7 +1265,7 @@ export class RenderRunner {
     }
     return {
       response,
-      timings: { launchMs, renderMs: Date.now() - renderStart },
+      timings: { launchMs, renderMs: Date.now() - renderStart, waits },
       pool: poolInfo,
     };
   }

@@ -27,6 +27,13 @@ export interface SerializedError {
   isCardError?: true;
   deps?: string[];
   stack?: string;
+  // Structured render-timeout diagnostics (e.g. launchMs, waits,
+  // renderStage, queryLoadsInFlight). The source of truth is the
+  // `boxel_index.timing_diagnostics` column; the IndexWriter copies
+  // the payload onto this field when persisting an error row so the
+  // existing UI read path (formattedError → CardErrorJSONAPI.meta.
+  // diagnostics) continues to work unchanged.
+  diagnostics?: Record<string, unknown>;
 }
 
 export interface CardErrorJSONAPI {
@@ -43,6 +50,11 @@ export interface CardErrorJSONAPI {
     isCreationError?: true;
     responseHeaders?: { [header: string]: string };
     remoteId?: string;
+    // CS-10872: structured prerender-timeout diagnostics carried over
+    // from the persisted error document so the in-UI error banner can
+    // surface launchMs/waits/renderStage/in-flight loads without
+    // operators having to hit the DB. Absent for non-timeout errors.
+    diagnostics?: Record<string, unknown>;
   };
   additionalErrors?: (CardError | SearchResultError['error'] | Error)[] | null;
 }
@@ -67,12 +79,17 @@ export function formattedError(
     if (additionalError && 'errorDetail' in additionalError) {
       cardError = additionalError.errorDetail;
       let { lastKnownGoodHtml, scopedCssUrls, cardTitle } = additionalError;
+      let diagnostics =
+        (cardError as any)?.diagnostics ?? (err as any)?.diagnostics;
       meta = {
         lastKnownGoodHtml,
         scopedCssUrls,
         stack: cardError.stack ?? err.stack ?? error?.stack ?? null,
         cardTitle,
         ...(remoteId ? { remoteId } : {}),
+        ...(diagnostics && typeof diagnostics === 'object'
+          ? { diagnostics }
+          : {}),
       };
     } else if (isCardError(additionalError)) {
       cardError = additionalError;
@@ -94,15 +111,25 @@ export function formattedError(
             status.message[cardError.status] ??
             cardError.message,
           realm: error?.responseHeaders?.get('X-Boxel-Realm-Url'),
-          meta: meta ?? {
-            lastKnownGoodHtml: null,
-            scopedCssUrls: [],
-            stack: cardError.stack ?? err.stack ?? error?.stack ?? null,
-            cardTitle: null,
-            ...(cardError.id ? { isCreationError: true } : {}),
-            ...(remoteId ? { remoteId } : {}),
-          },
-          additionalErrors: cardError.additionalErrors,
+          meta:
+            meta ??
+            (() => {
+              let diagnostics =
+                (cardError as any)?.diagnostics ?? (err as any)?.diagnostics;
+              return {
+                lastKnownGoodHtml: null,
+                scopedCssUrls: [],
+                stack: cardError.stack ?? err.stack ?? error?.stack ?? null,
+                cardTitle: null,
+                ...(cardError.id ? { isCreationError: true } : {}),
+                ...(remoteId ? { remoteId } : {}),
+                ...(diagnostics && typeof diagnostics === 'object'
+                  ? { diagnostics }
+                  : {}),
+              };
+            })(),
+          additionalErrors:
+            cardError.additionalErrors as CardErrorJSONAPI['additionalErrors'],
         },
       ],
     };
@@ -129,15 +156,23 @@ export function formattedError(
         title: err?.title ?? status.message[errorStatus] ?? errorMessage,
         message: errorMessage,
         realm: err?.realm ?? error.responseHeaders?.get('X-Boxel-Realm-Url'),
-        meta: err?.meta ?? {
-          lastKnownGoodHtml: null,
-          scopedCssUrls: [],
-          stack: error.stack ?? null,
-          cardTitle: null,
-          ...(err?.id ? { isCreationError: true } : {}),
-          ...(responseHeaders ? { responseHeaders } : {}),
-          ...(err?.id ? { remoteId: err.id } : {}),
-        },
+        meta:
+          err?.meta ??
+          (() => {
+            let diagnostics = (error as any)?.diagnostics;
+            return {
+              lastKnownGoodHtml: null,
+              scopedCssUrls: [],
+              stack: error.stack ?? null,
+              cardTitle: null,
+              ...(err?.id ? { isCreationError: true } : {}),
+              ...(responseHeaders ? { responseHeaders } : {}),
+              ...(err?.id ? { remoteId: err.id } : {}),
+              ...(diagnostics && typeof diagnostics === 'object'
+                ? { diagnostics }
+                : {}),
+            };
+          })(),
       },
     ],
   };

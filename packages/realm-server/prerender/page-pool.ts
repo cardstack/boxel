@@ -3,16 +3,20 @@ import type { ConsoleMessage, Page } from 'puppeteer';
 import type { BrowserContext } from 'puppeteer';
 import { resolvePrerenderManagerURL } from './config';
 import type { BrowserManager } from './browser-manager';
+import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel';
 
 type RenderSemaphore = {
-  acquire(): Promise<() => void>;
+  acquire(signal?: AbortSignal): Promise<() => void>;
 };
 
-class TabQueue {
+// Exported so cancellation-plumbing unit tests can drive it
+// directly — it's a pure in-memory FIFO with no Chrome dependency.
+export class TabQueue {
   #pending: Promise<void> = Promise.resolve();
   #depth = 0;
 
-  async acquire(): Promise<() => void> {
+  async acquire(signal?: AbortSignal): Promise<() => void> {
+    throwIfAborted(signal);
     let release!: () => void;
     let next = new Promise<void>((resolve) => {
       release = resolve;
@@ -20,7 +24,47 @@ class TabQueue {
     let prev = this.#pending;
     this.#pending = prev.catch(() => {}).then(() => next);
     this.#depth++;
-    await prev.catch(() => {});
+    // Race the prior-slot wait against the caller's abort signal.
+    // If the signal fires first, release our slot immediately so
+    // downstream waiters aren't blocked on a cancelled holder,
+    // then throw so `getPage` can bail out.
+    let onAbortPromise: Promise<never> | null = null;
+    let onAbortCleanup: (() => void) | undefined;
+    if (signal) {
+      onAbortPromise = new Promise<never>((_, reject) => {
+        let onAbort = () => {
+          reject(
+            new PrerenderCancelledError({
+              state: 'queued',
+              reason:
+                typeof signal.reason === 'string' ? signal.reason : undefined,
+            }),
+          );
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+        onAbortCleanup = () => signal.removeEventListener('abort', onAbort);
+      });
+    }
+    try {
+      if (onAbortPromise) {
+        await Promise.race([prev.catch(() => {}), onAbortPromise]);
+      } else {
+        await prev.catch(() => {});
+      }
+    } catch (e) {
+      this.#depth--;
+      release();
+      throw e;
+    } finally {
+      onAbortCleanup?.();
+    }
+    // A late abort between Promise.race resolving and us returning
+    // — treat as the same cancellation.
+    if (signal?.aborted) {
+      this.#depth--;
+      release();
+      throwIfAborted(signal);
+    }
     let released = false;
     return () => {
       if (released) return;
@@ -233,6 +277,52 @@ export class PagePool {
     return snapshot;
   }
 
+  // CS-10872: richer periodic-log snapshot. Whereas `getVacancySnapshot`
+  // collapses each affinity to {idle, tabCount} for routing, this exposes
+  // the raw per-affinity queue depth plus totals, so the prerender-app
+  // can log a single-line "fleet health" summary every N seconds.
+  getQueueDepthSnapshot(): {
+    totalTabs: number;
+    totalPending: number;
+    affinities: Array<{
+      affinityKey: string;
+      tabCount: number;
+      pendingTotal: number;
+      maxPending: number;
+      idle: boolean;
+    }>;
+  } {
+    let totalTabs = 0;
+    let totalPending = 0;
+    let affinities: Array<{
+      affinityKey: string;
+      tabCount: number;
+      pendingTotal: number;
+      maxPending: number;
+      idle: boolean;
+    }> = [];
+    for (let [affinityKey, entries] of this.#affinityPages) {
+      let tabCount = entries.size;
+      let pendingTotal = 0;
+      let maxPending = 0;
+      for (let entry of entries) {
+        let p = entry.queue.pendingCount;
+        pendingTotal += p;
+        if (p > maxPending) maxPending = p;
+      }
+      totalTabs += tabCount;
+      totalPending += pendingTotal;
+      affinities.push({
+        affinityKey,
+        tabCount,
+        pendingTotal,
+        maxPending,
+        idle: pendingTotal === 0,
+      });
+    }
+    return { totalTabs, totalPending, affinities };
+  }
+
   resetConsoleErrors(pageId: string): void {
     this.#consoleErrorsByPageId.set(pageId, new Map());
   }
@@ -266,17 +356,42 @@ export class PagePool {
     return evicted;
   }
 
-  async getPage(affinityKey: string): Promise<{
+  async getPage(
+    affinityKey: string,
+    opts?: { signal?: AbortSignal },
+  ): Promise<{
     page: Page;
     reused: boolean;
     launchMs: number;
+    // CS-10872: per-stage breakdown so operators can tell "waited for
+    // the global render semaphore" (the CS-10820 saturation signal)
+    // apart from "waited behind the affinity's tab queue" apart from
+    // "warmed a new tab". All three are operationally different.
+    waits: { semaphoreMs: number; tabQueueMs: number; tabStartupMs: number };
     pageId: string;
     release: () => void;
   }> {
+    let signal = opts?.signal;
+    throwIfAborted(signal);
     let t0 = Date.now();
+    let startupStart = Date.now();
     await this.#ensureStandbyPool();
-    let { entry, reused, releaseTab } =
-      await this.#selectEntryForAffinity(affinityKey);
+    let tabStartupMs = Date.now() - startupStart;
+    throwIfAborted(signal);
+    let tabQueueStart = Date.now();
+    let { entry, reused, releaseTab } = await this.#selectEntryForAffinity(
+      affinityKey,
+      signal,
+    );
+    let tabQueueMs = Date.now() - tabQueueStart;
+    // Race between the tab being acquired and the signal firing:
+    // if the signal fired while `#selectEntryForAffinity` was
+    // resolving, release the tab we just got so the next
+    // queued acquirer isn't blocked, then throw.
+    if (signal?.aborted) {
+      releaseTab();
+      throwIfAborted(signal);
+    }
     if (entry.affinityKey !== affinityKey) {
       entry = this.#reassignAffinityTab(entry, affinityKey);
       reused = false;
@@ -284,9 +399,20 @@ export class PagePool {
     if (entry.transitioning) {
       entry.transitioning = false;
     }
-    let releaseGlobal = this.#renderSemaphore
-      ? await this.#renderSemaphore.acquire()
-      : undefined;
+    let semaphoreStart = Date.now();
+    let releaseGlobal: (() => void) | undefined;
+    try {
+      releaseGlobal = this.#renderSemaphore
+        ? await this.#renderSemaphore.acquire(signal)
+        : undefined;
+    } catch (e) {
+      // Semaphore cancelled before we got a slot. Release the tab
+      // (we acquired it before queueing on the semaphore) so
+      // downstream requests for the same affinity aren't stuck.
+      releaseTab();
+      throw e;
+    }
+    let semaphoreMs = Date.now() - semaphoreStart;
     entry.lastUsedAt = Date.now();
     this.#touchLRU(affinityKey);
     void this.#ensureStandbyPool();
@@ -307,6 +433,7 @@ export class PagePool {
       pageId: entry.pageId,
       reused,
       launchMs: Date.now() - t0,
+      waits: { semaphoreMs, tabQueueMs, tabStartupMs },
       release,
     };
   }
@@ -621,6 +748,7 @@ export class PagePool {
 
   async #selectEntryForAffinity(
     affinityKey: string,
+    signal?: AbortSignal,
   ): Promise<{ entry: PoolEntry; reused: boolean; releaseTab: () => void }> {
     let entries = this.#affinityPages.get(affinityKey);
     let entryList = entries
@@ -629,7 +757,7 @@ export class PagePool {
     let idle = entryList.filter((entry) => entry.queue.pendingCount === 0);
     if (idle.length > 0) {
       let entry = this.#selectLRUTab(idle);
-      let releaseTab = await entry.queue.acquire();
+      let releaseTab = await entry.queue.acquire(signal);
       return { entry, reused: true, releaseTab };
     }
     if (entryList.length < this.#affinityTabMax) {
@@ -648,13 +776,13 @@ export class PagePool {
       }
       let commandeered = this.#commandeerDormantTab(affinityKey);
       if (commandeered) {
-        let releaseTab = await commandeered.queue.acquire();
+        let releaseTab = await commandeered.queue.acquire(signal);
         return { entry: commandeered, reused: false, releaseTab };
       }
     }
     if (entryList.length > 0) {
       let entry = this.#selectLeastPendingTab(entryList);
-      let releaseTab = await entry.queue.acquire();
+      let releaseTab = await entry.queue.acquire(signal);
       return { entry, reused: true, releaseTab };
     }
     let fallbackShared = this.#tryClaimOrphanContext(affinityKey);
@@ -669,7 +797,7 @@ export class PagePool {
     }
     let fallback = this.#commandeerDormantTab(affinityKey);
     if (fallback) {
-      let releaseTab = await fallback.queue.acquire();
+      let releaseTab = await fallback.queue.acquire(signal);
       return { entry: fallback, reused: false, releaseTab };
     }
     if (entryList.length === 0) {
@@ -686,7 +814,7 @@ export class PagePool {
         let entry = this.#selectLeastPendingTab(crossAffinityEntries);
         entry.transitioning = true;
         try {
-          let releaseTab = await entry.queue.acquire();
+          let releaseTab = await entry.queue.acquire(signal);
           return { entry, reused: false, releaseTab };
         } catch (error) {
           entry.transitioning = false;

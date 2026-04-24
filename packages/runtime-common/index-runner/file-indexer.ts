@@ -10,6 +10,7 @@ import {
   type JobInfo,
   type LocalPath,
   type ResolvedCodeRef,
+  type TimingDiagnostics,
 } from '../index';
 import { CardError, isCardError, serializableError } from '../error';
 import type { IndexRunnerDependencyManager } from './dependency-resolver';
@@ -34,6 +35,9 @@ export interface FileIndexerOptions {
   // module files, which produce HTML via their own module prerender).
   precomputedExtractResult: FileExtractResponse | undefined;
   precomputedRenderResult?: FileRenderResponse;
+  // Timing / diagnostic payload attached to the fused-visit response;
+  // persisted onto `boxel_index.timing_diagnostics` for this file's row.
+  timingDiagnostics?: TimingDiagnostics;
   dependencyResolver: IndexRunnerDependencyManager;
   updateEntry(
     entryURL: URL,
@@ -53,6 +57,7 @@ export async function performFileIndexing({
   jobInfo,
   precomputedExtractResult,
   precomputedRenderResult,
+  timingDiagnostics,
   dependencyResolver,
   updateEntry,
   logWarn,
@@ -125,7 +130,7 @@ export async function performFileIndexing({
     logWarn(
       `${jobIdentity(jobInfo)} encountered error indexing file ${path}: ${renderError.error.message}`,
     );
-    await updateEntry(entryURL, renderError);
+    await updateEntry(entryURL, { ...renderError, timingDiagnostics });
     return 'error';
   }
 
@@ -157,6 +162,7 @@ export async function performFileIndexing({
         ...(extractResult.searchDoc ?? {}),
       },
       types: fileTypes,
+      timingDiagnostics,
     });
     return 'error';
   }
@@ -196,6 +202,7 @@ export async function performFileIndexing({
     fittedHtml: renderResult?.fittedHTML ?? undefined,
     iconHTML: renderResult?.iconHTML ?? undefined,
     markdown: renderResult?.markdown ?? undefined,
+    timingDiagnostics,
   });
 
   return 'indexed';

@@ -110,8 +110,13 @@ module('LintValidationStep', function () {
           'hello.test.gts': 'import { test } from "qunit";',
         }),
         lintFileFn: makeLintFile({
-          'hello.gts': { fixed: false, output: '', messages: [] },
-          'hello.test.gts': { fixed: false, output: '', messages: [] },
+          'hello.gts': { ok: true, fixed: false, output: '', messages: [] },
+          'hello.test.gts': {
+            ok: true,
+            fixed: false,
+            output: '',
+            messages: [],
+          },
         }),
       }),
     );
@@ -138,6 +143,7 @@ module('LintValidationStep', function () {
         }),
         lintFileFn: makeLintFile({
           'hello.gts': {
+            ok: true,
             fixed: false,
             output: 'let x = 1;',
             messages: [
@@ -179,6 +185,7 @@ module('LintValidationStep', function () {
         }),
         lintFileFn: makeLintFile({
           'hello.gts': {
+            ok: true,
             fixed: false,
             output: 'export const x = 1;',
             messages: [
@@ -210,7 +217,7 @@ module('LintValidationStep', function () {
           // broken.gts not in map → readFile returns { ok: false }
         }),
         lintFileFn: makeLintFile({
-          'hello.gts': { fixed: false, output: '', messages: [] },
+          'hello.gts': { ok: true, fixed: false, output: '', messages: [] },
         }),
       }),
     );
