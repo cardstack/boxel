@@ -276,9 +276,7 @@ class ProjectIsolated extends Component<typeof Project> {
     const columns = this.args.model?.columns ?? [];
     if (cards.length === 0) return [];
     const maxSortOrder: Record<number, number> = {};
-    const groupBy = this.args.model?.groupBy;
-    const source =
-      defaultColumns.find((o) => o.value === groupBy) ?? defaultColumns[0]!;
+    const source = this.groupBySource;
     const placements = cards.map((card: any, index: number) => {
       const value = card[source.fieldName];
       const colIndex = columns.findIndex((col) => col.key === value);
@@ -333,14 +331,24 @@ class ProjectIsolated extends Component<typeof Project> {
     return (this.args.model as any)[realmURL];
   }
 
+  get groupBySource() {
+    const groupBy = this.args.model?.groupBy;
+    return defaultColumns.find((o) => o.value === groupBy) ?? defaultColumns[0]!;
+  }
+
+  get columnConfigField(): 'typeColumnConfig' | 'priorityColumnConfig' | 'statusColumnConfig' {
+    const groupBy = this.args.model?.groupBy ?? 'status';
+    if (groupBy === 'issueType') return 'typeColumnConfig';
+    if (groupBy === 'priority') return 'priorityColumnConfig';
+    return 'statusColumnConfig';
+  }
+
   addCardToColumn = dropTask(async (columnKey: string | null | undefined) => {
     if (!columnKey) return;
     const model = this.args.model;
     if (!model) return;
 
-    const source =
-      defaultColumns.find((o) => o.value === model.groupBy) ??
-      defaultColumns[0]!;
+    const source = this.groupBySource;
     const attributeName = source.fieldName;
     const projectCardId = model.id ?? null;
 
@@ -396,9 +404,7 @@ class ProjectIsolated extends Component<typeof Project> {
     const cards = model.issues;
     const columns = model.columns;
     if (!cards || !columns) return;
-    const source =
-      defaultColumns.find((o) => o.value === model.groupBy) ??
-      defaultColumns[0]!;
+    const source = this.groupBySource;
     for (const np of newPlacements) {
       const card = cards[np.index] as any;
       const col = columns[np.column];
@@ -416,14 +422,7 @@ class ProjectIsolated extends Component<typeof Project> {
   setColumnConfig = (key: string, patch: Record<string, unknown>): void => {
     const model = this.args.model;
     if (!model) return;
-    const groupBy = model.groupBy ?? 'status';
-    const configField =
-      groupBy === 'issueType'
-        ? 'typeColumnConfig'
-        : groupBy === 'priority'
-          ? 'priorityColumnConfig'
-          : 'statusColumnConfig';
-    const cols: KanbanColumnField[] = (model as any)[configField] ?? [];
+    const cols: KanbanColumnField[] = (model as any)[this.columnConfigField] ?? [];
     const cfg = cols.find((c) => c.key === key) as any;
     if (cfg) {
       for (const [k, v] of Object.entries(patch)) {
