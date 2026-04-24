@@ -1456,6 +1456,12 @@ export class Realm {
         if (e instanceof CardError) {
           return responseWithError(e, requestContext);
         }
+        // Log the underlying exception before returning 500 — otherwise
+        // callers only see "Write Error" and the original stack trace is
+        // lost, making atomic-batch failures effectively undebuggable.
+        this.#log.error(
+          `Atomic write failed: ${e.message}\n${e.stack ?? '(no stack)'}`,
+        );
         return createResponse({
           body: JSON.stringify({
             errors: [{ title: 'Write Error', detail: e.message }],
