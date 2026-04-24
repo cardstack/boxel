@@ -4,8 +4,8 @@ import type { ProfileManager } from '../lib/profile-manager';
 import {
   getProfileManager,
   formatProfileBadge,
-  getDomainFromMatrixId,
   getEnvironmentFromMatrixId,
+  getEnvironmentLabel,
   getUsernameFromMatrixId,
 } from '../lib/profile-manager';
 import {
@@ -105,65 +105,6 @@ export interface ProfileCommandOptions {
   user?: string;
   password?: string;
   name?: string;
-  matrixUrl?: string;
-  realmServerUrl?: string;
-}
-
-interface EnvironmentDefaults {
-  domain: string;
-  matrixUrl: string;
-  realmServerUrl: string;
-}
-
-const MENU_ENVIRONMENTS: Record<
-  'staging' | 'production' | 'local',
-  EnvironmentDefaults
-> = {
-  staging: {
-    domain: 'stack.cards',
-    matrixUrl: 'https://matrix-staging.stack.cards',
-    realmServerUrl: 'https://realms-staging.stack.cards/',
-  },
-  production: {
-    domain: 'boxel.ai',
-    matrixUrl: 'https://matrix.boxel.ai',
-    realmServerUrl: 'https://app.boxel.ai/',
-  },
-  local: {
-    domain: 'localhost',
-    matrixUrl: 'http://localhost:8008',
-    realmServerUrl: 'http://localhost:4201/',
-  },
-};
-
-// Matches scripts/env-slug.sh: lowercase, "/" -> "-", strip chars outside
-// [a-z0-9-], collapse runs of "-", trim leading/trailing "-".
-function computeEnvSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/\//g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-// Derive URLs from BOXEL_ENVIRONMENT using the same ".${slug}.localhost"
-// pattern that mise-tasks/lib/env-vars.sh produces for env-mode local dev.
-function resolveBoxelEnvironment(): EnvironmentDefaults | null {
-  const raw = process.env.BOXEL_ENVIRONMENT;
-  if (!raw || !raw.trim()) return null;
-  const slug = computeEnvSlug(raw);
-  if (!slug) {
-    console.error(
-      `${FG_RED}Error:${RESET} BOXEL_ENVIRONMENT="${raw}" contains no slug characters (expected letters, digits, or "-").`,
-    );
-    process.exit(1);
-  }
-  return {
-    domain: `${slug}.localhost`,
-    matrixUrl: `http://matrix.${slug}.localhost`,
-    realmServerUrl: `http://realm-server.${slug}.localhost/`,
-  };
 }
 
 export async function profileCommand(
@@ -179,7 +120,6 @@ export async function profileCommand(
       break;
 
     case 'add': {
-      const envDefaults = resolveBoxelEnvironment();
       const password = options?.password || process.env.BOXEL_PASSWORD;
       if (options?.user && password) {
         await addProfileNonInteractive(
@@ -187,11 +127,9 @@ export async function profileCommand(
           options.user,
           password,
           options.name,
-          options.matrixUrl ?? envDefaults?.matrixUrl,
-          options.realmServerUrl ?? envDefaults?.realmServerUrl,
         );
       } else {
-        await addProfile(manager, envDefaults);
+        await addProfile(manager);
       }
       break;
     }
@@ -262,12 +200,14 @@ async function listProfiles(manager: ProfileManager): Promise<void> {
     const env = getEnvironmentFromMatrixId(id);
 
     const marker = isActive ? `${FG_GREEN}\u2605${RESET} ` : '  ';
-    const domain = getDomainFromMatrixId(id);
+    const envLabel = getEnvironmentLabel(env);
     const envColor = env === 'production' ? FG_MAGENTA : FG_CYAN;
 
     console.log(`${marker}${BOLD}${id}${RESET}`);
     console.log(`    ${DIM}Name:${RESET} ${profile.displayName}`);
-    console.log(`    ${DIM}Environment:${RESET} ${envColor}${domain}${RESET}`);
+    console.log(
+      `    ${DIM}Environment:${RESET} ${envColor}${envLabel}${RESET}`,
+    );
     console.log(`    ${DIM}Realm Server:${RESET} ${profile.realmServerUrl}`);
     console.log('');
   }
@@ -277,77 +217,34 @@ async function listProfiles(manager: ProfileManager): Promise<void> {
   }
 }
 
-async function promptEnvironmentMenu(): Promise<{
-  domain: string;
-  matrixUrl: string;
-  realmServerUrl: string;
-}> {
+async function addProfile(manager: ProfileManager): Promise<void> {
+  console.log(`\n${BOLD}Add New Profile${RESET}\n`);
+
   console.log(`Which environment?`);
   console.log(`  ${FG_CYAN}1${RESET}) Staging (realms-staging.stack.cards)`);
   console.log(`  ${FG_MAGENTA}2${RESET}) Production (app.boxel.ai)`);
   console.log(`  ${FG_GREEN}3${RESET}) Local (localhost:4201)`);
-  console.log(`  ${FG_YELLOW}4${RESET}) Custom (enter your own URLs)`);
 
-  const envChoice = await prompt('\nChoice [1/2/3/4]: ');
-
-  if (envChoice === '4') {
-    const matrixUrl = await prompt('Matrix server URL: ');
-    if (!matrixUrl) {
-      console.error(`${FG_RED}Error:${RESET} Matrix server URL is required.`);
-      process.exit(1);
-    }
-    const realmServerUrl = await prompt('Realm server URL: ');
-    if (!realmServerUrl) {
-      console.error(`${FG_RED}Error:${RESET} Realm server URL is required.`);
-      process.exit(1);
-    }
-    let defaultDomain = 'custom';
-    try {
-      defaultDomain = new URL(matrixUrl).hostname || defaultDomain;
-    } catch {
-      // fall back to 'custom'
-    }
-    const domainInput = await prompt(
-      `Domain for Matrix ID [${defaultDomain}]: `,
-    );
-    return {
-      domain: domainInput || defaultDomain,
-      matrixUrl,
-      realmServerUrl,
-    };
-  }
-
-  if (envChoice === '3') {
-    return { ...MENU_ENVIRONMENTS.local };
-  }
-  if (envChoice === '2') {
-    return { ...MENU_ENVIRONMENTS.production };
-  }
-  return { ...MENU_ENVIRONMENTS.staging };
-}
-
-async function addProfile(
-  manager: ProfileManager,
-  envDefaults?: EnvironmentDefaults | null,
-): Promise<void> {
-  console.log(`\n${BOLD}Add New Profile${RESET}\n`);
+  const envChoice = await prompt('\nChoice [1/2/3]: ');
+  const isProduction = envChoice === '2';
+  const isLocal = envChoice === '3';
 
   let domain: string;
   let defaultMatrixUrl: string;
   let defaultRealmUrl: string;
 
-  if (envDefaults) {
-    console.log(
-      `${DIM}Using BOXEL_ENVIRONMENT=${process.env.BOXEL_ENVIRONMENT}${RESET}`,
-    );
-    domain = envDefaults.domain;
-    defaultMatrixUrl = envDefaults.matrixUrl;
-    defaultRealmUrl = envDefaults.realmServerUrl;
+  if (isLocal) {
+    domain = 'localhost';
+    defaultMatrixUrl = 'http://localhost:8008';
+    defaultRealmUrl = 'http://localhost:4201/';
+  } else if (isProduction) {
+    domain = 'boxel.ai';
+    defaultMatrixUrl = 'https://matrix.boxel.ai';
+    defaultRealmUrl = 'https://app.boxel.ai/';
   } else {
-    const menuResult = await promptEnvironmentMenu();
-    domain = menuResult.domain;
-    defaultMatrixUrl = menuResult.matrixUrl;
-    defaultRealmUrl = menuResult.realmServerUrl;
+    domain = 'stack.cards';
+    defaultMatrixUrl = 'https://matrix-staging.stack.cards';
+    defaultRealmUrl = 'https://realms-staging.stack.cards/';
   }
 
   console.log(`\nEnter your Boxel username (without @ or domain)`);
@@ -484,8 +381,6 @@ async function addProfileNonInteractive(
   matrixId: string,
   password: string,
   displayName?: string,
-  matrixUrl?: string,
-  realmServerUrl?: string,
 ): Promise<void> {
   if (!matrixId.startsWith('@') || !matrixId.includes(':')) {
     console.error(
@@ -508,20 +403,7 @@ async function addProfileNonInteractive(
     return;
   }
 
-  try {
-    await manager.addProfile(
-      matrixId,
-      password,
-      displayName,
-      matrixUrl,
-      realmServerUrl,
-    );
-  } catch (err) {
-    console.error(
-      `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
-    );
-    process.exit(1);
-  }
+  await manager.addProfile(matrixId, password, displayName);
   console.log(
     `${FG_GREEN}\u2713${RESET} Profile created: ${formatProfileBadge(matrixId)}`,
   );

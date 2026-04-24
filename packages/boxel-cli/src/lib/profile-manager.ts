@@ -80,12 +80,12 @@ export function getEnvironmentLabel(env: Environment): string {
 
 /**
  * Format profile for display in command output
- * @example [ctse · stack.cards]
+ * @example [ctse · staging]
  */
 export function formatProfileBadge(matrixId: string): string {
   const username = getUsernameFromMatrixId(matrixId);
-  const domain = getDomainFromMatrixId(matrixId);
-  return `${DIM}[${RESET}${FG_CYAN}${username}${RESET} ${DIM}\u00b7${RESET} ${FG_MAGENTA}${domain}${RESET}${DIM}]${RESET}`;
+  const env = getEnvironmentLabel(getEnvironmentFromMatrixId(matrixId));
+  return `${DIM}[${RESET}${FG_CYAN}${username}${RESET} ${DIM}\u00b7${RESET} ${FG_MAGENTA}${env}${RESET}${DIM}]${RESET}`;
 }
 
 export class ProfileManager {
