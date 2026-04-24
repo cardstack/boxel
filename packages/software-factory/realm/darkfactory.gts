@@ -96,7 +96,6 @@ export class Issue extends CardDef {
   @field createdAt = contains(DateTimeField);
   @field updatedAt = contains(DateTimeField);
   @field comments = containsMany(Comment);
-  @field kanbanBoard = linksTo(() => CardDef);
   @field statusBoardOrder = contains(NumberField);
   @field priorityBoardOrder = contains(NumberField);
   @field issueTypeBoardOrder = contains(NumberField);
@@ -111,7 +110,7 @@ export class Issue extends CardDef {
 
   static fitted = class Fitted extends Component<typeof Issue> {
     get statusColor(): string | undefined {
-      const project = this.args.model?.kanbanBoard as Project | null;
+      const project = this.args.model?.project as Project | null;
       return issueStatusColor(
         project?.issueStatusOptions,
         this.args.model?.status,
@@ -155,7 +154,7 @@ export class Issue extends CardDef {
 
   static isolated = class Isolated extends Component<typeof Issue> {
     get statusColor(): string | undefined {
-      const project = this.args.model?.kanbanBoard as Project | null;
+      const project = this.args.model?.project;
       return issueStatusColor(
         project?.issueStatusOptions,
         this.args.model?.status,
@@ -385,7 +384,7 @@ export class Project extends CardDef {
           this.selectedCardIndex = index;
         },
         onOpen: (index) => {
-          const card = (this.args.model?.issues as any[])?.[index];
+          const card = this.args.model?.issues?.[index];
           if (card) this.args.viewCard?.(card, 'isolated');
         },
       });
@@ -399,11 +398,9 @@ export class Project extends CardDef {
       const groupBy = this.args.model?.groupBy;
       const source =
         defaultColumns.find((o) => o.value === groupBy) ?? defaultColumns[0]!;
-      const placements = (cards as any[]).map((card: any, index: number) => {
+      const placements = cards.map((card: any, index: number) => {
         const value = card[source.fieldName];
-        const colIndex = (columns as any[]).findIndex(
-          (col: any) => col.key === value,
-        );
+        const colIndex = columns.findIndex((col) => col.key === value);
         const column = colIndex >= 0 ? colIndex : 0;
         const stored = card[source.orderField];
         let sortOrder: number;
@@ -419,7 +416,7 @@ export class Project extends CardDef {
 
       // Deferred so the write doesn't happen during rendering.
       const uninitialized = placements.filter(
-        (p) => (cards as any[])[p.index]?.[source.orderField] == null,
+        (p) => (cards[p.index] as any)?.[source.orderField] == null,
       );
       if (uninitialized.length > 0 && !this.orderInitPending) {
         this.orderInitPending = true;
@@ -427,7 +424,7 @@ export class Project extends CardDef {
         Promise.resolve().then(() => {
           this.orderInitPending = false;
           for (const p of uninitialized) {
-            const card = (cards as any[])[p.index];
+            const card = cards[p.index] as any;
             if (card && card[orderField] == null) {
               card[orderField] = p.sortOrder;
             }
@@ -463,10 +460,10 @@ export class Project extends CardDef {
       if (!model) return;
 
       const source =
-        defaultColumns.find((o) => o.value === (model as any).groupBy) ??
+        defaultColumns.find((o) => o.value === model.groupBy) ??
         defaultColumns[0]!;
       const attributeName = source.fieldName;
-      const kanbanBoardId = (model as any).id ?? null;
+      const projectCardId = model.id ?? null;
 
       await this.args.createCard?.(issueCodeRef, new URL(issueCodeRef.module), {
         realmURL: this.realmURL,
@@ -475,8 +472,7 @@ export class Project extends CardDef {
             type: 'card',
             attributes: { [attributeName]: columnKey },
             relationships: {
-              kanbanBoard: { links: { self: kanbanBoardId } },
-              project: { links: { self: kanbanBoardId } },
+              project: { links: { self: projectCardId } },
             },
             meta: { adoptsFrom: issueCodeRef },
           },
@@ -494,22 +490,21 @@ export class Project extends CardDef {
     get selectedGroupByOption():
       | { displayName: string; sort: string }
       | undefined {
-      const groupBy = (this.args.model as any)?.groupBy ?? 'status';
+      const groupBy = this.args.model?.groupBy ?? 'status';
       return this.groupByOptions.find((option) => option.sort === groupBy);
     }
 
     onGroupByChange = (option: { displayName: string; sort: string }): void => {
-      const model = this.args.model as any;
-      if (!model || model.groupBy === option.sort) return;
-      model.groupBy = option.sort;
+      if (!this.args.model || this.args.model.groupBy === option.sort) return;
+      this.args.model.groupBy = option.sort;
     };
 
     get hideEmptyColumns(): boolean {
-      return Boolean((this.args.model as any)?.hideEmptyColumns);
+      return Boolean(this.args.model?.hideEmptyColumns);
     }
 
     toggleHideEmptyColumns = (): void => {
-      const model = this.args.model as any;
+      const model = this.args.model;
       if (!model) return;
       model.hideEmptyColumns = !this.hideEmptyColumns;
     };
@@ -519,14 +514,14 @@ export class Project extends CardDef {
     commitPlacements = (newPlacements: KanbanPlacement[]): void => {
       const model = this.args.model;
       if (!model) return;
-      const cards = model.issues as any[];
-      const columns = model.columns as any[];
+      const cards = model.issues;
+      const columns = model.columns;
       if (!cards || !columns) return;
       const source =
-        defaultColumns.find((o) => o.value === (model as any).groupBy) ??
+        defaultColumns.find((o) => o.value === model.groupBy) ??
         defaultColumns[0]!;
       for (const np of newPlacements) {
-        const card = cards[np.index];
+        const card = cards[np.index] as any;
         const col = columns[np.column];
         if (card && col) {
           if (card[source.fieldName] !== col.key)
@@ -540,7 +535,7 @@ export class Project extends CardDef {
     // ── Settings ─────────────────────────────────────────────────────
 
     setColumnConfig = (key: string, patch: Record<string, unknown>): void => {
-      const model = this.args.model as any;
+      const model = this.args.model;
       if (!model) return;
       const groupBy = model.groupBy ?? 'status';
       const configField =
@@ -549,8 +544,8 @@ export class Project extends CardDef {
           : groupBy === 'priority'
             ? 'priorityColumnConfig'
             : 'statusColumnConfig';
-      const cols: KanbanColumnField[] = model[configField] ?? [];
-      const cfg = cols.find((c: any) => c.key === key) as any;
+      const cols: KanbanColumnField[] = (model as any)[configField] ?? [];
+      const cfg = cols.find((c) => c.key === key) as any;
       if (cfg) {
         for (const [k, v] of Object.entries(patch)) {
           cfg[k] = v;
@@ -979,7 +974,7 @@ export class Project extends CardDef {
     constructor(owner: Owner, args: any) {
       super(owner, args);
       Promise.resolve().then(() => {
-        const model = this.args.model as Project | undefined;
+        const model = this.args.model;
         if (!model) return;
 
         if (!model.issuePriorityOptions?.length) {
@@ -996,7 +991,7 @@ export class Project extends CardDef {
     }
 
     get groupBy(): string {
-      return (this.args.model as any)?.groupBy ?? 'status';
+      return this.args.model?.groupBy ?? 'status';
     }
 
     <template>
