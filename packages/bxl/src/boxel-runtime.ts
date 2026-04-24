@@ -1826,7 +1826,9 @@ interface PreparedPlanIdentity {
 interface AsyncPreparedRuntimeCacheEntry {
   cacheKey: string;
   cacheNamespace: string;
-  promise: Promise<PreparedBoxelRuntimeAsync>;
+  promise?: Promise<PreparedBoxelRuntimeAsync>;
+  runtimeRef?: WeakRef<PreparedBoxelRuntimeAsync>;
+  workerBacked?: boolean;
 }
 
 interface WorkerPlanEntry {
@@ -2379,7 +2381,27 @@ function nextAsyncSessionId(): string {
 }
 
 function getCachedPreparedAsyncRuntime(cacheKey: string) {
-  return preparedAsyncRuntimeCache.get(cacheKey)?.promise;
+  const entry = preparedAsyncRuntimeCache.get(cacheKey);
+  if (!entry) {
+    return undefined;
+  }
+
+  if (entry.promise) {
+    return entry.promise;
+  }
+
+  const prepared = entry.runtimeRef?.deref();
+  if (prepared) {
+    return Promise.resolve(prepared);
+  }
+
+  preparedAsyncRuntimeCache.delete(cacheKey);
+  if (entry.workerBacked && boxelRuntimeWorkerManager) {
+    void boxelRuntimeWorkerManager.invalidatePlans(cacheKey).catch(
+      () => undefined,
+    );
+  }
+  return undefined;
 }
 
 function setCachedPreparedAsyncRuntime(entry: AsyncPreparedRuntimeCacheEntry) {
@@ -2390,9 +2412,54 @@ function deleteCachedPreparedAsyncRuntime(cacheKey: string) {
   preparedAsyncRuntimeCache.delete(cacheKey);
 }
 
+function cleanupStalePreparedAsyncRuntimes(
+  cacheKeyOrNamespace?: string,
+) {
+  for (const [cacheKey, entry] of preparedAsyncRuntimeCache.entries()) {
+    if (
+      cacheKeyOrNamespace &&
+      cacheKey !== cacheKeyOrNamespace &&
+      entry.cacheNamespace !== cacheKeyOrNamespace
+    ) {
+      continue;
+    }
+    if (entry.promise) {
+      continue;
+    }
+    if (entry.runtimeRef?.deref()) {
+      continue;
+    }
+    preparedAsyncRuntimeCache.delete(cacheKey);
+    if (entry.workerBacked && boxelRuntimeWorkerManager) {
+      void boxelRuntimeWorkerManager.invalidatePlans(cacheKey).catch(
+        () => undefined,
+      );
+    }
+  }
+}
+
+function prunePreparedAsyncRuntimeNamespace(
+  cacheNamespace: string,
+  retainedCacheKey: string,
+  workerBacked: boolean,
+) {
+  for (const [cacheKey, entry] of preparedAsyncRuntimeCache.entries()) {
+    if (
+      cacheKey === retainedCacheKey ||
+      entry.cacheNamespace !== cacheNamespace ||
+      Boolean(entry.workerBacked) !== workerBacked
+    ) {
+      continue;
+    }
+    preparedAsyncRuntimeCache.delete(cacheKey);
+  }
+}
+
 function invalidateLocalPreparedAsyncRuntimeCache(
   cacheKeyOrNamespace?: string,
 ): number {
+  cleanupStalePreparedAsyncRuntimes(cacheKeyOrNamespace);
+
   if (!cacheKeyOrNamespace) {
     const removed = preparedAsyncRuntimeCache.size;
     preparedAsyncRuntimeCache.clear();
@@ -2713,26 +2780,47 @@ export async function prepareBoxelRuntimeAsync(
   options: BoxelRuntimeAsyncOptions = {},
 ): Promise<PreparedBoxelRuntimeAsync> {
   const payload = createPreparedPlanPayload(definition, options);
+  cleanupStalePreparedAsyncRuntimes(payload.cacheNamespace);
+  const useWorkerRuntime = canUseBrowserWorkerRuntime(options);
+
   const cached = getCachedPreparedAsyncRuntime(payload.cacheKey);
   if (cached) {
     return cached;
   }
 
-  const preparedPromise = (async () => {
-    if (!canUseBrowserWorkerRuntime(options)) {
-      return createLocalAsyncPreparedBoxelRuntime(payload);
-    }
-
-    const manager = getBoxelRuntimeWorkerManager();
-    const metadata = await manager.ensurePlan(payload);
-    return createWorkerBackedPreparedBoxelRuntime(manager, metadata);
-  })();
-
-  setCachedPreparedAsyncRuntime({
+  const cacheEntry: AsyncPreparedRuntimeCacheEntry = {
     cacheKey: payload.cacheKey,
     cacheNamespace: payload.cacheNamespace,
-    promise: preparedPromise,
-  });
+  };
+  const preparedPromise = (async () => {
+    const prepared = !useWorkerRuntime
+      ? createLocalAsyncPreparedBoxelRuntime(payload)
+      : createWorkerBackedPreparedBoxelRuntime(
+          getBoxelRuntimeWorkerManager(),
+          await getBoxelRuntimeWorkerManager().ensurePlan(payload),
+        );
+
+    cacheEntry.workerBacked = Boolean(
+      getWorkerAsyncPreparedRuntime(prepared),
+    );
+    cacheEntry.runtimeRef =
+      typeof WeakRef === 'function' ? new WeakRef(prepared) : undefined;
+    cacheEntry.promise = cacheEntry.runtimeRef
+      ? undefined
+      : Promise.resolve(prepared);
+    if (!useWorkerRuntime) {
+      prunePreparedAsyncRuntimeNamespace(
+        payload.cacheNamespace,
+        payload.cacheKey,
+        false,
+      );
+    }
+
+    return prepared;
+  })();
+
+  cacheEntry.promise = preparedPromise;
+  setCachedPreparedAsyncRuntime(cacheEntry);
 
   try {
     return await preparedPromise;

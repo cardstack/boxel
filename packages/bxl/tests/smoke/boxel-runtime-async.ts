@@ -343,8 +343,8 @@ const invalidatedNamespace = await invalidateBoxelRuntimeAsyncCache(
 );
 strictEqual(
   invalidatedNamespace,
-  2,
-  'invalidating a cache namespace should remove every revision under that namespace',
+  1,
+  'local async runtime caching should only retain the latest revision per cache namespace',
 );
 
 const preparedAfterNamespaceDrop = await prepareBoxelRuntimeAsync(definition, {
