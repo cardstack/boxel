@@ -4,8 +4,8 @@ import type { ProfileManager } from '../lib/profile-manager';
 import {
   getProfileManager,
   formatProfileBadge,
+  getDomainFromMatrixId,
   getEnvironmentFromMatrixId,
-  getEnvironmentLabel,
   getUsernameFromMatrixId,
 } from '../lib/profile-manager';
 import {
@@ -259,13 +259,13 @@ async function listProfiles(manager: ProfileManager): Promise<void> {
     const env = getEnvironmentFromMatrixId(id);
 
     const marker = isActive ? `${FG_GREEN}\u2605${RESET} ` : '  ';
-    const envLabel = getEnvironmentLabel(env);
+    const domain = getDomainFromMatrixId(id);
     const envColor = env === 'production' ? FG_MAGENTA : FG_CYAN;
 
     console.log(`${marker}${BOLD}${id}${RESET}`);
     console.log(`    ${DIM}Name:${RESET} ${profile.displayName}`);
     console.log(
-      `    ${DIM}Environment:${RESET} ${envColor}${envLabel}${RESET}`,
+      `    ${DIM}Environment:${RESET} ${envColor}${domain}${RESET}`,
     );
     console.log(`    ${DIM}Realm Server:${RESET} ${profile.realmServerUrl}`);
     console.log('');
