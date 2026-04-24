@@ -533,7 +533,14 @@ export function registerSyncCommand(realm: Command): void {
         let result = await sync(localDir, realmUrl, options);
         if (result.error) {
           console.error(`Error: ${result.error}`);
-          process.exit(1);
+          let hasPartialResults =
+            (Array.isArray(result.pushed) && result.pushed.length > 0) ||
+            (Array.isArray(result.pulled) && result.pulled.length > 0) ||
+            (Array.isArray(result.remoteDeleted) &&
+              result.remoteDeleted.length > 0) ||
+            (Array.isArray(result.localDeleted) &&
+              result.localDeleted.length > 0);
+          process.exit(hasPartialResults ? 2 : 1);
         }
         if (result.hasError) {
           console.log(
