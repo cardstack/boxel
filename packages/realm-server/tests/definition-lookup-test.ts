@@ -1598,15 +1598,27 @@ module(basename(__filename), function () {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       releaseGate();
-      let [dA, dB] = await Promise.all([pA, pB]);
+      let [resultA, resultB] = await Promise.allSettled([pA, pB]);
 
       assert.strictEqual(
         calls,
         2,
         'invalidate dropped the in-flight entry so caller B triggered its own prerender',
       );
-      assert.strictEqual(dA?.displayName, 'CoalesceInvalidate v1');
-      assert.strictEqual(dB?.displayName, 'CoalesceInvalidate v2');
+      // CS-10948: A's pre-invalidation result is dropped at persist time
+      // rather than served back. lookupDefinition therefore rejects (the
+      // post-skip readFromDatabaseCache misses because invalidate also
+      // deleted the row). Only B — which started after the bump and ran a
+      // fresh prerender — returns a Definition.
+      assert.strictEqual(
+        resultA.status,
+        'rejected',
+        'A is rejected — its pre-invalidation prerender result is discarded',
+      );
+      assert.strictEqual(resultB.status, 'fulfilled');
+      if (resultB.status === 'fulfilled') {
+        assert.strictEqual(resultB.value?.displayName, 'CoalesceInvalidate v2');
+      }
     });
 
     test('in-flight prerender result is dropped when invalidate runs concurrently', async function (assert) {

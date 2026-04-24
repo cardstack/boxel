@@ -333,6 +333,16 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheUserId: string;
     prerenderUserId: string;
   }): Promise<ModuleCacheEntry | undefined> {
+    // Snapshot the realm's invalidation generation BEFORE the first await.
+    // clearRealmCache (and any future synchronous bump) runs entirely before
+    // its first await, so a snapshot taken after an await above would already
+    // include the bump and silently match at persist time. Invalidate happens
+    // to await before bumping, so this point of failure is asymmetric — but
+    // we want both paths to be caught uniformly, so the safe place is entry.
+    // If the cache-hit short-circuits below, we never use this snapshot,
+    // which is fine — capturing it is a Map.get + struct allocation.
+    let startSnapshot = this.snapshotGeneration(resolvedRealmURL);
+
     let cached = await this.readFromDatabaseCache(
       moduleURL,
       cacheScope,
@@ -342,13 +352,6 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     if (cached && !this.isExpiredErrorEntry(cached)) {
       return cached;
     }
-
-    // Snapshot the realm's invalidation generation before we kick off the
-    // prerender. If invalidate / clearRealmCache / clearAllModules runs while
-    // we're prerendering, the generation will bump synchronously (before the
-    // DB delete commits), and the check just before persist below will skip
-    // re-inserting a result that reflects pre-invalidation state.
-    let startSnapshot = this.snapshotGeneration(resolvedRealmURL);
 
     for (let candidateURL of this.populationCandidates(moduleURL)) {
       if (candidateURL !== moduleURL) {
