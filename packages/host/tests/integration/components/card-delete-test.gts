@@ -534,6 +534,11 @@ module('Integration | card-delete', function (hooks) {
       `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
     );
     await click(`[data-test-open-search-field]`);
+    // Recents are fetched via prerendered search (CS-10915); wait for the
+    // async fetch to settle before asserting the recent item is shown.
+    await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`, {
+      timeout: 3000,
+    });
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     await click('[data-test-search-sheet-cancel-button]');
     await triggerEvent(
