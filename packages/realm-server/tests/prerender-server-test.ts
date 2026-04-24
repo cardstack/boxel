@@ -13,10 +13,7 @@ import {
   createPrerenderHttpServer,
 } from '../prerender/prerender-app';
 import type { Prerenderer } from '../prerender';
-import {
-  baseCardRef,
-  rri,
-} from '@cardstack/runtime-common';
+import { baseCardRef, rri } from '@cardstack/runtime-common';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,

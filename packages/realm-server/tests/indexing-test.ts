@@ -396,8 +396,7 @@ function makeTestRealmFileSystem(): Record<
         attributes: {},
         meta: {
           adoptsFrom: {
-            module:
-              rri('https://cardstack.com/base/card-api'),
+            module: rri('https://cardstack.com/base/card-api'),
             name: 'CardDef',
           },
         },
@@ -1113,8 +1112,7 @@ module(basename(__filename), function () {
       assert.deepEqual(
         doc.data.meta?.adoptsFrom,
         {
-          module:
-            rri('https://cardstack.com/base/text-file-def'),
+          module: rri('https://cardstack.com/base/text-file-def'),
           name: 'TextFileDef',
         },
         'adoptsFrom sourced from pristine file resource',
@@ -2845,8 +2843,7 @@ module(basename(__filename), function () {
               attributes: { cardTitle: 'overlap-target' },
               meta: {
                 adoptsFrom: {
-                  module:
-                    rri('./query-rel-overlap-target'),
+                  module: rri('./query-rel-overlap-target'),
                   name: 'QueryRelOverlapTarget',
                 },
               },
@@ -2863,8 +2860,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module:
-                    rri('./query-rel-overlap-consumer'),
+                  module: rri('./query-rel-overlap-consumer'),
                   name: 'QueryRelOverlapConsumer',
                 },
               },
@@ -3102,8 +3098,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module:
-                    rri('./css-relationship-consumer'),
+                  module: rri('./css-relationship-consumer'),
                   name: 'CssRelationshipConsumer',
                 },
               },
@@ -3425,8 +3420,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module:
-                    rri('./relationship-grandparent'),
+                  module: rri('./relationship-grandparent'),
                   name: 'RelationshipGrandParent',
                 },
               },
@@ -3621,8 +3615,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module:
-                    rri('./relationship-file-parent'),
+                  module: rri('./relationship-file-parent'),
                   name: 'RelationshipFileParent',
                 },
               },
@@ -3639,8 +3632,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module:
-                    rri('./relationship-file-grandparent'),
+                  module: rri('./relationship-file-grandparent'),
                   name: 'RelationshipFileGrandParent',
                 },
               },
@@ -3831,8 +3823,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module:
-                    rri('./file-relationship-consumer'),
+                  module: rri('./file-relationship-consumer'),
                   name: 'FileRelationshipConsumer',
                 },
               },

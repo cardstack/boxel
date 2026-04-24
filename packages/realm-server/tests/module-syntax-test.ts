@@ -30,8 +30,7 @@ module(basename(__filename), function () {
         },
         fieldName: 'age',
         fieldRef: {
-          module:
-            rri('https://cardstack.com/base/number'),
+          module: rri('https://cardstack.com/base/number'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -149,8 +148,7 @@ module(basename(__filename), function () {
         },
         fieldName: 'lastName',
         fieldRef: {
-          module:
-            rri('https://cardstack.com/base/string'),
+          module: rri('https://cardstack.com/base/string'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -513,8 +511,7 @@ module(basename(__filename), function () {
         },
         fieldName: 'firstName',
         fieldRef: {
-          module:
-            rri('https://cardstack.com/base/string'),
+          module: rri('https://cardstack.com/base/string'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -568,8 +565,7 @@ module(basename(__filename), function () {
         fieldName: 'age',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module:
-            rri('https://cardstack.com/base/number'),
+          module: rri('https://cardstack.com/base/number'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -630,8 +626,7 @@ module(basename(__filename), function () {
         fieldName: 'age',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module:
-            rri('https://cardstack.com/base/number'),
+          module: rri('https://cardstack.com/base/number'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -695,8 +690,7 @@ module(basename(__filename), function () {
         fieldName: 'age',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module:
-            rri('https://cardstack.com/base/number'),
+          module: rri('https://cardstack.com/base/number'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -752,8 +746,7 @@ module(basename(__filename), function () {
         fieldName: 'aliases',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module:
-            rri('https://cardstack.com/base/string'),
+          module: rri('https://cardstack.com/base/string'),
           name: 'default',
         },
         fieldType: 'containsMany',
@@ -923,8 +916,7 @@ module(basename(__filename), function () {
         fieldType: 'contains',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module:
-            rri('https://cardstack.com/base/string'),
+          module: rri('https://cardstack.com/base/string'),
           name: 'default',
         },
         incomingRelativeTo: undefined,
@@ -975,8 +967,7 @@ module(basename(__filename), function () {
         },
         fieldName: 'age',
         fieldRef: {
-          module:
-            rri('https://cardstack.com/base/number'),
+          module: rri('https://cardstack.com/base/number'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -1024,8 +1015,7 @@ module(basename(__filename), function () {
           },
           fieldName: 'firstName',
           fieldRef: {
-            module:
-              rri('https://cardstack.com/base/string'),
+            module: rri('https://cardstack.com/base/string'),
             name: 'default',
           },
           fieldType: 'contains',
@@ -1122,8 +1112,7 @@ module(basename(__filename), function () {
         },
         fieldName: 'artistNames',
         fieldRef: {
-          module:
-            rri('https://cardstack.com/base/string'),
+          module: rri('https://cardstack.com/base/string'),
           name: 'default',
         },
         fieldType: 'containsMany',
@@ -1179,8 +1168,7 @@ module(basename(__filename), function () {
         },
         fieldName: 'firstNameAdjusted',
         fieldRef: {
-          module:
-            rri('https://cardstack.com/base/string'),
+          module: rri('https://cardstack.com/base/string'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -1236,8 +1224,7 @@ module(basename(__filename), function () {
         },
         fieldName: 'streetNameAdjusted',
         fieldRef: {
-          module:
-            rri('https://cardstack.com/base/string'),
+          module: rri('https://cardstack.com/base/string'),
           name: 'default',
         },
         fieldType: 'contains',

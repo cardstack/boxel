@@ -681,8 +681,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('./query-person-finder.gts'),
+                      module: rri('./query-person-finder.gts'),
                       name: 'QueryPersonFinder',
                     },
                   },
@@ -794,8 +793,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('./query-person-finder-nested.gts'),
+                      module: rri('./query-person-finder-nested.gts'),
                       name: 'OuterQueryCard',
                     },
                   },
@@ -817,8 +815,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('./query-person-finder-nested.gts'),
+                      module: rri('./query-person-finder-nested.gts'),
                       name: 'DeepOuterQueryCard',
                     },
                   },
@@ -1169,8 +1166,7 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module:
-                      rri('https://cardstack.com/base/card-api'),
+                    module: rri('https://cardstack.com/base/card-api'),
                     name: 'CardDef',
                   },
                 },
@@ -1235,8 +1231,7 @@ module(basename(__filename), function () {
                 type: 'card',
                 meta: {
                   adoptsFrom: {
-                    module:
-                      rri('https://cardstack.com/base/card-api'),
+                    module: rri('https://cardstack.com/base/card-api'),
                     name: 'CardDef',
                   },
                 },
@@ -1265,8 +1260,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module:
-                      rri('http://localhost:4202/node-test/friend'),
+                    module: rri('http://localhost:4202/node-test/friend'),
                     name: 'Friend',
                   },
                 },
@@ -1294,8 +1288,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend'),
+                      module: rri('http://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1308,8 +1301,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend'),
+                      module: rri('http://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1322,8 +1314,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend'),
+                      module: rri('http://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1372,8 +1363,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend'),
+                      module: rri('http://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1414,8 +1404,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend'),
+                      module: rri('http://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1444,8 +1433,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend'),
+                      module: rri('http://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1474,8 +1462,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend'),
+                      module: rri('http://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1533,8 +1520,7 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module:
-                    rri('http://localhost:4202/node-test/friend'),
+                  module: rri('http://localhost:4202/node-test/friend'),
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -1601,8 +1587,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend'),
+                      module: rri('http://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1636,8 +1621,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend'),
+                      module: rri('http://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1671,8 +1655,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend'),
+                      module: rri('http://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1744,8 +1727,7 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module:
-                    rri('http://localhost:4202/node-test/friend'),
+                  module: rri('http://localhost:4202/node-test/friend'),
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -1794,8 +1776,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend'),
+                      module: rri('http://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1829,8 +1810,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend'),
+                      module: rri('http://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1885,8 +1865,7 @@ module(basename(__filename), function () {
                 meta: {
                   adoptsFrom: {
                     name: 'Friend',
-                    module:
-                      rri('http://localhost:4202/node-test/friend'),
+                    module: rri('http://localhost:4202/node-test/friend'),
                   },
                   realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
@@ -1943,8 +1922,7 @@ module(basename(__filename), function () {
                 meta: {
                   adoptsFrom: {
                     name: 'Friend',
-                    module:
-                      rri('http://localhost:4202/node-test/friend'),
+                    module: rri('http://localhost:4202/node-test/friend'),
                   },
                   realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
@@ -1976,8 +1954,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module:
-                      rri('http://localhost:4202/node-test/friend'),
+                    module: rri('http://localhost:4202/node-test/friend'),
                     name: 'Friend',
                   },
                 },
@@ -1991,8 +1968,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend'),
+                      module: rri('http://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                     realmURL: ri(`http://some-other-realm/`),
@@ -2040,8 +2016,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend'),
+                      module: rri('http://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -2077,8 +2052,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module:
-                      rri('http://localhost:4202/node-test/friend'),
+                    module: rri('http://localhost:4202/node-test/friend'),
                     name: 'Friend',
                   },
                   realmURL: ri(testRealmHref.replace(/\/$/, '')),
@@ -2114,8 +2088,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module:
-                      rri('http://localhost:4202/node-test/friend'),
+                    module: rri('http://localhost:4202/node-test/friend'),
                     name: 'Friend',
                   },
                 },
@@ -2168,8 +2141,7 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module:
-                    rri('http://localhost:4202/node-test/friend'),
+                  module: rri('http://localhost:4202/node-test/friend'),
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -2243,8 +2215,7 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module:
-                      rri('https://cardstack.com/base/card-api'),
+                    module: rri('https://cardstack.com/base/card-api'),
                     name: 'CardDef',
                   },
                 },
@@ -3303,8 +3274,9 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module:
-                      rri('http://localhost:4202/node-test/friend-with-used-link'),
+                    module: rri(
+                      'http://localhost:4202/node-test/friend-with-used-link',
+                    ),
                     name: 'FriendWithUsedLink',
                   },
                 },
@@ -3318,8 +3290,9 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend-with-used-link'),
+                      module: rri(
+                        'http://localhost:4202/node-test/friend-with-used-link',
+                      ),
                       name: 'FriendWithUsedLink',
                     },
                   },
@@ -3393,8 +3366,9 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend-with-used-link'),
+                      module: rri(
+                        'http://localhost:4202/node-test/friend-with-used-link',
+                      ),
                       name: 'FriendWithUsedLink',
                     },
                   },
@@ -3423,8 +3397,9 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend-with-used-link'),
+                      module: rri(
+                        'http://localhost:4202/node-test/friend-with-used-link',
+                      ),
                       name: 'FriendWithUsedLink',
                     },
                   },
@@ -3482,8 +3457,9 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'FriendWithUsedLink',
-                  module:
-                    rri('http://localhost:4202/node-test/friend-with-used-link'),
+                  module: rri(
+                    'http://localhost:4202/node-test/friend-with-used-link',
+                  ),
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -3532,8 +3508,9 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend-with-used-link'),
+                      module: rri(
+                        'http://localhost:4202/node-test/friend-with-used-link',
+                      ),
                       name: 'FriendWithUsedLink',
                     },
                   },
@@ -3587,8 +3564,9 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'FriendWithUsedLink',
-                  module:
-                    rri('http://localhost:4202/node-test/friend-with-used-link'),
+                  module: rri(
+                    'http://localhost:4202/node-test/friend-with-used-link',
+                  ),
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -3633,8 +3611,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        rri('http://localhost:4202/node-test/friend'),
+                      module: rri('http://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                     realmURL: ri(`http://some-other-realm/`),
@@ -4056,8 +4033,7 @@ module(basename(__filename), function () {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module:
-                    rri('https://cardstack.com/base/card-api'),
+                  module: rri('https://cardstack.com/base/card-api'),
                   name: 'CardDef',
                 },
               },
@@ -4174,8 +4150,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module:
-                      rri(`${providerRealmURL}person`),
+                    module: rri(`${providerRealmURL}person`),
                     name: 'Person',
                   },
                 },

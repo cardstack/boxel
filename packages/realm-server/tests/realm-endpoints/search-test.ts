@@ -1,11 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import {
-  baseRealm,
-  type Realm,
-  rri,
-} from '@cardstack/runtime-common';
+import { baseRealm, type Realm, rri } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupPermissionedRealmCached,
@@ -106,8 +102,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           let unknownTypeQuery: Query = {
             filter: {
               on: {
-                module:
-                  rri('http://some-realm-server/some-realm/some-card'),
+                module: rri('http://some-realm-server/some-realm/some-card'),
                 name: 'SomeCard',
               },
               eq: {

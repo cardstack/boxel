@@ -304,44 +304,29 @@ module(basename(__filename), function () {
     // --- Relative resolution against scoped base ---
 
     test('dot-slash relative against scoped base', function (assert) {
-      let result = resolveRRI(
-        './string',
-        rri('@cardstack/base/'),
-      );
+      let result = resolveRRI('./string', rri('@cardstack/base/'));
       assert.strictEqual(result, '@cardstack/base/string');
     });
 
     test('bare name against scoped base', function (assert) {
-      let result = resolveRRI(
-        'card',
-        rri('@cardstack/base/'),
-      );
+      let result = resolveRRI('card', rri('@cardstack/base/'));
       assert.strictEqual(result, '@cardstack/base/card');
     });
 
     test('dot-dot-slash against scoped base with subdirectory', function (assert) {
-      let result = resolveRRI(
-        '../card',
-        rri('@cardstack/base/fields/'),
-      );
+      let result = resolveRRI('../card', rri('@cardstack/base/fields/'));
       assert.strictEqual(result, '@cardstack/base/card');
     });
 
     test('dot-slash against scoped base without trailing slash', function (assert) {
-      let result = resolveRRI(
-        './string',
-        rri('@cardstack/base/card-api'),
-      );
+      let result = resolveRRI('./string', rri('@cardstack/base/card-api'));
       assert.strictEqual(result, '@cardstack/base/string');
     });
 
     // --- Relative resolution against URL base ---
 
     test('dot-slash relative against URL base', function (assert) {
-      let result = resolveRRI(
-        './card',
-        rri('http://localhost:4201/realm/'),
-      );
+      let result = resolveRRI('./card', rri('http://localhost:4201/realm/'));
       assert.strictEqual(result, 'http://localhost:4201/realm/card');
     });
 
@@ -354,10 +339,7 @@ module(basename(__filename), function () {
     });
 
     test('bare name against URL base', function (assert) {
-      let result = resolveRRI(
-        'card',
-        rri('http://localhost:4201/realm/'),
-      );
+      let result = resolveRRI('card', rri('http://localhost:4201/realm/'));
       assert.strictEqual(result, 'http://localhost:4201/realm/card');
     });
 
@@ -406,10 +388,7 @@ module(basename(__filename), function () {
     test('throws for absolute path against URL base', function (assert) {
       assert.throws(
         () =>
-          resolveRRI(
-            '/card',
-            rri('http://localhost:4201/realm/directory/'),
-          ),
+          resolveRRI('/card', rri('http://localhost:4201/realm/directory/')),
         /"\/" and "~\/" prefixes are not supported/,
       );
     });
@@ -450,26 +429,16 @@ module(basename(__filename), function () {
 
       test('inRealmRRI matches resource in realm', function (assert) {
         assert.true(
-          paths.inRealmRRI(
-            rri('http://localhost:4201/base/card-api'),
-          ),
+          paths.inRealmRRI(rri('http://localhost:4201/base/card-api')),
         );
       });
 
       test('inRealmRRI matches realm root without trailing slash', function (assert) {
-        assert.true(
-          paths.inRealmRRI(
-            rri('http://localhost:4201/base'),
-          ),
-        );
+        assert.true(paths.inRealmRRI(rri('http://localhost:4201/base')));
       });
 
       test('inRealmRRI rejects resource outside realm', function (assert) {
-        assert.false(
-          paths.inRealmRRI(
-            rri('http://localhost:4201/other/card'),
-          ),
-        );
+        assert.false(paths.inRealmRRI(rri('http://localhost:4201/other/card')));
       });
 
       test('localFromRRI strips realm prefix', function (assert) {
@@ -483,28 +452,21 @@ module(basename(__filename), function () {
 
       test('localFromRRI strips trailing slashes', function (assert) {
         assert.strictEqual(
-          paths.localFromRRI(
-            rri('http://localhost:4201/base/directory/'),
-          ),
+          paths.localFromRRI(rri('http://localhost:4201/base/directory/')),
           'directory',
         );
       });
 
       test('localFromRRI returns empty string for realm root', function (assert) {
         assert.strictEqual(
-          paths.localFromRRI(
-            rri('http://localhost:4201/base/'),
-          ),
+          paths.localFromRRI(rri('http://localhost:4201/base/')),
           '',
         );
       });
 
       test('localFromRRI throws for resource outside realm', function (assert) {
         assert.throws(
-          () =>
-            paths.localFromRRI(
-              rri('http://localhost:4201/other/card'),
-            ),
+          () => paths.localFromRRI(rri('http://localhost:4201/other/card')),
           /does not contain/,
         );
       });
@@ -543,32 +505,20 @@ module(basename(__filename), function () {
       });
 
       test('inRealmRRI matches scoped resource', function (assert) {
-        assert.true(
-          paths.inRealmRRI(
-            rri('@cardstack/base/card-api'),
-          ),
-        );
+        assert.true(paths.inRealmRRI(rri('@cardstack/base/card-api')));
       });
 
       test('inRealmRRI matches realm root without trailing slash', function (assert) {
-        assert.true(
-          paths.inRealmRRI(rri('@cardstack/base')),
-        );
+        assert.true(paths.inRealmRRI(rri('@cardstack/base')));
       });
 
       test('inRealmRRI rejects resource in different scope', function (assert) {
-        assert.false(
-          paths.inRealmRRI(
-            rri('@cardstack/catalog/card'),
-          ),
-        );
+        assert.false(paths.inRealmRRI(rri('@cardstack/catalog/card')));
       });
 
       test('localFromRRI strips scoped prefix', function (assert) {
         assert.strictEqual(
-          paths.localFromRRI(
-            rri('@cardstack/base/Card/my-instance'),
-          ),
+          paths.localFromRRI(rri('@cardstack/base/Card/my-instance')),
           'Card/my-instance',
         );
       });
