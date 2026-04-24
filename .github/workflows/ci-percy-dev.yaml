@@ -7,6 +7,13 @@ name: Percy dev run (throwaway project)
 
 on:
   workflow_dispatch:
+  # Temporary push trigger scoped to this branch so we can iterate before the
+  # workflow is indexed on the default branch (GitHub only registers
+  # workflow_dispatch for workflows that exist on the default branch). Remove
+  # this push block when CS-10954 merges.
+  push:
+    branches:
+      - host/percy-diffs-cs-10954
 
 permissions:
   contents: read
