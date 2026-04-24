@@ -33,6 +33,28 @@ boxel --help
 boxel --version
 ```
 
+### Environment variables
+
+These are read by `boxel profile add`:
+
+- `BOXEL_PASSWORD` — password for non-interactive profile creation. Preferred over `-p/--password`, which exposes the password in shell history and process listings.
+- `BOXEL_ENVIRONMENT` — one of `staging`, `production`, or `local`. When set, Matrix and realm server URLs (and the default domain for the interactive flow) are derived from it. Overridden by `--matrix-url` / `--realm-server-url` if those flags are provided. Unknown values exit with an error.
+
+Example — create a staging profile non-interactively:
+
+```bash
+BOXEL_PASSWORD=… BOXEL_ENVIRONMENT=staging boxel profile add -u @alice:stack.cards
+```
+
+Example — create a profile against a custom realm server:
+
+```bash
+BOXEL_PASSWORD=… boxel profile add \
+  -u @alice:my.server \
+  --matrix-url https://matrix.my.server \
+  --realm-server-url https://realms.my.server/
+```
+
 ## Development
 
 ### Building

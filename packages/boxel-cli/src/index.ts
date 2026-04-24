@@ -35,6 +35,16 @@ program
     '-r, --realm-server-url <url>',
     'Realm server URL (for add command with non-standard domains)',
   )
+  .addHelpText(
+    'after',
+    `
+Environment variables (for 'add'):
+  BOXEL_PASSWORD       Password; preferred over -p to avoid shell history.
+  BOXEL_ENVIRONMENT    One of: staging, production, local. When set, Matrix
+                       and realm server URLs (and the default domain for
+                       the interactive flow) are derived from it. Overridden
+                       by --matrix-url / --realm-server-url if provided.`,
+  )
   .action(
     async (
       subcommand?: string,
