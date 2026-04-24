@@ -77,6 +77,19 @@ function normalizeExecutableURL(url: string): string {
   }
 }
 
+// Dedup key matches the module cache row's identity:
+// (resolved_realm_url, cache_scope, auth_user_id, moduleURL). Two concurrent
+// callers that would hit the same row share one in-flight promise; callers
+// that would hit different rows do not collapse.
+function inFlightKey(args: {
+  resolvedRealmURL: string;
+  moduleURL: string;
+  cacheScope: CacheScope;
+  cacheUserId: string;
+}): string {
+  return `${args.resolvedRealmURL}|${args.moduleURL}|${args.cacheScope}|${args.cacheUserId}`;
+}
+
 function parseJsonValue<T>(value: T | string | null): T | null {
   if (value == null) {
     return null;
@@ -179,6 +192,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     userId: string,
     permissions: RealmPermissions,
   ) => string;
+  // Dedupes concurrent loadModuleCacheEntry calls that would hit the same
+  // cache row so a single prerenderer round-trip is shared by all waiters
+  // instead of each caller racing to the prerenderer independently.
+  #inFlight = new Map<string, Promise<ModuleCacheEntry | undefined>>();
 
   constructor(
     dbAdapter: DBAdapter,
@@ -265,7 +282,27 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return await query(this.#dbAdapter, expression, coerceTypes);
   }
 
-  private async loadModuleCacheEntry({
+  private async loadModuleCacheEntry(args: {
+    moduleURL: string;
+    realmURL: string;
+    resolvedRealmURL: string;
+    cacheScope: CacheScope;
+    cacheUserId: string;
+    prerenderUserId: string;
+  }): Promise<ModuleCacheEntry | undefined> {
+    let key = inFlightKey(args);
+    let existing = this.#inFlight.get(key);
+    if (existing) {
+      return await existing;
+    }
+    let pending = this.loadModuleCacheEntryUncached(args).finally(() => {
+      this.#inFlight.delete(key);
+    });
+    this.#inFlight.set(key, pending);
+    return await pending;
+  }
+
+  private async loadModuleCacheEntryUncached({
     moduleURL,
     realmURL,
     resolvedRealmURL,

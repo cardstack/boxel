@@ -1247,5 +1247,264 @@ module(basename(__filename), function () {
         'prerenderModule not called again — healthy entry is cached',
       );
     });
+
+    test('coalesces concurrent lookups of the same module into one prerender call', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+
+      let moduleURL = `${realmURL}coalesce-same.gts`;
+      let calls = 0;
+      let releaseGate!: () => void;
+      let gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          await gate;
+          return buildModuleResponse(args.url, 'CoalesceSame', []);
+        },
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      let p1 = lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'CoalesceSame',
+      });
+      let p2 = lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'CoalesceSame',
+      });
+      let p3 = lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'CoalesceSame',
+      });
+
+      // Flush queued microtasks so all three calls reach the in-flight gate
+      // before the prerender resolves.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      releaseGate();
+      let [d1, d2, d3] = await Promise.all([p1, p2, p3]);
+
+      assert.strictEqual(
+        calls,
+        1,
+        'prerenderModule called once for three concurrent same-module lookups',
+      );
+      assert.strictEqual(d1?.displayName, 'CoalesceSame');
+      assert.strictEqual(d2?.displayName, 'CoalesceSame');
+      assert.strictEqual(d3?.displayName, 'CoalesceSame');
+    });
+
+    test('does not coalesce concurrent lookups of different modules', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+
+      let moduleA = `${realmURL}coalesce-a.gts`;
+      let moduleB = `${realmURL}coalesce-b.gts`;
+      let calls = new Map<string, number>();
+      let releaseGate!: () => void;
+      let gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls.set(args.url, (calls.get(args.url) ?? 0) + 1);
+          await gate;
+          let name = args.url === moduleA ? 'CoalesceA' : 'CoalesceB';
+          return buildModuleResponse(args.url, name, []);
+        },
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      let pA = lookup.lookupDefinition({
+        module: moduleA,
+        name: 'CoalesceA',
+      });
+      let pB = lookup.lookupDefinition({
+        module: moduleB,
+        name: 'CoalesceB',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      releaseGate();
+      let [dA, dB] = await Promise.all([pA, pB]);
+
+      assert.strictEqual(
+        calls.get(moduleA),
+        1,
+        'prerenderModule called once for module A',
+      );
+      assert.strictEqual(
+        calls.get(moduleB),
+        1,
+        'prerenderModule called once for module B',
+      );
+      assert.strictEqual(dA?.displayName, 'CoalesceA');
+      assert.strictEqual(dB?.displayName, 'CoalesceB');
+    });
+
+    test('shares errored prerender result with concurrent waiters and releases in-flight slot on rejection', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+
+      let moduleURL = `${realmURL}coalesce-error.gts`;
+      let calls = 0;
+      let releaseGate!: () => void;
+      let gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          await gate;
+          return buildModuleResponse(args.url, 'CoalesceError', [], {
+            type: 'module-error',
+            error: {
+              id: args.url,
+              message: 'simulated prerender failure',
+              status: 500,
+              title: 'Render error',
+              deps: [],
+              additionalErrors: null,
+            },
+          });
+        },
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      let p1 = lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'CoalesceError',
+      });
+      let p2 = lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'CoalesceError',
+      });
+      let p3 = lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'CoalesceError',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      releaseGate();
+      let results = await Promise.allSettled([p1, p2, p3]);
+
+      assert.strictEqual(
+        calls,
+        1,
+        'prerenderModule called once for three concurrent erroring lookups',
+      );
+      for (let result of results) {
+        assert.strictEqual(
+          result.status,
+          'rejected',
+          'all concurrent waiters receive the shared rejection',
+        );
+      }
+
+      // The error row is persisted with a fresh timestamp, so a follow-up
+      // lookup should be served from the cache without re-invoking prerender.
+      await assert.rejects(
+        lookup.lookupDefinition({
+          module: moduleURL,
+          name: 'CoalesceError',
+        }),
+        /nonexistent type/,
+      );
+      assert.strictEqual(
+        calls,
+        1,
+        'follow-up lookup after settle hits cached error without a new prerender',
+      );
+
+      // Backdate the cached error past the TTL to simulate a stale error.
+      // The in-flight slot must have been released for the next call to form
+      // a fresh prerender gate rather than awaiting the already-settled
+      // in-flight promise and returning its rejection.
+      await dbAdapter.execute(
+        `UPDATE modules SET created_at = $1 WHERE url = $2`,
+        { bind: [Date.now() - 60_000, moduleURL] },
+      );
+
+      await assert.rejects(
+        lookup.lookupDefinition({
+          module: moduleURL,
+          name: 'CoalesceError',
+        }),
+        /nonexistent type/,
+      );
+      assert.strictEqual(
+        calls,
+        2,
+        'stale cached error triggers a fresh prerender — in-flight slot was released after prior failure',
+      );
+    });
   });
 });
