@@ -1,6 +1,5 @@
 // KanbanDragManager — Drag interaction for Kanban boards.
 // Uses insertion model: cards insert BETWEEN other cards.
-// Shares hold-to-drag timing and ghost lifecycle with GridManager.
 
 import { tracked } from '@glimmer/tracking';
 import {
@@ -8,7 +7,7 @@ import {
   type InsertionPoint,
   findInsertionFromPointer,
   resolveInsertion,
-} from './engine';
+} from './engine.ts';
 
 // ── Constants ────────────────────────────────────────────────────────── //
 const DRAG_THRESHOLD_PX = 4;
@@ -48,7 +47,7 @@ export class KanbanDragManager {
   @tracked dragGhostHeight = 0;
   @tracked dragOffsetX = 0;
   @tracked dragOffsetY = 0;
-  @tracked insertion: InsertionPoint | null = null; // current insertion point
+  @tracked insertion: InsertionPoint | null = null;
   @tracked isSettling = false;
   @tracked settleX = 0;
   @tracked settleY = 0;
@@ -87,7 +86,6 @@ export class KanbanDragManager {
     const container = this.containerFn();
     if (!container) return;
 
-    // Find which card was clicked via DOM
     const targetEl = e.target as HTMLElement;
     const cardEl = targetEl?.closest?.(
       '[data-card-index]',
@@ -110,7 +108,6 @@ export class KanbanDragManager {
     document.body.style.userSelect = 'none';
     (document.body.style as any).webkitUserSelect = 'none';
 
-    // Hold timer
     this.holdTimer = setTimeout(() => {
       if (this.interactionMode === 'pending') {
         this.activateDrag(container);
@@ -128,7 +125,6 @@ export class KanbanDragManager {
     this.pointerClientX = e.clientX;
     this.pointerClientY = e.clientY;
 
-    // Pending → drag on movement
     if (this.interactionMode === 'pending') {
       const dx = e.clientX - this.startClientX;
       const dy = e.clientY - this.startClientY;
@@ -139,7 +135,6 @@ export class KanbanDragManager {
       return;
     }
 
-    // Active drag: find insertion point
     const container = this.containerFn();
     if (!container || this.dragIndex === null) return;
 
@@ -162,7 +157,6 @@ export class KanbanDragManager {
     const container = this.containerFn();
     if (container) container.releasePointerCapture(e.pointerId);
 
-    // Tap: open the card
     if (this.interactionMode === 'pending') {
       if (this.holdTimer) {
         clearTimeout(this.holdTimer);
@@ -184,7 +178,6 @@ export class KanbanDragManager {
       return;
     }
 
-    // Find settle position: measure the insertion gap
     if (container && this.insertion) {
       this.measureSettlePosition(container);
     }
@@ -195,7 +188,6 @@ export class KanbanDragManager {
     const pendingDragIndex = this.dragIndex;
 
     setTimeout(() => {
-      // Commit insertion
       if (pendingInsertion && pendingDragIndex !== null) {
         const placements = this.placementsFn();
         const newPlacements = resolveInsertion(
@@ -265,7 +257,6 @@ export class KanbanDragManager {
       .filter((p) => p.column === column && p.index !== this.dragIndex)
       .sort((a, b) => a.sortOrder - b.sortOrder);
 
-    // Find the card element just before the insertion position
     const colEl = container.querySelector(
       `[data-kanban-column="${column}"]`,
     ) as HTMLElement | null;
@@ -275,7 +266,6 @@ export class KanbanDragManager {
     if (!bodyEl) return;
 
     if (colCards.length === 0) {
-      // Empty column: settle at top of body
       const bodyRect = bodyEl.getBoundingClientRect();
       this.settleX = bodyRect.left + 4;
       this.settleY = bodyRect.top + 8;
@@ -287,9 +277,8 @@ export class KanbanDragManager {
     const insertIdx = Math.min(position - 1, colCards.length);
 
     if (insertIdx >= colCards.length) {
-      // Insert at end: settle below last card (subtract transform)
       const lastCardEl = container.querySelector(
-        `[data-card-index="${colCards[colCards.length - 1].index}"]`,
+        `[data-card-index="${colCards[colCards.length - 1]?.index}"]`,
       ) as HTMLElement | null;
       if (lastCardEl) {
         const rect = lastCardEl.getBoundingClientRect();
@@ -301,9 +290,8 @@ export class KanbanDragManager {
         this.settleHeight = this.dragGhostHeight;
       }
     } else {
-      // Insert before a card: settle at that card's true position (subtract transform)
       const beforeCardEl = container.querySelector(
-        `[data-card-index="${colCards[insertIdx].index}"]`,
+        `[data-card-index="${colCards[insertIdx]?.index}"]`,
       ) as HTMLElement | null;
       if (beforeCardEl) {
         const rect = beforeCardEl.getBoundingClientRect();

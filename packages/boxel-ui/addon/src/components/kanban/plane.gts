@@ -1,6 +1,4 @@
 // KanbanPlane — Vertical columns with insertion-based drag.
-// Visual design inspired by Linear/sprint-planner: fixed-height cards,
-// clean columns, status-colored headers, professional kanban feel.
 
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -8,21 +6,21 @@ import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import type { SafeString } from '@ember/template';
 import { cn, eq, sanitizeHtmlSafe } from '@cardstack/boxel-ui/helpers';
-import type { KanbanDragManager } from './drag';
+import type { KanbanDragManager } from './drag.gts';
 import {
   type KanbanPlacement,
+  type KanbanColumnConfig,
   cardsInColumn,
   columnCount as colCount,
-} from './engine';
-import type { KanbanColumnField } from './column';
-import { CaptureElement, BindPointerDown } from './modifiers';
-import { KanbanColumnHeader } from './column-header';
-import { KanbanCard } from './card';
-import { KanbanGhost } from './ghost';
+} from './engine.ts';
+import { CaptureElement, BindPointerDown } from './modifiers.gts';
+import { KanbanColumnHeader } from './column-header.gts';
+import { KanbanCard } from './card.gts';
+import { KanbanGhost } from './ghost.gts';
 
 export class KanbanPlane extends Component<{
   Args: {
-    columns: KanbanColumnField[];
+    columns: KanbanColumnConfig[];
     placements: KanbanPlacement[];
     manager: KanbanDragManager;
     interactive: boolean;
@@ -39,7 +37,7 @@ export class KanbanPlane extends Component<{
     return this.args.manager;
   }
 
-  get columns(): KanbanColumnField[] {
+  get columns(): KanbanColumnConfig[] {
     return this.args.columns;
   }
 
@@ -55,7 +53,7 @@ export class KanbanPlane extends Component<{
   columnCardCount = (colIndex: number): number =>
     colCount(colIndex, this.args.placements);
 
-  isColumnVisible = (column: KanbanColumnField, colIndex: number): boolean => {
+  isColumnVisible = (column: KanbanColumnConfig, colIndex: number): boolean => {
     if (column.collapsed) {
       return false;
     }
@@ -65,7 +63,7 @@ export class KanbanPlane extends Component<{
     return this.columnCardCount(colIndex) > 0;
   };
 
-  isOverWip = (column: KanbanColumnField, colIndex: number): boolean => {
+  isOverWip = (column: KanbanColumnConfig, colIndex: number): boolean => {
     const limit = column.wipLimit ?? 0;
     return limit > 0 && this.columnCardCount(colIndex) > limit;
   };
@@ -127,7 +125,7 @@ export class KanbanPlane extends Component<{
 
     if (insertIdx >= colCards.length) {
       const lastEl = this.containerElement.querySelector(
-        `[data-card-index="${colCards[colCards.length - 1].index}"]`,
+        `[data-card-index="${colCards[colCards.length - 1]?.index}"]`,
       ) as HTMLElement | null;
       if (lastEl) {
         const rect = lastEl.getBoundingClientRect();
@@ -140,7 +138,7 @@ export class KanbanPlane extends Component<{
       }
     } else {
       const beforeEl = this.containerElement.querySelector(
-        `[data-card-index="${colCards[insertIdx].index}"]`,
+        `[data-card-index="${colCards[insertIdx]?.index}"]`,
       ) as HTMLElement | null;
       if (beforeEl) {
         const rect = beforeEl.getBoundingClientRect();
@@ -222,9 +220,7 @@ export class KanbanPlane extends Component<{
               {{/each}}
 
               {{#unless (this.columnCardCount colIdx)}}
-                {{#unless this.isDragging}}
-                  <div class='empty-col'>No cards</div>
-                {{/unless}}
+                <div class='empty-col'>No cards</div>
               {{/unless}}
             </div>
           </div>

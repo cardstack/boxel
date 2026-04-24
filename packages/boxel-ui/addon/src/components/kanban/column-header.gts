@@ -1,13 +1,13 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { ContextButton } from '@cardstack/boxel-ui/components';
+import ContextButton from '../context-button/index.gts';
 import { cn, cssVar } from '@cardstack/boxel-ui/helpers';
-import type { KanbanColumnField } from './column';
+import type { KanbanColumnConfig } from './engine.ts';
 
 interface Signature {
   Args: {
-    column: KanbanColumnField;
+    column: KanbanColumnConfig;
     cardCount: number;
     isOverWip: boolean;
     isTarget: boolean;

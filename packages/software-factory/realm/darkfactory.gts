@@ -33,12 +33,12 @@ import {
 import { realmURL } from '@cardstack/runtime-common';
 
 import { IssueOptionField } from './issue-option';
+import { KanbanColumnField } from './kanban-column';
 import {
-  KanbanColumnField,
   KanbanPlane,
   KanbanDragManager,
   type KanbanPlacement,
-} from './kanban/index';
+} from '@cardstack/boxel-ui/components';
 import { StatusPill } from './status-pill';
 
 import {

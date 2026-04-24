@@ -1,5 +1,4 @@
 // Pure kanban placement logic — no framework dependencies.
-// Exported from engine.gts; also imported directly by Node unit tests.
 
 // ── Types ────────────────────────────────────────────────────────────── //
 
@@ -13,6 +12,15 @@ export interface InsertionPoint {
   column: number; // target lane
   insertBeforeIndex: number; // card index to insert before (-1 = end)
   position: number; // sort position for shift calculations
+}
+
+export interface KanbanColumnConfig {
+  key: string | null;
+  label: string | null;
+  color: string | null;
+  wipLimit: number | null;
+  collapsed: boolean | null;
+  sortOrder: number | null;
 }
 
 // ── Column Queries ───────────────────────────────────────────────────── //
@@ -54,16 +62,13 @@ export function resolveInsertion(
   const sourceColumn = dragCard.column;
   const targetColumn = insertion.column;
 
-  // Move drag card to target column
   dragCard.column = targetColumn;
 
-  // Get target column cards (excluding drag card) in current order
   const targetCards = result
     .filter((p) => p.column === targetColumn && p.index !== dragIndex)
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
-  // Find insertion index by card identity (immune to renumbering)
-  let insertAt = targetCards.length; // default: end
+  let insertAt = targetCards.length;
   if (insertion.insertBeforeIndex !== -1) {
     const idx = targetCards.findIndex(
       (p) => p.index === insertion.insertBeforeIndex,
@@ -71,17 +76,16 @@ export function resolveInsertion(
     if (idx !== -1) insertAt = idx;
   }
 
-  // Renumber: cards before insertAt, then drag card, then cards after
   for (let i = 0; i < targetCards.length; i++) {
+    const card = targetCards[i]!;
     if (i < insertAt) {
-      targetCards[i].sortOrder = i + 1;
+      card.sortOrder = i + 1;
     } else {
-      targetCards[i].sortOrder = i + 2; // leave gap for drag card
+      card.sortOrder = i + 2;
     }
   }
   dragCard.sortOrder = insertAt + 1;
 
-  // Renumber source column if different
   if (sourceColumn !== targetColumn) {
     const sourceCards = result
       .filter((p) => p.column === sourceColumn && p.index !== dragIndex)
@@ -99,12 +103,6 @@ export function resolveInsertion(
 /**
  * Find which column the pointer is over and where between cards
  * the insertion should happen. Uses DOM measurement exclusively.
- *
- * @param clientX/Y - pointer screen position
- * @param container - the kanban board DOM element
- * @param placements - current card positions
- * @param dragIndex - card being dragged (excluded from hit test)
- * @returns InsertionPoint or null if pointer is outside all columns
  */
 export function findInsertionFromPointer(
   clientX: number,
@@ -112,7 +110,7 @@ export function findInsertionFromPointer(
   container: HTMLElement,
   placements: KanbanPlacement[],
   dragIndex: number,
-  _columnCount?: number,
+  _columnCount: number,
 ): InsertionPoint | null {
   const columnEls = container.querySelectorAll('[data-kanban-column]');
   let targetColumn: number | null = null;
@@ -137,8 +135,9 @@ export function findInsertionFromPointer(
   }
 
   for (let i = 0; i < columnCards.length; i++) {
+    const entry = columnCards[i]!;
     const cardEl = container.querySelector(
-      `[data-card-index="${columnCards[i].index}"]`,
+      `[data-card-index="${entry.index}"]`,
     ) as HTMLElement | null;
     if (!cardEl) continue;
 
@@ -148,8 +147,8 @@ export function findInsertionFromPointer(
     if (clientY < midY) {
       return {
         column: targetColumn,
-        insertBeforeIndex: columnCards[i].index,
-        position: columnCards[i].sortOrder,
+        insertBeforeIndex: entry.index,
+        position: entry.sortOrder,
       };
     }
   }
@@ -158,7 +157,7 @@ export function findInsertionFromPointer(
   return {
     column: targetColumn,
     insertBeforeIndex: -1,
-    position: lastCard.sortOrder + 1,
+    position: (lastCard?.sortOrder ?? 0) + 1,
   };
 }
 
