@@ -1293,15 +1293,15 @@ module(basename(__filename), function () {
       });
 
       let p1 = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'CoalesceSame',
       });
       let p2 = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'CoalesceSame',
       });
       let p3 = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'CoalesceSame',
       });
 
@@ -1368,11 +1368,11 @@ module(basename(__filename), function () {
       });
 
       let pA = lookup.lookupDefinition({
-        module: moduleA,
+        module: rri(moduleA),
         name: 'CoalesceA',
       });
       let pB = lookup.lookupDefinition({
-        module: moduleB,
+        module: rri(moduleB),
         name: 'CoalesceB',
       });
 
@@ -1446,15 +1446,15 @@ module(basename(__filename), function () {
       });
 
       let p1 = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'CoalesceError',
       });
       let p2 = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'CoalesceError',
       });
       let p3 = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'CoalesceError',
       });
 
@@ -1480,7 +1480,7 @@ module(basename(__filename), function () {
       // lookup should be served from the cache without re-invoking prerender.
       await assert.rejects(
         lookup.lookupDefinition({
-          module: moduleURL,
+          module: rri(moduleURL),
           name: 'CoalesceError',
         }),
         /nonexistent type/,
@@ -1502,7 +1502,7 @@ module(basename(__filename), function () {
 
       await assert.rejects(
         lookup.lookupDefinition({
-          module: moduleURL,
+          module: rri(moduleURL),
           name: 'CoalesceError',
         }),
         /nonexistent type/,
@@ -1536,7 +1536,7 @@ module(basename(__filename), function () {
           let version = calls;
           await gate;
           let definitionId = internalKeyFor(
-            { module: args.url, name: 'CoalesceInvalidate' },
+            { module: rri(args.url), name: 'CoalesceInvalidate' },
             undefined,
           );
           let moduleAlias = trimExecutableExtension(new URL(args.url)).href;
@@ -1555,7 +1555,7 @@ module(basename(__filename), function () {
                 definition: {
                   type: 'card-def',
                   codeRef: {
-                    module: moduleAlias,
+                    module: rri(moduleAlias),
                     name: 'CoalesceInvalidate',
                   },
                   displayName: `CoalesceInvalidate v${version}`,
@@ -1586,7 +1586,7 @@ module(basename(__filename), function () {
 
       // Caller A starts the prerender and parks at the gate.
       let pA = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'CoalesceInvalidate',
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1596,7 +1596,7 @@ module(basename(__filename), function () {
       await lookup.invalidate(moduleURL);
 
       let pB = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'CoalesceInvalidate',
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
