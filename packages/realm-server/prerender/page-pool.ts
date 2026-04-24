@@ -208,8 +208,14 @@ export class PagePool {
   // referential prerender deadlock). Module and command calls bypass
   // this semaphore entirely. Lazily created on first file call per
   // affinity; lifecycle is tied to the affinity itself, cleared in
-  // `disposeAffinity`.
+  // `closeAll`.
   #fileAdmission = new Map<string, AsyncSemaphore>();
+  // When true, `#acquireFileAdmission` becomes a no-op. Used by existing
+  // PagePool unit tests that predate the admission feature and exercise
+  // tab-routing semantics directly — those tests assume `getPage` doesn't
+  // gate file calls on an affinity-level semaphore. Production call sites
+  // never set this; Prerenderer constructs PagePool without the flag.
+  #disableFileAdmission: boolean;
 
   constructor(options: {
     maxPages: number;
@@ -220,6 +226,7 @@ export class PagePool {
     renderSemaphore?: RenderSemaphore;
     disableStandbyRefill?: boolean;
     onAffinityDisposed?: (affinityKey: string) => void;
+    disableFileAdmission?: boolean;
   }) {
     this.#maxPages = options.maxPages;
     let envTabMax = Number(process.env.PRERENDER_AFFINITY_TAB_MAX ?? 5);
@@ -258,6 +265,7 @@ export class PagePool {
     this.#renderSemaphore = options.renderSemaphore;
     this.#disableStandbyRefill = options.disableStandbyRefill ?? false;
     this.#onAffinityDisposed = options.onAffinityDisposed;
+    this.#disableFileAdmission = options.disableFileAdmission ?? false;
   }
 
   set serverURL(url: string) {
@@ -842,6 +850,13 @@ export class PagePool {
     affinityKey: string,
     signal?: AbortSignal,
   ): Promise<() => void> {
+    if (this.#disableFileAdmission) {
+      // Test opt-out — existing tab-routing unit tests predate the
+      // admission feature and assert concurrency that an enabled
+      // admission cap would block. Production PagePools never set
+      // this flag.
+      return () => {};
+    }
     let semaphore = this.#fileAdmission.get(affinityKey);
     if (!semaphore) {
       let capacity = Math.max(1, this.#affinityTabMax - 1);

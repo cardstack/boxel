@@ -74,6 +74,10 @@ function makeStubPagePool(
     closeContextDelay?: (id: string) => Promise<void>;
     onContextCreated?: (id: string) => void;
     onContextClosed?: (id: string) => void;
+    // Default `true` for back-compat with existing tab-routing unit
+    // tests that predate the admission feature. Admission-control
+    // tests opt in by passing `false`.
+    disableFileAdmission?: boolean;
   },
 ) {
   function makeStorage(): Storage {
@@ -177,6 +181,7 @@ function makeStubPagePool(
     standbyTimeoutMs: options?.standbyTimeoutMs ?? 500,
     renderSemaphore,
     disableStandbyRefill: options?.disableStandbyRefill,
+    disableFileAdmission: options?.disableFileAdmission ?? true,
   });
   return { pool, contextsCreated, contextsClosed };
 }
@@ -4552,22 +4557,15 @@ module(basename(__filename), function () {
         });
 
         test('runs prerenders in parallel when multiple tabs are available', async function (assert) {
-          // tabMax=3 (not 2) so the admission cap — `N − 1 = 2` — still
-          // permits two concurrent file calls. With tabMax=2 the cap
-          // clamps to 1 (reserving a tab for module / command work), so
-          // two same-affinity file calls would serialize instead of
-          // running in parallel. That behavior is verified below in the
-          // "file-queue admission holds the last tab for module calls"
-          // test.
           let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
-          let semaphore = new TestSemaphore(3);
+          let semaphore = new TestSemaphore(2);
           let active = 0;
           let maxActive = 0;
           let pool: PagePool | undefined;
 
           try {
-            process.env.PRERENDER_AFFINITY_TAB_MAX = '3';
-            ({ pool } = makeStubPagePool(3, semaphore));
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool(2, semaphore));
             await pool.warmStandbys();
 
             let run = async (realm: string) => {
@@ -4607,7 +4605,9 @@ module(basename(__filename), function () {
           let pool: PagePool | undefined;
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
-            ({ pool } = makeStubPagePool(2, semaphore));
+            ({ pool } = makeStubPagePool(2, semaphore, undefined, {
+              disableFileAdmission: false,
+            }));
             await pool.warmStandbys();
 
             let firstFile = await pool.getPage('realm-a', 'file');
@@ -4654,7 +4654,9 @@ module(basename(__filename), function () {
           let pool: PagePool | undefined;
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
-            ({ pool } = makeStubPagePool(2, semaphore));
+            ({ pool } = makeStubPagePool(2, semaphore, undefined, {
+              disableFileAdmission: false,
+            }));
             await pool.warmStandbys();
 
             let firstFile = await pool.getPage('realm-a', 'file');
