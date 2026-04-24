@@ -291,7 +291,10 @@ export default class SearchContent extends Component<Signature> {
         format: 'fitted' as const,
         realms: this.recentsSearchRealms,
         cardUrls: this.recentCardUrls,
-        isLive: true,
+        // Recents refetch on mount; don't add per-realm live subscriptions
+        // on top of the main searchResource, which already subscribes for
+        // incremental index updates.
+        isLive: false,
         cardComponentModifier: this.cardComponentModifier,
       };
     },
