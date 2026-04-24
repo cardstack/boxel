@@ -61,4 +61,16 @@ describe('resolveRealmAuthenticator', () => {
       expect(result.error).toContain('No active profile');
     }
   });
+
+  it('returns a friendly error (not a throw) when the realm URL is malformed in seed mode', () => {
+    const result = resolveRealmAuthenticator({
+      realmUrl: 'not-a-url',
+      realmSecretSeed: 'my-seed',
+      profileManager: pm,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/Invalid realm URL/);
+    }
+  });
 });

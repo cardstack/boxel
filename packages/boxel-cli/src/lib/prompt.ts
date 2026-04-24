@@ -108,6 +108,10 @@ export function promptPassword(question: string): Promise<string> {
  *   1. `BOXEL_REALM_SECRET_SEED` env var — used silently if set.
  *   2. If `flagPresent` is true, prompt the user (no echo).
  *   3. Otherwise return undefined — caller falls back to profile auth.
+ *
+ * Throws when `--realm-secret-seed` is requested but stdin is not a TTY
+ * (e.g. CI, piped shells) — otherwise `promptPassword` would hang
+ * indefinitely waiting for keypress input it can never receive.
  */
 export async function resolveRealmSecretSeed(
   flagPresent: boolean,
@@ -118,6 +122,12 @@ export async function resolveRealmSecretSeed(
   }
   if (!flagPresent) {
     return undefined;
+  }
+  if (!process.stdin.isTTY) {
+    throw new Error(
+      'Cannot prompt for realm secret seed: stdin is not a TTY. ' +
+        'Set BOXEL_REALM_SECRET_SEED in the environment instead.',
+    );
   }
   return promptPassword('Realm secret seed: ');
 }

@@ -34,11 +34,20 @@ export function resolveRealmAuthenticator(
   options: AuthResolverOptions,
 ): AuthResolution {
   if (options.realmSecretSeed) {
-    const authenticator = new SeedAuthenticator({
-      seed: options.realmSecretSeed,
-    });
-    authenticator.registerRealmUrl(options.realmUrl);
-    return { ok: true, authenticator, mode: 'seed' };
+    // registerRealmUrl throws on a malformed realm URL; surface that as a
+    // resolver error so pull/push/sync keep their friendly CLI error path.
+    try {
+      const authenticator = new SeedAuthenticator({
+        seed: options.realmSecretSeed,
+      });
+      authenticator.registerRealmUrl(options.realmUrl);
+      return { ok: true, authenticator, mode: 'seed' };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   const pm = options.profileManager ?? getProfileManager();

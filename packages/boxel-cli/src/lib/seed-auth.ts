@@ -151,9 +151,10 @@ export class SeedAuthenticator implements RealmAuthenticator {
   /**
    * Given any URL inside a realm (or the realm root itself), return the realm
    * root URL we'll use to mint the token. We match against the set of realm
-   * URLs we've already minted tokens for, falling back to the request's
-   * origin + first path segment (trailing slash), which matches the
-   * CLI-visible realm URL convention (`https://<host>/<owner>/<realm>/`).
+   * URLs we've already minted tokens for; the fallback (when nothing is
+   * pre-registered) takes the request's origin + first two path segments
+   * with a trailing slash, which matches the CLI-visible realm URL
+   * convention `https://<host>/<owner>/<realm>/`.
    */
   #resolveRealmUrl(requestUrl: string): string {
     for (const realmUrl of this.#tokenCache.keys()) {

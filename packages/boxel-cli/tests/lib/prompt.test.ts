@@ -32,4 +32,13 @@ describe('resolveRealmSecretSeed', () => {
     process.env.BOXEL_REALM_SECRET_SEED = 'env-seed';
     await expect(resolveRealmSecretSeed(true)).resolves.toBe('env-seed');
   });
+
+  it('throws when the flag is requested but stdin is not a TTY', async () => {
+    // In the vitest runner stdin is never a TTY, which is exactly the
+    // non-interactive case (CI, piped shells) we want to fail fast on.
+    expect(process.stdin.isTTY).toBeFalsy();
+    await expect(resolveRealmSecretSeed(true)).rejects.toThrow(
+      /stdin is not a TTY/,
+    );
+  });
 });
