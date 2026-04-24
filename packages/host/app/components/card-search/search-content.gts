@@ -16,8 +16,10 @@ import {
   type CodeRef,
   type Filter,
   type getCard,
+  type getCardCollection,
   CardContextName,
   GetCardContextName,
+  GetCardCollectionContextName,
   internalKeyFor,
 } from '@cardstack/runtime-common';
 
@@ -37,6 +39,7 @@ import {
 import { SectionPagination } from '@cardstack/host/utils/card-search/section-pagination';
 import {
   assembleSections,
+  buildLiveRecentsSection,
   buildQuerySections,
   buildRecentsSection,
   buildUrlSection,
@@ -154,6 +157,8 @@ export default class SearchContent extends Component<Signature> {
   @consume(CardContextName) declare private cardContext:
     | CardContext
     | undefined;
+  @consume(GetCardCollectionContextName)
+  declare private getCardCollection: getCardCollection;
 
   private get searchKeyIsURL() {
     return isURLSearchKey(this.args.searchKey);
@@ -373,8 +378,43 @@ export default class SearchContent extends Component<Signature> {
     this.pagination.showMore(sectionId, totalCount);
   }
 
+  @cached
+  private get recentCardCollection(): ReturnType<getCardCollection> | null {
+    // Only instantiate the collection when we actually need the fallback,
+    // so the happy path (prerendered succeeds) never loads card modules.
+    if (!this.needsLiveRecentsFallback) {
+      return null;
+    }
+    return this.getCardCollection(
+      this,
+      () => this.recentCardsService.recentCardIds,
+    );
+  }
+
+  private get needsLiveRecentsFallback(): boolean {
+    // Use the live CardDef path when prerendered has finished but didn't
+    // return anything for the known recents — typically a fetch failure
+    // in a multi-realm test setup. Keeping Recents visible matters more
+    // than the "zero card-module fetches" goal in that rare case.
+    const hasRecents = this.recentCardUrls.length > 0;
+    const ran = this.prerenderedRecentsResource.hasSearchRun;
+    const gotSomething = this.prerenderedRecentsResource.instances.length > 0;
+    return hasRecents && ran && !gotSomething;
+  }
+
+  private get liveRecentCards(): CardDef[] {
+    const collection = this.recentCardCollection;
+    if (!collection) return [];
+    return (collection.cards?.filter(Boolean) as CardDef[] | undefined) ?? [];
+  }
+
   private get recentCardsSection() {
     const instances = this.prerenderedRecentsResource.instances;
+
+    if (instances.length === 0 && this.needsLiveRecentsFallback) {
+      return buildLiveRecentsSection(this.liveRecentCards);
+    }
+
     if (this.args.isCompact) {
       // Preserve most-recent-first order from RecentCardsService rather
       // than the arbitrary order the server returns for an unsorted query.

@@ -12,6 +12,7 @@ import { cn, eq, type FittedFormatId } from '@cardstack/boxel-ui/helpers';
 
 import type { CodeRef } from '@cardstack/runtime-common';
 
+import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type RealmService from '@cardstack/host/services/realm';
 
 import type {
@@ -119,6 +120,18 @@ export default class SearchResultSection extends Component<Signature> {
     if (!sid || !getDisplayedCount) return section.cards;
     const limit = getDisplayedCount(sid, section.totalCount);
     return section.cards.slice(0, limit);
+  }
+
+  get displayedPrerenderedRecents() {
+    const section = this.recentsSection;
+    if (!section || section.kind !== 'prerendered') return [];
+    return this.displayedRecentsCards as typeof section.cards;
+  }
+
+  get displayedLiveRecents() {
+    const section = this.recentsSection;
+    if (!section || section.kind !== 'live') return [];
+    return this.displayedRecentsCards as typeof section.cards;
   }
 
   get hasMoreCards() {
@@ -315,43 +328,88 @@ export default class SearchResultSection extends Component<Signature> {
           />
         {{/unless}}
 
-        <GridContainer
-          class='cards {{this.viewClass}}'
-          @items={{this.displayedRecentsCards}}
-          @viewFormat={{this.viewFormat}}
-          @size={{this.cardSize}}
-          @fullWidthItem={{eq this.viewClass 'strip-view'}}
-          as |card GridItem|
-        >
-          <GridItem class={{if @isCompact 'recent-card-item--compact'}}>
-            <:default>
-              <ItemButton
-                @item={{card.component}}
-                @itemId={{card.url}}
-                @isSelected={{this.isCardSelected card.url}}
-                @multiSelect={{@multiSelect}}
-                @onSelect={{@handleSelect}}
-                @onSubmit={{@onSubmit}}
-                data-test-recent-card-result={{removeFileExtension card.url}}
-              />
-            </:default>
-            <:after>
-              {{#let (this.realm.info card.realmUrl) as |realmInfo|}}
-                <div
-                  class={{cn
-                    'realm-name'
-                    realm-name--compact=@isCompact
-                    boxel-ellipsize=@isCompact
+        {{#if (eq this.recentsSection.kind 'prerendered')}}
+          <GridContainer
+            class='cards {{this.viewClass}}'
+            @items={{this.displayedPrerenderedRecents}}
+            @viewFormat={{this.viewFormat}}
+            @size={{this.cardSize}}
+            @fullWidthItem={{eq this.viewClass 'strip-view'}}
+            as |card GridItem|
+          >
+            <GridItem class={{if @isCompact 'recent-card-item--compact'}}>
+              <:default>
+                <ItemButton
+                  @item={{card.component}}
+                  @itemId={{card.url}}
+                  @isSelected={{this.isCardSelected card.url}}
+                  @multiSelect={{@multiSelect}}
+                  @onSelect={{@handleSelect}}
+                  @onSubmit={{@onSubmit}}
+                  data-test-recent-card-result={{removeFileExtension card.url}}
+                />
+              </:default>
+              <:after>
+                {{#let (this.realm.info card.realmUrl) as |realmInfo|}}
+                  <div
+                    class={{cn
+                      'realm-name'
+                      realm-name--compact=@isCompact
+                      boxel-ellipsize=@isCompact
+                    }}
+                    data-test-realm-name
+                  >
+                    in
+                    {{realmInfo.name}}
+                  </div>
+                {{/let}}
+              </:after>
+            </GridItem>
+          </GridContainer>
+        {{else}}
+          <GridContainer
+            class='cards {{this.viewClass}}'
+            @items={{this.displayedLiveRecents}}
+            @viewFormat={{this.viewFormat}}
+            @size={{this.cardSize}}
+            @fullWidthItem={{eq this.viewClass 'strip-view'}}
+            as |card GridItem|
+          >
+            <GridItem class={{if @isCompact 'recent-card-item--compact'}}>
+              <:default>
+                <ItemButton
+                  @item={{card}}
+                  @itemId={{card.id}}
+                  @isSelected={{this.isCardSelected card.id}}
+                  @multiSelect={{@multiSelect}}
+                  @onSelect={{@handleSelect}}
+                  @onSubmit={{@onSubmit}}
+                  data-test-recent-card-result={{card.id}}
+                />
+              </:default>
+              <:after>
+                {{#if card}}
+                  {{#let
+                    (this.realm.info (urlForRealmLookup card))
+                    as |realmInfo|
                   }}
-                  data-test-realm-name
-                >
-                  in
-                  {{realmInfo.name}}
-                </div>
-              {{/let}}
-            </:after>
-          </GridItem>
-        </GridContainer>
+                    <div
+                      class={{cn
+                        'realm-name'
+                        realm-name--compact=@isCompact
+                        boxel-ellipsize=@isCompact
+                      }}
+                      data-test-realm-name
+                    >
+                      in
+                      {{realmInfo.name}}
+                    </div>
+                  {{/let}}
+                {{/if}}
+              </:after>
+            </GridItem>
+          </GridContainer>
+        {{/if}}
 
         {{#if this.displayShowMore}}
           <Button
