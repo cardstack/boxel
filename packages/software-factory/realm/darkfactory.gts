@@ -37,6 +37,7 @@ import { KanbanColumnField } from './kanban-column';
 import {
   KanbanPlane,
   KanbanDragManager,
+  type KanbanColumnConfig,
   type KanbanPlacement,
 } from '@cardstack/boxel-ui/components';
 import { StatusPill } from './status-pill';
@@ -272,55 +273,88 @@ class ProjectIsolated extends Component<typeof Project> {
   }
 
   get kanbanPlacements(): KanbanPlacement[] {
+    const placements = this.computePlacements();
+    this.scheduleOrderInit(placements);
+    return placements;
+  }
+
+  private computePlacements(): KanbanPlacement[] {
     const cards = this.args.model?.issues ?? [];
-    const columns = this.args.model?.columns ?? [];
+    const columns = this.kanbanColumns;
     if (cards.length === 0) return [];
     const maxSortOrder: Record<number, number> = {};
     const source = this.groupBySource;
-    const placements = cards.map((card: any, index: number) => {
+    return cards.map((card: any, index: number) => {
       const value = card[source.fieldName];
       const colIndex = columns.findIndex((col) => col.key === value);
       const column = colIndex >= 0 ? colIndex : 0;
       const stored = card[source.orderField];
-      let sortOrder: number;
       if (stored != null) {
-        sortOrder = stored;
         maxSortOrder[column] = Math.max(maxSortOrder[column] ?? 0, stored);
-      } else {
-        maxSortOrder[column] = (maxSortOrder[column] ?? 0) + 1;
-        sortOrder = maxSortOrder[column];
+        return { index, column, sortOrder: stored };
       }
-      return { index, column, sortOrder };
+      maxSortOrder[column] = (maxSortOrder[column] ?? 0) + 1;
+      return { index, column, sortOrder: maxSortOrder[column]! };
     });
+  }
 
-    // Deferred so the write doesn't happen during rendering.
+  // Deferred so the write doesn't happen during rendering.
+  private scheduleOrderInit(placements: KanbanPlacement[]): void {
+    if (this.orderInitPending) return;
+    const cards = this.args.model?.issues ?? [];
+    const orderField = this.groupBySource.orderField;
     const uninitialized = placements.filter(
-      (p) => (cards[p.index] as any)?.[source.orderField] == null,
+      (p) => (cards[p.index] as any)?.[orderField] == null,
     );
-    if (uninitialized.length > 0 && !this.orderInitPending) {
-      this.orderInitPending = true;
-      const orderField = source.orderField;
-      Promise.resolve().then(() => {
-        this.orderInitPending = false;
-        for (const p of uninitialized) {
-          const card = cards[p.index] as any;
-          if (card && card[orderField] == null) {
-            card[orderField] = p.sortOrder;
-          }
-        }
-      });
-    }
-
-    return placements;
+    if (uninitialized.length === 0) return;
+    this.orderInitPending = true;
+    Promise.resolve().then(() => {
+      this.orderInitPending = false;
+      for (const p of uninitialized) {
+        const card = cards[p.index] as any;
+        if (card?.[orderField] == null) card[orderField] = p.sortOrder;
+      }
+    });
   }
 
   get manager(): KanbanDragManager {
-    if (!this.dragManager) this.initManager();
     return this.dragManager!;
   }
 
-  get kanbanColumns(): KanbanColumnField[] {
-    return this.args.model?.columns ?? [];
+  get kanbanColumns(): KanbanColumnConfig[] {
+    const model = this.args.model;
+    if (!model) return [];
+    const source =
+      defaultColumns.find((o) => o.value === model.groupBy) ??
+      defaultColumns[0]!;
+    const boardOptionsByGroup: Record<string, IssueOptionField[]> = {
+      priority: model.issuePriorityOptions ?? [],
+      issueType: model.issueTypeOptions ?? [],
+      status: model.issueStatusOptions ?? [],
+    };
+    const configByGroup: Record<string, KanbanColumnField[]> = {
+      issueType: model.typeColumnConfig ?? [],
+      priority: model.priorityColumnConfig ?? [],
+      status: model.statusColumnConfig ?? [],
+    };
+    const boardOptions = boardOptionsByGroup[source.value];
+    const options: Option[] = boardOptions?.length
+      ? (boardOptions as Option[])
+      : source.options;
+    const config: KanbanColumnField[] = configByGroup[source.value] ?? [];
+    return options
+      .map((o, i) => {
+        const stored = config.find((c) => c.key === o.value);
+        return {
+          key: o.value,
+          label: o.label,
+          color: stored?.color ?? o.color ?? null,
+          wipLimit: stored?.wipLimit ?? null,
+          collapsed: stored?.collapsed ?? null,
+          sortOrder: stored?.sortOrder ?? i,
+        };
+      })
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   }
 
   get cardCount(): number {
@@ -336,11 +370,13 @@ class ProjectIsolated extends Component<typeof Project> {
     return defaultColumns.find((o) => o.value === groupBy) ?? defaultColumns[0]!;
   }
 
-  get columnConfigField(): 'typeColumnConfig' | 'priorityColumnConfig' | 'statusColumnConfig' {
-    const groupBy = this.args.model?.groupBy ?? 'status';
-    if (groupBy === 'issueType') return 'typeColumnConfig';
-    if (groupBy === 'priority') return 'priorityColumnConfig';
-    return 'statusColumnConfig';
+  private get activeColumnConfig(): KanbanColumnField[] {
+    const model = this.args.model;
+    if (!model) return [];
+    const groupBy = model.groupBy ?? 'status';
+    if (groupBy === 'issueType') return model.typeColumnConfig ?? [];
+    if (groupBy === 'priority') return model.priorityColumnConfig ?? [];
+    return model.statusColumnConfig ?? [];
   }
 
   addCardToColumn = dropTask(async (columnKey: string | null | undefined) => {
@@ -402,8 +438,8 @@ class ProjectIsolated extends Component<typeof Project> {
     const model = this.args.model;
     if (!model) return;
     const cards = model.issues;
-    const columns = model.columns;
-    if (!cards || !columns) return;
+    const columns = this.kanbanColumns;
+    if (!cards) return;
     const source = this.groupBySource;
     for (const np of newPlacements) {
       const card = cards[np.index] as any;
@@ -422,7 +458,7 @@ class ProjectIsolated extends Component<typeof Project> {
   setColumnConfig = (key: string, patch: Record<string, unknown>): void => {
     const model = this.args.model;
     if (!model) return;
-    const cols: KanbanColumnField[] = (model as any)[this.columnConfigField] ?? [];
+    const cols = this.activeColumnConfig;
     const cfg = cols.find((c) => c.key === key) as any;
     if (cfg) {
       for (const [k, v] of Object.entries(patch)) {
@@ -875,41 +911,6 @@ export class Project extends CardDef {
   @field statusColumnConfig = containsMany(KanbanColumnField);
   @field priorityColumnConfig = containsMany(KanbanColumnField);
   @field typeColumnConfig = containsMany(KanbanColumnField);
-  @field columns = containsMany(KanbanColumnField, {
-    computeVia: function (this: Project) {
-      const source =
-        defaultColumns.find((o) => o.value === this.groupBy) ??
-        defaultColumns[0]!;
-      const boardOptionsByGroup: Record<string, IssueOptionField[]> = {
-        priority: this.issuePriorityOptions,
-        issueType: this.issueTypeOptions,
-        status: this.issueStatusOptions,
-      };
-      const configByGroup: Record<string, KanbanColumnField[]> = {
-        issueType: this.typeColumnConfig ?? [],
-        priority: this.priorityColumnConfig ?? [],
-        status: this.statusColumnConfig ?? [],
-      };
-      const boardOptions = boardOptionsByGroup[source.value];
-      const options: Option[] = boardOptions?.length
-        ? (boardOptions as Option[])
-        : source.options;
-      const config: KanbanColumnField[] = configByGroup[source.value] ?? [];
-      return options
-        .map((o, i) => {
-          const stored = config.find((c) => c.key === o.value);
-          return new KanbanColumnField({
-            key: o.value,
-            label: o.label,
-            color: stored?.color ?? o.color,
-            wipLimit: stored?.wipLimit ?? null,
-            collapsed: stored?.collapsed ?? null,
-            sortOrder: stored?.sortOrder ?? i,
-          });
-        })
-        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-    },
-  });
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Project) {
@@ -1059,11 +1060,6 @@ export class Project extends CardDef {
           </div>
         </section>
 
-        <div class='col-config-row'>
-          <FieldContainer @label='Configured Columns' @vertical={{true}}>
-            <@fields.columns />
-          </FieldContainer>
-        </div>
       </div>
       <style scoped>
         .kanban-edit {
@@ -1115,13 +1111,6 @@ export class Project extends CardDef {
           font-size: var(--boxel-font-size-xs);
           line-height: 1.5;
           color: var(--muted-foreground, var(--boxel-600));
-        }
-        .col-config-row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: var(--boxel-sp);
-          min-width: 0;
-          align-items: start;
         }
       </style>
     </template>

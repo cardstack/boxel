@@ -3,7 +3,7 @@ import enumField from 'https://cardstack.com/base/enum';
 
 import { IssueOptionField } from './issue-option';
 
-import type { Issue, Project } from './darkfactory';
+import type { Issue } from './darkfactory';
 
 export interface Option {
   value: string;
