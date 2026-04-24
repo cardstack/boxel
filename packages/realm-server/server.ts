@@ -1038,7 +1038,10 @@ export class RealmServer {
         let realmName = maybeRealm.name;
         let realmPath = join(this.realmsRootPath, owner, realmName);
         let maybeRealmContents = readdirSync(realmPath);
-        if (maybeRealmContents.includes('.realm.json')) {
+        if (
+          maybeRealmContents.includes('.realm.json') ||
+          maybeRealmContents.includes('realm.json')
+        ) {
           let url = new URL(
             `${this.serverURL.pathname.replace(
               /\/$/,
@@ -1138,9 +1141,12 @@ export class RealmServer {
         try {
           let maybeRealmContents = readdirSync(realmPath);
 
-          if (!maybeRealmContents.includes('.realm.json')) {
+          if (
+            !maybeRealmContents.includes('.realm.json') &&
+            !maybeRealmContents.includes('realm.json')
+          ) {
             this.log.warn(
-              `Directory ${realmPath} exists but does not contain .realm.json, skipping`,
+              `Directory ${realmPath} exists but does not contain .realm.json or realm.json, skipping`,
             );
             continue;
           }
