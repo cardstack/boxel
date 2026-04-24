@@ -9,7 +9,10 @@ import { SeedAuthenticator } from './seed-auth';
 export interface AuthResolverOptions {
   /** Realm URL the command is operating on (used for registering the seed-auth cache). */
   realmUrl: string;
-  /** Explicit seed (from --realm-secret-seed). Wins over BOXEL_REALM_SECRET_SEED. */
+  /**
+   * Already-resolved realm secret seed. Callers who want env + prompt
+   * resolution should go through `resolveRealmSecretSeed` in `./prompt` first.
+   */
   realmSecretSeed?: string;
   /** Override the ProfileManager (tests). When seed mode is active we won't touch it. */
   profileManager?: ProfileManager;
@@ -22,19 +25,18 @@ export type AuthResolution =
 /**
  * Pick between seed-based auth and profile-based auth.
  *
- * Rules:
- *  - If `realmSecretSeed` (or `BOXEL_REALM_SECRET_SEED`) is present, use
- *    `SeedAuthenticator`. We do NOT require a profile in this mode — operators
- *    using the seed typically don't have a Matrix account configured.
- *  - Otherwise, fall back to the profile flow and require an active profile,
- *    preserving the existing error message so callers' handling stays intact.
+ *  - If `realmSecretSeed` is present, use `SeedAuthenticator`. We do NOT
+ *    require a profile in this mode — operators using the seed typically
+ *    don't have a Matrix account configured.
+ *  - Otherwise, fall back to the profile flow and require an active profile.
  */
 export function resolveRealmAuthenticator(
   options: AuthResolverOptions,
 ): AuthResolution {
-  const seed = options.realmSecretSeed ?? process.env.BOXEL_REALM_SECRET_SEED;
-  if (seed) {
-    const authenticator = new SeedAuthenticator({ seed });
+  if (options.realmSecretSeed) {
+    const authenticator = new SeedAuthenticator({
+      seed: options.realmSecretSeed,
+    });
     authenticator.registerRealmUrl(options.realmUrl);
     return { ok: true, authenticator, mode: 'seed' };
   }

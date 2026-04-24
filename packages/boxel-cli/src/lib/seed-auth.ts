@@ -60,20 +60,19 @@ export interface SeedAuthenticatorOptions {
   /** Raw realm secret seed used to sign JWTs (HS256). */
   seed: string;
   /**
-   * Override for the realm-server's matrix-client username. Real deployments
-   * all use `realm_server`, but integration tests use a different username, so
-   * tests can inject their own. Defaults to `realm_server`.
+   * @internal Override the realm-server's matrix-client username. Real
+   * deployments all use `realm_server`; tests against a server with a
+   * different username inject their own.
    */
   botUsername?: string;
   /**
-   * Full override for the bot matrix user id (e.g.
-   * `@node-test_realm-server:localhost`). When set, disables the per-realm
-   * host derivation entirely — tests that run against a realm hosted on
-   * `127.0.0.1` (where two-label derivation is nonsense) pass the expected
-   * bot id explicitly.
+   * @internal Full override for the bot matrix user id (e.g.
+   * `@node-test_realm-server:localhost`). Used by integration tests that run
+   * against a realm on `127.0.0.1`, where the two-label host-derivation
+   * formula is nonsensical.
    */
   botUserId?: string;
-  /** Override the 7-day JWT expiry used by real deployments. */
+  /** @internal Override the 7-day JWT expiry used by real deployments. */
   expiresIn?: jwt.SignOptions['expiresIn'];
 }
 
@@ -137,15 +136,15 @@ export class SeedAuthenticator implements RealmAuthenticator {
    * Mint (or return a cached) JWT for the given realm URL.
    */
   mintTokenForRealm(realmUrl: string): string {
-    const normalized = normalizeRealmUrl(realmUrl);
-    const cached = this.#tokenCache.get(normalized);
+    const claims = this.buildClaims(realmUrl);
+    const cached = this.#tokenCache.get(claims.realm);
     if (cached) {
       return cached;
     }
-    const token = jwt.sign(this.buildClaims(normalized), this.#seed, {
+    const token = jwt.sign(claims, this.#seed, {
       expiresIn: this.#expiresIn,
     });
-    this.#tokenCache.set(normalized, token);
+    this.#tokenCache.set(claims.realm, token);
     return token;
   }
 

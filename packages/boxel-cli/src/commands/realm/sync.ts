@@ -11,6 +11,7 @@ import {
 import type { ProfileManager } from '../../lib/profile-manager';
 import type { RealmAuthenticator } from '../../lib/realm-authenticator';
 import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
+import { resolveRealmSecretSeed } from '../../lib/prompt';
 import {
   type SyncManifest,
   computeFileHash,
@@ -73,7 +74,7 @@ class RealmSyncer extends RealmSyncBase {
       console.error('Failed to access realm:', error);
       throw new Error(
         'Cannot proceed with sync: Authentication or access failed. ' +
-          'Please check your Matrix credentials and realm permissions.',
+          'Please check your credentials and realm permissions.',
       );
     }
     console.log('Realm access verified');
@@ -491,13 +492,15 @@ export interface SyncCommandOptions {
   dryRun?: boolean;
   profileManager?: ProfileManager;
   /**
-   * Realm secret seed for administrative access. When set, the CLI mints a
-   * JWT locally and skips Matrix login + /_server-session + /_realm-auth.
-   * Falls back to the BOXEL_REALM_SECRET_SEED env var.
+   * Pre-resolved realm secret seed for administrative access. When set, the
+   * CLI mints a JWT locally and skips Matrix login + /_server-session +
+   * /_realm-auth. The `--realm-secret-seed` CLI flag is resolved via
+   * `resolveRealmSecretSeed` (env var or interactive prompt) before being
+   * passed here.
    */
   realmSecretSeed?: string;
   /**
-   * Escape hatch for tests: supply an already-constructed authenticator.
+   * @internal Test hook: supply an already-constructed authenticator.
    */
   authenticator?: RealmAuthenticator;
 }
@@ -519,8 +522,8 @@ export function registerSyncCommand(realm: Command): void {
     .option('--delete', 'Sync deletions both ways')
     .option('--dry-run', 'Preview without making changes')
     .option(
-      '--realm-secret-seed <seed>',
-      'Administrative auth: mint a realm JWT locally using the given seed instead of a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+      '--realm-secret-seed',
+      'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
     )
     .action(
       async (
@@ -532,10 +535,20 @@ export function registerSyncCommand(realm: Command): void {
           preferNewest?: boolean;
           delete?: boolean;
           dryRun?: boolean;
-          realmSecretSeed?: string;
+          realmSecretSeed?: boolean;
         },
       ) => {
-        await syncCommand(localDir, realmUrl, options);
+        const realmSecretSeed = await resolveRealmSecretSeed(
+          options.realmSecretSeed === true,
+        );
+        await syncCommand(localDir, realmUrl, {
+          preferLocal: options.preferLocal,
+          preferRemote: options.preferRemote,
+          preferNewest: options.preferNewest,
+          delete: options.delete,
+          dryRun: options.dryRun,
+          realmSecretSeed,
+        });
       },
     );
 }
@@ -555,9 +568,7 @@ export async function syncCommand(
       profileManager: options.profileManager,
     });
     if (!resolution.ok) {
-      console.error(
-        `Error: ${resolution.error.charAt(0).toLowerCase()}${resolution.error.slice(1)}`,
-      );
+      console.error(`Error: ${resolution.error}`);
       process.exit(1);
     }
     authenticator = resolution.authenticator;

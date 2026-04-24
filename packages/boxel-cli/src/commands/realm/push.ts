@@ -11,6 +11,7 @@ import {
 import type { ProfileManager } from '../../lib/profile-manager';
 import type { RealmAuthenticator } from '../../lib/realm-authenticator';
 import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
+import { resolveRealmSecretSeed } from '../../lib/prompt';
 import {
   type SyncManifest,
   computeFileHash,
@@ -308,13 +309,15 @@ export interface PushCommandOptions {
   force?: boolean;
   profileManager?: ProfileManager;
   /**
-   * Realm secret seed for administrative access. When set, the CLI mints a
-   * JWT locally and skips Matrix login + /_server-session + /_realm-auth.
-   * Falls back to the BOXEL_REALM_SECRET_SEED env var.
+   * Pre-resolved realm secret seed for administrative access. When set, the
+   * CLI mints a JWT locally and skips Matrix login + /_server-session +
+   * /_realm-auth. The `--realm-secret-seed` CLI flag is resolved via
+   * `resolveRealmSecretSeed` (env var or interactive prompt) before being
+   * passed here.
    */
   realmSecretSeed?: string;
   /**
-   * Escape hatch for tests: supply an already-constructed authenticator.
+   * @internal Test hook: supply an already-constructed authenticator.
    */
   authenticator?: RealmAuthenticator;
 }
@@ -332,8 +335,8 @@ export function registerPushCommand(realm: Command): void {
     .option('--dry-run', 'Show what would be done without making changes')
     .option('--force', 'Upload all files, even if unchanged')
     .option(
-      '--realm-secret-seed <seed>',
-      'Administrative auth: mint a realm JWT locally using the given seed instead of a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+      '--realm-secret-seed',
+      'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
     )
     .action(
       async (
@@ -343,10 +346,18 @@ export function registerPushCommand(realm: Command): void {
           delete?: boolean;
           dryRun?: boolean;
           force?: boolean;
-          realmSecretSeed?: string;
+          realmSecretSeed?: boolean;
         },
       ) => {
-        await pushCommand(localDir, realmUrl, options);
+        const realmSecretSeed = await resolveRealmSecretSeed(
+          options.realmSecretSeed === true,
+        );
+        await pushCommand(localDir, realmUrl, {
+          delete: options.delete,
+          dryRun: options.dryRun,
+          force: options.force,
+          realmSecretSeed,
+        });
       },
     );
 }
@@ -366,9 +377,7 @@ export async function pushCommand(
       profileManager: options.profileManager,
     });
     if (!resolution.ok) {
-      console.error(
-        `Error: ${resolution.error.charAt(0).toLowerCase()}${resolution.error.slice(1)}`,
-      );
+      console.error(`Error: ${resolution.error}`);
       process.exit(1);
     }
     authenticator = resolution.authenticator;

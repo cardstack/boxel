@@ -13,15 +13,13 @@ describe('resolveRealmAuthenticator', () => {
   beforeEach(() => {
     profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-auth-resolver-'));
     pm = new ProfileManager(profileDir);
-    delete process.env.BOXEL_REALM_SECRET_SEED;
   });
 
   afterEach(() => {
     fs.rmSync(profileDir, { recursive: true, force: true });
-    delete process.env.BOXEL_REALM_SECRET_SEED;
   });
 
-  it('returns a SeedAuthenticator when --realm-secret-seed is passed', () => {
+  it('returns a SeedAuthenticator when a seed is supplied', () => {
     const result = resolveRealmAuthenticator({
       realmUrl: 'https://app.boxel.ai/demo/',
       realmSecretSeed: 'my-seed',
@@ -31,31 +29,6 @@ describe('resolveRealmAuthenticator', () => {
     if (result.ok) {
       expect(result.mode).toBe('seed');
       expect(result.authenticator).toBeInstanceOf(SeedAuthenticator);
-    }
-  });
-
-  it('falls back to BOXEL_REALM_SECRET_SEED env var when the flag is absent', () => {
-    process.env.BOXEL_REALM_SECRET_SEED = 'env-seed';
-    const result = resolveRealmAuthenticator({
-      realmUrl: 'https://app.boxel.ai/demo/',
-      profileManager: pm,
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.mode).toBe('seed');
-    }
-  });
-
-  it('prefers the explicit flag over the env var', () => {
-    process.env.BOXEL_REALM_SECRET_SEED = 'env-seed';
-    const result = resolveRealmAuthenticator({
-      realmUrl: 'https://app.boxel.ai/demo/',
-      realmSecretSeed: 'flag-seed',
-      profileManager: pm,
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.mode).toBe('seed');
     }
   });
 
