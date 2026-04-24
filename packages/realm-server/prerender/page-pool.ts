@@ -461,6 +461,9 @@ export class PagePool {
       releaseAdmission = await this.#acquireFileAdmission(affinityKey, signal);
       admissionMs = Date.now() - admissionStart;
     }
+    // Every release path (success + the error paths below) funnels
+    // through `releaseAdmission?.()`, which already runs idle cleanup
+    // via the wrapper installed in `#acquireFileAdmission`.
     let startupStart = Date.now();
     try {
       await this.#ensureStandbyPool();
@@ -538,15 +541,6 @@ export class PagePool {
       entry.currentQueue = undefined;
       entry.lastUsedAt = Date.now();
       releaseAdmission?.();
-      // Drop the admission semaphore once it returns to idle so the
-      // map doesn't grow monotonically across realm affinities this
-      // server sees over its lifetime. A subsequent file call on the
-      // same affinity lazy-creates a fresh one (cheap). Skipped when
-      // `#disableFileAdmission` is set — no semaphore was created in
-      // the first place.
-      if (queue === 'file' && !this.#disableFileAdmission) {
-        this.#maybeDropIdleFileAdmission(affinityKey);
-      }
     };
     return {
       page: entry.page,
@@ -895,7 +889,17 @@ export class PagePool {
       semaphore = new AsyncSemaphore(capacity);
       this.#fileAdmission.set(affinityKey, semaphore);
     }
-    return semaphore.acquire(signal);
+    let rawRelease = await semaphore.acquire(signal);
+    // Wrap the raw release so every release path (success or any of
+    // `getPage`'s mid-setup error bailouts) also attempts idle cleanup
+    // of the semaphore map entry. Without this, an erroring file call
+    // would leave a permanently-idle semaphore in `#fileAdmission`
+    // until the next successful file call on the same affinity swept
+    // it away — bounded but not zero leak.
+    return () => {
+      rawRelease();
+      this.#maybeDropIdleFileAdmission(affinityKey);
+    };
   }
 
   // Called after each file release. Drops the semaphore entry for

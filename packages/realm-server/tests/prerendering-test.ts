@@ -4838,6 +4838,74 @@ module(basename(__filename), function () {
           }
         });
 
+        test('idle file-admission semaphore is dropped so the map does not grow unbounded', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            // While a file call holds admission, the semaphore is
+            // present in the snapshot with a non-zero cap.
+            let lease = await pool.getPage('realm-a', 'file');
+            let busySnap = pool.getQueueDepthSnapshot();
+            let busyAffinity = busySnap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              busyAffinity!.admission.cap,
+              1,
+              'semaphore is present while a file call holds admission',
+            );
+
+            // After release and with no waiters, the semaphore is
+            // idle. It should be dropped so the map stays bounded by
+            // affinities currently serving a file call, not by total
+            // affinities ever seen.
+            lease.release();
+            let idleSnap = pool.getQueueDepthSnapshot();
+            let idleAffinity = idleSnap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              idleAffinity!.admission.cap,
+              0,
+              'semaphore is dropped once in-use and pending both return to 0',
+            );
+            assert.strictEqual(
+              idleAffinity!.admission.pending,
+              0,
+              'no waiters on the dropped semaphore',
+            );
+
+            // A fresh file call on the same affinity lazy-creates a
+            // new semaphore — cheap, and the admission cap is
+            // recomputed from the current affinityTabMax.
+            let next = await pool.getPage('realm-a', 'file');
+            let reusedSnap = pool.getQueueDepthSnapshot();
+            let reusedAffinity = reusedSnap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              reusedAffinity!.admission.cap,
+              1,
+              'subsequent file call lazy-creates a fresh semaphore',
+            );
+            next.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
         test('prefers idle tab aligned to realm over standby tabs', async function (assert) {
           let { pool } = makeStubPagePool({ maxPages: 2 });
           await pool.warmStandbys();
