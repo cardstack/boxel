@@ -104,9 +104,9 @@ export class TestValidationStep implements ValidationStepRunner {
         let result = await config.client.read(realmUrl, path);
         return {
           ok: result.ok,
-          document: result.document as unknown as
-            | LooseSingleCardDocument
-            | undefined,
+          document: result.content
+            ? (JSON.parse(result.content) as LooseSingleCardDocument)
+            : undefined,
           error: result.error,
         };
       });

@@ -260,9 +260,9 @@ export async function parseRealmFiles(
       return {
         ok: result.ok,
         content: result.content,
-        document: result.document as
-          | { data: Record<string, unknown> }
-          | undefined,
+        document: result.content
+          ? (JSON.parse(result.content) as { data: Record<string, unknown> })
+          : undefined,
         error: result.error,
       };
     });

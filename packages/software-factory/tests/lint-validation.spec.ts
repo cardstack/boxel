@@ -141,7 +141,7 @@ test.describe('lint-validation e2e', () => {
       expect(cardRead.ok).toBe(true);
 
       let attrs = (
-        cardRead.document as unknown as {
+        JSON.parse(cardRead.content!) as {
           data?: { attributes?: Record<string, unknown> };
         }
       )?.data?.attributes;
