@@ -3,10 +3,10 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
 pnpm setup:catalog-in-deployment
+pnpm setup:legacy-catalog-in-deployment
 pnpm setup:skills-in-deployment
 pnpm setup:software-factory-in-deployment
 pnpm setup:boxel-homepage-in-deployment
-pnpm setup:external-catalog-in-deployment
 pnpm setup:openrouter-in-deployment
 
 SUBMISSION_REALM_PATH='/persistent/submissions'
@@ -19,8 +19,8 @@ DEFAULT_SOFTWARE_FACTORY_REALM_URL='https://realms-staging.stack.cards/software-
 SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFTWARE_FACTORY_REALM_URL}"
 DEFAULT_BOXEL_HOMEPAGE_REALM_URL='https://realms-staging.stack.cards/boxel-homepage/'
 BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HOMEPAGE_REALM_URL}"
-DEFAULT_EXTERNAL_CATALOG_REALM_URL='https://realms-staging.stack.cards/external-catalog/'
-EXTERNAL_CATALOG_REALM_URL="${RESOLVED_EXTERNAL_CATALOG_REALM_URL:-$DEFAULT_EXTERNAL_CATALOG_REALM_URL}"
+DEFAULT_LEGACY_CATALOG_REALM_URL='https://realms-staging.stack.cards/legacy-catalog/'
+LEGACY_CATALOG_REALM_URL="${RESOLVED_LEGACY_CATALOG_REALM_URL:-$DEFAULT_LEGACY_CATALOG_REALM_URL}"
 
 NODE_NO_WARNINGS=1 \
   LOW_CREDIT_THRESHOLD=2000 \
@@ -49,10 +49,10 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='@cardstack/catalog/' \
   --toUrl="${CATALOG_REALM_URL}" \
   \
-  --path='/persistent/external-catalog' \
-  --username='external_catalog_realm' \
-  --fromUrl="${EXTERNAL_CATALOG_REALM_URL}" \
-  --toUrl="${EXTERNAL_CATALOG_REALM_URL}" \
+  --path='/persistent/legacy-catalog' \
+  --username='legacy_catalog_realm' \
+  --fromUrl="${LEGACY_CATALOG_REALM_URL}" \
+  --toUrl="${LEGACY_CATALOG_REALM_URL}" \
   \
   --path="${SUBMISSION_REALM_PATH}" \
   --username='submission_realm' \
@@ -83,4 +83,3 @@ NODE_NO_WARNINGS=1 \
   --username='software_factory_realm' \
   --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
   --toUrl="${SOFTWARE_FACTORY_REALM_URL}"
-  --toUrl='https://realms-staging.stack.cards/experiments/'

@@ -23,6 +23,7 @@ import {
   internalKeyFor,
 } from '@cardstack/runtime-common';
 
+import type { PrerenderedCard } from '@cardstack/host/components/prerendered-card-search';
 import type { RealmFilter } from '@cardstack/host/components/realm-picker';
 import type { TypeFilter } from '@cardstack/host/components/type-picker';
 import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
@@ -31,16 +32,14 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
 
 import {
+  buildRecentsQuery,
   buildSearchQuery,
   shouldSkipSearchQuery,
 } from '@cardstack/host/utils/card-search/query-builder';
-import {
-  filterRecentCards,
-  sortAndFilterRecentCards,
-} from '@cardstack/host/utils/card-search/recent-cards';
 import { SectionPagination } from '@cardstack/host/utils/card-search/section-pagination';
 import {
   assembleSections,
+  buildLiveRecentsSection,
   buildQuerySections,
   buildRecentsSection,
   buildUrlSection,
@@ -226,25 +225,80 @@ export default class SearchContent extends Component<Signature> {
     };
   });
 
-  @cached
-  private get recentCardCollection(): ReturnType<getCardCollection> {
-    return this.getCardCollection(
-      this,
-      () => this.recentCardsService.recentCardIds,
+  private get recentCardUrls(): string[] {
+    return this.recentCardsService.recentCardIds.map((id) =>
+      id.endsWith('.json') ? id : `${id}.json`,
     );
   }
 
-  private get filteredRecentCards(): CardDef[] {
-    const cards =
-      (this.recentCardCollection?.cards?.filter(Boolean) as
-        | CardDef[]
-        | undefined) ?? [];
-    return filterRecentCards(
-      cards,
-      this.args.realmFilter.selectedURLs,
-      this.args.baseFilter,
-    );
+  // Only query realms that actually host one of the recent cards. The main
+  // searchResource hits every available realm (good for free-text search),
+  // but for Recents we already know the exact URL of each card, so searching
+  // realms that can't possibly contain them is pointless — and in tests
+  // that mix origins (e.g. baseRealm + testRealm + testModuleRealm at a
+  // different server), assertOwnRealmServer throws on the mixed set.
+  private get recentsSearchRealms(): string[] {
+    const realms = new Set<string>();
+    for (const url of this.recentCardUrls) {
+      const realm = this.realms.find((r) => url.startsWith(r));
+      if (realm) {
+        realms.add(realm);
+      }
+    }
+    return [...realms];
   }
+
+  // Recents always render as prerendered HTML to avoid fetching card
+  // modules when the search sheet opens. Compact mode uses an empty query
+  // and reorders results client-side to localStorage timestamp order;
+  // full mode reuses the realm-section query so sort, type filter, and
+  // search-term filter all happen server-side alongside the cardUrls
+  // constraint.
+  private prerenderedRecentsResource = getPrerenderedSearch(
+    this,
+    getOwner(this)!,
+    () => {
+      if (this.recentCardUrls.length === 0) {
+        return {
+          query: undefined,
+          format: undefined,
+          realms: this.realms,
+          cardUrls: undefined,
+          isLive: false,
+          cardComponentModifier: this.cardComponentModifier,
+        };
+      }
+      if (this.args.isCompact) {
+        return {
+          query: {},
+          format: 'fitted' as const,
+          realms: this.realms,
+          cardUrls: this.recentCardUrls,
+          isLive: false,
+          cardComponentModifier: this.cardComponentModifier,
+        };
+      }
+      const selectedTypeIds = this.args.typeFilter.selected.map((ref) =>
+        internalKeyFor(ref, undefined),
+      );
+      return {
+        query: buildRecentsQuery(
+          this.searchTerm,
+          this.args.activeSort,
+          this.args.baseFilter,
+          selectedTypeIds,
+        ),
+        format: 'fitted' as const,
+        realms: this.recentsSearchRealms,
+        cardUrls: this.recentCardUrls,
+        // Recents refetch on mount; don't add per-realm live subscriptions
+        // on top of the main searchResource, which already subscribes for
+        // incremental index updates.
+        isLive: false,
+        cardComponentModifier: this.cardComponentModifier,
+      };
+    },
+  );
 
   private get shouldSkipQuery() {
     // In baseFilter mode (modal), only skip when search key is a URL
@@ -303,16 +357,6 @@ export default class SearchContent extends Component<Signature> {
     return `${pluralize('result', total, true)} across ${pluralize('realm', realms.length, true)}`;
   }
 
-  private get sortedRecentCards(): CardDef[] {
-    return sortAndFilterRecentCards(this.filteredRecentCards, {
-      selectedTypes: this.args.typeFilter.selected,
-      skipTypeFiltering: this.args.typeFilter.skipTypeFiltering,
-      searchTerm: this.searchTerm,
-      activeSort: this.args.activeSort,
-      isCompact: this.args.isCompact,
-    });
-  }
-
   @action
   onChangeView(id: string) {
     this.activeViewId = id;
@@ -337,8 +381,59 @@ export default class SearchContent extends Component<Signature> {
     this.pagination.showMore(sectionId, totalCount);
   }
 
+  @cached
+  private get recentCardCollection(): ReturnType<getCardCollection> | null {
+    // Only instantiate the collection when we actually need the fallback,
+    // so the happy path (prerendered succeeds) never loads card modules.
+    if (!this.needsLiveRecentsFallback) {
+      return null;
+    }
+    return this.getCardCollection(
+      this,
+      () => this.recentCardsService.recentCardIds,
+    );
+  }
+
+  private get needsLiveRecentsFallback(): boolean {
+    // Use the live CardDef path only when the prerendered fetch threw —
+    // e.g. a multi-realm test setup where federated search can't be
+    // authorized. An empty prerendered result is legitimate (filter/realm
+    // excluded all recents) and must NOT trigger the fallback, or we'd
+    // resurrect cards the user filtered out.
+    return (
+      this.recentCardUrls.length > 0 &&
+      this.prerenderedRecentsResource.lastSearchErrored
+    );
+  }
+
+  private get liveRecentCards(): CardDef[] {
+    const collection = this.recentCardCollection;
+    if (!collection) return [];
+    return (collection.cards?.filter(Boolean) as CardDef[] | undefined) ?? [];
+  }
+
   private get recentCardsSection() {
-    return buildRecentsSection(this.sortedRecentCards);
+    const instances = this.prerenderedRecentsResource.instances;
+
+    if (this.needsLiveRecentsFallback) {
+      return buildLiveRecentsSection(this.liveRecentCards);
+    }
+
+    if (this.args.isCompact) {
+      // Preserve most-recent-first order from RecentCardsService rather
+      // than the arbitrary order the server returns for an unsorted query.
+      let byUrl = new Map<string, PrerenderedCard>();
+      for (let card of instances) {
+        byUrl.set(card.url, card);
+      }
+      let ordered = this.recentCardUrls
+        .map((url) => byUrl.get(url))
+        .filter((c): c is PrerenderedCard => c !== undefined);
+      return buildRecentsSection(ordered);
+    }
+    // Full mode: server already applied sort/filter/search, use the
+    // response order directly.
+    return buildRecentsSection([...instances]);
   }
 
   private get cardByUrlSection() {
@@ -384,10 +479,8 @@ export default class SearchContent extends Component<Signature> {
       }
     }
     // Cards from recents
-    for (const card of this.sortedRecentCards) {
-      if (card.id) {
-        urls.push(card.id.replace(/\.json$/, ''));
-      }
+    for (const card of this.prerenderedRecentsResource.instances) {
+      urls.push(card.url.replace(/\.json$/, ''));
     }
     // Card from URL section
     if (this.resolvedCard?.id) {

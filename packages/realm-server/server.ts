@@ -768,8 +768,8 @@ export class RealmServer {
           resolvedCatalogRealmURL: rewriteRealmURL(
             config.resolvedCatalogRealmURL,
           ),
-          resolvedExternalCatalogRealmURL: rewriteRealmURL(
-            config.resolvedExternalCatalogRealmURL,
+          resolvedLegacyCatalogRealmURL: rewriteRealmURL(
+            config.resolvedLegacyCatalogRealmURL,
           ),
           resolvedSkillsRealmURL: rewriteRealmURL(
             config.resolvedSkillsRealmURL,

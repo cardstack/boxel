@@ -1,4 +1,8 @@
 import ignore, { type Ignore } from 'ignore';
+// Isomorphic UUID — works in both Node and the browser (host tests
+// instantiate IndexRunner inside a Chrome tab, so Node's built-in
+// `crypto.randomUUID` is not available).
+import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import { Memoize } from 'typescript-memoize';
 
@@ -23,6 +27,7 @@ import {
   type LocalPath,
   type Reader,
   type Stats,
+  type TimingDiagnostics,
 } from './index';
 import { moduleFrom } from './code-ref';
 import type { CacheScope, DefinitionLookup } from './definition-lookup';
@@ -71,6 +76,13 @@ export class IndexRunner {
     totalIndexEntries: 0,
   };
   #shouldClearCacheForNextRender = true;
+  // Identifier for this runner's indexing batch (CS-10758 step 3).
+  // Threaded into PrerenderVisitArgs and released from the fromScratch /
+  // incremental finally blocks. One runner = one batch: if fromScratch
+  // then incremental run on the same instance, they share this id (same
+  // warm loader ownership — intended). Populated in the constructor after
+  // jobInfo is known so the id is easy to correlate with a job in logs.
+  #batchId!: string;
 
   constructor({
     realmURL,
@@ -108,6 +120,7 @@ export class IndexRunner {
     this.#realmURL = realmURL;
     this.#ignoreData = ignoreData;
     this.#jobInfo = jobInfo ?? { jobId: -1, reservationId: -1 };
+    this.#batchId = `${this.#jobInfo.jobId}-${uuidv4().slice(0, 8)}`;
     this.#reportStatus = reportStatus;
     this.#onProgress = onProgress;
     this.#prerenderer = prerenderer;
@@ -207,6 +220,20 @@ export class IndexRunner {
         jobId: current.#jobInfo.jobId,
         stats: current.stats,
       });
+      // Release the batch's ownership of this realm's affinity on the
+      // prerender server. Best-effort: if the prerenderer doesn't
+      // implement releaseBatch (older/remote stub), skip silently.
+      try {
+        await current.#prerenderer.releaseBatch?.({
+          batchId: current.#batchId,
+          affinityType: 'realm',
+          affinityValue: current.realmURL.href,
+        });
+      } catch (e) {
+        current.#log.warn(
+          `${jobIdentity(current.#jobInfo)} failed to release prerender batch ${current.#batchId} for ${current.realmURL.href}: ${(e as Error)?.message}`,
+        );
+      }
     }
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} completed from scratch indexing in ${Date.now() - start}ms`,
@@ -313,6 +340,20 @@ export class IndexRunner {
         jobId: current.#jobInfo.jobId,
         stats: current.stats,
       });
+      // Release the batch's ownership of this realm's affinity on the
+      // prerender server. Best-effort: if the prerenderer doesn't
+      // implement releaseBatch (older/remote stub), skip silently.
+      try {
+        await current.#prerenderer.releaseBatch?.({
+          batchId: current.#batchId,
+          affinityType: 'realm',
+          affinityValue: current.realmURL.href,
+        });
+      } catch (e) {
+        current.#log.warn(
+          `${jobIdentity(current.#jobInfo)} failed to release prerender batch ${current.#batchId} for ${current.realmURL.href}: ${(e as Error)?.message}`,
+        );
+      }
     }
 
     current.#log.debug(
@@ -338,6 +379,7 @@ export class IndexRunner {
         batch: this.batch,
         jobInfo: this.#jobInfo,
         auth: this.#auth,
+        batchId: this.#batchId,
         prerenderer: this.#prerenderer,
         consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
         logDebug: (message) => this.#log.debug(message),
@@ -481,6 +523,7 @@ export class IndexRunner {
     resourceCreatedAt,
     resource,
     renderResult,
+    timingDiagnostics,
   }: {
     path: LocalPath;
     lastModified: number;
@@ -490,6 +533,7 @@ export class IndexRunner {
     renderResult: NonNullable<
       Parameters<typeof performCardIndexing>[0]['precomputedRenderResult']
     >;
+    timingDiagnostics?: TimingDiagnostics;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let instanceURL = new URL(
@@ -515,6 +559,7 @@ export class IndexRunner {
         auth: this.#auth,
         jobInfo: this.#jobInfo,
         precomputedRenderResult: renderResult,
+        timingDiagnostics,
         dependencyResolver: this.#dependencyResolver,
         updateEntry: async (entryURL, entry) =>
           await this.updateEntry(entryURL, entry),
@@ -533,6 +578,7 @@ export class IndexRunner {
     hasModulePrerender,
     extractResult,
     renderResult,
+    timingDiagnostics,
   }: {
     path: LocalPath;
     lastModified: number;
@@ -547,6 +593,7 @@ export class IndexRunner {
     renderResult?: Parameters<
       typeof performFileIndexing
     >[0]['precomputedRenderResult'];
+    timingDiagnostics?: TimingDiagnostics;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let result = await performFileIndexing({
@@ -560,6 +607,7 @@ export class IndexRunner {
       jobInfo: this.#jobInfo,
       precomputedExtractResult: extractResult,
       precomputedRenderResult: renderResult,
+      timingDiagnostics,
       dependencyResolver: this.#dependencyResolver,
       updateEntry: async (entryURL, entry) => {
         await this.batch.updateEntry(entryURL, entry);

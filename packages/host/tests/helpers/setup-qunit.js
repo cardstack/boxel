@@ -16,19 +16,30 @@ export function setupQUnit() {
   // Per-module memory delta probe — log each test file's contribution to
   // retained memory, independent of where it falls in shard order. We GC
   // at module boundaries so the start/end snapshots compare like-for-like.
-  // QUnit module name is normally 1:1 with the test file. We only probe
-  // top-level modules (fullName.length === 1) so nested modules don't
-  // create overlapping start/end pairs.
+  //
+  // We run several gc() cycles with a microtask yield between each call so
+  // V8 can drain its FinalizationRegistry queue and finish generational
+  // sweeps between passes. Without the yield, finalizers are deferred until
+  // the next microtask checkpoint, so repeated synchronous gc() calls don't
+  // actually settle — prior-module garbage can reclaim mid-way through our
+  // window and produce negative "deltas" that aren't real.
+  //
+  // Uses QUnit.moduleStart/moduleDone (not QUnit.on('suiteStart')) because
+  // only the logging-callback API awaits async handlers. Nested modules
+  // are tracked with a simple depth counter so we only probe top-level ones.
   let usedAtModuleStart = null;
-  let inTopLevelModule = false;
-  QUnit.on('suiteStart', (details) => {
-    let depth = Array.isArray(details.fullName) ? details.fullName.length : 1;
-    if (depth !== 1) return;
-    inTopLevelModule = true;
-    if (typeof globalThis.gc === 'function') {
+  let moduleDepth = 0;
+  async function settledGc() {
+    if (typeof globalThis.gc !== 'function') return;
+    for (let i = 0; i < 3; i++) {
       globalThis.gc();
-      globalThis.gc();
+      await new Promise((r) => setTimeout(r, 0));
     }
+  }
+  QUnit.moduleStart(async () => {
+    moduleDepth++;
+    if (moduleDepth !== 1) return;
+    await settledGc();
     try {
       let pm = performance && performance.memory;
       usedAtModuleStart = pm ? pm.usedJSHeapSize : null;
@@ -36,32 +47,29 @@ export function setupQUnit() {
       usedAtModuleStart = null;
     }
   });
-  QUnit.on('suiteEnd', (details) => {
-    let depth = Array.isArray(details.fullName) ? details.fullName.length : 1;
-    if (depth !== 1 || !inTopLevelModule) return;
-    inTopLevelModule = false;
-    if (typeof globalThis.gc === 'function') {
-      globalThis.gc();
-      globalThis.gc();
-    }
-    try {
-      let pm = performance && performance.memory;
-      if (pm) {
-        let used = pm.usedJSHeapSize;
-        let usedMB = (used / 1048576).toFixed(1);
-        let totalMB = (pm.totalJSHeapSize / 1048576).toFixed(1);
-        let deltaMB =
-          usedAtModuleStart != null
-            ? ((used - usedAtModuleStart) / 1048576).toFixed(1)
-            : 'na';
-        let tests = details.tests ? details.tests.length : 0;
-        console.log(
-          `MEMPROBE_FILE module=${JSON.stringify(details.name)} tests=${tests} used=${usedMB}MB total=${totalMB}MB delta=${deltaMB}MB`,
-        );
+  QUnit.moduleDone(async (details) => {
+    if (moduleDepth === 1) {
+      await settledGc();
+      try {
+        let pm = performance && performance.memory;
+        if (pm) {
+          let used = pm.usedJSHeapSize;
+          let usedMB = (used / 1048576).toFixed(1);
+          let totalMB = (pm.totalJSHeapSize / 1048576).toFixed(1);
+          let deltaMB =
+            usedAtModuleStart != null
+              ? ((used - usedAtModuleStart) / 1048576).toFixed(1)
+              : 'na';
+          let tests = details.tests ? details.tests.length : 0;
+          console.log(
+            `MEMPROBE_FILE module=${JSON.stringify(details.name)} tests=${tests} used=${usedMB}MB total=${totalMB}MB delta=${deltaMB}MB`,
+          );
+        }
+      } catch (_) {
+        /* ignore */
       }
-    } catch (_) {
-      /* ignore */
     }
+    moduleDepth--;
   });
 
   // After each test, force GC (via --expose-gc) so V8 can release

@@ -85,14 +85,14 @@ export async function completeInstantiateResult(
     instantiateResultId,
   );
 
-  if (!readResult.ok || !readResult.document) {
+  if (!readResult.ok || !readResult.content) {
     return {
       updated: false,
       error: `Failed to read InstantiateResult: ${readResult.error}`,
     };
   }
 
-  let document = readResult.document as unknown as LooseSingleCardDocument;
+  let document = JSON.parse(readResult.content) as LooseSingleCardDocument;
   let completionAttrs: Record<string, unknown> = {
     status: attrs.status,
     completedAt: new Date().toISOString(),

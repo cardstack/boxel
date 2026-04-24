@@ -62,14 +62,14 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
     let cardId = resolveRelativeLink(projectLink);
     let result = await this.client.read(this.realmUrl, cardId);
 
-    if (!result.ok || !result.document) {
+    if (!result.ok || !result.content) {
       log.warn(
         `Could not load project for issue "${issue.id}" (status ${result.status ?? 'N/A'}): ${result.error ?? 'not found'}`,
       );
       return undefined;
     }
 
-    let document = result.document as unknown as LooseSingleCardDocument;
+    let document = JSON.parse(result.content) as LooseSingleCardDocument;
     return {
       id: cardId,
       ...document.data.attributes,
@@ -100,8 +100,8 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
       let cardId = resolveRelativeLink(link);
       try {
         let result = await this.client.read(this.realmUrl, cardId);
-        if (result.ok && result.document) {
-          let document = result.document as unknown as LooseSingleCardDocument;
+        if (result.ok && result.content) {
+          let document = JSON.parse(result.content) as LooseSingleCardDocument;
           articles.push({
             id: cardId,
             ...document.data.attributes,
@@ -131,14 +131,14 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
     issueId: string,
   ): Promise<Record<string, unknown> | undefined> {
     let result = await this.client.read(this.realmUrl, issueId);
-    if (!result.ok || !result.document) {
+    if (!result.ok || !result.content) {
       log.warn(
         `Could not fetch full issue "${issueId}" (status ${result.status ?? 'N/A'}): ${result.error ?? 'not found'}`,
       );
       return undefined;
     }
 
-    let document = result.document as unknown as LooseSingleCardDocument;
+    let document = JSON.parse(result.content) as LooseSingleCardDocument;
     return {
       id: issueId,
       ...document.data.attributes,

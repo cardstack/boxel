@@ -76,6 +76,7 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
         attributes: {
           title: `Submit ${listingName ?? 'Listing'}`,
           submittedBy: submittedBy ?? null,
+          catalogRealmUrl: catalogRealm,
         },
         relationships: {
           listing: {

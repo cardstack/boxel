@@ -3,6 +3,7 @@ import {
   iconURLFor,
   getRandomBackgroundURL,
 } from '@cardstack/runtime-common/realm-display-defaults';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import {
   getProfileManager,
   type ProfileManager,
@@ -238,8 +239,4 @@ function extractRealmUrlFromError(
   throw new Error(
     `Could not determine realm URL from server error response for endpoint "${endpoint}" on "${realmServerUrl}". The response did not include an explicit realm URL.`,
   );
-}
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
 }

@@ -66,47 +66,15 @@ export function isCardDocumentString(maybeJsonString: string) {
   }
 }
 
-export function isSingleCardDocument(doc: any): doc is SingleCardDocument {
-  if (typeof doc !== 'object' || doc == null) {
-    return false;
-  }
-  if (!('data' in doc)) {
-    return false;
-  }
-  let { data } = doc;
-  if (Array.isArray(data)) {
-    return false;
-  }
-  if ('included' in doc) {
-    let { included } = doc;
-    if (!isIncluded(included)) {
-      return false;
-    }
-  }
-  return isCardResource(data);
-}
-
-export function isCardCollectionDocument(
-  doc: any,
-): doc is CardCollectionDocument {
-  if (typeof doc !== 'object' || doc == null) {
-    return false;
-  }
-  if (!('data' in doc)) {
-    return false;
-  }
-  let { data } = doc;
-  if (!Array.isArray(data)) {
-    return false;
-  }
-  if ('included' in doc) {
-    let { included } = doc;
-    if (!isIncluded(included)) {
-      return false;
-    }
-  }
-  return data.every((resource) => isCardResource(resource));
-}
+// Pure shape predicates for card documents live in `card-document-shape.ts`
+// so callers that only need to recognize a card document don't pull the
+// transitive runtime chain. Re-exported here for backward compat; the
+// local imports let the remainder of this file call them directly.
+import {
+  isSingleCardDocument,
+  isCardCollectionDocument,
+} from './card-document-shape';
+export { isSingleCardDocument, isCardCollectionDocument };
 
 export function isFileMetaCollectionDocument(
   doc: any,

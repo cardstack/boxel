@@ -1,0 +1,207 @@
+import { module, test } from 'qunit';
+import { basename } from 'path';
+import { Prerenderer } from '../prerender/prerenderer';
+import { decorateRenderErrorDiagnostics } from '../prerender/prerender-app';
+
+// Locks down the consolidated diagnostic channel: every payload the
+// Prerenderer or HTTP layer knows about (server timings, host-side
+// breadcrumbs lifted from `RenderError.diagnostics`, and the HTTP
+// correlation ID) ends up on `response.meta`, not on any embedded
+// inner `SerializedError`. The indexer reads from `response.meta`
+// and persists into `boxel_index.timing_diagnostics`; the error-row
+// write path also copies the same blob onto `error_doc.diagnostics`
+// so the UI read surface (CardErrorJSONAPI.meta.diagnostics) keeps
+// working without a schema rename. The point of these tests is to
+// catch any regression that reintroduces the old "stuff diagnostics
+// into the inner SerializedError" pattern.
+
+type FakeVisitResponse = {
+  card?: {
+    error?: {
+      type: 'instance-error';
+      error: {
+        id: string;
+        status: number;
+        title: string;
+        message: string;
+        additionalErrors: unknown[] | null;
+        // Must stay undefined post-consolidation — the decorator
+        // lifts diagnostics off the outer wrapper, not onto the inner.
+        diagnostics?: Record<string, unknown>;
+      };
+      // The transient transport from `withTimeout`; lifted to
+      // `response.meta.diagnostics` and then deleted.
+      diagnostics?: Record<string, unknown>;
+    };
+  };
+  meta?: {
+    timing?: Record<string, unknown>;
+    requestId?: string;
+    diagnostics?: Record<string, unknown>;
+  };
+  pageUnusableError?: unknown;
+};
+
+function buildFakeVisitResponseWithTimeoutError(): FakeVisitResponse {
+  return {
+    card: {
+      error: {
+        type: 'instance-error',
+        error: {
+          id: 'https://realm.example/c/1.json',
+          status: 504,
+          title: 'Render timeout',
+          message: 'Render timed-out after 90000 ms',
+          additionalErrors: null,
+        },
+        // Mirror what `withTimeout` produces today — host-side
+        // breadcrumbs attached on the outer wrapper as a transient
+        // transport. The decorator should lift these to response.meta.
+        diagnostics: {
+          renderStage: 'waiting-stability',
+          stageAgeMs: 89696,
+          queryLoadsInFlight: [{ ageMs: 89721 }],
+        },
+      },
+    },
+  };
+}
+
+function buildFakeSuccessVisitResponse(): FakeVisitResponse {
+  return {
+    card: {
+      // Successful visit — no error wrapper at all.
+    } as FakeVisitResponse['card'],
+  };
+}
+
+module(basename(__filename), function () {
+  module('render diagnostics persistence — consolidated channel', function () {
+    test('Prerenderer.decorateRenderErrorsWithTimings lifts outer RenderError.diagnostics onto response.meta and leaves the inner SerializedError clean', function (assert) {
+      let response = buildFakeVisitResponseWithTimeoutError();
+      Prerenderer.decorateRenderErrorsWithTimings(
+        response,
+        {
+          launchMs: 42,
+          renderMs: 90000,
+          waits: {
+            semaphoreMs: 3,
+            tabQueueMs: 5,
+            tabStartupMs: 10,
+          },
+        },
+        90042,
+      );
+
+      // Host-side breadcrumbs lifted off the outer RenderError and
+      // merged with the server timing measurements into a single
+      // block on response.meta.diagnostics.
+      let meta = response.meta;
+      assert.ok(meta, 'response.meta populated');
+      let diagnostics = meta?.diagnostics;
+      assert.ok(diagnostics, 'diagnostics block on response.meta');
+      assert.strictEqual(diagnostics?.launchMs, 42, 'server launchMs present');
+      assert.strictEqual(
+        diagnostics?.renderElapsedMs,
+        90000,
+        'server renderElapsedMs present',
+      );
+      assert.strictEqual(
+        diagnostics?.totalElapsedMs,
+        90042,
+        'server totalElapsedMs present',
+      );
+      assert.deepEqual(
+        diagnostics?.waits,
+        { semaphoreMs: 3, tabQueueMs: 5, tabStartupMs: 10 },
+        'waits breakdown present',
+      );
+      assert.strictEqual(
+        diagnostics?.renderStage,
+        'waiting-stability',
+        'host-side renderStage lifted from RenderError.diagnostics',
+      );
+      assert.deepEqual(
+        diagnostics?.queryLoadsInFlight,
+        [{ ageMs: 89721 }],
+        'host-side queryLoadsInFlight lifted',
+      );
+
+      // Outer RenderError.diagnostics was a transient transport —
+      // deleted after the lift so nothing downstream has to know
+      // about the two-channel layout.
+      assert.strictEqual(
+        response.card?.error?.diagnostics,
+        undefined,
+        'outer RenderError.diagnostics cleared after lift',
+      );
+      // Inner SerializedError.diagnostics must NOT be populated by
+      // the decorator. This catches any regression that reintroduces
+      // the pre-consolidation dual-write pattern.
+      assert.strictEqual(
+        response.card?.error?.error.diagnostics,
+        undefined,
+        'inner SerializedError.diagnostics remains untouched',
+      );
+    });
+
+    test('decorateRenderErrorDiagnostics stamps requestId onto response.meta, not the inner error', function (assert) {
+      let response = buildFakeVisitResponseWithTimeoutError();
+      decorateRenderErrorDiagnostics(response, 'req-abc-123');
+
+      assert.strictEqual(
+        response.meta?.requestId,
+        'req-abc-123',
+        'requestId stamped on response.meta',
+      );
+      assert.strictEqual(
+        response.card?.error?.error.diagnostics,
+        undefined,
+        'inner SerializedError left alone',
+      );
+    });
+
+    test('decorator populates response.meta even when there is no embedded error (successful render)', function (assert) {
+      // Successful renders still get timing summaries so the indexer
+      // can persist them onto `timing_diagnostics` — that's the whole
+      // point of the consolidated column: operators can retrospectively
+      // ask "why did this instance take N seconds?" regardless of
+      // error status.
+      let response = buildFakeSuccessVisitResponse();
+      Prerenderer.decorateRenderErrorsWithTimings(
+        response,
+        { launchMs: 1, renderMs: 2, waits: {} },
+        3,
+      );
+
+      assert.ok(response.meta?.diagnostics, 'meta.diagnostics populated');
+      assert.strictEqual(response.meta?.diagnostics?.launchMs, 1);
+      assert.strictEqual(response.meta?.diagnostics?.renderElapsedMs, 2);
+      assert.strictEqual(response.meta?.diagnostics?.totalElapsedMs, 3);
+      assert.deepEqual(response.meta?.diagnostics?.waits, {});
+    });
+
+    test('both decorators stack: host-lifted diagnostics + server timings + requestId coexist on response.meta', function (assert) {
+      let response = buildFakeVisitResponseWithTimeoutError();
+      Prerenderer.decorateRenderErrorsWithTimings(
+        response,
+        { launchMs: 7, renderMs: 13, waits: { semaphoreMs: 1 } },
+        20,
+      );
+      decorateRenderErrorDiagnostics(response, 'req-xyz');
+
+      let meta = response.meta;
+      assert.strictEqual(meta?.diagnostics?.launchMs, 7, 'timing retained');
+      assert.strictEqual(
+        meta?.diagnostics?.renderStage,
+        'waiting-stability',
+        'host-side breadcrumb retained',
+      );
+      assert.strictEqual(
+        meta?.requestId,
+        'req-xyz',
+        'requestId present on same meta block',
+      );
+    });
+  });
+});

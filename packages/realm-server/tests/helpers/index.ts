@@ -158,7 +158,7 @@ export async function waitUntil<T>(
   options: {
     timeout?: number;
     interval?: number;
-    timeoutMessage?: string;
+    timeoutMessage?: string | (() => string);
   } = {},
 ): Promise<T> {
   let timeout = options.timeout ?? 1000;
@@ -172,9 +172,12 @@ export async function waitUntil<T>(
     }
     await new Promise((resolve) => setTimeout(resolve, interval));
   }
+  let message =
+    typeof options.timeoutMessage === 'function'
+      ? options.timeoutMessage()
+      : options.timeoutMessage;
   throw new Error(
-    'Timeout waiting for condition' +
-      (options.timeoutMessage ? `: ${options.timeoutMessage}` : ''),
+    'Timeout waiting for condition' + (message ? `: ${message}` : ''),
   );
 }
 

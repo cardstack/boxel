@@ -86,16 +86,14 @@ pnpm test:node
 
 ### Playwright tests (`tests/*.spec.ts`)
 
-Playwright tests are hermetically sealed. They start their own Postgres, Synapse, prerender server, and isolated realm server. They do not depend on any externally running realm server (e.g. `localhost:4201`).
+Playwright tests are hermetically sealed. They start their own Postgres, Synapse, prerender server, isolated realm server, **and the host app compat proxy**. They do not depend on any externally running realm server (e.g. `localhost:4201`) or on a separately-started host app.
+
+> **Do NOT start `packages/host`'s `serve:dist` (or any other host app process) before or during a Playwright test run.** The harness is hermetic — if you start the host app on port 4200 yourself, you'll either collide with the harness's ports or mask real regressions in the harness's host bring-up code. If a spec fails because the host app is unreachable, the fix belongs in the harness, not a side-channel dev server.
 
 Prerequisites:
 
 1. Docker must be running (for Synapse)
-2. Host app assets must be served at `http://localhost:4200/`:
-   ```bash
-   cd packages/host && pnpm serve:dist
-   ```
-3. Run `pnpm cache:prepare` to build or reuse the cached template database:
+2. Run `pnpm cache:prepare` to build or reuse the cached template database:
    ```bash
    pnpm cache:prepare
    ```

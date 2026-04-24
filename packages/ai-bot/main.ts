@@ -118,9 +118,9 @@ class Assistant {
         if (fetchedCost !== null) {
           await spendUsageCost(this.pgAdapter, matrixUserId, fetchedCost);
         } else {
-          const message = `Failed to fetch generation cost for user ${matrixUserId} (generationId: ${generationId}), credit deduction skipped`;
-          log.error(message);
-          Sentry.captureMessage(message, 'error');
+          log.warn(
+            `Failed to fetch generation cost for user ${matrixUserId} (generationId: ${generationId}), credit deduction skipped`,
+          );
         }
       } else {
         log.warn(

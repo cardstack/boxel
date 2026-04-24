@@ -24,6 +24,7 @@ import { OpenRouterFactoryAgent } from '../src/factory-agent/openrouter';
 import { OPENROUTER_CHAT_URL } from '../src/factory-agent';
 import type { AgentContext } from '../src/factory-agent';
 import type { FactoryTool } from '../src/factory-tool-builder';
+import { DONE_SIGNAL } from '../src/factory-tool-builder';
 import type { PromptLoader } from '../src/factory-prompt-loader';
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
@@ -208,6 +209,115 @@ module('factory-agent-schema-boundary / runtime', function () {
     assert.notOk(
       (params as { _def?: unknown })._def,
       'OpenRouter path: parameters do NOT carry Zod internal "_def"',
+    );
+
+    // CS-10814: the OpenAI-compatible `parallel_tool_calls` flag must be
+    // asserted on the wire so the route batches multiple tool_use blocks
+    // per assistant turn instead of serializing them 1-per-turn.
+    let parallelToolCalls = (capturedBody as { parallel_tool_calls?: boolean })
+      .parallel_tool_calls;
+    assert.true(
+      parallelToolCalls,
+      'OpenRouter body sets parallel_tool_calls: true when tools are present',
+    );
+  });
+
+  test('OpenRouter path: batched turn with signal_done still runs every tool in the batch', async function (assert) {
+    // CS-10814 review follow-up: with parallel_tool_calls enabled the model
+    // can emit `signal_done` alongside other tool_calls in a single assistant
+    // turn. Returning as soon as we saw `signal_done` used to drop the
+    // siblings; assert every tool in the batch executes before we report
+    // `done`.
+    let savedApiKey = process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
+
+    let writeCount = 0;
+    let writeTool: FactoryTool = {
+      name: 'write_file',
+      description: 'write a file',
+      parameters: { type: 'object', properties: {}, required: [] },
+      execute: async () => {
+        writeCount += 1;
+        return { ok: true };
+      },
+    };
+    let doneTool: FactoryTool = {
+      name: 'signal_done',
+      description: 'signal the agent is done',
+      parameters: { type: 'object', properties: {}, required: [] },
+      execute: async () => ({ signal: DONE_SIGNAL }),
+    };
+
+    let fakeClient = {
+      authedServerFetch: async () => {
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: 'call_write_1',
+                      type: 'function',
+                      function: { name: 'write_file', arguments: '{}' },
+                    },
+                    {
+                      id: 'call_done_1',
+                      type: 'function',
+                      function: { name: 'signal_done', arguments: '{}' },
+                    },
+                    {
+                      id: 'call_write_2',
+                      type: 'function',
+                      function: { name: 'write_file', arguments: '{}' },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': SupportedMimeType.JSON },
+          },
+        );
+      },
+    } as unknown as BoxelCLIClient;
+
+    let agent = new OpenRouterFactoryAgent(
+      {
+        model: 'anthropic/claude-opus-4',
+        realmServerUrl: 'https://realms.example.test/',
+        client: fakeClient,
+      },
+      stubPromptLoader,
+    );
+
+    let result;
+    try {
+      result = await agent.run(makeContext(), [writeTool, doneTool]);
+    } finally {
+      if (savedApiKey !== undefined) {
+        process.env.OPENROUTER_API_KEY = savedApiKey;
+      }
+    }
+
+    assert.strictEqual(
+      writeCount,
+      2,
+      'both write_file calls in the batch execute even when signal_done appears between them',
+    );
+    assert.strictEqual(
+      result.status,
+      'done',
+      'run() still reports done when the batch contained signal_done',
+    );
+    assert.strictEqual(
+      result.toolCalls.length,
+      3,
+      'toolCalls log captures every call in the batch, not just the ones before signal_done',
     );
   });
 

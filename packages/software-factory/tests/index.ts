@@ -20,5 +20,7 @@ import './validation-pipeline.test';
 import './test-step.test';
 import './lint-step.test';
 import './eval-step.test';
+import './eval-execution.test';
 import './instantiate-step.test';
 import './parse-step.test';
+import './port-allocator.test';

@@ -4,6 +4,10 @@ import { expect, test } from './fixtures';
 
 import { ParseValidationStep } from '../src/validators/parse-step';
 import type { ParseValidationDetails } from '../src/validators/parse-step';
+import {
+  BROKEN_TEMPLATE_GTS,
+  VALID_MODULE_GTS,
+} from './helpers/parse-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
 
 const fixtureRealmDir = resolve(
@@ -11,37 +15,6 @@ const fixtureRealmDir = resolve(
   'test-fixtures',
   'test-realm-runner',
 );
-
-// A valid .gts card module — intentionally simple (no Component<typeof X>)
-// to avoid BaseDef constraint errors that vary between CI and local type
-// resolution environments.
-const VALID_MODULE_GTS = `import {
-  CardDef,
-  field,
-  contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-
-export class ParseTestCard extends CardDef {
-  static displayName = 'Parse Test Card';
-  @field name = contains(StringField);
-}
-`;
-
-// A .gts module with an unclosed template tag (GTS syntax error)
-const BROKEN_TEMPLATE_GTS = `import {
-  CardDef,
-  Component,
-} from 'https://cardstack.com/base/card-api';
-
-export class BrokenCard extends CardDef {
-  static displayName = 'Broken Card';
-  static isolated = class Isolated extends Component<typeof BrokenCard> {
-    <template>
-      <div>Hello world</div>
-  };
-}
-`;
 
 test.use({ realmDir: fixtureRealmDir });
 test.use({ realmServerMode: 'isolated' });
@@ -169,7 +142,9 @@ test.describe('parse-validation e2e', () => {
       expect(cardRead.ok).toBe(true);
 
       let attrs = (
-        cardRead.document as { data?: { attributes?: Record<string, unknown> } }
+        JSON.parse(cardRead.content!) as {
+          data?: { attributes?: Record<string, unknown> };
+        }
       )?.data?.attributes;
       expect(attrs).toBeTruthy();
       expect(attrs?.status).toBe('passed');
@@ -240,7 +215,9 @@ test.describe('parse-validation e2e', () => {
       expect(cardRead.ok).toBe(true);
 
       let attrs = (
-        cardRead.document as { data?: { attributes?: Record<string, unknown> } }
+        JSON.parse(cardRead.content!) as {
+          data?: { attributes?: Record<string, unknown> };
+        }
       )?.data?.attributes;
       expect(attrs).toBeTruthy();
       expect(attrs?.status).toBe('failed');

@@ -5,6 +5,7 @@ import { resolve } from 'path';
 import { profileCommand } from './commands/profile';
 import { registerReadTranspiledCommand } from './commands/read-transpiled';
 import { registerRealmCommand } from './commands/realm/index';
+import { registerFileCommand } from './commands/file/index';
 import { registerRunCommand } from './commands/run-command';
 
 const pkg = JSON.parse(
@@ -42,6 +43,7 @@ program
     },
   );
 
+registerFileCommand(program);
 registerRealmCommand(program);
 registerRunCommand(program);
 registerReadTranspiledCommand(program);

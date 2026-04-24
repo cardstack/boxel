@@ -23,6 +23,7 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
+  addSkillToAiAssistant,
   percySnapshot,
   testRealmURL,
   setupCardLogs,
@@ -1368,13 +1369,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await waitFor('[data-test-room-name="test room 1"]', { timeout: 10000 });
 
     // add environment skill
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await fillIn('[data-test-search-field]', 'boxel environment');
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/boxel-environment"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/boxel-environment`);
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1465,13 +1460,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await waitFor('[data-test-room-name="test room 1"]', { timeout: 10000 });
 
     // add environment skill
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await fillIn('[data-test-search-field]', 'boxel environment');
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/boxel-environment"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/boxel-environment`);
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,

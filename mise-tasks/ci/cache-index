@@ -13,7 +13,7 @@ REALM_HOST="${REALM_BASE_URL#http://}"
 # boxel-homepage is excluded: its source repo (cardstack/boxel-home) is private
 # and inaccessible to CI without extra credentials.
 READINESS_URLS=""
-for realm in base catalog external-catalog skills submissions experiments openrouter software-factory; do
+for realm in base catalog legacy-catalog skills submissions experiments openrouter software-factory; do
   READINESS_URLS="${READINESS_URLS:+${READINESS_URLS}|}http-get://${REALM_HOST}/${realm}/${READY_PATH}"
 done
 READINESS_URLS="${READINESS_URLS}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}|${HOST_URL}"

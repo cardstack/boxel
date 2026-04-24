@@ -21,7 +21,11 @@ type VisitOpts = { timeoutMs?: number; simulateTimeoutMs?: number };
 
 type Wrapped<R> = {
   response: R;
-  timings: { launchMs: number; renderMs: number };
+  timings: {
+    launchMs: number;
+    renderMs: number;
+    waits?: { semaphoreMs: number; tabQueueMs: number; tabStartupMs: number };
+  };
   pool: PoolMeta;
 };
 

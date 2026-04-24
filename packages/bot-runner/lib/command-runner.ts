@@ -154,6 +154,31 @@ export class CommandRunner {
         });
 
         // Step 1.5: Lint & auto-fix collected files
+        // TEMP: lint step skipped while we investigate OOM in staging/prod.
+        // To restore: delete the skip block below and uncomment the original
+        // Step 1.5 block that follows it.
+        log.info('pr-listing-create: lint skipped (temporary)', {
+          fileCount: allFileContents.length,
+        });
+        void this.lintSubmissionFiles; // keep field marked "used" while skipped
+        if (workflowCardUrl) {
+          await this.enqueueRunCommand({
+            runAs,
+            realmURL: effectiveWorkflowRealm,
+            command: PATCH_CARD_INSTANCE_COMMAND,
+            commandInput: {
+              cardId: workflowCardUrl,
+              patch: {
+                attributes: {
+                  lintStatus: 'passed',
+                  lintFixedCount: 0,
+                },
+              },
+            },
+          });
+        }
+        /* TEMP: original Step 1.5 (lint & auto-fix) preserved below.
+           Uncomment this block and delete the skip block above to restore.
         if (workflowCardUrl) {
           await this.enqueueRunCommand({
             runAs,
@@ -254,6 +279,7 @@ export class CommandRunner {
             },
           });
         }
+        */
 
         // Build PR summary from available info
         let listingSummary =

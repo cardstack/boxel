@@ -602,12 +602,21 @@ export default class CardPrerender extends Component {
       }
       let component = routeInfo.attributes.Component;
       this.#renderErrorPayload = undefined;
+      let captureMode: 'innerHTML' | 'outerHTML' | 'textContent';
+      if (format === 'markdown') {
+        // Mirror realm-server puppeteer capture: markdown renders into a
+        // whitespace-preserving container; capturing textContent avoids
+        // polluting the markdown column with wrapper HTML (e.g. the
+        // "markdown-format" CSS class) that corrupts substring search.
+        captureMode = 'textContent';
+      } else if (['isolated', 'atom', 'head'].includes(format)) {
+        captureMode = 'innerHTML';
+      } else {
+        captureMode = 'outerHTML';
+      }
       let captured = await this.renderService.renderCardComponent(
         component,
-        // I think this is right, may need to revisit this as we incorporate more tests
-        ['isolated', 'atom', 'head'].includes(format)
-          ? 'innerHTML'
-          : 'outerHTML',
+        captureMode,
         format,
         this.waitForLinkedData,
       );
@@ -619,7 +628,9 @@ export default class CardPrerender extends Component {
         return null;
       }
       await this.#ensureRenderReady(routeInfo);
-      return this.processCapturedMarkup(captured);
+      return this.processCapturedMarkup(captured, {
+        isPlainText: format === 'markdown',
+      });
     },
   );
 
@@ -794,8 +805,13 @@ export default class CardPrerender extends Component {
     return true;
   }
 
-  private processCapturedMarkup(markup: string): string {
-    let cleaned = cleanCapturedHTML(markup);
+  private processCapturedMarkup(
+    markup: string,
+    opts?: { isPlainText?: boolean },
+  ): string {
+    // Plain-text captures (e.g. markdown-format) don't need HTML cleanup —
+    // the Ember-id/empty-data-attr cleanup only makes sense for HTML.
+    let cleaned = opts?.isPlainText ? markup : cleanCapturedHTML(markup);
     let errorPayload = extractPrerenderError(cleaned);
     if (errorPayload) {
       if (this.localIndexer.prerenderStatus === 'loading') {

@@ -29,6 +29,8 @@ import type {
   CardDef,
   CardStore,
   GetSearchResourceFuncOpts,
+  QueryLoadInfo,
+  QueryLoadMeta,
   StoreSearchResource,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -166,6 +168,30 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     Promise<SingleFileMetaDocument | CardError>
   > = new Map();
 
+  // CS-10872: in-flight query loads with metadata, used by the
+  // prerenderer's render-timeout error path to surface "what query
+  // fields were still loading" in the persisted error document.
+  // Keyed by a monotonic token so the same query can appear multiple
+  // times (e.g. seed + live-refresh) without collapsing.
+  #queryLoadsInFlight: Map<number, { meta: QueryLoadMeta; startedAt: number }> =
+    new Map();
+  #nextQueryLoadToken = 1;
+  // Bounded "top-slowest" history of completed query loads. Same
+  // intent as the loader's recent-evaluations: when the timeout diag
+  // reads this after the fact, we still know which query-field or
+  // standalone search ate the most wall time during the attempt.
+  #recentQueryLoads: Array<{ meta: QueryLoadMeta; ms: number }> = [];
+  // Per-URL startedAt for linked-field (card doc) and file-meta
+  // loads. Lets the timeout diagnostic report per-item ageMs, so a
+  // single slow linksTo target is distinguishable from many small
+  // ones piling up in a fan-out.
+  #cardDocStartedAt: Map<string, number> = new Map();
+  #fileMetaStartedAt: Map<string, number> = new Map();
+  // Bounded "top-slowest" history of completed doc loads.
+  #recentCardDocLoads: Array<{ url: string; ms: number }> = [];
+  #recentFileMetaLoads: Array<{ url: string; ms: number }> = [];
+  static #MAX_DIAGNOSTIC_HISTORY = 20;
+
   #storeHooks: StoreHooks | undefined;
 
   constructor(
@@ -218,11 +244,20 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
     promise = loadCardDocument(this.#fetch, url);
     this.#cardDocsInFlight.set(url, promise);
+    this.#cardDocStartedAt.set(url, Date.now());
     this.trackLoad(promise);
     try {
       return await promise;
     } finally {
+      let startedAt = this.#cardDocStartedAt.get(url);
       this.#cardDocsInFlight.delete(url);
+      this.#cardDocStartedAt.delete(url);
+      if (typeof startedAt === 'number') {
+        this.#recordDiagnosticHistory(this.#recentCardDocLoads, {
+          url,
+          ms: Date.now() - startedAt,
+        });
+      }
     }
   }
 
@@ -238,11 +273,20 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
     promise = loadFileMetaDocument(this.#fetch, url);
     this.#fileMetaDocsInFlight.set(url, promise);
+    this.#fileMetaStartedAt.set(url, Date.now());
     this.trackLoad(promise);
     try {
       return await promise;
     } finally {
+      let startedAt = this.#fileMetaStartedAt.get(url);
       this.#fileMetaDocsInFlight.delete(url);
+      this.#fileMetaStartedAt.delete(url);
+      if (typeof startedAt === 'number') {
+        this.#recordDiagnosticHistory(this.#recentFileMetaLoads, {
+          url,
+          ms: Date.now() - startedAt,
+        });
+      }
     }
   }
 
@@ -252,6 +296,48 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   get fileMetaDocsInFlight() {
     return [...this.#fileMetaDocsInFlight.keys()];
+  }
+
+  // CS-10872: per-item age for linked-field / file-meta loads. Used
+  // by the prerender timeout diagnostic so operators can see which
+  // URL has been hanging the longest, not just "there are 5 pending".
+  cardDocLoadsInFlight(): Array<{ url: string; ageMs: number }> {
+    let now = Date.now();
+    let out: Array<{ url: string; ageMs: number }> = [];
+    for (let [url, startedAt] of this.#cardDocStartedAt) {
+      out.push({ url, ageMs: now - startedAt });
+    }
+    return out;
+  }
+  fileMetaDocLoadsInFlight(): Array<{ url: string; ageMs: number }> {
+    let now = Date.now();
+    let out: Array<{ url: string; ageMs: number }> = [];
+    for (let [url, startedAt] of this.#fileMetaStartedAt) {
+      out.push({ url, ageMs: now - startedAt });
+    }
+    return out;
+  }
+  recentCardDocLoads(): Array<{ url: string; ms: number }> {
+    return [...this.#recentCardDocLoads];
+  }
+  recentFileMetaLoads(): Array<{ url: string; ms: number }> {
+    return [...this.#recentFileMetaLoads];
+  }
+  recentQueryLoads(): Array<{ meta: QueryLoadMeta; ms: number }> {
+    return this.#recentQueryLoads.map(({ meta, ms }) => ({ meta, ms }));
+  }
+
+  #recordDiagnosticHistory<T extends { ms: number }>(
+    history: T[],
+    entry: T,
+  ): void {
+    history.push(entry);
+    if (
+      history.length > CardStoreWithGarbageCollection.#MAX_DIAGNOSTIC_HISTORY
+    ) {
+      history.sort((a, b) => b.ms - a.ms);
+      history.length = CardStoreWithGarbageCollection.#MAX_DIAGNOSTIC_HISTORY;
+    }
   }
 
   trackLoad(load: Promise<unknown>) {
@@ -278,6 +364,39 @@ export default class CardStoreWithGarbageCollection implements CardStore {
           `trackLoad rejected id=${loadId} error=${String(error)}`,
         );
       });
+  }
+
+  trackQueryLoad(load: Promise<unknown>, meta: QueryLoadMeta): () => void {
+    let token = this.#nextQueryLoadToken++;
+    let startedAt = Date.now();
+    this.#queryLoadsInFlight.set(token, { meta, startedAt });
+    let released = false;
+    let release = () => {
+      if (released) return;
+      released = true;
+      this.#queryLoadsInFlight.delete(token);
+      this.#recordDiagnosticHistory(this.#recentQueryLoads, {
+        meta,
+        ms: Date.now() - startedAt,
+      });
+    };
+    // Swallow the chained promise's rejection — `load` may be an
+    // ember-concurrency TaskInstance that rejects with TaskCancelation
+    // when the owning component unmounts. Our only interest is that
+    // `release()` runs on settle; failing to catch here would surface
+    // the cancelation as an unhandled promise rejection and fail
+    // unrelated tests that tear down SearchResource mid-load.
+    load.finally(release).catch(() => {});
+    return release;
+  }
+
+  queryLoadsInFlight(): QueryLoadInfo[] {
+    let now = Date.now();
+    let out: QueryLoadInfo[] = [];
+    for (let { meta, startedAt } of this.#queryLoadsInFlight.values()) {
+      out.push({ ...meta, ageMs: now - startedAt });
+    }
+    return out;
   }
 
   async loaded() {
@@ -404,6 +523,17 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.#fileMetaDocsInFlight.clear();
     this.#inFlight.clear();
     this.#loadGeneration = 0;
+    // CS-10872: diagnostic trackers follow the same lifecycle as the
+    // in-flight maps. If a loader/cache reset happens mid-render
+    // (triggered by a `clearCache: true` clearCache retry, for
+    // example), stale in-flight entries and recent-history rows must
+    // not survive into the next render's timeout diagnostics.
+    this.#queryLoadsInFlight.clear();
+    this.#cardDocStartedAt.clear();
+    this.#fileMetaStartedAt.clear();
+    this.#recentQueryLoads.length = 0;
+    this.#recentCardDocLoads.length = 0;
+    this.#recentFileMetaLoads.length = 0;
     this.#idResolver.reset();
   }
 

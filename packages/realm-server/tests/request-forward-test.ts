@@ -671,12 +671,21 @@ module(basename(__filename), function () {
           'Should return Google Custom Search response',
         );
 
-        // Verify fetch was called correctly
-        assert.true(mockFetch.calledOnce, 'Fetch should be called once');
-        const calls = mockFetch.getCalls();
-
-        // Check that the URL includes the API key as a parameter
-        const callUrl = calls[0].args[0];
+        // Verify fetch was called to forward to Google. We find the
+        // Google call by URL rather than asserting `calledOnce` —
+        // background timers in the shared test prerender server
+        // (heartbeat to prerender-manager, periodic queue snapshot,
+        // etc.) also use `global.fetch` and can fire inside this
+        // test's stub window, racing the Google forward call. The
+        // test cares that the Google forward fetched with the right
+        // URL + headers, not that nothing else touched fetch.
+        const googleCall = mockFetch.getCalls().find((call) => {
+          let raw = call.args[0];
+          let s = typeof raw === 'string' ? raw : raw.toString();
+          return s.includes('googleapis.com/customsearch/v1');
+        });
+        assert.ok(googleCall, 'fetch was invoked against Google Custom Search');
+        const callUrl = googleCall!.args[0];
         const url = typeof callUrl === 'string' ? callUrl : callUrl.toString();
         assert.true(
           url.includes('key=google-api-key'),
@@ -696,7 +705,10 @@ module(basename(__filename), function () {
         );
 
         // Verify no authorization header was set (since we're using URL parameters)
-        const callHeaders = calls[0].args[1]?.headers as Record<string, string>;
+        const callHeaders = googleCall!.args[1]?.headers as Record<
+          string,
+          string
+        >;
         assert.notOk(
           callHeaders?.Authorization,
           'Should not set authorization header for URL parameter auth',

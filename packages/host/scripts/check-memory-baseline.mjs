@@ -61,29 +61,35 @@ for (const [mod, data] of Object.entries(current)) {
   const baseDelta = base.delta_mb;
   if (baseDelta == null) continue;
 
-  const diff = data.delta_mb - baseDelta;
-  const absDiff = Math.abs(diff);
+  // A negative baseline delta means the prior module's garbage was reclaimed
+  // partway through this module's window, not that this module actually freed
+  // memory. Treat it as noise: floor at 0 so the comparison falls back to the
+  // absolute thresholds rather than a bogus relative budget sized to |noise|.
+  const effectiveBase = Math.max(baseDelta, 0);
+  const diff = data.delta_mb - effectiveBase;
   // Only flag increases
   if (diff <= 0) continue;
 
-  const softThreshold = Math.max(SOFT_ABSOLUTE_MB, Math.abs(baseDelta) * SOFT_RELATIVE);
-  const hardThreshold = Math.max(HARD_ABSOLUTE_MB, Math.abs(baseDelta) * HARD_RELATIVE);
+  const softThreshold = Math.max(SOFT_ABSOLUTE_MB, effectiveBase * SOFT_RELATIVE);
+  const hardThreshold = Math.max(HARD_ABSOLUTE_MB, effectiveBase * HARD_RELATIVE);
 
-  if (absDiff >= hardThreshold) {
+  const pct = effectiveBase > 0 ? ((diff / effectiveBase) * 100).toFixed(0) : null;
+
+  if (diff >= hardThreshold) {
     failures.push({
       mod,
-      baseline: baseDelta,
+      baseline: effectiveBase,
       current: data.delta_mb,
       diff,
-      pct: baseDelta !== 0 ? ((diff / Math.abs(baseDelta)) * 100).toFixed(0) : 'inf',
+      pct,
     });
-  } else if (absDiff >= softThreshold) {
+  } else if (diff >= softThreshold) {
     warnings.push({
       mod,
-      baseline: baseDelta,
+      baseline: effectiveBase,
       current: data.delta_mb,
       diff,
-      pct: baseDelta !== 0 ? ((diff / Math.abs(baseDelta)) * 100).toFixed(0) : 'inf',
+      pct,
     });
   }
 }
@@ -107,8 +113,9 @@ if (failures.length > 0) {
   lines.push('| Module | Baseline | Current | Change |');
   lines.push('|--------|----------|---------|--------|');
   for (const f of failures.sort((a, b) => b.diff - a.diff)) {
+    const pctStr = f.pct != null ? ` (+${f.pct}%)` : '';
     lines.push(
-      `| ${escapeMd(f.mod)} | ${f.baseline.toFixed(1)} MB | ${f.current.toFixed(1)} MB | +${f.diff.toFixed(1)} MB (+${f.pct}%) |`,
+      `| ${escapeMd(f.mod)} | ${f.baseline.toFixed(1)} MB | ${f.current.toFixed(1)} MB | +${f.diff.toFixed(1)} MB${pctStr} |`,
     );
   }
   lines.push('');
@@ -119,8 +126,9 @@ if (warnings.length > 0) {
   lines.push('| Module | Baseline | Current | Change |');
   lines.push('|--------|----------|---------|--------|');
   for (const w of warnings.sort((a, b) => b.diff - a.diff)) {
+    const pctStr = w.pct != null ? ` (+${w.pct}%)` : '';
     lines.push(
-      `| ${escapeMd(w.mod)} | ${w.baseline.toFixed(1)} MB | ${w.current.toFixed(1)} MB | +${w.diff.toFixed(1)} MB (+${w.pct}%) |`,
+      `| ${escapeMd(w.mod)} | ${w.baseline.toFixed(1)} MB | ${w.current.toFixed(1)} MB | +${w.diff.toFixed(1)} MB${pctStr} |`,
     );
   }
   lines.push('');

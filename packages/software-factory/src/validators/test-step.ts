@@ -104,9 +104,9 @@ export class TestValidationStep implements ValidationStepRunner {
         let result = await config.client.read(realmUrl, path);
         return {
           ok: result.ok,
-          document: result.document as unknown as
-            | LooseSingleCardDocument
-            | undefined,
+          document: result.content
+            ? (JSON.parse(result.content) as LooseSingleCardDocument)
+            : undefined,
           error: result.error,
         };
       });
@@ -187,6 +187,20 @@ export class TestValidationStep implements ValidationStepRunner {
       targetRealmUrl,
       handle.testRunId,
     );
+
+    if (handle.status === 'error') {
+      log.info(
+        `Test run error${handle.errorMessage ? `: ${handle.errorMessage}` : ''}`,
+      );
+    } else if (details) {
+      let skippedNote =
+        details.skippedCount > 0 ? `, ${details.skippedCount} skipped` : '';
+      log.info(
+        `${details.passedCount} passed, ${details.failedCount} failed${skippedNote}`,
+      );
+    } else {
+      log.info(`Test run ${handle.status}`);
+    }
 
     // Step 4: Map to ValidationStepResult
     if (handle.status === 'passed') {

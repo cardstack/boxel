@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
+  LINT_TSCONFIG_FILENAME,
   parseTscOutput,
   parseTemplateLintOutput,
   sanitizeRelativePath,
@@ -39,6 +40,13 @@ module('lint-runner | sanitizeRelativePath', () => {
 
   test('rejects empty filename', (assert) => {
     assert.throws(() => sanitizeRelativePath('', tempDir), /required/);
+  });
+
+  test('rejects the reserved lint-tsconfig filename', (assert) => {
+    assert.throws(
+      () => sanitizeRelativePath(LINT_TSCONFIG_FILENAME, tempDir),
+      /reserved/,
+    );
   });
 });
 

@@ -84,6 +84,15 @@ function buildTypeFilter(
   return { any: codeRefs.map((ref) => ({ type: ref })) };
 }
 
+// OR-combine full-text markdown search with a cardTitle substring match so
+// short prefixes (e.g. "ma" → "mango", "mark") still find cards by title
+// while longer/natural-language queries tap markdown content via `matches`.
+function buildSearchTermFilter(searchTerm: string): Filter {
+  return {
+    any: [{ matches: searchTerm }, { contains: { cardTitle: searchTerm } }],
+  };
+}
+
 export function buildSearchQuery(
   searchKey: string,
   activeSort: SortOption,
@@ -91,33 +100,70 @@ export function buildSearchQuery(
   selectedTypeIds?: string[],
 ): Query {
   const typeFilter = buildTypeFilter(selectedTypeIds);
+  const searchTerm = searchKey?.trim() || undefined;
+  let filters: Filter[];
   if (baseFilter) {
-    const searchTerm = searchKey?.trim() || undefined;
     // When typeFilter is present, strip the baseFilter's type constraint
     // to avoid SQL conflict where two type conditions share one cross-join alias.
     // This is safe because the type picker only offers subtypes of the baseFilter type.
     const effectiveBaseFilter = typeFilter
       ? stripTypeFromFilter(baseFilter)
       : baseFilter;
-    const filters: Filter[] = [
+    filters = [
       ...(effectiveBaseFilter ? [effectiveBaseFilter] : []),
       ...(typeFilter ? [typeFilter] : []),
-      ...(searchTerm ? [{ contains: { cardTitle: searchTerm } }] : []),
+      ...(searchTerm ? [buildSearchTermFilter(searchTerm)] : []),
     ];
-    return {
-      filter: filters.length === 1 ? filters[0] : { every: filters },
-      sort: activeSort.sort,
-    };
+  } else {
+    filters = [
+      { not: { type: specRef } },
+      ...(typeFilter ? [typeFilter] : []),
+      ...(searchTerm ? [buildSearchTermFilter(searchTerm)] : []),
+    ];
   }
-  const searchTerm = searchKey?.trim() || undefined;
   return {
-    filter: {
-      every: [
-        { not: { type: specRef } },
-        ...(typeFilter ? [typeFilter] : []),
-        ...(searchTerm ? [{ contains: { cardTitle: searchTerm } }] : []),
-      ],
-    },
+    filter: filters.length === 1 ? filters[0] : { every: filters },
+    sort: activeSort.sort,
+  };
+}
+
+// Narrower query for the Recents section. Matches the pre-prerendered
+// client-side behavior where a search term filtered recents only by
+// cardTitle substring — unlike the realm search which also runs
+// full-text `matches` on markdown. Using `matches` here picks up
+// linked-card content (e.g. Fadhlan's card markdown includes its
+// linked Mango pet, so "man" matches via "mango"), producing false
+// positives the previous UX never showed.
+export function buildRecentsQuery(
+  searchTerm: string | undefined,
+  activeSort: SortOption,
+  baseFilter?: Filter,
+  selectedTypeIds?: string[],
+): Query {
+  const typeFilter = buildTypeFilter(selectedTypeIds);
+  const term = searchTerm?.trim() || undefined;
+  const termFilter: Filter | undefined = term
+    ? { contains: { cardTitle: term } }
+    : undefined;
+  let filters: Filter[];
+  if (baseFilter) {
+    const effectiveBaseFilter = typeFilter
+      ? stripTypeFromFilter(baseFilter)
+      : baseFilter;
+    filters = [
+      ...(effectiveBaseFilter ? [effectiveBaseFilter] : []),
+      ...(typeFilter ? [typeFilter] : []),
+      ...(termFilter ? [termFilter] : []),
+    ];
+  } else {
+    filters = [
+      { not: { type: specRef } },
+      ...(typeFilter ? [typeFilter] : []),
+      ...(termFilter ? [termFilter] : []),
+    ];
+  }
+  return {
+    filter: filters.length === 1 ? filters[0] : { every: filters },
     sort: activeSort.sort,
   };
 }

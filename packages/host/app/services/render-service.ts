@@ -39,10 +39,15 @@ import { render, teardown } from '../lib/isolated-render';
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
 import type { ComponentLike } from '@glint/template';
-import type { SimpleDocument, SimpleElement } from '@simple-dom/interface';
+import type {
+  SimpleDocument,
+  SimpleElement,
+  SimpleNode,
+} from '@simple-dom/interface';
 import type { Tokenizer } from '@simple-dom/parser';
 
 const ELEMENT_NODE_TYPE = 1;
+const TEXT_NODE_TYPE = 3;
 const MAX_ASYNC_RENDER_PASSES = 3;
 const { environment } = config;
 
@@ -178,7 +183,7 @@ export default class RenderService extends Service {
 
   async renderCardComponent(
     component: BoxComponent,
-    capture: 'innerHTML' | 'outerHTML' = 'outerHTML',
+    capture: 'innerHTML' | 'outerHTML' | 'textContent' = 'outerHTML',
     format: Format = 'isolated',
     waitForAsync?: () => Promise<void>,
   ): Promise<string> {
@@ -219,7 +224,7 @@ export default class RenderService extends Service {
 
 export function parseCardHtml(
   html: string,
-  capture: 'innerHTML' | 'outerHTML' = 'outerHTML',
+  capture: 'innerHTML' | 'outerHTML' | 'textContent' = 'outerHTML',
 ): string {
   let document = createDocument();
   let parser = new Parser(tokenize as Tokenizer, document, voidMap);
@@ -228,6 +233,23 @@ export function parseCardHtml(
     throw new Error(`no HTML to parse`);
   }
   let serializer = new Serializer(voidMap);
+
+  if (capture === 'textContent') {
+    // Used for markdown-format captures. Realm-server puppeteer targets
+    // [data-markdown-output] specifically because its async turndown modifier
+    // has fired by capture time in a real browser. The in-browser test
+    // prerender path cannot reliably flush `scheduleOnce('afterRender')`
+    // before capture, so we take textContent of the whole render tree
+    // instead — that always includes the rendered fallback-source text
+    // (which holds the card's visible content) and excludes HTML attribute
+    // values (so wrapper class names like "markdown-format" do not pollute
+    // the indexed markdown column).
+    let parts: string[] = [];
+    for (let node = fragment.firstChild; node; node = node.nextSibling) {
+      parts.push(collectTextContent(node));
+    }
+    return parts.join('');
+  }
 
   let parts: string[] = [];
   for (let node = fragment.firstChild; node; node = node.nextSibling) {
@@ -248,6 +270,20 @@ export function parseCardHtml(
     return parts.join('').trim();
   }
   throw new Error(`unable to determine HTML for card. found HTML:\n${html}`);
+}
+
+function collectTextContent(node: SimpleNode): string {
+  if (node.nodeType === TEXT_NODE_TYPE) {
+    return node.nodeValue ?? '';
+  }
+  if (node.nodeType !== ELEMENT_NODE_TYPE) {
+    return '';
+  }
+  let parts: string[] = [];
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    parts.push(collectTextContent(child));
+  }
+  return parts.join('');
 }
 
 function getChildElementById(

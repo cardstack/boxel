@@ -1,0 +1,112 @@
+import type { Command } from 'commander';
+import {
+  getProfileManager,
+  NO_ACTIVE_PROFILE_ERROR,
+  type ProfileManager,
+} from '../../lib/profile-manager';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+import { FG_RED, DIM, RESET } from '../../lib/colors';
+
+export interface ReadResult {
+  ok: boolean;
+  status?: number;
+  /** Raw text content of the file. */
+  content?: string;
+  error?: string;
+}
+
+export interface ReadCommandOptions {
+  profileManager?: ProfileManager;
+}
+
+interface ReadCliOptions {
+  realm: string;
+  json?: boolean;
+}
+
+/**
+ * Read a file from a realm. Always returns the raw text content.
+ * Callers should parse the content themselves if needed (e.g. JSON).
+ *
+ * Uses the per-realm JWT via `ProfileManager.authedRealmFetch`.
+ */
+export async function read(
+  realmUrl: string,
+  path: string,
+  options?: ReadCommandOptions,
+): Promise<ReadResult> {
+  let pm = options?.profileManager ?? getProfileManager();
+  let active = pm.getActiveProfile();
+  if (!active) {
+    return {
+      ok: false,
+      error: NO_ACTIVE_PROFILE_ERROR,
+    };
+  }
+
+  let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
+
+  let response: Response;
+  try {
+    response = await pm.authedRealmFetch(url, {
+      method: 'GET',
+      headers: { Accept: SupportedMimeType.CardSource },
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  if (!response.ok) {
+    let body = await response.text().catch(() => '(no body)');
+    return {
+      ok: false,
+      status: response.status,
+      error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
+    };
+  }
+
+  let text = await response.text();
+  return { ok: true, status: response.status, content: text };
+}
+
+export function registerReadCommand(parent: Command): void {
+  parent
+    .command('read')
+    .description('Read a file from a realm')
+    .argument(
+      '<path>',
+      'Realm-relative file path (e.g., hello-world.json, Cards/my-card.gts)',
+    )
+    .requiredOption('--realm <realm-url>', 'The realm URL to read from')
+    .option('--json', 'Output raw JSON response')
+    .action(async (filePath: string, opts: ReadCliOptions) => {
+      let result: ReadResult;
+      try {
+        result = await read(opts.realm, filePath);
+      } catch (err) {
+        console.error(
+          `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
+        );
+        process.exit(1);
+      }
+
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+      } else if (result.ok) {
+        console.log(result.content ?? '');
+      } else {
+        console.error(
+          `${DIM}Status:${RESET} ${result.status ?? '(no status)'}`,
+        );
+        console.error(`${FG_RED}Error:${RESET} ${result.error}`);
+      }
+
+      if (!result.ok) {
+        process.exit(1);
+      }
+    });
+}

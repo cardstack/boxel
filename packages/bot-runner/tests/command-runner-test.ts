@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import type {
   DBAdapter,
   ExecuteOptions,
@@ -7,7 +7,10 @@ import type {
   RunCommandResponse,
 } from '@cardstack/runtime-common';
 import type { GitHubClient } from '../lib/github';
-import { CommandRunner, type LintSubmissionFilesFn } from '../lib/command-runner';
+import {
+  CommandRunner,
+  type LintSubmissionFilesFn,
+} from '../lib/command-runner';
 
 const passThroughLint: LintSubmissionFilesFn = async (files) => ({
   passed: true,
@@ -207,7 +210,8 @@ module('command runner', () => {
               event_type: 'app.boxel.bot-trigger',
               content_type: 'pr-listing-create',
             },
-            command: '@cardstack/catalog/commands/collect-submission-files/default',
+            command:
+              '@cardstack/catalog/commands/collect-submission-files/default',
           },
         ],
       ],
@@ -255,8 +259,8 @@ module('command runner', () => {
 
     assert.strictEqual(
       publishedJobs.length,
-      5,
-      'enqueues collect-files, two lint-status patches, create-pr-card, and prCard-link patch',
+      4,
+      'enqueues collect-files, lintStatus=passed patch, create-pr-card, and prCard-link patch (lint step skipped)',
     );
     assert.strictEqual(createdBranches.length, 1, 'creates branch');
     assert.strictEqual(branchWrites.length, 1, 'writes files to branch');
@@ -268,33 +272,35 @@ module('command runner', () => {
       'command:http://localhost:4201/test/',
       'Job 1 (collect-files) uses default realm concurrency group',
     );
-    // Job 2: patch lintStatus=in-progress — user realm
+    // TEMP: lint step skipped — the lintStatus=in-progress patch is not
+    // enqueued. Uncomment and shift indices below back up by 1 when the
+    // lint step is restored in command-runner.ts.
+    // assert.strictEqual(
+    //   (publishedJobs[1] as { concurrencyGroup: string }).concurrencyGroup,
+    //   'command:http://localhost:4201/test/',
+    //   'Job 2 (lintStatus in-progress) uses default realm concurrency group',
+    // );
+    // Job 2: patch lintStatus=passed — user realm
     assert.strictEqual(
       (publishedJobs[1] as { concurrencyGroup: string }).concurrencyGroup,
       'command:http://localhost:4201/test/',
-      'Job 2 (lintStatus in-progress) uses default realm concurrency group',
+      'Job 2 (lintStatus passed) uses default realm concurrency group',
     );
-    // Job 3: patch lintStatus=passed — user realm
+    // Job 3: create-pr-card — submissions realm
     assert.strictEqual(
       (publishedJobs[2] as { concurrencyGroup: string }).concurrencyGroup,
-      'command:http://localhost:4201/test/',
-      'Job 3 (lintStatus passed) uses default realm concurrency group',
+      `command:${SUBMISSION_REALM_URL}`,
+      'Job 3 (create-pr-card) uses submissions realm concurrency group',
     );
-    // Job 4: create-pr-card — submissions realm
+    // Job 4: prCard link patch — user realm
     assert.strictEqual(
       (publishedJobs[3] as { concurrencyGroup: string }).concurrencyGroup,
-      `command:${SUBMISSION_REALM_URL}`,
-      'Job 4 (create-pr-card) uses submissions realm concurrency group',
-    );
-    // Job 5: prCard link patch — user realm
-    assert.strictEqual(
-      (publishedJobs[4] as { concurrencyGroup: string }).concurrencyGroup,
       'command:http://localhost:4201/test/',
-      'Job 5 (prCard link patch) uses default realm concurrency group',
+      'Job 4 (prCard link patch) uses default realm concurrency group',
     );
 
     assert.deepEqual(
-      (publishedJobs[3] as { args: Record<string, unknown> }).args,
+      (publishedJobs[2] as { args: Record<string, unknown> }).args,
       {
         realmURL: SUBMISSION_REALM_URL,
         realmUsername: SUBMISSION_BOT_USER_ID,
@@ -316,7 +322,7 @@ module('command runner', () => {
       'enqueues PR card creation in submissions realm',
     );
     assert.deepEqual(
-      (publishedJobs[4] as { args: Record<string, unknown> }).args,
+      (publishedJobs[3] as { args: Record<string, unknown> }).args,
       {
         realmURL: 'http://localhost:4201/test/',
         realmUsername: '@alice:localhost',
@@ -396,7 +402,8 @@ module('command runner', () => {
               event_type: 'app.boxel.bot-trigger',
               content_type: 'pr-listing-create',
             },
-            command: '@cardstack/catalog/commands/collect-submission-files/default',
+            command:
+              '@cardstack/catalog/commands/collect-submission-files/default',
           },
         ],
       ],
@@ -495,7 +502,8 @@ module('command runner', () => {
               event_type: 'app.boxel.bot-trigger',
               content_type: 'pr-listing-create',
             },
-            command: '@cardstack/catalog/commands/collect-submission-files/default',
+            command:
+              '@cardstack/catalog/commands/collect-submission-files/default',
           },
         ],
       ],
@@ -554,7 +562,8 @@ module('command runner', () => {
     assert.strictEqual(openedPRs.length, 0, 'does not open pull request');
   });
 
-  test('patches prCreationError when create-pr-card fails after lint passes', async (assert) => {
+  // TEMP: Re-enable this test when lint is restored.
+  skip('patches prCreationError when create-pr-card fails after lint passes', async (assert) => {
     let submissionCardUrl =
       'http://localhost:4201/submissions/SubmissionWorkflowCard/abc-123';
     let publishedJobs: Array<{
@@ -719,8 +728,9 @@ module('command runner', () => {
       'compensating patch writes prCreationError',
     );
     assert.ok(
-      (lastArgs.commandInput.patch.attributes.prCreationError as string)
-        .startsWith('PR creation failed:'),
+      (
+        lastArgs.commandInput.patch.attributes.prCreationError as string
+      ).startsWith('PR creation failed:'),
       `prCreationError message is prefixed: ${lastArgs.commandInput.patch.attributes.prCreationError}`,
     );
     assert.notOk(

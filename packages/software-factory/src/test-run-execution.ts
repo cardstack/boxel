@@ -471,7 +471,7 @@ async function runQunitInBrowser(
     });
     setHtml(html);
 
-    log.info(
+    log.debug(
       `Serving QUnit page at ${testPageUrl} for realm ${options.targetRealmUrl}`,
     );
 
@@ -522,7 +522,7 @@ async function runQunitInBrowser(
     );
 
     let durationMs = Date.now() - start;
-    log.info(
+    log.debug(
       `QUnit completed in ${durationMs}ms: ${qunitResults.runEnd?.testCounts?.total ?? 0} test(s)`,
     );
 
