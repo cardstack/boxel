@@ -3,6 +3,8 @@ import enumField from 'https://cardstack.com/base/enum';
 
 import { IssueOptionField } from './issue-option';
 
+import type { Issue, Project } from './darkfactory';
+
 export interface Option {
   value: string;
   label: string;
@@ -90,22 +92,22 @@ export function buildIssueOptionFields(options: Option[]): IssueOptionField[] {
 }
 
 export const IssueStatusField = enumField(StringField, {
-  options: function (this: any) {
-    const opts = this.kanbanBoard?.issueStatusOptions;
+  options: function (this: Issue) {
+    const opts = this.project?.issueStatusOptions;
     return opts?.length ? opts : issueStatusOptions;
   },
 });
 
 export const IssueTypeField = enumField(StringField, {
-  options: function (this: any) {
-    const opts = this.kanbanBoard?.issueTypeOptions;
+  options: function (this: Issue) {
+    const opts = this.project?.issueTypeOptions;
     return opts?.length ? opts : issueTypeOptions;
   },
 });
 
 export const IssuePriorityField = enumField(StringField, {
-  options: function (this: any) {
-    const opts = this.kanbanBoard?.issuePriorityOptions;
+  options: function (this: Issue) {
+    const opts = this.project?.issuePriorityOptions;
     return opts?.length ? opts : issuePriorityOptions;
   },
 });
