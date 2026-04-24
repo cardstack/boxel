@@ -86,14 +86,14 @@ export async function completeLintResult(
 ): Promise<{ updated: boolean; error?: string }> {
   let readResult = await readCard(options.workspaceDir, `${lintResultId}.json`);
 
-  if (!readResult.ok || !readResult.content) {
+  if (!readResult.ok || !readResult.document) {
     return {
       updated: false,
       error: `Failed to read LintResult: ${readResult.error ?? 'not found'}`,
     };
   }
 
-  let document = JSON.parse(readResult.content) as LooseSingleCardDocument;
+  let document = readResult.document as unknown as LooseSingleCardDocument;
   let completionAttrs: Record<string, unknown> = {
     status: attrs.status,
     completedAt: new Date().toISOString(),

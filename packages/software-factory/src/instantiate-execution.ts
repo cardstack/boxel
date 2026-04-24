@@ -467,13 +467,13 @@ async function prepareExampleInstance(
     };
   }
 
-  if (!rawRead.ok || !rawRead.content) {
+  if (!rawRead.ok || !rawRead.document) {
     return {
       error: `Failed to read example "${exampleUrl}": ${rawRead.error ?? (rawRead.status === 404 ? 'not found in workspace' : 'unknown error')}`,
     };
   }
 
-  let parsedDoc = JSON.parse(rawRead.content) as Record<string, unknown>;
+  let parsedDoc = rawRead.document;
 
   // A readable `.json` file isn't guaranteed to be a card document — a
   // malformed fixture or a raw JSON payload could be missing `data`,

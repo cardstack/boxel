@@ -119,9 +119,7 @@ export class TestValidationStep implements ValidationStepRunner {
         );
         return {
           ok: result.ok,
-          document: result.content
-            ? (JSON.parse(result.content) as LooseSingleCardDocument)
-            : undefined,
+          document: result.document as LooseSingleCardDocument | undefined,
           error: result.error,
         };
       });
