@@ -679,7 +679,7 @@ export class Listing extends CardDef {
     }
 
     return {
-      label: 'Make a PR',
+      label: 'Submit to Catalog',
       action: async () => {
         await new CreateAndOpenSubmissionWorkflowCardCommand(
           params.commandContext,
