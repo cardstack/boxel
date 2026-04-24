@@ -57,7 +57,7 @@ export async function completeTestRun(
   let readResult: Awaited<ReturnType<typeof options.client.read>> | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
     readResult = await options.client.read(options.targetRealmUrl, testRunId);
-    if (readResult.ok && readResult.document) {
+    if (readResult.ok && readResult.content) {
       break;
     }
     if (attempt < 2) {
@@ -65,14 +65,14 @@ export async function completeTestRun(
     }
   }
 
-  if (!readResult?.ok || !readResult?.document) {
+  if (!readResult?.ok || !readResult?.content) {
     return {
       updated: false,
       error: `Failed to read TestRun: ${readResult?.error}`,
     };
   }
 
-  let document = readResult.document as unknown as LooseSingleCardDocument;
+  let document = JSON.parse(readResult.content) as LooseSingleCardDocument;
   let completionAttrs: Record<string, unknown> = {
     status: attrs.status,
     completedAt: new Date().toISOString(),
