@@ -623,6 +623,88 @@ module(basename(__filename), function () {
           );
         });
 
+        test('can write new instance with new module when instance comes first in the batch', async function (assert) {
+          // Regression test: the atomic batch loop iterates files in
+          // map order. If the instance comes before the module its
+          // adoptsFrom points at, fileSerialization would (without the
+          // module-first sort and the pre-serialization index flush)
+          // try to resolve the module from the modules cache before
+          // it's been indexed, throwing FilterRefersToNonexistentTypeError
+          // and rolling back the whole batch.
+          //
+          // Reorder is safe because the operations are atomic — the
+          // realm is free to write them in any order so long as the
+          // observable result is "all or nothing".
+          let source = `
+            import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+            export class Town extends CardDef {
+              static displayName = 'Town';
+              @field name = contains(StringField);
+            }
+            `.trim();
+          let doc = {
+            'atomic:operations': [
+              // Instance listed FIRST — module SECOND.
+              {
+                op: 'add',
+                href: 'town.json',
+                data: {
+                  type: 'card',
+                  attributes: {
+                    name: 'Petaling Jaya',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './town-modules/town.gts',
+                      name: 'Town',
+                    },
+                  },
+                },
+              },
+              {
+                op: 'add',
+                href: 'town-modules/town.gts',
+                data: {
+                  type: 'source',
+                  attributes: {
+                    content: source,
+                  },
+                  meta: {},
+                },
+              },
+            ],
+          };
+          let response = await request
+            .post('/_atomic')
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+            )
+            .send(JSON.stringify(doc));
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `expected 201, got ${response.status}: ${JSON.stringify(response.body)}`,
+          );
+          assert.strictEqual(response.body['atomic:results'].length, 2);
+          let cardResponse = await request
+            .get('/town')
+            .set('Accept', SupportedMimeType.CardJson);
+          let json = cardResponse.body as LooseSingleCardDocument;
+          assert.strictEqual(json.data.attributes?.name, 'Petaling Jaya');
+          let sourceResponse = await request
+            .get('/town-modules/town.gts')
+            .set('Accept', SupportedMimeType.CardSource);
+          assert.strictEqual(
+            sourceResponse.text.trim(),
+            source,
+            'the card source is correct',
+          );
+        });
+
         test('update is a no-op when content is unchanged', async function (assert) {
           let source = `
               import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
