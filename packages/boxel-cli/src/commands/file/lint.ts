@@ -1,19 +1,14 @@
 import type { Command } from 'commander';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import {
   getProfileManager,
+  NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from '../../lib/profile-manager';
-import { FG_RED, FG_YELLOW, DIM, RESET } from '../../lib/colors';
-
-const MIME = {
-  CardSource: 'application/vnd.card+source',
-  JSON: 'application/json',
-} as const;
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+import { FG_GREEN, FG_RED, FG_YELLOW, DIM, RESET } from '../../lib/colors';
+import { write } from './write';
 
 export interface LintMessage {
   ruleId: string | null;
@@ -26,9 +21,11 @@ export interface LintMessage {
 }
 
 export interface LintResult {
-  fixed: boolean;
-  output: string;
-  messages: LintMessage[];
+  ok: boolean;
+  error?: string;
+  fixed?: boolean;
+  output?: string;
+  messages?: LintMessage[];
 }
 
 export interface LintCommandOptions {
@@ -42,7 +39,7 @@ export interface LintCommandOptions {
  * `X-HTTP-Method-Override: QUERY` headers. Returns the lint result
  * containing messages and optionally auto-fixed output.
  *
- * Throws on HTTP errors (different from read/write which return error objects).
+ * Uses the per-realm JWT via `ProfileManager.authedRealmFetch`.
  */
 export async function lint(
   realmUrl: string,
@@ -53,40 +50,63 @@ export async function lint(
   let pm = options?.profileManager ?? getProfileManager();
   let active = pm.getActiveProfile();
   if (!active) {
-    throw new Error(
-      'No active profile. Run `boxel profile add` to create one.',
-    );
+    return {
+      ok: false,
+      error: NO_ACTIVE_PROFILE_ERROR,
+    };
   }
 
   let lintUrl = `${ensureTrailingSlash(realmUrl)}_lint`;
-  let response = await pm.authedRealmFetch(lintUrl, {
-    method: 'POST',
-    headers: {
-      Accept: MIME.JSON,
-      'Content-Type': MIME.CardSource,
-      'X-Filename': filename,
-      'X-HTTP-Method-Override': 'QUERY',
-    },
-    body: source,
-  });
 
-  if (!response.ok) {
-    let body = await response.text().catch(() => '(no body)');
-    throw new Error(
-      `_lint returned HTTP ${response.status}: ${body.slice(0, 300)}`,
-    );
+  try {
+    let response = await pm.authedRealmFetch(lintUrl, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': SupportedMimeType.CardSource,
+        'X-Filename': filename,
+        'X-HTTP-Method-Override': 'QUERY',
+      },
+      body: source,
+    });
+
+    if (!response.ok) {
+      let body = await response.text().catch(() => '(no body)');
+      return {
+        ok: false,
+        error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
+      };
+    }
+
+    let json = (await response.json()) as {
+      fixed: boolean;
+      output: string;
+      messages: LintMessage[];
+    };
+
+    return {
+      ok: true,
+      fixed: json.fixed,
+      output: json.output,
+      messages: json.messages,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
-
-  return (await response.json()) as LintResult;
 }
 
 interface LintCliOptions {
   realm: string;
   file?: string;
+  json?: boolean;
+  fix?: boolean;
 }
 
-export function registerLintCommand(file: Command): void {
-  file
+export function registerLintCommand(parent: Command): void {
+  parent
     .command('lint')
     .description('Lint a file in a realm using the realm lint endpoint')
     .argument('<path>', 'Realm-relative file path to lint (e.g., my-card.gts)')
@@ -95,7 +115,16 @@ export function registerLintCommand(file: Command): void {
       '--file <local-filepath>',
       'Read source from a local file instead of fetching from the realm',
     )
+    .option('--json', 'Output raw JSON response')
+    .option('--fix', 'Write auto-fixed output back to the source')
     .action(async (filePath: string, opts: LintCliOptions) => {
+      let pm = getProfileManager();
+      let active = pm.getActiveProfile();
+      if (!active) {
+        console.error(`${FG_RED}Error:${RESET} ${NO_ACTIVE_PROFILE_ERROR}`);
+        process.exit(1);
+      }
+
       let source: string;
 
       if (opts.file) {
@@ -108,13 +137,11 @@ export function registerLintCommand(file: Command): void {
           process.exit(1);
         }
       } else {
-        // Fetch source from realm using read
-        let pm = getProfileManager();
         let readUrl = new URL(filePath, ensureTrailingSlash(opts.realm)).href;
         try {
           let response = await pm.authedRealmFetch(readUrl, {
             method: 'GET',
-            headers: { Accept: MIME.CardSource },
+            headers: { Accept: SupportedMimeType.CardSource },
           });
           if (!response.ok) {
             let body = await response.text().catch(() => '(no body)');
@@ -134,7 +161,9 @@ export function registerLintCommand(file: Command): void {
 
       let result: LintResult;
       try {
-        result = await lint(opts.realm, source, filePath);
+        result = await lint(opts.realm, source, filePath, {
+          profileManager: pm,
+        });
       } catch (err) {
         console.error(
           `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
@@ -142,15 +171,50 @@ export function registerLintCommand(file: Command): void {
         process.exit(1);
       }
 
-      let errors = result.messages.filter((m) => m.severity === 2);
-      let warnings = result.messages.filter((m) => m.severity === 1);
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+        if (!result.ok) {
+          process.exit(1);
+        }
+        return;
+      }
 
-      if (result.messages.length === 0) {
+      if (!result.ok) {
+        console.error(`${FG_RED}Error:${RESET} ${result.error}`);
+        process.exit(1);
+      }
+
+      // Handle --fix: write fixed output back to the source
+      if (opts.fix && result.fixed && result.output) {
+        if (opts.file) {
+          writeFileSync(opts.file, result.output, 'utf-8');
+          console.log(`${FG_GREEN}Fixed:${RESET} ${opts.file}`);
+        } else {
+          let writeResult = await write(opts.realm, filePath, result.output, {
+            profileManager: pm,
+          });
+          if (!writeResult.ok) {
+            console.error(
+              `${FG_RED}Error:${RESET} Could not write fixed file: ${writeResult.error}`,
+            );
+            process.exit(1);
+          }
+          console.log(
+            `${FG_GREEN}Fixed:${RESET} ${filePath} ${DIM}→${RESET} ${opts.realm}`,
+          );
+        }
+      }
+
+      let messages = result.messages ?? [];
+      let errors = messages.filter((m) => m.severity === 2);
+      let warnings = messages.filter((m) => m.severity === 1);
+
+      if (messages.length === 0) {
         console.log(`${DIM}No lint issues found.${RESET}`);
         return;
       }
 
-      for (let msg of result.messages) {
+      for (let msg of messages) {
         let color = msg.severity === 2 ? FG_RED : FG_YELLOW;
         let level = msg.severity === 2 ? 'error' : 'warning';
         let rule = msg.ruleId ? ` (${msg.ruleId})` : '';
