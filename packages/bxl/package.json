@@ -93,11 +93,13 @@
     "release:dry": "npm pack --dry-run"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@types/node": "^20.11.0",
     "esbuild": "^0.20.0",
     "eslint": "^9.0.0",
     "happy-dom": "^14.0.0",
     "tsx": "^4.7.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "typescript-eslint": "^8.59.0"
   }
 }
