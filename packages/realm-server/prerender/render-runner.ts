@@ -45,12 +45,14 @@ const log = logger('prerenderer');
 const reproduceLog = logger('prerenderer-reproduce');
 const commandRequestStorageKeyPrefix = 'boxel-command-request:';
 
-// CS-10872: surfaces the per-stage wait breakdown from PagePool.getPage so
+// Surfaces the per-stage wait breakdown from PagePool.getPage so
 // operators can tell "waited for the render semaphore" (saturation) apart
-// from "waited for an affinity tab" (warm-tab serialization) apart from
-// "warmed a new tab". All three arrive tagged on every prerender response.
+// from "waited for the per-affinity file-admission cap" apart from
+// "waited for an affinity tab" (warm-tab serialization) apart from
+// "warmed a new tab". All four arrive tagged on every prerender response.
 export type LaunchWaits = {
   semaphoreMs: number;
+  admissionMs: number;
   tabQueueMs: number;
   tabStartupMs: number;
 };

@@ -789,7 +789,16 @@ export class Prerenderer {
               busy > 0
                 ? `, busy=file:${q.file}/module:${q.module}/command:${q.command}`
                 : '';
-            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail})`;
+            // File-admission backpressure. `pending` = file callers
+            // currently queued behind an exhausted semaphore. Only
+            // printed when the semaphore has been created (affinity
+            // has seen a file call) and something is actually waiting
+            // — idle admission stays out of the log.
+            let admissionDetail =
+              a.admission.cap > 0 && a.admission.pending > 0
+                ? `, admission=pending=${a.admission.pending}/cap=${a.admission.cap}`
+                : '';
+            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail}${admissionDetail})`;
           })
           .join(' ');
         log.info(

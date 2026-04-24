@@ -337,6 +337,14 @@ export class PagePool {
       // right now (queue types in use). Tabs without `currentQueue`
       // are idle. The counts sum to ≤ tabCount.
       byQueue: { file: number; module: number; command: number };
+      // Per-affinity file-admission state. `cap` is the semaphore's
+      // capacity (= max(1, affinity tab max − 1); when affinity tab
+      // max ≥ 2 this leaves at least one tab reserved for
+      // module/command work). `pending` is the number of file callers
+      // currently queued behind an exhausted semaphore waiting for a
+      // slot. Both are 0 when the semaphore hasn't been lazily created
+      // yet, or was deleted once it returned to idle.
+      admission: { pending: number; cap: number };
     }>;
   } {
     let totalTabs = 0;
@@ -348,6 +356,7 @@ export class PagePool {
       maxPending: number;
       idle: boolean;
       byQueue: { file: number; module: number; command: number };
+      admission: { pending: number; cap: number };
     }> = [];
     for (let [affinityKey, entries] of this.#affinityPages) {
       let tabCount = entries.size;
@@ -360,6 +369,10 @@ export class PagePool {
         if (p > maxPending) maxPending = p;
         if (entry.currentQueue) byQueue[entry.currentQueue]++;
       }
+      let sem = this.#fileAdmission.get(affinityKey);
+      let admission = sem
+        ? { pending: sem.pendingCount, cap: sem.capacity }
+        : { pending: 0, cap: 0 };
       totalTabs += tabCount;
       totalPending += pendingTotal;
       affinities.push({
@@ -369,6 +382,7 @@ export class PagePool {
         maxPending,
         idle: pendingTotal === 0,
         byQueue,
+        admission,
       });
     }
     return { totalTabs, totalPending, affinities };
@@ -418,11 +432,17 @@ export class PagePool {
     page: Page;
     reused: boolean;
     launchMs: number;
-    // CS-10872: per-stage breakdown so operators can tell "waited for
-    // the global render semaphore" (the CS-10820 saturation signal)
-    // apart from "waited behind the affinity's tab queue" apart from
-    // "warmed a new tab". All three are operationally different.
-    waits: { semaphoreMs: number; tabQueueMs: number; tabStartupMs: number };
+    // Per-stage breakdown so operators can tell "waited for the global
+    // render semaphore" (saturation) apart from "waited behind the
+    // per-affinity file-admission cap" apart from "waited behind the
+    // affinity's tab queue" apart from "warmed a new tab." All four
+    // are operationally distinct.
+    waits: {
+      semaphoreMs: number;
+      admissionMs: number;
+      tabQueueMs: number;
+      tabStartupMs: number;
+    };
     pageId: string;
     release: () => void;
   }> {
@@ -435,9 +455,15 @@ export class PagePool {
     // bypass admission — they're the ones a stuck file caller may be
     // waiting on.
     let releaseAdmission: (() => void) | undefined;
+    let admissionMs = 0;
     if (queue === 'file') {
+      let admissionStart = Date.now();
       releaseAdmission = await this.#acquireFileAdmission(affinityKey, signal);
+      admissionMs = Date.now() - admissionStart;
     }
+    // Every release path (success + the error paths below) funnels
+    // through `releaseAdmission?.()`, which already runs idle cleanup
+    // via the wrapper installed in `#acquireFileAdmission`.
     let startupStart = Date.now();
     try {
       await this.#ensureStandbyPool();
@@ -521,7 +547,7 @@ export class PagePool {
       pageId: entry.pageId,
       reused,
       launchMs: Date.now() - t0,
-      waits: { semaphoreMs, tabQueueMs, tabStartupMs },
+      waits: { semaphoreMs, admissionMs, tabQueueMs, tabStartupMs },
       release,
     };
   }
@@ -863,7 +889,31 @@ export class PagePool {
       semaphore = new AsyncSemaphore(capacity);
       this.#fileAdmission.set(affinityKey, semaphore);
     }
-    return semaphore.acquire(signal);
+    let rawRelease = await semaphore.acquire(signal);
+    // Wrap the raw release so every release path (success or any of
+    // `getPage`'s mid-setup error bailouts) also attempts idle cleanup
+    // of the semaphore map entry. Without this, an erroring file call
+    // would leave a permanently-idle semaphore in `#fileAdmission`
+    // until the next successful file call on the same affinity swept
+    // it away — bounded but not zero leak.
+    return () => {
+      rawRelease();
+      this.#maybeDropIdleFileAdmission(affinityKey);
+    };
+  }
+
+  // Called after each file release. Drops the semaphore entry for
+  // `affinityKey` only when no callers hold permits and no waiters
+  // are queued — safe because a subsequent file call on the same
+  // affinity lazy-creates a new semaphore with the same capacity.
+  // Keeps `#fileAdmission` bounded by the number of affinities
+  // currently serving a file call, not by total affinities ever seen.
+  #maybeDropIdleFileAdmission(affinityKey: string): void {
+    let semaphore = this.#fileAdmission.get(affinityKey);
+    if (!semaphore) return;
+    if (semaphore.inUseCount === 0 && semaphore.pendingCount === 0) {
+      this.#fileAdmission.delete(affinityKey);
+    }
   }
 
   #poolEntryCount(): number {

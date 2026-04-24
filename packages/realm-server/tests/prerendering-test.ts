@@ -1511,6 +1511,7 @@ module(basename(__filename), function () {
         );
         let waitsShape =
           typeof diagnostics?.waits?.semaphoreMs === 'number' &&
+          typeof diagnostics?.waits?.admissionMs === 'number' &&
           typeof diagnostics?.waits?.tabQueueMs === 'number' &&
           typeof diagnostics?.waits?.tabStartupMs === 'number';
         assert.true(
@@ -1629,6 +1630,7 @@ module(basename(__filename), function () {
           );
           let waitsShape =
             typeof diagnostics?.waits?.semaphoreMs === 'number' &&
+            typeof diagnostics?.waits?.admissionMs === 'number' &&
             typeof diagnostics?.waits?.tabQueueMs === 'number' &&
             typeof diagnostics?.waits?.tabStartupMs === 'number';
           assert.true(waitsShape, 'diagnostics.waits breakdown populated');
@@ -4699,6 +4701,211 @@ module(basename(__filename), function () {
           }
         });
 
+        test('waits.admissionMs reports time spent in the file-admission queue', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            let first = await pool.getPage('realm-a', 'file');
+            assert.strictEqual(
+              first.waits.admissionMs,
+              0,
+              'first file call does not wait for admission (slot available)',
+            );
+
+            // Second file call blocks on the admission semaphore (cap=1
+            // at tabMax=2). Release the first after a short hold; the
+            // second's admissionMs should reflect that hold.
+            let holdMs = 20;
+            let secondPromise = pool.getPage('realm-a', 'file');
+            setTimeout(() => first.release(), holdMs);
+            let second = await secondPromise;
+            assert.ok(
+              second.waits.admissionMs >= holdMs - 5,
+              `second file call reports admissionMs ≥ ${holdMs}ms (actual: ${second.waits.admissionMs})`,
+            );
+            second.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('module / command calls bypass admission, waits.admissionMs is zero', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            // Hold the only admission slot with a file call.
+            let fileLease = await pool.getPage('realm-a', 'file');
+
+            // Module / command calls bypass admission and land immediately.
+            let moduleLease = await pool.getPage('realm-a', 'module');
+            assert.strictEqual(
+              moduleLease.waits.admissionMs,
+              0,
+              'module call skips admission entirely',
+            );
+            moduleLease.release();
+
+            let commandLease = await pool.getPage('realm-a', 'command');
+            assert.strictEqual(
+              commandLease.waits.admissionMs,
+              0,
+              'command call skips admission entirely',
+            );
+            commandLease.release();
+
+            fileLease.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('getQueueDepthSnapshot reports per-affinity admission pending/cap', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            // Before any file call has hit this affinity, admission
+            // semaphore hasn't been lazily created. Snapshot reports
+            // cap=0, pending=0 so operators can distinguish "admission
+            // not configured for this affinity yet" from "cap is 0".
+            let first = await pool.getPage('realm-a', 'file');
+            let snap1 = pool.getQueueDepthSnapshot();
+            let a1 = snap1.affinities.find((a) => a.affinityKey === 'realm-a');
+            assert.ok(a1, 'realm-a shows up in snapshot');
+            assert.strictEqual(
+              a1!.admission.cap,
+              1,
+              'admission cap = affinityTabMax − 1',
+            );
+            assert.strictEqual(
+              a1!.admission.pending,
+              0,
+              'no admission waiters when only caller holds the slot',
+            );
+
+            // Second file call blocks on admission. Snapshot should
+            // report one pending waiter.
+            let secondPromise = pool.getPage('realm-a', 'file');
+            await new Promise((r) => setTimeout(r, 10));
+            let snap2 = pool.getQueueDepthSnapshot();
+            let a2 = snap2.affinities.find((a) => a.affinityKey === 'realm-a');
+            assert.strictEqual(
+              a2!.admission.pending,
+              1,
+              'one waiter queued behind the exhausted admission semaphore',
+            );
+
+            first.release();
+            let second = await secondPromise;
+            second.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('idle file-admission semaphore is dropped so the map does not grow unbounded', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            // While a file call holds admission, the semaphore is
+            // present in the snapshot with a non-zero cap.
+            let lease = await pool.getPage('realm-a', 'file');
+            let busySnap = pool.getQueueDepthSnapshot();
+            let busyAffinity = busySnap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              busyAffinity!.admission.cap,
+              1,
+              'semaphore is present while a file call holds admission',
+            );
+
+            // After release and with no waiters, the semaphore is
+            // idle. It should be dropped so the map stays bounded by
+            // affinities currently serving a file call, not by total
+            // affinities ever seen.
+            lease.release();
+            let idleSnap = pool.getQueueDepthSnapshot();
+            let idleAffinity = idleSnap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              idleAffinity!.admission.cap,
+              0,
+              'semaphore is dropped once in-use and pending both return to 0',
+            );
+            assert.strictEqual(
+              idleAffinity!.admission.pending,
+              0,
+              'no waiters on the dropped semaphore',
+            );
+
+            // A fresh file call on the same affinity lazy-creates a
+            // new semaphore — cheap, and the admission cap is
+            // recomputed from the current affinityTabMax.
+            let next = await pool.getPage('realm-a', 'file');
+            let reusedSnap = pool.getQueueDepthSnapshot();
+            let reusedAffinity = reusedSnap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              reusedAffinity!.admission.cap,
+              1,
+              'subsequent file call lazy-creates a fresh semaphore',
+            );
+            next.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
         test('prefers idle tab aligned to realm over standby tabs', async function (assert) {
           let { pool } = makeStubPagePool({ maxPages: 2 });
           await pool.warmStandbys();
@@ -5513,7 +5720,12 @@ module(basename(__filename), function () {
             timings: {
               launchMs: 0,
               renderMs: 1,
-              waits: { semaphoreMs: 0, tabQueueMs: 0, tabStartupMs: 0 },
+              waits: {
+                semaphoreMs: 0,
+                admissionMs: 0,
+                tabQueueMs: 0,
+                tabStartupMs: 0,
+              },
             },
             pool: {
               pageId: `page-${attemptCount}`,
@@ -5614,7 +5826,12 @@ module(basename(__filename), function () {
             timings: {
               launchMs: 0,
               renderMs: 1,
-              waits: { semaphoreMs: 0, tabQueueMs: 0, tabStartupMs: 0 },
+              waits: {
+                semaphoreMs: 0,
+                admissionMs: 0,
+                tabQueueMs: 0,
+                tabStartupMs: 0,
+              },
             },
             pool: {
               pageId: `page-${attemptCount}`,
@@ -5724,7 +5941,12 @@ module(basename(__filename), function () {
             timings: {
               launchMs: 0,
               renderMs: 1,
-              waits: { semaphoreMs: 0, tabQueueMs: 0, tabStartupMs: 0 },
+              waits: {
+                semaphoreMs: 0,
+                admissionMs: 0,
+                tabQueueMs: 0,
+                tabStartupMs: 0,
+              },
             },
             pool: {
               pageId: `page-${attemptCount}`,
