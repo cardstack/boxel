@@ -1838,6 +1838,200 @@ module(basename(__filename), function () {
       );
     });
 
+    test('invalidate of one module does not discard in-flight prerender for an unrelated module in the same realm', async function (assert) {
+      // Per-module generation scoping regression guard: a realm-wide bump
+      // would spuriously discard the unrelated in-flight's result.
+      await dbAdapter.execute('DELETE FROM modules');
+
+      let moduleInvalidated = `${realmURL}scoped-invalidate-target.gts`;
+      let moduleUnaffected = `${realmURL}scoped-invalidate-bystander.gts`;
+      let calls = 0;
+      let releaseGate!: () => void;
+      let gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          await gate;
+          let name =
+            args.url === moduleUnaffected ? 'ScopedBystander' : 'ScopedTarget';
+          return buildModuleResponse(args.url, name, []);
+        },
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      // Bystander's prerender is in-flight.
+      let pBystander = lookup.lookupDefinition({
+        module: moduleUnaffected,
+        name: 'ScopedBystander',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Invalidate a DIFFERENT module in the same realm. With realm-wide
+      // bumps this would trip the bystander's generation check; with
+      // per-module bumps scoped to uniqueInvalidations, it shouldn't.
+      await lookup.invalidate(moduleInvalidated);
+
+      releaseGate();
+      let definition = await pBystander;
+      assert.strictEqual(
+        definition?.displayName,
+        'ScopedBystander',
+        'bystander persisted normally — invalidate scope respected',
+      );
+      assert.strictEqual(calls, 1);
+
+      let rows = (await dbAdapter.execute(
+        `SELECT url FROM modules WHERE url = $1`,
+        { bind: [moduleUnaffected] },
+      )) as { url: string }[];
+      assert.strictEqual(
+        rows.length,
+        1,
+        'bystander row is persisted, not spuriously discarded',
+      );
+    });
+
+    test('a settled in-flight promise does not delete a newer in-flight under the same key', async function (assert) {
+      // Identity-check regression guard. Without the identity check in
+      // loadModuleCacheEntry's .finally, A's settle would delete B's
+      // freshly-installed entry and cause D to race a third prerender.
+      await dbAdapter.execute('DELETE FROM modules');
+
+      let moduleURL = `${realmURL}identity-check.gts`;
+      let calls = 0;
+      let gates: Array<{ release: () => void; promise: Promise<void> }> = [];
+
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          let release!: () => void;
+          let promise = new Promise<void>((resolve) => {
+            release = resolve;
+          });
+          gates.push({ release, promise });
+          await promise;
+          return buildModuleResponse(args.url, 'Identity', []);
+        },
+      };
+
+      // setTimeout(0) is not reliable here: readFromDatabaseCache runs on
+      // the I/O phase of the event loop, which fires after timers, so a
+      // single macrotask yield can return before A has entered the
+      // prerender mock. Poll until the expected number of prerenders have
+      // started, with a generous bound for slow test environments.
+      let waitForCalls = async (expected: number): Promise<void> => {
+        let deadline = Date.now() + 5000;
+        while (calls < expected) {
+          if (Date.now() > deadline) {
+            throw new Error(
+              `waitForCalls timed out: expected ${expected}, saw ${calls}`,
+            );
+          }
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      // A enters #inFlight; parks at gates[0].
+      let pA = lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'Identity',
+      });
+      await waitForCalls(1);
+
+      // invalidate drops A's #inFlight entry synchronously.
+      await lookup.invalidate(moduleURL);
+
+      // B re-enters #inFlight under the same key with a fresh pending.
+      let pB = lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'Identity',
+      });
+      await waitForCalls(2);
+
+      // C joins B's pending (same key, B is still in-flight).
+      let pC = lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'Identity',
+      });
+      // Give C a chance to either coalesce or start its own prerender.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.strictEqual(
+        calls,
+        2,
+        'C coalesced into B without adding a prerender',
+      );
+
+      // Settle A. Its .finally must NOT delete B's entry.
+      gates[0].release();
+      await Promise.allSettled([pA]);
+
+      // D should STILL coalesce into B. If A's finally deleted B's entry,
+      // D would create a third prerender here.
+      let pD = lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'Identity',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.strictEqual(
+        calls,
+        2,
+        "D coalesced into B — A's settle did not delete B's #inFlight entry",
+      );
+
+      // Release B; everyone converges.
+      gates[1].release();
+      let [rB, rC, rD] = await Promise.allSettled([pB, pC, pD]);
+      assert.strictEqual(rB.status, 'fulfilled');
+      assert.strictEqual(rC.status, 'fulfilled');
+      assert.strictEqual(rD.status, 'fulfilled');
+    });
+
     test('in-flight prerender persists normally when no invalidate runs', async function (assert) {
       // Regression guard against the generation check skipping persist
       // in the happy path (no concurrent invalidation).

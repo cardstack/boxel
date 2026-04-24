@@ -93,6 +93,18 @@ function inFlightKey(args: {
   return `${args.resolvedRealmURL}|${args.moduleURL}|${args.cacheScope}|${args.cacheUserId}`;
 }
 
+// Module-generation key. Intentionally keyed on (realm, moduleURL) — not
+// (realm, moduleURL, scope, user) — because the invalidation paths that
+// bump it don't discriminate by cache scope or auth user (they delete all
+// rows for the URL), so every scope/user combo for the same URL shares
+// one counter.
+function moduleGenerationKey(
+  resolvedRealmURL: string,
+  moduleURL: string,
+): string {
+  return `${resolvedRealmURL}|${moduleURL}`;
+}
+
 function parseJsonValue<T>(value: T | string | null): T | null {
   if (value == null) {
     return null;
@@ -201,16 +213,22 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   #inFlight = new Map<string, Promise<ModuleCacheEntry | undefined>>();
   // Invalidation generations. Bumped synchronously by invalidate /
   // clearRealmCache / clearAllModules before the DB delete.
-  // loadModuleCacheEntryUncached snapshots both values at entry and
-  // re-checks them just before persist; if either changed, the in-flight
+  // loadModuleCacheEntryUncached snapshots all three values at entry and
+  // re-checks them just before persist; if any changed, the in-flight
   // prerender's result is discarded rather than re-inserted, so the cache
   // wipe isn't undone by a prerender that started against pre-invalidation
-  // state. Two scopes:
-  //   - #generations: per-realm; bumped by per-realm invalidation paths.
-  //   - #globalGeneration: bumped only by clearAllModules so an in-flight
-  //     for a realm that hasn't been invalidated individually still
-  //     observes the wipe (the per-realm counter would miss it).
-  #generations = new Map<string, number>();
+  // state. Three scopes, matching the three invalidation paths exactly:
+  //   - #moduleGenerations: keyed by `${resolvedRealmURL}|${moduleURL}`;
+  //     bumped by invalidate() for each URL in its fan-out. Scoping to the
+  //     specific URLs avoids spuriously discarding an in-flight prerender
+  //     for an unrelated module in the same realm.
+  //   - #realmGenerations: keyed by `resolvedRealmURL`; bumped by
+  //     clearRealmCache() so every in-flight prerender for that realm is
+  //     invalidated, including modules not yet in #moduleGenerations.
+  //   - #globalGeneration: bumped by clearAllModules() so every in-flight
+  //     prerender is invalidated regardless of realm or module URL.
+  #moduleGenerations = new Map<string, number>();
+  #realmGenerations = new Map<string, number>();
   #globalGeneration = 0;
 
   constructor(
@@ -311,8 +329,17 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     if (existing) {
       return await existing;
     }
-    let pending = this.loadModuleCacheEntryUncached(args).finally(() => {
-      this.#inFlight.delete(key);
+    let pending: Promise<ModuleCacheEntry | undefined>;
+    pending = this.loadModuleCacheEntryUncached(args).finally(() => {
+      // Identity-check before deletion: an invalidation path may have
+      // dropped our entry mid-flight, after which a newer caller can
+      // install their own pending under the same key. Deleting
+      // unconditionally would remove that newer entry and break coalescing
+      // for its subsequent waiters. We only clean up if the map still
+      // points at *this* pending promise.
+      if (this.#inFlight.get(key) === pending) {
+        this.#inFlight.delete(key);
+      }
     });
     this.#inFlight.set(key, pending);
     return await pending;
@@ -333,15 +360,15 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheUserId: string;
     prerenderUserId: string;
   }): Promise<ModuleCacheEntry | undefined> {
-    // Snapshot the realm's invalidation generation BEFORE the first await.
+    // Snapshot invalidation generations BEFORE the first await.
     // clearRealmCache (and any future synchronous bump) runs entirely before
     // its first await, so a snapshot taken after an await above would already
     // include the bump and silently match at persist time. Invalidate happens
     // to await before bumping, so this point of failure is asymmetric — but
     // we want both paths to be caught uniformly, so the safe place is entry.
     // If the cache-hit short-circuits below, we never use this snapshot,
-    // which is fine — capturing it is a Map.get + struct allocation.
-    let startSnapshot = this.snapshotGeneration(resolvedRealmURL);
+    // which is fine — capturing it is a few Map.get calls + struct alloc.
+    let startSnapshot = this.snapshotGeneration(resolvedRealmURL, moduleURL);
 
     let cached = await this.readFromDatabaseCache(
       moduleURL,
@@ -376,7 +403,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       ) {
         continue;
       }
-      if (this.generationChanged(resolvedRealmURL, startSnapshot)) {
+      if (this.generationChanged(resolvedRealmURL, moduleURL, startSnapshot)) {
         // Invalidate (or a wider cache wipe) ran while we were prerendering.
         // Discard our now-stale result rather than re-inserting it. Fall
         // back to whatever the DB currently has — undefined if the wipe
@@ -400,30 +427,49 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return undefined;
   }
 
-  private snapshotGeneration(resolvedRealmURL: string): {
-    perRealm: number;
-    global: number;
-  } {
+  private snapshotGeneration(
+    resolvedRealmURL: string,
+    moduleURL: string,
+  ): { module: number; realm: number; global: number } {
     return {
-      perRealm: this.#generations.get(resolvedRealmURL) ?? 0,
+      module:
+        this.#moduleGenerations.get(
+          moduleGenerationKey(resolvedRealmURL, moduleURL),
+        ) ?? 0,
+      realm: this.#realmGenerations.get(resolvedRealmURL) ?? 0,
       global: this.#globalGeneration,
     };
   }
 
   private generationChanged(
     resolvedRealmURL: string,
-    snapshot: { perRealm: number; global: number },
+    moduleURL: string,
+    snapshot: { module: number; realm: number; global: number },
   ): boolean {
     return (
-      (this.#generations.get(resolvedRealmURL) ?? 0) !== snapshot.perRealm ||
+      (this.#moduleGenerations.get(
+        moduleGenerationKey(resolvedRealmURL, moduleURL),
+      ) ?? 0) !== snapshot.module ||
+      (this.#realmGenerations.get(resolvedRealmURL) ?? 0) !== snapshot.realm ||
       this.#globalGeneration !== snapshot.global
     );
   }
 
-  private bumpGeneration(resolvedRealmURL: string): void {
-    this.#generations.set(
+  private bumpModuleGeneration(
+    resolvedRealmURL: string,
+    moduleURL: string,
+  ): void {
+    let key = moduleGenerationKey(resolvedRealmURL, moduleURL);
+    this.#moduleGenerations.set(
+      key,
+      (this.#moduleGenerations.get(key) ?? 0) + 1,
+    );
+  }
+
+  private bumpRealmGeneration(resolvedRealmURL: string): void {
+    this.#realmGenerations.set(
       resolvedRealmURL,
-      (this.#generations.get(resolvedRealmURL) ?? 0) + 1,
+      (this.#realmGenerations.get(resolvedRealmURL) ?? 0) + 1,
     );
   }
 
@@ -564,19 +610,26 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       );
     }
     let uniqueInvalidations = [...new Set(invalidations)];
-    // Order matters: bump generation + drop in-flight synchronously BEFORE
-    // awaiting the DB delete. Any in-flight prerender that completes
-    // between this point and the DELETE commit will see the new generation
-    // when it's about to persist and will discard its result instead of
-    // re-inserting a row that this invalidation just removed.
-    this.bumpGeneration(resolvedRealmURL);
+    // Order matters: bump the affected modules' generations + drop in-flight
+    // synchronously BEFORE awaiting the DB delete. Any in-flight prerender
+    // for one of these URLs that completes between this point and the
+    // DELETE commit will see the new generation at persist time and discard
+    // its result instead of re-inserting a row that this invalidation just
+    // removed. Scoping to uniqueInvalidations (rather than the whole realm)
+    // leaves unrelated in-flight prerenders in the same realm untouched —
+    // their generations are unchanged, their persists proceed normally.
+    for (let invalidatedURL of uniqueInvalidations) {
+      this.bumpModuleGeneration(resolvedRealmURL, invalidatedURL);
+    }
     this.dropInFlightForRealm(resolvedRealmURL, uniqueInvalidations);
     await this.deleteModuleAliases(resolvedRealmURL, uniqueInvalidations);
     return uniqueInvalidations;
   }
 
   async clearRealmCache(resolvedRealmURL: string): Promise<void> {
-    this.bumpGeneration(resolvedRealmURL);
+    // Realm-scope bump: every in-flight prerender for this realm (any
+    // module URL, any scope/user) sees the mismatch at persist time.
+    this.bumpRealmGeneration(resolvedRealmURL);
     this.dropInFlightForRealm(resolvedRealmURL);
     await this.query([
       'DELETE FROM',
@@ -598,11 +651,16 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   // be valid after a cache wipe, so post-invalidation callers don't join a
   // pre-invalidation promise. If `moduleURLs` is provided, only entries
   // under that realm matching one of those URLs are dropped; otherwise every
-  // in-flight entry for the realm is dropped. The already-running promises
-  // still complete (we can't cancel the prerender) and may re-persist a now-
-  // stale row, but that race is narrower than before and self-heals on the
-  // next fresh prerender. What this fully prevents is waiters joining the
-  // stale promise after the invalidation returned.
+  // in-flight entry for the realm is dropped. The already-running prerender
+  // round-trip cannot be cancelled and still completes, but because the
+  // invalidation path also bumps the module / realm / global generation
+  // synchronously before awaiting the DB delete, the in-flight's generation
+  // check in loadModuleCacheEntryUncached observes the bump before
+  // persistModuleCacheEntry runs and discards the result via
+  // readFromDatabaseCache instead of repopulating the cleared row. This
+  // drop step is the in-flight-map half of the same fix: it ensures new
+  // callers arriving after the invalidation don't attach to the now-
+  // soon-to-be-discarded promise.
   private dropInFlightForRealm(
     resolvedRealmURL: string,
     moduleURLs?: string[],
