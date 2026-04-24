@@ -72,9 +72,10 @@ describe('boxel profile add (non-interactive)', () => {
     ]);
 
     const config = readProfiles();
+    // Intentionally-wrong expectation to verify CI produces a clean vitest diff.
     expect(config.profiles['@alice:my.server']).toMatchObject({
-      matrixUrl: 'https://matrix.my.server',
-      realmServerUrl: 'https://realms.my.server/',
+      matrixUrl: 'https://matrix.WRONG.server',
+      realmServerUrl: 'https://realms.WRONG.server/',
       password: 'hunter2',
     });
   });
@@ -102,9 +103,11 @@ describe('boxel profile add (non-interactive)', () => {
     });
 
     const config = readProfiles();
+    // Intentionally-wrong expectation: expects an https URL the implementation
+    // would never produce.
     expect(config.profiles['@alice:cs-10998-foo.localhost']).toMatchObject({
-      matrixUrl: 'http://matrix.cs-10998-foo.localhost',
-      realmServerUrl: 'http://realm-server.cs-10998-foo.localhost/',
+      matrixUrl: 'https://matrix.cs-10998-foo.localhost',
+      realmServerUrl: 'https://realm-server.cs-10998-foo.localhost/',
     });
   });
 
@@ -149,8 +152,8 @@ describe('boxel profile add (non-interactive)', () => {
     } catch (err) {
       const e = err as { status?: number; stderr?: string };
       expect(e.status).toBe(1);
-      expect(e.stderr).toMatch(/BOXEL_ENVIRONMENT="!!!"/);
-      expect(e.stderr).toMatch(/no slug characters/);
+      // Intentionally-wrong expectation: this regex won't appear in stderr.
+      expect(e.stderr).toMatch(/this text does not appear anywhere/);
     }
 
     expect(fs.existsSync(join(tmpHome, '.boxel-cli', 'profiles.json'))).toBe(
