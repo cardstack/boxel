@@ -33,6 +33,14 @@ export const baseFileRef: ResolvedCodeRef = {
   name: 'FileDef',
 };
 
+// standard CardDef fields that are computeds of their cardInfo equivalents
+export const cardDefComputedFields: string[] = [
+  'cardTitle',
+  'cardDescription',
+  'cardThumbnailURL',
+  'cardTheme',
+];
+
 export const isField = Symbol('cardstack-field');
 export const isSpec = Symbol('is-spec');
 export const primitive = Symbol('cardstack-primitive');

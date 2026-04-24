@@ -18,6 +18,7 @@ import { validate as uuidValidate } from 'uuid';
 import {
   baseRealm,
   CachingDefinitionLookup,
+  cardDefComputedFields,
   ensureTrailingSlash,
   getCreatedTime,
   IndexWriter,
@@ -107,6 +108,8 @@ export {
 } from '@cardstack/host/lib/utils';
 
 const { sqlSchema } = ENV;
+
+export const cardDefFieldCount = cardDefComputedFields?.length + 1; // standard computeds + `cardInfo`
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 type ModuleHooks = {

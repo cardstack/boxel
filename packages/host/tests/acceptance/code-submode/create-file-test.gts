@@ -33,6 +33,7 @@ import {
   type TestContextWithSave,
   setupAuthEndpoints,
   setupUserSubscription,
+  cardDefFieldCount,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -809,8 +810,8 @@ export class TrèsTestCard extends CardDef {
         );
       assert
         .dom('[data-test-total-fields]')
-        .containsText('4')
-        .hasAttribute('title', '4 fields');
+        .containsText(`${cardDefFieldCount}`)
+        .hasAttribute('title', `${cardDefFieldCount} fields`);
     });
 
     test<TestContextWithSave>('can create a new card definition in same realm as inherited definition', async function (assert) {

@@ -48,6 +48,7 @@ import {
   type TestContextWithSave,
   setMonacoContent,
   withCachedRealmSetup,
+  cardDefFieldCount,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -228,6 +229,8 @@ const inThisFileSource = `
 
   export default class DefaultClass {}
 `;
+
+const exportedCardFieldCount = `${cardDefFieldCount + 1}`; // standard field count + own field
 
 const commandModuleSource = `
   import { Command } from '@cardstack/runtime-common';
@@ -802,7 +805,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         `[data-test-card-schema="exported card"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
       )
       .exists();
-    assert.dom(`[data-test-total-fields]`).containsText('5');
+    assert.dom(`[data-test-total-fields]`).containsText(exportedCardFieldCount);
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
 
     // clicking on a field
@@ -1878,7 +1881,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .exists({ count: 1 });
     assert.dom(`[data-test-card-schema="local parent"]`).exists();
     assert.dom(`[data-test-card-schema="local grandparent"]`).exists();
-    assert.dom(`[data-test-total-fields]`).containsText('4');
+    assert.dom(`[data-test-total-fields]`).containsText(`${cardDefFieldCount}`);
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
     assert.true(monacoService.getLineCursorOn()?.includes('GrandParent'));
 
@@ -2075,7 +2078,7 @@ export class TestCard extends ExportedCard {
     assert
       .dom('[data-test-card-schema]')
       .exists({ count: 4 }, 'the card hierarchy is displayed in schema editor');
-    assert.dom('[data-test-total-fields]').containsText('5');
+    assert.dom('[data-test-total-fields]').containsText(exportedCardFieldCount);
 
     // assert modal state is cleared
     await settled();
@@ -2280,7 +2283,7 @@ export class ExportedCard extends ExportedCardParent {
     assert
       .dom('[data-test-card-schema]')
       .exists({ count: 4 }, 'the card hierarchy is displayed in schema editor');
-    assert.dom('[data-test-total-fields]').containsText('5');
+    assert.dom('[data-test-total-fields]').containsText(exportedCardFieldCount);
   });
 
   test('field error message displays if you try to inherit using a filename that already exists', async function (assert) {

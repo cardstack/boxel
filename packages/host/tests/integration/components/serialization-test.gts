@@ -69,6 +69,8 @@ import {
   EthereumAddressField,
   RichMarkdownField,
   getFields,
+  Theme,
+  CardInfoField,
 } from '../../helpers/base-realm';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -3263,6 +3265,7 @@ module('Integration | serialization', function (hooks) {
             links: { self: `${testRealmURL}Pet/mango` },
             data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
           },
+          cardTheme: { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -3282,6 +3285,9 @@ module('Integration | serialization', function (hooks) {
             cardDescription: 'Pet',
             cardThumbnailURL: '../pet.svg',
             cardInfo,
+          },
+          relationships: {
+            cardTheme: { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -3307,6 +3313,7 @@ module('Integration | serialization', function (hooks) {
             },
             friend: { links: { self: null } },
             friendPet: { links: { self: null } },
+            cardTheme: { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -3470,6 +3477,7 @@ module('Integration | serialization', function (hooks) {
             pet: { links: { self: null } },
             friend: { links: { self: null } },
             friendPet: { links: { self: null } },
+            cardTheme: { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -3584,6 +3592,27 @@ module('Integration | serialization', function (hooks) {
       assert.deepEqual(friendPetRel, {
         type: 'loaded',
         card: null,
+      });
+    });
+
+    test('can serialize CardDef.cardTheme as a non-null computed linksTo', async function (assert) {
+      class Article extends CardDef {}
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: { 'test-cards.gts': { Article } },
+      });
+      let theme = new Theme();
+      await saveCard(theme, `${testRealmURL}Theme/ocean-blue`, loader);
+      let article = new Article({
+        cardInfo: new CardInfoField({ theme }),
+      });
+      let serialized = serializeCard(article, {
+        includeComputeds: true,
+        includeUnrenderedFields: true,
+      });
+      assert.deepEqual(serialized.data.relationships?.cardTheme, {
+        links: { self: `${testRealmURL}Theme/ocean-blue` },
+        data: { id: `${testRealmURL}Theme/ocean-blue`, type: 'card' },
       });
     });
   });
@@ -5646,6 +5675,11 @@ module('Integration | serialization', function (hooks) {
               self: null,
             },
           },
+          cardTheme: {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -7030,6 +7064,7 @@ module('Integration | serialization', function (hooks) {
             links: { self: `${testRealmURL}Pet/van-gogh` },
             data: { id: `${testRealmURL}Pet/van-gogh`, type: 'card' },
           },
+          cardTheme: { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -7050,6 +7085,9 @@ module('Integration | serialization', function (hooks) {
             cardThumbnailURL: null,
             cardInfo,
           },
+          relationships: {
+            cardTheme: { links: { self: null } },
+          },
           meta: {
             adoptsFrom: {
               module: rri(`${testRealmURL}test-cards`),
@@ -7066,6 +7104,9 @@ module('Integration | serialization', function (hooks) {
             cardDescription: null,
             cardThumbnailURL: null,
             cardInfo,
+          },
+          relationships: {
+            cardTheme: { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -7093,6 +7134,7 @@ module('Integration | serialization', function (hooks) {
               links: { self: `${testRealmURL}Pet/van-gogh` },
               data: { id: `${testRealmURL}Pet/van-gogh`, type: 'card' },
             },
+            cardTheme: { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -7271,6 +7313,7 @@ module('Integration | serialization', function (hooks) {
           relationships: {
             friend: { links: { self: null } },
             friendPets: { links: { self: null } },
+            cardTheme: { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -7446,6 +7489,7 @@ module('Integration | serialization', function (hooks) {
           data: { type: 'card', id: `${testRealmURL}Friend/hassan` },
         },
         friendPets: { links: { self: null } },
+        cardTheme: { links: { self: null } },
         'ownPets.0': {
           links: { self: `${testRealmURL}Pet/mango` },
           data: { type: 'card', id: `${testRealmURL}Pet/mango` },
