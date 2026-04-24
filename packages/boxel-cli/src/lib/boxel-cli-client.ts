@@ -5,6 +5,10 @@ import {
   type LintMessage,
 } from '../commands/file/lint';
 import {
+  listFiles as coreListFiles,
+  type ListFilesResult,
+} from '../commands/file/list';
+import {
   readTranspiledModule,
   type ReadTranspiledResult,
 } from '../commands/read-transpiled';
@@ -12,8 +16,9 @@ import { write as coreWrite, type WriteResult } from '../commands/file/write';
 import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { pull as realmPull } from '../commands/realm/pull';
 import { getProfileManager, type ProfileManager } from './profile-manager';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-export type { ReadTranspiledResult };
+export type { ListFilesResult, ReadTranspiledResult };
 
 const MIME = {
   CardSource: 'application/vnd.card+source',
@@ -21,10 +26,6 @@ const MIME = {
   JSON: 'application/json',
   JSONAPI: 'application/vnd.api+json',
 } as const;
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
 
 export interface CreateRealmOptions {
   /** URL slug for the realm (lowercase, numbers, hyphens). */
@@ -70,11 +71,6 @@ export interface SearchResult {
   ok: boolean;
   status?: number;
   data?: Record<string, unknown>[];
-  error?: string;
-}
-
-export interface ListFilesResult {
-  filenames: string[];
   error?: string;
 }
 
@@ -268,49 +264,7 @@ export class BoxelCLIClient {
    * Returns relative paths (e.g., `hello.gts`, `Cards/my-card.json`).
    */
   async listFiles(realmUrl: string): Promise<ListFilesResult> {
-    let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
-    let mtimesUrl = `${normalizedRealmUrl}_mtimes`;
-
-    try {
-      let response = await this.pm.authedRealmFetch(mtimesUrl, {
-        method: 'GET',
-        headers: { Accept: MIME.JSONAPI },
-      });
-
-      if (!response.ok) {
-        let body = await response.text();
-        return {
-          filenames: [],
-          error: `_mtimes returned HTTP ${response.status}: ${body.slice(0, 300)}`,
-        };
-      }
-
-      let json = (await response.json()) as {
-        data?: { attributes?: { mtimes?: Record<string, number> } };
-      };
-      let mtimes =
-        json?.data?.attributes?.mtimes ??
-        (json as unknown as Record<string, number>);
-
-      let filenames: string[] = [];
-      for (let fullUrl of Object.keys(mtimes)) {
-        if (!fullUrl.startsWith(normalizedRealmUrl)) {
-          continue;
-        }
-        let relativePath = fullUrl.slice(normalizedRealmUrl.length);
-        if (!relativePath || relativePath.endsWith('/')) {
-          continue;
-        }
-        filenames.push(relativePath);
-      }
-
-      return { filenames: filenames.sort() };
-    } catch (err) {
-      return {
-        filenames: [],
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
+    return coreListFiles(realmUrl, { profileManager: this.pm });
   }
 
   /**
