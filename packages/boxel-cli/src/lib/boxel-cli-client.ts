@@ -1,10 +1,6 @@
 import { deleteFile, type DeleteResult } from '../commands/file/delete';
 import { read as fileRead, type ReadResult } from '../commands/file/read';
 import {
-  readCard as cardRead,
-  type ReadCardResult,
-} from '../commands/card/read';
-import {
   lint as coreLint,
   type LintResult,
   type LintMessage,
@@ -23,12 +19,15 @@ import { pull as realmPull } from '../commands/realm/pull';
 import { getProfileManager, type ProfileManager } from './profile-manager';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-export type {
-  ReadResult,
-  ReadCardResult,
-  ListFilesResult,
-  ReadTranspiledResult,
-};
+export type { ReadResult, ListFilesResult, ReadTranspiledResult };
+
+export interface ReadCardResult {
+  ok: boolean;
+  status?: number;
+  /** Parsed JSON document (for .json card files). */
+  document?: Record<string, unknown>;
+  error?: string;
+}
 
 const MIME = {
   CardSource: 'application/vnd.card+source',
@@ -154,16 +153,24 @@ export class BoxelCLIClient {
   }
 
   /**
-   * Read a card instance from a realm as parsed JSON.
-   *
-   * Uses `Accept: application/vnd.card+json` so the realm returns
-   * the card document in JSON:API format (from the index).
-   *
-   * Delegates to the standalone `readCard()` in `commands/card/read.ts`
-   * so the CLI and programmatic API share one implementation.
+   * Read a JSON card file from a realm and parse it into a document.
+   * Convenience wrapper around `read()` for callers that need parsed JSON.
    */
   async readCard(realmUrl: string, path: string): Promise<ReadCardResult> {
-    return cardRead(realmUrl, path, { profileManager: this.pm });
+    let result = await this.read(realmUrl, path);
+    if (!result.ok) {
+      return { ok: false, status: result.status, error: result.error };
+    }
+    try {
+      let document = JSON.parse(result.content!) as Record<string, unknown>;
+      return { ok: true, status: result.status, document };
+    } catch {
+      return {
+        ok: false,
+        status: result.status,
+        error: 'Failed to parse response as JSON',
+      };
+    }
   }
 
   /**

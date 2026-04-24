@@ -7,7 +7,6 @@
 import type {
   BoxelCLIClient,
   ReadResult,
-  ReadCardResult,
   WriteResult,
   DeleteResult,
   SearchResult,
@@ -70,41 +69,12 @@ export function createMockClient(options?: MockClientOptions): BoxelCLIClient {
             error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
           };
         }
-        let content = await response.text();
-        return { ok: true, status: response.status, content };
-      } catch (err) {
-        return {
-          ok: false,
-          error: err instanceof Error ? err.message : String(err),
-        };
-      }
-    },
-
-    async readCard(realmUrl: string, path: string): Promise<ReadCardResult> {
-      let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
-      try {
-        let response = await fetchImpl(url, {
-          method: 'GET',
-          headers: { Accept: 'application/vnd.card+json' },
-        });
-        if (!response.ok) {
-          let body = await response.text();
-          return {
-            ok: false,
-            status: response.status,
-            error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-          };
-        }
         let text = await response.text();
         try {
           let document = JSON.parse(text) as Record<string, unknown>;
           return { ok: true, status: response.status, document };
         } catch {
-          return {
-            ok: false,
-            status: response.status,
-            error: 'Failed to parse response as JSON',
-          };
+          return { ok: true, status: response.status, content: text };
         }
       } catch (err) {
         return {

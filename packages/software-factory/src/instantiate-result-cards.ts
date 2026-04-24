@@ -80,7 +80,7 @@ export async function completeInstantiateResult(
   attrs: InstantiateResultAttributes,
   options: InstantiateResultRealmOptions & { projectCardUrl?: string },
 ): Promise<{ updated: boolean; error?: string }> {
-  let readResult = await options.client.readCard(
+  let readResult = await options.client.read(
     options.targetRealmUrl,
     instantiateResultId,
   );

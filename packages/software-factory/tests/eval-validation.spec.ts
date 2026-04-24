@@ -99,7 +99,7 @@ test.describe('eval-validation e2e', () => {
       expect(details.modulesWithErrors).toBe(0);
 
       // Read back the EvalResult card to verify persistence
-      let cardRead = await client.readCard(realmUrl, details.evalResultId);
+      let cardRead = await client.read(realmUrl, details.evalResultId);
       expect(cardRead.ok).toBe(true);
 
       let attrs = (
@@ -178,7 +178,7 @@ test.describe('eval-validation e2e', () => {
       expect(brokenModule!.error).not.toContain('Missing Authorization');
 
       // Read back the EvalResult card to verify it was persisted as failed
-      let cardRead = await client.readCard(realmUrl, details.evalResultId);
+      let cardRead = await client.read(realmUrl, details.evalResultId);
       expect(cardRead.ok).toBe(true);
 
       let attrs = (

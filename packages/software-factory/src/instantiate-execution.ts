@@ -435,7 +435,7 @@ async function prepareExampleInstance(
 > {
   let rawRead;
   try {
-    rawRead = await client.readCard(targetRealmUrl, exampleUrl);
+    rawRead = await client.read(targetRealmUrl, exampleUrl);
   } catch (err) {
     return {
       error: `Failed to read example "${exampleUrl}": ${err instanceof Error ? err.message : String(err)}`,

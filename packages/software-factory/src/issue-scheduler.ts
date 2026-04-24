@@ -237,7 +237,7 @@ export class RealmIssueStore implements IssueStore {
   ): Promise<void> {
     // Read the source JSON file (not the indexed card, which can have
     // stripped relationships during indexing).
-    let readResult = await this.client.readCard(
+    let readResult = await this.client.read(
       this.realmUrl,
       ensureJsonExtension(issueId),
     );
@@ -317,7 +317,7 @@ export class RealmIssueStore implements IssueStore {
     // Strip the realm URL prefix to get the relative path
     let relativePath = projectId.replace(this.realmUrl, '');
 
-    let readResult = await this.client.readCard(
+    let readResult = await this.client.read(
       this.realmUrl,
       ensureJsonExtension(relativePath),
     );

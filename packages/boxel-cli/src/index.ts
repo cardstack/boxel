@@ -6,7 +6,6 @@ import { profileCommand } from './commands/profile';
 import { registerReadTranspiledCommand } from './commands/read-transpiled';
 import { registerRealmCommand } from './commands/realm/index';
 import { registerFileCommand } from './commands/file/index';
-import { registerCardCommand } from './commands/card/index';
 import { registerRunCommand } from './commands/run-command';
 
 const pkg = JSON.parse(
@@ -44,7 +43,6 @@ program
     },
   );
 
-registerCardCommand(program);
 registerFileCommand(program);
 registerRealmCommand(program);
 registerRunCommand(program);

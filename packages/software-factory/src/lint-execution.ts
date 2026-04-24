@@ -154,7 +154,9 @@ export async function lintRealmFiles(
       let result = await options.client.read(realmUrl, path);
       return {
         ok: result.ok,
-        content: result.content,
+        content:
+          result.content ??
+          (result.document ? JSON.stringify(result.document) : undefined),
         error: result.error,
       };
     });

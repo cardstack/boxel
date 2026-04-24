@@ -43,10 +43,6 @@ let runner: PgQueueRunner | undefined;
 
 export async function startTestRealmServer(options?: {
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
-  /** Use the minimal card prerenderer instead of the noop stub.
-   *  Required for tests that fetch cards via Accept: CardJson (e.g. card read).
-   *  No Chrome or host app needed — indexes cards from their raw JSON source. */
-  useCardPrerenderer?: boolean;
 }): Promise<void> {
   prepareTestDB();
   dbAdapter = await createTestPgAdapter();
@@ -75,7 +71,7 @@ export async function startTestRealmServer(options?: {
       '*': ['read', 'write'],
       [`@${TEST_USERNAME}:localhost`]: ['read', 'write', 'realm-owner'],
     },
-    ...(options?.useCardPrerenderer ? {} : { prerenderer: noopPrerenderer }),
+    prerenderer: noopPrerenderer,
   });
 
   testRealmHttpServer = server;

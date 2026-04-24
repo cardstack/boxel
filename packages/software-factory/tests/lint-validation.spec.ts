@@ -137,7 +137,7 @@ test.describe('lint-validation e2e', () => {
       expect(details.filesChecked).toBeGreaterThan(0);
 
       // Read back the LintResult card from the realm to verify it was persisted
-      let cardRead = await client.readCard(realmUrl, details.lintResultId);
+      let cardRead = await client.read(realmUrl, details.lintResultId);
       expect(cardRead.ok).toBe(true);
 
       let attrs = (

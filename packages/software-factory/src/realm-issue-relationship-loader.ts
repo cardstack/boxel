@@ -60,7 +60,7 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
     }
 
     let cardId = resolveRelativeLink(projectLink);
-    let result = await this.client.readCard(this.realmUrl, cardId);
+    let result = await this.client.read(this.realmUrl, cardId);
 
     if (!result.ok || !result.document) {
       log.warn(
@@ -99,7 +99,7 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
     for (let link of knowledgeLinks) {
       let cardId = resolveRelativeLink(link);
       try {
-        let result = await this.client.readCard(this.realmUrl, cardId);
+        let result = await this.client.read(this.realmUrl, cardId);
         if (result.ok && result.document) {
           let document = result.document as unknown as LooseSingleCardDocument;
           articles.push({
@@ -130,7 +130,7 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
   private async fetchFullIssue(
     issueId: string,
   ): Promise<Record<string, unknown> | undefined> {
-    let result = await this.client.readCard(this.realmUrl, issueId);
+    let result = await this.client.read(this.realmUrl, issueId);
     if (!result.ok || !result.document) {
       log.warn(
         `Could not fetch full issue "${issueId}" (status ${result.status ?? 'N/A'}): ${result.error ?? 'not found'}`,

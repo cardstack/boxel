@@ -256,22 +256,13 @@ export async function parseRealmFiles(
   let readFileFn =
     options.readFileFn ??
     (async (realmUrl: string, path: string) => {
-      if (path.endsWith('.json')) {
-        let result = await options.client.readCard(realmUrl, path);
-        return {
-          ok: result.ok,
-          content: undefined,
-          document: result.document as
-            | { data: Record<string, unknown> }
-            | undefined,
-          error: result.error,
-        };
-      }
       let result = await options.client.read(realmUrl, path);
       return {
         ok: result.ok,
         content: result.content,
-        document: undefined,
+        document: result.document as
+          | { data: Record<string, unknown> }
+          | undefined,
         error: result.error,
       };
     });

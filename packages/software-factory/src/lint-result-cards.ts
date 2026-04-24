@@ -80,7 +80,7 @@ export async function completeLintResult(
   attrs: LintResultAttributes,
   options: LintResultRealmOptions & { projectCardUrl?: string },
 ): Promise<{ updated: boolean; error?: string }> {
-  let readResult = await options.client.readCard(
+  let readResult = await options.client.read(
     options.targetRealmUrl,
     lintResultId,
   );

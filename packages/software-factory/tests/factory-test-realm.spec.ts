@@ -72,7 +72,7 @@ test.describe('factory-test-realm e2e', () => {
       expect(handle.errorMessage).toBeUndefined();
 
       // Read the TestRun card back and verify its persisted state
-      let testRunCard = await client.readCard(realmUrl, handle.testRunId);
+      let testRunCard = await client.read(realmUrl, handle.testRunId);
       expect(testRunCard.ok).toBe(true);
       let attrs = (
         testRunCard.document as unknown as {
@@ -140,7 +140,7 @@ test.describe('factory-test-realm e2e', () => {
       expect(handle.status).toBe('failed');
 
       // Read the TestRun card back and verify its persisted state
-      let testRunCard = await client.readCard(realmUrl, handle.testRunId);
+      let testRunCard = await client.read(realmUrl, handle.testRunId);
       expect(testRunCard.ok).toBe(true);
       let attrs = (
         testRunCard.document as unknown as {

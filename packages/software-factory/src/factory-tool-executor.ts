@@ -415,7 +415,7 @@ export class ToolExecutor {
 
     switch (toolName) {
       case 'realm-read': {
-        let result = await client.readCard(
+        let result = await client.read(
           String(toolArgs['realm-url']),
           String(toolArgs['path']),
         );

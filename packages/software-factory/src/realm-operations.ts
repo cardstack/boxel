@@ -39,7 +39,7 @@ export async function addCommentToIssue(
 ): Promise<{ ok: boolean; error?: string }> {
   let filePath = ensureJsonExtension(path);
 
-  let existing = await client.readCard(realmUrl, filePath);
+  let existing = await client.read(realmUrl, filePath);
   if (!existing.ok || !existing.document) {
     return {
       ok: false,

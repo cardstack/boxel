@@ -101,7 +101,7 @@ export class TestValidationStep implements ValidationStepRunner {
     this.readCardFn =
       config.readCard ??
       (async (realmUrl: string, path: string) => {
-        let result = await config.client.readCard(realmUrl, path);
+        let result = await config.client.read(realmUrl, path);
         return {
           ok: result.ok,
           document: result.document as unknown as

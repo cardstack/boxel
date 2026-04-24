@@ -78,7 +78,7 @@ export async function completeParseResult(
   attrs: ParseResultAttributes,
   options: ParseResultRealmOptions & { projectCardUrl?: string },
 ): Promise<{ updated: boolean; error?: string }> {
-  let readResult = await options.client.readCard(
+  let readResult = await options.client.read(
     options.targetRealmUrl,
     parseResultId,
   );
