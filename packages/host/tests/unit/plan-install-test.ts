@@ -449,13 +449,11 @@ module('Unit | Catalog | Install Plan Builder', function () {
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name',
-                  module:
-                    rri(`${sourceRealmURL.href}some-folder/some`),
+                  module: rri(`${sourceRealmURL.href}some-folder/some`),
                 },
                 targetCodeRef: {
                   name: 'Some Ref Name',
-                  module:
-                    rri(`${targetRealmURL}xyz/some-folder/some`),
+                  module: rri(`${targetRealmURL}xyz/some-folder/some`),
                 },
               },
             ],
@@ -468,13 +466,11 @@ module('Unit | Catalog | Install Plan Builder', function () {
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name',
-                  module:
-                    rri(`${sourceRealmURL.href}some-folder/some`),
+                  module: rri(`${sourceRealmURL.href}some-folder/some`),
                 },
                 targetCodeRef: {
                   name: 'Some Ref Name',
-                  module:
-                    rri(`${targetRealmURL}xyz/some-folder/some`),
+                  module: rri(`${targetRealmURL}xyz/some-folder/some`),
                 },
               },
             ],
@@ -488,13 +484,11 @@ module('Unit | Catalog | Install Plan Builder', function () {
             [
               {
                 sourceCodeRef: {
-                  module:
-                    rri(`${sourceRealmURL.href}some-folder/some`),
+                  module: rri(`${sourceRealmURL.href}some-folder/some`),
                   name: 'Some Ref Name',
                 },
                 targetCodeRef: {
-                  module:
-                    rri(`${targetRealmURL}xyz/some-folder/some`),
+                  module: rri(`${targetRealmURL}xyz/some-folder/some`),
                   name: 'Some Ref Name',
                 },
               },
@@ -512,8 +506,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 sourceCard: {} as CardDef,
                 targetCodeRef: {
                   name: 'Some Ref Name',
-                  module:
-                    rri(`${targetRealmURL}xyz/some-folder/some`),
+                  module: rri(`${targetRealmURL}xyz/some-folder/some`),
                 },
                 lid: 'xyz/some-folder/Example/1',
               },
@@ -528,8 +521,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 sourceCard: {} as CardDef,
                 targetCodeRef: {
                   name: 'Some Ref Name',
-                  module:
-                    rri(`${targetRealmURL}xyz/some-folder/some`),
+                  module: rri(`${targetRealmURL}xyz/some-folder/some`),
                 },
                 lid: 'xyz/some-folder/Example/1',
               },
@@ -547,8 +539,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 sourceCard: {} as CardDef,
                 targetCodeRef: {
                   name: 'Some Ref Name',
-                  module:
-                    rri(`${targetRealmURL}xyz/some-folder/some`),
+                  module: rri(`${targetRealmURL}xyz/some-folder/some`),
                 },
                 lid: 'xyz/some-folder/Example/1',
               },
@@ -565,13 +556,11 @@ module('Unit | Catalog | Install Plan Builder', function () {
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name',
-                  module:
-                    rri(`${sourceRealmURL.href}some-folder/some`),
+                  module: rri(`${sourceRealmURL.href}some-folder/some`),
                 },
                 targetCodeRef: {
                   name: 'Some Ref Name',
-                  module:
-                    rri(`${targetRealmURL}xyz/some-folder/some`),
+                  module: rri(`${targetRealmURL}xyz/some-folder/some`),
                 },
               },
             ],
@@ -584,13 +573,11 @@ module('Unit | Catalog | Install Plan Builder', function () {
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name 2',
-                  module:
-                    rri(`${sourceRealmURL.href}some-folder/some`),
+                  module: rri(`${sourceRealmURL.href}some-folder/some`),
                 },
                 targetCodeRef: {
                   name: 'Some Ref Name 2',
-                  module:
-                    rri(`${targetRealmURL}xyz/some-folder/some`),
+                  module: rri(`${targetRealmURL}xyz/some-folder/some`),
                 },
               },
             ],
@@ -603,13 +590,11 @@ module('Unit | Catalog | Install Plan Builder', function () {
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name 3',
-                  module:
-                    rri(`${sourceRealmURL.href}some-folder/some`),
+                  module: rri(`${sourceRealmURL.href}some-folder/some`),
                 },
                 targetCodeRef: {
                   name: 'Some Ref Name 3',
-                  module:
-                    rri(`${targetRealmURL}xyz/some-folder/some-3`),
+                  module: rri(`${targetRealmURL}xyz/some-folder/some-3`),
                 },
               },
             ],

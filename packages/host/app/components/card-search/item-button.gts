@@ -7,10 +7,7 @@ import { Button } from '@cardstack/boxel-ui/components';
 import { and, cn, not } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
-import {
-  isCardInstance,
-  rri,
-} from '@cardstack/runtime-common';
+import { isCardInstance, rri } from '@cardstack/runtime-common';
 
 import type RealmService from '@cardstack/host/services/realm';
 

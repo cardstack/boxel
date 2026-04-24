@@ -233,8 +233,7 @@ function parseCommandParam(
       return undefined;
     }
     return {
-      module:
-        rri(`${url.origin}${pathname.slice(0, index)}`),
+      module: rri(`${url.origin}${pathname.slice(0, index)}`),
       name: pathname.slice(index + 1),
     };
   } catch {

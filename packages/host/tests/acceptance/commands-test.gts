@@ -763,8 +763,7 @@ module('Acceptance | Commands tests', function (hooks) {
         {
           id: '29e8addb-197b-4d6d-b0a9-547959bf7c96',
           name: buildCommandFunctionName({
-            module:
-              rri(`${testRealmURL}search-and-open-card-command`),
+            module: rri(`${testRealmURL}search-and-open-card-command`),
             name: 'default',
           }),
           arguments: JSON.stringify({
@@ -842,8 +841,7 @@ module('Acceptance | Commands tests', function (hooks) {
         {
           id: '29e8addb-197b-4d6d-b0a9-547959bf7c96',
           name: buildCommandFunctionName({
-            module:
-              rri(`${testRealmURL}search-and-open-card-command`),
+            module: rri(`${testRealmURL}search-and-open-card-command`),
             name: 'default',
           }),
           arguments: JSON.stringify({

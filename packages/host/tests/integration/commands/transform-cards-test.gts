@@ -4,11 +4,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
-import {
-  baseRealm,
-  Command,
-  rri,
-} from '@cardstack/runtime-common';
+import { baseRealm, Command, rri } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type { SearchCardsByQueryCommand as SearchCardsByQueryCommandType } from '@cardstack/host/commands/search-cards';
@@ -311,8 +307,7 @@ module('Integration | commands | transform-cards', function (hooks) {
         },
       },
       commandRef: {
-        module:
-          rri(`${testRealmURL}uppercase-name-command`),
+        module: rri(`${testRealmURL}uppercase-name-command`),
         name: 'default',
       },
     });
@@ -352,8 +347,7 @@ module('Integration | commands | transform-cards', function (hooks) {
         },
       },
       commandRef: {
-        module:
-          rri(`${testRealmURL}add-metadata-command`),
+        module: rri(`${testRealmURL}add-metadata-command`),
         name: 'default',
       },
     });
@@ -470,8 +464,7 @@ module('Integration | commands | transform-cards', function (hooks) {
           },
         },
         commandRef: {
-          module:
-            rri(`${testRealmURL}non-existent-command`),
+          module: rri(`${testRealmURL}non-existent-command`),
           name: 'default',
         },
       });

@@ -2957,8 +2957,7 @@ module('Integration | serialization', function (hooks) {
               fields: {
                 nextTravelGoal: {
                   adoptsFrom: {
-                    module:
-                      rri(`${testRealmURL}trip-info-cards`),
+                    module: rri(`${testRealmURL}trip-info-cards`),
                     name: 'TravelGoalWithProgress',
                   },
                 },
@@ -4069,8 +4068,7 @@ module('Integration | serialization', function (hooks) {
               fields: {
                 loves: {
                   adoptsFrom: {
-                    module:
-                      rri(`${testRealmURL}test-cards`),
+                    module: rri(`${testRealmURL}test-cards`),
                     name: 'Pet',
                   },
                 },
@@ -4188,15 +4186,13 @@ module('Integration | serialization', function (hooks) {
             people: [
               {
                 adoptsFrom: {
-                  module:
-                    rri(`${testRealmURL}test-cards`),
+                  module: rri(`${testRealmURL}test-cards`),
                   name: 'Employee',
                 },
               },
               {
                 adoptsFrom: {
-                  module:
-                    rri(`${testRealmURL}test-cards`),
+                  module: rri(`${testRealmURL}test-cards`),
                   name: 'Customer',
                 },
               },
@@ -4477,15 +4473,13 @@ module('Integration | serialization', function (hooks) {
                 tags: [
                   {
                     adoptsFrom: {
-                      module:
-                        rri(`${testRealmURL}test-cards`),
+                      module: rri(`${testRealmURL}test-cards`),
                       name: 'PriorityTag',
                     },
                   },
                   {
                     adoptsFrom: {
-                      module:
-                        rri(`${testRealmURL}test-cards`),
+                      module: rri(`${testRealmURL}test-cards`),
                       name: 'StatusTag',
                     },
                   },
@@ -4644,8 +4638,7 @@ module('Integration | serialization', function (hooks) {
             people: [
               {
                 adoptsFrom: {
-                  module:
-                    rri(`${testRealmURL}test-cards`),
+                  module: rri(`${testRealmURL}test-cards`),
                   name: 'Employee',
                 },
                 fields: {
@@ -4653,8 +4646,7 @@ module('Integration | serialization', function (hooks) {
                     {},
                     {
                       adoptsFrom: {
-                        module:
-                          rri(`${testRealmURL}test-cards`),
+                        module: rri(`${testRealmURL}test-cards`),
                         name: 'DogWalker',
                       },
                     },
@@ -4761,8 +4753,7 @@ module('Integration | serialization', function (hooks) {
             fields: {
               favorite: {
                 adoptsFrom: {
-                  module:
-                    rri(`${testRealmURL}test-cards`),
+                  module: rri(`${testRealmURL}test-cards`),
                   name: 'Toy',
                 },
               },
@@ -5719,8 +5710,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module:
-                  rri('http://localhost:4202/test/captain'),
+                module: rri('http://localhost:4202/test/captain'),
                 name: 'Captain',
               },
             },
@@ -5745,8 +5735,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module:
-                rri(`http://localhost:4202/test/captain`),
+              module: rri(`http://localhost:4202/test/captain`),
               name: 'Boat',
             },
           },

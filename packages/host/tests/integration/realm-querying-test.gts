@@ -3,11 +3,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import {
-  baseRealm,
-  baseCardRef,
-  rri,
-} from '@cardstack/runtime-common';
+import { baseRealm, baseCardRef, rri } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
@@ -527,8 +523,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module:
-              rri(`${testModuleRealm}type-examples`),
+            module: rri(`${testModuleRealm}type-examples`),
             name: 'TypeExamples',
           },
         },
@@ -543,8 +538,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module:
-              rri(`${testModuleRealm}type-examples`),
+            module: rri(`${testModuleRealm}type-examples`),
             name: 'TypeExamples',
           },
         },
@@ -558,8 +552,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module:
-              rri(`${testModuleRealm}type-examples`),
+            module: rri(`${testModuleRealm}type-examples`),
             name: 'TypeExamples',
           },
         },
@@ -573,8 +566,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module:
-              rri(`${testModuleRealm}type-examples`),
+            module: rri(`${testModuleRealm}type-examples`),
             name: 'TypeExamples',
           },
         },
@@ -602,8 +594,7 @@ module(`Integration | realm querying`, function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module:
-                    rri(`${testModuleRealm}file-query-card`),
+                  module: rri(`${testModuleRealm}file-query-card`),
                   name: 'FileQueryCard',
                 },
               },

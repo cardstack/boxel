@@ -117,8 +117,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
         relationships,
         meta: {
           adoptsFrom: {
-            module:
-              rri(`${catalogRealm}catalog-app/listing/listing`),
+            module: rri(`${catalogRealm}catalog-app/listing/listing`),
             name: listingSubClass[listingType],
           },
         },

@@ -331,10 +331,9 @@ module('Unit | index-writer', function (hooks) {
           } as LooseCardResource,
           search_doc: { name: 'Mango' },
           deps: [`${testRealmURL}person`],
-          types: [
-            { module: rri(`./person`), name: 'Person' },
-            baseCardRef,
-          ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
+          types: [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+            (i) => internalKeyFor(i, new URL(testRealmURL)),
+          ),
         },
       ],
     );
@@ -404,10 +403,9 @@ module('Unit | index-writer', function (hooks) {
         },
         search_doc: { name: 'Mango' },
         deps: [`${testRealmURL}person`],
-        types: [
-          { module: rri(`./person`), name: 'Person' },
-          baseCardRef,
-        ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
+        types: [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+          (i) => internalKeyFor(i, new URL(testRealmURL)),
+        ),
       },
       'live version of the doc has not changed',
     );
@@ -502,10 +500,9 @@ module('Unit | index-writer', function (hooks) {
   });
 
   test('can copy index entries', async function (assert) {
-    let types = [
-      { module: rri(`./person`), name: 'Person' },
-      baseCardRef,
-    ].map((i) => internalKeyFor(i, new URL(testRealmURL)));
+    let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+      (i) => internalKeyFor(i, new URL(testRealmURL)),
+    );
     let destTypes = [
       { module: rri(`./person`), name: 'Person' },
       baseCardRef,
@@ -674,10 +671,9 @@ module('Unit | index-writer', function (hooks) {
   });
 
   test('error entry includes last known good state when available', async function (assert) {
-    let types = [
-      { module: rri(`./person`), name: 'Person' },
-      baseCardRef,
-    ].map((i) => internalKeyFor(i, new URL(testRealmURL)));
+    let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+      (i) => internalKeyFor(i, new URL(testRealmURL)),
+    );
     let modified = Date.now();
     let resource: CardResource = {
       id: rri(`${testRealmURL}1`),

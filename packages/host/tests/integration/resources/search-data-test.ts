@@ -5,11 +5,7 @@ import { waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import type {
-  DataQuery,
-  Loader,
-  Realm,
-} from '@cardstack/runtime-common';
+import type { DataQuery, Loader, Realm } from '@cardstack/runtime-common';
 import {
   baseRealm,
   rri,

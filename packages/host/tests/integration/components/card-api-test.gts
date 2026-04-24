@@ -12,10 +12,7 @@ import { module, test } from 'qunit';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
-import {
-  CardContextName,
-  rri,
-} from '@cardstack/runtime-common';
+import { CardContextName, rri } from '@cardstack/runtime-common';
 
 import type StoreService from '@cardstack/host/services/store';
 

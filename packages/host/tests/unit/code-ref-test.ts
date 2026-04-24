@@ -4,10 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import type {
-  Loader,
-  LooseCardResource,
-} from '@cardstack/runtime-common';
+import type { Loader, LooseCardResource } from '@cardstack/runtime-common';
 import {
   baseRealm,
   loadCardDef,
@@ -134,8 +131,7 @@ module('code-ref', function (hooks) {
             adoptsFrom: {
               type: 'ancestorOf',
               card: {
-                module:
-                  rri(`${testRealmURL}code-ref-test-1`),
+                module: rri(`${testRealmURL}code-ref-test-1`),
                 name: 'TestCard1',
               },
             },
@@ -145,8 +141,7 @@ module('code-ref', function (hooks) {
               adoptsFrom: {
                 type: 'fieldOf',
                 card: {
-                  module:
-                    rri(`${testRealmURL}code-ref-test-3`),
+                  module: rri(`${testRealmURL}code-ref-test-3`),
                   name: 'TestCard3',
                 },
                 field: 'someField',

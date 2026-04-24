@@ -1,11 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import {
-  baseRealm,
-  type Query,
-  rri,
-} from '@cardstack/runtime-common';
+import { baseRealm, type Query, rri } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {

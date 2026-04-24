@@ -3,11 +3,7 @@ import {
   Rows4 as StripViewIcon,
 } from '@cardstack/boxel-ui/icons';
 
-import {
-  baseRealm,
-  rri,
-  type Sort,
-} from '@cardstack/runtime-common';
+import { baseRealm, rri, type Sort } from '@cardstack/runtime-common';
 
 export interface ViewOption {
   id: string;
