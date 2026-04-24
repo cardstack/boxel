@@ -36,6 +36,7 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from './lib/realm-registry-reconciler';
+import { RealmFileChangesListener } from './lib/realm-file-changes-listener';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
 (globalThis as any).ContentTagGlobal = ContentTagGlobal;
@@ -279,6 +280,7 @@ const getIndexHTML = async () => {
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
   let reconciler: RealmRegistryReconciler | undefined;
+  let fileChangesListener: RealmFileChangesListener | undefined;
 
   if (workerManagerUrl) {
     await waitForWorkerManager(workerManagerUrl);
@@ -437,7 +439,10 @@ const getIndexHTML = async () => {
     httpServer.closeAllConnections();
     httpServer.close(() => {
       (async () => {
-        await reconciler?.shutDown();
+        await Promise.all([
+          reconciler?.shutDown(),
+          fileChangesListener?.shutDown(),
+        ]);
         queue.destroy(); // warning this is async
         dbAdapter.close(); // warning this is async
         console.log(`realm server on port ${stopPort} has stopped`);
@@ -558,6 +563,19 @@ const getIndexHTML = async () => {
   });
   reconciler.registerExistingMounts(realms);
   reconciler.start();
+
+  // Cross-instance cache invalidation. Realm.write() emits NOTIFY
+  // realm_file_changes; this listener receives those and forwards to the
+  // local Realm's invalidateCache(path). Under single-instance the writer
+  // has already invalidated its own caches synchronously, so self-echoes
+  // are idempotent no-ops. Lookups go through the same `realms` array the
+  // reconciler uses — in Phase 2 the reconciler and legacy loadRealms()
+  // both keep it in sync.
+  fileChangesListener = new RealmFileChangesListener({
+    dbAdapter,
+    lookupMountedRealm: (url) => realms.find((r) => r.url === url),
+  });
+  fileChangesListener.start();
 
   let actualPort =
     (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
