@@ -617,9 +617,21 @@ export async function sync(
     localDeleted: syncer.localDeletedFiles.slice().sort(),
     skippedConflicts: syncer.skippedConflicts.slice().sort(),
     hasError: syncer.hasError,
+    error: syncer.hasError ? buildSyncErrorMessage(syncer) : undefined,
   };
 }
 
+function buildSyncErrorMessage(syncer: RealmSyncer): string {
+  let summary = [
+    `${syncer.pushedFiles.length} pushed`,
+    `${syncer.pulledFiles.length} pulled`,
+    `${syncer.remoteDeletedFiles.length} remote deleted`,
+    `${syncer.localDeletedFiles.length} local deleted`,
+    `${syncer.skippedConflicts.length} conflicts skipped`,
+  ].join(', ');
+
+  return `Sync completed with errors. ${summary}.`;
+}
 function emptyResult(partial: Pick<SyncResult, 'error'>): SyncResult {
   return {
     pushed: [],
