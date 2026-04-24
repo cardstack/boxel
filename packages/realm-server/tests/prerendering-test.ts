@@ -4906,6 +4906,238 @@ module(basename(__filename), function () {
           }
         });
 
+        test('PRERENDER_AFFINITY_FILE_CONCURRENCY unset: cap equals the deadlock-safety ceiling (no behavior change)', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let prevFileConcurrency =
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '5';
+            delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            ({ pool } = makeStubPagePool({
+              maxPages: 5,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+            let lease = await pool.getPage('realm-a', 'file');
+            let snap = pool.getQueueDepthSnapshot();
+            let affinity = snap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              affinity!.admission.cap,
+              4,
+              'default cap equals ceiling (affinityTabMax=5 → 4)',
+            );
+            lease.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+            if (prevFileConcurrency === undefined) {
+              delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            } else {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY =
+                prevFileConcurrency;
+            }
+          }
+        });
+
+        test('PRERENDER_AFFINITY_FILE_CONCURRENCY lowers the cap below the ceiling', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let prevFileConcurrency =
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '5';
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY = '1';
+            ({ pool } = makeStubPagePool({
+              maxPages: 5,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            let first = await pool.getPage('realm-a', 'file');
+            let snap1 = pool.getQueueDepthSnapshot();
+            let affinity1 = snap1.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              affinity1!.admission.cap,
+              1,
+              'cap lowered to env override when override < ceiling',
+            );
+
+            // Second file call blocks on admission because cap=1.
+            let holdMs = 20;
+            let secondPromise = pool.getPage('realm-a', 'file');
+            setTimeout(() => first.release(), holdMs);
+            let second = await secondPromise;
+            assert.ok(
+              second.waits.admissionMs >= holdMs - 5,
+              `second file call waited for admission (${second.waits.admissionMs}ms)`,
+            );
+            second.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+            if (prevFileConcurrency === undefined) {
+              delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            } else {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY =
+                prevFileConcurrency;
+            }
+          }
+        });
+
+        test('PRERENDER_AFFINITY_FILE_CONCURRENCY above ceiling is clamped to the ceiling', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let prevFileConcurrency =
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '3';
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY = '99';
+            ({ pool } = makeStubPagePool({
+              maxPages: 3,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+            let lease = await pool.getPage('realm-a', 'file');
+            let snap = pool.getQueueDepthSnapshot();
+            let affinity = snap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              affinity!.admission.cap,
+              2,
+              'cap clamped to deadlock-safety ceiling (tabMax=3 → 2) even when env asks for 99',
+            );
+            lease.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+            if (prevFileConcurrency === undefined) {
+              delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            } else {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY =
+                prevFileConcurrency;
+            }
+          }
+        });
+
+        test('invalid PRERENDER_AFFINITY_FILE_CONCURRENCY falls back to the ceiling', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let prevFileConcurrency =
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '5';
+            for (let badValue of ['0', '-1', 'abc', '']) {
+              if (badValue === '') {
+                delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+              } else {
+                process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY = badValue;
+              }
+              let { pool } = makeStubPagePool({
+                maxPages: 5,
+                disableFileAdmission: false,
+              });
+              try {
+                await pool.warmStandbys();
+                let lease = await pool.getPage('realm-a', 'file');
+                let snap = pool.getQueueDepthSnapshot();
+                let affinity = snap.affinities.find(
+                  (a) => a.affinityKey === 'realm-a',
+                );
+                assert.strictEqual(
+                  affinity!.admission.cap,
+                  4,
+                  `invalid env value ${JSON.stringify(badValue)} falls back to ceiling (4)`,
+                );
+                lease.release();
+              } finally {
+                await pool.closeAll();
+              }
+            }
+          } finally {
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+            if (prevFileConcurrency === undefined) {
+              delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            } else {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY =
+                prevFileConcurrency;
+            }
+          }
+        });
+
+        test('module / command calls still bypass admission when PRERENDER_AFFINITY_FILE_CONCURRENCY=1', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let prevFileConcurrency =
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '3';
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY = '1';
+            ({ pool } = makeStubPagePool({
+              maxPages: 3,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            // A file call holds the only admission slot.
+            let fileLease = await pool.getPage('realm-a', 'file');
+
+            // Module and command calls skip admission entirely — they
+            // don't queue behind the file slot. Both should land
+            // immediately on a fresh tab.
+            let moduleLease = await pool.getPage('realm-a', 'module');
+            assert.strictEqual(
+              moduleLease.waits.admissionMs,
+              0,
+              'module call bypasses admission even with cap exhausted',
+            );
+            moduleLease.release();
+
+            let commandLease = await pool.getPage('realm-a', 'command');
+            assert.strictEqual(
+              commandLease.waits.admissionMs,
+              0,
+              'command call bypasses admission even with cap exhausted',
+            );
+            commandLease.release();
+
+            fileLease.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+            if (prevFileConcurrency === undefined) {
+              delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            } else {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY =
+                prevFileConcurrency;
+            }
+          }
+        });
+
         test('prefers idle tab aligned to realm over standby tabs', async function (assert) {
           let { pool } = makeStubPagePool({ maxPages: 2 });
           await pool.warmStandbys();

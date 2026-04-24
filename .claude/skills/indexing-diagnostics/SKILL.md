@@ -246,7 +246,8 @@ Walk the fields top-down. The *first* positive signal wins; stop there.
 | Signal | Category | What to look at next |
 |---|---|---|
 | `waits.semaphoreMs` ≈ `totalElapsedMs` | **Launch stall (capacity)** | Fleet-wide: `prerender-queue-snapshot` lines on every prerender server around that timestamp. Is `totalPending` piled up? Add capacity, don't touch host. |
-| `waits.tabQueueMs` ≈ `totalElapsedMs` (and semaphoreMs small) | **Same-affinity contention** | Same realm's batch is serialized on one tab. Check whether `PRERENDER_AFFINITY_TAB_MAX` is 1 for this fleet, or whether a rogue user request is sharing the tab (see CS-10873 for the cancel-on-abort follow-up). |
+| `waits.admissionMs` ≈ `totalElapsedMs` (and semaphoreMs small) | **Per-affinity admission stall** | This realm hit its own file-admission cap — the server had capacity but wasn't letting this realm use it, by design. Grep the queue-snapshot log for `admission=pending=N/cap=N` on the same affinity to confirm waiters were piling up. If the cap looks too tight for the workload, `PRERENDER_AFFINITY_FILE_CONCURRENCY` is the knob (see the tuning-knobs section); default is the deadlock-safety ceiling, so only lowered fleets can produce this signal. |
+| `waits.tabQueueMs` ≈ `totalElapsedMs` (and semaphoreMs / admissionMs small) | **Same-affinity contention** | Same realm's batch is serialized on one tab. Check whether `PRERENDER_AFFINITY_TAB_MAX` is 1 for this fleet, or whether a rogue user request is sharing the tab (see CS-10873 for the cancel-on-abort follow-up). |
 | `launchMs` small **and** `renderStage` is `null`/`model:start` | **Very early render stall** — transition hadn't yet rendered anything. Usually means the route threw before setting a real stage. Look at `capturedDom` (`<data-prerender-error>` is common) and console errors. |
 | `renderStage` ∈ `buildModel:fetching-source` / `buildModel:deriving-type` / `buildModel:hydrating` | **Backend stall during model build** | Usually a slow realm server or cross-realm fetch. Check realm-server logs for the same requestId; check the fetch target from `capturedDom` / `cardDocsInFlight`. |
 | `inFlightModuleImports.length > 0` | **Loader stall** | Each URL is a `.gts` / `.ts` we'd already started a `fetchModule(...)` for. Confirm the realm serves those URLs and that there's no import cycle. Often resolves with `clearCache: true` on retry (already in place) — if that's failing check for 500s on the module URL. |
@@ -509,6 +510,26 @@ grep 'manually visit prerendered url .*<card-id>' realm-server.log | tail -1
 Two different tokens do two different jobs: the user-minted realm-scoped JWT got you the reindex, the indexer's full session map gets the browser tab past its auth checks for every realm the render touches.
 
 If `GRAFANA_SECRET` is configured on your server, you can skip the user-JWT step and use `curl -H "Authorization: $GRAFANA_SECRET" http://localhost:4201/_grafana-full-reindex` instead (grafana endpoint is a GET, no MIME gotcha). In dev the per-realm JWT path is almost always easier.
+
+## Prerender capacity tuning knobs
+
+Three env vars control the per-prerender-server shape. They're resolved once at `PagePool` construction; changes require a process restart.
+
+| Env var | Default | What it controls | When to change it |
+|---|---|---|---|
+| `PRERENDER_PAGE_POOL_SIZE` | `5` | Total simultaneous Chrome tabs the pool can manage. The `capacity` the server reports in its heartbeat. | Fleet capacity. Raise when `waits.semaphoreMs` dominates `launchMs` across rows from all realms (server-wide saturation); lower if you need to reduce memory footprint and you can confirm from snapshots that pending rarely approaches `totalTabs`. |
+| `PRERENDER_AFFINITY_TAB_MAX` | `5` (clamped to `PRERENDER_PAGE_POOL_SIZE`) | Max tabs a single affinity (realm or user) can simultaneously hold from the pool. | Rarely. Must be ≥ 2 for the self-referential prerender deadlock to be prevented — PagePool logs a warning at startup when it isn't. Lower only if you want to force multi-realm fairness at the tab-routing level. |
+| `PRERENDER_AFFINITY_FILE_CONCURRENCY` | unset → `max(1, PRERENDER_AFFINITY_TAB_MAX − 1)` (the deadlock-safety ceiling) | Cap on concurrent `file` renders within a single affinity. Module and command calls bypass admission; they're never capped by this knob. | Cross-realm fairness. When one realm's fan-out (e.g. a catalog reindex) is stealing render budget from every other realm, lower this below the ceiling to reserve tabs for other affinities. The effective cap is always `min(env, ceiling)` so this can't accidentally break the deadlock-safety invariant. |
+
+**Default invariant**: when `PRERENDER_AFFINITY_FILE_CONCURRENCY` is unset, the effective file-admission cap equals the deadlock-safety ceiling — same behavior as before the knob existed. Changing the knob is an explicit operator decision driven by `admissionMs` telemetry; don't adjust it without data.
+
+When the cap is active and below the ceiling, PagePool logs one info line at construction:
+
+```
+file-queue admission: cap=2 (affinityTabMax=5, deadlock-safety ceiling=4)
+```
+
+Grep for `file-queue admission: cap=` in prerender-server logs to confirm the effective value in a running fleet.
 
 ## Extending the diagnostics
 

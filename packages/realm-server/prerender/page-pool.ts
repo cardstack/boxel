@@ -202,14 +202,22 @@ export class PagePool {
   #onAffinityDisposed: ((affinityKey: string) => void) | undefined;
 
   // Per-affinity admission semaphore for the `file` queue. Capacity is
-  // `#affinityTabMax - 1` — at most N−1 concurrent file renders on the
-  // affinity, reserving at least one tab slot for `module` / `command`
-  // work that the in-flight file renders may be waiting on (the self-
-  // referential prerender deadlock). Module and command calls bypass
-  // this semaphore entirely. Lazily created on first file call per
-  // affinity; lifecycle is tied to the affinity itself, cleared in
-  // `closeAll`.
+  // `#fileAdmissionCap` — at most that many concurrent file renders on
+  // the affinity, reserving at least one tab slot for `module` /
+  // `command` work that the in-flight file renders may be waiting on
+  // (the self-referential prerender deadlock). Module and command
+  // calls bypass this semaphore entirely. Lazily created on first file
+  // call per affinity; lifecycle is tied to the affinity itself,
+  // cleared in `closeAll`.
   #fileAdmission = new Map<string, AsyncSemaphore>();
+  // Effective per-affinity file-admission capacity. Defaults to the
+  // deadlock-safety ceiling `max(1, #affinityTabMax − 1)` (same as
+  // before the operator knob existed). When
+  // `PRERENDER_AFFINITY_FILE_CONCURRENCY` is set and ≥ 1, the value is
+  // clamped at the ceiling to preserve the deadlock-safety invariant.
+  // Resolved once at construction so tests that mutate env vars see
+  // the value frozen against the pool they're driving.
+  #fileAdmissionCap: number;
   // When true, `#acquireFileAdmission` becomes a no-op. Used by existing
   // PagePool unit tests that predate the admission feature and exercise
   // tab-routing semantics directly — those tests assume `getPage` doesn't
@@ -266,6 +274,38 @@ export class PagePool {
     this.#disableStandbyRefill = options.disableStandbyRefill ?? false;
     this.#onAffinityDisposed = options.onAffinityDisposed;
     this.#disableFileAdmission = options.disableFileAdmission ?? false;
+    // Resolve the per-affinity file-admission cap. Ceiling is the
+    // deadlock-safety `max(1, affinityTabMax − 1)`. Operator override
+    // via `PRERENDER_AFFINITY_FILE_CONCURRENCY`; invalid or missing
+    // values fall through to the ceiling — i.e. the pre-knob behavior.
+    let ceiling = Math.max(1, this.#affinityTabMax - 1);
+    let raw = process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+    let override: number | undefined;
+    if (raw !== undefined && raw !== '') {
+      let parsed = Number(raw);
+      if (Number.isInteger(parsed) && parsed >= 1) {
+        override = parsed;
+      } else {
+        log.warn(
+          `PRERENDER_AFFINITY_FILE_CONCURRENCY=${raw} invalid (must be an integer ≥ 1); falling back to deadlock-safety ceiling=${ceiling}`,
+        );
+      }
+    }
+    this.#fileAdmissionCap =
+      override === undefined ? ceiling : Math.min(override, ceiling);
+    if (
+      !this.#disableFileAdmission &&
+      override !== undefined &&
+      this.#fileAdmissionCap < ceiling
+    ) {
+      // Operator has explicitly lowered the cap below the ceiling.
+      // Log so the effective value is visible without grepping env.
+      // No log line when the env is unset (common case) — nothing
+      // changed.
+      log.info(
+        `file-queue admission: cap=${this.#fileAdmissionCap} (affinityTabMax=${this.#affinityTabMax}, deadlock-safety ceiling=${ceiling})`,
+      );
+    }
   }
 
   set serverURL(url: string) {
@@ -885,8 +925,7 @@ export class PagePool {
     }
     let semaphore = this.#fileAdmission.get(affinityKey);
     if (!semaphore) {
-      let capacity = Math.max(1, this.#affinityTabMax - 1);
-      semaphore = new AsyncSemaphore(capacity);
+      semaphore = new AsyncSemaphore(this.#fileAdmissionCap);
       this.#fileAdmission.set(affinityKey, semaphore);
     }
     let rawRelease = await semaphore.acquire(signal);
