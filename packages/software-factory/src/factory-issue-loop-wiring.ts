@@ -336,24 +336,37 @@ export function createLoopAgentWithLabel(config: CreateLoopAgentConfig): {
  * in the Boxel UI). Logs but never throws — sync issues should surface as
  * failed validation, not exceptions in the orchestrator.
  */
+export interface WorkspaceSyncOutcome {
+  ok: boolean;
+  error?: string;
+}
+
 export async function syncWorkspaceToRealm(
   client: BoxelCLIClient,
   targetRealmUrl: string,
   workspaceDir: string,
-): Promise<void> {
+): Promise<WorkspaceSyncOutcome> {
   try {
     let result = await withStdoutRedirected(() =>
       client.sync(targetRealmUrl, workspaceDir, { preferLocal: true }),
     );
     if (result.error) {
       log.warn(`Workspace sync error: ${result.error}`);
-    } else if (result.hasError) {
-      log.warn('Workspace sync completed with errors — see prior log lines');
+      return { ok: false, error: result.error };
     }
+    if (result.hasError) {
+      log.warn('Workspace sync completed with errors — see prior log lines');
+      return {
+        ok: false,
+        error:
+          'Workspace sync completed with per-file errors — see prior log lines for the failing paths and the realm-server response.',
+      };
+    }
+    return { ok: true };
   } catch (err) {
-    log.warn(
-      `Workspace sync threw: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    let message = err instanceof Error ? err.message : String(err);
+    log.warn(`Workspace sync threw: ${message}`);
+    return { ok: false, error: message };
   }
 }
 

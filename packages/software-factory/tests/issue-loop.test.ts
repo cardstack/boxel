@@ -275,7 +275,7 @@ function makeLoopConfig(
     // loop itself never reads or writes the workspace; it only invokes the
     // injected sync callback.
     workspaceDir: '/tmp/boxel-factory-test-unit',
-    syncWorkspace: async () => {},
+    syncWorkspace: async () => ({ ok: true }),
     maxIterationsPerIssue: 5,
     maxOuterCycles: 50,
     ...overrides,

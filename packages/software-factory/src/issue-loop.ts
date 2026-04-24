@@ -117,8 +117,13 @@ export interface IssueLoopConfig {
    * agent turn — before validation runs — and again after validation
    * writes its artifact cards. Factored out of the loop so tests can
    * stub it without spinning up a real CLI client.
+   *
+   * Returns `{ ok: true }` on success, or `{ ok: false, error }` when
+   * the sync reported errors. The loop uses this to refuse to mark an
+   * issue done if the agent's writes didn't actually reach the realm
+   * (e.g. atomic batch rejected by the realm server).
    */
-  syncWorkspace: () => Promise<void>;
+  syncWorkspace: () => Promise<{ ok: boolean; error?: string }>;
   briefUrl?: string;
   /** Maximum inner-loop iterations per issue. Default: 8. */
   maxIterationsPerIssue?: number;
@@ -324,7 +329,7 @@ export async function runIssueLoop(
       // Push the agent's workspace writes to the realm so the prerenderer-
       // backed validators (eval / instantiate / test-step's QUnit run) see
       // the latest source when they execute against the realm.
-      await syncWorkspace();
+      let preValidationSync = await syncWorkspace();
 
       // Validation — runs after every agent turn.
       // Pass the iteration number so all steps use it as the sequence
@@ -334,31 +339,66 @@ export async function runIssueLoop(
       // Push the validator's artifact cards (ParseResult / LintResult /
       // EvalResult / InstantiateResult / TestRun) to the realm so they
       // appear in the Boxel UI.
-      await syncWorkspace();
-      validationContext =
+      let postValidationSync = await syncWorkspace();
+
+      let syncFailed = !preValidationSync.ok || !postValidationSync.ok;
+      let syncError = preValidationSync.error ?? postValidationSync.error;
+
+      // If either sync failed, the agent's writes didn't land on the
+      // realm. Validators will have seen an empty/stale realm so a
+      // "passed" result is vacuous. Surface the sync error into the
+      // next iteration's context so the agent can react (retry,
+      // simplify, split the batch).
+      let validationSummary =
         validationResults && !validationResults.passed
           ? validator.formatForContext(validationResults)
           : undefined;
-      log.info(`  Validation: ${formatValidation(validationResults)}`);
+      if (syncFailed) {
+        let syncNotice = [
+          'Workspace sync to the realm FAILED — your file writes are still only on local disk.',
+          `Reason: ${syncError ?? '(unknown)'}`,
+          'Common causes: the realm server rejected the atomic batch (500),',
+          'a file has a syntax/index error, or an instance references a module',
+          "that isn't included in the same batch. Inspect your writes and try",
+          'again. Until the sync succeeds, the issue will not be marked done.',
+        ].join('\n');
+        validationContext = validationSummary
+          ? `${syncNotice}\n\n${validationSummary}`
+          : syncNotice;
+      } else {
+        validationContext = validationSummary;
+      }
+      log.info(
+        `  Validation: ${formatValidation(validationResults)}${
+          syncFailed ? ' (sync failed — ignoring validation pass/fail)' : ''
+        }`,
+      );
 
       // The loop owns issue status transitions. The agent signals
       // completion via signal_done; the loop promotes to "done" only
-      // when signal_done is called AND validation passes.
+      // when signal_done is called, validation passes, AND the sync
+      // succeeded. A failed sync means the realm doesn't have the
+      // agent's writes, so marking the issue done would claim
+      // completion for work that isn't actually delivered.
       let agentSignaledDone = result.toolCalls.some(
         (tc) => tc.tool === 'signal_done',
       );
 
-      if (agentSignaledDone && validationResults?.passed) {
+      if (agentSignaledDone && validationResults?.passed && !syncFailed) {
         try {
           await issueStore.updateIssue(issue.id, { status: 'done' });
           log.info(
-            `  Issue marked done (agent called signal_done, validation passed)`,
+            `  Issue marked done (agent called signal_done, validation passed, sync succeeded)`,
           );
         } catch (err) {
           log.warn(
             `  Failed to mark issue as done: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
+      } else if (agentSignaledDone && syncFailed) {
+        log.info(
+          `  Agent signaled done but workspace sync failed — work isn't on the realm yet, continuing iteration`,
+        );
       } else if (agentSignaledDone && !validationResults?.passed) {
         log.info(
           `  Agent signaled done but validation failed — continuing iteration`,
