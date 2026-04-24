@@ -95,9 +95,49 @@ export function windowErrorHandler({
     }
   }
 
+  // CS-10860: tag errors that bubbled up through Glimmer revalidation so
+  // the prerender server / ops operator has a cheap signal that the
+  // offending code lives in a template helper (getter/if/each) rather
+  // than in loader or model wiring. The minified stack still surfaces
+  // recognizable Glimmer/Ember frames — look for any of them and prepend
+  // a hint to the message so it shows up in the error doc without having
+  // to parse the stack by hand.
+  let templateHint = describeTemplateOrigin(errorPayload.error.stack);
+  if (templateHint && typeof errorPayload.error.message === 'string') {
+    if (!errorPayload.error.message.startsWith(templateHint)) {
+      errorPayload.error.message = `${templateHint}: ${errorPayload.error.message}`;
+    }
+  }
+
   setError(JSON.stringify(errorPayload));
   setStatusToUnusable();
   event.preventDefault?.();
+}
+
+const TEMPLATE_STACK_MARKERS = [
+  'ifHelper',
+  'eachHelper',
+  'helperForImpl',
+  'evaluateOuter',
+  'handleException',
+  'rerender',
+  'renderRoots',
+  'revalidate',
+  'UpdatingVM',
+  'LowLevelVM',
+] as const;
+
+function describeTemplateOrigin(
+  stack: string | null | undefined,
+): string | undefined {
+  if (!stack) {
+    return undefined;
+  }
+  let hit = TEMPLATE_STACK_MARKERS.find((marker) => stack.includes(marker));
+  if (!hit) {
+    return undefined;
+  }
+  return `Error during template render (Glimmer frame "${hit}" in stack)`;
 }
 
 export function errorJsonApiToErrorEntry(

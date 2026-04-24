@@ -725,6 +725,48 @@ module(basename(__filename), function () {
                   },
                 },
               },
+              // CS-10860 regression fixture: initial render succeeds, then a
+              // tracked write from the constructor schedules a revalidation
+              // whose {{#if}} helper throws a TypeError. In prod this
+              // signature surfaced as `Uncaught (in promise) TypeError:
+              // Cannot convert undefined or null to object` from ifHelper →
+              // compile → rerender, and the outer data-prerender-status
+              // binding stayed frozen at "loading" until the render-timeout
+              // fired at 90s. The fix makes the render route's window-path
+              // errorHandler transition the broken {{outlet}} to
+              // render/error.gts, so Glimmer can commit a render instead of
+              // rolling back every revalidation; see the CS-10860 comment in
+              // packages/host/app/routes/render.ts for the rationale.
+              'revalidation-throws.gts': `
+              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { tracked } from '@glimmer/tracking';
+              export class RevalidationThrows extends CardDef {
+                static isolated = class extends Component<typeof this> {
+                  @tracked bork = false;
+                  constructor(...args) {
+                    super(...args);
+                    Promise.resolve().then(() => { this.bork = true; });
+                  }
+                  get explode() {
+                    if (this.bork) {
+                      return Object.getPrototypeOf(undefined);
+                    }
+                    return null;
+                  }
+                  <template>{{#if this.explode}}hi{{/if}}</template>
+                }
+              }
+            `,
+              'revalidation-throws.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: './revalidation-throws',
+                      name: 'RevalidationThrows',
+                    },
+                  },
+                },
+              },
               'directory-query.gts': `
               import { CardDef, field, contains, linksTo, linksToMany, StringField, Component, queryableValue } from 'https://cardstack.com/base/card-api';
 
@@ -1222,6 +1264,53 @@ module(basename(__filename), function () {
         assert.true(
           result.pool.evicted,
           'unhandled rejection evicts prerender page to recover clean state',
+        );
+      });
+
+      test('card prerender surfaces revalidation-time helper errors without timing out', async function (assert) {
+        let cardURL = `${realmURL}revalidation-throws.json`;
+
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.ok(result.response.error, 'prerender reports error');
+        assert.strictEqual(
+          result.response.error?.error.status,
+          500,
+          'revalidation-time error surfaces as 500',
+        );
+        let message = result.response.error?.error.message ?? '';
+        let lowered = message.toLowerCase();
+        let surfacesTypeError =
+          message.includes('Cannot convert undefined or null to object') ||
+          lowered.includes('getprototypeof');
+        assert.ok(
+          surfacesTypeError,
+          `revalidation-time error surfaces underlying TypeError, got: ${message}`,
+        );
+        assert.false(
+          result.pool.timedOut,
+          'revalidation-time error should not be mistaken for timeout',
+        );
+        assert.true(
+          result.pool.evicted,
+          'revalidation-time error evicts prerender page to recover clean state',
+        );
+        let stack = result.response.error?.error.stack ?? '';
+        assert.ok(
+          stack.length > 0,
+          `revalidation-time error surfaces a stack trace (needed to localize the offending template), got: ${stack}`,
+        );
+        let hasTemplateOriginHint =
+          lowered.includes('template render') || lowered.includes('glimmer');
+        assert.ok(
+          hasTemplateOriginHint,
+          `error message includes a template-origin hint so ops can tell the error is in a template getter/helper, got: ${message}`,
         );
       });
 

@@ -141,6 +141,39 @@ export default class RenderRoute extends Route<Model> {
     if (isTesting()) {
       (globalThis as any).__boxelRenderContext = undefined;
     }
+    // CS-10860: swap the broken {{outlet}} content for render/error.gts so
+    // Glimmer can commit a render. Without this, a throw during revalidation
+    // inside a helper (e.g. {{#if throwingGetter}}) spins forever: the
+    // tracked write above schedules another revalidation that hits the same
+    // throw, Glimmer rolls the transaction back, and the outer
+    // data-prerender-status binding never commits.
+    //
+    // We deliberately bypass handleRenderError here — processRenderError
+    // would coerce model.status to 'error' and overwrite the 'unusable'
+    // DOM write, losing the evict=true signal the prerender server relies
+    // on to dispose the now-dead page. Prime renderErrorState with the
+    // text windowErrorHandler just wrote so render/error.gts renders the
+    // same payload, and transition manually to render.error.
+    let reason: any =
+      'reason' in event
+        ? (event as any).reason
+        : event instanceof ErrorEvent
+          ? (event.error ?? event.message)
+          : (event as CustomEvent).detail?.reason;
+    if (
+      reason?.name === 'TransitionAborted' ||
+      reason?.code === 'TRANSITION_ABORTED'
+    ) {
+      return;
+    }
+    let context = this.#deriveErrorContext();
+    let errorText = elements.errorElement?.textContent ?? '';
+    this.renderErrorState.setError({
+      reason: errorText,
+      cardId: context.cardId,
+      nonce: context.nonce,
+    });
+    this.#transitionToErrorRoute();
   };
 
   activate() {
