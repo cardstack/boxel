@@ -65,6 +65,10 @@ export function buildPrerenderApp(options: {
 }): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   prerenderer: Prerenderer;
+  // Resolved pool size (explicit option → env → default). Returned so
+  // `createPrerenderHttpServer` can report the same value to the
+  // manager in `sendHeartbeat` without duplicating the resolution.
+  maxPages: number;
 } {
   let app = new Koa<Koa.DefaultState, Koa.Context>();
   let router = new Router();
@@ -856,7 +860,7 @@ export function buildPrerenderApp(options: {
     log.error(`prerender server HTTP error: ${err.message}`);
   });
 
-  return { app, prerenderer };
+  return { app, prerenderer, maxPages };
 }
 
 function resolvePrerenderServerURL(port?: number): string {
@@ -897,7 +901,15 @@ export function createPrerenderHttpServer(options?: {
   let isClosing = false;
   let fatalExitOnUncaught = options?.fatalExitOnUncaught ?? true;
   let serverURL = resolvePrerenderServerURL(options?.port);
-  let { app, prerenderer } = buildPrerenderApp({
+  let {
+    app,
+    prerenderer,
+    // Reuse the resolved value `buildPrerenderApp` computed so
+    // `sendHeartbeat` reports the same pool size the PagePool was
+    // actually constructed with — no duplicate resolution, no drift
+    // when the default or env var changes.
+    maxPages: resolvedMaxPages,
+  } = buildPrerenderApp({
     maxPages: options?.maxPages,
     serverURL,
     isDraining: () => draining,
@@ -933,7 +945,7 @@ export function createPrerenderHttpServer(options?: {
   async function sendHeartbeat(status?: 'active' | 'draining') {
     try {
       const managerURL = resolvePrerenderManagerURL();
-      const capacity = Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
+      const capacity = resolvedMaxPages;
       let body = {
         data: {
           type: 'prerender-server',
