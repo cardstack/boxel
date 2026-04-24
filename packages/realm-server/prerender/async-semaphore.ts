@@ -6,6 +6,7 @@ import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel';
 //   - Prerenderer (global render-concurrency cap)
 //   - PagePool file-queue admission control (CS-10946)
 export class AsyncSemaphore {
+  #capacity: number;
   #available: number;
   // `resolve` hands the acquirer the release function once a slot
   // frees. `onCancel` gives the cancellation path a way to splice
@@ -16,7 +17,19 @@ export class AsyncSemaphore {
   }> = [];
 
   constructor(max: number) {
-    this.#available = Math.max(1, max);
+    this.#capacity = Math.max(1, max);
+    this.#available = this.#capacity;
+  }
+
+  // Total slots (from construction). Stable for the semaphore's lifetime.
+  get capacity(): number {
+    return this.#capacity;
+  }
+
+  // Waiters currently queued behind an exhausted semaphore. Zero when
+  // `#available > 0` (no one is waiting because slots are free).
+  get pendingCount(): number {
+    return this.#queue.length;
   }
 
   async acquire(signal?: AbortSignal): Promise<() => void> {
