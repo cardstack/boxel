@@ -91,9 +91,9 @@ describe('boxel profile add (non-interactive)', () => {
       expect(e.stderr).toMatch(/--realm-server-url/);
     }
 
-    expect(
-      fs.existsSync(join(tmpHome, '.boxel-cli', 'profiles.json')),
-    ).toBe(false);
+    expect(fs.existsSync(join(tmpHome, '.boxel-cli', 'profiles.json'))).toBe(
+      false,
+    );
   });
 
   it('derives URLs from the BOXEL_ENVIRONMENT slug', () => {
@@ -153,8 +153,8 @@ describe('boxel profile add (non-interactive)', () => {
       expect(e.stderr).toMatch(/no slug characters/);
     }
 
-    expect(
-      fs.existsSync(join(tmpHome, '.boxel-cli', 'profiles.json')),
-    ).toBe(false);
+    expect(fs.existsSync(join(tmpHome, '.boxel-cli', 'profiles.json'))).toBe(
+      false,
+    );
   });
 });

@@ -115,7 +115,10 @@ interface EnvironmentDefaults {
   realmServerUrl: string;
 }
 
-const MENU_ENVIRONMENTS: Record<'staging' | 'production' | 'local', EnvironmentDefaults> = {
+const MENU_ENVIRONMENTS: Record<
+  'staging' | 'production' | 'local',
+  EnvironmentDefaults
+> = {
   staging: {
     domain: 'stack.cards',
     matrixUrl: 'https://matrix-staging.stack.cards',
@@ -264,9 +267,7 @@ async function listProfiles(manager: ProfileManager): Promise<void> {
 
     console.log(`${marker}${BOLD}${id}${RESET}`);
     console.log(`    ${DIM}Name:${RESET} ${profile.displayName}`);
-    console.log(
-      `    ${DIM}Environment:${RESET} ${envColor}${domain}${RESET}`,
-    );
+    console.log(`    ${DIM}Environment:${RESET} ${envColor}${domain}${RESET}`);
     console.log(`    ${DIM}Realm Server:${RESET} ${profile.realmServerUrl}`);
     console.log('');
   }
