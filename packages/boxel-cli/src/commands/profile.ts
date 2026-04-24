@@ -105,6 +105,8 @@ export interface ProfileCommandOptions {
   user?: string;
   password?: string;
   name?: string;
+  matrixUrl?: string;
+  realmServerUrl?: string;
 }
 
 export async function profileCommand(
@@ -127,6 +129,8 @@ export async function profileCommand(
           options.user,
           password,
           options.name,
+          options.matrixUrl,
+          options.realmServerUrl,
         );
       } else {
         await addProfile(manager);
@@ -224,16 +228,41 @@ async function addProfile(manager: ProfileManager): Promise<void> {
   console.log(`  ${FG_CYAN}1${RESET}) Staging (realms-staging.stack.cards)`);
   console.log(`  ${FG_MAGENTA}2${RESET}) Production (app.boxel.ai)`);
   console.log(`  ${FG_GREEN}3${RESET}) Local (localhost:4201)`);
+  console.log(`  ${FG_YELLOW}4${RESET}) Custom (enter your own URLs)`);
 
-  const envChoice = await prompt('\nChoice [1/2/3]: ');
+  const envChoice = await prompt('\nChoice [1/2/3/4]: ');
   const isProduction = envChoice === '2';
   const isLocal = envChoice === '3';
+  const isCustom = envChoice === '4';
 
   let domain: string;
   let defaultMatrixUrl: string;
   let defaultRealmUrl: string;
 
-  if (isLocal) {
+  if (isCustom) {
+    const matrixUrlInput = await prompt('Matrix server URL: ');
+    if (!matrixUrlInput) {
+      console.error(`${FG_RED}Error:${RESET} Matrix server URL is required.`);
+      process.exit(1);
+    }
+    const realmUrlInput = await prompt('Realm server URL: ');
+    if (!realmUrlInput) {
+      console.error(`${FG_RED}Error:${RESET} Realm server URL is required.`);
+      process.exit(1);
+    }
+    let defaultDomain = 'custom';
+    try {
+      defaultDomain = new URL(matrixUrlInput).hostname || defaultDomain;
+    } catch {
+      // fall back to 'custom'
+    }
+    const domainInput = await prompt(
+      `Domain for Matrix ID [${defaultDomain}]: `,
+    );
+    domain = domainInput || defaultDomain;
+    defaultMatrixUrl = matrixUrlInput;
+    defaultRealmUrl = realmUrlInput;
+  } else if (isLocal) {
     domain = 'localhost';
     defaultMatrixUrl = 'http://localhost:8008';
     defaultRealmUrl = 'http://localhost:4201/';
@@ -381,6 +410,8 @@ async function addProfileNonInteractive(
   matrixId: string,
   password: string,
   displayName?: string,
+  matrixUrl?: string,
+  realmServerUrl?: string,
 ): Promise<void> {
   if (!matrixId.startsWith('@') || !matrixId.includes(':')) {
     console.error(
@@ -403,7 +434,20 @@ async function addProfileNonInteractive(
     return;
   }
 
-  await manager.addProfile(matrixId, password, displayName);
+  try {
+    await manager.addProfile(
+      matrixId,
+      password,
+      displayName,
+      matrixUrl,
+      realmServerUrl,
+    );
+  } catch (err) {
+    console.error(
+      `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exit(1);
+  }
   console.log(
     `${FG_GREEN}\u2713${RESET} Profile created: ${formatProfileBadge(matrixId)}`,
   );

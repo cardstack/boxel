@@ -27,11 +27,25 @@ program
   .option('-u, --user <matrixId>', 'Matrix user ID (e.g., @user:boxel.ai)')
   .option('-p, --password <password>', 'Password (for add command)')
   .option('-n, --name <displayName>', 'Display name (for add command)')
+  .option(
+    '-m, --matrix-url <url>',
+    'Matrix server URL (for add command with non-standard domains)',
+  )
+  .option(
+    '-r, --realm-server-url <url>',
+    'Realm server URL (for add command with non-standard domains)',
+  )
   .action(
     async (
       subcommand?: string,
       arg?: string,
-      options?: { user?: string; password?: string; name?: string },
+      options?: {
+        user?: string;
+        password?: string;
+        name?: string;
+        matrixUrl?: string;
+        realmServerUrl?: string;
+      },
     ) => {
       if (options?.password) {
         console.warn(
