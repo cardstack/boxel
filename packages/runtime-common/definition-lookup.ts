@@ -172,7 +172,7 @@ export interface DefinitionLookup {
     codeRef: ResolvedCodeRef,
   ): Promise<Definition | undefined>;
   invalidate(moduleURL: string): Promise<string[]>;
-  clearRealmCache(realmURL: string): Promise<void>;
+  clearRealmCache(resolvedRealmURL: string): Promise<void>;
   clearAllModules(): Promise<void>;
   registerRealm(realm: LocalRealm): void;
   forRealm(realm: LocalRealm): DefinitionLookup;
@@ -506,14 +506,16 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return uniqueInvalidations;
   }
 
-  async clearRealmCache(realmURL: string): Promise<void> {
+  async clearRealmCache(resolvedRealmURL: string): Promise<void> {
     await this.query([
       'DELETE FROM',
       MODULES_TABLE,
       'WHERE',
-      ...(every([['resolved_realm_url =', param(realmURL)]]) as Expression),
+      ...(every([
+        ['resolved_realm_url =', param(resolvedRealmURL)],
+      ]) as Expression),
     ]);
-    this.dropInFlightForRealm(realmURL);
+    this.dropInFlightForRealm(resolvedRealmURL);
   }
 
   async clearAllModules(): Promise<void> {
@@ -546,12 +548,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       }
       return;
     }
-    for (let moduleURL of moduleURLs) {
-      let prefix = `${resolvedRealmURL}|${moduleURL}|`;
-      for (let key of [...this.#inFlight.keys()]) {
-        if (key.startsWith(prefix)) {
-          this.#inFlight.delete(key);
-        }
+    let prefixes = moduleURLs.map(
+      (moduleURL) => `${resolvedRealmURL}|${moduleURL}|`,
+    );
+    for (let key of [...this.#inFlight.keys()]) {
+      if (prefixes.some((prefix) => key.startsWith(prefix))) {
+        this.#inFlight.delete(key);
       }
     }
   }
@@ -1286,8 +1288,8 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
     return await this.#inner.invalidate(moduleURL);
   }
 
-  async clearRealmCache(realmURL: string): Promise<void> {
-    await this.#inner.clearRealmCache(realmURL);
+  async clearRealmCache(resolvedRealmURL: string): Promise<void> {
+    await this.#inner.clearRealmCache(resolvedRealmURL);
   }
 
   async clearAllModules(): Promise<void> {
