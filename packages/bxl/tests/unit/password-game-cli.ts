@@ -1,6 +1,6 @@
 // Password Game regression test — 26 BXL rules covering the readable-syntax
 // surface (present/words/implies helpers, Excel LEN/UPPER/LEFT/RIGHT/PROPER,
-// infix CONTAINS/STARTSWITH/ENDSWITH/AND/IN, jq unique/split/tostring/etc.)
+// jq contains/startswith/endswith, AND/IN, jq unique/split/tostring/etc.)
 //
 // Source of truth is docs/password-game-spec.md. Each rule must:
 //   1. compile without throwing
@@ -68,13 +68,13 @@ const RULES: Rule[] = [
   {
     id: 7,
     label: 'Email contains @',
-    expression: '.profile.email CONTAINS "@"',
+    expression: '.profile.email | contains("@")',
     breakBy: (f) => ({ ...f, profile: { ...f.profile, email: 'ada-at-bxl.dev' } }),
   },
   {
     id: 8,
     label: 'Email starts with username',
-    expression: '.profile.email STARTSWITH .profile.username',
+    expression: '. as $root | .profile.email | startswith($root.profile.username)',
     breakBy: (f) => ({ ...f, profile: { ...f.profile, email: 'someone@else.org' } }),
   },
   {
@@ -132,7 +132,7 @@ const RULES: Rule[] = [
   {
     id: 15,
     label: 'Secret phrase contains BXL (case-insensitive)',
-    expression: 'UPPER(.security.secretPhrase) CONTAINS "BXL"',
+    expression: 'UPPER(.security.secretPhrase) | contains("BXL")',
     breakBy: (f) => ({
       ...f,
       security: { ...f.security, secretPhrase: 'I love coding in jq alone' },
@@ -141,7 +141,8 @@ const RULES: Rule[] = [
   {
     id: 16,
     label: 'Backup code starts with UPPER(first 3 of username)',
-    expression: '.security.backupCode STARTSWITH UPPER(LEFT(.profile.username, 3))',
+    expression:
+      '. as $root | .security.backupCode | startswith(UPPER(LEFT($root.profile.username, 3)))',
     breakBy: (f) => ({
       ...f,
       security: { ...f.security, backupCode: 'XYZPURPLE42' },
@@ -150,7 +151,8 @@ const RULES: Rule[] = [
   {
     id: 17,
     label: 'Backup code contains UPPER(favorite color)',
-    expression: '.security.backupCode CONTAINS UPPER(.preferences.favoriteColor)',
+    expression:
+      '. as $root | .security.backupCode | contains(UPPER($root.preferences.favoriteColor))',
     breakBy: (f) => ({
       ...f,
       security: { ...f.security, backupCode: 'ADAGREEN42' },
@@ -159,7 +161,8 @@ const RULES: Rule[] = [
   {
     id: 18,
     label: 'Backup code ends with your age',
-    expression: '.security.backupCode ENDSWITH (.profile.age | tostring)',
+    expression:
+      '. as $root | .security.backupCode | endswith($root.profile.age | tostring)',
     breakBy: (f) => ({
       ...f,
       security: { ...f.security, backupCode: 'ADAPURPLE99' },
@@ -205,7 +208,7 @@ const RULES: Rule[] = [
   {
     id: 24,
     label: 'Bio mentions the display name',
-    expression: '.bio CONTAINS .profile.displayName',
+    expression: '. as $root | .bio | contains($root.profile.displayName)',
     breakBy: (f) => ({
       ...f,
       bio: 'Just some text without the person name in it 2026 BXL',
@@ -214,7 +217,7 @@ const RULES: Rule[] = [
   {
     id: 25,
     label: 'Bio mentions the year 2026',
-    expression: '.bio CONTAINS "2026"',
+    expression: '.bio | contains("2026")',
     breakBy: (f) => ({
       ...f,
       bio: 'Ada Lovelace joined last year to code with ada42 and love BXL',

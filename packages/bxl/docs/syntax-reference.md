@@ -19,13 +19,13 @@ If you know spreadsheets, you know the core idea. The difference: instead of cel
 | `=A1 + B1` | `Price + Tax` |
 | `=SUM(A1:A10)` | `SUM("Line Item".Amount)`  — implicit iteration, no `map` needed |
 | `=IFERROR(A1, 0)` | `IFERROR(Value, 0)` |
-| `=SUMIF(C:C, "Service", B:B)` | `SUM("Line Item"[*Category = "Service"].Amount)` |
+| `=SUMIF(C:C, "Service", B:B)` | `SUM("Line Item"[* ."Category" = "Service"].Amount)` |
 | `=VLOOKUP(E2, A:B, 2, FALSE)` | `"Line Item"[SKU = Target SKU]."Unit Price"`  — first-match predicate |
 | `=A1` (first row) | `"Line Item"[#first].Amount` |
 | `=INDEX(A:A, ROWS(A:A))` (last) | `"Line Item"[#last].Amount` |
 | `=ROUND(B1*C1, 2)` | `ROUND(Quantity * "Unit Price", 2)` |
 
-> **Notice what changes between Excel and BXL:** no cell letters (`A1`), no absolute columns (`A:A`), no separate `ROWS()` to get the last position. Every row shows a different piece of sugar in action — labels replace cell references, implicit iteration replaces `map`, `[*pred]` replaces `SUMIF`, first-match `[pred]` replaces `VLOOKUP`, and positional selectors replace `INDEX`/`ROWS` arithmetic.
+> **Notice what changes between Excel and BXL:** no cell letters (`A1`), no absolute columns (`A:A`), no separate `ROWS()` to get the last position. Every row shows a different piece of sugar in action — labels replace cell references, implicit iteration replaces `map`, `[* .pred]` replaces `SUMIF`, first-match `[pred]` replaces `VLOOKUP`, and positional selectors replace `INDEX`/`ROWS` arithmetic.
 
 > **Commas for Excel, semicolons for `def`.** Built-in Excel formulas take commas to match spreadsheet paste: `ROUND("Unit Price", 2)`, `SUM(a, b, c)`. BXL rewrites the comma-separated argument list to jq's `;` form during compile so the runtime sees valid jq — that rewrite happens under the hood; `ROUND("Unit Price"; 2)` is not paste-compatible with Excel and is not a form authors write. The rewrite applies **only** to built-in Excel formulas: user-defined `def` helpers must use `;` at both the definition (`def clamp(lo; hi; x): …`) and the call (`clamp(0; 100; .score)`). Array literals also use **commas**: `[1, 2, 3]`.
 
@@ -49,7 +49,7 @@ If you only remember ten things about BXL, remember these. Every other section e
 | **1** | **Labels replace paths in schema-aware contexts.** `"Line Item".Quantity`, not `.lineItems[].quantity`. | Write what the UI shows. The compiler resolves display names via the active schema. |
 | **2** | **Implicit iteration on array fields.** Navigating `.field` on an array auto-materializes. | `SUM("Line Item".Amount)` — no `map`, no `[all]`. Sugar beats boilerplate. |
 | **3** | **One-based rows use `[#N]`; raw `[N]` is 0-based jq.** They mean different elements. | `[#4]` = 4th row. `[3]` = 4th row but zero-based (escape hatch). Pick one style per expression. |
-| **4** | **Predicates come in two shapes.** `[pred]` returns the first match; `[*pred]` returns every match. | Scalar vs array result. `[SKU="X"]` finds one; `[*Taxable]` filters all. |
+| **4** | **Predicates come in two shapes.** `[pred]` returns the first match; `[* .pred]` returns every match. | Scalar vs array result. `[SKU="X"]` finds one; `[* ."Taxable"]` filters all. |
 | **5** | **Excel-style equality works:** `=` and `<>` compile to `==` and `!=`. | Paste `IF(Status="paid", …)` from Excel, no edits needed. |
 | **6** | **UPPERCASE is a promise.** `ROUND`, `SUM`, `ISBLANK` match Microsoft Excel exactly. lowercase (`present`, `when`, `words`) is BXL-native. | UPPERCASE paste-compatible with Excel cells. lowercase is BXL's own vocabulary. |
 | **7** | **Positional selectors live in `[#...]` only.** Positive selectors are 1-based; last-relative selectors count backward from the end. | `[#1]`, `[#4]`, `[#first]`, `[#last]`, `[#last-1]`, `[#4..#last-3]`, `[#1, #2, #7..#9, #11]`, `[#odd]`, `[#even]`, `[#only]`. |
@@ -85,13 +85,13 @@ BXL keeps canonical jq valid and adds a schema-aware readable layer. Labels, one
 | Readable BXL | Canonical jq | Shape |
 | --- | --- | --- |
 | `"Line Item"[SKU = "COPY-04"].Quantity` | `first(.lineItems[] \| select(.sku == "COPY-04")).quantity` | **First match** — scalar result. |
-| `"Line Item"[*Category = "Service"]` | `[.lineItems[] \| select(.category == "Service")]` | **Filter all** — `[*pred]` keeps every matching row. |
-| `SUM("Line Item"[*Taxable]."Line Total")` | `SUM([.lineItems[] \| select(.taxable).lineTotal])` | Excel `SUMIF` shape — no dedicated `_BY` builtin needed. |
-| `COUNTA("Line Item"[*Quantity > 5])` | `COUNTA([.lineItems[] \| select(.quantity > 5)])` | Excel `COUNTIF` shape. |
-| `"Line Item"[*Quantity * "Unit Price" > 15].SKU` | `[.lineItems[] \| select(.quantity * .unitPrice > 15).sku]` | Arbitrary boolean predicate — arithmetic across sibling fields. |
-| `"Line Item"[SKU STARTSWITH "BRAND"]` | `first(.lineItems[] \| select(.sku \| startswith("BRAND")))` | `STARTSWITH` / `^=`, `ENDSWITH` / `$=`, `CONTAINS` / `*=`. |
+| `"Line Item"[* ."Category" = "Service"]` | `[.lineItems[] \| select(.category == "Service")]` | **Filter all** — `[* .pred]` keeps every matching row. |
+| `SUM("Line Item"[* ."Taxable"]."Line Total")` | `SUM([.lineItems[] \| select(.taxable).lineTotal])` | Excel `SUMIF` shape — no dedicated `_BY` builtin needed. |
+| `COUNTA("Line Item"[* .Quantity > 5])` | `COUNTA([.lineItems[] \| select(.quantity > 5)])` | Excel `COUNTIF` shape. |
+| `"Line Item"[* .Quantity * ."Unit Price" > 15].SKU` | `[.lineItems[] \| select(.quantity * .unitPrice > 15).sku]` | Arbitrary boolean predicate — arithmetic across sibling fields. |
+| `"Line Item"[SKU \| startswith("BRAND")]` | `first(.lineItems[] \| select(.sku \| startswith("BRAND")))` | String predicates use jq pipe form. |
 
-> **Predicate truthiness.** `[*Taxable]` (bare field) uses Excel truthy semantics — `true` keeps, `false` / `null` / missing filter out — same as jq's native `select(.taxable)`.
+> **Predicate truthiness.** `[* ."Taxable"]` uses jq item-scope truthiness — `true` keeps, `false` / `null` / missing filter out — same as jq's native `select(.taxable)`.
 
 ### Positional selectors
 
@@ -131,7 +131,7 @@ _Canonical jq · runtime form_
 ROUND(.subtotal * .taxRate / 100; 2) == .taxAmount
 ```
 
-> **Equality is Excel-style in readable BXL.** Use `=` for equality and `<>` for inequality everywhere — top-level, inside `[pred]`, `[*pred]`, `all(…)`, `any(…)`, `IF(…)`. Both `==` / `!=` still parse as input; the canonicalizer rewrites. Compiled jq keeps `==` / `!=` because jq requires them at runtime.
+> **Equality is Excel-style in readable BXL.** Use `=` for equality and `<>` for inequality everywhere — top-level, inside `[pred]`, `[* .pred]`, `all(…)`, `any(…)`, `IF(…)`. Both `==` / `!=` still parse as input; the canonicalizer rewrites. Compiled jq keeps `==` / `!=` because jq requires them at runtime.
 
 > **Root-scope across pipes is automatic.** BXL detects readable labels that appear after a top-level pipe and auto-binds the root via `. as $root`. You can write `"Line Item"[all]."Line Total" | add == Subtotal` without parentheses — it compiles to `. as $root | [.lineItems[].lineTotal] | add == $root.subtotal`. Explicit jq paths (`.subtotal`) still mean "read from the current piped input"; readable labels mean "read from the root."
 
@@ -164,32 +164,32 @@ BXL absorbs five Excel-specific idioms so a formula from a spreadsheet works ver
 
 ## Interesting Patterns
 
-Compact idioms that showcase how labels, `[*pred]`, implicit iteration, and Excel operators braid together. Each one-liner replaces 5–10 lines of imperative TypeScript.
+Compact idioms that showcase how labels, `[* .pred]`, implicit iteration, and Excel operators braid together. Each one-liner replaces 5–10 lines of imperative TypeScript.
 
 ### Excel SUMIF / COUNTIF without the `_BY` builtin
 
 _Conditional sum_
 
 ```
-SUM("Line Item"[*Taxable]."Line Total")
+SUM("Line Item"[* ."Taxable"]."Line Total")
 ```
 
 _Conditional count (with explicit predicate)_
 
 ```
-COUNTA("Line Item"[*Category = "Service"])
+COUNTA("Line Item"[* ."Category" = "Service"])
 ```
 
 _Average with a numeric predicate_
 
 ```
-AVERAGE("Line Item"[*Quantity > 2]."Line Total")
+AVERAGE("Line Item"[* .Quantity > 2]."Line Total")
 ```
 
 _Predicate with arithmetic across sibling fields_
 
 ```
-"Line Item"[*Quantity * "Unit Price" > 15].SKU
+"Line Item"[* .Quantity * ."Unit Price" > 15].SKU
 ```
 
 ### Self-auditing constraints
@@ -197,7 +197,7 @@ _Predicate with arithmetic across sibling fields_
 _Stored tax matches computed tax_
 
 ```
-ROUND(SUM("Line Item"[*Taxable]."Line Total") * "Tax Rate" / 100, 2) = "Tax Amount"
+ROUND(SUM("Line Item"[* ."Taxable"]."Line Total") * "Tax Rate" / 100, 2) = "Tax Amount"
 ```
 
 _Subtotal matches line-item aggregate (root-scope across pipe)_
@@ -209,7 +209,7 @@ _Subtotal matches line-item aggregate (root-scope across pipe)_
 _Payments cover balance_
 
 ```
-Total - SUM(Payment[*Status = "captured"].Amount)
+Total - SUM(Payment[* .Status = "captured"].Amount)
 ```
 
 ### Policy predicates with `all` / `any`
@@ -277,13 +277,13 @@ Status = "in-review"
 _Empty check_
 
 ```
-(Payment[*Status = "failed"] | length) = 0
+(Payment[* .Status = "failed"] | length) = 0
 ```
 
 _Exactly one match, then take it_
 
 ```
-"Line Item"[*Category = "Service"][#only]
+"Line Item"[* ."Category" = "Service"][#only]
 ```
 
 ### Multi-line analytics pipeline
@@ -338,7 +338,7 @@ ROUND(Subtotal - "Discount Amount" + "Tax Amount" + Shipping, 2) = Total
 _Taxable-only tax_
 
 ```
-ROUND(("Line Item"[*Taxable]."Line Total" | add) * "Tax Rate" / 100, 2) = "Tax Amount"
+ROUND(("Line Item"[* ."Taxable"]."Line Total" | add) * "Tax Rate" / 100, 2) = "Tax Amount"
 ```
 
 _Per-item consistency_
@@ -377,7 +377,7 @@ end
 _Missing-submission flag_
 
 ```
-Assignment[*Submitted = false].Title
+Assignment[* .Submitted = false].Title
 ```
 
 ### 3 · Mortgage / loan comparison
@@ -402,13 +402,13 @@ Flag violations: meals over per-diem by city, missing receipts above $75, late s
 _Per-diem over-limit_
 
 ```
-Item[*Category = "meal" and Amount > VLOOKUP(City, Policy."Per Diem", 2, false)].Category
+Item[* .Category = "meal" and .Amount > VLOOKUP(.City, Policy."Per Diem", 2, false)].Category
 ```
 
 _Missing receipt_
 
 ```
-Item[*Amount > 75 and "Has Receipt" = false]
+Item[* .Amount > 75 and ."Has Receipt" = false]
 ```
 
 _Late submission_
@@ -508,7 +508,7 @@ SUMIF_BY(Timesheet[], "Hours Worked" > 8, "Hours Worked" - 8) * "Hourly Rate" * 
 _Lunch-break policy_
 
 ```
-Timesheet[*"Hours Worked" > 6 and "Lunch Taken" = false].Date
+Timesheet[* ."Hours Worked" > 6 and ."Lunch Taken" = false].Date
 ```
 
 ### 9 · Form conditional logic and auto-fill
@@ -545,7 +545,7 @@ _Outlier list (> 3 sigma)_
 
 ```
 Reading[*
-    ABS((Value - AVERAGE(Reading[all].Value)) / STDEV_P(Reading[all].Value)) > 3
+    ABS((.Value - AVERAGE(Reading[all].Value)) / STDEV_P(Reading[all].Value)) > 3
 ].Timestamp
 ```
 
@@ -981,6 +981,8 @@ Two flavors: **range-based** (classic Excel) and **\_BY** variants for arrays of
 | `VLOOKUP(val, table, colIdx)` | Vertical lookup -- search first column, return nth column |
 | `VLOOKUP(val, table, colIdx, rangeLookup)` | Set `rangeLookup` to `false` for exact match |
 | `VLOOKUP_BY(rows, lookupKey, val, resultKey)` | Row-object VLOOKUP |
+| `XLOOKUP(val, lookupArr, returnArr)` | Exact lookup across independent lookup/return arrays |
+| `XLOOKUP(val, lookupArr, returnArr, fallback)` | Exact lookup with fallback for missing values |
 | `HLOOKUP(val, table, rowIdx)` | Horizontal lookup |
 | `LOOKUP(val, lookupArr, resultArr)` | Simple lookup with two arrays |
 | `LOOKUP_BY(rows, lookupKey, val, resultKey)` | Row-object LOOKUP |
@@ -1048,6 +1050,7 @@ INDEX(.names, MATCH("target", .ids, 0))
 | `IFERROR(val, fallback)` | Catch any error | `IFERROR(.x / .y, 0)` |
 | `IFNA(val, fallback)` | Catch only #N/A | `IFNA(VLOOKUP(...), "missing")` |
 | `IFS(c1, v1, c2, v2, ...)` | Multiple conditions (2--4 pairs) | `IFS(.x > 90, "A", .x > 80, "B", true, "C")` |
+| `LET(name, value, expr)` | Excel-style local binding lowered to jq `as $name` | `LET(limit, 10000, .amount > limit)` |
 | `SWITCH([expr, v1, r1, ...])` | Value-based dispatch (commas inside array) | `SWITCH([.status, "A", "Active", "I", "Inactive", "Unknown"])` |
 | `when(p, q)` | **BXL** — implication shortcut. Equivalent to `IF(p, q, TRUE)`. Useful for "if this applies, then this must hold" constraints. | `when(Payment = "Credit card", present("Bill To".Zip))` |
 | `implies(p, q)` | **BXL** — alias for `when`. Preferred when the expression reads as logic. | `implies(Status = "shipped", "Tracking Number" != null)` |

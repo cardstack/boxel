@@ -94,7 +94,7 @@ when(Payment = "Credit card"; present("Bill To".Zip))
 ```bxl
 UPPER(Currency) = "USD"        -- Excel idiom
 words(Donor) >= 2              -- BXL, no Excel equivalent
-Email CONTAINS "@"             -- lowercase jq, infix form
+Email | contains("@")          -- lowercase jq pipe form
 ```
 
 ### Numbers & math

@@ -88,6 +88,9 @@ strictEqual(firstMatch('selectors', '#-2'), 'constant.numeric.zero-based-index.b
 strictEqual(firstMatch('selectors', '#last'), 'keyword.other.selector-hash.bxl');
 strictEqual(firstMatch('selectors', '#last-3'), 'keyword.other.selector-hash.bxl');
 strictEqual(firstMatch('numbers', '89.04'), 'constant.numeric.bxl');
-strictEqual(firstMatch('keywords', 'STARTSWITH'), 'keyword.operator.predicate.bxl');
+strictEqual(firstMatch('keywords', 'IN'), 'keyword.operator.predicate.bxl');
+strictEqual(firstMatch('keywords', 'LIKE'), 'keyword.operator.predicate.bxl');
+strictEqual(firstMatch('keywords', 'BETWEEN'), 'keyword.operator.predicate.bxl');
+strictEqual(firstMatch('jq-functions', 'overlaps('), 'support.function.jq.bxl');
 
 console.log('BXL syntax highlighting grammar: validation passed');

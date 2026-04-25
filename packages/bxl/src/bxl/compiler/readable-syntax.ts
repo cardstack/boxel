@@ -353,10 +353,12 @@ const FORMULA_FUNCTIONS = new Set([
   'WEEKNUM',
   'WORKDAY',
   'WORKDAY_INTL',
+  'LET',
   'XIRR',
   'XIRR_BY',
   'XNPV',
   'XNPV_BY',
+  'XLOOKUP',
   'XOR',
   'YEAR',
   'YEARFRAC',
@@ -365,14 +367,37 @@ const FORMULA_FUNCTIONS = new Set([
 export const BXL_FORMULA_FUNCTIONS = FORMULA_FUNCTIONS;
 
 const LOWERCASE_BXL_HELPERS = new Set([
+  'between',
   'implies',
+  'like',
   'nonempty',
+  'overlaps',
   'present',
   'when',
   'words',
 ]);
 
 export const BXL_COMMA_ARGUMENT_HELPERS = LOWERCASE_BXL_HELPERS;
+
+const REMOVED_STRING_WORD_OPERATORS = new Set([
+  'CONTAINS',
+  'STARTSWITH',
+  'ENDSWITH',
+]);
+
+const REMOVED_STRING_OPERATOR_ALIASES = new Set(['^=', '$=', '*=']);
+
+function removedStringOperatorMessage(operator: string): string {
+  return `Readable string operator ${operator} was removed. Use jq pipe form instead, such as Field | contains("text"), Field | startswith("prefix"), or Field | endswith("suffix").`;
+}
+
+function isRemovedStringWordOperator(value: string): boolean {
+  const lower = value.toLowerCase();
+  return (
+    value !== lower &&
+    (lower === 'contains' || lower === 'startswith' || lower === 'endswith')
+  );
+}
 
 const ARRAY_PACKED_VARIADIC_FORMULAS = new Set([
   'AND',
@@ -420,11 +445,13 @@ const CASE_INSENSITIVE_JQ_FUNCTIONS = new Set([
   'keys',
   'last',
   'length',
+  'like',
   'map',
   'map_values',
   'max',
   'min',
   'nonempty',
+  'overlaps',
   'present',
   'reverse',
   'select',
@@ -442,6 +469,7 @@ const CASE_INSENSITIVE_JQ_FUNCTIONS = new Set([
   'when',
   'with_entries',
   'words',
+  'between',
 ]);
 
 const PATH_RESERVED = new Set([
@@ -474,6 +502,10 @@ function isIdent(token: Token | undefined, value: string): boolean {
 
 function canonicalFunctionName(name: string): string {
   const upper = name.toUpperCase();
+  if (isRemovedStringWordOperator(name)) {
+    throw new ReadableSyntaxError(removedStringOperatorMessage(upper));
+  }
+
   if (FORMULA_FUNCTIONS.has(upper)) {
     return upper;
   }
@@ -1249,12 +1281,14 @@ function isPredicateLike(tokens: Token[]): boolean {
   return tokens.some(
     (token) =>
       token.type === 'ident' ||
-      ['=', '==', '!=', '<', '<=', '>', '>=', '^=', '$=', '*='].includes(
-        token.value,
-      ) ||
-      ['STARTSWITH', 'ENDSWITH', 'CONTAINS', 'IN'].includes(
-        token.value.toUpperCase(),
-      ),
+      ['=', '==', '!=', '<', '<=', '>', '>='].includes(token.value) ||
+      ['between', 'in', 'is', 'like'].includes(token.value.toLowerCase()),
+  );
+}
+
+function hasExplicitCurrentItem(tokens: Token[]): boolean {
+  return tokens.some(
+    (token) => token.type === 'op' && (token.value === '.' || token.value === '?.'),
   );
 }
 
@@ -1277,6 +1311,11 @@ function compilePredicate(
       changed: parts.some((part) => part.changed),
       warnings: parts.flatMap((part) => part.warnings),
     };
+  }
+
+  const sqlConstruct = compileSqlPredicateConstruct(tokens, itemScope);
+  if (sqlConstruct) {
+    return sqlConstruct;
   }
 
   const rangesAnd = splitTopLevel(tokens, 0, tokens.length, 'and');
@@ -1309,13 +1348,20 @@ function compilePredicate(
     };
   }
 
+  const removedStringOp = tokens.find(
+    (token) =>
+      REMOVED_STRING_OPERATOR_ALIASES.has(token.value) ||
+      (token.type === 'ident' && isRemovedStringWordOperator(token.value)),
+  );
+  if (removedStringOp) {
+    throw new ReadableSyntaxError(
+      removedStringOperatorMessage(removedStringOp.value),
+    );
+  }
+
   const opIndex = tokens.findIndex((token) =>
-    ['=', '==', '!=', '<', '<=', '>', '>=', '^=', '$=', '*='].includes(
-      token.value,
-    ) ||
-    ['STARTSWITH', 'ENDSWITH', 'CONTAINS', 'IN'].includes(
-      token.value.toUpperCase(),
-    ),
+    ['=', '==', '!=', '<', '<=', '>', '>='].includes(token.value) ||
+    token.value.toUpperCase() === 'IN',
   );
 
   if (opIndex === -1) {
@@ -1332,9 +1378,7 @@ function compilePredicate(
   }
 
   const left = compileValue(tokens.slice(0, opIndex), itemScope);
-  const op = ['STARTSWITH', 'ENDSWITH', 'CONTAINS', 'IN'].includes(
-    tokens[opIndex].value.toUpperCase(),
-  )
+  const op = tokens[opIndex].value.toUpperCase() === 'IN'
     ? tokens[opIndex].value.toUpperCase()
     : tokens[opIndex].value;
   const right = compileValue(tokens.slice(opIndex + 1), itemScope);
@@ -1358,27 +1402,6 @@ function compilePredicate(
         changed: left.changed || right.changed,
         warnings,
       };
-    case '^=':
-    case 'STARTSWITH':
-      return {
-        source: `(${left.source} | startswith(${right.source}))`,
-        changed: true,
-        warnings,
-      };
-    case '$=':
-    case 'ENDSWITH':
-      return {
-        source: `(${left.source} | endswith(${right.source}))`,
-        changed: true,
-        warnings,
-      };
-    case '*=':
-    case 'CONTAINS':
-      return {
-        source: `(${left.source} | contains(${right.source}))`,
-        changed: true,
-        warnings,
-      };
     case 'IN':
       return {
         source: `(${left.source} | IN(${right.source}))`,
@@ -1397,6 +1420,112 @@ function compilePredicate(
   }
 }
 
+function compileSqlPredicateConstruct(
+  tokens: Token[],
+  itemScope: ReadableSchema | undefined,
+): CompileChunk | undefined {
+  const isIndex = findTopLevelWord(tokens, 'is');
+  if (isIndex > 0) {
+    const notIndex = isIdent(tokens[isIndex + 1], 'not') ? isIndex + 1 : -1;
+    const literalIndex = notIndex === -1 ? isIndex + 1 : isIndex + 2;
+    const literal = sqlIsLiteral(tokens[literalIndex]);
+    if (literal && literalIndex === tokens.length - 1) {
+      const left = compileValue(tokens.slice(0, isIndex), itemScope);
+      const op = notIndex === -1 ? '==' : '!=';
+      return {
+        source: `${left.source} ${op} ${literal}`,
+        changed: true,
+        warnings: left.warnings,
+      };
+    }
+  }
+
+  const betweenIndex = findTopLevelWord(tokens, 'between');
+  if (betweenIndex > 0) {
+    const notIndex = isIdent(tokens[betweenIndex - 1], 'not')
+      ? betweenIndex - 1
+      : -1;
+    const leftEnd = notIndex === -1 ? betweenIndex : notIndex;
+    const andIndex = findTopLevelWord(tokens, 'and', betweenIndex + 1);
+    if (andIndex > betweenIndex + 1 && andIndex < tokens.length - 1) {
+      const left = compileValue(tokens.slice(0, leftEnd), itemScope);
+      const lower = compileValue(tokens.slice(betweenIndex + 1, andIndex), itemScope);
+      const upper = compileValue(tokens.slice(andIndex + 1), itemScope);
+      const source = `between(${left.source}; ${lower.source}; ${upper.source})`;
+      return {
+        source: notIndex === -1 ? source : `(${source} | not)`,
+        changed: true,
+        warnings: [...left.warnings, ...lower.warnings, ...upper.warnings],
+      };
+    }
+  }
+
+  const likeIndex = findTopLevelWord(tokens, 'like');
+  if (likeIndex > 0) {
+    const notIndex = isIdent(tokens[likeIndex - 1], 'not') ? likeIndex - 1 : -1;
+    const leftEnd = notIndex === -1 ? likeIndex : notIndex;
+    const left = compileValue(tokens.slice(0, leftEnd), itemScope);
+    const pattern = compileValue(tokens.slice(likeIndex + 1), itemScope);
+    const source = `like(${left.source}; ${pattern.source})`;
+    return {
+      source: notIndex === -1 ? source : `(${source} | not)`,
+      changed: true,
+      warnings: [...left.warnings, ...pattern.warnings],
+    };
+  }
+
+  const inIndex = findTopLevelWord(tokens, 'in');
+  if (inIndex > 0 && isIdent(tokens[inIndex - 1], 'not')) {
+    const left = compileValue(tokens.slice(0, inIndex - 1), itemScope);
+    const right = compileValue(tokens.slice(inIndex + 1), itemScope);
+    return {
+      source: `((${left.source} | IN(${right.source})) | not)`,
+      changed: true,
+      warnings: [
+        ...left.warnings,
+        ...right.warnings,
+        {
+          code: 'in-predicate-needs-helper',
+          message:
+            'Readable IN predicates compile to IN(value); add a native helper before using this in production.',
+        },
+      ],
+    };
+  }
+
+  return undefined;
+}
+
+function findTopLevelWord(tokens: Token[], word: string, start = 0): number {
+  let depth = 0;
+  for (let i = start; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token.type === 'punc') {
+      if (token.value === '(' || token.value === '[' || token.value === '{') {
+        depth++;
+      } else if (token.value === ')' || token.value === ']' || token.value === '}') {
+        depth--;
+      }
+      continue;
+    }
+    if (depth === 0 && isIdent(token, word)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function sqlIsLiteral(token: Token | undefined): string | undefined {
+  if (!token || token.type !== 'ident') {
+    return undefined;
+  }
+  const lower = token.value.toLowerCase();
+  if (lower === 'null' || lower === 'true' || lower === 'false') {
+    return lower;
+  }
+  return undefined;
+}
+
 class Compiler {
   private index = 0;
   private readonly end: number;
@@ -1408,6 +1537,7 @@ class Compiler {
       schema?: ReadableSchema;
       rootPathPrefix?: string;
       itemScope?: ReadableSchema;
+      bindings?: Iterable<string>;
     },
     start = 0,
     end = tokens.length,
@@ -1417,6 +1547,7 @@ class Compiler {
     this.schema = options.schema;
     this.rootPathPrefix = options.rootPathPrefix;
     this.constructorItemScope = options.itemScope;
+    this.bindings = new Set(options.bindings ?? []);
   }
 
   private readonly rootPathPrefix?: string;
@@ -1424,6 +1555,7 @@ class Compiler {
   // (which is the root for bare-ident lookup). Gets mutated during a
   // pipeline: after `|`, `.` points at the prior stream's element scope.
   private readonly constructorItemScope?: ReadableSchema;
+  private readonly bindings: Set<string>;
 
   compile(scope = this.schema): CompileChunk {
     const parts: string[] = [];
@@ -1461,7 +1593,12 @@ class Compiler {
           const close = findMatching(this.tokens, open);
           const inner = new Compiler(
             this.tokens,
-            { schema: this.schema, rootPathPrefix: readableRootPrefix, itemScope },
+            {
+              schema: this.schema,
+              rootPathPrefix: readableRootPrefix,
+              itemScope,
+              bindings: this.bindings,
+            },
             open + 1,
             close,
           ).compile(scope);
@@ -1539,7 +1676,12 @@ class Compiler {
         const close = findMatching(this.tokens, this.index);
         const inner = new Compiler(
           this.tokens,
-          { schema: this.schema, rootPathPrefix: readableRootPrefix, itemScope },
+          {
+            schema: this.schema,
+            rootPathPrefix: readableRootPrefix,
+            itemScope,
+            bindings: this.bindings,
+          },
           this.index + 1,
           close,
         ).compile(scope);
@@ -1555,7 +1697,12 @@ class Compiler {
         const close = findMatching(this.tokens, this.index);
         const inner = new Compiler(
           this.tokens,
-          { schema: this.schema, rootPathPrefix: readableRootPrefix, itemScope },
+          {
+            schema: this.schema,
+            rootPathPrefix: readableRootPrefix,
+            itemScope,
+            bindings: this.bindings,
+          },
           this.index + 1,
           close,
         ).compile(scope);
@@ -1619,7 +1766,7 @@ class Compiler {
       const key = this.tokens.slice(start, colon).map(tokenSource).join('');
       const value = new Compiler(
         this.tokens,
-        { schema: this.schema, rootPathPrefix, itemScope },
+        { schema: this.schema, rootPathPrefix, itemScope, bindings: this.bindings },
         colon + 1,
         end,
       ).compile(scope);
@@ -1669,6 +1816,17 @@ class Compiler {
       ? splitTopLevel(this.tokens, open + 1, close, ',')
       : semicolonRanges;
 
+    if (name === 'LET') {
+      const compiledLet = this.compileLetFunction(
+        ranges,
+        scope,
+        rootPathPrefix,
+        itemScope,
+      );
+      this.index = close + 1;
+      return compiledLet;
+    }
+
     // Thread the caller's `.` scope through into each argument's compile.
     // For filter combinators like `map`/`select`, callers always arrive with
     // `itemScope` already set to the element shape (pipes set itemScope to
@@ -1678,7 +1836,7 @@ class Compiler {
     const args = ranges.map(([start, end]) =>
       new Compiler(
         this.tokens,
-        { schema: this.schema, rootPathPrefix, itemScope },
+        { schema: this.schema, rootPathPrefix, itemScope, bindings: this.bindings },
         start,
         end,
       ).compile(scope),
@@ -1709,6 +1867,87 @@ class Compiler {
       streamItemScope: args[0]?.streamItemScope,
       needsRootBinding: args.some((arg) => arg.needsRootBinding),
     };
+  }
+
+  private compileLetFunction(
+    ranges: [number, number][],
+    scope: ReadableSchema | undefined,
+    rootPathPrefix?: string,
+    itemScope?: ReadableSchema,
+  ): CompileChunk {
+    if (ranges.length < 3 || ranges.length % 2 === 0) {
+      throw new ReadableSyntaxError(
+        'LET expects one or more name/value pairs followed by a final expression.',
+      );
+    }
+
+    const warnings: ReadableSyntaxWarning[] = [];
+    const nextBindings = new Set(this.bindings);
+    const compiledBindings: { name: string; value: CompileChunk }[] = [];
+    let needsRootBinding = false;
+
+    for (let index = 0; index < ranges.length - 1; index += 2) {
+      const name = this.letBindingName(ranges[index]);
+      const valueRange = ranges[index + 1];
+      const value = new Compiler(
+        this.tokens,
+        {
+          schema: this.schema,
+          rootPathPrefix,
+          itemScope,
+          bindings: nextBindings,
+        },
+        valueRange[0],
+        valueRange[1],
+      ).compile(scope);
+      compiledBindings.push({ name, value });
+      warnings.push(...value.warnings);
+      needsRootBinding = needsRootBinding || Boolean(value.needsRootBinding);
+      nextBindings.add(name);
+    }
+
+    const bodyRange = ranges[ranges.length - 1];
+    const body = new Compiler(
+      this.tokens,
+      {
+        schema: this.schema,
+        rootPathPrefix,
+        itemScope,
+        bindings: nextBindings,
+      },
+      bodyRange[0],
+      bodyRange[1],
+    ).compile(scope);
+    warnings.push(...body.warnings);
+    needsRootBinding = needsRootBinding || Boolean(body.needsRootBinding);
+
+    let source = body.source;
+    for (const binding of [...compiledBindings].reverse()) {
+      source = `(${binding.value.source}) as $${binding.name} | ${source}`;
+    }
+
+    return {
+      source,
+      changed: true,
+      warnings,
+      streamItemScope: body.streamItemScope,
+      needsRootBinding,
+    };
+  }
+
+  private letBindingName(range: [number, number]): string {
+    const tokens = this.tokens.slice(range[0], range[1]);
+    if (
+      tokens.length !== 1 ||
+      tokens[0].type !== 'ident' ||
+      KEYWORDS.has(tokens[0].value.toLowerCase()) ||
+      LITERALS.has(tokens[0].value.toLowerCase())
+    ) {
+      throw new ReadableSyntaxError(
+        'LET binding names must be bare identifiers.',
+      );
+    }
+    return tokens[0].value;
   }
 
   private tryCompilePath(
@@ -1764,6 +2003,10 @@ class Compiler {
       valueScope = resolved?.valueScope;
       arrayItemScope = resolved?.arrayItemScope;
       pendingImplicitArray = Boolean(resolved?.field.kind === 'array');
+      changed = true;
+    } else if (first?.type === 'ident' && this.bindings.has(first.value)) {
+      out = `$${first.value}`;
+      this.index++;
       changed = true;
     } else {
       const label = this.readLabelToken(scope);
@@ -1959,19 +2202,33 @@ class Compiler {
       };
     }
 
-    // `[*pred]` — filter-all. The leading `*` marks "keep every row that
+    // `[* .pred]` — filter-all. The leading `*` marks "keep every row that
     // satisfies the predicate" and emits a materialized stream that the
-    // rest of the path can navigate into. Composes with downstream
-    // `.field` via implicit `[all]` just like the bare `[all]` form:
-    //   "Line Item"[*Taxable]."Line Total"
+    // rest of the path can navigate into. BXL 1.x requires an explicit `.`
+    // inside the predicate so item-scope paths are visibly jq-shaped:
+    //   "Line Item"[* ."Taxable"]."Line Total"
     //     → [.lineItems[] | select(.taxable).lineTotal]
-    //   COUNT("Line Item"[*Category = "Service"])
+    //   COUNT("Line Item"[* ."Category" = "Service"])
     //     → COUNT([.lineItems[] | select(.category == "Service")])
-    // Bare-label shorthand: `[*Taxable]` means `[*Taxable == true]` in
-    // the Excel-truthy sense; jq's own `select(.x)` already does the
-    // right thing (null/false filter out, everything else keeps).
     if (inner[0]?.type === 'op' && inner[0].value === '*' && item) {
       const predTokens = inner.slice(1);
+      if (predTokens.length === 0) {
+        return {
+          source: `[${base}[]`,
+          changed: true,
+          warnings: [],
+          next: this.index,
+          valueScope: item,
+          arrayItemScope: item,
+          streamItemScope: item,
+          openMaterialized: true,
+        };
+      }
+      if (!hasExplicitCurrentItem(predTokens)) {
+        throw new ReadableSyntaxError(
+          'Filter-all [* ...] predicates must use explicit current-item paths such as [* .Field] or [* ."Display Label"].',
+        );
+      }
       const predicate = compilePredicate(predTokens, item);
       return {
         source: `[${base}[] | select(${predicate.source})`,
@@ -2247,6 +2504,7 @@ class Compiler {
       const compiled = new Compiler(inner, {
         schema: this.schema,
         rootPathPrefix,
+        bindings: this.bindings,
       }).compile(currentScope);
       return {
         source: `[${base}[${compiled.source}][]`,
@@ -2264,6 +2522,7 @@ class Compiler {
     const compiled = new Compiler(inner, {
       schema: this.schema,
       rootPathPrefix,
+      bindings: this.bindings,
     }).compile(currentScope);
     return {
       source: `${base}[${compiled.source}]`,
@@ -2296,76 +2555,137 @@ export function stripExcelCellPrefix(source: string): { source: string; changed:
 // We process occurrences right-to-left so `^`'s right-associativity and
 // `&` chaining both fall out naturally.
 /**
- * Rewrite `X STARTSWITH Y` / `X ENDSWITH Y` / `X CONTAINS Y` as infix
- * operators (outside predicate brackets) into pipe-form jq calls:
+ * Rewrite SQL-like readable predicate operators outside predicate brackets.
+ * `IN`, `BETWEEN`, `LIKE`, and `IS` are kept as syntax sugar because they are
+ * portable SQL predicate operators. Non-SQL semantics stay function-shaped,
+ * exactly like jq. The string word operators are rejected instead of rewritten
+ * because `.contains CONTAINS "fish"` is too ambiguous.
  *
- *   .donor STARTSWITH "Mr."   →   ((.donor) | startswith("Mr."))
- *   .email CONTAINS "@"       →   ((.email) | contains("@"))
+ * Lowercase jq pipe form remains valid BXL:
  *
- * The word forms compile correctly inside predicate suffix brackets
- * (`Foo[Bar STARTSWITH "X"]`) via compilePredicate, so this pass skips only
- * those bracket contexts. Array literals/comprehensions like
- * `[range(...) as $r | "abc" STARTSWITH "a"]` still need rewriting.
- * Formula-call form (`STARTSWITH(x; y)`) is already handled by the
- * function-call compiler — we only rewrite when the word is followed by an
- * atom, not `(`.
+ *   .email | contains("@")
+ *   .code  | startswith("INV-")
  */
 export function rewriteWordBinaryOperators(
   source: string,
 ): { source: string; changed: boolean } {
-  const WORD_OPS: Record<string, string> = {
-    STARTSWITH: 'startswith',
-    ENDSWITH: 'endswith',
-    CONTAINS: 'contains',
-  };
   let current = source;
-  let changed = false;
   let guard = 0;
   while (guard++ < 1024) {
     const tokens = tokenizeQuietly(current);
     if (!tokens) break;
     let rewroteThisPass = false;
-    // Walk right-to-left so indices on the left remain valid between passes.
     // Track only predicate suffix brackets, not array/comprehension brackets.
     const depthAt = predicateBracketDepths(tokens);
     for (let i = tokens.length - 1; i >= 0; i--) {
       const tok = tokens[i];
       if (tok.type !== 'ident') continue;
-      const jqName = WORD_OPS[tok.value.toUpperCase()];
-      if (!jqName) continue;
       // Inside predicate suffix brackets? Let compilePredicate handle it.
       if (depthAt[i] > 0) continue;
-      // Formula-call form (FUNC(...))? Let function-call compiler handle it.
-      // Distinguish `STARTSWITH(x; y)` (call — skip) from `x STARTSWITH (y)`
-      // (infix whose RHS happens to be a grouped expression — rewrite).
-      // Adjacent `(` = call; whitespace between = infix + paren group.
+
       const next = tokens[i + 1];
-      if (
+      const isCall =
         next &&
         next.type === 'punc' &&
         next.value === '(' &&
-        next.start === tok.end
-      ) {
+        next.start === tok.end;
+
+      if (isRemovedStringWordOperator(tok.value)) {
+        if (isCall || (excelOperandExtent(tokens, i, -1) && excelOperandExtent(tokens, i, +1))) {
+          throw new ReadableSyntaxError(removedStringOperatorMessage(tok.value));
+        }
         continue;
       }
-      const lhs = excelOperandExtent(tokens, i, -1);
-      const rhs = excelOperandExtent(tokens, i, +1);
-      if (!lhs || !rhs) continue;
-      const lhsText = current.slice(lhs.start, lhs.end);
-      const rhsText = current.slice(rhs.start, rhs.end);
-      // Capture root as $__ctx so RHS-side `.field` paths resolve against
-      // root, not against the piped-in LHS value. Without this, any RHS
-      // that traverses `.foo` tries to index into the LHS string and jq
-      // throws "Cannot index string with string".
-      const replacement = `(. as $__ctx | (${lhsText}) | ${jqName}($__ctx | ${rhsText}))`;
-      current = current.slice(0, lhs.start) + replacement + current.slice(rhs.end);
-      changed = true;
+
+      if (isIdent(tok, 'is')) {
+        const left = excelOperandExtent(tokens, i, -1);
+        const notIndex = isIdent(tokens[i + 1], 'not') ? i + 1 : -1;
+        const literalIndex = notIndex === -1 ? i + 1 : i + 2;
+        const literal = sqlIsLiteral(tokens[literalIndex]);
+        const literalToken = tokens[literalIndex];
+        if (left && literal && literalToken?.end !== undefined) {
+          const leftSource = current.slice(left.start, left.end);
+          current =
+            current.slice(0, left.start) +
+            `${leftSource} ${notIndex === -1 ? '==' : '!='} ${literal}` +
+            current.slice(literalToken.end);
+          rewroteThisPass = true;
+          break;
+        }
+      }
+
+      if (isIdent(tok, 'between')) {
+        const notIndex = isIdent(tokens[i - 1], 'not') ? i - 1 : -1;
+        const left = excelOperandExtent(tokens, notIndex === -1 ? i : notIndex, -1);
+        const lower = excelOperandExtent(tokens, i, +1);
+        const andIndex = findTopLevelWord(tokens, 'and', i + 1);
+        const upper = andIndex === -1 ? undefined : excelOperandExtent(tokens, andIndex, +1);
+        if (left && lower && upper && andIndex > i) {
+          const leftSource = current.slice(left.start, left.end);
+          const lowerSource = current.slice(lower.start, lower.end);
+          const upperSource = current.slice(upper.start, upper.end);
+          const source = `between(${leftSource}; ${lowerSource}; ${upperSource})`;
+          current =
+            current.slice(0, left.start) +
+            (notIndex === -1 ? source : `(${source} | not)`) +
+            current.slice(upper.end);
+          rewroteThisPass = true;
+          break;
+        }
+      }
+
+      if (isIdent(tok, 'like')) {
+        const notIndex = isIdent(tokens[i - 1], 'not') ? i - 1 : -1;
+        const left = excelOperandExtent(tokens, notIndex === -1 ? i : notIndex, -1);
+        const right = excelOperandExtent(tokens, i, +1);
+        if (left && right) {
+          const leftSource = current.slice(left.start, left.end);
+          const rightSource = current.slice(right.start, right.end);
+          const source = `like(${leftSource}; ${rightSource})`;
+          current =
+            current.slice(0, left.start) +
+            (notIndex === -1 ? source : `(${source} | not)`) +
+            current.slice(right.end);
+          rewroteThisPass = true;
+          break;
+        }
+      }
+
+      const operator =
+        tok.value.toUpperCase() === 'IN'
+          ? 'IN'
+          : undefined;
+      if (!operator || isCall) continue;
+
+      const notIndex = operator === 'IN' && isIdent(tokens[i - 1], 'not')
+        ? i - 1
+        : -1;
+      const left = excelOperandExtent(tokens, notIndex === -1 ? i : notIndex, -1);
+      const right = excelOperandExtent(tokens, i, +1);
+      if (!left || !right) continue;
+
+      const leftSource = current.slice(left.start, left.end);
+      const rightSource = current.slice(right.start, right.end);
+      const replacement =
+        operator === 'IN'
+          ? notIndex === -1
+            ? `(${leftSource} | IN(${rightSource}))`
+            : `((${leftSource} | IN(${rightSource})) | not)`
+          : undefined;
+      if (!replacement) continue;
+      current =
+        current.slice(0, left.start) +
+        replacement +
+        current.slice(right.end);
       rewroteThisPass = true;
       break;
     }
-    if (!rewroteThisPass) break;
+
+    if (!rewroteThisPass) {
+      break;
+    }
   }
-  return { source: current, changed };
+  return { source: current, changed: current !== source };
 }
 
 export function rewriteExcelOperators(
@@ -2432,7 +2752,7 @@ function excelOperandExtent(
       anchor = matchOpen(tokens, startIdx);
       if (anchor < 0) return undefined;
       if (anchor > 0 && tokens[anchor - 1].type === 'ident') anchor--;
-    } else if (!['ident', 'number', 'string'].includes(first.type)) {
+    } else if (!['ident', 'number', 'string', 'format'].includes(first.type)) {
       return undefined;
     }
     // Extend left over `.field` / `.["Label"]` suffixes so
@@ -2444,7 +2764,7 @@ function excelOperandExtent(
         if (anchor < 0) return undefined;
         if (
           anchor > 0 &&
-          ['ident', 'number', 'string'].includes(tokens[anchor - 1].type)
+          ['ident', 'number', 'string', 'format'].includes(tokens[anchor - 1].type)
         ) {
           anchor -= 1;
         }
@@ -2460,7 +2780,7 @@ function excelOperandExtent(
         const okPunc =
           beforeDot && beforeDot.type === 'punc' &&
           (beforeDot.value === ')' || beforeDot.value === ']' || beforeDot.value === '}');
-        if (beforeDot && (okPunc || ['ident', 'number', 'string'].includes(beforeDot.type))) {
+        if (beforeDot && (okPunc || ['ident', 'number', 'string', 'format'].includes(beforeDot.type))) {
           anchor -= 2;
           continue;
         }
@@ -2486,7 +2806,7 @@ function excelOperandExtent(
     // Leading `.ident` path like `.subtotal`.
     endIdx = anchor + 1;
     if (endIdx >= tokens.length) return undefined;
-  } else if (!['ident', 'number', 'string'].includes(first.type)) {
+  } else if (!['ident', 'number', 'string', 'format'].includes(first.type)) {
     return undefined;
   }
   // Extend right: `ident(...)` call, `foo[...]` subscript, `.field`.
@@ -2494,7 +2814,7 @@ function excelOperandExtent(
     const next = tokens[endIdx + 1];
     if (next.type === 'op' && (next.value === '.' || next.value === '?.')) {
       const afterDot = tokens[endIdx + 2];
-      if (afterDot && ['ident', 'number', 'string'].includes(afterDot.type)) {
+      if (afterDot && ['ident', 'number', 'string', 'format'].includes(afterDot.type)) {
         endIdx += 2;
         continue;
       }
@@ -2734,8 +3054,7 @@ export function preprocessReadableSource(
   if (wordOps.changed) {
     rewrites.push({
       code: 'word-binary-operator-rewritten',
-      message:
-        'Rewrote word-form STARTSWITH / ENDSWITH / CONTAINS (outside predicate brackets) to pipe-form jq calls.',
+      message: 'Rewrote word-form string operators to pipe-form jq calls.',
     });
     next = wordOps.source;
   }

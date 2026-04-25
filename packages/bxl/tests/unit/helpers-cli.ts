@@ -117,6 +117,21 @@ strictEqual(evalOn('when(true; false)', {}),  false, 'when(true; false) failed r
 strictEqual(evalOn('when(true; true)', {}),   true,  'when(true; true) satisfied');
 
 // ─────────────────────────────────────────────────────────────────────────
+// LET — UPPERCASE (Excel-style lexical bindings, lowered to jq `as $name`)
+// ─────────────────────────────────────────────────────────────────────────
+
+strictEqual(
+  evalOn('LET(limit, 400, Amount > limit)', good),
+  true,
+  'LET binds a local name for the body expression',
+);
+strictEqual(
+  evalOn('LET(limit, 400, doubled, limit * 2, doubled = 800)', good),
+  true,
+  'LET supports multiple name/value pairs before the body',
+);
+
+// ─────────────────────────────────────────────────────────────────────────
 // words — lowercase (BXL word count; no Excel equivalent)
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -140,6 +155,35 @@ deepStrictEqual(
   ['a', 'b', 'c'],
   'nonempty strips null and empty string',
 );
+
+// ─────────────────────────────────────────────────────────────────────────
+// overlaps — lowercase (BXL set intersection)
+// ─────────────────────────────────────────────────────────────────────────
+
+strictEqual(
+  evalOn('.tags | overlaps(["finance", "legal"])', { tags: ['sales', 'finance'] }),
+  true,
+  'overlaps detects shared set members',
+);
+strictEqual(
+  evalOn('.tags | overlaps(["finance", "legal"])', { tags: ['sales'] }),
+  false,
+  'overlaps returns false for disjoint sets',
+);
+
+// ─────────────────────────────────────────────────────────────────────────
+// SQL predicate module helpers — lowercase because they are BXL-native
+// compute mappings for SQL-ish predicate sugar.
+// ─────────────────────────────────────────────────────────────────────────
+
+strictEqual(evalOn('between(.amount; 10; 20)', { amount: 15 }), true, 'between true in range');
+strictEqual(evalOn('between(.amount; 10; 20)', { amount: 25 }), false, 'between false out of range');
+strictEqual(evalOn('like(.name; "Ali%")', { name: 'Alice' }), true, 'like supports SQL trailing percent wildcard');
+strictEqual(evalOn('like(.name; "%ice")', { name: 'Alice' }), true, 'like supports SQL leading percent wildcard');
+strictEqual(evalOn('like(.name; "%lic%")', { name: 'Alice' }), true, 'like supports SQL contains-style percent wildcard');
+strictEqual(evalOn('like(.name; "Alice")', { name: 'Alice' }), true, 'like without wildcard is exact string match');
+strictEqual(evalOn('like(.name; "Ali")', { name: 'Alice' }), false, 'like without wildcard does not do prefix matching');
+strictEqual(evalOn('like(.name; "A_i_e")', { name: 'Alice' }), true, 'like supports SQL underscore wildcard');
 
 // ─────────────────────────────────────────────────────────────────────────
 // Compile-output sanity (canonical jq shape)
@@ -179,4 +223,4 @@ strictEqual(
   'when rewrites readable comma separators to jq semicolons',
 );
 
-console.log('BXL helpers (ISBLANK, present, when, implies, words, nonempty): all checks passed');
+console.log('BXL helpers (ISBLANK, LET, present, when, implies, words, nonempty, overlaps, SQL predicate helpers): all checks passed');

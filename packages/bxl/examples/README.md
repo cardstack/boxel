@@ -26,7 +26,7 @@ value, and diagnostics. Docs reference cases by `id`.
 - `edge-cases.ts`    — warnings, confusing syntax, hostile text
 - `contexts.ts`      — formulas, constraints, transforms, workflow gates
 - `excel-paste.ts`   — `=`, `<>`, `^`, `&`, formula coverage
-- `pred-filter.ts`   — `[*pred]`, `[#N]`, ranges, implicit iteration
+- `pred-filter.ts`   — `[* .pred]`, `[#N]`, ranges, implicit iteration
 
 Plus a browser harness:
 

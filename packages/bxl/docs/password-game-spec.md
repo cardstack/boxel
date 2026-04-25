@@ -95,32 +95,33 @@ Each rule has:
 | 4 | Display name is exactly two words | `words(.profile.displayName) == 2` | `words()` helper |
 | 5 | Display name is in Title Case | `PROPER(.profile.displayName) == .profile.displayName` | Excel `PROPER`, self-equality |
 | 6 | Age is between 18 and 120 | `.profile.age >= 18 AND .profile.age <= 120` | `AND`, numeric range |
-| 7 | Email contains an `@` | `.profile.email CONTAINS "@"` | `CONTAINS` infix |
-| 8 | Email starts with username | `.profile.email STARTSWITH .profile.username` | `STARTSWITH` infix, field-to-field |
+| 7 | Email contains an `@` | `.profile.email \| contains("@")` | jq `contains` |
+| 8 | Email starts with username | `. as $root \| .profile.email \| startswith($root.profile.username)` | jq `startswith`, field-to-field |
 | 9 | Birth year + age equals this year (2026) | `.profile.birthYear + .profile.age == 2026` | arithmetic + equality |
 | 10 | Favorite color uppercased is "PURPLE" | `UPPER(.preferences.favoriteColor) == "PURPLE"` | Excel `UPPER` |
 | 11 | Favorite number equals length of favorite color | `.preferences.favoriteNumber == LEN(.preferences.favoriteColor)` | cross-field `LEN` |
 | 12 | Theme is "dark" or "light" | `.preferences.theme IN ["dark", "light"]` | `IN` with literal array |
-| 13 | If newsletter is on, bio must mention "BXL" | `implies(.preferences.newsletter, .bio CONTAINS "BXL")` | `implies()` helper + `CONTAINS` |
+| 13 | If newsletter is on, bio must mention "BXL" | `implies(.preferences.newsletter, .bio \| contains("BXL"))` | `implies()` helper + jq `contains` |
 | 14 | Secret phrase is exactly 5 words | `words(.security.secretPhrase) == 5` | `words()` on nested path |
-| 15 | Secret phrase contains "BXL" (case-insensitive) | `UPPER(.security.secretPhrase) CONTAINS "BXL"` | `UPPER` piped into `CONTAINS` |
-| 16 | Backup code starts with UPPER(first 3 chars of username) | `.security.backupCode STARTSWITH UPPER(LEFT(.profile.username, 3))` | `STARTSWITH` + `UPPER` + `LEFT` composed |
-| 17 | Backup code contains UPPER(favorite color) | `.security.backupCode CONTAINS UPPER(.preferences.favoriteColor)` | `CONTAINS` + `UPPER` on field |
-| 18 | Backup code ends with your age | `.security.backupCode ENDSWITH (.profile.age \| tostring)` | `ENDSWITH` + jq pipe |
+| 15 | Secret phrase contains "BXL" (case-insensitive) | `UPPER(.security.secretPhrase) \| contains("BXL")` | `UPPER` piped into jq `contains` |
+| 16 | Backup code starts with UPPER(first 3 chars of username) | `. as $root \| .security.backupCode \| startswith(UPPER(LEFT($root.profile.username, 3)))` | jq `startswith` + `UPPER` + `LEFT` composed |
+| 17 | Backup code contains UPPER(favorite color) | `. as $root \| .security.backupCode \| contains(UPPER($root.preferences.favoriteColor))` | jq `contains` + `UPPER` on field |
+| 18 | Backup code ends with your age | `. as $root \| .security.backupCode \| endswith($root.profile.age \| tostring)` | jq `endswith` + jq pipe |
 | 19 | PIN is exactly 4 digits | `LEN(.security.pin \| tostring) == 4` | `LEN` on stringified number |
 | 20 | Sum of PIN digits equals favoriteNumber × 2 | `([.security.pin \| tostring \| split("") \| .[] \| tonumber] \| add) == .preferences.favoriteNumber * 2` | jq pipe chain: `split`, array-spread, `tonumber`, `add` |
 | 21 | Tag count equals favoriteNumber minus 2 | `(.tags \| length) == .preferences.favoriteNumber - 2` | jq `length` on array, arithmetic |
 | 22 | First tag has length 3 | `LEN(.tags[0]) == 3` | array index + `LEN` on string |
 | 23 | All tags are unique | `(.tags \| unique \| length) == (.tags \| length)` | jq `unique` |
-| 24 | Bio mentions the display name | `.bio CONTAINS .profile.displayName` | `CONTAINS` field-to-field |
-| 25 | Bio mentions the year 2026 | `.bio CONTAINS "2026"` | `CONTAINS` literal |
+| 24 | Bio mentions the display name | `. as $root \| .bio \| contains($root.profile.displayName)` | jq `contains`, field-to-field |
+| 25 | Bio mentions the year 2026 | `.bio \| contains("2026")` | jq `contains` literal |
 | 26 | Backup code is **exactly** `UPPER(first 3 of username) + UPPER(color) + age` | `.security.backupCode == UPPER(LEFT(.profile.username, 3)) + UPPER(.preferences.favoriteColor) + (.profile.age \| tostring)` | capstone: string concat, `UPPER`, `LEFT`, `tostring`, cross-field |
 
 ### Feature coverage cross-check
 
 - **BXL-native helpers** — `present` (R1), `words` (R4, R14), `implies` (R13)
 - **Excel functions** — `LEN` (R2, R11, R19, R22), `RIGHT` (R3), `PROPER` (R5), `UPPER` (R10, R15, R16, R17, R26), `LEFT` (R16, R26)
-- **Readable word operators (infix)** — `CONTAINS` (R7, R13, R15, R17, R24, R25), `STARTSWITH` (R8, R16), `ENDSWITH` (R18), `AND` (R6), `IN` (R12)
+- **Readable word operators (infix)** — `AND` (R6), `IN` (R12)
+- **jq string helpers** — `contains` (R7, R13, R15, R17, R24, R25), `startswith` (R8, R16), `endswith` (R18)
 - **jq surface** — `length` (R21, R23), `unique` (R23), `tostring` (R3, R18, R19, R20, R26), `tonumber` (R20), `split` (R20), `add` (R20), array spread `.[]` (R20)
 - **Cross-field references** — R3, R8, R11, R13, R16, R17, R18, R20, R21, R24, R26
 - **Nested path traversal** — every rule touches `.profile.`, `.preferences.`, or `.security.`

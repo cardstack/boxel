@@ -228,6 +228,10 @@ const coverageCases: TestCase[] = [
     expectedJq: 'CHOOSE(2; ["bronze", "silver", "gold"])',
   },
 
+  // --- Lookup ---
+  { name: 'lookup: XLOOKUP exact', expression: 'XLOOKUP("B", ["A", "B"], [10, 20])', expected: 20 },
+  { name: 'lookup: XLOOKUP fallback', expression: 'XLOOKUP("C", ["A", "B"], [10, 20], "missing")', expected: 'missing' },
+
   // --- Statistical ---
   { name: 'stat: SUM([1, 2, 3, 4, 5])', expression: 'SUM([1, 2, 3, 4, 5])', expected: 15 },
   { name: 'stat: AVERAGE([1, 2, 3, 4, 5])', expression: 'AVERAGE([1, 2, 3, 4, 5])', expected: 3 },

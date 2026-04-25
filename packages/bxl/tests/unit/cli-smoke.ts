@@ -124,14 +124,14 @@ const cases: Array<{
     expected: 12,
   },
   {
-    name: 'word-form startswith',
-    expression: '"Line Item"[SKU STARTSWITH "BRAND"].SKU',
+    name: 'jq startswith pipe predicate',
+    expression: '"Line Item"[SKU | startswith("BRAND")].SKU',
     expected: 'BRAND-RED',
   },
   {
-    name: 'css startswith alias',
-    expression: '"Line Item"[SKU ^= "BRAND"].SKU',
-    expected: 'BRAND-RED',
+    name: 'jq contains pipe predicate',
+    expression: '"Line Item"[SKU | contains("COPY-04")].SKU',
+    expected: 'COPY-04',
   },
   {
     name: 'composite row plus drift predicate',

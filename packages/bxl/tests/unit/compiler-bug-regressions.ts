@@ -1,8 +1,8 @@
 // Regression tests for three compiler bugs fixed after the electric-haddock
 // Guide work surfaced them:
 //
-//   1. `X STARTSWITH Y` / `X ENDSWITH Y` / `X CONTAINS Y` as infix outside
-//      predicate brackets compiled to literal jq, which is invalid.
+//   1. Removed readable string word operators reject clearly; lowercase jq
+//      pipe forms remain valid.
 //   2. `and`, `or`, `not` got tight-bound with a following `.path` by the
 //      post-formatter (`and.amount`, `not.anonymous`) — invalid jq.
 //   3. The Excel `=` → `==` preprocessor only ran at bracket depth 0, so
@@ -45,44 +45,28 @@ function assertEval(bxl: string, expected: unknown, label: string) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Bug #1 — word operators STARTSWITH / ENDSWITH / CONTAINS as infix
+// Bug #1 — removed string word operators reject clearly
 // ─────────────────────────────────────────────────────────────────────────
 
-// Schema-mode adds `. as $root | ...` wrapping + rewrites fields to
-// `$root.field`. The word-op rewriter's own `$__ctx` binding composes
-// with it. See Bug #6 below for the why.
-assertCompile(
+for (const expr of [
   'Donor STARTSWITH "Grace"',
-  '. as $root |(. as $__ctx |($root.donor) | startswith($__ctx | "Grace"))',
-  '#1 STARTSWITH infix → pipe form with $__ctx binding',
-);
-
-assertCompile(
   'Campaign ENDSWITH "Drive"',
-  '. as $root |(. as $__ctx |($root.campaign) | endswith($__ctx | "Drive"))',
-  '#1 ENDSWITH infix → pipe form with $__ctx binding',
-);
-
-assertCompile(
   'Email CONTAINS "@"',
-  '. as $root |(. as $__ctx |($root.email) | contains($__ctx | "@"))',
-  '#1 CONTAINS infix → pipe form (arity-1, not invalid contains/2)',
-);
-
-assertEval('Donor STARTSWITH "Grace"', true, '#1 STARTSWITH evaluates');
-assertEval('Campaign ENDSWITH "Drive"', true, '#1 ENDSWITH evaluates');
-assertEval('Email CONTAINS "@"',  true, '#1 CONTAINS evaluates');
-assertEval('Donor STARTSWITH "Mr."', false, '#1 STARTSWITH negative case');
-
-// Formula-call form is left alone (not rewritten into pipe form).
-assertCompile(
   'STARTSWITH(Donor; "Grace")',
-  'startswith(.donor; "Grace")',
-  '#1 STARTSWITH formula call untouched',
-);
+]) {
+  throws(
+    () => compileReadableSyntax(expr, { schema }),
+    /Readable string operator/,
+    `#1 removed string operator rejects: ${expr}`,
+  );
+}
 
-// Inside predicate brackets attached to a path, word-ops are handled by
-// compilePredicate and must NOT be touched by the infix rewrite pass.
+assertEval('Donor | startswith("Grace")', true, '#1 jq startswith pipe evaluates');
+assertEval('Campaign | endswith("Drive")', true, '#1 jq endswith pipe evaluates');
+assertEval('Email | contains("@")', true, '#1 jq contains pipe evaluates');
+assertEval('Donor | startswith("Mr.")', false, '#1 jq startswith negative case');
+
+// Inside predicate brackets, removed word-ops reject and jq pipe form works.
 const itemScheme: ReadableSchema = {
   fields: [
     {
@@ -91,14 +75,27 @@ const itemScheme: ReadableSchema = {
     },
   ],
 };
+throws(
+  () => compileReadableSyntax('"Line Item"[SKU STARTSWITH "A"].SKU', { schema: itemScheme }),
+  /Readable string operator/,
+  '#1 predicate STARTSWITH rejects',
+);
+for (const expr of [
+  '"Line Item"[SKU ^= "A"].SKU',
+  '"Line Item"[SKU $= "A"].SKU',
+  '"Line Item"[SKU *= "A"].SKU',
+]) {
+  throws(
+    () => compileReadableSyntax(expr, { schema: itemScheme }),
+    /Readable string operator/,
+    `#1 predicate string alias rejects: ${expr}`,
+  );
+}
 const predicateCompile = compileReadableSyntax(
-  '"Line Item"[SKU STARTSWITH "A"].SKU',
+  '"Line Item"[SKU | startswith("A")].SKU',
   { schema: itemScheme },
 );
-ok(
-  predicateCompile.source.includes('startswith'),
-  `#1 predicate STARTSWITH compiles: ${predicateCompile.source}`,
-);
+ok(predicateCompile.source.includes('startswith'), `#1 predicate jq pipe compiles: ${predicateCompile.source}`);
 
 // ─────────────────────────────────────────────────────────────────────────
 // Bug #2 — keyword-vs-identifier spacing (and.foo / not.foo / or.foo)
@@ -231,62 +228,41 @@ strictEqual(
 );
 
 // ─────────────────────────────────────────────────────────────────────────
-// Bug #5 — `X WORDOP (expr)` with whitespace before `(` was misread as
-// formula-call form and left as `x endswith(expr)` (invalid jq).
-// Fix: distinguish adjacent `(` (call) from separated `(` (infix RHS
-// grouping) by checking token position `next.start === tok.end`.
-// Surfaced by electric-haddock invoice's `backupCode ENDSWITH (.age | tostring)`
-// use case.
+// Bug #5 — removed string operators reject whether they are followed by
+// grouped RHS syntax or adjacent function-call syntax.
 // ─────────────────────────────────────────────────────────────────────────
 
-assertCompile(
+for (const expr of [
   'Campaign ENDSWITH ("Drive")',
-  '. as $root |(. as $__ctx |($root.campaign) | endswith($__ctx |("Drive")))',
-  '#5 ENDSWITH followed by space+( is infix, not formula call',
-);
-
-assertCompile(
   'Campaign CONTAINS (Campaign)',
-  '. as $root |(. as $__ctx |($root.campaign) | contains($__ctx |($root.campaign)))',
-  '#5 CONTAINS followed by space+( is infix, not formula call',
-);
-
-// Adjacent `(` (no space) still means formula call — preserve that.
-assertCompile(
   'STARTSWITH(Donor; "Grace")',
-  'startswith(.donor; "Grace")',
-  '#5 STARTSWITH( with no space = formula call form, still untouched',
-);
-
-assertEval(
-  'Campaign ENDSWITH ("Drive")',
-  true,
-  '#5 grouped-RHS evaluates (was jq parse error before fix)',
-);
+]) {
+  throws(
+    () => compileReadableSyntax(expr, { schema }),
+    /Readable string operator/,
+    `#5 removed grouped/call string operator rejects: ${expr}`,
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────
-// Bug #6 — infix word-ops with a non-literal RHS evaluated `.field` on
-// the piped-in LHS value rather than the root. Symptom: jq threw
-// "Cannot index string with string" for `.email STARTSWITH .username`.
-// Fix: capture root as `$__ctx` before the pipe and re-apply it to RHS:
-//   (. as $__ctx | (lhs) | op($__ctx | rhs))
+// Bug #6 — jq pipe string helpers with non-literal RHS evaluate against root.
 // ─────────────────────────────────────────────────────────────────────────
 
 assertCompile(
-  'Email STARTSWITH Donor',
-  '. as $root |(. as $__ctx |($root.email) | startswith($__ctx | $root.donor))',
-  '#6 field-RHS binds root via $__ctx (composes with $root schema wrap)',
+  'Email | startswith(Donor)',
+  '. as $root | .email | startswith($root.donor)',
+  '#6 field-RHS jq pipe compiles',
 );
 
 assertEval(
-  'Campaign STARTSWITH Campaign',
+  'Campaign | startswith(Campaign)',
   true,
-  '#6 self-reference on RHS evaluates (was "Cannot index string with string")',
+  '#6 self-reference on RHS evaluates',
 );
 
 strictEqual(
   evaluateBxl(
-    '.bio CONTAINS .name',
+    '. as $root | .bio | contains($root.name)',
     { bio: 'hello grace', name: 'grace' },
   ).value,
   true,
@@ -295,7 +271,7 @@ strictEqual(
 
 strictEqual(
   evaluateBxl(
-    '.code ENDSWITH (.age | tostring)',
+    '. as $root | .code | endswith($root.age | tostring)',
     { code: 'ADA42', age: 42 },
   ).value,
   true,
@@ -350,21 +326,20 @@ deepStrictEqual(
 );
 
 // ─────────────────────────────────────────────────────────────────────────
-// Bug #8 — infix word operators inside array/comprehension brackets were
-// skipped for the same reason. Predicate suffix brackets should be
-// exempt, but array literals/comprehensions still need the rewrite.
+// Bug #8 — removed string word operators inside array/comprehension brackets
+// reject, while jq pipe string helpers still work.
 // ─────────────────────────────────────────────────────────────────────────
 
-assertCompile(
-  '[range(0; 2) as $r | ("abc" STARTSWITH "a")]',
-  '[range(0; 2) as $r |((. as $__ctx |("abc") | startswith($__ctx | "a")))]',
-  '#8 STARTSWITH infix rewrites inside comprehensions',
+throws(
+  () => compileReadableSyntax('[range(0; 2) as $r | ("abc" STARTSWITH "a")]'),
+  /Readable string operator/,
+  '#8 removed STARTSWITH rejects inside comprehensions',
 );
 
 deepStrictEqual(
-  evaluateBxl('[range(0; 2) as $r | ("abc" STARTSWITH "a")]', {}).value,
+  evaluateBxl('[range(0; 2) as $r | ("abc" | startswith("a"))]', {}).value,
   [true, true],
-  '#8 STARTSWITH infix evaluates inside comprehensions',
+  '#8 jq startswith pipe evaluates inside comprehensions',
 );
 
 console.log('BXL compiler bug regressions: all checks passed');

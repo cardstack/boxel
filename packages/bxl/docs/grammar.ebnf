@@ -15,6 +15,10 @@
    formatter normalizes those to `,` in both Solid and Readable output. Bare
    multi-word labels are accepted when the active schema resolves the phrase
    unambiguously.
+
+   Filter-all note: the `[* ...]` selector requires explicit current-item
+   paths inside the predicate. Write `[* .Taxable]` or `[* ."Display Label"]`,
+   not `[*Taxable]`.
 *)
 
 Program             = Expr ;
@@ -42,12 +46,14 @@ PrimaryExpr         = Literal
                     | NativeExpr ;
 
 ReadablePath        = Label, { PathStep | Selector | OptionalSuffix } ;
+ContextPath         = "@", Identifier, { ".", Identifier } ;
 PathStep            = ("." | "?."), Label ;
 OptionalSuffix      = "?" ;
 
 Selector            = "[", SelectorBody, "]" ;
 SelectorBody        = EmptyStream
                     | AllSelector
+                    | FilterAll
                     | HashSelectorUnion
                     | HumanIndex
                     | HumanRange
@@ -65,6 +71,8 @@ SelectorBody        = EmptyStream
 
 EmptyStream         = ;
 AllSelector         = "all" | "..." ;
+FilterAll          = "*", [ ExplicitCurrentItemPredicate ] ;
+ExplicitCurrentItemPredicate = Predicate ;
 HumanIndex         = ("row" | "item"), Number ;
 HumanRange         = ("row" | "item"), Number, "..", Number ;
 HashRangeEndpoint  = HashKeyword | HashLastOffset | "#", Number ;
@@ -80,18 +88,22 @@ NativeIndex        = Number ;
 NativeSlice        = [ Number ], ":", [ Number ] ;
 RowAndPredicate    = HumanIndex, ",", Predicate ;
 
-Predicate          = PredicateOr ;
-PredicateOr        = PredicateAnd, { "or", PredicateAnd } ;
-PredicateAnd       = PredicateUnary, { "and", PredicateUnary } ;
-PredicateUnary     = "not", PredicateUnary
-                    | "(", Predicate, ")"
-                    | PredicateComparison
-                    | PredicateValue ;
-PredicateComparison = PredicateValue, PredicateOp, PredicateValue ;
-PredicateValue     = ReadablePath | Literal | FunctionCall | "(", Expr, ")" ;
-PredicateOp        = "=" | "==" | "!=" | "<" | "<=" | ">" | ">="
-                    | "^=" | "$=" | "*="
-                    | "STARTSWITH" | "ENDSWITH" | "CONTAINS" | "IN" ;
+Predicate          = SqlPredicate ;
+SqlPredicate       = SqlOr ;
+SqlOr              = SqlAnd, { ("OR" | "or"), SqlAnd } ;
+SqlAnd             = SqlNot, { ("AND" | "and"), SqlNot } ;
+SqlNot             = [ ("NOT" | "not") ], SqlComparison ;
+SqlComparison      = SqlValue
+                   | SqlValue, CompareOp, SqlValue
+                   | SqlValue, [ ("NOT" | "not") ], ("IN" | "in"), ArrayOrContext
+                   | SqlValue, [ ("NOT" | "not") ], ("BETWEEN" | "between"), SqlValue, ("AND" | "and"), SqlValue
+                   | SqlValue, [ ("NOT" | "not") ], ("LIKE" | "like"), SqlLikePattern
+                   | SqlValue, ("IS" | "is"), [ ("NOT" | "not") ], (Null | Boolean) ;
+SqlValue           = SqlTerm, { ("+" | "-"), SqlTerm } ;
+SqlTerm            = SqlFactor, { ("*" | "/" | "%"), SqlFactor } ;
+SqlFactor          = ReadablePath | ContextPath | Literal | ArrayExpr | FunctionCall | "(", SqlValue, ")" ;
+SqlLikePattern     = String ;
+ArrayOrContext     = ArrayExpr | ContextPath ;
 
 FunctionCall       = Identifier, "(", [ FunctionArgs ], ")" ;
 FunctionArgs       = Expr, { ("," | ";"), Expr } ;

@@ -15,3 +15,4 @@ coverage/
 
 # Personal realm-sync config — points at your local Boxel workspace
 .bxl-realm-sync.json
+.gstack/

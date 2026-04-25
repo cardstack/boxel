@@ -35,8 +35,8 @@ const cases: Array<{
     expected: 500,
   },
   {
-    name: 'mixed-case predicate operator',
-    expression: 'line item[sku startswith "COPY"].sku',
+    name: 'jq pipe predicate helper',
+    expression: 'line item[sku | startswith("COPY")].sku',
     expected: 'COPY-03',
   },
   {
@@ -61,7 +61,7 @@ const cases: Array<{
   },
   {
     name: 'comma-separated any function',
-    expression: 'ANY(line item[], sku ^= "COPY")',
+    expression: 'ANY(line item[], sku | startswith("COPY"))',
     expected: true,
   },
   {

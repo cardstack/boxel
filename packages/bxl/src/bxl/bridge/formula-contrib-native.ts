@@ -85,6 +85,7 @@ import {
   excelOct2Hex,
 } from '../../formulajs/engineering.js';
 import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.js';
+import { compare } from '../../jqtools/evaluate/compare.js';
 import {
   excelAccrint,
   excelCoupdays,
@@ -864,6 +865,85 @@ function lookupValue(
   return result;
 }
 
+function xlookupValue(
+  lookupLike: unknown,
+  lookupArrayLike: unknown,
+  returnArrayLike: unknown,
+  ifNotFound: unknown = undefined,
+  matchModeLike: unknown = 0,
+  searchModeLike: unknown = 1,
+) {
+  const lookupArray = flattenExcelArgs(lookupArrayLike);
+  const returnArray = flattenExcelArgs(returnArrayLike);
+  const matchMode = parseExcelNumber(matchModeLike);
+  const searchMode = parseExcelNumber(searchModeLike);
+
+  if (![0, -1, 1].includes(matchMode) || ![1, -1].includes(searchMode)) {
+    throwExcelError(EXCEL_ERROR.value);
+  }
+
+  const indices = lookupArray.map((_, index) => index);
+  if (searchMode === -1) {
+    indices.reverse();
+  }
+
+  for (const index of indices) {
+    const entry = lookupArray[index];
+    if (entry === lookupLike) {
+      return returnArray[index] ?? null;
+    }
+  }
+
+  if (matchMode !== 0) {
+    let bestIndex: number | undefined;
+    for (const index of indices) {
+      const entry = lookupArray[index];
+      if (typeof entry === 'number' && typeof lookupLike === 'number') {
+        if (
+          (matchMode === -1 && entry < lookupLike) ||
+          (matchMode === 1 && entry > lookupLike)
+        ) {
+          if (
+            bestIndex === undefined ||
+            (matchMode === -1 && entry > (lookupArray[bestIndex] as number)) ||
+            (matchMode === 1 && entry < (lookupArray[bestIndex] as number))
+          ) {
+            bestIndex = index;
+          }
+        }
+      }
+
+      if (typeof entry === 'string' && typeof lookupLike === 'string') {
+        const order = entry.localeCompare(lookupLike);
+        if (
+          (matchMode === -1 && order < 0) ||
+          (matchMode === 1 && order > 0)
+        ) {
+          if (
+            bestIndex === undefined ||
+            (matchMode === -1 &&
+              entry.localeCompare(String(lookupArray[bestIndex])) > 0) ||
+            (matchMode === 1 &&
+              entry.localeCompare(String(lookupArray[bestIndex])) < 0)
+          ) {
+            bestIndex = index;
+          }
+        }
+      }
+    }
+
+    if (bestIndex !== undefined) {
+      return returnArray[bestIndex] ?? null;
+    }
+  }
+
+  if (ifNotFound !== undefined) {
+    return ifNotFound;
+  }
+
+  throwExcelError(EXCEL_ERROR.na);
+}
+
 function vlookupValue(
   lookupLike: unknown,
   tableLike: unknown,
@@ -961,7 +1041,34 @@ function vlookupByRows(
   return vlookupValue(lookupValueLike, table, 2, rangeLookupLike);
 }
 
+function sqlLikeValue(valueLike: unknown, patternLike: unknown): boolean {
+  const value = parseExcelString(valueLike);
+  const pattern = parseExcelString(patternLike);
+  let regex = '^';
+  for (const char of pattern) {
+    if (char === '%') {
+      regex += '.*';
+    } else if (char === '_') {
+      regex += '.';
+    } else {
+      regex += char.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
+    }
+  }
+  regex += '$';
+  return new RegExp(regex, 's').test(value);
+}
+
+function betweenValue(value: unknown, lower: unknown, upper: unknown): boolean {
+  return compare(value, lower) >= 0 && compare(value, upper) <= 0;
+}
+
 const bareNativeFilters: Record<string, BareNativeFilter> = {
+  *'between/3'(_input, value, lower, upper) {
+    yield betweenValue(value, lower, upper);
+  },
+  *'like/2'(_input, value, pattern) {
+    yield sqlLikeValue(value, pattern);
+  },
   *'ABS/1'(_input, value) {
     yield Math.abs(parseExcelNumber(value));
   },
@@ -1753,6 +1860,25 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   *'VLOOKUP_BY/5'(_input, rows, lookupKey, lookupValueLike, resultKey, rangeLookup) {
     yield vlookupByRows(rows, lookupKey, lookupValueLike, resultKey, rangeLookup);
+  },
+  *'XLOOKUP/3'(_input, lookupValueLike, lookupArray, returnArray) {
+    yield xlookupValue(lookupValueLike, lookupArray, returnArray);
+  },
+  *'XLOOKUP/4'(_input, lookupValueLike, lookupArray, returnArray, ifNotFound) {
+    yield xlookupValue(lookupValueLike, lookupArray, returnArray, ifNotFound);
+  },
+  *'XLOOKUP/5'(_input, lookupValueLike, lookupArray, returnArray, ifNotFound, matchMode) {
+    yield xlookupValue(lookupValueLike, lookupArray, returnArray, ifNotFound, matchMode);
+  },
+  *'XLOOKUP/6'(_input, lookupValueLike, lookupArray, returnArray, ifNotFound, matchMode, searchMode) {
+    yield xlookupValue(
+      lookupValueLike,
+      lookupArray,
+      returnArray,
+      ifNotFound,
+      matchMode,
+      searchMode,
+    );
   },
   *'XIRR/2'(_input, values, dates) {
     yield excelXirr(values, dates);

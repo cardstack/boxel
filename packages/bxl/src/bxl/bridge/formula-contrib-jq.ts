@@ -71,4 +71,13 @@ def words(s):
 # nonempty(arr): strip nulls and empty strings from an array.
 def nonempty(arr):
   . as $in | ($in | arr) | map(select(. != null and . != ""));
+
+# overlaps(arr): true when the input array and arr share at least one value.
+# This is the in-memory mirror of the predicate-profile SQL overlap operator.
+def overlaps(arr):
+  . as $left
+  | arr as $right
+  | if (($left | type) != "array") or (($right | type) != "array") then false
+    else any($left[]; . as $item | any($right[]; . == $item))
+    end;
 `);

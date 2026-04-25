@@ -81,11 +81,11 @@ try {
   );
   deepStrictEqual(scopedEqualsResult.value, [true, false, false]);
 
-  const wordOpInComprehension = bundle.evaluateBxl(
-    '[range(0; 2) as $r | ("abc" STARTSWITH "a")]',
+  const jqStringPredicateInComprehension = bundle.evaluateBxl(
+    '[range(0; 2) as $r | ("abc" | startswith("a"))]',
     {},
   );
-  deepStrictEqual(wordOpInComprehension.value, [true, true]);
+  deepStrictEqual(jqStringPredicateInComprehension.value, [true, true]);
 
   console.log('bundled first(filter()).field chain works');
 } finally {

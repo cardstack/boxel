@@ -5,6 +5,9 @@ This directory holds the v0.1 documentation set.
 | File                        | Purpose                                        |
 | --------------------------- | ---------------------------------------------- |
 | `syntax-reference.md`       | Canonical public BXL syntax                    |
+| `profiles.md`               | Execution profile contracts and use cases      |
+| `predicate-sql.md`           | Predicate-profile SQL compiler contract        |
+| `query-then-process.md`      | Retrieval first, BXL post-query processing     |
 | `grammar.ebnf`              | Formal grammar (matches implementation)        |
 | `sandbox.md`                | Sandbox contract, blocked builtins, budgets    |
 | `excel-compatibility.md`    | Supported Excel paste idioms and formulas      |

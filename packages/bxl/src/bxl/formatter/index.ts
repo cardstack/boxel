@@ -95,6 +95,7 @@ const BXL_CANONICAL_WORDS = new Map([
   ['in', 'IN'],
   ['null', 'null'],
   ['or', 'or'],
+  ['overlaps', 'overlaps'],
   ['row', 'row'],
   ['startswith', 'startswith'],
   ['then', 'then'],
@@ -639,10 +640,10 @@ function shouldInsertSpace(
   if (current.value === ',' || current.value === ';') {
     return false;
   }
-  if (['==', '!=', '<', '<=', '>', '>=', '=', '^=', '$=', '*=', '|'].includes(current.value)) {
+  if (['==', '!=', '<', '<=', '>', '>=', '=', '|'].includes(current.value)) {
     return true;
   }
-  if (['==', '!=', '<', '<=', '>', '>=', '=', '^=', '$=', '*=', '|'].includes(previous.value)) {
+  if (['==', '!=', '<', '<=', '>', '>=', '=', '|'].includes(previous.value)) {
     return true;
   }
   if (current.value === '..' || previous.value === '..') {
@@ -761,10 +762,10 @@ function shouldInsertReadableSpace(
   if (current.value === '[' && isValueToken(previous)) {
     return false;
   }
-  if (['==', '!=', '<', '<=', '>', '>=', '=', '^=', '$=', '*=', '|'].includes(current.value)) {
+  if (['==', '!=', '<', '<=', '>', '>=', '=', '|'].includes(current.value)) {
     return true;
   }
-  if (['==', '!=', '<', '<=', '>', '>=', '=', '^=', '$=', '*=', '|'].includes(previous.value)) {
+  if (['==', '!=', '<', '<=', '>', '>=', '=', '|'].includes(previous.value)) {
     return true;
   }
   // Binary arithmetic gets breathing room in readable output. `+`, `*`,
@@ -791,7 +792,7 @@ function shouldInsertReadableSpace(
     ['+', '*', '/', '%'].includes(previous.value)
   ) {
     // Exception: `*` immediately after `[` is the BXL filter-all marker
-    // (`[*pred]`), not a binary op. Same goes for `[` after a comma /
+    // (`[* .pred]`), not a binary op. Same goes for `[` after a comma /
     // semicolon / `,` (inner argument boundary).
     if (
       previous.value === '*' &&
@@ -962,6 +963,13 @@ export function bxlToJqExpression(
   return compileReadableSyntax(source, options);
 }
 
+export function bxlToStorageExpression(
+  source: string,
+  options: BxlConversionOptions = {},
+): ReadableSyntaxCompileResult {
+  return compileReadableSyntax(source, options);
+}
+
 function parseJqPath(source: string, start: number): { end: number; parts: PathPart[] } | undefined {
   if (source[start] !== '.' || !/[A-Za-z_]/.test(source[start + 1] ?? '')) {
     return undefined;
@@ -1067,7 +1075,7 @@ function readableJqPath(
 
 function convertFirstSelect(source: string, schema: ReadableSchema | undefined) {
   return source.replace(
-    /first\((\.[A-Za-z_][A-Za-z0-9_]*)\[\]\s*\|\s*select\((\.[A-Za-z_][A-Za-z0-9_]*)\s*(==|!=|<=|>=|<|>|\^=|\$=|\*=)\s*([^)]*)\)\)(\.[A-Za-z_][A-Za-z0-9_]*)/g,
+    /first\((\.[A-Za-z_][A-Za-z0-9_]*)\[\]\s*\|\s*select\((\.[A-Za-z_][A-Za-z0-9_]*)\s*(==|!=|<=|>=|<|>)\s*([^)]*)\)\)(\.[A-Za-z_][A-Za-z0-9_]*)/g,
     (match, collectionPath, predicatePath, operator, value, outputPath) => {
       const collection = parseJqPath(collectionPath, 0);
       const predicate = parseJqPath(predicatePath, 0);
@@ -1226,6 +1234,13 @@ export function jqToReadableBxlExpression(
     rewrites: [...rewrites, ...solid.rewrites, ...spacingRewrite],
     lint: readableLint,
   };
+}
+
+export function storageToReadableBxlExpression(
+  source: string,
+  options: BxlConversionOptions = {},
+): JqToReadableBxlResult {
+  return jqToReadableBxlExpression(source, options);
 }
 
 // =========================================================================

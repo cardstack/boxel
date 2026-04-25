@@ -19,14 +19,17 @@ import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.js';
 import {
   compileReadableSyntax,
   ReadableSchema,
+  ReadableSyntaxCompileResult,
   ReadableSyntaxWarning,
 } from './bxl/compiler/readable-syntax.js';
 import {
   bxlToJqExpression,
+  bxlToStorageExpression,
   collapseBxlExpression,
   expandBxlExpression,
   jqToReadableBxlExpression,
   solidifyBxlExpression,
+  storageToReadableBxlExpression,
 } from './bxl/formatter/index.js';
 import type {
   BxlConversionOptions,
@@ -46,6 +49,33 @@ import {
   DEFAULT_BUILTIN_LIBRARIES,
   BuiltinLibraryName,
 } from './bxl/registry/index.js';
+import {
+  assertValidBxlProfile,
+  parseBxlAst,
+  validateBxlAst,
+  visitBxlAst,
+  type BxlAstOptions,
+  type BxlAstProgram,
+  type BxlAttachment,
+  type BxlProfile,
+  type BxlProfileIssue,
+  type BxlProfileValidationOptions,
+} from './bxl/ast/index.js';
+import {
+  BxlPredicateSqlError,
+  SQL_PREDICATE_MODULE,
+  compileBxlPredicateAstToSql,
+  compileBxlPredicateToSql,
+} from './bxl/sql/index.js';
+import type {
+  BxlPredicateSqlOptions,
+  BxlPredicateSqlPath,
+  BxlPredicateSqlPathUsage,
+  BxlPredicateSqlResult,
+  BxlPredicateSqlValue,
+  BxlSqlPredicateMapping,
+  BxlSqlPredicateModule,
+} from './bxl/sql/index.js';
 import { toBxlErrorRecord, type BxlErrorRecord, type BxlSafeResult } from './error-utils.js';
 export {
   __runBoxelRuntimeWorker,
@@ -95,19 +125,32 @@ export const VERSION = '0.1.0-dev.0';
 
 export {
   compileReadableSyntax,
+  assertValidBxlProfile,
+  SQL_PREDICATE_MODULE,
   bxlToJqExpression,
+  bxlToStorageExpression,
   collapseBxlExpression,
+  compileBxlPredicateAstToSql,
+  compileBxlPredicateToSql,
   expandBxlExpression,
   jqToReadableBxlExpression,
   lintBxlExpression,
+  parseBxlAst,
   parseNativeJq,
   prepareNativeJq,
   runNativeJq,
   solidifyBxlExpression,
+  storageToReadableBxlExpression,
   tokenizeNativeJq,
+  validateBxlAst,
+  visitBxlAst,
+  BxlPredicateSqlError,
 };
 
 export type {
+  BxlAstOptions,
+  BxlAstProgram,
+  BxlAttachment,
   BxlConversionOptions,
   BxlFormatResult,
   BxlLintIssue,
@@ -116,10 +159,21 @@ export type {
   BxlLintSeverity,
   BxlRewrite,
   BxlSolidifyResult,
+  BxlProfile,
+  BxlProfileIssue,
+  BxlProfileValidationOptions,
+  BxlPredicateSqlOptions,
+  BxlPredicateSqlPath,
+  BxlPredicateSqlPathUsage,
+  BxlPredicateSqlResult,
+  BxlPredicateSqlValue,
+  BxlSqlPredicateMapping,
+  BxlSqlPredicateModule,
   BuiltinLibraryName,
   JqToReadableBxlResult,
   NativeRuntimeLimits,
   ReadableSchema,
+  ReadableSyntaxCompileResult,
   ReadableSyntaxWarning,
   BxlErrorRecord,
   BxlSafeResult,
@@ -130,6 +184,30 @@ export interface BxlOptions {
   libraries?: BuiltinLibraryName[];
   readableSyntax?: boolean;
   runtimeLimits?: NativeRuntimeLimits;
+}
+
+export interface CompileBxlOptions extends BxlOptions {
+  target?: 'jq' | 'ast';
+  profile?: BxlProfile;
+  attachment?: BxlAttachment;
+}
+
+export function compileBxl(
+  expression: string,
+  options: CompileBxlOptions & { target: 'ast' },
+): BxlAstProgram;
+export function compileBxl(
+  expression: string,
+  options?: CompileBxlOptions & { target?: 'jq' },
+): ReadableSyntaxCompileResult;
+export function compileBxl(
+  expression: string,
+  options: CompileBxlOptions = {},
+): ReadableSyntaxCompileResult | BxlAstProgram {
+  if (options.target === 'ast') {
+    return parseBxlAst(expression, options);
+  }
+  return compileReadableSyntax(expression, options);
 }
 
 export interface BxlEvaluation {

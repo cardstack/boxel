@@ -32,7 +32,7 @@ const invoice = {
 const cases = [
   { expr: '"Line Item"[#first].SKU', expected: 'COPY-01' },
   { expr: '"Line Item"[#2].SKU', expected: 'BRAND-RED' },
-  { expr: '"Line Item"[SKU ^= "BRAND"].Quantity', expected: 5 },
+  { expr: '"Line Item"[SKU | startswith("BRAND")].Quantity', expected: 5 },
   { expr: 'ROUND(Subtotal * "Tax Rate" / 100, 2)', expected: 4.13 },
   { expr: '"Line Item"[all]."Line Total" | add', expected: 32 },
 ];

@@ -11,7 +11,7 @@ Spreadsheet-style formulas over JSON. Paste-compatible with Excel. Sandboxed by 
 
 ```bxl
 "Line Item"[SKU = "BRAND-RED"]."Unit Price"          -- first-match predicate
-SUM("Line Item"[*Taxable]."Line Total")              -- SUMIF without the _BY
+SUM("Line Item"[* ."Taxable"]."Line Total")          -- SUMIF without the _BY
 ROUND(Subtotal * "Tax Rate" / 100, 2) = "Tax Amount" -- paste from Excel, it runs
 ```
 
@@ -67,15 +67,13 @@ The eight design decisions that make BXL feel the way it does:
 - **Labels instead of paths** — `Subtotal + "Tax Amount"` beats `.subtotal + .taxAmount`. Labels resolve against a schema at compile time.
 - **1-based rows** — `"Line Item"[#4]` is the fourth row. `[3]` remains the jq-native 0-based escape hatch.
 - **Implicit iteration** — `"Line Item"."Line Total"` auto-materializes across the array. No `map` for the common case.
-- **Two predicate shapes** — `[pred]` picks the first match (scalar). `[*pred]` keeps every match (array). Replaces `VLOOKUP` / `SUMIF` without a separate builtin.
+- **Two predicate shapes** — `[pred]` picks the first match (scalar). `[* .pred]` keeps every match (array) with explicit jq item scope. Replaces `VLOOKUP` / `SUMIF` without a separate builtin.
 - **One positional selector family** — `[#1]`, `[#first]`, `[#last]`, `[#last-1]`, `[#4..#last-3]`, `[#1, #2, #7..#9, #11]`, `[#odd]`, `[#even]`, `[#only]`. CSS inspired the readability; BXL keeps it all inside `[#...]`.
 - **Paste Excel unchanged** — `=`, `<>`, `^`, `&`, leading `=` all work. `ROUND`, `SUM`, `IF`, `VLOOKUP` match Microsoft Excel exactly.
 - **UPPERCASE is a promise, lowercase is a contribution** — `ROUND("Unit Price", 2)` is paste-compatible with Excel (commas, real Excel function). `present(x)`, `when(p, q)`, `words(s)` are BXL-native.
 - **One sandbox, many surfaces** — the same language powers computed fields, form validation, visibility rules, workflow gates, access policies, and annotation targets.
 
 The full reference with syntax-highlighted examples is at **[bxl.boxel.site](https://bxl.boxel.site)** (also shipped as [`docs/syntax-reference.html`](./docs/syntax-reference.html) and [`docs/syntax-reference.md`](./docs/syntax-reference.md)); the formal grammar lives in [`docs/grammar.ebnf`](./docs/grammar.ebnf).
-
----
 
 ## A tour of the syntax
 
@@ -132,7 +130,7 @@ evaluateBxl('"Line Item"[SKU = "BRAND-RED"]."Unit Price"', invoice, { schema });
 // => 20
 
 // 5 · Filter-all predicate — the SUMIF shape
-evaluateBxl('SUM("Line Item"[*Taxable]."Line Total")', invoice, { schema });
+evaluateBxl('SUM("Line Item"[* ."Taxable"]."Line Total")', invoice, { schema });
 // => 50  (only the taxable row)
 
 // 6 · Positional selectors
@@ -175,6 +173,8 @@ BXL is evaluated from eight distinct positions in a typical application. Each us
 | **Notification trigger**| Fire when threshold crossed       | `"Budget Remaining" < 1000`                             |
 | **Reactive predicate**  | Watch-and-fire rule               | `age("Last Heartbeat") > DURATION("60s")`               |
 | **Query transform**     | Bulk derivation over an array     | <code>"Line Item" &#124; map(Quantity * "Unit Price")</code> |
+
+For server-scale lists, keep retrieval and processing separate: the host query language owns filtering, search relevance, ordering, and pagination; BXL processes the bounded JSON result that comes back. See [Query Then Process](./docs/query-then-process.md) for the pattern, including a Boxel query example, an illustrative PostgreSQL JSONB lowering, and a BXL process step using Excel functions.
 
 ### Where expressions live — three layers, one rule each
 
@@ -221,7 +221,7 @@ export const donationForm = {
 
     { key: 'email', label: 'Email',
       validate: [
-        { expr: 'Email CONTAINS "@"',
+        { expr: 'Email | contains("@")',
           message: 'Must be a valid email' },
       ],
     },
@@ -264,7 +264,7 @@ export const donationForm = {
 
 Every expression above fires at a different point in the form's lifecycle, and each maps to one row of the 8-position grid:
 
-- `Email CONTAINS "@"` · `"Donation Amount" > 0` → **constraint**, per-field on input
+- `Email | contains("@")` · `"Donation Amount" > 0` → **constraint**, per-field on input
 - `"Donation Amount" >= 250` · `present(Employer)` · `Recurring` → **visible-when**, recalculated as other fields change
 - `Employer."Matching Program"` → **autofill / default**, applied on field focus or record load
 - `IF(Recurring, "Donation Amount" * 12, "Donation Amount")` → **formula field**, recomputed on every change
@@ -297,7 +297,7 @@ BXL skips Excel's cell-grid functions (`OFFSET`, `INDIRECT`, `DAVERAGE`), most s
 
 ```
 jq:   .lineItems | map(select(.taxable)) | map(.lineTotal) | add
-BXL:  SUM("Line Item"[*Taxable]."Line Total")
+BXL:  SUM("Line Item"[* ."Taxable"]."Line Total")
 ```
 
 If you already know jq, you already know BXL. If you don't, every pipeline jq supports still works — BXL just gives you a readable shortcut when a schema is available.
@@ -327,7 +327,7 @@ XQuery:  sum(for $li in $invoice/lineItem
              return $li/lineTotal)
 ```
 ```bxl
-BXL:     SUM("Line Item"[*Taxable]."Line Total")
+BXL:     SUM("Line Item"[* ."Taxable"]."Line Total")
 ```
 
 Four lines of FLWOR compress into one BXL expression. FLWOR is more explicit about each step; BXL is more compact because implicit iteration and predicate-indexed arrays do the work silently.
@@ -409,7 +409,7 @@ CSS is genuinely sandboxed — it can't fetch, mutate, or call arbitrary code, a
 
 ```
 JSONata:  $sum(lineItems[taxable].lineTotal)
-BXL:      SUM("Line Item"[*Taxable]."Line Total")
+BXL:      SUM("Line Item"[* ."Taxable"]."Line Total")
 ```
 
 The differences, honestly:
@@ -447,7 +447,7 @@ invoice.lineItems
   .reduce((sum, li) => sum + li.lineTotal, 0);
 ```
 ```bxl
-SUM("Line Item"[*Taxable]."Line Total")
+SUM("Line Item"[* ."Taxable"]."Line Total")
 ```
 
 Both answer the same question. The JS version has `fetch` and `process.env` in scope and runs inside your server bundle; the BXL version refuses I/O by construction and serializes as data. Different tools for different distances from user-authored input — neither replaces the other.
@@ -508,6 +508,56 @@ See [`docs/sandbox.md`](./docs/sandbox.md) for the full threat model and contrac
 
 ---
 
+## Execution profiles
+
+BXL is deliberately expressive. In the full language you can use readable field labels, jq paths and pipes, Excel functions, local bindings, conditionals, user-defined helpers, and jq's collection operators. That is the right contract for formulas, transforms, and local computation over a JSON snapshot.
+
+The objection is also fair: a language that can do all of that should not be accepted unchanged in every execution surface. A query planner cannot run arbitrary string transforms. A request-time authorization check should not run a custom recursive helper. A write/index-time derivation should produce stable facts, not depend on unbounded runtime behavior.
+
+Profiles are the practical answer. BXL stays one language and one AST, but hosts can validate a strict subset for the place where the expression will run. The full language remains available where full computation is appropriate; narrower profiles reject expressions that exceed their execution contract before they become runtime surprises.
+
+| Profile | Intent | Typical use | What the subset protects |
+| --- | --- | --- | --- |
+| `compute` | Full value computation | formulas, transforms, UI validation, query transforms | Preserves the current BXL contract: readable jq plus Excel helpers. |
+| `policy` | Bounded request-time authorization | write gates, field redaction decisions | Keeps request checks deterministic, fail-closed, and cheap to run. |
+| `predicate` | Query-time boolean filtering | row-level read filters, search constraints | Requires a query-shaped boolean predicate; rejects transforms and runtime-only helpers. |
+| `derive` | Write/index-time derived facts | access facts, search facets, cached derived fields | Limits expressions to stable facts the platform may store, index, cache, or reuse. |
+
+Profile violations are parser diagnostics:
+
+```ts
+const ast = compileBxl('words(Description) > 500', {
+  target: 'ast',
+  profile: 'predicate',
+  schema,
+});
+
+ast.profileIssues[0]?.code;
+// => 'predicate-call-banned'
+```
+
+For predicate-profile expressions, the compiler can also emit a parameterized SQL fragment:
+
+```ts
+const sql = compileBxlPredicateToSql(
+  'Status IN ["Active", "Pending"] and Department IN @User.Departments',
+  {
+    schema,
+    context: { User: { Departments: ['Finance', 'Legal'] } },
+    pathToSql(path) {
+      return `data #>> '{${path.parts.join(',')}}'`;
+    },
+  },
+);
+
+sql.params;
+// ['Active', 'Pending', 'Finance', 'Legal']
+```
+
+This is how BXL avoids becoming "one language that does too much." The language is broad; each execution profile is intentionally small. See [`docs/profiles.md`](./docs/profiles.md) for the detailed profile contracts and examples.
+
+---
+
 ## Built on two open-source giants
 
 BXL is a thin, opinionated layer on proven foundations.
@@ -525,6 +575,7 @@ Our own work — the readable-syntax compiler, linter, formatter, sandbox, and r
 import {
   evaluateBxl,      // readable BXL → JSON value (full runtime)
   compileBxl,       // readable BXL → canonical jq source (no evaluation)
+  compileBxlPredicateToSql, // predicate-profile BXL → parameterized SQL
   lintBxl,          // parser-only diagnostics (no formula helpers, no evaluator)
   solidifyBxl,      // normalize fuzzy input to Solid BXL (one-liner, canonical)
   expandBxl,        // wrap at pipes / multi-arg calls for readability
@@ -571,6 +622,7 @@ One-shot pipes too: `echo '{"n":42}' | bxl eval 'n * 2'` prints `84`.
 - [`docs/syntax-reference.md`](./docs/syntax-reference.md) — same reference in Markdown, for GitHub browsing and plain-text viewers
 - [`docs/grammar.ebnf`](./docs/grammar.ebnf) — formal grammar
 - [`docs/sandbox.md`](./docs/sandbox.md) — sandbox contract and threat model
+- [`docs/profiles.md`](./docs/profiles.md) — profile contracts for restricted execution surfaces
 - [`docs/excel-compatibility.md`](./docs/excel-compatibility.md) — what pasted Excel formulas support
 - [`docs/formulas.md`](./docs/formulas.md) — Excel helper matrix (implemented, BXL-only, via jq, won't add)
 - [`docs/api.md`](./docs/api.md) — TypeScript API and option defaults

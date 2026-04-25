@@ -44,13 +44,10 @@ const PREDICATE_OPERATORS = new Set([
   '<=',
   '>',
   '>=',
-  '^=',
-  '$=',
-  '*=',
-  'STARTSWITH',
-  'ENDSWITH',
-  'CONTAINS',
   'IN',
+  'BETWEEN',
+  'IS',
+  'LIKE',
 ]);
 
 function normalizeLabel(label: string): string {
@@ -73,6 +70,7 @@ function codeForCompileError(message: string): string {
   if (/Unsupported predicate operator/i.test(message)) return 'unsupported-predicate-op';
   if (/CSS-style pseudo-class syntax was removed/i.test(message)) return 'legacy-pseudo-class-removed';
   if (/Unsupported positional selector keyword/i.test(message)) return 'unsupported-positional-selector';
+  if (/Filter-all \[\* \.\.\.\] predicates must use explicit current-item paths/i.test(message)) return 'filter-all-requires-dot';
   if (/Unclosed '/i.test(message)) return 'unclosed-bracket';
   if (/Unterminated string/i.test(message)) return 'unterminated-string';
   if (/Cannot tokenize character/i.test(message)) return 'untokenizable-character';

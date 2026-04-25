@@ -1,7 +1,7 @@
 // Exercise the Excel-Table-style filter syntax and related row/index
 // conventions added in this pass:
 //
-//   `[*pred]`   — filter-all with truthy / predicate semantics.
+//   `[* .pred]` — filter-all with explicit current-item predicate semantics.
 //                 Replaces most uses of the `_BY` builtin family.
 //   `[#N]`      — one-based single-row shortcut (was zero-based).
 //   `[#N..#M]`  — one-based inclusive range (preferred spelling).
@@ -17,7 +17,7 @@
 //   top-level `=` — auto-rewritten to `==` at compile so `Status = "x"`
 //                   is a comparison, not a jq assignment.
 
-import { deepStrictEqual, strictEqual } from 'node:assert';
+import { deepStrictEqual, strictEqual, throws } from 'node:assert';
 import {
   bxlToJqExpression,
   evaluateBxl,
@@ -36,31 +36,31 @@ interface FilterCase {
 }
 
 const cases: FilterCase[] = [
-  // --- [*pred] truthy filter-all ---
+  // --- [* .pred] truthy filter-all ---
   {
     name: '[*field] truthy filter across line items',
-    expression: '"Line Item"[*Taxable]."Line Total"',
+    expression: '"Line Item"[* ."Taxable"]."Line Total"',
     expectedValue: [10, 12, 18, 15],
     expectedJq: '[.lineItems[] | select(.taxable).lineTotal]',
   },
   {
     name: '[*field] piped into add (Excel SUMIF shape)',
-    expression: 'SUM("Line Item"[*Taxable]."Line Total")',
+    expression: 'SUM("Line Item"[* ."Taxable"]."Line Total")',
     expectedValue: 55,
   },
   {
     name: '[*pred] with explicit comparison',
-    expression: 'SUM("Line Item"[*Category = "Service"]."Line Total")',
+    expression: 'SUM("Line Item"[* ."Category" = "Service"]."Line Total")',
     expectedValue: 33,
   },
   {
     name: '[*pred] composes with numeric comparison',
-    expression: '"Line Item"[*Quantity > 5].SKU',
+    expression: '"Line Item"[* .Quantity > 5].SKU',
     expectedValue: ['COPY-04'],
   },
   {
     name: 'COUNTA over [*pred] matches object-arity intent',
-    expression: 'COUNTA("Line Item"[*Taxable])',
+    expression: 'COUNTA("Line Item"[* ."Taxable"])',
     expectedValue: 4,
   },
 
@@ -172,6 +172,14 @@ for (const c of cases) {
     console.error(`    ${(error as Error).message}`);
   }
 }
+
+throws(
+  () => evaluateBxl('"Line Item"[*Taxable]."Line Total"', bxlExampleInput, {
+    schema: bxlExampleSchema,
+  }),
+  /Filter-all \[\* \.\.\.\] predicates must use explicit current-item paths/,
+  'filter-all shorthand now requires an explicit current-item dot',
+);
 
 // --- Solidify rewrites: [row N] / [item N] → [#N] ---
 

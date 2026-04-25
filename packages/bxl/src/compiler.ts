@@ -6,19 +6,75 @@
  * to compile.
  */
 
+import {
+  compileReadableSyntax,
+  type ReadableSchema,
+  type ReadableSyntaxCompileResult,
+} from './bxl/compiler/readable-syntax.js';
+import {
+  parseBxlAst,
+  type BxlAstProgram,
+  type BxlAttachment,
+  type BxlProfile,
+} from './bxl/ast/index.js';
+import {
+  BxlPredicateSqlError,
+  compileBxlPredicateAstToSql,
+  compileBxlPredicateToSql,
+} from './bxl/sql/index.js';
+
 export {
   compileReadableSyntax,
 } from './bxl/compiler/readable-syntax.js';
 
+export {
+  assertValidBxlProfile,
+  parseBxlAst,
+  validateBxlAst,
+  visitBxlAst,
+} from './bxl/ast/index.js';
+
+export {
+  BxlPredicateSqlError,
+  SQL_PREDICATE_MODULE,
+  compileBxlPredicateAstToSql,
+  compileBxlPredicateToSql,
+} from './bxl/sql/index.js';
+
 export type {
   ReadableSchema,
   ReadableField,
+  ReadableSyntaxCompileResult,
   ReadableSyntaxWarning,
 } from './bxl/compiler/readable-syntax.js';
 
+export type {
+  BxlAstNode,
+  BxlAstOptions,
+  BxlAstProgram,
+  BxlAttachment,
+  BxlContextPathNode,
+  BxlPathNode,
+  BxlProfile,
+  BxlProfileIssue,
+  BxlProfileValidationOptions,
+} from './bxl/ast/index.js';
+
+export type {
+  BxlPredicateSqlOptions,
+  BxlPredicateSqlPath,
+  BxlPredicateSqlPathUsage,
+  BxlPredicateSqlResult,
+  BxlPredicateSqlValue,
+  BxlSqlPredicateMapping,
+  BxlSqlPredicateModule,
+} from './bxl/sql/index.js';
+
 export {
+  bxlToStorageExpression,
   bxlToJqExpression,
   jqToReadableBxlExpression,
+  storageToReadableBxlExpression,
   solidifyBxlExpression,
   expandBxlExpression,
   collapseBxlExpression,
@@ -31,3 +87,29 @@ export type {
   BxlSolidifyResult,
   JqToReadableBxlResult,
 } from './bxl/formatter/index.js';
+
+export interface CompileBxlOptions {
+  schema?: ReadableSchema;
+  readableSyntax?: boolean;
+  target?: 'jq' | 'ast';
+  profile?: BxlProfile;
+  attachment?: BxlAttachment;
+}
+
+export function compileBxl(
+  expression: string,
+  options: CompileBxlOptions & { target: 'ast' },
+): BxlAstProgram;
+export function compileBxl(
+  expression: string,
+  options?: CompileBxlOptions & { target?: 'jq' },
+): ReadableSyntaxCompileResult;
+export function compileBxl(
+  expression: string,
+  options: CompileBxlOptions = {},
+): ReadableSyntaxCompileResult | BxlAstProgram {
+  if (options.target === 'ast') {
+    return parseBxlAst(expression, options);
+  }
+  return compileReadableSyntax(expression, options);
+}

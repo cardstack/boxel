@@ -14,6 +14,7 @@ src/bxl/  (this folder)
   ├── compiler/     readable BXL → canonical jqxl (source-level rewrite)
   ├── formatter/    solid / readable / multi-line formatters
   ├── linter/       parser-only diagnostics (imports jqtools/parser, never evaluate)
+  ├── ast/          semantic AST + execution profile validation
   ├── registry/     assembles jq-core + formula libraries
   ├── bridge/       top-level runtime entry (native.ts); wires formulajs to jq
   ├── syntax/       TextMate grammar JSON
@@ -28,7 +29,7 @@ BXL imports from both `src/jqtools/` and `src/formulajs/`. The reverse is
 - **`compiler/readable-syntax.ts`** — rewrites readable BXL to canonical jqxl
   before tokenizing. Handles label paths, positional selectors
   (`[#first]`, `[#last]`, `[#last-N]`, `[#N..#last-K]`, `[#only]`, `[#odd]`, `[#even]`, `[#N]`, `[#-N]`,
-  `[*pred]`, `[all]`), predicate
+  `[* .pred]`, `[all]`), predicate
   indices (`[Field = "X"]`, `[Field > 5]`), Excel preprocessor (`=`, `<>`,
   `^`, `&`, leading `=`), and formula-name lifting. Uses the schema to
   resolve quoted and bare labels to jq paths.
@@ -39,6 +40,8 @@ BXL imports from both `src/jqtools/` and `src/formulajs/`. The reverse is
 - **`linter/index.ts`** — non-evaluating diagnostics: missing quotes,
   zero-based index warnings, first-match predicate warnings, Excel-equality
   preference, deprecated row shortcut, etc.
+- **`ast/index.ts`** — semantic AST projection over canonical BXL/jq plus
+  profile validators (`compute`, `policy`, `predicate`, `derive`).
 - **`registry/index.ts`** — `BXL_REGISTRY` (core + formula), public
   `resolveBuiltinRegistry`.
 - **`bridge/native.ts`** — `runNativeJq`, `parseNativeJq`, `tokenizeNativeJq`.
