@@ -675,14 +675,21 @@ module(basename(__filename), function () {
               // promise) ..." log so the captured additionalErrors has
               // a stack-bearing entry the test can assert on.
               'desync-repro.gts': `
+              import { registerDestructor } from '@ember/destroyable';
               import { CardDef, Component } from 'https://cardstack.com/base/card-api';
               export class DesyncRepro extends CardDef {
                 static isolated = class extends Component<typeof this> {
                   constructor(...args) {
                     super(...args);
-                    setTimeout(() => {
-                      let container = document.querySelector('[data-prerender]');
-                      if (!container) return;
+                    // Install the observer synchronously: by the time this
+                    // child component constructor runs, the parent template
+                    // has already rendered the [data-prerender] container
+                    // into the DOM, so we don't need to defer the install.
+                    // We deliberately avoid setTimeout here because the
+                    // prerender timer stub blocks zero-delay callbacks
+                    // during prerender, which would skip the install.
+                    let container = document.querySelector('[data-prerender]');
+                    if (container) {
                       let observer = new MutationObserver(() => {
                         if (container.getAttribute('data-prerender-status') === 'ready') {
                           container.setAttribute('data-prerender-status', 'loading');
@@ -692,7 +699,13 @@ module(basename(__filename), function () {
                         attributes: true,
                         attributeFilter: ['data-prerender-status'],
                       });
-                    }, 0);
+                      // Disconnect when this component tears down so the
+                      // observer doesn't persist into a subsequent render
+                      // if the page were reused (it shouldn't be, since the
+                      // detector marks the page 'unusable' and the pool
+                      // evicts — but belt and suspenders).
+                      registerDestructor(this, () => observer.disconnect());
+                    }
                     console.error('desync-repro: simulated runloop-swallowed render exception');
                   }
                   <template>ok</template>

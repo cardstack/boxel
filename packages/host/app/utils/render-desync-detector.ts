@@ -182,7 +182,19 @@ export async function runDomDesyncCheck(
   if (typeof document === 'undefined') {
     return;
   }
-  let yields = ctx.microtaskYields ?? DEFAULT_MICROTASK_YIELDS;
+  // Clamp `microtaskYields` to a sane positive integer. The override knob
+  // is sourced from `globalThis.__boxelDomDesyncMicrotaskYields` (untyped at
+  // runtime), so a stray non-finite / non-positive / non-integer value
+  // would silently shrink the flush-window guard below `DEFAULT_MICROTASK_YIELDS`
+  // and bump false-positive risk. Round to integer, require > 0, otherwise
+  // fall back to the default.
+  let rawYields = ctx.microtaskYields;
+  let yields =
+    typeof rawYields === 'number' &&
+    Number.isFinite(rawYields) &&
+    rawYields > 0
+      ? Math.floor(rawYields)
+      : DEFAULT_MICROTASK_YIELDS;
 
   // Microtask drain #1: lets Backburner's render flush land. Backburner
   // schedules its flush via Promise.resolve().then(...), so yielding the
