@@ -1424,8 +1424,7 @@ export class RenderRunner {
     if (lines.length === 0) {
       return undefined;
     }
-    let header =
-      entry.type === 'assert' ? 'AssertionError' : 'ConsoleError';
+    let header = entry.type === 'assert' ? 'AssertionError' : 'ConsoleError';
     return [`${header}: ${entry.text}`, ...lines].join('\n');
   }
 
