@@ -719,7 +719,7 @@ patchedDependencies:
     hash: 32dda55b40f0bc860d0a8e93bee54d8005c34ed7ac5faed23ce9f5e5f57eea39
     path: patches/magic-string@0.25.9.patch
   matrix-js-sdk@38.3.0:
-    hash: 0472d34281d936a5dcdacff67d2851d88c1df9593cd06b7725ee8414c12aa1d5
+    hash: cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb
     path: patches/matrix-js-sdk@38.3.0.patch
   monaco-editor@0.52.2:
     hash: bdefe071221b87c7c15e1add6739d24d486f543dbad0d714ae586085204626cd
@@ -740,7 +740,7 @@ importers:
     dependencies:
       matrix-js-sdk:
         specifier: 38.3.0
-        version: 38.3.0(patch_hash=0472d34281d936a5dcdacff67d2851d88c1df9593cd06b7725ee8414c12aa1d5)
+        version: 38.3.0(patch_hash=cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb)
     devDependencies:
       '@actions/core':
         specifier: 'catalog:'
@@ -852,7 +852,7 @@ importers:
         version: 4.18.1
       matrix-js-sdk:
         specifier: 'catalog:'
-        version: 38.3.0(patch_hash=0472d34281d936a5dcdacff67d2851d88c1df9593cd06b7725ee8414c12aa1d5)
+        version: 38.3.0(patch_hash=cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb)
       openai:
         specifier: 'catalog:'
         version: 5.12.2(patch_hash=6833f1bcf56cde16edb25881777c31d2745994c6ea992d1e2051d1248d213449)(ws@8.19.0)(zod@3.25.76)
@@ -971,7 +971,7 @@ importers:
         version: 7.9.3
       matrix-js-sdk:
         specifier: 'catalog:'
-        version: 38.3.0(patch_hash=0472d34281d936a5dcdacff67d2851d88c1df9593cd06b7725ee8414c12aa1d5)
+        version: 38.3.0(patch_hash=cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb)
       super-fast-md5:
         specifier: 'catalog:'
         version: 1.0.3
@@ -1017,7 +1017,7 @@ importers:
         version: 8.55.0
       matrix-js-sdk:
         specifier: 'catalog:'
-        version: 38.3.0(patch_hash=0472d34281d936a5dcdacff67d2851d88c1df9593cd06b7725ee8414c12aa1d5)
+        version: 38.3.0(patch_hash=cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb)
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@24.10.8)(typescript@5.9.3)
@@ -2667,7 +2667,7 @@ importers:
         version: 1.9.2
       matrix-js-sdk:
         specifier: 'catalog:'
-        version: 38.3.0(patch_hash=0472d34281d936a5dcdacff67d2851d88c1df9593cd06b7725ee8414c12aa1d5)
+        version: 38.3.0(patch_hash=cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb)
       mermaid:
         specifier: 'catalog:'
         version: 11.14.0
@@ -3316,7 +3316,7 @@ importers:
         version: 3.2.0(marked@12.0.2)
       matrix-js-sdk:
         specifier: 'catalog:'
-        version: 38.3.0(patch_hash=0472d34281d936a5dcdacff67d2851d88c1df9593cd06b7725ee8414c12aa1d5)
+        version: 38.3.0(patch_hash=cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb)
       mime-types:
         specifier: 'catalog:'
         version: 2.1.35
@@ -3523,7 +3523,7 @@ importers:
     dependencies:
       matrix-js-sdk:
         specifier: 'catalog:'
-        version: 38.3.0(patch_hash=0472d34281d936a5dcdacff67d2851d88c1df9593cd06b7725ee8414c12aa1d5)
+        version: 38.3.0(patch_hash=cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb)
     devDependencies:
       '@babel/preset-typescript':
         specifier: 'catalog:'
@@ -21586,7 +21586,7 @@ snapshots:
 
   '@types/matrix-js-sdk@11.1.0':
     dependencies:
-      matrix-js-sdk: 38.3.0(patch_hash=0472d34281d936a5dcdacff67d2851d88c1df9593cd06b7725ee8414c12aa1d5)
+      matrix-js-sdk: 38.3.0(patch_hash=cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb)
 
   '@types/mdast@3.0.15':
     dependencies:
@@ -29438,7 +29438,7 @@ snapshots:
 
   matrix-events-sdk@0.0.1: {}
 
-  matrix-js-sdk@38.3.0(patch_hash=0472d34281d936a5dcdacff67d2851d88c1df9593cd06b7725ee8414c12aa1d5):
+  matrix-js-sdk@38.3.0(patch_hash=cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb):
     dependencies:
       '@babel/runtime': 7.28.6
       '@matrix-org/matrix-sdk-crypto-wasm': 15.3.0
