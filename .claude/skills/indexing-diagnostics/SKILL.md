@@ -264,6 +264,29 @@ Walk the fields top-down. The *first* positive signal wins; stop there.
 - **`queryLoadsInFlight` but no `fieldName`** — this is an ad-hoc `store.search()` call, not a query field. The `source` string carries the SearchResource's `source` tag (`seed` / `search` / `live-refresh`) to help.
 - **`launchMs + renderElapsedMs ≠ totalElapsedMs`** — possible under retry, since render-runner re-enters with `clearCache: true` on known error signatures. Treat each attempt as its own story; the final stored attempt wins.
 
+### Render binding desync errors
+
+A row with `error_doc.title === 'Render binding desync'` (status 500, `evict: true`) is the render route's desync detector saying: the model reached the `ready` state but Glimmer's binding for the prerender container never updated. No JS-level error fired during the render, yet the render clearly didn't complete. This is specifically **not** a timeout — the page returned fast because the detector caught the mismatch early. The page IS evicted: Glimmer's binding failing to advance is exactly the signal that the runloop stopped working mid-render, so the half-rendered state can't be reused.
+
+**What it means.** The card's template threw during render and the Ember runloop caught the exception in a way that no observable JS event fired:
+
+- `window.error`: not fired
+- `window.unhandledrejection`: not fired
+- `RSVP.on('error')`: not fired
+- `console.error`: not called from JS
+
+Chrome's DevTools console surfaces the throw as `Uncaught (in promise) ...`, but that comes from Chrome's internal Promise-rejection tracker — it doesn't route through any JS-callable signal. So the normal render-route handlers can't see it, and the only deterministic signal left is the DOM desync: `model.status === 'ready'` in the route while `[data-prerender-status] === 'loading'` in the document.
+
+**How to debug.** The detector captures very little on its own — just the stage it was in when it gave up. The real lead is in `error_doc.additionalErrors`: every `console.error` that fired on the page (including the browser-internal "Uncaught (in promise) ..." log) is recorded with its CDP-reported stack frames. Walk those stacks top-down to find the originating getter / helper / computed. Typical causes:
+
+- A helper reference that resolved to `null`/`undefined`, causing `getInternalHelperManager` to throw on `Object.keys(null)` / `Reflect.ownKeys(undefined)`.
+- A `@field` getter that accesses `undefined.property` because an upstream link didn't materialize.
+- A template-level `{{#if (someHelper ...)}}` where `someHelper` was renamed or removed.
+
+**False-positive profile.** The detector has four gates that all have to hold simultaneously: `isReady=true`, `model.status='ready'`, DOM attribute === `loading` specifically, and the state persists across a microtask drain + one macrotask boundary (so Backburner's render flush has had time to land). In-flight loads are filtered upstream by `#waitForRenderLoadStability` — by the time the detector runs the loader is quiescent. The one residual scenario is a card whose template runs a multi-second *synchronous* getter that starves both the microtask queue and our native `setTimeout(0)`; when the getter finishes, the microtask queue drains, the binding flips to `ready`, the detector's continuation sees `ready`, and it exits cleanly. So in practice false-positives require the render route, Backburner, Glimmer, and `setTimeout(0)` to all be blocked in the same JS thread for >1 frame — a state the route can't be in while logically `ready`.
+
+**Mitigation if you suspect a false-positive.** The detector is tunable at runtime via `globalThis.__boxelDomDesyncMicrotaskYields` (default 5 microtask yields before and after the macrotask boundary). Bump it if a specific card family legitimately needs more flush time. The detector module (`packages/host/app/utils/render-desync-detector.ts`) has the full chart and explains why it deliberately avoids `requestAnimationFrame` (RAF + Ember autotrack has a long tail of subtle breakages — microtask + macrotask yields align with how Backburner sequences its own flushes).
+
 ## Cross-referencing logs
 
 Every prerender log line carries `requestId=<uuid>`. Join them:

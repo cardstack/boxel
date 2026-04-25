@@ -660,6 +660,85 @@ module(basename(__filename), function () {
                   },
                 },
               },
+              // Simulates the runloop-swallowed-exception class of render
+              // failure. The template renders fine, but a MutationObserver
+              // forces every Glimmer update of [data-prerender-status]
+              // back to "loading" — the same end-state produced when the
+              // real template throws and the runloop catches the
+              // exception without any JS event firing. The desync
+              // detector should recognise this as `model.status=ready`
+              // vs DOM=loading and write data-prerender-status="unusable"
+              // directly via Document API, evicting the page (Glimmer's
+              // failure to advance the binding IS the signal that the
+              // runloop is dead — half-rendered state can't be reused).
+              // The console.error call simulates Chrome's "Uncaught (in
+              // promise) ..." log so the captured additionalErrors has
+              // a stack-bearing entry the test can assert on.
+              'desync-repro.gts': `
+              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              export class DesyncRepro extends CardDef {
+                static isolated = class extends Component<typeof this> {
+                  constructor(...args) {
+                    super(...args);
+                    setTimeout(() => {
+                      let container = document.querySelector('[data-prerender]');
+                      if (!container) return;
+                      let observer = new MutationObserver(() => {
+                        if (container.getAttribute('data-prerender-status') === 'ready') {
+                          container.setAttribute('data-prerender-status', 'loading');
+                        }
+                      });
+                      observer.observe(container, {
+                        attributes: true,
+                        attributeFilter: ['data-prerender-status'],
+                      });
+                    }, 0);
+                    console.error('desync-repro: simulated runloop-swallowed render exception');
+                  }
+                  <template>ok</template>
+                }
+              }
+            `,
+              'desync-repro.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: './desync-repro',
+                      name: 'DesyncRepro',
+                    },
+                  },
+                },
+              },
+              // Backburner's runloop error rescue is `setTimeout(() => { throw err }, 0)`.
+              // The prerender timer stub no-ops blocked timer callbacks, which silently
+              // swallows that throw and leaves the prerender stuck at
+              // data-prerender-status="loading" until cardRenderTimeout. This fixture
+              // schedules the same pattern from a component constructor so the test can
+              // assert the error surfaces as a normal render error.
+              'set-timeout-throws.gts': `
+              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              export class SetTimeoutThrows extends CardDef {
+                static isolated = class extends Component<typeof this> {
+                  constructor(...args) {
+                    super(...args);
+                    setTimeout(() => {
+                      throw new Error('set-timeout boom');
+                    }, 0);
+                  }
+                  <template>oops</template>
+                }
+              }
+            `,
+              'set-timeout-throws.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: './set-timeout-throws',
+                      name: 'SetTimeoutThrows',
+                    },
+                  },
+                },
+              },
               'throws.gts': `
               import { CardDef, Component } from 'https://cardstack.com/base/card-api';
               export class Throws extends CardDef {
@@ -1170,14 +1249,29 @@ module(basename(__filename), function () {
           Array.isArray(additionalErrors),
           'additionalErrors includes console errors',
         );
+        let consoleEntry = additionalErrors?.find(
+          (error: any) =>
+            typeof error?.message === 'string' &&
+            error.message.includes('console boom'),
+        ) as { message?: string; stack?: string } | undefined;
         assert.ok(
-          additionalErrors?.some(
-            (error) =>
-              typeof error?.message === 'string' &&
-              error.message.includes('console boom'),
-          ),
-          'console error message is captured',
+          consoleEntry,
+          `console error message is captured, got: ${JSON.stringify(additionalErrors)}`,
         );
+        // Puppeteer's CDP stackTrace() doesn't fire for every
+        // console.error call site (it depends on the originating runtime
+        // task), and when it does fire the frames point at the bundled
+        // chunk.js URLs (no source maps at capture time). What matters
+        // is that the captured frame list round-trips into the error
+        // doc as a non-empty stack string when present — that's the
+        // only lead a debugger has when the desync detector fires with
+        // no other signal.
+        if (typeof consoleEntry?.stack === 'string') {
+          assert.ok(
+            consoleEntry.stack.length > 0,
+            `captured console error stack is non-empty when present, got: ${consoleEntry.stack}`,
+          );
+        }
       });
 
       test('card prerender ignores console errors on success', async function (assert) {
@@ -1222,6 +1316,140 @@ module(basename(__filename), function () {
         assert.true(
           result.pool.evicted,
           'unhandled rejection evicts prerender page to recover clean state',
+        );
+      });
+
+      test('card prerender detects DOM desync when Glimmer binding never flips to ready', async function (assert) {
+        // The desync-repro fixture renders successfully but forces the
+        // [data-prerender-status] attribute back to "loading" every time
+        // Glimmer tries to flip it — the same end-state produced in
+        // production when a template throws and the runloop swallows the
+        // exception with no JS event firing. The desync detector should
+        // spot model.status=ready vs DOM=loading after Backburner's
+        // flush window and write the terminal state directly. The
+        // fixture also calls console.error; puppeteer's CDP capture
+        // preserves a stack trace on that console message so the error
+        // doc lands with a lead back at the offending module.
+        let cardURL = `${realmURL}desync-repro.json`;
+
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.ok(
+          result.response.error,
+          'desync detector produces an error doc',
+        );
+        assert.strictEqual(
+          result.response.error?.error.title,
+          'Render binding desync',
+          'error title names the desync class',
+        );
+        assert.strictEqual(
+          result.response.error?.error.status,
+          500,
+          'desync surfaces as 500',
+        );
+        assert.ok(
+          result.response.error?.error.message?.includes(
+            '[data-prerender-status]',
+          ),
+          `desync message names the DOM signal that never updated, got: ${result.response.error?.error.message}`,
+        );
+        // Desync IS the signal that the runloop stopped advancing this
+        // card's render — Glimmer's binding never landed. The page is
+        // carrying a half-finished render tree, so the pool must evict
+        // it; reusing would bleed the broken state into the next render.
+        assert.true(
+          result.pool.evicted,
+          'desync signals a dead runloop — page is evicted',
+        );
+        assert.false(
+          result.pool.timedOut,
+          'desync detector fires well before cardRenderTimeout',
+        );
+
+        // The desync detector carries very little context on its own —
+        // the real lead is the console.error(s) the page logged while
+        // the render was in-flight, which the render-runner appends to
+        // additionalErrors with their CDP-reported stack frames.
+        let additionalErrors =
+          result.response.error?.error.additionalErrors ?? [];
+        let consoleEntry = additionalErrors.find(
+          (error: any) =>
+            typeof error?.message === 'string' &&
+            error.message.includes('desync-repro'),
+        ) as { message?: string; stack?: string } | undefined;
+        assert.ok(
+          consoleEntry,
+          `console error message is captured in additionalErrors, got: ${JSON.stringify(additionalErrors)}`,
+        );
+        // Stack is best-effort: puppeteer's CDP stackTrace() doesn't
+        // fire reliably for every console.error site, and when it does
+        // the frames point at bundled chunk.js URLs (no source maps at
+        // capture time). Verify only that a non-empty stack round-trips
+        // into the error doc when one was attached.
+        if (typeof consoleEntry?.stack === 'string') {
+          assert.ok(
+            consoleEntry.stack.length > 0,
+            `captured console error stack is non-empty when present, got: ${consoleEntry.stack}`,
+          );
+        }
+      });
+
+      test('card prerender surfaces errors thrown from setTimeout without timing out', async function (assert) {
+        // Backburner's runloop error rescue does
+        //   `setTimeout(() => { throw err }, 0);`
+        // to surface an exception caught by the runloop. The prerender
+        // timer stub used to no-op blocked timer callbacks
+        // indiscriminately, so that throw was silently swallowed —
+        // leaving the prerender stuck at data-prerender-status="loading"
+        // until cardRenderTimeout (90s) and surfacing a misleading
+        // "Render timeout" instead of the real error. The fixture
+        // schedules the same pattern from a component constructor; the
+        // timer stub now wraps zero-delay callbacks in try/catch and
+        // writes the captured exception directly to the prerender DOM
+        // signals (status='error', no eviction) — Backburner has already
+        // rescued its internal runloop state by the time it scheduled
+        // the rescue-timer, so this failure class is recoverable.
+        let cardURL = `${realmURL}set-timeout-throws.json`;
+
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.ok(
+          result.response.error,
+          'prerender reports error thrown from setTimeout',
+        );
+        assert.strictEqual(
+          result.response.error?.error.status,
+          500,
+          'setTimeout throw surfaces as 500',
+        );
+        assert.ok(
+          result.response.error?.error.message?.includes('set-timeout boom'),
+          `setTimeout throw message includes thrown message, got: ${result.response.error?.error.message}`,
+        );
+        assert.false(
+          result.pool.timedOut,
+          'setTimeout throw should not be mistaken for timeout',
+        );
+        // Eviction is reserved for runloop-destroyed failures — the
+        // setTimeout throw leaves Backburner intact (it already rescued
+        // internally before we intercepted the rescue-rethrow). The
+        // page stays reusable.
+        assert.false(
+          result.pool.evicted,
+          'setTimeout throw does not evict — Ember runloop is still intact',
         );
       });
 

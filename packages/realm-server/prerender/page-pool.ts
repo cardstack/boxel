@@ -137,6 +137,13 @@ export type ConsoleErrorEntry = {
   type: ReturnType<ConsoleMessage['type']>;
   text: string;
   location?: ConsoleErrorLocation;
+  // Captured CDP stack trace from the console.error site, when Puppeteer
+  // exposes it. Critical for the desync-detector path: when the runloop
+  // swallows a render exception with no JS event firing, Chrome still
+  // routes "Uncaught (in promise) ..." through console output, and the
+  // stack frames here are the only pointer back at the offending
+  // template/getter/helper.
+  stackFrames?: ConsoleErrorLocation[];
 };
 
 const log = logger('prerenderer');
@@ -1426,10 +1433,30 @@ export class PagePool {
           formatted,
         );
         if (type === 'error' || type === 'assert') {
+          // Puppeteer's ConsoleMessage.stackTrace() returns the CDP-reported
+          // call stack at the point the message was emitted. Chrome
+          // populates this for "Uncaught (in promise) ..." logs even when
+          // no JS-level error event fires, so it's our best lead for the
+          // desync class of failures.
+          let pptrStackTrace = message.stackTrace?.();
+          let stackFrames: ConsoleErrorLocation[] | undefined =
+            Array.isArray(pptrStackTrace) && pptrStackTrace.length > 0
+              ? pptrStackTrace
+                  .filter((frame) => !!frame?.url)
+                  .map((frame) => ({
+                    url: frame.url,
+                    lineNumber: frame.lineNumber,
+                    columnNumber: frame.columnNumber,
+                  }))
+              : undefined;
+          if (stackFrames && stackFrames.length === 0) {
+            stackFrames = undefined;
+          }
           this.#recordConsoleError(pageId, {
             type,
             text: formatted,
             location: locationData,
+            stackFrames,
           });
         }
       } catch (e) {

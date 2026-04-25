@@ -133,6 +133,73 @@ function timersBlocked() {
   return stubDepth > 0 && blockDepth > 0;
 }
 
+// Backburner's runloop error rescue path is `setTimeout(() => { throw err }, 0)`,
+// used to turn an exception caught by the runloop into a top-level uncaught
+// error that surfaces via `window.error`. When the timer stub is active and we
+// no-op those callbacks, the throw never fires — every render-route handler
+// that listens on `window.error` / `unhandledrejection` / RSVP error stays
+// quiet, and the prerender hangs at data-prerender-status="loading" until
+// cardRenderTimeout. Surface the captured exception by writing the prerender
+// DOM signals directly via Document API.
+//
+// We deliberately do NOT route through window.dispatchEvent('error', ...) or
+// the boxel-render-error CustomEvent: those would trigger the render route's
+// processRenderError path, which aborts in-flight transitions and the auth-
+// fetch race that's currently building the model. Aborting cascades into
+// in-flight network requests and surfaces as a misleading "Failed to fetch"
+// error instead of the underlying timer throw. By the time this rescue-timer
+// fires, Backburner has already cleaned up its internal runloop state — the
+// runloop is alive — so the right move is just to publish the error to the
+// prerender server without further Ember interaction. We write
+// data-prerender-status="error" (NOT "unusable") because the runloop is
+// recoverable; the page stays reusable for subsequent renders.
+function surfaceTimerError(err: unknown) {
+  if (typeof document === 'undefined') {
+    return;
+  }
+  let message =
+    err && typeof err === 'object' && 'message' in (err as object)
+      ? String((err as { message: unknown }).message)
+      : String(err);
+  let stack =
+    err && typeof err === 'object' && 'stack' in (err as object)
+      ? String((err as { stack: unknown }).stack)
+      : undefined;
+  let payload = {
+    type: 'instance-error',
+    error: {
+      status: 500,
+      title: 'Render error rescued from prerender timer',
+      message,
+      stack: appendRenderTimerSummaryToStack(stack) ?? stack,
+      additionalErrors: null,
+    },
+  };
+  let serialized = JSON.stringify(payload, null, 2);
+  let container = document.querySelector(
+    '[data-prerender]',
+  ) as HTMLElement | null;
+  if (!container) {
+    container = document.createElement('div');
+    container.setAttribute('data-prerender', '');
+    document.body.appendChild(container);
+  }
+  let errorElement = document.querySelector(
+    '[data-prerender-error]',
+  ) as HTMLElement | null;
+  if (!errorElement) {
+    errorElement = document.createElement('pre');
+    errorElement.setAttribute('data-prerender-error', '');
+    container.appendChild(errorElement);
+  }
+  container.dataset.prerenderStatus = 'error';
+  try {
+    errorElement.textContent = serialized;
+  } catch {
+    // best-effort; avoid throwing while writing an error
+  }
+}
+
 function installStubs() {
   if (typeof window === 'undefined') {
     return;
@@ -151,6 +218,29 @@ function installStubs() {
       return invokeSetTimeout ? invokeSetTimeout(...args) : (0 as const);
     }
     recordBlockedTimer('setTimeout', args);
+    let originalCallback = args[0];
+    let delay = args[1] as number | undefined;
+    // Zero-delay timers are typically Backburner runloop continuations or its
+    // error-rescue throw path. Run them through the real setTimeout but wrap
+    // in try/catch and route any thrown exception through surfaceTimerError —
+    // see that function below for why we publish via Document API rather
+    // than dispatching a window event. Without this, render errors that
+    // Backburner forwards via `setTimeout(throw, 0)` are swallowed and the
+    // prerender hangs at data-prerender-status="loading" until
+    // cardRenderTimeout.
+    if (
+      typeof originalCallback === 'function' &&
+      (delay === undefined || delay === 0)
+    ) {
+      let safeCallback = (...cbArgs: any[]) => {
+        try {
+          (originalCallback as (...a: any[]) => unknown)(...cbArgs);
+        } catch (err) {
+          surfaceTimerError(err);
+        }
+      };
+      return invokeSetTimeout(safeCallback, delay);
+    }
     if (!warnedTimeout) {
       console.warn(
         '[boxel] setTimeout is disabled while prerendering to prevent runaway timers',
@@ -159,11 +249,20 @@ function installStubs() {
     }
     // Return a syntactically valid timeout handle but immediately clear it so
     // no timer keeps running while prerendering.
-    let handle = invokeSetTimeout(() => {}, args[1] as number | undefined);
+    let handle = invokeSetTimeout(() => {}, delay);
     nativeClearTimeout?.(handle as unknown as number | undefined);
     return handle;
   }) as typeof window.setTimeout;
 
+  // Note: we intentionally do NOT thread errors through setInterval the way we
+  // do for setTimeout above. Backburner's runloop error-rescue path uses
+  // setTimeout(throw, 0) specifically — setInterval isn't part of its error
+  // surfacing protocol. setInterval callers in our codebase are pollers and
+  // animation loops where allowing even a single tick to fire would defeat
+  // the purpose of suppressing runaway intervals during prerender. If we ever
+  // discover a real-world case of a render error escaping via setInterval
+  // we can revisit, but the symmetry isn't worth breaking the suppression
+  // contract today.
   window.setInterval = ((...args: Parameters<typeof window.setInterval>) => {
     if (!timersBlocked() || !invokeSetInterval) {
       return invokeSetInterval ? invokeSetInterval(...args) : (0 as const);
