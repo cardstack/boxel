@@ -223,7 +223,9 @@ export async function runDomDesyncCheck(
   // Sanitise settleHopsMs the same way: the override is sourced from
   // globalThis (untyped), and a malformed value would either skip the
   // grace window entirely (false positives) or stretch it past the
-  // prerender timeout. Keep only positive finite numbers; if nothing
+  // prerender timeout. Keep only non-negative finite numbers; 0ms is
+  // allowed because a 0-delay hop is still a useful macrotask boundary
+  // (it drains queued macrotasks once and yields control). If nothing
   // valid survives, fall back to the default series.
   let rawHops = ctx.settleHopsMs;
   let hopsMs: readonly number[] =
@@ -261,6 +263,15 @@ export async function runDomDesyncCheck(
     if (!isDesynced(ctx)) return;
   }
 
+  // Final destruction guard: every iteration of the polling loop above
+  // checks isDestroyed before scheduling its hop, but there is still a
+  // small window between the last hop's check and this verdict where
+  // the route can be torn down (e.g. owner destroy or beforeModel of
+  // the next render). Re-check here so we don't write terminal state
+  // into a DOM that no longer belongs to this render — emitDesyncError
+  // mints DOM nodes via ensurePrerenderElements, which we don't want
+  // to do mid-teardown.
+  if (ctx.isDestroyed()) return;
   let totalGraceMs = hopsMs.reduce((a, b) => a + b, 0);
   renderDesyncLogger.warn(
     `dom desync detected cardId=${ctx.cardId}: model.status=ready but DOM data-prerender-status=loading after ${totalGraceMs}ms grace window — assuming the template threw and the runloop swallowed the exception`,
