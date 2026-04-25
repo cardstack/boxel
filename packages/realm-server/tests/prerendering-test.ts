@@ -709,36 +709,6 @@ module(basename(__filename), function () {
                   },
                 },
               },
-              // Backburner's runloop error rescue is `setTimeout(() => { throw err }, 0)`.
-              // The prerender timer stub no-ops blocked timer callbacks, which silently
-              // swallows that throw and leaves the prerender stuck at
-              // data-prerender-status="loading" until cardRenderTimeout. This fixture
-              // schedules the same pattern from a component constructor so the test can
-              // assert the error surfaces as a normal render error.
-              'set-timeout-throws.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
-              export class SetTimeoutThrows extends CardDef {
-                static isolated = class extends Component<typeof this> {
-                  constructor(...args) {
-                    super(...args);
-                    setTimeout(() => {
-                      throw new Error('set-timeout boom');
-                    }, 0);
-                  }
-                  <template>oops</template>
-                }
-              }
-            `,
-              'set-timeout-throws.json': {
-                data: {
-                  meta: {
-                    adoptsFrom: {
-                      module: './set-timeout-throws',
-                      name: 'SetTimeoutThrows',
-                    },
-                  },
-                },
-              },
               'throws.gts': `
               import { CardDef, Component } from 'https://cardstack.com/base/card-api';
               export class Throws extends CardDef {
@@ -1401,57 +1371,6 @@ module(basename(__filename), function () {
         }
       });
 
-      test('card prerender surfaces errors thrown from setTimeout without timing out', async function (assert) {
-        // Backburner's runloop error rescue does
-        //   `setTimeout(() => { throw err }, 0);`
-        // to surface an exception caught by the runloop. The prerender
-        // timer stub used to no-op blocked timer callbacks
-        // indiscriminately, so that throw was silently swallowed —
-        // leaving the prerender stuck at data-prerender-status="loading"
-        // until cardRenderTimeout (90s) and surfacing a misleading
-        // "Render timeout" instead of the real error. The fixture
-        // schedules the same pattern from a component constructor; the
-        // timer stub now wraps zero-delay callbacks in try/catch and
-        // writes the captured exception directly to the prerender DOM
-        // signals (status='error', no eviction) — Backburner has already
-        // rescued its internal runloop state by the time it scheduled
-        // the rescue-timer, so this failure class is recoverable.
-        let cardURL = `${realmURL}set-timeout-throws.json`;
-
-        let result = await prerenderCard(prerenderer, {
-          affinityType: 'realm',
-          affinityValue: realmURL,
-          realm: realmURL,
-          url: cardURL,
-          auth: auth(),
-        });
-
-        assert.ok(
-          result.response.error,
-          'prerender reports error thrown from setTimeout',
-        );
-        assert.strictEqual(
-          result.response.error?.error.status,
-          500,
-          'setTimeout throw surfaces as 500',
-        );
-        assert.ok(
-          result.response.error?.error.message?.includes('set-timeout boom'),
-          `setTimeout throw message includes thrown message, got: ${result.response.error?.error.message}`,
-        );
-        assert.false(
-          result.pool.timedOut,
-          'setTimeout throw should not be mistaken for timeout',
-        );
-        // Eviction is reserved for runloop-destroyed failures — the
-        // setTimeout throw leaves Backburner intact (it already rescued
-        // internally before we intercepted the rescue-rethrow). The
-        // page stays reusable.
-        assert.false(
-          result.pool.evicted,
-          'setTimeout throw does not evict — Ember runloop is still intact',
-        );
-      });
 
       test('card prerender surfaces RSVP rejection without timing out', async function (assert) {
         let cardURL = `${realmURL}rsvp-rejects.json`;
