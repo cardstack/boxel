@@ -1,14 +1,10 @@
 import { defineConfig } from '@playwright/test';
 
-// CS-10860 diagnostic: prerenderer + render-route channels were silenced
-// at warn-only by default, which left us blind when an SF test timed
-// out waiting on a render (we couldn't tell whether the prerender server
-// was busy, the page pool was churning, or a render had stalled). The
-// `prerenderer-chrome` channel remains off because Chrome console output
-// is too noisy to leave on by default; everything else is bumped to info
-// so the next timeout has a usable trail in the CI log.
+// `render-desync=info` stays on so the desync detector's verdicts (warns
+// on detection, plus any debug logs we add later) make it into CI output;
+// everything else is at the same warn-baseline as before CS-10860.
 const defaultPlaywrightLogLevels =
-  '*=warn,software-factory:playwright=info,software-factory:playwright:support=info,software-factory:playwright:cache=info,prerenderer=info,prerenderer-manager=info,render-ready=info,render-desync=info,prerenderer-chrome=none';
+  '*=warn,software-factory:playwright=info,software-factory:playwright:support=info,software-factory:playwright:cache=info,render-desync=info,prerenderer-chrome=none';
 process.env.LOG_LEVELS ??= defaultPlaywrightLogLevels;
 
 const realmPort = Number(process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4205);

@@ -63,16 +63,25 @@
 //        Filters: Glimmer's binding flushed; another handler wrote
 //        a terminal state via Document API.
 //
-//    Gate 4: Drain N microtasks + cross 1 macrotask boundary before
-//            checking, so Backburner's render flush has had time to land
+//    Gate 4: Backoff-poll Backburner's flush window before declaring a
+//            verdict — drain microtasks, then sleep through a series of
+//            macrotask hops, re-checking after each hop
 //      → Ember/Glimmer schedule binding updates via Backburner's
 //        Promise.resolve().then(...) microtask chain, then occasionally
 //        a setTimeout(0). Yielding the same way gives them priority.
+//        Under heavy parallel load (CI workers=3, contended Chrome
+//        and Node event loops) Backburner's flush can lag tens to
+//        hundreds of ms behind — short hops would produce false
+//        positives. Hops back off (50ms → 200 → 500 → 1000 → 2000)
+//        so healthy renders exit at the first hop, slow-but-correct
+//        renders get up to ~3.75s of slack, and only renders that
+//        stay desynced through the full grace window are declared
+//        failures. Total grace is well under cardRenderTimeout (90s).
 //        Filters: ordinary render that just hasn't flushed yet.
 //
 //  In healthy renders Gate 4 is immediate: Backburner's flush runs in a
 //  handful of microtasks, the binding flips to 'ready', Gate 3 closes,
-//  we exit cleanly.
+//  we exit cleanly before even reaching the first hop.
 //
 //  In-flight loads are filtered out upstream by
 //  #waitForRenderLoadStability before we even call this detector — by
@@ -110,10 +119,28 @@ import { logger } from '@cardstack/runtime-common';
 
 const renderDesyncLogger = logger('render-desync');
 
-// Number of microtask yields before AND after the macrotask boundary.
-// Tuned to give Backburner several rounds of flush opportunity without
-// blowing past the deterministic flush window of a healthy render.
+// Number of microtask yields before AND after each macrotask hop.
+// Tuned to give Backburner several rounds of flush opportunity per
+// hop without blowing past the deterministic flush window of a
+// healthy render.
 export const DEFAULT_MICROTASK_YIELDS = 5;
+
+// Polling backoff (in ms) used between desync verdicts. After each
+// hop we re-check the gates, so a render that flushes mid-budget
+// exits clean — only renders that stay desynced through the full
+// cumulative window are declared failures.
+//
+// Why a series of hops instead of one long sleep: under heavy parallel
+// load (CI workers=3, contended Chrome / Node event loops) Backburner's
+// flush can lag tens to hundreds of ms behind the model.status='ready'
+// assignment. A single short hop produces false-positive desyncs that
+// evict healthy pages and amplify pool churn. A single LONG hop
+// delays detection for every render. Backoff polling gives the fast
+// path a fast exit and the slow path real wall-clock slack — total
+// budget here is ~3.75s, well under cardRenderTimeout (90s).
+export const DEFAULT_SETTLE_HOPS_MS: readonly number[] = [
+  50, 200, 500, 1000, 2000,
+];
 
 export const DESYNC_ERROR_TITLE = 'Render binding desync';
 export const DESYNC_ERROR_MESSAGE =
@@ -145,7 +172,7 @@ export interface DesyncDetectorContext {
   modelStatus: () => string;
   // Schedule a timer that bypasses the prerender timer stub so the
   // detector keeps firing even when blocked timers are in effect.
-  // Used exactly once, to cross a single macrotask boundary.
+  // Used once per hop in the backoff polling loop.
   scheduleNativeTimeout: (callback: () => void, delayMs: number) => unknown;
   // Returns the [data-prerender] container and [data-prerender-error]
   // element — creating them if absent. Same helper the existing error
@@ -158,16 +185,24 @@ export interface DesyncDetectorContext {
   // helper the existing error path uses.
   appendStackSummary: (stack: string | undefined) => string | undefined;
   // Override knob for tuning microtask yield count in CI / production.
-  // Default 5 microtasks before and after the single macrotask boundary
-  // gives Backburner ample flush opportunity.
+  // Default 5 microtasks before and after each macrotask hop gives
+  // Backburner ample flush opportunity per round.
   microtaskYields?: number;
+  // Override knob for the hop-by-hop wallclock backoff used between
+  // verdicts. Each entry is a ms delay scheduled via
+  // ctx.scheduleNativeTimeout (so the prerender timer stub is bypassed
+  // and the detector keeps firing even when blocked timers are in
+  // effect). After each hop we re-run the desync fingerprint check
+  // and exit early if the binding has caught up.
+  settleHopsMs?: readonly number[];
 }
 
-// Runs a one-shot desync check. Yields microtasks + a single macrotask
-// boundary so Backburner / Glimmer have had time to flush, then reads
-// the [data-prerender-status] attribute. If the desync fingerprint
-// persists, writes terminal state directly via Document API and
-// surfaces a synthetic render error.
+// Runs a one-shot desync check. Drains microtasks, then polls the
+// desync fingerprint with a backoff series of macrotask hops so
+// Backburner / Glimmer have had real wallclock time to flush. The
+// fast path exits at the first clean check; only renders that stay
+// desynced through the full grace window write terminal state
+// directly via Document API and surface a synthetic render error.
 export async function runDomDesyncCheck(
   ctx: DesyncDetectorContext,
 ): Promise<void> {
@@ -185,34 +220,50 @@ export async function runDomDesyncCheck(
     typeof rawYields === 'number' && Number.isFinite(rawYields) && rawYields > 0
       ? Math.floor(rawYields)
       : DEFAULT_MICROTASK_YIELDS;
+  // Sanitise settleHopsMs the same way: the override is sourced from
+  // globalThis (untyped), and a malformed value would either skip the
+  // grace window entirely (false positives) or stretch it past the
+  // prerender timeout. Keep only positive finite numbers; if nothing
+  // valid survives, fall back to the default series.
+  let rawHops = ctx.settleHopsMs;
+  let hopsMs: readonly number[] =
+    Array.isArray(rawHops) &&
+    rawHops.length > 0 &&
+    rawHops.every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0)
+      ? rawHops
+      : DEFAULT_SETTLE_HOPS_MS;
 
-  // Microtask drain #1: lets Backburner's render flush land. Backburner
-  // schedules its flush via Promise.resolve().then(...), so yielding the
-  // same way puts our continuation behind theirs.
+  // Microtask drain #0: let Backburner's render flush land before we
+  // even start the wallclock polling. Backburner schedules its flush
+  // via Promise.resolve().then(...), so yielding the same way puts our
+  // continuation behind theirs and gives the fast path a fast exit.
   for (let i = 0; i < yields; i++) {
     if (ctx.isDestroyed()) return;
     await Promise.resolve();
   }
+  if (!isDesynced(ctx)) return;
 
-  // Macrotask boundary: ensures any setTimeout(0) deferral inside
-  // Backburner's flush has fired before we read DOM state.
-  await new Promise<void>((resolve) =>
-    ctx.scheduleNativeTimeout(() => resolve(), 0),
-  );
-
-  // Microtask drain #2: lets any new microtasks scheduled during the
-  // macrotask flush land before we read DOM state.
-  for (let i = 0; i < yields; i++) {
+  // Wallclock polling with backoff. After each macrotask hop we drain
+  // microtasks again, then re-check the desync fingerprint. A render
+  // that catches up mid-budget exits clean; only renders that stay
+  // desynced through the full cumulative grace window are declared
+  // failures and trigger emitDesyncError.
+  for (let hopIndex = 0; hopIndex < hopsMs.length; hopIndex++) {
+    let delay = hopsMs[hopIndex];
     if (ctx.isDestroyed()) return;
-    await Promise.resolve();
+    await new Promise<void>((resolve) =>
+      ctx.scheduleNativeTimeout(() => resolve(), delay),
+    );
+    for (let i = 0; i < yields; i++) {
+      if (ctx.isDestroyed()) return;
+      await Promise.resolve();
+    }
+    if (!isDesynced(ctx)) return;
   }
 
-  if (!isDesynced(ctx)) {
-    return;
-  }
-
+  let totalGraceMs = hopsMs.reduce((a, b) => a + b, 0);
   renderDesyncLogger.warn(
-    `dom desync detected cardId=${ctx.cardId}: model.status=ready but DOM data-prerender-status=loading after Backburner flush window — assuming the template threw and the runloop swallowed the exception`,
+    `dom desync detected cardId=${ctx.cardId}: model.status=ready but DOM data-prerender-status=loading after ${totalGraceMs}ms grace window — assuming the template threw and the runloop swallowed the exception`,
   );
   emitDesyncError(ctx);
 }

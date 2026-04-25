@@ -769,6 +769,7 @@ export default class RenderRoute extends Route<Model> {
       ensurePrerenderElements: () => this.#ensurePrerenderElements(),
       appendStackSummary: (stack) => appendRenderTimerSummaryToStack(stack),
       microtaskYields: (globalThis as any).__boxelDomDesyncMicrotaskYields,
+      settleHopsMs: (globalThis as any).__boxelDomDesyncSettleHopsMs,
     });
   }
 
