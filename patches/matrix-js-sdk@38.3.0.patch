@@ -67,6 +67,17 @@ index 7fe744ceb78ef93cbb07e09c49108010e17e1f1d..c131092c9f0c04e52073aa03bc81c70f
  }
  interface IStateFilter extends IRoomEventFilter {
  }
+diff --git a/lib/filter-component.js b/lib/filter-component.js
+--- a/lib/filter-component.js
++++ b/lib/filter-component.js
+@@ -83,6 +83,7 @@ export class FilterComponent {
+       senders: this.filterJson.senders,
+       not_senders: this.filterJson.not_senders,
+       contains_url: this.filterJson.contains_url,
++      ['org.matrix.msc3874.not_rel_types']: this.filterJson['org.matrix.msc3874.not_rel_types'] || [],
+       [FILTER_RELATED_BY_SENDERS.name]: this.filterJson[FILTER_RELATED_BY_SENDERS.name],
+       [FILTER_RELATED_BY_REL_TYPES.name]: this.filterJson[FILTER_RELATED_BY_REL_TYPES.name]
+     }).filter(_ref => {
 diff --git a/lib/sliding-sync.d.ts b/lib/sliding-sync.d.ts
 index 9cda67dd7098a6708fab266da7e3fefec730a582..ca098ae2ba415a61303b9ad1673d1de269adfd1c 100644
 --- a/lib/sliding-sync.d.ts
