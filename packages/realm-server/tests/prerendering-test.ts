@@ -8,9 +8,7 @@ import type {
   FileExtractResponse,
   RenderRouteOptions,
 } from '@cardstack/runtime-common';
-import {
-  type Realm as RuntimeRealm,
-} from '@cardstack/runtime-common';
+import { type Realm as RuntimeRealm } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index';
 import { PagePool } from '../prerender/page-pool';
 import { RenderRunner } from '../prerender/render-runner';
