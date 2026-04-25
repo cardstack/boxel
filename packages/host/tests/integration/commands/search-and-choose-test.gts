@@ -4,7 +4,6 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-
 import SearchAndChooseCommand from '@cardstack/host/commands/search-and-choose';
 import RealmService from '@cardstack/host/services/realm';
 

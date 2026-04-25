@@ -4,7 +4,7 @@ import { settled } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, Deferred} from '@cardstack/runtime-common';
+import { baseRealm, Deferred } from '@cardstack/runtime-common';
 import type {
   SingleCardDocument,
   SingleFileMetaDocument,

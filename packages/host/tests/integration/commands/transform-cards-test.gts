@@ -4,7 +4,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
-import { baseRealm, Command} from '@cardstack/runtime-common';
+import { baseRealm, Command } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type { SearchCardsByQueryCommand as SearchCardsByQueryCommandType } from '@cardstack/host/commands/search-cards';

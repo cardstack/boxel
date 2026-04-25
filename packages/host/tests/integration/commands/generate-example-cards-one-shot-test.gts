@@ -1,7 +1,6 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-
 import { GenerateExampleCardsOneShotCommand } from '@cardstack/host/commands/generate-example-cards';
 
 import {

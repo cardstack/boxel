@@ -1,7 +1,6 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-
 import OpenCreateListingModalCommand from '@cardstack/host/commands/open-create-listing-modal';
 
 import {

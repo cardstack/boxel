@@ -1,10 +1,7 @@
 import { module, test } from 'qunit';
 
 import type { LooseSingleFileMetaDocument } from '@cardstack/runtime-common';
-import {
-  baseRRI,
-  isSingleFileMetaDocument,
-} from '@cardstack/runtime-common';
+import { baseRRI, isSingleFileMetaDocument } from '@cardstack/runtime-common';
 
 import {
   setupBaseRealm,

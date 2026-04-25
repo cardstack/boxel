@@ -294,10 +294,7 @@ module(`Integration | search data resource`, function (hooks) {
       'live update adds new resource',
     );
     let ids = search.resources.map((r) => r.id);
-    assert.ok(
-      ids.includes(testRRI('books/3')),
-      'new book appears in results',
-    );
+    assert.ok(ids.includes(testRRI('books/3')), 'new book appears in results');
   });
 
   test(`returns correct meta with pagination`, async function (assert) {

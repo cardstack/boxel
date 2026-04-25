@@ -3,7 +3,6 @@ import GlimmerComponent from '@glimmer/component';
 
 import { module, test } from 'qunit';
 
-
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import { testRealmURL, testRRI } from '../../helpers';
