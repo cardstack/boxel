@@ -11,10 +11,11 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
+  rri,
+  baseRRI,
   Deferred,
   registerCardReferencePrefix,
   unregisterCardReferencePrefix,
-  rri,
 } from '@cardstack/runtime-common';
 
 import type FileUploadService from '@cardstack/host/services/file-upload';
@@ -24,6 +25,7 @@ import {
   setupLocalIndexing,
   setupRealmCacheTeardown,
   testRealmURL,
+  testRRI,
   setupOnSave,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -602,7 +604,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         assert.deepEqual(
           json.data.meta.adoptsFrom,
           {
-            module: rri(`${baseRealm.url}card-api`),
+            module: baseRRI('card-api'),
             name: 'CardDef',
           },
           'adoptsFrom is correct',
@@ -664,7 +666,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         assert.deepEqual(
           json.data.meta.adoptsFrom,
           {
-            module: rri(`${baseRealm.url}card-api`),
+            module: baseRRI('card-api'),
             name: 'CardDef',
           },
           'adoptsFrom is correct',
@@ -732,7 +734,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         assert.deepEqual(
           json.data.meta.adoptsFrom,
           {
-            module: rri(`${testRealmURL}person`),
+            module: testRRI('person'),
             name: 'Person',
           },
           'adoptsFrom is correct',

@@ -12,7 +12,7 @@ import { module, test } from 'qunit';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
-import { CardContextName, rri } from '@cardstack/runtime-common';
+import { CardContextName} from '@cardstack/runtime-common';
 
 import type StoreService from '@cardstack/host/services/store';
 
@@ -20,6 +20,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  testRRI,
 } from '../../helpers';
 import {
   CardDef,
@@ -101,7 +102,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri(`${testRealmURL}author`),
+                module: testRRI('author'),
                 name: 'Author',
               },
             },
@@ -116,7 +117,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri(`${testRealmURL}author`),
+                module: testRRI('author'),
                 name: 'Author',
               },
             },
@@ -131,7 +132,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri(`${testRealmURL}author`),
+                module: testRRI('author'),
                 name: 'Author',
               },
             },
@@ -154,7 +155,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
           return {
             filter: {
               on: {
-                module: rri(`${testRealmURL}author`),
+                module: testRRI('author'),
                 name: 'Author',
               },
               eq: {

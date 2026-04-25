@@ -33,7 +33,6 @@ import {
   fields,
   cardTypeDisplayName,
   type CodeRef,
-  rri,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -45,6 +44,7 @@ import {
   cleanWhiteSpace,
   p,
   testRealmURL,
+  testRRI,
   setupCardLogs,
   saveCard,
   percySnapshot,
@@ -884,7 +884,7 @@ module('Integration | card-basics', function (hooks) {
       card.boolean = true;
       card.languagesSpoken = ['english', 'japanese'];
       card.ref = {
-        module: rri(`${testRealmURL}person`),
+        module: testRRI('person'),
         name: 'Person',
       };
       let readName: string = card.firstName;

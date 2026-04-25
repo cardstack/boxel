@@ -26,6 +26,7 @@ import type LocalIndexer from '@cardstack/host/services/local-indexer';
 import {
   getDbAdapter,
   testRealmURL,
+  testRRI,
   setupIndex,
   makeRenderer,
   createPrerenderAuth,
@@ -52,7 +53,7 @@ const makeCardResource = (
   name: string,
   adoptsFrom: { module: RealmResourceIdentifier; name: string },
 ): CardResource => ({
-  id: rri(`${testRealmURL}${id}`),
+  id: testRRI(id),
   type: 'card',
   attributes: {
     name,
@@ -339,7 +340,7 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let resource: CardResource = {
-      id: rri(`${testRealmURL}1.json`),
+      id: testRRI('1.json'),
       type: 'card',
       attributes: {
         name: 'Van Gogh',
@@ -509,7 +510,7 @@ module('Unit | index-writer', function (hooks) {
     ].map((i) => internalKeyFor(i, new URL(testRealmURL2)));
     let modified = Date.now();
     let resource: CardResource = {
-      id: rri(`${testRealmURL}1`),
+      id: testRRI('1'),
       type: 'card',
       attributes: {
         name: 'Mango',
@@ -677,7 +678,7 @@ module('Unit | index-writer', function (hooks) {
     );
     let modified = Date.now();
     let resource: CardResource = {
-      id: rri(`${testRealmURL}1`),
+      id: testRRI('1'),
       type: 'card',
       attributes: {
         name: 'Mango',
@@ -1066,7 +1067,7 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let resource: CardResource = {
-      id: rri(`${testRealmURL}1.json`),
+      id: testRRI('1.json'),
       type: 'card',
       attributes: {
         name: 'Van Gogh',
@@ -1099,7 +1100,7 @@ module('Unit | index-writer', function (hooks) {
         realmURL: testRealmURL,
         canonicalURL: `${testRealmURL}1.json`,
         instance: {
-          id: rri(`${testRealmURL}1`),
+          id: testRRI('1'),
           type: 'card',
           attributes: {
             name: 'Mango',
@@ -1154,7 +1155,7 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let resource: CardResource = {
-      id: rri(`${testRealmURL}1.json`),
+      id: testRRI('1.json'),
       type: 'card',
       attributes: {
         name: 'Van Gogh',
@@ -1195,7 +1196,7 @@ module('Unit | index-writer', function (hooks) {
         realmURL: testRealmURL,
         canonicalURL: `${testRealmURL}1.json`,
         instance: {
-          id: rri(`${testRealmURL}1.json`),
+          id: testRRI('1.json'),
           type: 'card',
           attributes: {
             name: 'Van Gogh',
@@ -1231,7 +1232,7 @@ module('Unit | index-writer', function (hooks) {
       [],
     );
     let resource: CardResource = {
-      id: rri(`${testRealmURL}1.json`),
+      id: testRRI('1.json'),
       type: 'card',
       attributes: { name: 'Van Gogh' },
       meta: {

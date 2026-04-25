@@ -40,6 +40,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   testRealmURL,
+  testRRI,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
@@ -314,7 +315,7 @@ module('Acceptance | operator mode tests', function (hooks) {
               cardDescription: 'Spec for Person Card',
               specType: 'card',
               ref: {
-                module: rri(`${testRealmURL}person`),
+                module: testRRI('person'),
                 name: 'Person',
               },
             },
@@ -333,7 +334,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri(`${testRealmURL}pet`),
+                module: testRRI('pet'),
                 name: 'Pet',
               },
             },
@@ -346,7 +347,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri(`${testRealmURL}pet`),
+                module: testRRI('pet'),
                 name: 'Pet',
               },
             },
@@ -374,7 +375,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri(`${testRealmURL}person`),
+                module: testRRI('person'),
                 name: 'Person',
               },
             },
@@ -394,7 +395,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri(`${testRealmURL}person`),
+                module: testRRI('person'),
                 name: 'Person',
               },
             },
@@ -560,7 +561,7 @@ module('Acceptance | operator mode tests', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: rri(`${testRealmURL}person`),
+                  module: testRRI('person'),
                   name: 'Person',
                 },
               },

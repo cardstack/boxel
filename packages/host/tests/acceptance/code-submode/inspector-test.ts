@@ -39,6 +39,7 @@ import {
   setupLocalIndexing,
   setupRealmCacheTeardown,
   testRealmURL,
+  testRRI,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   setupOnSave,
@@ -999,7 +1000,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         'the name field is correct',
       );
       assert.deepEqual(json.data.meta.adoptsFrom, {
-        module: rri(`${testRealmURL}pet`),
+        module: testRRI('pet'),
         name: 'Pet',
       });
       assert.strictEqual(json.data.meta.realmURL, testRealmURL2);

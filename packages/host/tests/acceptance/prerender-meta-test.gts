@@ -15,6 +15,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   testRealmURL,
+  testRRI,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   capturePrerenderResult,
@@ -252,7 +253,7 @@ module('Acceptance | prerender | meta', function (hooks) {
       {
         data: {
           type: 'card',
-          id: rri(`${testRealmURL}Person/hassan`),
+          id: testRRI('Person/hassan'),
           attributes: {
             name: 'Hassan',
             cardTitle: 'Hassan',

@@ -9,7 +9,6 @@ import type {
   RenderRouteOptions,
 } from '@cardstack/runtime-common';
 import {
-  baseRealm,
   type Realm as RuntimeRealm,
 } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index';
@@ -29,6 +28,8 @@ import {
   baseCardRef,
   trimExecutableExtension,
   rri,
+  baseRealm,
+  baseRRI,
 } from '@cardstack/runtime-common';
 import {
   installDelayedRuntimeRealmSearchPatch,
@@ -6471,7 +6472,7 @@ module(basename(__filename), function () {
           fileExtract: true,
           fileRender: true,
           fileDefCodeRef: {
-            module: rri(`${baseRealm.url}json-file-def`),
+            module: baseRRI('json-file-def'),
             name: 'JsonFileDef',
           },
         },

@@ -2,9 +2,8 @@ import { module, test } from 'qunit';
 
 import type { LooseSingleFileMetaDocument } from '@cardstack/runtime-common';
 import {
-  baseRealm,
+  baseRRI,
   isSingleFileMetaDocument,
-  rri,
 } from '@cardstack/runtime-common';
 
 import {
@@ -53,7 +52,7 @@ module('Integration | serializeFileDef', function (hooks) {
     let doc = serializeFileDef(fileDef);
 
     assert.deepEqual(doc.data.meta.adoptsFrom, {
-      module: rri(`${baseRealm.url}card-api`),
+      module: baseRRI('card-api'),
       name: 'FileDef',
     });
   });

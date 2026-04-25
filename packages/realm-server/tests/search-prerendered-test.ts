@@ -4,7 +4,7 @@ import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import { rri } from '@cardstack/runtime-common';
 import { setupPermissionedRealmCached, createJWT } from './helpers';
-import { PRERENDERED_HTML_FORMATS, baseRealm } from '@cardstack/runtime-common';
+import { PRERENDERED_HTML_FORMATS, baseRRI } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -160,7 +160,7 @@ module(basename(__filename), function () {
             let queryBase: Query = {
               filter: {
                 on: {
-                  module: rri(`${baseRealm.url}card-api`),
+                  module: baseRRI('card-api'),
                   name: 'FileDef',
                 },
                 eq: {

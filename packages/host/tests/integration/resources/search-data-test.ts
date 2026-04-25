@@ -8,7 +8,7 @@ import { module, test } from 'qunit';
 import type { DataQuery, Loader, Realm } from '@cardstack/runtime-common';
 import {
   baseRealm,
-  rri,
+  baseRRI,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
@@ -22,6 +22,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  testRRI,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -100,7 +101,7 @@ module(`Integration | search data resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}book`),
+              module: testRRI('book'),
               name: 'Book',
             },
           },
@@ -119,7 +120,7 @@ module(`Integration | search data resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}book`),
+              module: testRRI('book'),
               name: 'Book',
             },
           },
@@ -142,7 +143,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         type: {
-          module: rri(`${testRealmURL}book`),
+          module: testRRI('book'),
           name: 'Book',
         },
       },
@@ -174,7 +175,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         on: {
-          module: rri(`${testRealmURL}book`),
+          module: testRRI('book'),
           name: 'Book',
         },
         eq: {
@@ -208,7 +209,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         type: {
-          module: rri(`${baseRealm.url}card-api`),
+          module: baseRRI('card-api'),
           name: 'FileDef',
         },
       },
@@ -244,7 +245,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         type: {
-          module: rri(`${testRealmURL}book`),
+          module: testRRI('book'),
           name: 'Book',
         },
       },
@@ -277,7 +278,7 @@ module(`Integration | search data resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}book`),
+              module: testRRI('book'),
               name: 'Book',
             },
           },
@@ -294,7 +295,7 @@ module(`Integration | search data resource`, function (hooks) {
     );
     let ids = search.resources.map((r) => r.id);
     assert.ok(
-      ids.includes(rri(`${testRealmURL}books/3`)),
+      ids.includes(testRRI('books/3')),
       'new book appears in results',
     );
   });
@@ -303,7 +304,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         type: {
-          module: rri(`${testRealmURL}book`),
+          module: testRRI('book'),
           name: 'Book',
         },
       },

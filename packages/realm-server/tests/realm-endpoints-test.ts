@@ -14,9 +14,9 @@ import {
   writeFileSync,
 } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
-import { rri } from '@cardstack/runtime-common';
 import {
   baseRealm,
+  baseRRI,
   CachingDefinitionLookup,
   SupportedMimeType,
   type LooseSingleCardDocument,
@@ -228,7 +228,7 @@ module(basename(__filename), function () {
       assert.strictEqual(json.data.type, 'file-meta');
       assert.strictEqual(json.data.attributes?.name, 'person.gts');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
-        module: rri(`${baseRealm.url}gts-file-def`),
+        module: baseRRI('gts-file-def'),
         name: 'GtsFileDef',
       });
     });
@@ -258,7 +258,7 @@ module(basename(__filename), function () {
       assert.strictEqual(json.data.type, 'file-meta');
       assert.strictEqual(json.data.attributes?.name, 'guide.md');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
-        module: rri(`${baseRealm.url}markdown-file-def`),
+        module: baseRRI('markdown-file-def'),
         name: 'MarkdownDef',
       });
     });

@@ -26,7 +26,6 @@ import {
   type LooseSingleCardDocument,
   registerCardReferencePrefix,
   unregisterCardReferencePrefix,
-  rri,
 } from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -45,6 +44,7 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 
 import {
   testRealmURL,
+  testRRI,
   setupLocalIndexing,
   setupOnSave,
   setupCardLogs,
@@ -208,7 +208,7 @@ module('Integration | Store', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}person`),
+              module: testRRI('person'),
               name: 'Person',
             },
           },
@@ -239,7 +239,7 @@ module('Integration | Store', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}person`),
+              module: testRRI('person'),
               name: 'Person',
             },
           },
@@ -352,7 +352,7 @@ module('Integration | Store', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}person`),
+              module: testRRI('person'),
               name: 'Person',
             },
           },
@@ -635,7 +635,7 @@ module('Integration | Store', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri(`${testRealmURL}person`),
+            module: testRRI('person'),
             name: 'Person',
           },
         },
@@ -663,7 +663,7 @@ module('Integration | Store', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri(`${testRealmURL}person`),
+            module: testRRI('person'),
             name: 'Person',
           },
         },
@@ -806,7 +806,7 @@ module('Integration | Store', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri(`${testRealmURL}person`),
+            module: testRRI('person'),
             name: 'Person',
           },
         },
@@ -842,7 +842,7 @@ module('Integration | Store', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}person`),
+              module: testRRI('person'),
               name: 'Person',
             },
           },
@@ -940,13 +940,13 @@ module('Integration | Store', function (hooks) {
     let doc: SingleCardDocument = {
       data: {
         type: 'card',
-        id: rri(`${testRealmURL}Person/hassan`),
+        id: testRRI('Person/hassan'),
         attributes: {
           name: 'Hassan',
         },
         meta: {
           adoptsFrom: {
-            module: rri(`${testRealmURL}person`),
+            module: testRRI('person'),
             name: 'Person',
           },
         },
@@ -1261,7 +1261,7 @@ module('Integration | Store', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: rri(`${testRealmURL}gallery`),
+                  module: testRRI('gallery'),
                   name: 'Gallery',
                 },
               },
@@ -1404,7 +1404,7 @@ module('Integration | Store', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: rri(`${testRealmURL}gallery`),
+                  module: testRRI('gallery'),
                   name: 'Gallery',
                 },
               },
@@ -1590,7 +1590,7 @@ module('Integration | Store', function (hooks) {
       {
         filter: {
           on: {
-            module: rri(`${testRealmURL}person`),
+            module: testRRI('person'),
             name: 'Person',
           },
           eq: {
@@ -1635,7 +1635,7 @@ module('Integration | Store', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}person`),
+              module: testRRI('person'),
               name: 'Person',
             },
           },
@@ -1712,7 +1712,7 @@ module('Integration | Store', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}person`),
+              module: testRRI('person'),
               name: 'Person',
             },
           },
@@ -1739,7 +1739,7 @@ module('Integration | Store', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}person`),
+              module: testRRI('person'),
               name: 'Person',
             },
           },
@@ -2321,7 +2321,7 @@ module('Integration | Store', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}person`),
+              module: testRRI('person'),
               name: 'Person',
             },
           },
@@ -2342,7 +2342,7 @@ module('Integration | Store', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}person`),
+              module: testRRI('person'),
               name: 'Person',
             },
           },
@@ -2415,7 +2415,7 @@ module('Integration | Store', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}person`),
+              module: testRRI('person'),
               name: 'Person',
             },
           },
@@ -2436,7 +2436,7 @@ module('Integration | Store', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}person`),
+              module: testRRI('person'),
               name: 'Person',
             },
           },
@@ -2506,7 +2506,7 @@ module('Integration | Store', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}person`),
+              module: testRRI('person'),
               name: 'Person',
             },
           },
@@ -2527,7 +2527,7 @@ module('Integration | Store', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}person`),
+              module: testRRI('person'),
               name: 'Person',
             },
           },

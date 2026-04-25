@@ -17,6 +17,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
   testRealmURL,
+  testRRI,
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
@@ -75,7 +76,7 @@ module('code-ref', function (hooks) {
 
   test('can dynamically load a card definition', async function (assert) {
     let ref = {
-      module: rri(`${testRealmURL}person`),
+      module: testRRI('person'),
       name: 'Person',
     };
     await loadCardDef(ref, { loader });
@@ -94,12 +95,12 @@ module('code-ref', function (hooks) {
 
   test('can instantiate a card that uses a code-ref field', async function (assert) {
     let adoptsFrom = {
-      module: rri(`${testRealmURL}code-ref-test`),
+      module: testRRI('code-ref-test'),
       name: 'TestCard',
     };
     await loadCardDef(adoptsFrom, { loader });
     let ref = {
-      module: rri(`${testRealmURL}person`),
+      module: testRRI('person'),
       name: 'Person',
     };
     let doc = {
@@ -123,7 +124,7 @@ module('code-ref', function (hooks) {
     let json: LooseCardResource = {
       meta: {
         adoptsFrom: {
-          module: rri(`${testRealmURL}code-ref-test`),
+          module: testRRI('code-ref-test'),
           name: 'TestCard',
         },
         fields: {
@@ -131,7 +132,7 @@ module('code-ref', function (hooks) {
             adoptsFrom: {
               type: 'ancestorOf',
               card: {
-                module: rri(`${testRealmURL}code-ref-test-1`),
+                module: testRRI('code-ref-test-1'),
                 name: 'TestCard1',
               },
             },
@@ -141,7 +142,7 @@ module('code-ref', function (hooks) {
               adoptsFrom: {
                 type: 'fieldOf',
                 card: {
-                  module: rri(`${testRealmURL}code-ref-test-3`),
+                  module: testRRI('code-ref-test-3'),
                   name: 'TestCard3',
                 },
                 field: 'someField',
@@ -157,7 +158,7 @@ module('code-ref', function (hooks) {
     assert.deepEqual(json, {
       meta: {
         adoptsFrom: {
-          module: rri(`${testRealmURL}foo-bar`),
+          module: testRRI('foo-bar'),
           name: 'TestCard',
         },
         fields: {
@@ -165,7 +166,7 @@ module('code-ref', function (hooks) {
             adoptsFrom: {
               type: 'ancestorOf',
               card: {
-                module: rri(`${testRealmURL}foo-bar-1`),
+                module: testRRI('foo-bar-1'),
                 name: 'TestCard1',
               },
             },
@@ -175,7 +176,7 @@ module('code-ref', function (hooks) {
               adoptsFrom: {
                 type: 'fieldOf',
                 card: {
-                  module: rri(`${testRealmURL}foo-bar-3`),
+                  module: testRRI('foo-bar-3'),
                   name: 'TestCard3',
                 },
                 field: 'someField',

@@ -8,8 +8,8 @@ import { module, test } from 'qunit';
 import type { Loader, Query } from '@cardstack/runtime-common';
 import {
   baseRealm,
+  baseRRI,
   isFileDefInstance,
-  rri,
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -26,6 +26,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  testRRI,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -124,7 +125,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}article`),
+              module: testRRI('article'),
               name: 'Article',
             },
           },
@@ -140,7 +141,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}book`),
+              module: testRRI('book'),
               name: 'Book',
             },
           },
@@ -162,7 +163,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}post`),
+              module: testRRI('post'),
               name: 'Post',
             },
           },
@@ -184,7 +185,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}article`),
+              module: testRRI('article'),
               name: 'Article',
             },
           },
@@ -203,7 +204,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}book`),
+              module: testRRI('book'),
               name: 'Book',
             },
           },
@@ -222,7 +223,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}book`),
+              module: testRRI('book'),
               name: 'Book',
             },
           },
@@ -241,7 +242,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}book`),
+              module: testRRI('book'),
               name: 'Book',
             },
           },
@@ -255,13 +256,13 @@ module(`Integration | search resource`, function (hooks) {
             cardDescription: 'A card that represents a blog post',
             specType: 'card',
             ref: {
-              module: rri(`${testRealmURL}post`),
+              module: testRRI('post'),
               name: 'Post',
             },
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${baseRealm.url}spec`),
+              module: baseRRI('spec'),
               name: 'Spec',
             },
           },
@@ -275,13 +276,13 @@ module(`Integration | search resource`, function (hooks) {
             cardDescription: 'A card that represents an online article ',
             specType: 'card',
             ref: {
-              module: rri(`${testRealmURL}article`),
+              module: testRRI('article'),
               name: 'Article',
             },
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${baseRealm.url}spec`),
+              module: baseRRI('spec'),
               name: 'Spec',
             },
           },
@@ -307,7 +308,7 @@ module(`Integration | search resource`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: rri(`${testRealmURL}book`),
+          module: testRRI('book'),
           name: 'Book',
         },
         eq: {
@@ -344,7 +345,7 @@ module(`Integration | search resource`, function (hooks) {
       let query: Query = {
         filter: {
           on: {
-            module: rri(`${testRealmURL}book`),
+            module: testRRI('book'),
             name: 'Book',
           },
           eq: {
@@ -386,7 +387,7 @@ module(`Integration | search resource`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: rri(`${testRealmURL}book`),
+          module: testRRI('book'),
           name: 'Book',
         },
         eq: {
@@ -424,7 +425,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}book`),
+              module: testRRI('book'),
               name: 'Book',
             },
           },
@@ -444,7 +445,7 @@ module(`Integration | search resource`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: rri(`${testRealmURL}book`),
+          module: testRRI('book'),
           name: 'Book',
         },
         eq: {
@@ -481,7 +482,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}book`),
+              module: testRRI('book'),
               name: 'Book',
             },
           },
@@ -504,7 +505,7 @@ module(`Integration | search resource`, function (hooks) {
     let query: Query = {
       filter: {
         type: {
-          module: rri(`${testRealmURL}book`),
+          module: testRRI('book'),
           name: 'Book',
         },
       },
@@ -516,7 +517,7 @@ module(`Integration | search resource`, function (hooks) {
         {
           by: 'author.firstName',
           on: {
-            module: rri(`${testRealmURL}book`),
+            module: testRRI('book'),
             name: 'Book',
           },
           direction: 'asc',
@@ -599,7 +600,7 @@ module(`Integration | search resource`, function (hooks) {
     let query: Query = {
       filter: {
         type: {
-          module: rri(`${baseRealm.url}card-api`),
+          module: baseRRI('card-api'),
           name: 'FileDef',
         },
       },
@@ -638,7 +639,7 @@ module(`Integration | search resource`, function (hooks) {
     let query: Query = {
       filter: {
         type: {
-          module: rri(`${baseRealm.url}card-api`),
+          module: baseRRI('card-api'),
           name: 'FileDef',
         },
       },

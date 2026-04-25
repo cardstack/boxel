@@ -8,8 +8,8 @@ import {
   PermissionsContextName,
   type Permissions,
   baseRealm,
+  baseRRI,
   testRealmURL,
-  rri,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -266,7 +266,7 @@ module('Integration | RichMarkdownField', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${baseRealm.url}card-api`),
+              module: baseRRI('card-api'),
               name: 'CardDef',
             },
           },

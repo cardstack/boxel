@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import { baseRealm, type Realm, rri } from '@cardstack/runtime-common';
+import { baseRealm, baseRRI, type Realm, rri } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupPermissionedRealmCached,
@@ -47,7 +47,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       return {
         filter: {
           type: {
-            module: rri(`${baseRealm.url}card-api`),
+            module: baseRRI('card-api'),
             name: 'FileDef',
           },
         },

@@ -4,7 +4,6 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { rri } from '@cardstack/runtime-common';
 
 import SearchAndChooseCommand from '@cardstack/host/commands/search-and-choose';
 import RealmService from '@cardstack/host/services/realm';
@@ -16,6 +15,7 @@ import {
   setupRealmServerEndpoints,
   testRealmInfo,
   testRealmURL,
+  testRRI,
   withCachedRealmSetup,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
@@ -151,11 +151,11 @@ export class ContextCard extends CardDef {
   test('LLM index selection uses sourceContextCodeRef as context', async function (assert) {
     let result = await searchAndChooseCommand.execute({
       candidateTypeCodeRef: {
-        module: rri(`${testRealmURL}choice.gts`),
+        module: testRRI('choice.gts'),
         name: 'Choice',
       },
       sourceContextCodeRef: {
-        module: rri(`${testRealmURL}context-card.gts`),
+        module: testRRI('context-card.gts'),
         name: 'ContextCard',
       },
       max: 1,

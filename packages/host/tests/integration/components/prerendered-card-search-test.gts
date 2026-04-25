@@ -14,10 +14,10 @@ import { module, test } from 'qunit';
 import type { Query } from '@cardstack/runtime-common';
 import {
   baseRealm,
+  baseRRI,
   type Realm,
   type LooseSingleCardDocument,
   CardContextName,
-  rri,
 } from '@cardstack/runtime-common';
 import type { PrerenderedCardLike } from '@cardstack/runtime-common/prerendered-card-search';
 
@@ -29,6 +29,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  testRRI,
 } from '../../helpers';
 import {
   CardDef,
@@ -219,7 +220,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}book`),
+              module: testRRI('book'),
               name: 'Book',
             },
           },
@@ -234,7 +235,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}book`),
+              module: testRRI('book'),
               name: 'Book',
             },
           },
@@ -256,7 +257,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}post`),
+              module: testRRI('post'),
               name: 'Post',
             },
           },
@@ -278,7 +279,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}article`),
+              module: testRRI('article'),
               name: 'Article',
             },
           },
@@ -297,7 +298,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}book`),
+              module: testRRI('book'),
               name: 'Book',
             },
           },
@@ -316,7 +317,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}book`),
+              module: testRRI('book'),
               name: 'Book',
             },
           },
@@ -335,7 +336,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}book`),
+              module: testRRI('book'),
               name: 'Book',
             },
           },
@@ -355,7 +356,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${baseRealm.url}spec`),
+              module: baseRRI('spec'),
               name: 'Spec',
             },
           },
@@ -375,7 +376,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${baseRealm.url}spec`),
+              module: baseRRI('spec'),
               name: 'Spec',
             },
           },
@@ -403,7 +404,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: rri(`${testRealmURL}book`),
+          module: testRRI('book'),
           name: 'Book',
         },
         eq: {
@@ -414,7 +415,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         {
           by: 'author.lastName',
           on: {
-            module: rri(`${testRealmURL}book`),
+            module: testRRI('book'),
             name: 'Book',
           },
         },
@@ -468,7 +469,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: rri(`${baseRealm.url}card-api`),
+          module: baseRRI('card-api'),
           name: 'FileDef',
         },
         eq: {
@@ -519,7 +520,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: rri(`${testRealmURL}book`),
+          module: testRRI('book'),
           name: 'Book',
         },
         eq: {
@@ -530,7 +531,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         {
           by: 'author.lastName',
           on: {
-            module: rri(`${testRealmURL}book`),
+            module: testRRI('book'),
             name: 'Book',
           },
         },
@@ -617,7 +618,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}book`),
+              module: testRRI('book'),
               name: 'Book',
             },
           },
@@ -628,7 +629,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: rri(`${testRealmURL}book`),
+          module: testRRI('book'),
           name: 'Book',
         },
         eq: {
@@ -639,7 +640,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         {
           by: 'author.lastName',
           on: {
-            module: rri(`${testRealmURL}book`),
+            module: testRRI('book'),
             name: 'Book',
           },
         },
@@ -703,7 +704,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: rri(`${testRealmURL}book`),
+          module: testRRI('book'),
           name: 'Book',
         },
         eq: {
@@ -714,7 +715,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         {
           by: 'author.lastName',
           on: {
-            module: rri(`${testRealmURL}book`),
+            module: testRRI('book'),
             name: 'Book',
           },
         },
@@ -777,7 +778,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: rri(`${testRealmURL}book`),
+          module: testRRI('book'),
           name: 'Book',
         },
         eq: {
@@ -788,7 +789,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         {
           by: 'author.lastName',
           on: {
-            module: rri(`${testRealmURL}book`),
+            module: testRRI('book'),
             name: 'Book',
           },
         },
@@ -842,7 +843,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         type: {
-          module: rri(`${testRealmURL}book`),
+          module: testRRI('book'),
           name: 'Book',
         },
       },
@@ -854,7 +855,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         {
           by: 'author.firstName',
           on: {
-            module: rri(`${testRealmURL}book`),
+            module: testRRI('book'),
             name: 'Book',
           },
           direction: 'asc',
@@ -976,7 +977,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: rri(`${testRealmURL}book`),
+          module: testRRI('book'),
           name: 'Book',
         },
         eq: {
@@ -987,7 +988,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         {
           by: 'author.lastName',
           on: {
-            module: rri(`${testRealmURL}book`),
+            module: testRRI('book'),
             name: 'Book',
           },
         },

@@ -24,11 +24,13 @@ import { windowErrorHandler } from '@cardstack/host/lib/window-error-handler';
 
 import {
   testRealmURL,
+  testRRI,
   cleanWhiteSpace,
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
   testModuleRealm,
+  testModuleRRI,
   cardInfo,
   getFileCreatedAt,
 } from '../helpers';
@@ -138,7 +140,7 @@ module(`Integration | realm indexing`, function (hooks) {
     let { data: cards } = await queryEngine.searchCards({});
     assert.deepEqual(cards, [
       {
-        id: rri(`${testRealmURL}empty`),
+        id: testRRI('empty'),
         type: 'card',
         attributes: {
           cardInfo,
@@ -380,7 +382,7 @@ module(`Integration | realm indexing`, function (hooks) {
       'Person/owner.json',
       JSON.stringify({
         data: {
-          id: rri(`${testRealmURL}Person/owner`),
+          id: testRRI('Person/owner'),
           attributes: {
             firstName: 'Hassan',
           },
@@ -399,7 +401,7 @@ module(`Integration | realm indexing`, function (hooks) {
       );
       if (mango?.type === 'doc') {
         assert.deepEqual(mango.doc.data, {
-          id: rri(`${testRealmURL}Pet/mango`),
+          id: testRRI('Pet/mango'),
           type: 'card',
           links: {
             self: './mango',
@@ -478,7 +480,7 @@ module(`Integration | realm indexing`, function (hooks) {
       'Pet/mango.json',
       JSON.stringify({
         data: {
-          id: rri(`${testRealmURL}Pet/mango`),
+          id: testRRI('Pet/mango'),
           attributes: {
             firstName: 'Van Gogh',
           },
@@ -498,7 +500,7 @@ module(`Integration | realm indexing`, function (hooks) {
       delete entry.doc.data.meta.lastModified;
       delete entry.doc.data.meta.resourceCreatedAt;
       assert.deepEqual(entry.doc.data, {
-        id: rri(`${testRealmURL}Pet/mango`),
+        id: testRRI('Pet/mango'),
         type: 'card',
         links: {
           self: './mango',
@@ -555,7 +557,7 @@ module(`Integration | realm indexing`, function (hooks) {
         delete entry.doc.data.meta.lastModified;
         delete entry.doc.data.meta.resourceCreatedAt;
         assert.deepEqual(entry.doc.data, {
-          id: rri(`${testRealmURL}Pet/mango`),
+          id: testRRI('Pet/mango'),
           type: 'card',
           links: {
             self: './mango',
@@ -651,7 +653,7 @@ module(`Integration | realm indexing`, function (hooks) {
     );
     if (mango?.type === 'doc') {
       assert.deepEqual(mango.doc.data, {
-        id: rri(`${testRealmURL}Pet/mango`),
+        id: testRRI('Pet/mango'),
         type: 'card',
         links: {
           self: './mango',
@@ -748,7 +750,7 @@ module(`Integration | realm indexing`, function (hooks) {
     let mango = await indexer.cardDocument(new URL(`${testRealmURL}Pet/mango`));
     if (mango?.type === 'doc') {
       assert.deepEqual(mango.doc.data, {
-        id: rri(`${testRealmURL}Pet/mango`),
+        id: testRRI('Pet/mango'),
         type: 'card',
         links: {
           self: './mango',
@@ -836,7 +838,7 @@ module(`Integration | realm indexing`, function (hooks) {
     );
     if (entry?.type === 'doc') {
       assert.deepEqual(entry.doc.data, {
-        id: rri(`${testRealmURL}person-spec`),
+        id: testRRI('person-spec'),
         type: 'card',
         links: {
           self: './person-spec',
@@ -966,7 +968,7 @@ module(`Integration | realm indexing`, function (hooks) {
     );
     if (entry?.type === 'doc') {
       assert.deepEqual(entry.doc.data, {
-        id: rri(`${testRealmURL}person-spec`),
+        id: testRRI('person-spec'),
         type: 'card',
         links: {
           self: './person-spec',
@@ -1043,7 +1045,7 @@ module(`Integration | realm indexing`, function (hooks) {
     entry = await indexer.cardDocument(new URL(`${testRealmURL}people-skill`));
     if (entry?.type === 'doc') {
       assert.deepEqual(entry.doc.data, {
-        id: rri(`${testRealmURL}people-skill`),
+        id: testRRI('people-skill'),
         type: 'card',
         links: {
           self: './people-skill',
@@ -1554,13 +1556,13 @@ module(`Integration | realm indexing`, function (hooks) {
       'vangogh.json',
       JSON.stringify({
         data: {
-          id: rri(`${testRealmURL}vangogh`),
+          id: testRRI('vangogh'),
           attributes: {
             firstName: 'Van Van',
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testRealmURL}person`),
+              module: testRRI('person'),
               name: 'Person',
             },
           },
@@ -1572,7 +1574,7 @@ module(`Integration | realm indexing`, function (hooks) {
     assert.deepEqual(
       instance,
       {
-        id: rri(`${testRealmURL}vangogh`),
+        id: testRRI('vangogh'),
         type: 'card',
         attributes: {
           cardInfo: {
@@ -2214,7 +2216,7 @@ module(`Integration | realm indexing`, function (hooks) {
     if (vendor?.type === 'doc') {
       assert.deepEqual(vendor.doc, {
         data: {
-          id: rri(`${testRealmURL}Vendor/vendor1`),
+          id: testRRI('Vendor/vendor1'),
           type: 'card',
           links: {
             self: './vendor1',
@@ -2290,7 +2292,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         included: [
           {
-            id: rri(`${testRealmURL}Chain/1`),
+            id: testRRI('Chain/1'),
             type: 'card',
             links: {
               self: `../Chain/1`,
@@ -2331,7 +2333,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
           },
           {
-            id: rri(`${testRealmURL}Chain/2`),
+            id: testRRI('Chain/2'),
             type: 'card',
             links: {
               self: `../Chain/2`,
@@ -2783,7 +2785,7 @@ module(`Integration | realm indexing`, function (hooks) {
 
     if (hassan?.type === 'doc') {
       assert.deepEqual(hassan.doc.data, {
-        id: rri(`${testRealmURL}PetPerson/hassan`),
+        id: testRRI('PetPerson/hassan'),
         type: 'card',
         links: { self: './hassan' },
         attributes: {
@@ -2811,7 +2813,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri(`${testModuleRealm}pet-person`),
+            module: testModuleRRI('pet-person'),
             name: 'PetPerson',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -2838,7 +2840,7 @@ module(`Integration | realm indexing`, function (hooks) {
       });
       assert.deepEqual(hassan.doc.included, [
         {
-          id: rri(`${testRealmURL}Pet/mango`),
+          id: testRRI('Pet/mango'),
           type: 'card',
           links: { self: `../Pet/mango` },
           attributes: {
@@ -2854,7 +2856,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testModuleRealm}pet`),
+              module: testModuleRRI('pet'),
               name: 'Pet',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -2877,7 +2879,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
         },
         {
-          id: rri(`${testRealmURL}Pet/vanGogh`),
+          id: testRRI('Pet/vanGogh'),
           type: 'card',
           links: { self: `../Pet/vanGogh` },
           attributes: {
@@ -2893,7 +2895,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testModuleRealm}pet`),
+              module: testModuleRRI('pet'),
               name: 'Pet',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -2998,7 +3000,7 @@ module(`Integration | realm indexing`, function (hooks) {
       // debug
       assert.deepEqual(card.doc, {
         data: {
-          id: rri(`${testRealmURL}PetPerson/burcu`),
+          id: testRRI('PetPerson/burcu'),
           type: 'card',
           links: { self: './burcu' },
           attributes: {
@@ -3015,7 +3017,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`${testModuleRealm}pet-person`),
+              module: testModuleRRI('pet-person'),
               name: 'PetPerson',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -3129,7 +3131,7 @@ module(`Integration | realm indexing`, function (hooks) {
 
     if (spec?.type === 'doc') {
       assert.deepEqual(spec.doc.data, {
-        id: rri(`${testRealmURL}pet-person-spec`),
+        id: testRRI('pet-person-spec'),
         type: 'card',
         links: { self: './pet-person-spec' },
         attributes: {
@@ -3298,7 +3300,7 @@ module(`Integration | realm indexing`, function (hooks) {
     );
     if (hassan?.type === 'doc') {
       assert.deepEqual(hassan.doc.data, {
-        id: rri(`${testRealmURL}Friend/hassan`),
+        id: testRRI('Friend/hassan'),
         type: 'card',
         links: {
           self: './hassan',
@@ -3447,7 +3449,7 @@ module(`Integration | realm indexing`, function (hooks) {
     if (hassan?.type === 'doc') {
       assert.deepEqual(hassan.doc, {
         data: {
-          id: rri(`${testRealmURL}Friend/hassan`),
+          id: testRRI('Friend/hassan'),
           type: 'card',
           links: { self: './hassan' },
           attributes: {
@@ -3498,7 +3500,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         included: [
           {
-            id: rri(`${testRealmURL}Friend/mango`),
+            id: testRRI('Friend/mango'),
             type: 'card',
             links: { self: `./mango` },
             attributes: {
@@ -3595,7 +3597,7 @@ module(`Integration | realm indexing`, function (hooks) {
     if (mango?.type === 'doc') {
       assert.deepEqual(mango.doc, {
         data: {
-          id: rri(`${testRealmURL}Friend/mango`),
+          id: testRRI('Friend/mango'),
           type: 'card',
           links: { self: './mango' },
           attributes: {
@@ -3646,7 +3648,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         included: [
           {
-            id: rri(`${testRealmURL}Friend/hassan`),
+            id: testRRI('Friend/hassan'),
             type: 'card',
             links: { self: `./hassan` },
             attributes: {
@@ -3773,7 +3775,7 @@ module(`Integration | realm indexing`, function (hooks) {
     if (hassan?.type === 'doc') {
       assert.deepEqual(hassan.doc, {
         data: {
-          id: rri(`${testRealmURL}Friend/hassan`),
+          id: testRRI('Friend/hassan'),
           type: 'card',
           links: { self: './hassan' },
           attributes: {
@@ -3859,7 +3861,7 @@ module(`Integration | realm indexing`, function (hooks) {
     let mangoID = `${testRealmURL}Friends/mango`;
     let vanGoghID = `${testRealmURL}Friends/vanGogh`;
     let friendsRef = {
-      module: rri(`${testModuleRealm}friends`),
+      module: testModuleRRI('friends'),
       name: 'Friends',
     };
     let { realm, adapter } = await setupIntegrationTestRealm({

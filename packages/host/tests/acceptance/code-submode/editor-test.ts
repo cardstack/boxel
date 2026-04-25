@@ -24,6 +24,7 @@ import {
   setupOnSave,
   setupRealmCacheTeardown,
   testRealmURL,
+  testRRI,
   getMonacoContent,
   setMonacoContent,
   setupAcceptanceTestRealm,
@@ -393,7 +394,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri(`${testRealmURL}person`),
+            module: testRRI('person'),
             name: 'Person',
           },
         },
@@ -424,7 +425,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri(`${testRealmURL}pet`),
+            module: testRRI('pet'),
             name: 'Pet',
           },
         },
@@ -472,7 +473,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri(`${testRealmURL}pet`),
+            module: testRRI('pet'),
             name: 'Pet',
           },
         },

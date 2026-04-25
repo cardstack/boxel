@@ -28,6 +28,7 @@ import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   percySnapshot,
   testRealmURL,
+  testRRI,
   setupCardLogs,
   setupLocalIndexing,
   setupOnSave,
@@ -745,7 +746,7 @@ module('Integration | card-copy', function (hooks) {
       assert.strictEqual(json.data.id, `${testRealm2URL}Pet/${id}`);
       assert.strictEqual(json.data.attributes?.firstName, 'Mango');
       assert.deepEqual(json.data.meta.adoptsFrom, {
-        module: rri(`${testRealmURL}pet`),
+        module: testRRI('pet'),
         name: 'Pet',
       });
       assert.strictEqual(json.data.meta.realmURL, testRealm2URL);
@@ -1004,7 +1005,7 @@ module('Integration | card-copy', function (hooks) {
       assert.strictEqual(json.data.id, `${testRealm2URL}Person/${id}`);
       assert.strictEqual(json.data.attributes?.firstName, 'Hassan');
       assert.deepEqual(json.data.meta.adoptsFrom, {
-        module: rri(`${testRealmURL}person`),
+        module: testRRI('person'),
         name: 'Person',
       });
       assert.strictEqual(json.data.meta.realmURL, testRealm2URL);
@@ -1025,7 +1026,7 @@ module('Integration | card-copy', function (hooks) {
       let included = json.included?.[0]!;
       assert.strictEqual(included.id, `${testRealmURL}Pet/mango`);
       assert.deepEqual(included.meta.adoptsFrom, {
-        module: rri(`${testRealmURL}pet`),
+        module: testRRI('pet'),
         name: 'Pet',
       });
       assert.deepEqual(included.meta.realmURL, testRealmURL);
@@ -1139,7 +1140,7 @@ module('Integration | card-copy', function (hooks) {
       assert.strictEqual(json.data.id, `${testRealm2URL}Person/${id}`);
       assert.strictEqual(json.data.attributes?.firstName, 'Sakura');
       assert.deepEqual(json.data.meta.adoptsFrom, {
-        module: rri(`${testRealmURL}person`),
+        module: testRRI('person'),
         name: 'Person',
       });
       assert.strictEqual(json.data.meta.realmURL, testRealm2URL);
@@ -1160,7 +1161,7 @@ module('Integration | card-copy', function (hooks) {
       let included = json.included?.[0]!;
       assert.strictEqual(included.id, `${testRealm2URL}Pet/paper`);
       assert.deepEqual(included.meta.adoptsFrom, {
-        module: rri(`${testRealmURL}pet`),
+        module: testRRI('pet'),
         name: 'Pet',
       });
       assert.deepEqual(included.meta.realmURL, testRealm2URL);

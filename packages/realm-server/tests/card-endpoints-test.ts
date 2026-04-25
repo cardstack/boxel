@@ -11,9 +11,9 @@ import type {
   ResourceID,
 } from '@cardstack/runtime-common';
 import {
-  baseRealm,
   isSingleCardDocument,
   ri,
+  baseRRI,
   rri,
   type LooseSingleCardDocument,
   type SingleCardDocument,
@@ -375,7 +375,7 @@ module(basename(__filename), function () {
           assert.strictEqual(hero?.attributes?.name, 'hero.png');
           assert.strictEqual(hero?.attributes?.contentType, 'image/png');
           assert.deepEqual(hero?.meta?.adoptsFrom, {
-            module: rri(`${baseRealm.url}png-image-def`),
+            module: baseRRI('png-image-def'),
             name: 'PngDef',
           });
 

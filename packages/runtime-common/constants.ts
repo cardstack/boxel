@@ -1,9 +1,20 @@
 import { RealmPaths } from './paths';
 import type { ResolvedCodeRef } from './code-ref';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import {
+  rri,
+  type RealmResourceIdentifier,
+} from './card-reference-resolver';
 import type { RealmPermissions } from './index';
 
 export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
+
+/**
+ * Build a `RealmResourceIdentifier` for a module inside the base realm.
+ * Equivalent to `` rri(`${baseRealm.url}${path}`) `` but shorter.
+ */
+export function baseRRI(path: string): RealmResourceIdentifier {
+  return rri(`${baseRealm.url}${path}`);
+}
 
 export const devSkillLocalPath = 'Skill/boxel-development';
 export const envSkillLocalPath = 'Skill/boxel-environment';

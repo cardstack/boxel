@@ -23,10 +23,9 @@ import {
   type CreateNewCard,
   type Filter,
   type ResolvedCodeRef,
-  baseRealm,
+  baseRRI,
   Deferred,
   isResolvedCodeRef,
-  rri,
 } from '@cardstack/runtime-common';
 
 import type { Query } from '@cardstack/runtime-common/query';
@@ -310,7 +309,7 @@ export default class CardCatalogModal extends Component<Signature> {
         sort: [
           {
             on: {
-              module: rri(`${baseRealm.url}card-api`),
+              module: baseRRI('card-api'),
               name: 'CardDef',
             },
             by: 'cardTitle',
