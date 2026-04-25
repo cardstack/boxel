@@ -221,6 +221,12 @@ function isDesynced(ctx: DesyncDetectorContext): boolean {
   if (ctx.isDestroyed()) return false;
   if (!ctx.isReady()) return false;
   if (ctx.modelStatus() !== 'ready') return false;
+  // Read-only fingerprint check: deliberately uses a direct
+  // querySelector instead of ctx.ensurePrerenderElements() so we never
+  // mint DOM nodes from the detection path. ensurePrerenderElements
+  // creates-if-absent (the write-path semantic that emitDesyncError
+  // depends on); calling it here would pollute every passing check
+  // with empty container/error nodes.
   let container = document.querySelector(
     '[data-prerender]',
   ) as HTMLElement | null;
@@ -258,6 +264,12 @@ function emitDesyncError(ctx: DesyncDetectorContext): void {
     },
   };
   let serialized = JSON.stringify(payload, null, 2);
+  // Write path: ensurePrerenderElements() intentionally creates the
+  // [data-prerender] container and [data-prerender-error] element if
+  // either is absent. By the time we get here we've already decided to
+  // publish a terminal state, so we need a place to put it — even if
+  // the parent template never rendered the scaffold (e.g. because the
+  // throw happened before the parent template ran).
   let { container, errorElement } = ctx.ensurePrerenderElements();
   if (container) {
     // 'unusable' (not 'error'): the detector only fires when we've
