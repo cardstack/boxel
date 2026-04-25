@@ -238,8 +238,12 @@ function emitDesyncError(ctx: DesyncDetectorContext): void {
       title: DESYNC_ERROR_TITLE,
       message: DESYNC_ERROR_MESSAGE,
       stack: augmentedStack,
-      meta: { renderStage: stage },
+      // Structured diagnostics ride on the `diagnostics` field per
+      // SerializedError; the indexer copies these onto
+      // `boxel_index.timing_diagnostics`.
+      diagnostics: { renderStage: stage },
       deps: [ctx.cardId],
+      additionalErrors: null,
     },
   };
   let serialized = JSON.stringify(payload, null, 2);
