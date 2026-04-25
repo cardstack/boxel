@@ -1398,8 +1398,9 @@ export class RenderRunner {
   // When the desync detector surfaces a render error with no
   // captured exception, the only lead back to the offending template is
   // the call stack the browser attached to its console.error log. We
-  // assemble that into a Node-style stack string so the existing error
-  // viewer renders it the same as any other captured stack.
+  // assemble that into a Node-style stack string (header line +
+  // `    at <url>:<line>:<col>` frames) so the existing error viewer
+  // renders it the same as any other captured stack.
   #formatConsoleErrorStack(entry: ConsoleErrorEntry): string | undefined {
     let frames = entry.stackFrames;
     if (!Array.isArray(frames) || frames.length === 0) {
@@ -1420,7 +1421,12 @@ export class RenderRunner {
       let suffix = segments.length ? `:${segments.join(':')}` : '';
       lines.push(`    at ${frame.url}${suffix}`);
     }
-    return lines.length > 0 ? lines.join('\n') : undefined;
+    if (lines.length === 0) {
+      return undefined;
+    }
+    let header =
+      entry.type === 'assert' ? 'AssertionError' : 'ConsoleError';
+    return [`${header}: ${entry.text}`, ...lines].join('\n');
   }
 
   #formatConsoleError(entry: ConsoleErrorEntry): string {

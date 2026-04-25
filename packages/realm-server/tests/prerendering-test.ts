@@ -1384,7 +1384,6 @@ module(basename(__filename), function () {
         }
       });
 
-
       test('card prerender surfaces RSVP rejection without timing out', async function (assert) {
         let cardURL = `${realmURL}rsvp-rejects.json`;
 

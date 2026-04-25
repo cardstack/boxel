@@ -98,14 +98,6 @@
 //  that the runloop is dead. Reusing the page would carry that broken
 //  state into the next render, so the pool gets a fresh tab.
 //
-//  Contrast with the timer-stub error threading path, which catches
-//  Backburner's `setTimeout(throw, 0)` runloop-rescue throw and
-//  dispatches it via the `boxel-render-error` CustomEvent. That's
-//  runloop-recoverable because Backburner has already finished its
-//  rescue cleanup by the time the rescue-timer fires — the runloop
-//  survived. Desync is the opposite: we detect it BECAUSE the runloop
-//  didn't survive the render.
-//
 //  The error message names the failure class explicitly so the user
 //  has a starting point. The render-runner separately enriches the
 //  error doc with any captured console errors from puppeteer's
@@ -190,9 +182,7 @@ export async function runDomDesyncCheck(
   // fall back to the default.
   let rawYields = ctx.microtaskYields;
   let yields =
-    typeof rawYields === 'number' &&
-    Number.isFinite(rawYields) &&
-    rawYields > 0
+    typeof rawYields === 'number' && Number.isFinite(rawYields) && rawYields > 0
       ? Math.floor(rawYields)
       : DEFAULT_MICROTASK_YIELDS;
 
@@ -235,6 +225,15 @@ function isDesynced(ctx: DesyncDetectorContext): boolean {
     '[data-prerender]',
   ) as HTMLElement | null;
   if (!container) return false;
+  // Race guard: the detector schedule fires async, so by the time
+  // this check runs the prerender server may have moved on to a new
+  // render that's reusing the same [data-prerender] container. The
+  // closure-captured `ctx.cardId` was the render that scheduled this
+  // check; if the live container's data-prerender-id no longer
+  // matches, we're looking at a different render and our
+  // model-vs-DOM comparison is meaningless. Skip.
+  let liveCardId = container.getAttribute('data-prerender-id');
+  if (liveCardId && liveCardId !== ctx.cardId) return false;
   return container.getAttribute('data-prerender-status') === 'loading';
 }
 

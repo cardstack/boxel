@@ -1479,7 +1479,13 @@ export class PagePool {
     if (bucket.size >= CONSOLE_ERROR_LIMIT) {
       return;
     }
-    let location = entry.location;
+    // Dedup key falls back to the top stack frame when the message has
+    // no location of its own. Browser-internal "Uncaught (in promise)
+    // ..." logs typically have no `message.location()`, so two distinct
+    // throws with the same exception text but different originating sites
+    // would otherwise collapse into one entry — and we'd lose the stack
+    // frames that are the only debugging signal for the desync class.
+    let location = entry.location ?? entry.stackFrames?.[0];
     let key = [
       entry.type,
       entry.text,
