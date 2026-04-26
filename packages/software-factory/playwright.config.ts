@@ -14,7 +14,11 @@ export default defineConfig({
   testMatch: ['**/*.spec.ts'],
   fullyParallel: false,
   reporter: process.env.CI ? [['list']] : undefined,
-  workers: 3,
+  // TEMP: drop to 1 worker to test OOM hypothesis on the SF runner under
+  // the vite host build. Each runQunitInBrowser test spawns Chromium and
+  // loads the full host runtime; 3 parallel browsers may exhaust runner
+  // RAM and trigger "hosted runner lost communication" deaths.
+  workers: 1,
   timeout: 300_000,
   expect: {
     timeout: 15_000,

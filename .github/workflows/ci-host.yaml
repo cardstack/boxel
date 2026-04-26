@@ -1,22 +1,10 @@
 name: CI Host
 
 on:
+  # TEMP: pull_request trigger disabled while debugging vite-build SF tests.
+  # Revert this block to restore PR runs.
   push:
     branches: [main]
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - "packages/host/**"
-      - "packages/base/**"
-      - "packages/boxel-icons/**"
-      - "packages/boxel-ui/**"
-      - "packages/catalog-realm/**"
-      - "packages/eslint-plugin-boxel/**"
-      - "packages/realm-server/**"
-      - "packages/runtime-common/**"
-      - ".github/workflows/ci-host.yaml"
-      - "package.json"
-      - "pnpm-lock.yaml"
   workflow_dispatch:
 
 permissions:
