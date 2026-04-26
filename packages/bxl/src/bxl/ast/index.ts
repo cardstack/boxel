@@ -26,6 +26,7 @@ import {
   type NativeDialectOptions,
 } from '../bridge/native.js';
 import type { ReadableSyntaxWarning } from '../compiler/readable-syntax.js';
+import { classifyBxlProfileFunction } from '../profiles/function-safety.js';
 
 export type BxlProfile =
   | 'compute'
@@ -259,43 +260,6 @@ export interface BxlProfileValidationOptions {
   attachment?: BxlAttachment;
 }
 
-const AGGREGATE_CALLS = new Set([
-  'AVERAGE',
-  'AVERAGEIF',
-  'AVERAGEIF_BY',
-  'AVERAGEIFS_BY',
-  'COUNT',
-  'COUNTA',
-  'COUNTIF',
-  'COUNTIF_BY',
-  'COUNTIFS_BY',
-  'MAX',
-  'MIN',
-  'SUM',
-  'SUMIF',
-  'SUMIF_BY',
-  'SUMIFS_BY',
-  'SUMPRODUCT',
-]);
-
-const PREDICATE_CALL_ALLOWLIST = new Set([
-  'IN',
-  'age',
-  'between',
-  'like',
-  'matches',
-  'NOT',
-  'not',
-  'overlaps',
-  'present',
-]);
-
-const DERIVE_CALL_ALLOWLIST = new Set([
-  'IN',
-  'not',
-  'overlaps',
-]);
-
 const ASSIGNMENT_OPERATORS = new Set([
   '=',
   '|=',
@@ -469,11 +433,18 @@ function validateSandboxProfileNode(
 }
 
 function validatePolicyNode(node: BxlAstNode, issues: BxlProfileIssue[]) {
-  if (node.type === 'call' && AGGREGATE_CALLS.has(node.name.toUpperCase())) {
+  if (node.type !== 'call') {
+    return;
+  }
+
+  const decision = classifyBxlProfileFunction('policy', node.name);
+  if (decision.safety === 'deny') {
     issues.push({
-      code: 'policy-aggregate-banned',
+      code: decision.category === 'aggregate'
+        ? 'policy-aggregate-banned'
+        : 'policy-call-banned',
       severity: 'error',
-      message: `Profile.policy is for bounded request-time authorization decisions and does not allow aggregate call ${node.name}.`,
+      message: `Profile.policy is for bounded request-time authorization decisions and does not allow call ${node.name}${decision.message ? `: ${decision.message}` : ''}.`,
       nodeType: node.type,
     });
   }
@@ -525,8 +496,7 @@ function validatePredicateNode(
 
   if (
     node.type === 'call' &&
-    !PREDICATE_CALL_ALLOWLIST.has(node.name) &&
-    !PREDICATE_CALL_ALLOWLIST.has(node.name.toUpperCase())
+    classifyBxlProfileFunction('predicate', node.name).safety !== 'allow'
   ) {
     issues.push({
       code: 'predicate-call-banned',
@@ -564,72 +534,28 @@ function validatePredicateNode(
 
 function validateDeriveNode(
   node: BxlAstNode,
-  parent: BxlAstNode | undefined,
+  _parent: BxlAstNode | undefined,
   issues: BxlProfileIssue[],
 ) {
-  if (node.type === 'binding') {
+  if (node.type === 'contextPath') {
     issues.push({
-      code: 'derive-binding-banned',
+      code: 'derive-context-banned',
       severity: 'error',
-      message: 'Profile.derive is for write/index-time derived facts and cannot use local jq bindings.',
+      message: `Profile.derive is for deterministic write/index-time computation and cannot use request or environment context ${node.root}.`,
       nodeType: node.type,
     });
   }
 
-  if (node.type === 'variable') {
-    issues.push({
-      code: 'derive-variable-banned',
-      severity: 'error',
-      message: 'Profile.derive is for write/index-time derived facts and cannot use free jq variables.',
-      nodeType: node.type,
-    });
-  }
-
-  if (isDynamicPathNode(node)) {
-    issues.push({
-      code: 'derive-dynamic-path-banned',
-      severity: 'error',
-      message: 'Profile.derive is for write/index-time derived facts and cannot use iterator, slice, or dynamic-index paths.',
-      nodeType: node.type,
-    });
-  }
-
-  if (
-    node.type === 'call' &&
-    !DERIVE_CALL_ALLOWLIST.has(node.name) &&
-    !DERIVE_CALL_ALLOWLIST.has(node.name.toUpperCase())
-  ) {
-    issues.push({
-      code: 'derive-call-banned',
-      severity: 'error',
-      message: `Profile.derive is for write/index-time derived facts and cannot derive call ${node.name}.`,
-      nodeType: node.type,
-    });
-  }
-
-  if (
-    node.type === 'binary' &&
-    node.operator === ',' &&
-    isArrayComma(parent)
-  ) {
-    return;
-  }
-
-  if (
-    node.type === 'binary' &&
-    node.operator === '|' &&
-    isPredicatePipe(node)
-  ) {
-    return;
-  }
-
-  if (node.type === 'binary' && !isPredicateOperator(node.operator)) {
-    issues.push({
-      code: 'derive-operator-banned',
-      severity: 'error',
-      message: `Profile.derive is for write/index-time derived facts and cannot derive operator ${node.operator}.`,
-      nodeType: node.type,
-    });
+  if (node.type === 'call') {
+    const decision = classifyBxlProfileFunction('derive', node.name);
+    if (decision.safety === 'deny') {
+      issues.push({
+        code: 'derive-call-banned',
+        severity: 'error',
+        message: `Profile.derive is for deterministic write/index-time computation and cannot use call ${node.name}${decision.message ? `: ${decision.message}` : ''}.`,
+        nodeType: node.type,
+      });
+    }
   }
 }
 
@@ -658,7 +584,7 @@ function profileMessagePrefix(profile: BxlProfile): string {
     case 'predicate':
       return 'Profile.predicate must compile to a query-time boolean predicate and';
     case 'derive':
-      return 'Profile.derive is for write/index-time derived facts and';
+      return 'Profile.derive is for deterministic write/index-time computation and';
   }
 }
 

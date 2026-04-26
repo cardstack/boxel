@@ -8,9 +8,11 @@ type BxlProfile = 'compute' | 'policy' | 'predicate' | 'derive';
 
 Use `compileBxl(expression, { target: 'ast', profile })` or `parseBxlAst(expression, { profile })` to collect `profileIssues`. Use `assertValidBxlProfile(ast, { profile })` when a caller should reject invalid expressions.
 
+Function safety categories and profile call allow/deny lists live in one source module: `src/bxl/profiles/function-safety.ts`. Keep profile-specific function decisions there, then have validators and tooling consume that registry.
+
 ## `compute`
 
-`compute` is the full BXL profile. It preserves the README contract: readable labels compile to canonical jq, Excel-compatible functions are available, jq paths and pipes remain valid, and the expression computes a value from the current JSON input.
+`compute` is the full browser/local BXL profile. It preserves the README contract: readable labels compile to canonical jq, Excel-compatible functions are available, jq paths and pipes remain valid, and the expression computes a value from the current JSON input.
 
 Use it for:
 
@@ -109,6 +111,9 @@ Restrictions:
 - no jq `label` / `break`
 - no jq format filters such as `@csv`
 - no aggregate calls such as `SUM`, `COUNT`, or `AVERAGE`
+- no error-masking calls such as `IFERROR` or `ISERROR`
+- no volatile calls such as `RAND`, `RANDBETWEEN`, `NOW`, or `TODAY`
+- no control, side-effect, or runtime metadata calls such as `debug`, `stderr`, `halt`, or `builtins`
 
 Representative diagnostic:
 
@@ -258,11 +263,14 @@ See [`predicate-sql.md`](./predicate-sql.md) for the detailed SQL compiler contr
 
 ## `derive`
 
-`derive` is for write/index-time derived facts. It is the profile for expressions that compute stable values the platform may store, index, cache, or reuse on a later read path.
+`derive` is for deterministic headless write/index-time computation. It is the right profile for Boxel `computedVia` and other derived values that the platform may store, index, cache, or reuse on a later read path.
+
+Unlike `predicate`, `derive` is allowed to compute values. Record-local aggregation is a primary use case. The important boundary is determinism: a derived value should come from the record snapshot, not from the current user, request, wall clock, runtime metadata, or an unbounded custom program.
 
 Use it for:
 
-- access facts
+- `computedVia`
+- denormalized fields
 - search facets
 - cached derived fields
 - index-time facts used by later queries
@@ -289,6 +297,18 @@ if Status = "Active" then Department else null end
 Department = "Finance" and Status = "Active"
 ```
 
+```bxl
+SUM("Line Item"[* ."Taxable"]."Line Total")
+```
+
+```bxl
+LET(total, SUM("Line Item"."Line Total"), total > 10000)
+```
+
+```bxl
+IFERROR(Amount, 0)
+```
+
 Restrictions:
 
 - no user-defined `def` helpers
@@ -298,36 +318,36 @@ Restrictions:
 - no jq `try` / `catch`
 - no jq `label` / `break`
 - no jq format filters such as `@csv`
-- no local `as` bindings
-- no iterator, slice, or dynamic-index paths
-- only stable fact-shaping expressions
-- only allowlisted calls such as `IN`, `overlaps`, and `not`
+- no request, actor, mutation, or environment contexts such as `@User`, `@Env`, `$new`, or `$old`
+- no volatile calls such as `RAND`, `RANDBETWEEN`, `NOW`, or `TODAY`
+- no control, side-effect, or runtime metadata calls such as `debug`, `stderr`, `halt`, or `builtins`
+- record-local arrays, filters, `LET`, Excel helpers, arithmetic, object/array shaping, and aggregate calls are allowed
 
 Representative diagnostic:
 
 ```text
-derive-call-banned: Profile.derive is for write/index-time derived facts and cannot derive call SUM.
+derive-call-banned: Profile.derive is for deterministic write/index-time computation and cannot use call RAND: volatile calls are not stable write-time derivations.
 ```
 
 Invalid examples:
 
 ```bxl
-SUM("Line Item"[* ."Taxable"]."Line Total")
+RAND()
 ```
 
-Invalid because aggregate calls are outside the current `derive` subset.
+Invalid because a headless derived value must be stable across reindexing.
 
 ```bxl
-Amount + Tax
+@User.ID
 ```
 
-Invalid because arithmetic transforms are outside the current stable-fact subset.
+Invalid because derived values should not depend on the current actor.
 
 ```bxl
-.lineItems[]
+debug
 ```
 
-Invalid because derived facts must be stable path-shaped values, not raw jq streams.
+Invalid because runtime control, side-effect, and metadata helpers are outside the derivation contract.
 
 ## Attachments are not profiles
 

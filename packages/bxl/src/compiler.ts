@@ -35,6 +35,20 @@ export {
 } from './bxl/ast/index.js';
 
 export {
+  BXL_AGGREGATE_CALLS,
+  BXL_CONTROL_OR_SIDE_EFFECT_CALLS,
+  BXL_DERIVE_DENIED_CALLS,
+  BXL_ERROR_MASKING_CALLS,
+  BXL_FUNCTION_SAFETY_CATEGORIES,
+  BXL_METADATA_CALLS,
+  BXL_PREDICATE_LOWERABLE_CALLS,
+  BXL_PROFILE_FUNCTION_POLICIES,
+  BXL_VOLATILE_CALLS,
+  categoryForBxlFunction,
+  classifyBxlProfileFunction,
+} from './bxl/profiles/function-safety.js';
+
+export {
   BxlPredicateSqlError,
   SQL_PREDICATE_MODULE,
   compileBxlPredicateAstToSql,
@@ -59,6 +73,13 @@ export type {
   BxlProfileIssue,
   BxlProfileValidationOptions,
 } from './bxl/ast/index.js';
+
+export type {
+  BxlFunctionSafetyCategory,
+  BxlFunctionSafetyDecision,
+  BxlProfileFunctionPolicy,
+  BxlProfileFunctionSafety,
+} from './bxl/profiles/function-safety.js';
 
 export type {
   BxlPredicateSqlOptions,

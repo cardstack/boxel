@@ -518,10 +518,12 @@ Profiles are the practical answer. BXL stays one language and one AST, but hosts
 
 | Profile | Intent | Typical use | What the subset protects |
 | --- | --- | --- | --- |
-| `compute` | Full value computation | formulas, transforms, UI validation, query transforms | Preserves the current BXL contract: readable jq plus Excel helpers. |
+| `compute` | Full browser/local value computation | formulas, transforms, UI validation, query transforms | Preserves the current BXL contract: readable jq plus Excel helpers. |
 | `policy` | Bounded request-time authorization | write gates, field redaction decisions | Keeps request checks deterministic, fail-closed, and cheap to run. |
 | `predicate` | Query-time boolean filtering | row-level read filters, search constraints | Requires a query-shaped boolean predicate; rejects transforms and runtime-only helpers. |
-| `derive` | Write/index-time derived facts | access facts, search facets, cached derived fields | Limits expressions to stable facts the platform may store, index, cache, or reuse. |
+| `derive` | Headless write/index-time computation | `computedVia`, denormalized fields, search facets | Allows record-local Excel/jq computation, including aggregation, while rejecting request context and volatile runtime behavior. |
+
+`computedVia` belongs in `derive`, not `compute`: it often needs aggregation over nested record data, but it runs in a headless write/index-time environment where the result should not depend on the current user, request, wall clock, or runtime metadata.
 
 Profile violations are parser diagnostics:
 

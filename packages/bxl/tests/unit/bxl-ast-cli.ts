@@ -1,7 +1,9 @@
 import { deepStrictEqual, ok, strictEqual, throws } from 'node:assert';
 import {
   assertValidBxlProfile,
+  categoryForBxlFunction,
   bxlToStorageExpression,
+  classifyBxlProfileFunction,
   compileBxl,
   parseBxlAst,
   storageToReadableBxlExpression,
@@ -75,16 +77,9 @@ const deriveAst = parseBxlAst('SUM("Line Item"[* ."Taxable"]."Line Total")', {
   profile: 'derive',
 });
 strictEqual(
-  deriveAst.profileIssues.some((issue) => issue.code === 'derive-call-banned'),
-  true,
-  'derive profile rejects non-derivable calls',
-);
-strictEqual(
-  deriveAst.profileIssues.some((issue) =>
-    issue.message.includes('write/index-time derived facts'),
-  ),
-  true,
-  'derive profile explains the index-time contract',
+  deriveAst.profileIssues.length,
+  0,
+  'derive profile allows record-local aggregate computedVia expressions',
 );
 
 function expectProfileIssue(
@@ -175,6 +170,16 @@ expectProfileIssue(
   'policy-aggregate-banned',
   { messageIncludes: 'request-time authorization decisions' },
 );
+expectProfileIssue('IFERROR(Amount, 0) > 10', 'policy', 'policy-call-banned', {
+  messageIncludes: 'error-masking calls',
+});
+expectProfileIssue('RAND() > 0.5', 'policy', 'policy-call-banned', {
+  messageIncludes: 'volatile calls',
+});
+expectProfileIssue('debug', 'policy', 'policy-call-banned', {
+  readableSyntax: false,
+  messageIncludes: 'control/side-effect calls',
+});
 expectProfileIssue('words(Description) > 10', 'predicate', 'predicate-call-banned', {
   messageIncludes: 'query-time boolean predicate',
 });
@@ -197,31 +202,37 @@ for (const expression of [
     messageIncludes: 'query-time boolean predicate',
   });
 }
-expectProfileIssue(
-  'SUM("Line Item"[* ."Taxable"]."Line Total")',
-  'derive',
-  'derive-call-banned',
-  { messageIncludes: 'write/index-time derived facts' },
-);
 strictEqual(
   parseBxlAst('Amount + 1', { schema, profile: 'derive' }).profileIssues.length,
   0,
   'derive profile allows stable arithmetic fact shaping',
 );
-expectProfileIssue('1 as $x | $x', 'derive', 'derive-binding-banned', {
-  readableSyntax: false,
-  messageIncludes: 'write/index-time derived facts',
+strictEqual(
+  parseBxlAst('LET(total, SUM("Line Item"."Line Total"), total > 10)', {
+    schema,
+    profile: 'derive',
+  }).profileIssues.length,
+  0,
+  'derive profile allows LET and aggregation for headless computedVia work',
+);
+strictEqual(
+  parseBxlAst('IFERROR(Amount, 0)', { schema, profile: 'derive' }).profileIssues.length,
+  0,
+  'derive profile allows deterministic Excel error fallback helpers',
+);
+expectProfileIssue('RAND() > 0.5', 'derive', 'derive-call-banned', {
+  messageIncludes: 'volatile calls',
 });
-for (const expression of [
-  '.lineItems[]',
-  '.lineItems[0:1]',
-  '.lineItems[.amount]',
-]) {
-  expectProfileIssue(expression, 'derive', 'derive-dynamic-path-banned', {
-    readableSyntax: false,
-    messageIncludes: 'write/index-time derived facts',
-  });
-}
+expectProfileIssue('debug', 'derive', 'derive-call-banned', {
+  readableSyntax: false,
+  messageIncludes: 'control/side-effect calls',
+});
+expectProfileIssue('@User.ID', 'derive', 'derive-context-banned', {
+  messageIncludes: 'deterministic write/index-time computation',
+});
+expectProfileIssue('$new.Amount', 'derive', 'derive-context-banned', {
+  messageIncludes: 'deterministic write/index-time computation',
+});
 
 const policyLetAst = parseBxlAst('LET(isLarge, Amount > 10, isLarge)', {
   schema,
@@ -231,6 +242,30 @@ strictEqual(
   policyLetAst.profileIssues.length,
   0,
   'policy allows LET/local binding for readable bounded checks',
+);
+strictEqual(
+  categoryForBxlFunction('SUM'),
+  'aggregate',
+  'function safety registry classifies aggregate calls in one source module',
+);
+deepStrictEqual(
+  classifyBxlProfileFunction('predicate', 'like'),
+  {
+    safety: 'allow',
+    normalizedName: 'LIKE',
+    category: 'predicateLowerable',
+  },
+  'function safety registry exposes predicate lowerable calls',
+);
+deepStrictEqual(
+  classifyBxlProfileFunction('derive', 'RAND'),
+  {
+    safety: 'deny',
+    normalizedName: 'RAND',
+    category: 'volatile',
+    message: 'volatile calls are not stable write-time derivations',
+  },
+  'function safety registry exposes derive denied calls',
 );
 
 for (const testCase of boundedProfileCases) {

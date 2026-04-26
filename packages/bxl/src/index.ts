@@ -67,6 +67,19 @@ import {
   compileBxlPredicateAstToSql,
   compileBxlPredicateToSql,
 } from './bxl/sql/index.js';
+import {
+  BXL_AGGREGATE_CALLS,
+  BXL_CONTROL_OR_SIDE_EFFECT_CALLS,
+  BXL_DERIVE_DENIED_CALLS,
+  BXL_ERROR_MASKING_CALLS,
+  BXL_FUNCTION_SAFETY_CATEGORIES,
+  BXL_METADATA_CALLS,
+  BXL_PREDICATE_LOWERABLE_CALLS,
+  BXL_PROFILE_FUNCTION_POLICIES,
+  BXL_VOLATILE_CALLS,
+  categoryForBxlFunction,
+  classifyBxlProfileFunction,
+} from './bxl/profiles/function-safety.js';
 import type {
   BxlPredicateSqlOptions,
   BxlPredicateSqlPath,
@@ -76,6 +89,12 @@ import type {
   BxlSqlPredicateMapping,
   BxlSqlPredicateModule,
 } from './bxl/sql/index.js';
+import type {
+  BxlFunctionSafetyCategory,
+  BxlFunctionSafetyDecision,
+  BxlProfileFunctionPolicy,
+  BxlProfileFunctionSafety,
+} from './bxl/profiles/function-safety.js';
 import { toBxlErrorRecord, type BxlErrorRecord, type BxlSafeResult } from './error-utils.js';
 export {
   __runBoxelRuntimeWorker,
@@ -124,6 +143,17 @@ export type {
 export const VERSION = '0.1.0-dev.0';
 
 export {
+  BXL_AGGREGATE_CALLS,
+  BXL_CONTROL_OR_SIDE_EFFECT_CALLS,
+  BXL_DERIVE_DENIED_CALLS,
+  BXL_ERROR_MASKING_CALLS,
+  BXL_FUNCTION_SAFETY_CATEGORIES,
+  BXL_METADATA_CALLS,
+  BXL_PREDICATE_LOWERABLE_CALLS,
+  BXL_PROFILE_FUNCTION_POLICIES,
+  BXL_VOLATILE_CALLS,
+  categoryForBxlFunction,
+  classifyBxlProfileFunction,
   compileReadableSyntax,
   assertValidBxlProfile,
   SQL_PREDICATE_MODULE,
@@ -176,6 +206,10 @@ export type {
   ReadableSyntaxCompileResult,
   ReadableSyntaxWarning,
   BxlErrorRecord,
+  BxlFunctionSafetyCategory,
+  BxlFunctionSafetyDecision,
+  BxlProfileFunctionPolicy,
+  BxlProfileFunctionSafety,
   BxlSafeResult,
 };
 
