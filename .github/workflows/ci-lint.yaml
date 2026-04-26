@@ -1,11 +1,9 @@
 name: CI Lint
 
 on:
-  # TEMP: pull_request trigger disabled while debugging vite-build SF tests.
-  # Revert this block to restore PR runs.
   push:
     branches: [main]
-  workflow_dispatch:
+  pull_request:
 
 permissions:
   checks: write

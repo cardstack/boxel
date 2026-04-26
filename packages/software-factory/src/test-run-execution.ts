@@ -286,6 +286,12 @@ function buildQunitTestPageHtml(opts: {
 
   <script>
     globalThis.process = { env: {}, version: '', cwd() { return '/'; } };
+    // Mirror the host's tests/index.html inline shim — vite-bundled code
+    // references the Node \`global\` symbol, and buildQunitTestPageHtml only
+    // extracts <script src> and <script type="module"> blocks, dropping the
+    // source's plain inline <script> that defines this. Without it, Ember
+    // boot throws "global is not defined" and QUnit never starts.
+    globalThis.global = globalThis;
 
     // -----------------------------------------------------------------------
     // Result collection for Playwright extraction.
@@ -478,28 +484,14 @@ async function runQunitInBrowser(
     browser = await chromium.launch({ headless: true });
     let page = await browser.newPage();
 
-    // TEMP DEBUG: always forward browser console/pageerror so vite-build CI
-     // failures surface in the SF job log. Use log.error so the playwright
-     // default level (*=warn) doesn't filter these out. Revert before merge.
-    page.on('console', (msg) => {
-      log.error(`[browser] ${msg.type()}: ${msg.text()}`);
-    });
-    page.on('pageerror', (err) => {
-      log.error(`[browser] PAGE ERROR: ${err.message}\n${err.stack ?? ''}`);
-    });
-    page.on('requestfailed', (req) => {
-      log.error(
-        `[browser] REQUEST FAILED: ${req.method()} ${req.url()} — ${req.failure()?.errorText}`,
-      );
-    });
-    page.on('response', (resp) => {
-      if (resp.status() >= 400) {
-        log.error(`[browser] HTTP ${resp.status()} ${resp.url()}`);
-      }
-    });
-    page.on('close', () => {
-      log.error('[browser] page CLOSED');
-    });
+    if (options.debug) {
+      page.on('console', (msg) => {
+        log.debug(`[browser] ${msg.type()}: ${msg.text()}`);
+      });
+      page.on('pageerror', (err) => {
+        log.debug(`[browser] PAGE ERROR: ${err.message}`);
+      });
+    }
 
     // Intercept requests to the target realm and inject the Authorization
     // header. live-test.js fetches _mtimes and modules without auth, but
