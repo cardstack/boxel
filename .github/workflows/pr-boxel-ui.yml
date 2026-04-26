@@ -1,13 +1,9 @@
 name: CI [boxel-ui]
 
 on:
-  pull_request:
-    paths:
-      - "packages/boxel-ui/**"
-      - "packages/boxel-icons/**"
-      - ".github/workflows/pr-boxel-ui.yml"
-      - "package.json"
-      - "pnpm-lock.yaml"
+  # TEMP: pull_request trigger disabled while debugging vite-build SF tests.
+  # Revert this block to restore PR runs.
+  workflow_dispatch:
 
 permissions:
   contents: read

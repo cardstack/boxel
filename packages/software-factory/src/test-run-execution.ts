@@ -478,14 +478,24 @@ async function runQunitInBrowser(
     browser = await chromium.launch({ headless: true });
     let page = await browser.newPage();
 
-    if (options.debug) {
-      page.on('console', (msg) => {
-        log.debug(`[browser] ${msg.type()}: ${msg.text()}`);
-      });
-      page.on('pageerror', (err) => {
-        log.debug(`[browser] PAGE ERROR: ${err.message}`);
-      });
-    }
+    // TEMP DEBUG: always forward browser console/pageerror so vite-build CI
+     // failures surface in the SF job log. Revert before merge.
+    page.on('console', (msg) => {
+      log.info(`[browser] ${msg.type()}: ${msg.text()}`);
+    });
+    page.on('pageerror', (err) => {
+      log.info(`[browser] PAGE ERROR: ${err.message}\n${err.stack ?? ''}`);
+    });
+    page.on('requestfailed', (req) => {
+      log.info(
+        `[browser] REQUEST FAILED: ${req.method()} ${req.url()} — ${req.failure()?.errorText}`,
+      );
+    });
+    page.on('response', (resp) => {
+      if (resp.status() >= 400) {
+        log.info(`[browser] HTTP ${resp.status()} ${resp.url()}`);
+      }
+    });
 
     // Intercept requests to the target realm and inject the Authorization
     // header. live-test.js fetches _mtimes and modules without auth, but

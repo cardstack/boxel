@@ -1,10 +1,9 @@
 name: YAML Lint
 
 on:
-  pull_request:
-    paths:
-      - "**.yml"
-      - "**.yaml"
+  # TEMP: pull_request trigger disabled while debugging vite-build SF tests.
+  # Revert this block to restore PR runs.
+  workflow_dispatch:
 
 jobs:
   lint:
