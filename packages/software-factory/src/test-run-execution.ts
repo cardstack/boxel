@@ -479,22 +479,26 @@ async function runQunitInBrowser(
     let page = await browser.newPage();
 
     // TEMP DEBUG: always forward browser console/pageerror so vite-build CI
-     // failures surface in the SF job log. Revert before merge.
+     // failures surface in the SF job log. Use log.error so the playwright
+     // default level (*=warn) doesn't filter these out. Revert before merge.
     page.on('console', (msg) => {
-      log.info(`[browser] ${msg.type()}: ${msg.text()}`);
+      log.error(`[browser] ${msg.type()}: ${msg.text()}`);
     });
     page.on('pageerror', (err) => {
-      log.info(`[browser] PAGE ERROR: ${err.message}\n${err.stack ?? ''}`);
+      log.error(`[browser] PAGE ERROR: ${err.message}\n${err.stack ?? ''}`);
     });
     page.on('requestfailed', (req) => {
-      log.info(
+      log.error(
         `[browser] REQUEST FAILED: ${req.method()} ${req.url()} — ${req.failure()?.errorText}`,
       );
     });
     page.on('response', (resp) => {
       if (resp.status() >= 400) {
-        log.info(`[browser] HTTP ${resp.status()} ${resp.url()}`);
+        log.error(`[browser] HTTP ${resp.status()} ${resp.url()}`);
       }
+    });
+    page.on('close', () => {
+      log.error('[browser] page CLOSED');
     });
 
     // Intercept requests to the target realm and inject the Authorization
