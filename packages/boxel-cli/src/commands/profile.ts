@@ -349,10 +349,7 @@ async function promptEnvironmentMenu(): Promise<{
       console.error(`${FG_RED}Error:${RESET} Realm server URL is required.`);
       process.exit(1);
     }
-    const realmServerUrl = validateUrl(
-      realmServerUrlInput,
-      'Realm server URL',
-    );
+    const realmServerUrl = validateUrl(realmServerUrlInput, 'Realm server URL');
     // matrixUrl is already validated by validateUrl above, so new URL won't
     // throw — the hostname fallback is just for the unlikely edge case of
     // a parseable URL with empty hostname (e.g. "http:///path").

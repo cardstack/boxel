@@ -313,10 +313,7 @@ export class ProfileManager {
       profile.matrixUrl = urls.matrixUrl;
       changed = true;
     }
-    if (
-      urls.realmServerUrl &&
-      urls.realmServerUrl !== profile.realmServerUrl
-    ) {
+    if (urls.realmServerUrl && urls.realmServerUrl !== profile.realmServerUrl) {
       profile.realmServerUrl = urls.realmServerUrl;
       changed = true;
     }
