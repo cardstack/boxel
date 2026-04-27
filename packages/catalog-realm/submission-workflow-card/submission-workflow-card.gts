@@ -66,9 +66,8 @@ const STEP_DEFINITIONS = [
   },
   {
     key: 'create-pr',
-    label: 'Lint & Create PR',
-    description:
-      'Lint files, auto-fix issues, and create a GitHub pull request',
+    label: 'Create PR',
+    description: 'Create a GitHub pull request for the selected listing',
   },
   {
     key: 'ci-checks',

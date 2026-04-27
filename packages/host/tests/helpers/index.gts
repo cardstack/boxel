@@ -6,7 +6,7 @@ import {
   visit,
   settled,
 } from '@ember/test-helpers';
-import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
+import { click, findAll, waitUntil, waitFor } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -18,6 +18,7 @@ import { validate as uuidValidate } from 'uuid';
 import {
   baseRealm,
   CachingDefinitionLookup,
+  cardDefComputedFields,
   ensureTrailingSlash,
   getCreatedTime,
   IndexWriter,
@@ -42,6 +43,7 @@ import {
   type RenderError,
 } from '@cardstack/runtime-common';
 
+import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import {
@@ -104,6 +106,8 @@ export {
 } from '@cardstack/host/lib/utils';
 
 const { sqlSchema } = ENV;
+
+export const cardDefFieldCount = cardDefComputedFields?.length + 1; // standard computeds + `cardInfo`
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 type ModuleHooks = {
@@ -1989,4 +1993,50 @@ export async function verifyJSONWithUUIDInFolder(
       'file name shape not as expected when checking for [uuid].[extension]',
     );
   }
+}
+
+export async function addSkillToAiAssistant(
+  skillCardId: string,
+  roomId?: string,
+) {
+  let resolvedRoomId =
+    roomId ??
+    document.querySelector('[data-test-room]')?.getAttribute('data-test-room');
+
+  if (!resolvedRoomId) {
+    throw new Error(
+      `Expected an active AI assistant room before adding skill "${skillCardId}"`,
+    );
+  }
+
+  let command = new UpdateRoomSkillsCommand(
+    getService('command-service').commandContext,
+  );
+  await command.execute({
+    roomId: resolvedRoomId,
+    skillCardIdsToActivate: [skillCardId],
+  });
+
+  let matrixService = getService('matrix-service') as {
+    getRoomData(roomId: string): {
+      skillsConfig: {
+        enabledSkillCards?: Array<{ sourceUrl?: string }>;
+      };
+    } | null;
+  };
+
+  await waitUntil(
+    () =>
+      Boolean(
+        matrixService
+          .getRoomData(resolvedRoomId)
+          ?.skillsConfig.enabledSkillCards?.some(
+            (fileDef) => fileDef.sourceUrl === skillCardId,
+          ),
+      ),
+    {
+      timeout: 5000,
+      timeoutMessage: `Timed out waiting for room skill state for "${skillCardId}"`,
+    },
+  );
 }

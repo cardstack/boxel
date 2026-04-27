@@ -40,14 +40,14 @@ export async function addCommentToIssue(
   let filePath = ensureJsonExtension(path);
 
   let existing = await client.read(realmUrl, filePath);
-  if (!existing.ok || !existing.document) {
+  if (!existing.ok || !existing.content) {
     return {
       ok: false,
-      error: `Failed to read issue at ${filePath}: ${existing.error ?? 'no document'}`,
+      error: `Failed to read issue at ${filePath}: ${existing.error ?? 'no content'}`,
     };
   }
 
-  let document = existing.document as unknown as LooseSingleCardDocument;
+  let document = JSON.parse(existing.content) as LooseSingleCardDocument;
   let attrs = (document.data?.attributes ?? {}) as Record<string, unknown>;
   let existingComments = Array.isArray(attrs.comments)
     ? (attrs.comments as unknown[])

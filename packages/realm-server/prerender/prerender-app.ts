@@ -18,12 +18,16 @@ import {
   fetchRequestFromContext,
 } from '../middleware';
 import { Prerenderer } from './index';
+import type { Timings } from './render-runner';
 import { resolvePrerenderManagerURL } from './config';
 import {
+  PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
+  sanitizePrerenderRequestId,
 } from './prerender-constants';
+import { randomUUID } from 'crypto';
 
 type PrerenderServer = Server & {
   __stopPrerenderer?: () => Promise<void>;
@@ -31,6 +35,27 @@ type PrerenderServer = Server & {
 
 let log = logger('prerender-server');
 const defaultPrerenderServerPort = 4221;
+
+// Stamp the per-request `requestId` onto `response.meta.requestId`
+// so it flows through the same channel as timings / host-side
+// diagnostics and ends up on `boxel_index.timing_diagnostics` for
+// cross-log grepping. The launch/waits/render/total timings are
+// already attached inside Prerenderer (regardless of HTTP vs
+// in-process); this layer just adds the HTTP-only correlation id.
+// Exported so the diagnostics-persistence regression tests can
+// exercise it directly.
+export function decorateRenderErrorDiagnostics(
+  response: any,
+  requestId: string,
+): void {
+  if (!response || typeof response !== 'object') {
+    return;
+  }
+  response.meta = {
+    ...(response.meta ?? {}),
+    requestId,
+  };
+}
 
 export function buildPrerenderApp(options: {
   serverURL: string;
@@ -40,11 +65,15 @@ export function buildPrerenderApp(options: {
 }): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   prerenderer: Prerenderer;
+  // Resolved pool size (explicit option → env → default). Returned so
+  // `createPrerenderHttpServer` can report the same value to the
+  // manager in `sendHeartbeat` without duplicating the resolution.
+  maxPages: number;
 } {
   let app = new Koa<Koa.DefaultState, Koa.Context>();
   let router = new Router();
   let maxPages =
-    options?.maxPages ?? Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
+    options?.maxPages ?? Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 5);
   let prerenderer = new Prerenderer({
     maxPages,
     serverURL: options.serverURL,
@@ -107,7 +136,7 @@ export function buildPrerenderApp(options: {
 
   type PrerenderExecResult<R> = {
     response: R;
-    timings: { launchMs: number; renderMs: number };
+    timings: Timings;
     pool: {
       pageId: string;
       affinityType: AffinityType;
@@ -227,7 +256,10 @@ export function buildPrerenderApp(options: {
       infoLabel: string;
       warnTimeoutMessage: (target: string) => string;
       errorContext: string;
-      execute: (args: A) => Promise<PrerenderExecResult<R>>;
+      execute: (
+        args: A,
+        opts: { signal: AbortSignal },
+      ) => Promise<PrerenderExecResult<R>>;
       afterResponse?: (target: string, response: R) => void;
       parseAttributes: (attrs: any) => RouteParseResult<A>;
       errorMessage?: string | ((err: any) => string);
@@ -235,6 +267,29 @@ export function buildPrerenderApp(options: {
     },
   ) {
     router.post(path, async (ctxt: Koa.Context) => {
+      // CS-10872: echo manager's correlation ID so operators can grep
+      // one ID across client → manager → prerender-server. Fall back
+      // to a mint if the caller didn't supply one (direct calls, tests).
+      // CS-10872: sanitize to keep grepable IDs in logs & headers.
+      let requestId =
+        sanitizePrerenderRequestId(ctxt.get(PRERENDER_REQUEST_ID_HEADER)) ??
+        randomUUID();
+      ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
+      // Propagate client-disconnect through to the Prerenderer so a
+      // queued render can bail out of the semaphore / tab-queue wait
+      // instead of finishing work no one is waiting for. The manager
+      // aborts its upstream `fetch` on client close, which closes
+      // this request's socket. We listen on `ctxt.res` (not
+      // `ctxt.req`) because Node 17+ auto-destroys IncomingMessage
+      // after the body is consumed, firing `req.close` during normal
+      // flow; `res.close` fires after flushing on success or on
+      // real connection tear-down before the response is sent.
+      let ac = new AbortController();
+      const onClientClose = () => {
+        if (ctxt.res.writableEnded) return;
+        ac.abort();
+      };
+      ctxt.res.on('close', onClientClose);
       try {
         let request = await fetchRequestFromContext(ctxt);
         let raw = await request.text();
@@ -293,7 +348,7 @@ export function buildPrerenderApp(options: {
 
         let start = Date.now();
         let execPromise = options
-          .execute(routeArgs)
+          .execute(routeArgs, { signal: ac.signal })
           .then((result) => ({ result }));
         let drainPromise = options.drainingPromise
           ? options.drainingPromise.then(() => ({ draining: true as const }))
@@ -334,17 +389,34 @@ export function buildPrerenderApp(options: {
         let poolFlagSuffix =
           poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
         log.info(
-          '%s %s total=%dms launch=%dms render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+          '%s %s requestId=%s total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
           options.infoLabel,
           parsed.logTarget,
+          requestId,
           totalMs,
           timings.launchMs,
+          timings.waits.semaphoreMs,
+          timings.waits.tabQueueMs,
+          timings.waits.tabStartupMs,
           timings.renderMs,
           pool.pageId,
           pool.affinityType,
           pool.affinityValue,
           poolFlagSuffix,
         );
+        decorateRenderErrorDiagnostics(response, requestId);
+        // Timings are already embedded inside `response.meta.diagnostics`
+        // by `Prerenderer.decorateRenderErrorsWithTimings` — the indexer
+        // reads them from there. Keep the envelope `meta.timing`
+        // populated (at the JSON:API envelope level) so existing
+        // log/telemetry consumers that read the envelope don't have
+        // to migrate.
+        let envelopeTiming = {
+          launchMs: timings.launchMs,
+          renderMs: timings.renderMs,
+          totalMs,
+          waits: timings.waits,
+        };
         ctxt.status = 201;
         ctxt.set('Content-Type', 'application/vnd.api+json');
         ctxt.body = {
@@ -354,11 +426,7 @@ export function buildPrerenderApp(options: {
             attributes: response,
           },
           meta: {
-            timing: {
-              launchMs: timings.launchMs,
-              renderMs: timings.renderMs,
-              totalMs,
-            },
+            timing: envelopeTiming,
             pool,
           },
         };
@@ -367,6 +435,14 @@ export function buildPrerenderApp(options: {
         }
         options.afterResponse?.(parsed.logTarget, response);
       } catch (err: any) {
+        // Swallow caller-cancelled: the socket is already closed,
+        // nothing to report to them, no error metric to emit.
+        if ((err as { name?: string })?.name === 'PrerenderCancelledError') {
+          log.debug(
+            `prerender cancelled before completion requestId=${requestId}`,
+          );
+          return;
+        }
         Sentry.captureException(err);
         log.error(`Unhandled error in ${options.errorContext}:`, err);
         ctxt.status = 500;
@@ -382,6 +458,8 @@ export function buildPrerenderApp(options: {
             },
           ],
         };
+      } finally {
+        ctxt.res.off('close', onClientClose);
       }
     });
   }
@@ -393,7 +471,8 @@ export function buildPrerenderApp(options: {
     warnTimeoutMessage: (url) => `module render of ${url} timed out`,
     errorContext: '/prerender-module',
     parseAttributes: parseDefaultPrerenderAttributes,
-    execute: (args) => prerenderer.prerenderModule(args),
+    execute: (args, { signal }) =>
+      prerenderer.prerenderModule({ ...args, signal }),
     drainingPromise: options.drainingPromise,
     afterResponse: (url, response) => {
       const moduleResponse = response as ModuleRenderResponse;
@@ -415,12 +494,13 @@ export function buildPrerenderApp(options: {
       errorContext: '/run-command',
       errorMessage: 'Error running command',
       parseAttributes: parseRunCommandAttributes,
-      execute: (args) =>
+      execute: (args, { signal }) =>
         prerenderer.runCommand({
           userId: args.affinityValue,
           auth: args.auth,
           command: args.command,
           commandInput: args.commandInput as Record<string, unknown> | null,
+          signal,
         }),
       drainingPromise: options.drainingPromise,
     },
@@ -429,6 +509,21 @@ export function buildPrerenderApp(options: {
   // Composite visit prerender: runs a caller-selected subset of
   // {fileExtract, cardRender, fileRender} on a single page acquisition.
   router.post('/prerender-visit', async (ctxt: Koa.Context) => {
+    // CS-10872: sanitize to keep grepable IDs in logs & headers —
+    // same contract as the shared `registerPrerenderRoute` wrapper
+    // used by /prerender-module, /prerender-file-extract, etc.
+    let requestId =
+      sanitizePrerenderRequestId(ctxt.get(PRERENDER_REQUEST_ID_HEADER)) ??
+      randomUUID();
+    ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
+    // Client-disconnect → cancel the render. See the note on the
+    // shared `registerPrerenderRoute` wrapper above.
+    let ac = new AbortController();
+    const onClientClose = () => {
+      if (ctxt.res.writableEnded) return;
+      ac.abort();
+    };
+    ctxt.res.on('close', onClientClose);
     try {
       let request = await fetchRequestFromContext(ctxt);
       let raw = await request.text();
@@ -548,6 +643,7 @@ export function buildPrerenderApp(options: {
           ...(fileData ? { fileData } : {}),
           ...(Array.isArray(types) ? { types } : {}),
           ...(batchId ? { batchId } : {}),
+          signal: ac.signal,
         })
         .then((result) => ({ result }));
       let drainPromise = options.drainingPromise
@@ -590,16 +686,30 @@ export function buildPrerenderApp(options: {
         .join(', ');
       let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
       log.info(
-        'visit prerendered %s total=%dms launch=%dms render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+        'visit prerendered %s requestId=%s total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
         url,
+        requestId,
         totalMs,
         timings.launchMs,
+        timings.waits.semaphoreMs,
+        timings.waits.tabQueueMs,
+        timings.waits.tabStartupMs,
         timings.renderMs,
         pool.pageId,
         pool.affinityType,
         pool.affinityValue,
         poolFlagSuffix,
       );
+      decorateRenderErrorDiagnostics(response, requestId);
+      // Timings are already inside `response.meta.diagnostics`. Here
+      // we just populate the JSON:API envelope `meta.timing` that
+      // existing telemetry consumers still read.
+      let envelopeTiming = {
+        launchMs: timings.launchMs,
+        renderMs: timings.renderMs,
+        totalMs,
+        waits: timings.waits,
+      };
       ctxt.status = 201;
       ctxt.set('Content-Type', 'application/vnd.api+json');
       ctxt.body = {
@@ -609,11 +719,7 @@ export function buildPrerenderApp(options: {
           attributes: response,
         },
         meta: {
-          timing: {
-            launchMs: timings.launchMs,
-            renderMs: timings.renderMs,
-            totalMs,
-          },
+          timing: envelopeTiming,
           pool,
         },
       };
@@ -626,6 +732,12 @@ export function buildPrerenderApp(options: {
         );
       }
     } catch (err: any) {
+      if ((err as { name?: string })?.name === 'PrerenderCancelledError') {
+        log.debug(
+          `prerender-visit cancelled before completion requestId=${requestId}`,
+        );
+        return;
+      }
       Sentry.captureException(err);
       log.error('Unhandled error in /prerender-visit:', err);
       ctxt.status = 500;
@@ -637,6 +749,8 @@ export function buildPrerenderApp(options: {
           },
         ],
       };
+    } finally {
+      ctxt.res.off('close', onClientClose);
     }
   });
 
@@ -746,7 +860,7 @@ export function buildPrerenderApp(options: {
     log.error(`prerender server HTTP error: ${err.message}`);
   });
 
-  return { app, prerenderer };
+  return { app, prerenderer, maxPages };
 }
 
 function resolvePrerenderServerURL(port?: number): string {
@@ -787,7 +901,15 @@ export function createPrerenderHttpServer(options?: {
   let isClosing = false;
   let fatalExitOnUncaught = options?.fatalExitOnUncaught ?? true;
   let serverURL = resolvePrerenderServerURL(options?.port);
-  let { app, prerenderer } = buildPrerenderApp({
+  let {
+    app,
+    prerenderer,
+    // Reuse the resolved value `buildPrerenderApp` computed so
+    // `sendHeartbeat` reports the same pool size the PagePool was
+    // actually constructed with — no duplicate resolution, no drift
+    // when the default or env var changes.
+    maxPages: resolvedMaxPages,
+  } = buildPrerenderApp({
     maxPages: options?.maxPages,
     serverURL,
     isDraining: () => draining,
@@ -823,7 +945,7 @@ export function createPrerenderHttpServer(options?: {
   async function sendHeartbeat(status?: 'active' | 'draining') {
     try {
       const managerURL = resolvePrerenderManagerURL();
-      const capacity = Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
+      const capacity = resolvedMaxPages;
       let body = {
         data: {
           type: 'prerender-server',

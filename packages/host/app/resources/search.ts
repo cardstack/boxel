@@ -107,6 +107,35 @@ export class SearchResource<
       `trackStoreLoad start #${loadNumber} source=${source} query=${this.#previousQueryString ?? '(unknown)'}`,
     );
     this.runtimeStore.trackLoad(load);
+    // CS-10872: tag this load so the prerender's timeout error can
+    // distinguish a query-field search from an arbitrary `trackLoad`.
+    // `dependencyTracking` carries queryField + consumer when the
+    // SearchResource is driving a query-field resolution.
+    let queryFieldName: string | undefined;
+    let consumerId: string | undefined;
+    let trackingSource: string | undefined;
+    let tracking = this.#dependencyTracking;
+    if (tracking && typeof tracking === 'object') {
+      queryFieldName =
+        typeof (tracking as any).queryField === 'string'
+          ? ((tracking as any).queryField as string)
+          : undefined;
+      consumerId =
+        typeof (tracking as any).consumer === 'string'
+          ? ((tracking as any).consumer as string)
+          : undefined;
+      trackingSource =
+        typeof (tracking as any).source === 'string'
+          ? ((tracking as any).source as string)
+          : undefined;
+    }
+    this.runtimeStore.trackQueryLoad?.(load, {
+      source: `search-resource:${source}${trackingSource ? `:${trackingSource}` : ''}`,
+      query: this.#previousQuery,
+      realms: this.#previousRealms ?? this.realmsToSearch,
+      ...(consumerId ? { cardId: consumerId } : {}),
+      ...(queryFieldName ? { fieldName: queryFieldName } : {}),
+    });
     void load
       .finally(() => {
         // Ignore stale completions from superseded loads; keep test-facing
