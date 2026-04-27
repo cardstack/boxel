@@ -67,6 +67,14 @@ ALERTS_DIR="provisioning/alerting"
 
 mkdir -p "$DASHBOARDS_DIR" "$FOLDERS_DIR" "$DATASOURCES_DIR" "$ALERTS_DIR"
 
+# Sweep up scaffolding placeholders. The .gitkeep files were CS-10914
+# placeholders for empty dirs; once we write real content here grafanactl
+# (which scans the resources tree at push time) warns about them as
+# "unrecognized format gitkeep". The grafanactl/resources/alerts/ dir
+# itself is obsolete since CS-10918 — alerts now live in provisioning/alerting/.
+find grafanactl/resources provisioning -name '.gitkeep' -type f -delete 2>/dev/null || true
+rm -rf grafanactl/resources/alerts 2>/dev/null || true
+
 api() {
   local path="$1"
   local response http body
@@ -135,23 +143,10 @@ api '/api/search?type=dash-db' | jq -c '.[]' | while IFS= read -r row; do
 done
 
 # Synapse dashboard is upstream-vendored (matrix-org/synapse, contrib/grafana/).
-# Tag the file header for future archaeologists.
-synapse_file="$DASHBOARDS_DIR/synapse.json"
-if [[ -f "$synapse_file" ]]; then
-  # Add a sibling .NOTE file rather than embedding a comment in JSON
-  # (JSON has no comments). The .NOTE is informational, not consumed by tools.
-  cat > "$DASHBOARDS_DIR/synapse.NOTE.md" <<'EOF'
-# Vendored from upstream Synapse
-
-`synapse.json` is the upstream Synapse project's monitoring dashboard
-(published at https://github.com/matrix-org/synapse, contrib/grafana/).
-We carry a copy because we run a Synapse server.
-
-When Synapse upgrades add new metrics worth dashboarding, re-pull from
-upstream and rebase any local edits. Treat as vendored third-party code:
-do not modify locally unless we're willing to own the diff.
-EOF
-fi
+# The vendoring note lives in the package README under "Vendored content"
+# rather than as a sibling .NOTE.md (which grafanactl would warn about as
+# "unrecognized format md"). Clean up any leftover NOTE files from earlier runs.
+rm -f "$DASHBOARDS_DIR/synapse.NOTE.md" 2>/dev/null || true
 
 # ===== Data sources =====
 # Note: secureJsonData (passwords, API keys) is NEVER returned by Grafana's API.
