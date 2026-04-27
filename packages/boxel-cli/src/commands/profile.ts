@@ -181,12 +181,23 @@ export async function profileCommand(
     case 'add': {
       const password = options?.password || process.env.BOXEL_PASSWORD;
       if (options?.user && password) {
-        // Only consult BOXEL_ENVIRONMENT when at least one URL isn't already
-        // supplied by a flag — otherwise an invalid env var (e.g. slugs to
-        // empty) would kill a fully-specified invocation where the env var
-        // would have been overridden anyway.
-        const needsEnvDefaults = !options.matrixUrl || !options.realmServerUrl;
+        // BOXEL_ENVIRONMENT only fills in URLs when (a) at least one flag is
+        // missing, AND (b) the Matrix ID's domain isn't a known standard
+        // (stack.cards / boxel.ai / localhost). Otherwise an unrelated
+        // BOXEL_ENVIRONMENT in the shell would silently produce a profile
+        // whose Matrix ID and URLs disagree — and an invalid env value
+        // (e.g. one that slugs to empty) would kill a fully-specified
+        // invocation where the env was meant to be overridden anyway.
+        const matrixIdEnv = getEnvironmentFromMatrixId(options.user);
+        const isStandardDomain = matrixIdEnv !== 'unknown';
+        const needsEnvDefaults =
+          !isStandardDomain && (!options.matrixUrl || !options.realmServerUrl);
         const envDefaults = needsEnvDefaults ? resolveBoxelEnvironment() : null;
+        if (envDefaults) {
+          console.log(
+            `${DIM}Using BOXEL_ENVIRONMENT=${process.env.BOXEL_ENVIRONMENT}${RESET}`,
+          );
+        }
         await addProfileNonInteractive(
           manager,
           options.user,

@@ -165,9 +165,11 @@ describe('boxel profile add (non-interactive)', () => {
     });
   });
 
-  it('exits 1 when BOXEL_ENVIRONMENT slugifies to empty', () => {
+  it('exits 1 when BOXEL_ENVIRONMENT slugifies to empty (and is actually consulted)', () => {
+    // Use a non-standard domain so BOXEL_ENVIRONMENT is consulted; a
+    // standard domain like @alice:stack.cards bypasses the env var entirely.
     try {
-      run(['-u', '@alice:stack.cards'], { BOXEL_ENVIRONMENT: '!!!' });
+      run(['-u', '@alice:my.server'], { BOXEL_ENVIRONMENT: '!!!' });
       throw new Error('expected command to exit non-zero');
     } catch (err) {
       const e = err as { status?: number; stderr?: string };
@@ -179,5 +181,19 @@ describe('boxel profile add (non-interactive)', () => {
     expect(fs.existsSync(join(tmpHome, '.boxel-cli', 'profiles.json'))).toBe(
       false,
     );
+  });
+
+  it('ignores BOXEL_ENVIRONMENT when the Matrix ID has a known standard domain', () => {
+    // The Matrix ID's domain is authoritative for known standards
+    // (stack.cards / boxel.ai / localhost). Even an *invalid* env value
+    // (which would otherwise exit 1) must not affect this path — the
+    // resulting profile points at staging, not at env-derived URLs.
+    run(['-u', '@alice:stack.cards'], { BOXEL_ENVIRONMENT: '!!!' });
+
+    const config = readProfiles();
+    expect(config.profiles['@alice:stack.cards']).toMatchObject({
+      matrixUrl: 'https://matrix-staging.stack.cards',
+      realmServerUrl: 'https://realms-staging.stack.cards/',
+    });
   });
 });
