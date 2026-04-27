@@ -292,7 +292,7 @@ export async function buildModuleModel(
         let consumes = (
           await context.loaderService.loader.getConsumedModules(id)
         ).filter((u) => u !== id);
-        deps = consumes.map((d) => trimExecutableExtension(new URL(d)).href);
+        deps = consumes.map((d) => trimExecutableExtension(d));
         let lastModifiedRFC7321 = response.headers.get('last-modified');
         let createdAtRFC7321 = response.headers.get('x-created');
         if (!lastModifiedRFC7321) {
@@ -399,7 +399,7 @@ async function makeDefinition(
     return {
       type: 'definition',
       definition,
-      moduleURL: trimExecutableExtension(new URL(url)).href,
+      moduleURL: trimExecutableExtension(url).href,
       types: typesMaybeError.types.map(({ refURL }) => refURL),
     };
   } catch (err: any) {

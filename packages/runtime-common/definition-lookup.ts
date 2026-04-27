@@ -67,15 +67,7 @@ function canonicalURL(url: string, relativeTo?: string): string {
 }
 
 function normalizeExecutableURL(url: string): string {
-  if (!hasExecutableExtension(url)) {
-    return url;
-  }
-  try {
-    return trimExecutableExtension(new URL(url)).href;
-  } catch (_e) {
-    // Fallback for non-URL identifiers
-    return url.replace(/\.(gts|ts|js|gjs)$/, '');
-  }
+  return trimExecutableExtension(url);
 }
 
 // Application-level dedup key. Coalesces two concurrent lookups only when

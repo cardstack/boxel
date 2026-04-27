@@ -40,6 +40,7 @@ import {
   CardError,
   loadCardDef,
   localId as localIdSymbol,
+  rri,
   specRef,
   type getCard,
   type getCards,
@@ -754,7 +755,7 @@ export default class InteractSubmode extends Component {
     }
 
     // assumption: take actions in the right-most stack
-    await this.createCard(this.rightMostStackIndex, spec.ref, specId, {
+    await this.createCard(this.rightMostStackIndex, spec.ref, rri(specId), {
       realmURL: this.operatorModeStateService.getWritableRealmURL(),
     });
   });

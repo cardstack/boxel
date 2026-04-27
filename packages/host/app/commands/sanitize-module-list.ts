@@ -37,7 +37,7 @@ export default class SanitizeModuleListCommand extends HostBaseCommand<
     // "https://…/foo.gts" and "https://…/foo" don't produce separate entries.
     const seen = new Map<string, string>(); // normalized → original
     for (const m of input.moduleUrls) {
-      const normalized = trimExecutableExtension(new URL(m)).href;
+      const normalized = trimExecutableExtension(m);
       if (!seen.has(normalized)) {
         seen.set(normalized, m);
       }

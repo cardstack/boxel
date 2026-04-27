@@ -204,9 +204,7 @@ export class Batch {
 
   @Memoize()
   private get nodeResolvedInvalidations() {
-    return [...this.invalidations].map(
-      (href) => trimExecutableExtension(new URL(href)).href,
-    );
+    return [...this.invalidations].map((href) => trimExecutableExtension(href));
   }
 
   async getModifiedTimes(): Promise<LastModifiedTimes> {
@@ -716,9 +714,7 @@ export class Batch {
       return types.map((type) =>
         [
           id,
-          isRegisteredPrefix(id)
-            ? id.replace(/\.(gts|ts|js|gjs)$/, '')
-            : trimExecutableExtension(new URL(id)).href,
+          trimExecutableExtension(id),
           type,
           this.realmVersion,
           this.realmURL.href,
@@ -838,7 +834,7 @@ export class Batch {
     let invalidations: string[] = [];
     for (let url of urls) {
       for (let seed of await this.invalidationSeeds(url)) {
-        let alias = trimExecutableExtension(new URL(seed)).href;
+        let alias = trimExecutableExtension(seed);
         let workingInvalidations = [
           ...new Set([
             ...(!this.nodeResolvedInvalidations.includes(alias) ? [seed] : []),

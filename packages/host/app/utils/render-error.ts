@@ -388,11 +388,11 @@ export function stripSelfDeps(
       return undefined;
     }
     try {
-      return trimExecutableExtension(new URL(value)).href;
+      return trimExecutableExtension(value);
     } catch (_e) {
       if (moduleURL) {
         try {
-          return trimExecutableExtension(new URL(value, moduleURL)).href;
+          return trimExecutableExtension(new URL(value, moduleURL).href);
         } catch (_e2) {
           return value;
         }

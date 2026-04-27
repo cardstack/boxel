@@ -350,13 +350,18 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   private viewCardInCodeSubmode: ViewCardFn = async (cardOrURL) => {
-    let cardId = cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id;
+    let cardId =
+      typeof cardOrURL === 'string'
+        ? cardOrURL
+        : cardOrURL instanceof URL
+          ? cardOrURL.href
+          : cardOrURL.id;
     if (!cardId) {
       return;
     }
 
     const fileUrl = hasExtension(cardId) ? cardId : `${cardId}.json`;
-    await this.operatorModeStateService.updateCodePath(new URL(fileUrl));
+    await this.operatorModeStateService.updateCodePath(rri(fileUrl));
   };
 
   @action private setActivePanel(item: ModuleInspectorView) {

@@ -135,7 +135,7 @@ export function isSpecCard(def: any) {
 
 export function codeRefWithAbsoluteURL(
   ref: CodeRef,
-  relativeTo?: URL | undefined,
+  relativeTo?: RealmResourceIdentifier | URL | undefined,
   opts?: { trimExecutableExtension?: true },
 ): CodeRef {
   if (!('type' in ref)) {

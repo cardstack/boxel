@@ -77,14 +77,5 @@ export function normalizeDependencyForLookup(
   relativeTo: URL,
 ): string {
   let canonical = canonicalURL(dep, relativeTo.href);
-  // For registered prefix deps (e.g. @cardstack/catalog/foo.gts),
-  // trim executable extensions without URL parsing
-  if (isRegisteredPrefix(canonical)) {
-    return canonical.replace(/\.(gts|ts|js|gjs)$/, '');
-  }
-  try {
-    return trimExecutableExtension(new URL(canonical)).href;
-  } catch (_err) {
-    return canonical;
-  }
+  return trimExecutableExtension(canonical);
 }
