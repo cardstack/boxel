@@ -8,11 +8,6 @@ import {
   separatedByCommas,
   type Expression,
 } from '../index';
-import {
-  type QueueCoalesceContext,
-  type QueueCoalesceDecision,
-  registerQueueJobDefinition,
-} from '../queue';
 
 export interface DailyCreditGrantArgs extends JSONTypes.Object {
   lowCreditThreshold: number;
@@ -20,47 +15,12 @@ export interface DailyCreditGrantArgs extends JSONTypes.Object {
 
 export { dailyCreditGrant };
 
-function isObjectLike(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value);
-}
-
-function getLowCreditThreshold(args: unknown): number | undefined {
-  if (!isObjectLike(args)) {
-    return undefined;
-  }
-  let value = args.lowCreditThreshold;
-  return typeof value === 'number' ? value : undefined;
-}
-
-function chooseDailyCreditGrantCoalesceDecision(
-  context: QueueCoalesceContext,
-): QueueCoalesceDecision {
-  let { incoming, candidates } = context;
-  // Only join if the threshold matches; different thresholds describe
-  // different work and joining would silently drop the second caller's intent.
-  let incomingThreshold = getLowCreditThreshold(incoming.args);
-  let twin = candidates.find(
-    (candidate) =>
-      candidate.jobType === incoming.jobType &&
-      getLowCreditThreshold(candidate.args) === incomingThreshold,
-  );
-  if (!twin) {
-    return { type: 'insert' };
-  }
-  return {
-    type: 'join',
-    jobId: twin.id,
-    update: {
-      priority: Math.max(twin.priority, incoming.priority),
-      timeout: Math.max(twin.timeout, incoming.timeout),
-    },
-  };
-}
-
-registerQueueJobDefinition({
-  jobType: 'daily-credit-grant',
-  coalesce: chooseDailyCreditGrantCoalesceDecision,
-});
+// No coalesce handler: the worker is idempotent at the SQL level via
+// `granted_today = false` — a duplicate run on the same day finds no
+// eligible rows and inserts nothing. The concurrency group
+// 'daily-credit-grant' also serializes execution. The worst case from a
+// concurrent enqueue is one wasted full-table scan, not a double-grant,
+// so coalescing isn't worth the extra code path.
 
 const dailyCreditGrant: Task<DailyCreditGrantArgs, void> = ({
   dbAdapter,
