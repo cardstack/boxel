@@ -434,14 +434,31 @@ jobs:
           merge-multiple: true
 
       - name: Update memory baseline
+        # Retry with rebase: another PR may merge to main while host CI is
+        # running (~15+ min), causing `git push` to be rejected. We re-run
+        # the merge-aware script against the freshest tip-of-main on each
+        # attempt so prior-baseline preservation stays correct.
         run: |
-          node packages/host/scripts/update-memory-baseline.mjs all-memory-reports packages/host/memory-baseline.json
-          if git diff --quiet packages/host/memory-baseline.json; then
-            echo "Baseline unchanged — nothing to commit."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+
+            node packages/host/scripts/update-memory-baseline.mjs all-memory-reports packages/host/memory-baseline.json
+            if git diff --quiet packages/host/memory-baseline.json; then
+              echo "Baseline unchanged — nothing to commit."
+              exit 0
+            fi
             git add packages/host/memory-baseline.json
             git commit -m "Update host test memory baseline [skip ci]"
-            git push
-          fi
+
+            if git push; then
+              exit 0
+            fi
+            echo "Push rejected on attempt $attempt — retrying after $((attempt * 5))s"
+            sleep $((attempt * 5))
+          done
+          echo "Failed to push memory baseline after 5 attempts"
+          exit 1
