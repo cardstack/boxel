@@ -63,7 +63,7 @@ jobs:
       # for the rationale). The pre-flight check below asserts the expected
       # hostname for paranoia.
       EXPECTED_GRAFANA_HOSTNAME: grafana.boxel.ai
-      GRAFANACTL_VERSION: "0.7.0"
+      GRAFANACTL_VERSION: "0.1.10"
 
     steps:
       - name: Refuse to apply from non-main branches
@@ -112,22 +112,9 @@ jobs:
           fi
 
       - name: Install grafanactl
-        # Same install + checksum-verify as the staging workflow.
-        run: |
-          set -euo pipefail
-          TARBALL="grafanactl_${GRAFANACTL_VERSION}_linux_amd64.tar.gz"
-          RELEASE_URL="https://github.com/grafana/grafanactl/releases/download/v${GRAFANACTL_VERSION}"
-          TMPDIR="$(mktemp -d)"
-          trap 'rm -rf "$TMPDIR"' EXIT
-
-          curl -fsSL "${RELEASE_URL}/${TARBALL}"    -o "${TMPDIR}/${TARBALL}"
-          curl -fsSL "${RELEASE_URL}/checksums.txt" -o "${TMPDIR}/checksums.txt"
-
-          ( cd "$TMPDIR" && grep " ${TARBALL}\$" checksums.txt | sha256sum -c - )
-
-          tar -xzf "${TMPDIR}/${TARBALL}" -C "$TMPDIR" grafanactl
-          sudo install -m 0755 "${TMPDIR}/grafanactl" /usr/local/bin/grafanactl
-          grafanactl --version
+        uses: ./.github/actions/install-grafanactl
+        with:
+          version: ${{ env.GRAFANACTL_VERSION }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
