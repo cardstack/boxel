@@ -1,19 +1,26 @@
 # grafanactl context configuration for the observability package.
 #
-# Used by ./scripts/{apply,pull}.sh via the --config flag, so this file (rather
-# than the dev's per-user grafanactl config) is the source of truth for shared
-# context definitions.
+# Used by ./scripts/{apply,pull,check}.sh, which render this file to a tempfile
+# at runtime — substituting ${GRAFANA_TOKEN} (sourced from SSM by
+# ./scripts/grafanactl-env.sh) and setting current-context to the requested env.
 #
-# Tokens are NEVER stored here. For staging and production, ./scripts/grafanactl-env.sh
-# sources the token from SSM /<env>/grafana/grafanactl_token and exports it as
-# GRAFANA_TOKEN, which grafanactl picks up at runtime.
+# IMPORTANT: do NOT add `current-context:` to this file. grafanactl's env-var
+# override of GRAFANA_TOKEN only takes effect on the file's current-context,
+# regardless of the --context flag passed at the command line. Keeping
+# current-context out of the committed file (and rendering it per-invocation)
+# avoids both that pitfall and the mutation `grafanactl config use-context`
+# would otherwise write into a tracked file.
+#
+# Tokens are NEVER stored in this file. The ${GRAFANA_TOKEN} placeholder is
+# substituted at apply/pull time from the env var that grafanactl-env.sh
+# exports after fetching from SSM /<env>/grafana/grafanactl_token.
 
 contexts:
   local:
     grafana:
       server: http://localhost:3001
       org-id: 1
-      # Local docker-compose Grafana uses admin/admin basic auth.
+      # Local docker-compose Grafana uses admin/admin basic auth — no token.
       user: admin
       password: admin
 
@@ -21,7 +28,7 @@ contexts:
     grafana:
       server: https://grafana-staging.stack.cards
       org-id: 1
-      # Token is sourced from SSM at runtime — see scripts/grafanactl-env.sh.
+      token: ${GRAFANA_TOKEN}
       # Hostname is the build-out placeholder; rename to dashboard-staging.stack.cards
       # at Phase 6 cutover (atomic with the AMG DNS handover).
 
@@ -29,8 +36,6 @@ contexts:
     grafana:
       server: https://grafana.boxel.ai
       org-id: 1
-      # Token is sourced from SSM at runtime — see scripts/grafanactl-env.sh.
+      token: ${GRAFANA_TOKEN}
       # Hostname is the build-out placeholder; rename to dashboard.boxel.ai at
       # Phase 6 cutover.
-
-current-context: local

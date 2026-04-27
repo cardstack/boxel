@@ -13,24 +13,15 @@
 #   - grafanactl installed (brew install --formula grafanactl)
 #   - For local: docker compose up -d grafana
 #   - For staging/production: AWS credentials with ssm:GetParameter
-set -euo pipefail
+set -eo pipefail
 
 env_name=local
 forwarded_args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env)
-      env_name="$2"
-      shift 2
-      ;;
-    --env=*)
-      env_name="${1#--env=}"
-      shift
-      ;;
-    *)
-      forwarded_args+=("$1")
-      shift
-      ;;
+    --env) env_name="$2"; shift 2 ;;
+    --env=*) env_name="${1#--env=}"; shift ;;
+    *) forwarded_args+=("$1"); shift ;;
   esac
 done
 
@@ -39,8 +30,11 @@ cd "$(dirname "$0")/.."
 # shellcheck source=./grafanactl-env.sh
 source ./scripts/grafanactl-env.sh "$env_name"
 
-exec grafanactl \
-  --config ./grafanactl/config.yaml \
+cfg="$(./scripts/render-config.sh "$env_name")"
+trap 'rm -f "$cfg"' EXIT
+
+grafanactl \
+  --config "$cfg" \
   --context "$env_name" \
   resources push \
   --path ./grafanactl/resources \

@@ -15,33 +15,18 @@
 # Prereqs:
 #   - grafanactl installed (brew install --formula grafanactl)
 #   - For staging/production: AWS credentials with ssm:GetParameter
-set -euo pipefail
+set -eo pipefail
 
 env_name=local
 out_path=""
 forwarded_args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env)
-      env_name="$2"
-      shift 2
-      ;;
-    --env=*)
-      env_name="${1#--env=}"
-      shift
-      ;;
-    --path | -p)
-      out_path="$2"
-      shift 2
-      ;;
-    --path=*)
-      out_path="${1#--path=}"
-      shift
-      ;;
-    *)
-      forwarded_args+=("$1")
-      shift
-      ;;
+    --env) env_name="$2"; shift 2 ;;
+    --env=*) env_name="${1#--env=}"; shift ;;
+    --path | -p) out_path="$2"; shift 2 ;;
+    --path=*) out_path="${1#--path=}"; shift ;;
+    *) forwarded_args+=("$1"); shift ;;
   esac
 done
 
@@ -55,8 +40,11 @@ cd "$(dirname "$0")/.."
 # shellcheck source=./grafanactl-env.sh
 source ./scripts/grafanactl-env.sh "$env_name"
 
-exec grafanactl \
-  --config ./grafanactl/config.yaml \
+cfg="$(./scripts/render-config.sh "$env_name")"
+trap 'rm -f "$cfg"' EXIT
+
+grafanactl \
+  --config "$cfg" \
   --context "$env_name" \
   resources pull \
   --path "$out_path" \
