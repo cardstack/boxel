@@ -39,7 +39,7 @@ jobs:
       # which is what the diff workflow needs (read the token, then use
       # it to pull dashboards/folders from staging Grafana).
       AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
-      GRAFANACTL_VERSION: "0.7.0"
+      GRAFANACTL_VERSION: "0.1.10"
       DIFF_MARKER: "<!-- observability-diff -->"
       MAX_COMMENT_BYTES: 60000
 
@@ -48,22 +48,9 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install grafanactl
-        # Same SHA-256 verified install as the apply workflows.
-        run: |
-          set -euo pipefail
-          TARBALL="grafanactl_${GRAFANACTL_VERSION}_linux_amd64.tar.gz"
-          RELEASE_URL="https://github.com/grafana/grafanactl/releases/download/v${GRAFANACTL_VERSION}"
-          TMPDIR="$(mktemp -d)"
-          trap 'rm -rf "$TMPDIR"' EXIT
-
-          curl -fsSL "${RELEASE_URL}/${TARBALL}"    -o "${TMPDIR}/${TARBALL}"
-          curl -fsSL "${RELEASE_URL}/checksums.txt" -o "${TMPDIR}/checksums.txt"
-
-          ( cd "$TMPDIR" && grep " ${TARBALL}\$" checksums.txt | sha256sum -c - )
-
-          tar -xzf "${TMPDIR}/${TARBALL}" -C "$TMPDIR" grafanactl
-          sudo install -m 0755 "${TMPDIR}/grafanactl" /usr/local/bin/grafanactl
-          grafanactl --version
+        uses: ./.github/actions/install-grafanactl
+        with:
+          version: ${{ env.GRAFANACTL_VERSION }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
