@@ -55,6 +55,7 @@ import type { Prerenderer } from '@cardstack/runtime-common';
 import { retrieveScopedCSS } from './lib/retrieve-scoped-css';
 import { mirrorSourceRealmToRegistry } from './lib/realm-registry-writes';
 import { withRealmWriteLock } from './lib/realm-advisory-locks';
+import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler';
 import {
   indexURLCandidates,
   indexCandidateExpressions,
@@ -104,10 +105,12 @@ export class RealmServer {
       }
     | undefined;
   private prerenderer: Prerenderer | undefined;
+  private reconciler: RealmRegistryReconciler;
 
   constructor({
     serverURL,
     realms,
+    reconciler,
     virtualNetwork,
     matrixClient,
     realmServerSecretSeed,
@@ -127,6 +130,7 @@ export class RealmServer {
   }: {
     serverURL: URL;
     realms: Realm[];
+    reconciler: RealmRegistryReconciler;
     virtualNetwork: VirtualNetwork;
     matrixClient: MatrixClient;
     realmServerSecretSeed: string;
@@ -178,7 +182,12 @@ export class RealmServer {
     this.getRegistrationSecret = getRegistrationSecret;
     this.enableFileWatcher = enableFileWatcher ?? false;
     this.domainsForPublishedRealms = domainsForPublishedRealms;
-    this.realms = [...realms];
+    // Pass-by-reference: handlers and the reconciler both mutate this
+    // array. Copying it would create two divergent views of mounted
+    // realms — a bug under multi-instance Phase 3 semantics. The legacy
+    // `[...realms]` copy is gone with that constraint.
+    this.realms = realms;
+    this.reconciler = reconciler;
     this.prerenderer = prerenderer;
   }
 
@@ -240,6 +249,7 @@ export class RealmServer {
           createAndMountRealm: this.createAndMountRealm,
           domainsForPublishedRealms: this.domainsForPublishedRealms,
           prerenderer: this.prerenderer,
+          reconciler: this.reconciler,
         }),
       )
       .use(
