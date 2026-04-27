@@ -127,6 +127,7 @@ const ProjectKanbanToolbar: TemplateOnlyComponent<Signature> = <template>
       display: flex;
       align-items: center;
       gap: 0.5rem;
+      margin-right: 0.75rem;
     }
     .group-by-label {
       font-size: 0.75rem;
@@ -157,7 +158,10 @@ const ProjectKanbanToolbar: TemplateOnlyComponent<Signature> = <template>
       border-radius: 0.25rem;
     }
     .settings-button {
-      color: var(--kanban-muted-foreground);
+      opacity: 0.6;
+    }
+    .settings-button:hover {
+      opacity: 1;
     }
   </style>
 </template>;

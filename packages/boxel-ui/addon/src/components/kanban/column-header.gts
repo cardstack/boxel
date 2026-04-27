@@ -23,7 +23,7 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
         class='col-dot'
         style={{cssVar
           col-dot-bg=(if
-            @column.color @column.color 'var(--muted, var(--boxel-100))'
+            @column.color @column.color 'var(--boxel-450)'
           )
         }}
       ></span>
@@ -80,11 +80,12 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
       gap: 8px;
     }
     .col-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 3px;
+      width: 0.625rem;
+      height: 0.625rem;
+      border-radius: 50%;
       flex-shrink: 0;
       background: var(--col-dot-bg);
+      box-shadow: 0 0 0 1.5px color-mix(in oklch, var(--col-dot-bg) 30%, transparent);
     }
     .col-name {
       font-size: 13px;
@@ -111,12 +112,10 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
       font-weight: 600;
     }
     .col-add-btn {
-      color: var(--muted-foreground, var(--boxel-450));
       opacity: 0.6;
     }
     .col-add-btn:hover {
       opacity: 1;
-      color: var(--foreground, var(--boxel-dark));
     }
   </style>
 </template>;

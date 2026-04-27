@@ -408,7 +408,7 @@ class ProjectIsolated extends Component<typeof Project> {
         --kanban-card-foreground: var(--card-foreground, var(--boxel-dark));
         --kanban-foreground: var(--foreground, var(--boxel-700));
         --kanban-muted-bg: var(--muted, var(--boxel-100));
-        --kanban-muted-foreground: var(--muted-foreground, var(--boxel-450));
+        --kanban-muted-foreground: var(--muted-foreground, var(--boxel-500));
         --kanban-border-color: var(--border, var(--boxel-border-color));
 
         display: flex;
