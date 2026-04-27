@@ -11,10 +11,13 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import { concat } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { htmlSafe } from '@ember/template';
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import SourceCode from '@cardstack/boxel-icons/source-code';
+import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
 
 import { Listing } from '../catalog-app/listing/listing';
 import { PrCard } from '../pr-card/pr-card';
@@ -543,6 +546,17 @@ export class SubmissionWorkflowCard extends CardDef {
       );
     }
 
+    @action
+    viewCatalogListing() {
+      let url = this.catalogListingUrl;
+      let commandContext = this.args.context?.commandContext;
+      if (!url || !commandContext) return;
+      new ShowCardCommand(commandContext).execute({
+        cardId: url,
+        format: 'isolated',
+      });
+    }
+
     <template>
       <div class='sw-layout'>
 
@@ -696,12 +710,9 @@ export class SubmissionWorkflowCard extends CardDef {
                     {{#if this.catalogListingUrl}}
                       <div class='sw-step-detail sw-catalog-link'>
                         <BoxelButton
-                          @as='anchor'
-                          @href={{this.catalogListingUrl}}
                           @kind='primary'
                           @size='small'
-                          target='_blank'
-                          rel='noopener noreferrer'
+                          {{on 'click' this.viewCatalogListing}}
                         >
                           View listing in catalog
                         </BoxelButton>
