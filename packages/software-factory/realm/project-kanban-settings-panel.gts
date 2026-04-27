@@ -9,15 +9,19 @@ type Column = {
   wipLimit?: number | null;
   collapsed?: boolean | null;
 };
+type ColumnEventHandler = (
+  key: string | null | undefined,
+  event: Event,
+) => void;
 
 interface Signature {
   Args: {
     columns: Column[];
-    onColorChange: (key: string | null | undefined, event: Event) => void;
-    onWipChange: (key: string | null | undefined, event: Event) => void;
-    onCollapseChange: (key: string | null | undefined, event: Event) => void;
-    onMoveColUp: (key: string | null | undefined, event: Event) => void;
-    onMoveColDown: (key: string | null | undefined, event: Event) => void;
+    onColorChange: ColumnEventHandler;
+    onWipChange: ColumnEventHandler;
+    onCollapseChange: ColumnEventHandler;
+    onMoveColUp: ColumnEventHandler;
+    onMoveColDown: ColumnEventHandler;
   };
 }
 
@@ -47,7 +51,7 @@ const ProjectKanbanSettingsPanel: TemplateOnlyComponent<Signature> = <template>
             <input
               type='color'
               class='color-input'
-              value={{if col.color col.color '#6366f1'}}
+              value={{if col.color col.color '#2b4fff'}}
               {{on 'change' (fn @onColorChange col.key)}}
             />
           </label>

@@ -20,15 +20,15 @@ export interface Column {
 }
 
 export const issueStatusOptions: Option[] = [
-  { value: 'backlog', label: 'Backlog', color: 'var(--boxel-navy)' },
+  { value: 'backlog', label: 'Backlog', color: '#2b4fff' },
   {
     value: 'in_progress',
     label: 'In Progress',
-    color: 'var(--boxel-warning-200)',
+    color: '#f9cd4a',
   },
-  { value: 'blocked', label: 'Blocked', color: 'var(--boxel-red)' },
-  { value: 'review', label: 'In Review', color: 'var(--boxel-dark-green)' },
-  { value: 'done', label: 'Done', color: 'var(--boxel-purple)' },
+  { value: 'blocked', label: 'Blocked', color: '#db1731' },
+  { value: 'review', label: 'In Review', color: '#285028' },
+  { value: 'done', label: 'Done', color: '#7a2cf4' },
 ];
 
 export const issueTypeOptions: Option[] = [
@@ -48,11 +48,11 @@ export const issuePriorityOptions: Option[] = [
 ];
 
 export const projectStatusOptions: Option[] = [
-  { value: 'planning', label: 'Planning', color: 'var(--boxel-navy)' },
-  { value: 'active', label: 'Active', color: 'var(--boxel-dark-green)' },
-  { value: 'on_hold', label: 'On Hold', color: 'var(--boxel-orange)' },
-  { value: 'completed', label: 'Completed', color: 'var(--boxel-purple)' },
-  { value: 'archived', label: 'Archived', color: 'var(--boxel-500)' },
+  { value: 'planning', label: 'Planning', color: '#2b4fff' },
+  { value: 'active', label: 'Active', color: '#285028' },
+  { value: 'on_hold', label: 'On Hold', color: '#f59f0b' },
+  { value: 'completed', label: 'Completed', color: '#7a2cf4' },
+  { value: 'archived', label: 'Archived', color: '#9d9c9d' },
 ];
 
 export const defaultColumns: Column[] = [

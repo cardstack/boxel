@@ -194,9 +194,12 @@ export class ProjectKanbanController {
     );
   }
 
-  setColumnColor(key: string | null | undefined, color: string): void {
+  setColumnColor(
+    key: string | null | undefined,
+    color: string | null | undefined,
+  ): void {
     if (!key) return;
-    this.setColumnConfig(key, { color });
+    this.setColumnConfig(key, { color: color?.trim()?.length ? color : null });
   }
 
   setColumnWipLimit(key: string | null | undefined, raw: number): void {
