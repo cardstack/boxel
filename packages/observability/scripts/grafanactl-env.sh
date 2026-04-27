@@ -37,7 +37,12 @@ _grafanactl_env_main() {
 
   case "$env_name" in
     local)
-      # Nothing to source — admin/admin is in the committed config.yaml.
+      # Local uses admin/admin from the rendered config. Actively clear any
+      # GRAFANA_* env vars left over from a previous `source ... staging`
+      # so grafanactl's env-var override doesn't replace local's basic auth
+      # with a stale staging/prod token (would 401 against the local
+      # admin/admin Grafana).
+      unset GRAFANA_TOKEN GRAFANA_SERVER GRAFANA_ORG_ID GRAFANA_USER GRAFANA_PASSWORD GRAFANA_STACK_ID
       return 0
       ;;
     staging | production)
