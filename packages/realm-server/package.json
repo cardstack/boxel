@@ -142,6 +142,7 @@
     "stripe": "docker run --rm --add-host=host.docker.internal:host-gateway -it stripe/stripe-cli:latest"
   },
   "dependencies": {
+    "playwright": "1.57.0",
     "puppeteer": "^24.8.2"
   }
 }

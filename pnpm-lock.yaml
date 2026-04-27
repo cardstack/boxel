@@ -2542,6 +2542,9 @@ importers:
 
   packages/realm-server:
     dependencies:
+      playwright:
+        specifier: 1.57.0
+        version: 1.57.0
       puppeteer:
         specifier: ^24.8.2
         version: 24.35.0(typescript@5.9.3)

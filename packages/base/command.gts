@@ -185,6 +185,20 @@ export class GenerateThumbnailOutput extends CardDef {
   @field imageDefUrl = contains(StringField);
 }
 
+export class ScreenshotCardInput extends CardDef {
+  @field cardUrl = contains(StringField);
+  @field targetRealmUrl = contains(StringField);
+  @field format = contains(StringField); // isolated | embedded | fitted | atom, defaults to fitted
+  @field browser = contains(StringField); // optional: chromium | firefox | webkit, defaults to chromium
+  @field targetPath = contains(StringField); // optional: subfolder within realm, e.g. "ListingScreenshots"
+  @field targetCardId = contains(StringField); // optional: patch this card's screenshots relationship
+  @field screenshotIndex = contains(NumberField); // optional: which screenshots.N slot to patch
+}
+
+export class ScreenshotCardOutput extends CardDef {
+  @field imageDefUrl = contains(StringField);
+}
+
 export class CreateInstanceInput extends CardDef {
   @field codeRef = contains(CodeRefField);
   @field realm = contains(StringField);

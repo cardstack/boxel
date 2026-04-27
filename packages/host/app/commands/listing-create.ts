@@ -25,6 +25,7 @@ import HostBaseCommand from '../lib/host-base-command';
 import AuthedFetchCommand from './authed-fetch';
 import CreateSpecCommand from './create-specs';
 import GenerateThumbnailCommand from './generate-thumbnail';
+import ScreenshotCardCommand from './screenshot-card';
 import GetCardCommand from './get-card';
 import GetCatalogRealmUrlsCommand from './get-catalog-realm-urls';
 import GetRealmOfUrlCommand from './get-realm-of-url';
@@ -160,6 +161,14 @@ export default class ListingCreateCommand extends HostBaseCommand<
           codeRef,
         ),
       },
+      {
+        name: 'autoGenerateThumbnail',
+        promise: this.autoGenerateThumbnail(listingCard, codeRef, targetRealm),
+      },
+      {
+        name: 'autoScreenshotExamples',
+        promise: this.autoScreenshotExamples(listingCard, openCardIds, targetRealm),
+      },
     ];
 
     const backgroundWork = Promise.allSettled(
@@ -173,11 +182,6 @@ export default class ListingCreateCommand extends HostBaseCommand<
           );
         }
       });
-    });
-
-    // Fire-and-forget thumbnail generation (external API call, should not block modal)
-    this.autoGenerateThumbnail(listingCard, codeRef, targetRealm).catch((e) => {
-      console.warn('Failed to auto-generate thumbnail:', e);
     });
 
     const { ListingCreateResult } = commandModule;
@@ -549,6 +553,38 @@ export default class ListingCreateCommand extends HostBaseCommand<
       },
     );
     (listing as any).categories = selected;
+  }
+
+  private async autoScreenshotExamples(
+    listing: CardAPI.CardDef,
+    openCardIds: string[] | undefined,
+    targetRealm: string,
+  ): Promise<void> {
+    if (!listing.id || !openCardIds?.length) return;
+
+    for (const [index, cardId] of openCardIds.entries()) {
+      try {
+        const result = await new ScreenshotCardCommand(
+          this.commandContext,
+        ).execute({
+          cardUrl: cardId,
+          targetRealmUrl: targetRealm,
+          format: 'isolated',
+          targetPath: 'ListingScreenshots',
+          targetCardId: listing.id,
+          screenshotIndex: index,
+        });
+        console.log(
+          `[listing-create] screenshot success for ${cardId}:`,
+          result,
+        );
+      } catch (error) {
+        console.warn(
+          `[listing-create] screenshot failed for ${cardId}:`,
+          error,
+        );
+      }
+    }
   }
 
   private async autoGenerateThumbnail(
