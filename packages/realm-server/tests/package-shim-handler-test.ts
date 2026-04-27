@@ -20,6 +20,12 @@ module(basename(__filename), function () {
     test('wrapWithStrictNamespace passes Symbol gets through without throwing', async function (assert) {
       await runSharedTest(packageShimHandlerTests, assert, {});
     });
+    test('wrapWithStrictNamespace allows runtime-probe `then` (await thenable detection)', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('wrapWithStrictNamespace allows runtime-probe `__esModule`, `toJSON`, and Object.prototype methods', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
     test('wrapWithStrictNamespace honors the ALLOW_MISSING_NAMED_EXPORTS escape hatch', async function (assert) {
       await runSharedTest(packageShimHandlerTests, assert, {});
     });

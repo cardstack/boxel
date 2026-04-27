@@ -84,6 +84,60 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
     );
   },
 
+  'wrapWithStrictNamespace allows runtime-probe `then` (await thenable detection)':
+    async (assert) => {
+      let ns = wrapWithStrictNamespace('@cardstack/runtime-common', {
+        someExport: 1,
+      });
+      // `await ns` does `Reflect.get(value, 'then')`. The Proxy must
+      // not throw on this — otherwise every awaited shimmed module
+      // breaks (we hit exactly this regression in CI: cascading
+      // `ReferenceError: Module '...' has no exported member 'then'`
+      // across host / matrix / realm-server suites).
+      let resolved = await Promise.resolve(ns);
+      assert.strictEqual(
+        resolved,
+        ns,
+        'await on a shimmed namespace returns the namespace (treated as non-thenable)',
+      );
+      assert.strictEqual(
+        (ns as any).then,
+        undefined,
+        '`.then` access returns undefined without throwing',
+      );
+    },
+
+  'wrapWithStrictNamespace allows runtime-probe `__esModule`, `toJSON`, and Object.prototype methods':
+    async (assert) => {
+      let ns = wrapWithStrictNamespace('@cardstack/runtime-common', {
+        someExport: 1,
+      });
+      // `__esModule` is what CJS/ESM interop bridges probe to decide
+      // how to import the default. Should be undefined, not a throw.
+      assert.strictEqual(
+        (ns as any).__esModule,
+        undefined,
+        '__esModule probe returns undefined without throwing',
+      );
+      // `toJSON` is what `JSON.stringify(ns)` probes for.
+      assert.strictEqual(
+        (ns as any).toJSON,
+        undefined,
+        'toJSON probe returns undefined without throwing',
+      );
+      // Object.prototype methods inherited via the prototype chain.
+      assert.strictEqual(
+        typeof (ns as any).toString,
+        'function',
+        'toString returns the inherited Object.prototype method',
+      );
+      assert.strictEqual(
+        typeof (ns as any).hasOwnProperty,
+        'function',
+        'hasOwnProperty returns the inherited Object.prototype method',
+      );
+    },
+
   'wrapWithStrictNamespace honors the ALLOW_MISSING_NAMED_EXPORTS escape hatch':
     async (assert) => {
       let opted: any = { foo: 1 };

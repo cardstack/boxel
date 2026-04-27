@@ -40,6 +40,39 @@ export function fallbackShim(extras?: ModuleLike): ModuleLike {
   return stub;
 }
 
+// Names the JS runtime and common library code probe on arbitrary
+// objects, NOT real named imports. Critical inclusions:
+//
+//   • `then` — `await ns` and `Promise.resolve(ns).then(...)` both
+//     call `Reflect.get(value, 'then')` to detect thenables. If the
+//     strict Proxy throws on this lookup, every awaited shimmed
+//     module breaks (we observed exactly this in CI: cascading
+//     `ReferenceError: Module '...' has no exported member 'then'`
+//     across host / matrix / realm-server suites).
+//   • `__esModule` — bundler CJS/ESM interop probes this to decide
+//     how to bridge default exports.
+//   • `toJSON` — `JSON.stringify(ns)` probes for it.
+//   • Object.prototype method names (`toString`, `valueOf`, etc.) —
+//     runtime + library code commonly probes these. They aren't
+//     real exports either.
+//
+// All of these pass through unchanged; missing ones return whatever
+// the underlying namespace would have returned (typically `undefined`
+// for `then`/`__esModule`, the inherited Object.prototype method for
+// the others).
+const RUNTIME_PROBE_NAMES = new Set<string>([
+  'then',
+  '__esModule',
+  'toJSON',
+  'toString',
+  'valueOf',
+  'hasOwnProperty',
+  'isPrototypeOf',
+  'propertyIsEnumerable',
+  'toLocaleString',
+  'constructor',
+]);
+
 // Wraps a shimmed module with a Proxy that throws a clear,
 // actionable error when an importer reads a name that doesn't
 // exist on the namespace. Plain JavaScript silently produces
@@ -50,10 +83,10 @@ export function fallbackShim(extras?: ModuleLike): ModuleLike {
 // exactly this footgun.
 //
 // Scope: every property *get* with a string key that isn't on the
-// namespace throws. Symbol gets, `has`, `ownKeys`, and
-// `getOwnPropertyDescriptor` traps pass through unchanged so
-// runtime introspection (`'foo' in ns`, `Object.keys(ns)`,
-// `Reflect.has(...)`) keeps working.
+// namespace AND isn't a runtime-probe name throws. Symbol gets,
+// `has`, `ownKeys`, and `getOwnPropertyDescriptor` traps pass
+// through unchanged so runtime introspection (`'foo' in ns`,
+// `Object.keys(ns)`, `Reflect.has(...)`) keeps working.
 //
 // Escape hatch: if the namespace exposes
 // `ALLOW_MISSING_NAMED_EXPORTS`, the Proxy returns `undefined` for
@@ -85,6 +118,11 @@ export function wrapWithStrictNamespace(
       // (via `prop in target`) would silently let a card read those
       // values and bypass the missing-import check.
       if (Object.prototype.hasOwnProperty.call(target, prop)) {
+        return Reflect.get(target, prop, receiver);
+      }
+      // Runtime probe — let it through to whatever the underlying
+      // object would return. NOT a missing-import case.
+      if (RUNTIME_PROBE_NAMES.has(prop)) {
         return Reflect.get(target, prop, receiver);
       }
       throw new ReferenceError(
