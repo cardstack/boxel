@@ -89,11 +89,19 @@ jobs:
         # un-cutover Phase 6 dry-run). If config.yaml has anything other
         # than the expected hostname for the production context, abort
         # before fetching credentials.
+        #
+        # The awk uses an in-block flag rather than awk's range syntax
+        # (`/start/,/end/`), because `/^  production:$/,/^  [a-z]/` would
+        # match only the start line — the end pattern `^  [a-z]` matches
+        # the start line itself, terminating the range immediately.
         working-directory: packages/observability
         run: |
           set -eo pipefail
-          ACTUAL=$(awk '/^  production:$/,/^  [a-z]/{print}' grafanactl/config.yaml \
-            | awk '/server:/{print $2; exit}')
+          ACTUAL="$(awk '
+            /^  production:$/      { in_prod=1; next }
+            in_prod && /^  [a-z]/  { exit }
+            in_prod && /^      server:/ { print $2; exit }
+          ' grafanactl/config.yaml)"
           echo "config.yaml production server: $ACTUAL"
           echo "expected:                       https://${EXPECTED_GRAFANA_HOSTNAME}"
           if [[ "$ACTUAL" != "https://${EXPECTED_GRAFANA_HOSTNAME}" ]]; then
