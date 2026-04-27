@@ -2479,6 +2479,8 @@ importers:
         specifier: 'catalog:'
         version: 2.8.2
 
+  packages/observability: {}
+
   packages/openrouter-realm:
     devDependencies:
       '@cardstack/boxel-icons':

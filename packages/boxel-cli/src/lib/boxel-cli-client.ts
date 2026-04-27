@@ -14,12 +14,18 @@ import {
   type ReadTranspiledResult,
 } from '../commands/read-transpiled';
 import { write as coreWrite, type WriteResult } from '../commands/file/write';
+import {
+  cancelIndexing as coreCancelIndexing,
+  type CancelIndexingResult,
+} from '../commands/realm/cancel-indexing';
 import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { pull as realmPull } from '../commands/realm/pull';
+import { sync as realmSync, type SyncResult } from '../commands/realm/sync';
+import { waitForReady as coreWaitForReady } from '../commands/realm/wait-for-ready';
 import { getProfileManager, type ProfileManager } from './profile-manager';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-export type { ReadResult, ListFilesResult, ReadTranspiledResult };
+export type { ReadResult, ListFilesResult, ReadTranspiledResult, SyncResult };
 
 const MIME = {
   CardSource: 'application/vnd.card+source',
@@ -53,6 +59,19 @@ export interface PullResult {
   /** Relative file paths that were downloaded. */
   files: string[];
   error?: string;
+}
+
+export interface SyncOptions {
+  /** Resolve conflicts by keeping the local version. */
+  preferLocal?: boolean;
+  /** Resolve conflicts by keeping the remote version. */
+  preferRemote?: boolean;
+  /** Resolve conflicts by keeping the newest version. */
+  preferNewest?: boolean;
+  /** Propagate deletions in both directions. */
+  delete?: boolean;
+  /** Preview without making changes. */
+  dryRun?: boolean;
 }
 
 export type { DeleteResult };
@@ -90,10 +109,7 @@ export interface AtomicResult {
   error?: string;
 }
 
-export interface CancelIndexingResult {
-  ok: boolean;
-  error?: string;
-}
+export type { CancelIndexingResult };
 
 export class BoxelCLIClient {
   private pm: ProfileManager;
@@ -314,28 +330,10 @@ export class BoxelCLIClient {
     realmUrl: string,
     timeoutMs = 30_000,
   ): Promise<WaitForReadyResult> {
-    let readinessUrl = `${ensureTrailingSlash(realmUrl)}_readiness-check`;
-    let startedAt = Date.now();
-
-    while (Date.now() - startedAt < timeoutMs) {
-      try {
-        let response = await this.pm.authedRealmFetch(readinessUrl, {
-          method: 'GET',
-          headers: { Accept: MIME.JSON },
-        });
-        if (response.ok) {
-          return { ready: true };
-        }
-      } catch {
-        // retry
-      }
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-
-    return {
-      ready: false,
-      error: `Realm not ready after ${timeoutMs}ms: ${readinessUrl}`,
-    };
+    return coreWaitForReady(realmUrl, {
+      timeoutMs,
+      profileManager: this.pm,
+    });
   }
 
   /**
@@ -405,33 +403,10 @@ export class BoxelCLIClient {
    * Cancel all indexing jobs (running + pending) for a realm.
    */
   async cancelAllIndexingJobs(realmUrl: string): Promise<CancelIndexingResult> {
-    let cancelUrl = `${ensureTrailingSlash(realmUrl)}_cancel-indexing-job`;
-
-    try {
-      let response = await this.pm.authedRealmFetch(cancelUrl, {
-        method: 'POST',
-        headers: {
-          Accept: MIME.JSON,
-          'Content-Type': MIME.JSON,
-        },
-        body: JSON.stringify({ cancelPending: true }),
-      });
-
-      if (!response.ok) {
-        let body = await response.text();
-        return {
-          ok: false,
-          error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-        };
-      }
-
-      return { ok: true };
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
+    return coreCancelIndexing(realmUrl, {
+      profileManager: this.pm,
+      cancelPending: true,
+    });
   }
 
   /**
@@ -476,6 +451,26 @@ export class BoxelCLIClient {
   ): Promise<PullResult> {
     return realmPull(realmUrl, localDir, {
       delete: options?.delete,
+      profileManager: this.pm,
+    });
+  }
+
+  /**
+   * Bidirectional sync between a local workspace and a realm. Thin wrapper
+   * around the `realm sync` command's programmatic `sync()` function so the
+   * CLI and programmatic API share one implementation.
+   */
+  async sync(
+    realmUrl: string,
+    localDir: string,
+    options?: SyncOptions,
+  ): Promise<SyncResult> {
+    return realmSync(localDir, realmUrl, {
+      preferLocal: options?.preferLocal,
+      preferRemote: options?.preferRemote,
+      preferNewest: options?.preferNewest,
+      delete: options?.delete,
+      dryRun: options?.dryRun,
       profileManager: this.pm,
     });
   }

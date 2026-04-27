@@ -31,9 +31,16 @@ import {
   Grid3x3 as GridIcon,
   Rows4 as StripIcon,
 } from '@cardstack/boxel-ui/icons';
-import { type Query, type getCards } from '@cardstack/runtime-common';
+import {
+  codeRef,
+  type Query,
+  type getCards,
+} from '@cardstack/runtime-common';
 
 import { RealmTabs } from './components/portal/realm-tabs';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 
 type ViewOption = 'strip' | 'grid';
 
@@ -102,11 +109,7 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
   get baseTypeFilter(): Query {
     return {
       filter: {
-        type: {
-          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./submission-card', import.meta.url).href,
-          name: 'SubmissionCard',
-        },
+        type: codeRef(here, './submission-card', 'SubmissionCard'),
       },
       sort: [{ by: 'createdAt', direction: 'desc' }],
     };

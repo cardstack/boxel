@@ -27,6 +27,7 @@ import {
   baseCardRef,
   baseFieldRef,
   type CodeRef,
+  type ResolvedCodeRef,
 } from './index';
 import { resolveCardReference } from './card-reference-resolver';
 //@ts-ignore unsure where these types live
@@ -116,7 +117,7 @@ export class ModuleSyntax {
   }: {
     cardBeingModified: CodeRef;
     fieldName: string;
-    fieldRef: { name: string; module: string }; // module could be a relative path
+    fieldRef: ResolvedCodeRef; // module could be a relative path
     fieldType: FieldType;
     fieldDefinitionType: 'card' | 'field';
     incomingRelativeTo: URL | undefined; // can be undefined when you know the url is not going to be relative
@@ -386,7 +387,7 @@ function makeNewField({
   computedFieldFunctionSourceCode,
 }: {
   target: NodePath<t.Node>;
-  fieldRef: { name: string; module: string };
+  fieldRef: ResolvedCodeRef;
   fieldDefinitionType: 'card' | 'field';
   fieldType: FieldType;
   fieldName: string;
