@@ -106,17 +106,42 @@ pnpm test
 # Run tests in watch mode
 pnpm test:watch
 
-# Run integration tests (requires Docker for test Postgres)
+# Run integration tests
 pnpm test:integration
 ```
 
-Integration tests use a stub prerenderer by default so they don't need
-Chrome or a running host app. Tests that exercise card indexing (e.g.
-content-based search assertions) opt in by passing
-`useRealPrerenderer: true` to `startTestRealmServer()`. Those tests
-require the host app running at `BOXEL_HOST_URL` (default
-`http://localhost:4200`) — start the dev stack from the repo root with
-`pnpm start` before running them.
+#### Integration test prerequisites
+
+`pnpm test:integration` requires:
+
+1. **Docker** — for the test Postgres container (started automatically by
+   the test runner script).
+2. **Dev stack running** — host app on `:4200` and base realm on
+   `:4201/base/`. Some integration tests (currently `search.test.ts`)
+   pass `useRealPrerenderer: true` to `startTestRealmServer()` so card
+   indexing exercises the real Chrome prerenderer. Without the dev
+   stack up, those tests fail their `beforeAll` with a clear
+   "host unreachable" message; the rest of the suite still passes
+   with a noop prerenderer.
+
+   Start the dev stack from `packages/realm-server/`:
+
+   ```bash
+   mise run test-services:matrix
+   ```
+
+   This brings up the host dist, base realm, prerender service,
+   prerender manager, icons, worker-base, and dev Postgres — the
+   minimum needed for real card indexing. Leave it running in another
+   terminal and then run `pnpm test:integration` from
+   `packages/boxel-cli/`.
+
+   Alternatively, `pnpm start` from the repo root brings up the full
+   dev stack and works equivalently.
+
+In CI, the `boxel-cli-test` job runs `mise run test-services:matrix`
+in the background before the integration suite (see
+`.github/workflows/ci.yaml`).
 
 ### Publishing
 
