@@ -41,6 +41,7 @@ import {
   errorJsonApiToErrorEntry,
 } from '../lib/window-error-handler';
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
+import { runDomDesyncCheck } from '../utils/render-desync-detector';
 import {
   RenderCardTypeTracker,
   deriveCardTypeFromDoc,
@@ -753,6 +754,23 @@ export default class RenderRoute extends Route<Model> {
     renderReadyLogger.debug(
       `settleModelAfterRender done cardId=${model.cardId} deps=${model.capturedDeps?.length ?? 0}`,
     );
+    // Kick off a one-shot DOM desync check that guards against the
+    // runloop-swallowed-exception class of render failures. See
+    // `render-desync-detector.ts` for the full mechanism + the
+    // false-positive chart. Fire-and-forget; the check runs async and
+    // surfaces any detected desync directly to the DOM.
+    void runDomDesyncCheck({
+      cardId: model.cardId,
+      nonce: model.nonce,
+      isDestroyed: () => this.isDestroying || this.isDestroyed,
+      isReady: () => this.#modelStates.get(model)?.isReady ?? false,
+      modelStatus: () => model.status,
+      scheduleNativeTimeout,
+      ensurePrerenderElements: () => this.#ensurePrerenderElements(),
+      appendStackSummary: (stack) => appendRenderTimerSummaryToStack(stack),
+      microtaskYields: (globalThis as any).__boxelDomDesyncMicrotaskYields,
+      settleHopsMs: (globalThis as any).__boxelDomDesyncSettleHopsMs,
+    });
   }
 
   async #waitForRenderLoadStability(cardId: string): Promise<void> {
