@@ -46,7 +46,7 @@ describe('realm cancel-indexing (integration)', () => {
     expect(result.error).toBeDefined();
   });
 
-  it('POSTs `{ cancelPending: true }` to the cancel-indexing endpoint', async () => {
+  it('POSTs `{ cancelPending: false }` by default (running-only)', async () => {
     let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
     try {
       await cancelIndexing(realmUrl, { profileManager });
@@ -58,6 +58,24 @@ describe('realm cancel-indexing (integration)', () => {
       let headers = init!.headers as Record<string, string>;
       expect(headers['Content-Type']).toBe('application/json');
       expect(headers['Accept']).toBe('application/json');
+      expect(JSON.parse(init!.body as string)).toEqual({
+        cancelPending: false,
+      });
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('POSTs `{ cancelPending: true }` when cancelPending option is set', async () => {
+    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
+    try {
+      await cancelIndexing(realmUrl, {
+        profileManager,
+        cancelPending: true,
+      });
+
+      expect(fetchSpy).toHaveBeenCalledOnce();
+      let [, init] = fetchSpy.mock.calls[0];
       expect(JSON.parse(init!.body as string)).toEqual({ cancelPending: true });
     } finally {
       fetchSpy.mockRestore();

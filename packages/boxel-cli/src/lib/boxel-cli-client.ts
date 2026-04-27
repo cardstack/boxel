@@ -406,7 +406,10 @@ export class BoxelCLIClient {
    * Cancel all indexing jobs (running + pending) for a realm.
    */
   async cancelAllIndexingJobs(realmUrl: string): Promise<CancelIndexingResult> {
-    return coreCancelIndexing(realmUrl, { profileManager: this.pm });
+    return coreCancelIndexing(realmUrl, {
+      profileManager: this.pm,
+      cancelPending: true,
+    });
   }
 
   /**

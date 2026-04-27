@@ -9,6 +9,8 @@ import { FG_GREEN, FG_RED, RESET } from '../../lib/colors';
 
 export interface CancelIndexingCommandOptions {
   profileManager?: ProfileManager;
+  /** Also cancel queued/pending jobs. Defaults to false (running-only). */
+  cancelPending?: boolean;
 }
 
 export interface CancelIndexingResult {
@@ -18,12 +20,16 @@ export interface CancelIndexingResult {
 
 interface CancelIndexingCliOptions {
   realm: string;
+  cancelPending?: boolean;
   json?: boolean;
 }
 
 /**
- * Cancel all indexing jobs (running + pending) for a realm.
- * Sends a POST to `<realmUrl>/_cancel-indexing-job` with `{ cancelPending: true }`.
+ * Cancel indexing jobs for a realm.
+ *
+ * Sends a POST to `<realmUrl>/_cancel-indexing-job` with `{ cancelPending }`.
+ * By default cancels only running jobs; pass `cancelPending: true` to also
+ * cancel queued/pending jobs.
  */
 export async function cancelIndexing(
   realmUrl: string,
@@ -38,6 +44,7 @@ export async function cancelIndexing(
     };
   }
 
+  let cancelPending = options?.cancelPending ?? false;
   let cancelUrl = `${ensureTrailingSlash(realmUrl)}_cancel-indexing-job`;
 
   try {
@@ -47,7 +54,7 @@ export async function cancelIndexing(
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ cancelPending: true }),
+      body: JSON.stringify({ cancelPending }),
     });
 
     if (!response.ok) {
@@ -70,14 +77,22 @@ export async function cancelIndexing(
 export function registerCancelIndexingCommand(realm: Command): void {
   realm
     .command('cancel-indexing')
-    .description('Cancel all indexing jobs (running + pending) for a realm')
+    .description(
+      'Cancel running indexing jobs for a realm (use --cancel-pending to also cancel queued jobs)',
+    )
     .requiredOption(
       '--realm <realm-url>',
       'URL of the realm to cancel indexing for',
     )
+    .option(
+      '--cancel-pending',
+      'Also cancel queued/pending indexing jobs (default: cancel running only)',
+    )
     .option('--json', 'Output raw JSON response')
     .action(async (opts: CancelIndexingCliOptions) => {
-      let result = await cancelIndexing(opts.realm);
+      let result = await cancelIndexing(opts.realm, {
+        cancelPending: opts.cancelPending,
+      });
 
       if (opts.json) {
         console.log(JSON.stringify(result, null, 2));
@@ -85,8 +100,9 @@ export function registerCancelIndexingCommand(realm: Command): void {
           process.exit(1);
         }
       } else if (result.ok) {
+        let scope = opts.cancelPending ? 'running and pending' : 'running';
         console.log(
-          `${FG_GREEN}Cancelled indexing jobs for ${opts.realm}${RESET}`,
+          `${FG_GREEN}Cancelled ${scope} indexing jobs for ${opts.realm}${RESET}`,
         );
       } else {
         console.error(`${FG_RED}Error:${RESET} ${result.error}`);
