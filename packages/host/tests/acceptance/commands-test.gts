@@ -588,12 +588,16 @@ module('Acceptance | Commands tests', function (hooks) {
     await click('[data-test-schedule-meeting-button]');
     await waitUntil(() => getRoomIds().length > 0);
     let roomId = getRoomIds().pop()!;
-    let message = (await waitUntil(() =>
-      getRoomEvents(roomId)
-        .slice()
-        .reverse()
-        .find((m) => m.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE),
-    ))!;
+    let message = (await waitUntil(() => {
+      let roomEvents = getRoomEvents(roomId);
+      for (let i = roomEvents.length - 1; i >= 0; i--) {
+        let event = roomEvents[i];
+        if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
+          return event;
+        }
+      }
+      return undefined;
+    }))!;
     let boxelMessageData = JSON.parse(message.content.data);
     let meetingCardEventId = boxelMessageData.attachedCards[0];
     let meetingCardId = meetingCardEventId.sourceUrl;
