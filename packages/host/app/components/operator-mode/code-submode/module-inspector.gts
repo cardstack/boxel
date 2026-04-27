@@ -39,6 +39,7 @@ import {
   GetCardsContextName,
   GetCardContextName,
   loadCardDef,
+  rri,
   specRef,
   localId,
   meta,
@@ -379,15 +380,17 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     if (!this.args.selectedDeclaration?.exportName) {
       return {
         name: '',
-        module: '',
+        module: rri(''),
       };
     }
     return {
       name: this.args.selectedDeclaration.exportName,
-      module: `${this.operatorModeStateService.state.codePath!.href.replace(
-        /\.[^.]+$/,
-        '',
-      )}`,
+      module: rri(
+        `${this.operatorModeStateService.state.codePath!.href.replace(
+          /\.[^.]+$/,
+          '',
+        )}`,
+      ),
     };
   }
 

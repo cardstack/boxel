@@ -1,5 +1,9 @@
 import { Deferred } from './deferred';
-import { resolveCardReference } from './card-reference-resolver';
+import {
+  resolveCardReference,
+  type RealmResourceIdentifier,
+  type RealmIdentifier,
+} from './card-reference-resolver';
 import {
   collectDependentModuleCacheInvalidations,
   extractModuleDependencyKeys,
@@ -2621,7 +2625,7 @@ export class Realm {
     let doc: SingleFileMetaDocument = {
       data: {
         type: 'file-meta',
-        id: fileURL,
+        id: fileURL as RealmResourceIdentifier,
         attributes: {
           name,
           url: fileURL,
@@ -2635,7 +2639,7 @@ export class Realm {
         meta: {
           adoptsFrom: fileDefCodeRef,
           realmInfo,
-          realmURL: this.url,
+          realmURL: this.url as RealmIdentifier,
         },
         links: { self: fileURL },
       },
@@ -2711,14 +2715,14 @@ export class Realm {
     let doc: SingleFileMetaDocument = {
       data: {
         type: 'file-meta',
-        id: fileURL,
+        id: fileURL as RealmResourceIdentifier,
         attributes: {
           ...attributes,
         },
         meta: {
           adoptsFrom,
           realmInfo,
-          realmURL: this.url,
+          realmURL: this.url as RealmIdentifier,
           ...(fileEntry.resource?.meta?.queryFieldDefs
             ? { queryFieldDefs: fileEntry.resource.meta.queryFieldDefs }
             : {}),
@@ -3068,7 +3072,12 @@ export class Realm {
           realmURL: new URL(this.url),
         });
         visitModuleDeps(resource, (moduleURL, setModuleURL) => {
-          setModuleURL(resolveCardReference(moduleURL, instanceURL));
+          setModuleURL(
+            resolveCardReference(
+              moduleURL,
+              instanceURL,
+            ) as RealmResourceIdentifier,
+          );
         });
       }
       let fileSerialization: LooseSingleCardDocument | undefined;

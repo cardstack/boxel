@@ -9,6 +9,7 @@
  */
 
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 
 import { test } from './fixtures';
 import { expect } from '@playwright/test';
@@ -280,7 +281,7 @@ async function buildToolsForRealm(
       client,
       realm.realmServerURL.href,
       realm.realmURL.href,
-      { module: darkfactoryModule, name },
+      { module: rri(darkfactoryModule), name },
     );
     if (schema) {
       cardTypeSchemas.set(name, schema);
@@ -293,7 +294,10 @@ async function buildToolsForRealm(
     client,
     realm.realmServerURL.href,
     baseRealmUrl,
-    { module: 'https://cardstack.com/base/spec', name: 'Spec' },
+    {
+      module: rri('https://cardstack.com/base/spec'),
+      name: 'Spec',
+    },
   );
   if (specSchema) {
     cardTypeSchemas.set('Spec', specSchema);

@@ -8,6 +8,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   testRealmURL,
+  testRRI,
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -77,7 +78,7 @@ module('Integration | loading', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}card-with-broken-icon`,
+            module: testRRI('card-with-broken-icon'),
             name: 'CardWithBrokenIcon',
           },
         },

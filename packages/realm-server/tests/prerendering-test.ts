@@ -8,10 +8,7 @@ import type {
   FileExtractResponse,
   RenderRouteOptions,
 } from '@cardstack/runtime-common';
-import {
-  baseRealm,
-  type Realm as RuntimeRealm,
-} from '@cardstack/runtime-common';
+import type { Realm as RuntimeRealm } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index';
 import { PagePool } from '../prerender/page-pool';
 import { RenderRunner } from '../prerender/render-runner';
@@ -28,6 +25,9 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import {
   baseCardRef,
   trimExecutableExtension,
+  rri,
+  baseRealm,
+  baseRRI,
 } from '@cardstack/runtime-common';
 import {
   installDelayedRuntimeRealmSearchPatch,
@@ -252,7 +252,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: rri('./person'),
                     name: 'Person',
                   },
                 },
@@ -298,7 +298,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './person',
+                  module: rri('./person'),
                   name: 'Person',
                 },
               },
@@ -451,7 +451,7 @@ module(basename(__filename), function () {
         renderOptions: {
           fileExtract: true,
           fileDefCodeRef: {
-            module: `${realmURL}filedef-mismatch`,
+            module: rri(`${realmURL}filedef-mismatch`),
             name: 'FileDef',
           },
         },
@@ -548,7 +548,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -574,7 +574,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './no-icon',
+                      module: rri('./no-icon'),
                       name: 'NoIcon',
                     },
                   },
@@ -598,7 +598,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './bad-icon-import',
+                      module: rri('./bad-icon-import'),
                       name: 'BadIconImport',
                     },
                   },
@@ -609,7 +609,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './broken',
+                      module: rri('./broken'),
                       name: 'Broken',
                     },
                   },
@@ -631,7 +631,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './rejects',
+                      module: rri('./rejects'),
                       name: 'Rejects',
                     },
                   },
@@ -654,70 +654,8 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './rsvp-rejects',
+                      module: rri('./rsvp-rejects'),
                       name: 'RsvpRejects',
-                    },
-                  },
-                },
-              },
-              // Simulates the runloop-swallowed-exception class of render
-              // failure. The template renders fine, but a MutationObserver
-              // forces every Glimmer update of [data-prerender-status]
-              // back to "loading" — the same end-state produced when the
-              // real template throws and the runloop catches the
-              // exception without any JS event firing. The desync
-              // detector should recognise this as `model.status=ready`
-              // vs DOM=loading and write data-prerender-status="unusable"
-              // directly via Document API, evicting the page (Glimmer's
-              // failure to advance the binding IS the signal that the
-              // runloop is dead — half-rendered state can't be reused).
-              // The console.error call simulates Chrome's "Uncaught (in
-              // promise) ..." log so the captured additionalErrors has
-              // a stack-bearing entry the test can assert on.
-              'desync-repro.gts': `
-              import { registerDestructor } from '@ember/destroyable';
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
-              export class DesyncRepro extends CardDef {
-                static isolated = class extends Component<typeof this> {
-                  constructor(...args) {
-                    super(...args);
-                    // Install the observer synchronously: by the time this
-                    // child component constructor runs, the parent template
-                    // has already rendered the [data-prerender] container
-                    // into the DOM, so we don't need to defer the install.
-                    // We deliberately avoid setTimeout here because the
-                    // prerender timer stub blocks zero-delay callbacks
-                    // during prerender, which would skip the install.
-                    let container = document.querySelector('[data-prerender]');
-                    if (container) {
-                      let observer = new MutationObserver(() => {
-                        if (container.getAttribute('data-prerender-status') === 'ready') {
-                          container.setAttribute('data-prerender-status', 'loading');
-                        }
-                      });
-                      observer.observe(container, {
-                        attributes: true,
-                        attributeFilter: ['data-prerender-status'],
-                      });
-                      // Disconnect when this component tears down so the
-                      // observer doesn't persist into a subsequent render
-                      // if the page were reused (it shouldn't be, since the
-                      // detector marks the page 'unusable' and the pool
-                      // evicts — but belt and suspenders).
-                      registerDestructor(this, () => observer.disconnect());
-                    }
-                    console.error('desync-repro: simulated runloop-swallowed render exception');
-                  }
-                  <template>ok</template>
-                }
-              }
-            `,
-              'desync-repro.json': {
-                data: {
-                  meta: {
-                    adoptsFrom: {
-                      module: './desync-repro',
-                      name: 'DesyncRepro',
                     },
                   },
                 },
@@ -737,7 +675,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './throws',
+                      module: rri('./throws'),
                       name: 'Throws',
                     },
                   },
@@ -759,7 +697,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './console-error',
+                      module: rri('./console-error'),
                       name: 'ConsoleError',
                     },
                   },
@@ -781,7 +719,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './console-no-error',
+                      module: rri('./console-no-error'),
                       name: 'ConsoleNoError',
                     },
                   },
@@ -917,7 +855,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Directory',
                     },
                   },
@@ -932,7 +870,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -954,7 +892,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -976,7 +914,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -998,7 +936,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -1020,7 +958,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -1232,29 +1170,14 @@ module(basename(__filename), function () {
           Array.isArray(additionalErrors),
           'additionalErrors includes console errors',
         );
-        let consoleEntry = additionalErrors?.find(
-          (error: any) =>
-            typeof error?.message === 'string' &&
-            error.message.includes('console boom'),
-        ) as { message?: string; stack?: string } | undefined;
         assert.ok(
-          consoleEntry,
-          `console error message is captured, got: ${JSON.stringify(additionalErrors)}`,
+          additionalErrors?.some(
+            (error) =>
+              typeof error?.message === 'string' &&
+              error.message.includes('console boom'),
+          ),
+          'console error message is captured',
         );
-        // Puppeteer's CDP stackTrace() doesn't fire for every
-        // console.error call site (it depends on the originating runtime
-        // task), and when it does fire the frames point at the bundled
-        // chunk.js URLs (no source maps at capture time). What matters
-        // is that the captured frame list round-trips into the error
-        // doc as a non-empty stack string when present — that's the
-        // only lead a debugger has when the desync detector fires with
-        // no other signal.
-        if (typeof consoleEntry?.stack === 'string') {
-          assert.ok(
-            consoleEntry.stack.length > 0,
-            `captured console error stack is non-empty when present, got: ${consoleEntry.stack}`,
-          );
-        }
       });
 
       test('card prerender ignores console errors on success', async function (assert) {
@@ -1300,88 +1223,6 @@ module(basename(__filename), function () {
           result.pool.evicted,
           'unhandled rejection evicts prerender page to recover clean state',
         );
-      });
-
-      test('card prerender detects DOM desync when Glimmer binding never flips to ready', async function (assert) {
-        // The desync-repro fixture renders successfully but forces the
-        // [data-prerender-status] attribute back to "loading" every time
-        // Glimmer tries to flip it — the same end-state produced in
-        // production when a template throws and the runloop swallows the
-        // exception with no JS event firing. The desync detector should
-        // spot model.status=ready vs DOM=loading after Backburner's
-        // flush window and write the terminal state directly. The
-        // fixture also calls console.error; puppeteer's CDP capture
-        // preserves a stack trace on that console message so the error
-        // doc lands with a lead back at the offending module.
-        let cardURL = `${realmURL}desync-repro.json`;
-
-        let result = await prerenderCard(prerenderer, {
-          affinityType: 'realm',
-          affinityValue: realmURL,
-          realm: realmURL,
-          url: cardURL,
-          auth: auth(),
-        });
-
-        assert.ok(
-          result.response.error,
-          'desync detector produces an error doc',
-        );
-        assert.strictEqual(
-          result.response.error?.error.title,
-          'Render binding desync',
-          'error title names the desync class',
-        );
-        assert.strictEqual(
-          result.response.error?.error.status,
-          500,
-          'desync surfaces as 500',
-        );
-        assert.ok(
-          result.response.error?.error.message?.includes(
-            '[data-prerender-status]',
-          ),
-          `desync message names the DOM signal that never updated, got: ${result.response.error?.error.message}`,
-        );
-        // Desync IS the signal that the runloop stopped advancing this
-        // card's render — Glimmer's binding never landed. The page is
-        // carrying a half-finished render tree, so the pool must evict
-        // it; reusing would bleed the broken state into the next render.
-        assert.true(
-          result.pool.evicted,
-          'desync signals a dead runloop — page is evicted',
-        );
-        assert.false(
-          result.pool.timedOut,
-          'desync detector fires well before cardRenderTimeout',
-        );
-
-        // The desync detector carries very little context on its own —
-        // the real lead is the console.error(s) the page logged while
-        // the render was in-flight, which the render-runner appends to
-        // additionalErrors with their CDP-reported stack frames.
-        let additionalErrors =
-          result.response.error?.error.additionalErrors ?? [];
-        let consoleEntry = additionalErrors.find(
-          (error: any) =>
-            typeof error?.message === 'string' &&
-            error.message.includes('desync-repro'),
-        ) as { message?: string; stack?: string } | undefined;
-        assert.ok(
-          consoleEntry,
-          `console error message is captured in additionalErrors, got: ${JSON.stringify(additionalErrors)}`,
-        );
-        // Stack is best-effort: puppeteer's CDP stackTrace() doesn't
-        // fire reliably for every console.error site, and when it does
-        // the frames point at bundled chunk.js URLs (no source maps at
-        // capture time). Verify only that a non-empty stack round-trips
-        // into the error doc when one was attached.
-        if (typeof consoleEntry?.stack === 'string') {
-          assert.ok(
-            consoleEntry.stack.length > 0,
-            `captured console error stack is non-empty when present, got: ${consoleEntry.stack}`,
-          );
-        }
       });
 
       test('card prerender surfaces RSVP rejection without timing out', async function (assert) {
@@ -1973,7 +1814,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dep-reset-consumer',
+                      module: rri('./dep-reset-consumer'),
                       name: 'DepResetConsumer',
                     },
                   },
@@ -1990,7 +1831,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dep-reset-consumer',
+                      module: rri('./dep-reset-consumer'),
                       name: 'DepResetConsumer',
                     },
                   },
@@ -2003,7 +1844,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -2016,7 +1857,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -2232,7 +2073,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './prerendered-search-live',
+                      module: rri('./prerendered-search-live'),
                       name: 'LiveSearchHost',
                     },
                   },
@@ -2242,7 +2083,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './prerendered-search-live',
+                      module: rri('./prerendered-search-live'),
                       name: 'LiveSearchInner',
                     },
                   },
@@ -2255,7 +2096,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './prerendered-search-live',
+                      module: rri('./prerendered-search-live'),
                       name: 'LiveSearchResult',
                     },
                   },
@@ -2263,6 +2104,7 @@ module(basename(__filename), function () {
               },
               'live-file-search-card.gts': `
               import { CardDef, Component, field, contains, StringField, linksTo } from 'https://cardstack.com/base/card-api';
+              import { rri } from '@cardstack/runtime-common';
 
               export class LiveFileSearchInner extends CardDef {
                 static displayName = 'Live File Search Inner';
@@ -2279,7 +2121,7 @@ module(basename(__filename), function () {
                     return {
                       filter: {
                         on: {
-                          module: 'https://cardstack.com/base/card-api',
+                          module: rri('https://cardstack.com/base/card-api'),
                           name: 'FileDef',
                         },
                         eq: {
@@ -2349,7 +2191,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './live-file-search-card',
+                      module: rri('./live-file-search-card'),
                       name: 'LiveFileSearchHost',
                     },
                   },
@@ -2359,7 +2201,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './live-file-search-card',
+                      module: rri('./live-file-search-card'),
                       name: 'LiveFileSearchInner',
                     },
                   },
@@ -2557,7 +2399,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './article',
+                    module: rri('./article'),
                     name: 'Article',
                   },
                 },
@@ -2584,7 +2426,7 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: './website',
+                    module: rri('./website'),
                     name: 'Website',
                   },
                 },
@@ -2623,7 +2465,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './auth-proxy',
+                    module: rri('./auth-proxy'),
                     name: 'AuthProxy',
                   },
                 },
@@ -2813,7 +2655,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './person',
+              module: rri('./person'),
               name: 'Person',
             },
           },
@@ -2826,7 +2668,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './person',
+              module: rri('./person'),
               name: 'Person',
             },
           },
@@ -2863,7 +2705,7 @@ module(basename(__filename), function () {
           attributes: {},
           meta: {
             adoptsFrom: {
-              module: './query-directory',
+              module: rri('./query-directory'),
               name: 'QueryDirectory',
             },
           },
@@ -2895,7 +2737,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './query-directory-proxy',
+              module: rri('./query-directory-proxy'),
               name: 'QueryDirectoryProxy',
             },
           },
@@ -3008,7 +2850,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: rri('./person'),
                 name: 'Person',
               },
             },
@@ -3021,7 +2863,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: rri('./person'),
                 name: 'Person',
               },
             },
@@ -3058,7 +2900,7 @@ module(basename(__filename), function () {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: './query-directory',
+                module: rri('./query-directory'),
                 name: 'QueryDirectory',
               },
             },
@@ -3090,7 +2932,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './query-directory-proxy',
+                module: rri('./query-directory-proxy'),
                 name: 'QueryDirectoryProxy',
               },
             },
@@ -3240,7 +3082,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -3253,7 +3095,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -3277,7 +3119,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './broken-card',
+                      module: rri('./broken-card'),
                       name: 'Broken',
                     },
                   },
@@ -3393,7 +3235,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './cat',
+                      module: rri('./cat'),
                       name: 'Cat',
                     },
                   },
@@ -3411,7 +3253,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog',
+                      module: rri('./dog'),
                       name: 'Dog',
                     },
                   },
@@ -3432,7 +3274,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog-many',
+                      module: rri('./dog-many'),
                       name: 'DogMany',
                     },
                   },
@@ -3457,7 +3299,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog-profile',
+                      module: rri('./dog-profile'),
                       name: 'DogProfile',
                     },
                   },
@@ -3500,7 +3342,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './non-isolated-links-card',
+                      module: rri('./non-isolated-links-card'),
                       name: 'NonIsolatedLinks',
                     },
                   },
@@ -3517,7 +3359,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/brand-guide',
+                      module: rri('https://cardstack.com/base/brand-guide'),
                       name: 'default',
                     },
                   },
@@ -3535,7 +3377,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './cat',
+                      module: rri('./cat'),
                       name: 'Cat',
                     },
                   },
@@ -3555,7 +3397,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './cat',
+                      module: rri('./cat'),
                       name: 'Cat',
                     },
                   },
@@ -3585,7 +3427,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './intentional-error',
+                      module: rri('./intentional-error'),
                       name: 'IntentionalError',
                     },
                   },
@@ -3614,7 +3456,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './timer-error-card',
+                      module: rri('./timer-error-card'),
                       name: 'TimerError',
                     },
                   },
@@ -3645,7 +3487,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './timer-timeout-card',
+                      module: rri('./timer-timeout-card'),
                       name: 'TimerTimeout',
                     },
                   },
@@ -3676,7 +3518,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './unusable-error',
+                      module: rri('./unusable-error'),
                       name: 'UnusableError',
                     },
                   },
@@ -3710,7 +3552,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './embedded-error',
+                      module: rri('./embedded-error'),
                       name: 'EmbeddedError',
                     },
                   },
@@ -3740,7 +3582,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog',
+                      module: rri('./dog'),
                       name: 'Dog',
                     },
                   },
@@ -6536,7 +6378,10 @@ module(basename(__filename), function () {
           data: {
             attributes: { info: `Detail ${i}` },
             meta: {
-              adoptsFrom: { module: '../detail', name: 'Detail' },
+              adoptsFrom: {
+                module: rri('../detail'),
+                name: 'Detail',
+              },
             },
           },
         };
@@ -6590,7 +6435,10 @@ module(basename(__filename), function () {
               },
             },
             meta: {
-              adoptsFrom: { module: '../child-config', name: 'ChildConfig' },
+              adoptsFrom: {
+                module: rri('../child-config'),
+                name: 'ChildConfig',
+              },
             },
           },
         };
@@ -6607,7 +6455,10 @@ module(basename(__filename), function () {
         data: {
           relationships: childRelationships,
           meta: {
-            adoptsFrom: { module: './parent-card', name: 'ParentCard' },
+            adoptsFrom: {
+              module: rri('./parent-card'),
+              name: 'ParentCard',
+            },
           },
         },
       };
@@ -6748,7 +6599,10 @@ module(basename(__filename), function () {
               data: {
                 attributes: { name: 'Maple' },
                 meta: {
-                  adoptsFrom: { module: './person', name: 'Person' },
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
                 },
               },
             },
@@ -6847,7 +6701,7 @@ module(basename(__filename), function () {
           fileExtract: true,
           fileRender: true,
           fileDefCodeRef: {
-            module: `${baseRealm.url}json-file-def`,
+            module: baseRRI('json-file-def'),
             name: 'JsonFileDef',
           },
         },

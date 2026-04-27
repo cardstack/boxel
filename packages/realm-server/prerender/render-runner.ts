@@ -1422,8 +1422,8 @@ export class RenderRunner {
   // `    at <url>:<line>:<col>` frames) from whatever frames CDP
   // attached to the entry. Used for both console-error and
   // runtime-exception sources — the header line distinguishes them.
-  // For the desync-detector class of failure, this is often the only
-  // pointer back at the offending template / getter / helper.
+  // For the runtime-exception source this is the actionable lead
+  // back at the offending template / getter / helper.
   #formatConsoleErrorStack(entry: ConsoleErrorEntry): string | undefined {
     let frames = entry.stackFrames;
     if (!Array.isArray(frames) || frames.length === 0) {
