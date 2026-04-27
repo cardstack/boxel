@@ -32,7 +32,6 @@ import {
   GetCardCollectionContextName,
   Deferred,
   cardTypeDisplayName,
-  cardIdToURL,
   cardTypeIcon,
   codeRefWithAbsoluteURL,
   identifyCard,
@@ -48,6 +47,7 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
   type LocalPath,
+  type RealmResourceIdentifier,
   type ResolvedCodeRef,
   type Filter,
 } from '@cardstack/runtime-common';
@@ -155,7 +155,7 @@ export default class InteractSubmode extends Component {
   private createCard = async (
     stackIndex: number,
     ref: CodeRef,
-    relativeTo: URL | undefined,
+    relativeTo: RealmResourceIdentifier | URL | undefined,
     opts?: {
       realmURL?: URL;
       localDir?: LocalPath;
@@ -555,7 +555,6 @@ export default class InteractSubmode extends Component {
   private openSelectedSearchResultInStack = restartableTask(
     async (cardId: string) => {
       let waiterToken = waiter.beginAsync();
-      let url = cardIdToURL(cardId);
       try {
         let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
 
@@ -566,10 +565,10 @@ export default class InteractSubmode extends Component {
           SearchSheetTriggers.DropCardToLeftNeighborStackButton
         ) {
           let newItem = new StackItem({
-            id: url.href,
+            id: cardId,
             format: 'isolated',
             stackIndex: 0,
-            type: this.getStackItemType(url, url.href),
+            type: this.getStackItemType(cardId, cardId),
           });
           // it's important that we await the stack item readiness _before_
           // we mutate the stack, otherwise there are very odd visual artifacts
@@ -590,7 +589,7 @@ export default class InteractSubmode extends Component {
           searchSheetTrigger ===
           SearchSheetTriggers.DropCardToRightNeighborStackButton
         ) {
-          await this.viewCard(this.stacks.length, url, 'isolated');
+          await this.viewCard(this.stacks.length, cardId, 'isolated');
         } else {
           // In case, that the search was accessed directly without clicking right and left buttons,
           // the rightmost stack will be REPLACED by the selection
@@ -602,17 +601,17 @@ export default class InteractSubmode extends Component {
             numberOfStacks === 0 ||
             this.operatorModeStateService.stackIsEmpty(stackIndex)
           ) {
-            await this.viewCard(0, url, 'isolated');
+            await this.viewCard(0, cardId, 'isolated');
           } else {
             stack = this.operatorModeStateService.rightMostStack();
             if (stack) {
               let bottomMostItem = stack[0];
               if (bottomMostItem) {
                 let stackItem = new StackItem({
-                  id: url.href,
+                  id: cardId,
                   format: 'isolated',
                   stackIndex,
-                  type: this.getStackItemType(url, url.href),
+                  type: this.getStackItemType(cardId, cardId),
                 });
                 // await stackItem.ready();
                 this.operatorModeStateService.clearStackAndAdd(
@@ -755,7 +754,7 @@ export default class InteractSubmode extends Component {
     }
 
     // assumption: take actions in the right-most stack
-    await this.createCard(this.rightMostStackIndex, spec.ref, cardIdToURL(specId), {
+    await this.createCard(this.rightMostStackIndex, spec.ref, specId, {
       realmURL: this.operatorModeStateService.getWritableRealmURL(),
     });
   });

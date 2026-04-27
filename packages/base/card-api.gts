@@ -92,6 +92,7 @@ import {
   type RuntimeDependencyTrackingContext,
   resolveCardReference,
   cardIdToURL,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -2339,7 +2340,7 @@ export type CreateCardFn = (
 ) => Promise<string | undefined>;
 
 export type ViewCardFn = (
-  cardOrURL: CardDef | URL,
+  cardOrURL: CardDef | URL | RealmResourceIdentifier,
   format?: Format,
   opts?: {
     type?: 'card' | 'file';

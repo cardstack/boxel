@@ -18,7 +18,6 @@ import type {
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import {
-  cardIdToURL,
   cardTypeIcon,
   identifyCard,
   isRealmIndexCard,
@@ -206,7 +205,7 @@ export function getDefaultCardMenuItems(
       action: async () => {
         await new SwitchSubmodeCommand(params.commandContext).execute({
           submode: 'code',
-          codePath: cardId ? cardIdToURL(cardId).href : undefined,
+          codePath: cardId,
         });
       },
       icon: CodeIcon,

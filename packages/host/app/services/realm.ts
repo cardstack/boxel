@@ -26,6 +26,7 @@ import type {
   Permissions,
   JWTPayload,
   RealmPermissions,
+  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import {
   Deferred,
@@ -935,6 +936,16 @@ export default class RealmService extends Service {
     for (const realm of this.realms.keys()) {
       let realmURL = new URL(realm);
       if (new RealmPaths(realmURL).inRealm(url)) {
+        return new URL(realmURL);
+      }
+    }
+    return undefined;
+  }
+
+  realmOfRRI(rri: RealmResourceIdentifier): URL | undefined {
+    for (const realm of this.realms.keys()) {
+      let realmURL = new URL(realm);
+      if (new RealmPaths(realmURL).inRealmRRI(rri)) {
         return new URL(realmURL);
       }
     }

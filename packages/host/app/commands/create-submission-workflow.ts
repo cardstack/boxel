@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { cardIdToURL, isCardInstance, rri } from '@cardstack/runtime-common';
+import { isCardInstance, rri } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -60,7 +60,7 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
 
     // Save the workflow card in the user's realm (where the listing lives)
     let workflowRealm =
-      this.realm.realmOfURL(cardIdToURL(listingId))?.href ?? realm;
+      this.realm.realmOfRRI(listingId)?.href ?? realm;
 
     // Step 1: Create the SubmissionWorkflowCard with listing linked
     let catalogRealm = this.catalogRealm;

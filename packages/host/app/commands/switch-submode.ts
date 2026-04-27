@@ -1,5 +1,7 @@
 import { service } from '@ember/service';
 
+import { cardIdToURL } from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import { Submodes } from '../components/submode-switcher';
@@ -67,7 +69,7 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
               ? lastId
               : lastId + '.json'
             : null);
-        let codeUrl = codePath ? new URL(codePath) : null;
+        let codeUrl = codePath ? cardIdToURL(codePath) : null;
         let currentSubmode = this.operatorModeStateService.state.submode;
         let finalCodeUrl = codeUrl;
         if (

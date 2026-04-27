@@ -163,7 +163,12 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   private viewCard: ViewCardFn = (cardOrURL) => {
-    let cardId = cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id;
+    let cardId =
+      typeof cardOrURL === 'string'
+        ? cardOrURL
+        : cardOrURL instanceof URL
+          ? cardOrURL.href
+          : cardOrURL.id;
     if (!cardId) {
       return;
     }

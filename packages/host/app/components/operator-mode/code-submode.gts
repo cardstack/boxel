@@ -31,9 +31,9 @@ import { File, Upload } from '@cardstack/boxel-ui/icons';
 
 import type { CodeRef } from '@cardstack/runtime-common';
 import {
-  cardIdToURL,
   isCardDocumentString,
   isCardErrorJSONAPI,
+  rri,
   RealmPaths,
   PermissionsContextName,
   GetCardContextName,
@@ -631,8 +631,8 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action private async openSearchResultInEditor(cardId: string) {
     let codePath = cardId.endsWith('.json')
-      ? cardIdToURL(cardId)
-      : cardIdToURL(cardId + '.json');
+      ? rri(cardId)
+      : rri(`${cardId}.json`);
     await this.operatorModeStateService.updateCodePath(codePath);
   }
 

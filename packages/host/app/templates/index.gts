@@ -121,7 +121,12 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
   }
 
   private viewCard: ViewCardFn = (cardOrURL) => {
-    let cardId = cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id;
+    let cardId =
+      typeof cardOrURL === 'string'
+        ? cardOrURL
+        : cardOrURL instanceof URL
+          ? cardOrURL.href
+          : cardOrURL.id;
     if (!cardId) {
       return;
     }

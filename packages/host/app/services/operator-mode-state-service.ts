@@ -11,9 +11,13 @@ import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
-import type { CodeRef } from '@cardstack/runtime-common';
+import type {
+  CodeRef,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import {
   cardIdToURL,
+  rri,
   RealmPaths,
   type LocalPath,
   isResolvedCodeRef,
@@ -682,7 +686,7 @@ export default class OperatorModeStateService extends Service {
     if (codeRef && isResolvedCodeRef(codeRef)) {
       //(possibly) in a different module
       this._state.codeSelection = codeRef.name;
-      await this.updateCodePath(cardIdToURL(codeRef.module));
+      await this.updateCodePath(codeRef.module);
     } else if (
       codeRef &&
       'type' in codeRef &&
@@ -692,7 +696,7 @@ export default class OperatorModeStateService extends Service {
     ) {
       this._state.fieldSelection = codeRef.field;
       this._state.codeSelection = codeRef.card.name;
-      await this.updateCodePath(cardIdToURL(codeRef.card.module));
+      await this.updateCodePath(codeRef.card.module);
     } else if (localName && onLocalSelection) {
       //in the same module
       this._state.codeSelection = localName;
@@ -731,10 +735,12 @@ export default class OperatorModeStateService extends Service {
   };
 
   async updateCodePath(
-    codePath: URL | null,
+    codePath: RealmResourceIdentifier | URL | null,
     moduleInspectorView?: ModuleInspectorView,
   ) {
-    let canonicalCodePath = await this.determineCanonicalCodePath(codePath);
+    let codePathURL =
+      typeof codePath === 'string' ? cardIdToURL(codePath) : codePath;
+    let canonicalCodePath = await this.determineCanonicalCodePath(codePathURL);
     this._state.codePath = canonicalCodePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
@@ -1255,7 +1261,7 @@ export default class OperatorModeStateService extends Service {
     if (!realmUrl.endsWith('/')) {
       realmUrl = realmUrl + '/';
     }
-    let id = `${realmUrl}index`;
+    let id = rri(`${realmUrl}index`);
     let stackItem = new StackItem({
       id,
       format: 'isolated',
@@ -1271,7 +1277,7 @@ export default class OperatorModeStateService extends Service {
     await this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
-        : cardIdToURL(id),
+        : id,
     );
     this.updateSubmode(Submodes.Interact);
 

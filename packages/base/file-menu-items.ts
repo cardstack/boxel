@@ -2,7 +2,6 @@ import {
   copyCardURLToClipboard,
   type MenuItemOptions,
 } from '@cardstack/boxel-ui/helpers';
-import { cardIdToURL } from '@cardstack/runtime-common';
 
 import ArrowLeft from '@cardstack/boxel-icons/arrow-left';
 import CodeIcon from '@cardstack/boxel-icons/code';
@@ -81,9 +80,7 @@ export function getDefaultFileMenuItems(
       action: async () => {
         await new SwitchSubmodeCommand(params.commandContext).execute({
           submode: 'code',
-          codePath: fileDefInstanceId
-            ? cardIdToURL(fileDefInstanceId).href
-            : undefined,
+          codePath: fileDefInstanceId,
         });
       },
       icon: CodeIcon,

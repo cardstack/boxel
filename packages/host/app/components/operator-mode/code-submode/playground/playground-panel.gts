@@ -23,10 +23,10 @@ import { Folder, IconPlusThin } from '@cardstack/boxel-ui/icons';
 
 import {
   CardContextName,
-  cardIdToURL,
   cardTypeDisplayName,
   getMenuItems,
   isSpecCard,
+  rri,
   type Permissions,
   PermissionsContextName,
   type RealmIdentifier,
@@ -433,8 +433,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       return undefined;
     }
     try {
-      let cardURL = cardIdToURL(selectedCardId);
-      return this.realm.realmOfURL(cardURL)?.href;
+      return this.realm.realmOfRRI(rri(selectedCardId))?.href;
     } catch {
       return undefined;
     }
