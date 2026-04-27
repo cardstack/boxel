@@ -63,8 +63,15 @@ const RETRYABLE_ERROR_CODES = new Set([
 ]);
 const RETRYABLE_MESSAGE_PATTERNS: readonly RegExp[] = [
   /Loading (?:CSS )?chunk \S+ failed/i,
+  // Specifically the dynamic-import failure message — a bare
+  // `/Failed to fetch/i` was tempting here but matches too much: any
+  // resolver that throws "Failed to fetch <whatever>" for a non-
+  // chunk reason (deliberate `fetch()` calls inside the resolver,
+  // for instance) would get retried as if it were a chunk-load
+  // transient. The dynamic-import variant is what `import()`
+  // actually throws on a chunk-fetch failure, and that's the case
+  // we want to retry.
   /Failed to fetch dynamically imported module/i,
-  /Failed to fetch/i,
   /NetworkError when attempting to fetch resource/i,
   /ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN/,
   /ERR_(?:CONNECTION_RESET|CONNECTION_REFUSED|NETWORK_CHANGED|INTERNET_DISCONNECTED|EMPTY_RESPONSE|TIMED_OUT)/,
@@ -92,7 +99,8 @@ export function isRetryableShimResolveError(error: unknown): boolean {
 
 export interface ShimRetryDeps {
   // Pluggable for tests so we can assert backoff behavior without
-  // burning real wallclock time. Production passes `setTimeout`.
+  // burning real wallclock time. When omitted, the retry path uses
+  // `defaultDelay` (a thin `setTimeout`-based sleep) below.
   delay?: (ms: number) => Promise<void>;
   // Override the default backoff schedule. Tests can pass `[]` to
   // collapse retries into a single attempt.
@@ -106,6 +114,15 @@ export interface ShimRetryDeps {
 const defaultDelay = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+// Minimal logging surface used by `withResolveRetry`. Narrower than
+// `ReturnType<typeof logger>` so tests can pass a no-op stub without
+// having to construct a full `loglevel` instance — the production
+// code only ever calls `warn` and `debug`.
+export interface ShimRetryLogger {
+  warn: (...args: unknown[]) => void;
+  debug: (...args: unknown[]) => void;
+}
+
 // Wraps a shim resolver with retry-on-transient-failure + bounded
 // exponential backoff. Returns a function with the same signature as
 // the input, so `shimAsyncModule` can swap it in transparently.
@@ -117,7 +134,7 @@ const defaultDelay = (ms: number) =>
 // burying it under "tried 3 times".
 export function withResolveRetry<TArgs extends unknown[], TResult>(
   label: string,
-  log: ReturnType<typeof logger>,
+  log: ShimRetryLogger,
   fn: (...args: TArgs) => Promise<TResult>,
   deps: ShimRetryDeps = {},
 ): (...args: TArgs) => Promise<TResult> {

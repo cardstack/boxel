@@ -4,10 +4,16 @@ import {
   PACKAGES_FAKE_ORIGIN,
   isRetryableShimResolveError,
   withResolveRetry,
+  type ShimRetryLogger,
 } from '../package-shim-handler';
-import { logger as makeLogger } from '../log';
 
-let testLog = makeLogger('shim-handler-test');
+// No-op logger so the retry-focused tests don't print warn/debug
+// noise to CI output. The realm-server harness defaults to
+// `LOG_LEVELS='*=info'`, so a real `loglevel` instance would emit a
+// warn line on every retry — these tests deliberately exercise the
+// retry path many times. The shape matches the `ShimRetryLogger`
+// interface (only warn/debug are called from `withResolveRetry`).
+let testLog: ShimRetryLogger = { warn: () => {}, debug: () => {} };
 
 // Sleep stub that records each delay synchronously instead of
 // burning real wallclock time. Tests inject this via the
