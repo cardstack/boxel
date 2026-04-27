@@ -40,7 +40,14 @@ jobs:
       # configure-aws-credentials step below will fail with "InvalidIdentityToken"
       # or similar — apply the infra config first.
       AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
-      GRAFANA_SERVER: https://grafana-staging.stack.cards
+      # Server URL deliberately NOT set here. The committed
+      # packages/observability/grafanactl/config.yaml is the single source of
+      # truth for per-context server URLs (rendered to a tempfile by
+      # scripts/render-config.sh at apply time). Setting GRAFANA_SERVER as
+      # workflow env would silently override the config — if config.yaml's
+      # staging URL ever changes (e.g., Phase 6 cutover dashboard-staging.*
+      # rename), the workflow would still hit the old hostname.
+      #
       # Grafana 12.4.3 is the production pin; grafanactl version should be
       # current enough to talk to it. Bump as needed.
       GRAFANACTL_VERSION: "0.7.0"
@@ -55,11 +62,24 @@ jobs:
         # for grafanactl. Pinned via $GRAFANACTL_VERSION above.
         # If the URL pattern changes upstream, update the curl and the
         # README's install hint together.
+        #
+        # The release artifact's SHA-256 is verified against the published
+        # checksums.txt before installing — guards against a tampered
+        # artifact in transit or on the GitHub release CDN.
         run: |
-          curl -fsSL \
-            "https://github.com/grafana/grafanactl/releases/download/v${GRAFANACTL_VERSION}/grafanactl_${GRAFANACTL_VERSION}_linux_amd64.tar.gz" \
-            -o /tmp/grafanactl.tar.gz
-          sudo tar -xzf /tmp/grafanactl.tar.gz -C /usr/local/bin grafanactl
+          set -euo pipefail
+          TARBALL="grafanactl_${GRAFANACTL_VERSION}_linux_amd64.tar.gz"
+          RELEASE_URL="https://github.com/grafana/grafanactl/releases/download/v${GRAFANACTL_VERSION}"
+          TMPDIR="$(mktemp -d)"
+          trap 'rm -rf "$TMPDIR"' EXIT
+
+          curl -fsSL "${RELEASE_URL}/${TARBALL}"       -o "${TMPDIR}/${TARBALL}"
+          curl -fsSL "${RELEASE_URL}/checksums.txt"    -o "${TMPDIR}/checksums.txt"
+
+          ( cd "$TMPDIR" && grep " ${TARBALL}\$" checksums.txt | sha256sum -c - )
+
+          tar -xzf "${TMPDIR}/${TARBALL}" -C "$TMPDIR" grafanactl
+          sudo install -m 0755 "${TMPDIR}/grafanactl" /usr/local/bin/grafanactl
           grafanactl --version
 
       - name: Configure AWS credentials
@@ -82,7 +102,6 @@ jobs:
           # downstream tool echoes it. Then export to subsequent steps.
           echo "::add-mask::$GRAFANA_TOKEN"
           echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
-          echo "GRAFANA_SERVER=$GRAFANA_SERVER" >> "$GITHUB_ENV"
 
       - name: Apply
         # apply.sh sources its own grafanactl-env.sh helper, which for
@@ -99,6 +118,6 @@ jobs:
         run: |
           echo "## Observability apply" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Target: \`$GRAFANA_SERVER\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Target: staging (server URL from packages/observability/grafanactl/config.yaml)" >> "$GITHUB_STEP_SUMMARY"
           echo "- grafanactl: \`$GRAFANACTL_VERSION\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Status: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
