@@ -813,7 +813,7 @@ jobs:
       - name: Start dev stack (icons + host-dist + base realm + prerenderer)
         run: |
           mise run test-services:matrix | tee -a /tmp/server.log &
-          timeout 600 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf http://localhost:4201/base/ > /dev/null; do sleep 2; done'
+          timeout 600 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf http://localhost:4201/base/_readiness-check > /dev/null; do sleep 2; done'
       - name: Run integration tests
         run: pnpm test:integration
         working-directory: packages/boxel-cli
