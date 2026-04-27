@@ -79,6 +79,61 @@ describe('boxel profile add (non-interactive)', () => {
     });
   });
 
+  it('exits 1 when --matrix-url is not a parseable URL', () => {
+    try {
+      run([
+        '-u',
+        '@alice:my.server',
+        '-m',
+        'matrix-url',
+        '-r',
+        'https://realms.my.server/',
+      ]);
+      throw new Error('expected command to exit non-zero');
+    } catch (err) {
+      const e = err as { status?: number; stderr?: string };
+      expect(e.status).toBe(1);
+      expect(e.stderr).toMatch(/--matrix-url "matrix-url" is not a valid URL/);
+    }
+  });
+
+  it('exits 1 when --realm-server-url uses a non-http(s) scheme', () => {
+    try {
+      run([
+        '-u',
+        '@alice:my.server',
+        '-m',
+        'https://matrix.my.server',
+        '-r',
+        'file:///etc/passwd',
+      ]);
+      throw new Error('expected command to exit non-zero');
+    } catch (err) {
+      const e = err as { status?: number; stderr?: string };
+      expect(e.status).toBe(1);
+      expect(e.stderr).toMatch(
+        /--realm-server-url "file:\/\/\/etc\/passwd" must use http:\/\/ or https:\/\//,
+      );
+    }
+  });
+
+  it('trims whitespace from URL flag values', () => {
+    run([
+      '-u',
+      '@alice:my.server',
+      '-m',
+      '  https://matrix.my.server  ',
+      '-r',
+      '  https://realms.my.server/  ',
+    ]);
+
+    const config = readProfiles();
+    expect(config.profiles['@alice:my.server']).toMatchObject({
+      matrixUrl: 'https://matrix.my.server',
+      realmServerUrl: 'https://realms.my.server/',
+    });
+  });
+
   it('exits 1 with a clear error for a non-standard domain without URL flags', () => {
     try {
       run(['-u', '@alice:my.server']);

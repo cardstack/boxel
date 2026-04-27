@@ -136,6 +136,31 @@ const MENU_ENVIRONMENTS: Record<
   },
 };
 
+// Validate and normalize a Matrix or realm-server URL provided by the user
+// (via --matrix-url / --realm-server-url or the interactive Custom prompt).
+// Returns the trimmed input on success; exits 1 with a clear message
+// otherwise. Without this, downstream code (fetch, realm auth, etc.) would
+// throw on invalid input far away from where the value was entered.
+function validateUrl(input: string, label: string): string {
+  const trimmed = input.trim();
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    console.error(
+      `${FG_RED}Error:${RESET} ${label} "${input}" is not a valid URL.`,
+    );
+    process.exit(1);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    console.error(
+      `${FG_RED}Error:${RESET} ${label} "${input}" must use http:// or https://.`,
+    );
+    process.exit(1);
+  }
+  return trimmed;
+}
+
 // Matches scripts/env-slug.sh: lowercase, "/" -> "-", strip chars outside
 // [a-z0-9-], collapse runs of "-", trim leading/trailing "-".
 function computeEnvSlug(name: string): string {
@@ -181,6 +206,12 @@ export async function profileCommand(
     case 'add': {
       const password = options?.password || process.env.BOXEL_PASSWORD;
       if (options?.user && password) {
+        const matrixUrl = options.matrixUrl
+          ? validateUrl(options.matrixUrl, '--matrix-url')
+          : undefined;
+        const realmServerUrl = options.realmServerUrl
+          ? validateUrl(options.realmServerUrl, '--realm-server-url')
+          : undefined;
         // BOXEL_ENVIRONMENT only fills in URLs when (a) at least one flag is
         // missing, AND (b) the Matrix ID's domain isn't a known standard
         // (stack.cards / boxel.ai / localhost). Otherwise an unrelated
@@ -191,7 +222,7 @@ export async function profileCommand(
         const matrixIdEnv = getEnvironmentFromMatrixId(options.user);
         const isStandardDomain = matrixIdEnv !== 'unknown';
         const needsEnvDefaults =
-          !isStandardDomain && (!options.matrixUrl || !options.realmServerUrl);
+          !isStandardDomain && (!matrixUrl || !realmServerUrl);
         const envDefaults = needsEnvDefaults ? resolveBoxelEnvironment() : null;
         if (envDefaults) {
           console.log(
@@ -203,8 +234,8 @@ export async function profileCommand(
           options.user,
           password,
           options.name,
-          options.matrixUrl ?? envDefaults?.matrixUrl,
-          options.realmServerUrl ?? envDefaults?.realmServerUrl,
+          matrixUrl ?? envDefaults?.matrixUrl,
+          realmServerUrl ?? envDefaults?.realmServerUrl,
         );
       } else {
         await addProfile(manager, resolveBoxelEnvironment());
@@ -307,22 +338,25 @@ async function promptEnvironmentMenu(): Promise<{
   const envChoice = await prompt('\nChoice [1/2/3/4]: ');
 
   if (envChoice === '4') {
-    const matrixUrl = await prompt('Matrix server URL: ');
-    if (!matrixUrl) {
+    const matrixUrlInput = await prompt('Matrix server URL: ');
+    if (!matrixUrlInput) {
       console.error(`${FG_RED}Error:${RESET} Matrix server URL is required.`);
       process.exit(1);
     }
-    const realmServerUrl = await prompt('Realm server URL: ');
-    if (!realmServerUrl) {
+    const matrixUrl = validateUrl(matrixUrlInput, 'Matrix server URL');
+    const realmServerUrlInput = await prompt('Realm server URL: ');
+    if (!realmServerUrlInput) {
       console.error(`${FG_RED}Error:${RESET} Realm server URL is required.`);
       process.exit(1);
     }
-    let defaultDomain = 'custom';
-    try {
-      defaultDomain = new URL(matrixUrl).hostname || defaultDomain;
-    } catch {
-      // fall back to 'custom'
-    }
+    const realmServerUrl = validateUrl(
+      realmServerUrlInput,
+      'Realm server URL',
+    );
+    // matrixUrl is already validated by validateUrl above, so new URL won't
+    // throw — the hostname fallback is just for the unlikely edge case of
+    // a parseable URL with empty hostname (e.g. "http:///path").
+    const defaultDomain = new URL(matrixUrl).hostname || 'custom';
     const domainInput = await prompt(
       `Domain for Matrix ID [${defaultDomain}]: `,
     );
