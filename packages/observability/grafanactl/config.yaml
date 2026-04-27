@@ -1,18 +1,36 @@
 # grafanactl context configuration for the observability package.
 #
-# Currently defines only the `local` context. CS-10913 adds `staging` and
-# `production` contexts (with tokens sourced from SSM, never committed).
-#
-# Used by ./scripts/apply.sh via the --config flag, so this file (rather than
-# the dev's per-user grafanactl config) is the source of truth for shared
+# Used by ./scripts/{apply,pull}.sh via the --config flag, so this file (rather
+# than the dev's per-user grafanactl config) is the source of truth for shared
 # context definitions.
+#
+# Tokens are NEVER stored here. For staging and production, ./scripts/grafanactl-env.sh
+# sources the token from SSM /<env>/grafana/grafanactl_token and exports it as
+# GRAFANA_TOKEN, which grafanactl picks up at runtime.
 
 contexts:
   local:
     grafana:
       server: http://localhost:3001
       org-id: 1
+      # Local docker-compose Grafana uses admin/admin basic auth.
       user: admin
       password: admin
+
+  staging:
+    grafana:
+      server: https://grafana-staging.stack.cards
+      org-id: 1
+      # Token is sourced from SSM at runtime — see scripts/grafanactl-env.sh.
+      # Hostname is the build-out placeholder; rename to dashboard-staging.stack.cards
+      # at Phase 6 cutover (atomic with the AMG DNS handover).
+
+  production:
+    grafana:
+      server: https://grafana.boxel.ai
+      org-id: 1
+      # Token is sourced from SSM at runtime — see scripts/grafanactl-env.sh.
+      # Hostname is the build-out placeholder; rename to dashboard.boxel.ai at
+      # Phase 6 cutover.
 
 current-context: local
