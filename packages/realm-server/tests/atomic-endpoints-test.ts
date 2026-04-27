@@ -6,6 +6,7 @@ import type { DirResult } from 'tmp';
 import type { Realm, RealmAdapter } from '@cardstack/runtime-common';
 import {
   type LooseSingleCardDocument,
+  readFileAsText,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import {
@@ -16,6 +17,41 @@ import {
   withRealmPath,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+
+type DiskSnapshot =
+  | { kind: 'present'; lastModified: number; content: string }
+  | { kind: 'absent' }
+  | { kind: 'error'; message: string };
+
+async function readDiskSnapshot(
+  adapter: RealmAdapter,
+  path: string,
+): Promise<DiskSnapshot> {
+  try {
+    let file = await readFileAsText(path, (p) => adapter.openFile(p));
+    if (!file) {
+      return { kind: 'absent' };
+    }
+    return {
+      kind: 'present',
+      lastModified: file.lastModified,
+      content: file.content,
+    };
+  } catch (e) {
+    return { kind: 'error', message: (e as Error).message };
+  }
+}
+
+function formatDiskSnapshot(snapshot: DiskSnapshot): string {
+  switch (snapshot.kind) {
+    case 'absent':
+      return '<absent>';
+    case 'error':
+      return `<error: ${snapshot.message}>`;
+    case 'present':
+      return `lastModified=${snapshot.lastModified} content=${JSON.stringify(snapshot.content)}`;
+  }
+}
 
 module(basename(__filename), function () {
   module(
@@ -841,7 +877,7 @@ module(basename(__filename), function () {
             ],
           };
 
-          await request
+          let addResponse = await request
             .post('/_atomic')
             .set('Accept', SupportedMimeType.JSONAPI)
             .set(
@@ -850,6 +886,14 @@ module(basename(__filename), function () {
             )
             .send(JSON.stringify(addDoc))
             .expect(201);
+
+          // Snapshot the on-disk serialized form right after the add so
+          // the timeout message can show whether the update actually
+          // changed the file or not.
+          let postAddDisk = await readDiskSnapshot(
+            testRealmAdapter,
+            'update-person.json',
+          );
 
           let updateDoc = {
             'atomic:operations': [
@@ -884,6 +928,15 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 201);
           assert.strictEqual(response.body['atomic:results'].length, 1);
 
+          // Snapshot the on-disk serialized form right after the update.
+          // Together with postAddDisk this distinguishes "write was
+          // skipped (content-equality false positive)" from "write
+          // happened but reindex didn't pick it up".
+          let postUpdateDisk = await readDiskSnapshot(
+            testRealmAdapter,
+            'update-person.json',
+          );
+
           // The atomic POST awaits indexing, so by 201 boxel_index should
           // be updated. The remaining CI flake is read-path readiness —
           // most often a slow first-instance prerender / module-cache
@@ -906,7 +959,15 @@ module(basename(__filename), function () {
               timeout: 30_000,
               interval: 100,
               timeoutMessage: () =>
-                `updated firstName was not visible via /update-person (last GET status=${lastStatus}, last firstName=${JSON.stringify(updatedCard?.data?.attributes?.firstName)})`,
+                [
+                  'updated firstName was not visible via /update-person',
+                  `last GET status=${lastStatus}`,
+                  `last firstName=${JSON.stringify(updatedCard?.data?.attributes?.firstName)}`,
+                  `add 201 body=${JSON.stringify(addResponse.body)}`,
+                  `update 201 body=${JSON.stringify(response.body)}`,
+                  `disk after add=${formatDiskSnapshot(postAddDisk)}`,
+                  `disk after update=${formatDiskSnapshot(postUpdateDisk)}`,
+                ].join(' | '),
             },
           );
           assert.strictEqual(
