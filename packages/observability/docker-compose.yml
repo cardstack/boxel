@@ -36,7 +36,10 @@ services:
       # (boxel-pg on 5435) for the local postgres data source.
       - "host.docker.internal:host-gateway"
     depends_on:
-      - loki
+      # Wait for Loki to actually be ready, not just started — otherwise
+      # Grafana provisioning may fail to validate the Loki data source.
+      loki:
+        condition: service_healthy
     restart: unless-stopped
 
   loki:
@@ -45,7 +48,18 @@ services:
       - "3100:3100"
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
+      # In grafana/loki:3.4.4 the bundled local-config.yaml uses /loki as
+      # `path_prefix` (chunks_directory: /loki/chunks, etc.), so the named
+      # volume mounts there to persist the WAL / chunks / TSDB across
+      # container recreates. Verified locally with a push → down/up →
+      # query round-trip.
       - loki_data:/loki
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3100/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
     restart: unless-stopped
 
   # Optional: log scraper (Alloy). Commented out by default — local dev
