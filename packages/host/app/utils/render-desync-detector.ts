@@ -301,12 +301,23 @@ function isDesynced(ctx: DesyncDetectorContext): boolean {
   // Race guard: the detector schedule fires async, so by the time
   // this check runs the prerender server may have moved on to a new
   // render that's reusing the same [data-prerender] container. The
-  // closure-captured `ctx.cardId` was the render that scheduled this
-  // check; if the live container's data-prerender-id no longer
-  // matches, we're looking at a different render and our
-  // model-vs-DOM comparison is meaningless. Skip.
+  // closure-captured `ctx.cardId` and `ctx.nonce` identify the render
+  // that scheduled this check.
+  //
+  // Card-id mismatch catches the cross-card reuse case (the container
+  // is a singleton in the host's render route — successive renders for
+  // different cards rewrite its dataset). Nonce mismatch catches the
+  // same-card-next-attempt case: the prerender server can issue
+  // multiple render attempts for the same cardId (e.g. retry-on-error
+  // path) and `ctx.nonce` is the per-attempt token written by the
+  // route. An in-flight check from attempt N polling against attempt
+  // N+1's still-`loading` DOM would otherwise misclassify a healthy
+  // in-progress render as a desync and write `unusable` for the wrong
+  // attempt.
   let liveCardId = container.getAttribute('data-prerender-id');
   if (liveCardId && liveCardId !== ctx.cardId) return false;
+  let liveNonce = container.getAttribute('data-prerender-nonce');
+  if (liveNonce && liveNonce !== ctx.nonce) return false;
   return container.getAttribute('data-prerender-status') === 'loading';
 }
 
