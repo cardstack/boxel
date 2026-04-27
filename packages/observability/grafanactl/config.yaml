@@ -1,5 +1,18 @@
-# Placeholder — filled in by CS-10913.
+# grafanactl context configuration for the observability package.
 #
-# Defines `local`, `staging`, and `production` contexts. Tokens are read from
-# the GRAFANA_TOKEN env var (sourced from SSM at /<env>/grafana/grafanactl_token
-# for staging/production); never committed.
+# Currently defines only the `local` context. CS-10913 adds `staging` and
+# `production` contexts (with tokens sourced from SSM, never committed).
+#
+# Used by ./scripts/apply.sh via the --config flag, so this file (rather than
+# the dev's per-user grafanactl config) is the source of truth for shared
+# context definitions.
+
+contexts:
+  local:
+    grafana:
+      server: http://localhost:3001
+      org-id: 1
+      user: admin
+      password: admin
+
+current-context: local

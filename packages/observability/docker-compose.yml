@@ -1,6 +1,55 @@
-# Placeholder — filled in by CS-10912.
+# Local Grafana for previewing dashboard changes before they hit staging.
 #
-# When complete, this runs a local Grafana 12.x (matching the production pin in
-# cardstack/infra:configs/grafana/) with dashboard/datasource provisioning
-# mounted from ./grafanactl/resources/. A Loki + Alloy sidecar is added in
-# Phase 2.5 (CS-10918+).
+# Run from this directory:   docker compose up -d grafana
+# Login:                     http://localhost:3001  (admin / admin)
+# Stop:                      docker compose down
+#
+# Port 3001 avoids conflicts with traefik (80, 4230), the realm-server dev
+# stack (4201/4210/4212/4213/4221/4222/4230/4231/4232), and the host's
+# common port 3000. Image pin matches the production pin in
+# cardstack/infra:configs/grafana/.
+#
+# Provisioning is mounted read-only from ./grafanactl/resources/. Those
+# directories are empty until Phase 3 (CS-10922) imports the AMG dashboards.
+# AMP and CloudWatch panels will show "no data" locally — no AWS creds.
+
+services:
+  grafana:
+    image: grafana/grafana:12.4.3
+    container_name: boxel-observability-grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./grafanactl/resources/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafanactl/resources/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    extra_hosts:
+      # Lets the Grafana container reach the host's Postgres
+      # (boxel-pg on 5435) for the local postgres data source.
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # ─── Phase 2.5 placeholder (CS-10918+) ──────────────────────────────────
+  # Loki + Alloy will run alongside Grafana to provide a local LogQL data
+  # source so dashboard log panels behave the same locally and in prod.
+  # Uncomment once CS-10918 lands the loki.yaml data-source manifest and
+  # the realm-server / worker stdout has an Alloy scraping config.
+  #
+  # loki:
+  #   image: grafana/loki:3.x
+  #   ports:
+  #     - "3100:3100"
+  #   volumes:
+  #     - loki_data:/loki
+  #
+  # alloy:
+  #   image: grafana/alloy:latest
+  #   volumes:
+  #     - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+
+volumes:
+  grafana_data:
+  # loki_data:    # uncomment with the loki service in Phase 2.5
