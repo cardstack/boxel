@@ -18,18 +18,6 @@
 # `set -e` into the caller's shell and close the user's terminal. Errors
 # are handled explicitly below.
 
-# `_grafanactl_env_die` writes to stderr and either returns (sourced) or
-# exits (executed). Both paths leave the caller's interactive shell intact.
-_grafanactl_env_die() {
-  local code="$1"
-  shift
-  printf 'error: %s\n' "$*" >&2
-  # `return` works only when sourced; `2>/dev/null` swallows the
-  # "return: can only `return' from a function or sourced script" message
-  # that appears if this script was executed instead of sourced.
-  return "$code" 2>/dev/null || exit "$code"
-}
-
 _grafanactl_env_main() {
   local env_name="${1:-local}"
   local token_val=""
@@ -76,7 +64,7 @@ _grafanactl_env_main "$@"
 _grafanactl_env_rc=$?
 
 # Clean up: don't leave helpers polluting the caller's shell namespace.
-unset -f _grafanactl_env_die _grafanactl_env_main
+unset -f _grafanactl_env_main
 
 # Mirror the function's return code, using `return` if sourced, `exit` if not.
 return "$_grafanactl_env_rc" 2>/dev/null || exit "$_grafanactl_env_rc"

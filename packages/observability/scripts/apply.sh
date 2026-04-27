@@ -15,13 +15,27 @@
 #   - For staging/production: AWS credentials with ssm:GetParameter
 set -eo pipefail
 
+usage_error() { echo "error: $1" >&2; exit 2; }
+
 env_name=local
 forwarded_args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env) env_name="$2"; shift 2 ;;
-    --env=*) env_name="${1#--env=}"; shift ;;
-    *) forwarded_args+=("$1"); shift ;;
+    --env)
+      [[ $# -ge 2 && "$2" != --* ]] || usage_error "missing value for --env"
+      env_name="$2"
+      shift 2
+      ;;
+    --env=*)
+      env_name="${1#--env=}"
+      [[ -n "$env_name" ]] || usage_error "missing value for --env"
+      shift
+      ;;
+    *)
+      # Anything else is forwarded to grafanactl push (e.g., --dry-run).
+      forwarded_args+=("$1")
+      shift
+      ;;
   esac
 done
 

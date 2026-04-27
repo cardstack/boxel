@@ -6,14 +6,27 @@
 #
 # Wraps `grafanactl config check` so it picks up the rendered per-env config
 # (with token substituted and current-context set correctly).
-set -euo pipefail
+set -eo pipefail
+
+usage_error() { echo "error: $1" >&2; exit 2; }
 
 env_name=local
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env) env_name="$2"; shift 2 ;;
-    --env=*) env_name="${1#--env=}"; shift ;;
-    *) shift ;;
+    --env)
+      [[ $# -ge 2 && "$2" != --* ]] || usage_error "missing value for --env"
+      env_name="$2"
+      shift 2
+      ;;
+    --env=*)
+      env_name="${1#--env=}"
+      [[ -n "$env_name" ]] || usage_error "missing value for --env"
+      shift
+      ;;
+    *)
+      # No forwarding for check.sh — `grafanactl config check` takes no args.
+      usage_error "unknown option: $1"
+      ;;
   esac
 done
 

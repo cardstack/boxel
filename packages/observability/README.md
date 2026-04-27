@@ -47,11 +47,11 @@ This README expands as the migration progresses (Phase 2.5 Loki integration, Pha
 
 ## Phase status
 
-| Ticket    | Phase | Status     | Description                              |
-| --------- | ----- | ---------- | ---------------------------------------- |
-| CS-10914  | 2     | this PR    | Package skeleton                         |
-| CS-10912  | 2     | not started | Local `docker-compose.yml` for Grafana   |
-| CS-10913  | 2     | not started | grafanactl `local`/`staging`/`prod` ctxs |
+| Ticket    | Phase | Status      | Description                              |
+| --------- | ----- | ----------- | ---------------------------------------- |
+| CS-10914  | 2     | this PR     | Package skeleton                         |
+| CS-10912  | 2     | this PR     | Local `docker-compose.yml` for Grafana   |
+| CS-10913  | 2     | this PR     | grafanactl `local`/`staging`/`prod` ctxs |
 | CS-10918  | 2.5   | not started | Loki data source                         |
 | CS-10922  | 3     | not started | AMG export and reformat                  |
 | CS-10932  | 4     | not started | CI: apply to staging on merge            |

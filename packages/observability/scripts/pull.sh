@@ -17,22 +17,43 @@
 #   - For staging/production: AWS credentials with ssm:GetParameter
 set -eo pipefail
 
+usage_error() { echo "error: $1" >&2; exit 2; }
+
 env_name=local
 out_path=""
 forwarded_args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env) env_name="$2"; shift 2 ;;
-    --env=*) env_name="${1#--env=}"; shift ;;
-    --path | -p) out_path="$2"; shift 2 ;;
-    --path=*) out_path="${1#--path=}"; shift ;;
-    *) forwarded_args+=("$1"); shift ;;
+    --env)
+      [[ $# -ge 2 && "$2" != --* ]] || usage_error "missing value for --env"
+      env_name="$2"
+      shift 2
+      ;;
+    --env=*)
+      env_name="${1#--env=}"
+      [[ -n "$env_name" ]] || usage_error "missing value for --env"
+      shift
+      ;;
+    --path | -p)
+      [[ $# -ge 2 && "$2" != --* ]] || usage_error "missing value for --path"
+      out_path="$2"
+      shift 2
+      ;;
+    --path=*)
+      out_path="${1#--path=}"
+      [[ -n "$out_path" ]] || usage_error "missing value for --path"
+      shift
+      ;;
+    *)
+      # Anything else is forwarded to grafanactl pull.
+      forwarded_args+=("$1")
+      shift
+      ;;
   esac
 done
 
 if [[ -z "$out_path" ]]; then
-  echo "error: --path <dir> is required (refusing to default to ./resources to avoid overwriting committed manifests)" >&2
-  exit 2
+  usage_error "--path <dir> is required (refusing to default to ./resources to avoid overwriting committed manifests)"
 fi
 
 cd "$(dirname "$0")/.."

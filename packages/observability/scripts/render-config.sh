@@ -13,6 +13,14 @@
 # and current-context pointing at it.
 set -euo pipefail
 
+if ! command -v envsubst >/dev/null 2>&1; then
+  echo "error: envsubst not found on PATH (part of the gettext package)." >&2
+  echo "  macOS:        brew install gettext   # then: brew link --force gettext" >&2
+  echo "  Ubuntu/Debian: apt-get install -y gettext-base" >&2
+  echo "  Alpine:        apk add --no-cache gettext" >&2
+  exit 1
+fi
+
 target_env="${1:-local}"
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 src="$script_dir/../grafanactl/config.yaml"
