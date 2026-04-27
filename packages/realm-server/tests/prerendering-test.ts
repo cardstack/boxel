@@ -746,11 +746,28 @@ module(basename(__filename), function () {
                     let p = Promise.reject(
                       new Error('thrown then revoked: simulated whitepaper-class bug'),
                     );
-                    // Attach the catch a microtask later so V8 sees the
-                    // rejection as uncaught first, then retracts.
-                    queueMicrotask(() => {
+                    // Attach the catch on a MACROTASK boundary, not a
+                    // microtask. V8's HostPromiseRejectionTracker runs
+                    // at the END of the current microtask checkpoint —
+                    // anything we queue via queueMicrotask / .then runs
+                    // BEFORE that check, so V8 sees the promise as
+                    // already-handled and never fires
+                    // Runtime.exceptionThrown (and consequently never
+                    // fires Runtime.exceptionRevoked either). To
+                    // reproduce the production whitepaper bug shape
+                    // (V8 fires thrown, then RSVP/Backburner attach
+                    // a .catch on a later flush, V8 fires revoked)
+                    // we need the catch attach to land in a later
+                    // task. window.setTimeout is stubbed to a no-op
+                    // during prerender (render-timer-stub.ts), so
+                    // reach for MessageChannel — a Web API that
+                    // schedules a real task and is not touched by
+                    // the timer stub.
+                    let mc = new MessageChannel();
+                    mc.port1.onmessage = () => {
                       p.catch(() => {});
-                    });
+                    };
+                    mc.port2.postMessage(null);
                   }
                   <template>ok</template>
                 }
