@@ -1667,7 +1667,7 @@ module(basename(__filename), function () {
 
       // Caller A starts the prerender and parks at the gate.
       let pA = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'StalePersist',
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1743,7 +1743,7 @@ module(basename(__filename), function () {
       });
 
       let pA = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'StalePersistClearRealm',
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1815,7 +1815,7 @@ module(basename(__filename), function () {
       });
 
       let pA = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'StalePersistClearAll',
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1889,7 +1889,7 @@ module(basename(__filename), function () {
 
       // Bystander's prerender is in-flight.
       let pBystander = lookup.lookupDefinition({
-        module: moduleUnaffected,
+        module: rri(moduleUnaffected),
         name: 'ScopedBystander',
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1983,7 +1983,7 @@ module(basename(__filename), function () {
 
       // A enters #inFlight; parks at gates[0].
       let pA = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'Identity',
       });
       await waitForCalls(1);
@@ -1993,14 +1993,14 @@ module(basename(__filename), function () {
 
       // B re-enters #inFlight under the same key with a fresh pending.
       let pB = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'Identity',
       });
       await waitForCalls(2);
 
       // C joins B's pending (same key, B is still in-flight).
       let pC = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'Identity',
       });
       // Give C a chance to either coalesce or start its own prerender.
@@ -2018,7 +2018,7 @@ module(basename(__filename), function () {
       // D should STILL coalesce into B. If A's finally deleted B's entry,
       // D would create a third prerender here.
       let pD = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'Identity',
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -2079,7 +2079,7 @@ module(basename(__filename), function () {
       });
 
       let pA = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'StalePersistHappy',
       });
       await new Promise((resolve) => setTimeout(resolve, 0));

@@ -716,7 +716,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './desync-repro',
+                      module: rri('./desync-repro'),
                       name: 'DesyncRepro',
                     },
                   },
