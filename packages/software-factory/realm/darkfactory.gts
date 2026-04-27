@@ -2,7 +2,7 @@ import { tracked } from '@glimmer/tracking';
 import { dropTask } from 'ember-concurrency';
 import { get } from '@ember/helper';
 import { on } from '@ember/modifier';
-import Owner from '@ember/owner';
+import type Owner from '@ember/owner';
 
 import {
   CardDef,

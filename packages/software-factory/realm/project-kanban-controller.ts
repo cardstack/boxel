@@ -4,10 +4,12 @@ import {
   type KanbanPlacement,
 } from '@cardstack/boxel-ui/components';
 
-import type { Issue, Project } from './darkfactory';
+import type { Issue } from './darkfactory';
 import type { IssueOptionField } from './issue-option';
 import { KanbanColumnField } from './kanban-column';
 import { defaultColumns, type Option } from './kanban-config';
+import type { ResolvedCodeRef } from '@cardstack/runtime-common';
+import type { CardDef } from '../../base/card-api.gts';
 
 type GroupByOption = { displayName: string; sort: string };
 
@@ -34,15 +36,10 @@ type CreateCardInput = {
         project: { links: { self: string | null } };
       };
       meta: {
-        adoptsFrom: IssueCodeRef;
+        adoptsFrom: ResolvedCodeRef;
       };
     };
   };
-};
-
-type IssueCodeRef = {
-  module: string;
-  name: string;
 };
 
 export class ProjectKanbanController {
@@ -50,11 +47,11 @@ export class ProjectKanbanController {
   private orderInitPending = false;
 
   constructor(
-    private getModel: () => Project | undefined,
+    private getModel: () => CardDef | undefined,
     private getRealmURL: () => URL | undefined,
-    private issueCodeRef: IssueCodeRef,
+    private issueCodeRef: ResolvedCodeRef,
     private createCard?: (
-      codeRef: IssueCodeRef,
+      codeRef: ResolvedCodeRef,
       codeRefURL: URL,
       input: CreateCardInput,
     ) => Promise<unknown>,
