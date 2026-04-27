@@ -13,7 +13,7 @@ import {
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
 import { RealmServer } from './server';
-import { join, resolve } from 'path';
+import { join } from 'path';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -336,47 +336,15 @@ const getIndexHTML = async () => {
     })),
   });
 
-  for (let [i, path] of paths.entries()) {
-    let url = hrefs[i][0];
-
+  // Validate per-CLI-path username invariant. Phase 3 no longer constructs
+  // realms here — the reconciler does it via mountFromRow once registry
+  // rows are read — but we still want the misconfiguration to fail fast.
+  for (let [i] of paths.entries()) {
     let username = String(usernames[i]);
     if (username.length === 0) {
-      console.error(`missing username for realm ${url}`);
+      console.error(`missing username for realm ${hrefs[i][0]}`);
       process.exit(-1);
     }
-
-    let realmAdapter = new NodeAdapter(
-      resolve(String(path)),
-      ENABLE_FILE_WATCHER,
-    );
-
-    let realm = new Realm(
-      {
-        url,
-        adapter: realmAdapter,
-        secretSeed: REALM_SECRET_SEED,
-        virtualNetwork,
-        dbAdapter,
-        queue,
-        matrixClient,
-        realmServerURL: serverURL,
-        definitionLookup,
-        cardSizeLimitBytes: Number(
-          process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
-        ),
-        fileSizeLimitBytes: Number(
-          process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
-        ),
-      },
-      {
-        ...(FULL_INDEX_ON_STARTUP ? { fullIndexOnStartup: true as const } : {}),
-        ...(process.env.DISABLE_MODULE_CACHING === 'true'
-          ? { disableModuleCaching: true }
-          : {}),
-      },
-    );
-    realms.push(realm);
-    virtualNetwork.mount(realm.handle);
   }
 
   let registrationSecretDeferred: Deferred<string>;
@@ -569,14 +537,15 @@ const getIndexHTML = async () => {
     stopRealmServer(false);
   });
 
+  // Phase 3: server.start() awaits reconciler.reconcile() to do the
+  // initial pinned mount (bootstrap realms — base, catalog) before the
+  // HTTP listener accepts traffic. Non-pinned realms (source, published)
+  // wait for first-request mount via reconciler.lookupOrMount().
   await server.start();
 
-  // Snapshot any realms that the legacy CLI-bootstrap loop or
-  // server.start() (loadRealms) eager-mounted into the reconciler's
-  // mounted map so its first reconcile pass treats them as already
-  // mounted. Phase 3 PR 1 still has these legacy paths in place;
-  // Phase 3 PR 2 removes them.
-  reconciler.registerExistingMounts(realms);
+  // Begin the reconciler's background poll loop (LISTEN realm_registry +
+  // 30s safety poll). It picks up changes from peer instances (publish,
+  // unpublish, delete) and reconciles them into local mounted state.
   reconciler.start();
 
   // Cross-instance cache invalidation. Realm.write() emits NOTIFY
@@ -584,8 +553,7 @@ const getIndexHTML = async () => {
   // local Realm's invalidateCache(path). Under single-instance the writer
   // has already invalidated its own caches synchronously, so self-echoes
   // are idempotent no-ops. Lookups go through the same `realms` array the
-  // reconciler uses — in Phase 2 the reconciler and legacy loadRealms()
-  // both keep it in sync.
+  // reconciler maintains via mountFromRow / unmount.
   fileChangesListener = new RealmFileChangesListener({
     dbAdapter,
     lookupMountedRealm: (url) => realms.find((r) => r.url === url),

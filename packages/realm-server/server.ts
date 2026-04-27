@@ -17,19 +17,13 @@ import {
   DEFAULT_PERMISSIONS,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
-  PUBLISHED_DIRECTORY_NAME,
   RealmPaths,
   fetchSessionRoom,
   userInitiatedPriority,
   hasExtension,
   executableExtensions,
 } from '@cardstack/runtime-common';
-import {
-  ensureDirSync,
-  writeJSONSync,
-  readdirSync,
-  existsSync,
-} from 'fs-extra';
+import { ensureDirSync, writeJSONSync, existsSync } from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
 import {
   httpLogging,
@@ -284,24 +278,18 @@ export class RealmServer {
   }
 
   async start() {
-    let loadedRealms = await this.loadRealms();
-    for (let loadedRealm of loadedRealms) {
-      const existingIndex = this.realms.findIndex(
-        (r) => r.url === loadedRealm.url,
-      );
-      if (existingIndex === -1) {
-        this.realms.push(loadedRealm);
-      } else {
-        this.realms[existingIndex] = loadedRealm;
-      }
-    }
-
-    // ideally we'd like to use a Promise.all to start these and the ordering
-    // will just fall out naturally from cross realm invalidation. Until we have
-    // that we should start the realms in order.
-    for (let realm of this.realms) {
-      await realm.start();
-    }
+    // Phase 3: registry-driven boot.
+    //   1. SELECT * FROM realm_registry → reconciler.knownByUrl
+    //   2. Eagerly mount only `pinned=true` rows (bootstrap realms — base,
+    //      catalog). Each pinned mount calls reconciler.ensureMounted →
+    //      mountFromRow (factory in main.ts), which constructs a Realm,
+    //      awaits realm.start(), then publishes it into the shared
+    //      `realms[]` array and the virtualNetwork.
+    //   3. Non-pinned rows: do nothing. Mount-on-demand happens in
+    //      findOrMountRealm() on first request.
+    // The reconciler's background poll loop (LISTEN realm_registry + 30s
+    // poll) is started in main.ts after this method returns.
+    await this.reconciler.reconcile();
   }
 
   get testingOnlyRealms() {
@@ -583,7 +571,30 @@ export class RealmServer {
     );
   };
 
-  private findRealmForRequestURL(requestURL: URL): Realm | undefined {
+  // Resolves a request URL to a mounted Realm, lazy-mounting via the
+  // reconciler if the request is the first hit on a non-pinned realm
+  // (Phase 3 lazy-mount semantics). Returns undefined when no realm in the
+  // registry matches the request — caller should respond 404.
+  //
+  // Lookup order:
+  //   1. reconciler.knownByUrl: the Phase 3 source of truth. Iterates
+  //      registry rows and finds the one whose URL prefix contains the
+  //      request, then delegates to reconciler.lookupOrMount() which
+  //      hits reconciler.mounted on the warm path or constructs+mounts
+  //      via mountFromRow on cold first request.
+  //   2. legacy this.realms fallback: covers handler-created realms in
+  //      Phase 3 PR 1 (publish/copy push directly to this.realms; the
+  //      reconciler may not have observed them yet via NOTIFY/reconcile).
+  //      Phase 3 PR 2 removes this fallback when handlers register with
+  //      the reconciler instead of mutating this.realms directly.
+  private async findOrMountRealm(requestURL: URL): Promise<Realm | undefined> {
+    for (const url of this.reconciler.knownByUrl.keys()) {
+      let realmURL = new URL(url);
+      realmURL.protocol = requestURL.protocol;
+      if (new RealmPaths(realmURL).inRealm(requestURL)) {
+        return await this.reconciler.lookupOrMount(url);
+      }
+    }
     return this.realms.find((candidate) => {
       let realmURL = new URL(candidate.url);
       realmURL.protocol = requestURL.protocol;
@@ -594,7 +605,7 @@ export class RealmServer {
   private async getPublishedRealmInfo(
     requestURL: URL,
   ): Promise<{ lastPublishedAt: string | null } | null> {
-    let realm = this.findRealmForRequestURL(requestURL);
+    let realm = await this.findOrMountRealm(requestURL);
     if (!realm) {
       return null;
     }
@@ -672,15 +683,15 @@ export class RealmServer {
     // During publish/copy index races, module rows can lag behind source files.
     // Only do filesystem probing after we've identified an instance candidate
     // to avoid extra IO on the hot request path.
-    if (this.hasExtensionlessSourceModule(cardURL)) {
+    if (await this.hasExtensionlessSourceModule(cardURL)) {
       return false;
     }
 
     return true;
   }
 
-  private hasExtensionlessSourceModule(cardURL: URL): boolean {
-    let realm = this.findRealmForRequestURL(cardURL);
+  private async hasExtensionlessSourceModule(cardURL: URL): Promise<boolean> {
+    let realm = await this.findOrMountRealm(cardURL);
     if (!realm?.dir) {
       return false;
     }
@@ -709,7 +720,7 @@ export class RealmServer {
   }
 
   private async hasPublicPermissions(cardURL: URL): Promise<boolean> {
-    let realm = this.findRealmForRequestURL(cardURL);
+    let realm = await this.findOrMountRealm(cardURL);
 
     if (!realm) {
       return false;
@@ -1018,229 +1029,13 @@ export class RealmServer {
     );
     this.realms.push(realm);
     this.virtualNetwork.mount(realm.handle);
+    // Tell the reconciler this realm is already mounted on this process so a
+    // subsequent reconcile() pass that sees the row doesn't double-mount it
+    // via mountFromRow. Phase 3 PR 1: handlers still own this push/mount;
+    // Phase 3 PR 2 will hand the lifecycle to the reconciler entirely.
+    this.reconciler.registerExistingMounts([realm]);
     return realm;
   };
-
-  // TODO consider refactoring this into main.ts after createRealm() becomes
-  // private and realm creation happens as part of user creation. Then the
-  // testing would likely move to the matrix client. Currently testing this
-  // method is only possible by having this function in the RealmServer which is
-  // within our testing boundary. main.ts is outside of our testing boundary.
-  // The only real way to test thru main.ts is with a full stack, a la matrix
-  // client tests.
-  private async loadRealms() {
-    let realms: Realm[] = [];
-
-    for (let maybeUsername of readdirSync(this.realmsRootPath, {
-      withFileTypes: true,
-    })) {
-      if (!maybeUsername.isDirectory()) {
-        continue;
-      }
-      let owner = maybeUsername.name;
-
-      // Skip published realms, loaded later
-      if (owner === PUBLISHED_DIRECTORY_NAME) {
-        continue;
-      }
-
-      for (let maybeRealm of readdirSync(join(this.realmsRootPath, owner), {
-        withFileTypes: true,
-      })) {
-        if (!maybeRealm.isDirectory()) {
-          continue;
-        }
-        let realmName = maybeRealm.name;
-        let realmPath = join(this.realmsRootPath, owner, realmName);
-        let maybeRealmContents = readdirSync(realmPath);
-        if (maybeRealmContents.includes('.realm.json')) {
-          let url = new URL(
-            `${this.serverURL.pathname.replace(
-              /\/$/,
-              '',
-            )}/${owner}/${realmName}/`,
-            this.serverURL,
-          ).href;
-          let existingRealm = this.realms.find((realm) => realm.url === url);
-          if (existingRealm) {
-            realms.push(existingRealm);
-            continue;
-          }
-          let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
-          let realm = new Realm({
-            url,
-            adapter,
-            secretSeed: this.realmSecretSeed,
-            virtualNetwork: this.virtualNetwork,
-            dbAdapter: this.dbAdapter,
-            queue: this.queue,
-            matrixClient: this.matrixClient,
-            realmServerURL: this.serverURL.href,
-            definitionLookup: this.definitionLookup,
-            cardSizeLimitBytes: this.cardSizeLimitBytes,
-            fileSizeLimitBytes: this.fileSizeLimitBytes,
-          });
-          this.virtualNetwork.mount(realm.handle);
-          realms.push(realm);
-        }
-      }
-    }
-
-    let publishedRealms = await this.findPublishedRealms();
-    return [...realms, ...publishedRealms];
-  }
-
-  private async findPublishedRealms() {
-    let realms = [];
-    try {
-      this.log.info('Loading published realms…');
-
-      let publishedRealms = (
-        await query(this.dbAdapter, [
-          `SELECT * FROM published_realms ORDER BY published_realm_url`,
-        ])
-      ).map((row) => ({
-        id: row.id as string,
-        owner_username: row.owner_username as string,
-        source_realm_url: row.source_realm_url as string,
-        published_realm_url: row.published_realm_url as string,
-      }));
-
-      this.log.info(
-        `Found ${publishedRealms.length} published realms in database`,
-      );
-
-      let publishedRealmsByUrl = new Map(
-        publishedRealms.map((r) => [r.published_realm_url, r]),
-      );
-
-      let publishedDir = join(this.realmsRootPath, PUBLISHED_DIRECTORY_NAME);
-
-      if (!existsSync(publishedDir)) {
-        if (publishedRealms.length > 0) {
-          this.log.warn(
-            `Found ${publishedRealms.length} published realms in database but ${PUBLISHED_DIRECTORY_NAME} directory does not exist at ${publishedDir}`,
-          );
-        }
-
-        this.log.info(
-          `No ${PUBLISHED_DIRECTORY_NAME} directory found, skipping published realms`,
-        );
-        return [];
-      }
-
-      this.log.info(
-        `Scanning ${PUBLISHED_DIRECTORY_NAME} directory: ${publishedDir}`,
-      );
-
-      let foundDirectories = new Set<string>();
-      let publishedDirContents = readdirSync(publishedDir, {
-        withFileTypes: true,
-      });
-
-      this.log.info(
-        `Found ${publishedDirContents.length} items in ${PUBLISHED_DIRECTORY_NAME} directory`,
-      );
-
-      for (let maybeRealmDir of publishedDirContents) {
-        if (!maybeRealmDir.isDirectory()) {
-          continue;
-        }
-
-        let realmDirName = maybeRealmDir.name;
-        let realmPath = join(publishedDir, realmDirName);
-
-        try {
-          let maybeRealmContents = readdirSync(realmPath);
-
-          if (!maybeRealmContents.includes('.realm.json')) {
-            this.log.warn(
-              `Directory ${realmPath} exists but does not contain .realm.json, skipping`,
-            );
-            continue;
-          }
-
-          let matchingPublishedRealm = publishedRealms.find(
-            (publishedRealmRow) => publishedRealmRow.id === realmDirName,
-          );
-
-          if (!matchingPublishedRealm) {
-            this.log.warn(
-              `Found directory ${realmPath} but no matching entry in published_realms table, skipping`,
-            );
-            continue;
-          }
-
-          let publishedRealmUrl = matchingPublishedRealm.published_realm_url;
-
-          foundDirectories.add(publishedRealmUrl);
-
-          let publishedRealmRow = publishedRealmsByUrl.get(publishedRealmUrl);
-
-          if (!publishedRealmRow) {
-            this.log.warn(
-              `Found published realm directory at ${realmPath} but no corresponding entry in published_realms table for URL ${publishedRealmUrl}`,
-            );
-            continue;
-          }
-
-          let existingRealm = this.realms.find(
-            (realm) => realm.url === publishedRealmUrl,
-          );
-          if (existingRealm) {
-            realms.push(existingRealm);
-            continue;
-          }
-
-          let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
-
-          let realm = new Realm({
-            url: publishedRealmUrl,
-            adapter,
-            secretSeed: this.realmSecretSeed,
-            virtualNetwork: this.virtualNetwork,
-            dbAdapter: this.dbAdapter,
-            queue: this.queue,
-            matrixClient: this.matrixClient,
-            realmServerURL: this.serverURL.href,
-            definitionLookup: this.definitionLookup,
-            cardSizeLimitBytes: this.cardSizeLimitBytes,
-            fileSizeLimitBytes: this.fileSizeLimitBytes,
-          });
-
-          this.virtualNetwork.mount(realm.handle);
-          realms.push(realm);
-
-          this.log.info(
-            `Loaded published realm: ${publishedRealmUrl} from ${realmPath}`,
-          );
-        } catch (dirError) {
-          this.log.warn(
-            `Error processing published realm directory ${realmPath}: ${dirError}`,
-          );
-        }
-      }
-
-      for (let publishedRealm of publishedRealms) {
-        if (!foundDirectories.has(publishedRealm.published_realm_url)) {
-          this.log.warn(
-            `Published realm ${publishedRealm.published_realm_url} exists in database but no corresponding directory found in ${publishedDir}`,
-          );
-        }
-      }
-
-      this.log.info(
-        `Finished loading published realms. Loaded ${realms.filter((r) => r.url.includes(PUBLISHED_DIRECTORY_NAME) || foundDirectories.has(r.url)).length} published realms.`,
-      );
-    } catch (error) {
-      this.log.error(`Error loading published realms: ${error}`);
-      if (error instanceof Error) {
-        this.log.error(`Stack trace: ${error.stack}`);
-      }
-    }
-
-    return realms;
-  }
 
   private sendEvent = async (
     user: string,
