@@ -1,0 +1,6 @@
+# Placeholder — filled in by CS-10912.
+#
+# When complete, this runs a local Grafana 12.x (matching the production pin in
+# cardstack/infra:configs/grafana/) with dashboard/datasource provisioning
+# mounted from ./grafanactl/resources/. A Loki + Alloy sidecar is added in
+# Phase 2.5 (CS-10918+).

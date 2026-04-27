@@ -1,0 +1,5 @@
+# Placeholder — filled in by CS-10913.
+#
+# Defines `local`, `staging`, and `production` contexts. Tokens are read from
+# the GRAFANA_TOKEN env var (sourced from SSM at /<env>/grafana/grafanactl_token
+# for staging/production); never committed.
