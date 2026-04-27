@@ -22,6 +22,7 @@ import {
   Deferred,
   loadCardDef,
   internalKeyFor,
+  cardIdToURL,
   trimExecutableExtension,
   isCardError,
   isCardDef,
@@ -201,7 +202,7 @@ export async function buildModuleModel(
   context: ModuleModelContext,
 ): Promise<Model> {
   let parsedOptions = renderOptions ?? {};
-  let moduleURL = trimExecutableExtension(new URL(id));
+  let moduleURL = trimExecutableExtension(cardIdToURL(id));
   registerBoxelTransitionTo(context.router, context.owner);
 
   if (parsedOptions.clearCache) {

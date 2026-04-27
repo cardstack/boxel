@@ -2,6 +2,7 @@ import { service } from '@ember/service';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
+  cardIdToURL,
   identifyCard,
   internalKeyFor,
   isCardErrorJSONAPI,
@@ -71,7 +72,7 @@ export default class ShowCardCommand extends HostBaseCommand<
         operatorModeStateService.state.codeSelection !== cardDefRef.name
       ) {
         await operatorModeStateService.updateCodePath(
-          new URL(cardDefRef.module + '.gts'),
+          cardIdToURL(cardDefRef.module + '.gts'),
           'preview',
         );
       }

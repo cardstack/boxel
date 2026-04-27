@@ -682,7 +682,7 @@ export default class OperatorModeStateService extends Service {
     if (codeRef && isResolvedCodeRef(codeRef)) {
       //(possibly) in a different module
       this._state.codeSelection = codeRef.name;
-      await this.updateCodePath(new URL(codeRef.module));
+      await this.updateCodePath(cardIdToURL(codeRef.module));
     } else if (
       codeRef &&
       'type' in codeRef &&
@@ -692,7 +692,7 @@ export default class OperatorModeStateService extends Service {
     ) {
       this._state.fieldSelection = codeRef.field;
       this._state.codeSelection = codeRef.card.name;
-      await this.updateCodePath(new URL(codeRef.card.module));
+      await this.updateCodePath(cardIdToURL(codeRef.card.module));
     } else if (localName && onLocalSelection) {
       //in the same module
       this._state.codeSelection = localName;
@@ -1271,7 +1271,7 @@ export default class OperatorModeStateService extends Service {
     await this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
-        : new URL(id),
+        : cardIdToURL(id),
     );
     this.updateSubmode(Submodes.Interact);
 

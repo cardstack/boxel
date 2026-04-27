@@ -32,6 +32,7 @@ import {
   GetCardCollectionContextName,
   Deferred,
   cardTypeDisplayName,
+  cardIdToURL,
   cardTypeIcon,
   codeRefWithAbsoluteURL,
   identifyCard,
@@ -554,7 +555,7 @@ export default class InteractSubmode extends Component {
   private openSelectedSearchResultInStack = restartableTask(
     async (cardId: string) => {
       let waiterToken = waiter.beginAsync();
-      let url = new URL(cardId);
+      let url = cardIdToURL(cardId);
       try {
         let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
 
@@ -754,7 +755,7 @@ export default class InteractSubmode extends Component {
     }
 
     // assumption: take actions in the right-most stack
-    await this.createCard(this.rightMostStackIndex, spec.ref, new URL(specId), {
+    await this.createCard(this.rightMostStackIndex, spec.ref, cardIdToURL(specId), {
       realmURL: this.operatorModeStateService.getWritableRealmURL(),
     });
   });
