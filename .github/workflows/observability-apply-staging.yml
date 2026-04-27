@@ -33,13 +33,13 @@ jobs:
 
     env:
       AWS_REGION: us-east-1
-      # IAM role used to fetch the grafanactl service-account token from SSM.
-      # Currently uses the existing boxel-host role; if/when that role is too
-      # broad for this purpose, replace with a dedicated
-      # `boxel-observability-apply` role (see CS-10932 design notes — scope
-      # principle prefers the dedicated role). Either way the role needs:
-      #   ssm:GetParameter on /staging/grafana/grafanactl_token
-      AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-host
+      # Dedicated, narrowly-scoped role created in cardstack/infra#665
+      # (configs/boxel-observability-apply/staging). Has exactly one
+      # permission: ssm:GetParameter on /staging/grafana/grafanactl_token.
+      # If the role doesn't exist yet (infra PR not applied), the
+      # configure-aws-credentials step below will fail with "InvalidIdentityToken"
+      # or similar — apply the infra config first.
+      AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
       GRAFANA_SERVER: https://grafana-staging.stack.cards
       # Grafana 12.4.3 is the production pin; grafanactl version should be
       # current enough to talk to it. Bump as needed.
