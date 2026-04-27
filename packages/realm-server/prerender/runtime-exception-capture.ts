@@ -225,24 +225,33 @@ function toConsoleErrorEntry(details: CdpExceptionDetails): ConsoleErrorEntry {
         columnNumber: details.columnNumber,
       }
     : undefined;
-  let frames = details.stackTrace?.callFrames;
-  let stackFrames: ConsoleErrorLocation[] | undefined =
-    Array.isArray(frames) && frames.length > 0
-      ? frames
-          .filter((frame) => !!frame?.url)
-          .map((frame) => ({
-            url: frame.url,
-            lineNumber: frame.lineNumber,
-            columnNumber: frame.columnNumber,
-          }))
-      : undefined;
+  let stackFrames = extractStackFrames(details);
   return {
     type: 'error',
-    text: extractExceptionMessage(details),
+    // Pass `stackFrames !== undefined` so the message extraction can
+    // strip a redundant inline stack from `description` (which V8
+    // includes verbatim) when the same frames are about to land in
+    // the SerializedError's separate `stack` field.
+    text: extractExceptionMessage(details, stackFrames !== undefined),
     location,
     stackFrames,
     source: 'exception',
   };
+}
+
+function extractStackFrames(
+  details: CdpExceptionDetails,
+): ConsoleErrorLocation[] | undefined {
+  let frames = details.stackTrace?.callFrames;
+  if (!Array.isArray(frames) || frames.length === 0) return undefined;
+  let usable = frames
+    .filter((frame) => !!frame?.url)
+    .map((frame) => ({
+      url: frame.url,
+      lineNumber: frame.lineNumber,
+      columnNumber: frame.columnNumber,
+    }));
+  return usable.length > 0 ? usable : undefined;
 }
 
 // Picks the most actionable text we can extract from a CDP
@@ -253,18 +262,36 @@ function toConsoleErrorEntry(details: CdpExceptionDetails): ConsoleErrorEntry {
 //
 //   • `exception.description` is the V8-side toString of the live
 //     exception object. For thrown Errors this looks like
-//     `"TypeError: Cannot read properties of undefined ...\n    at ..."`
-//     — the most actionable form.
+//     `"TypeError: ...\n    at frame1\n    at frame2"` — header line
+//     + an inline stack. When we ALSO have CDP `stackTrace.callFrames`
+//     to populate the SerializedError's separate `stack` field, we
+//     keep just the header line so the surfaced `message` and `stack`
+//     stay cleanly separated (and `#formatConsoleError` doesn't append
+//     a location suffix after an embedded stack). When there's no
+//     separate stack field, we keep the full description so the only
+//     stack info we have isn't dropped on the floor.
 //   • `exception.value` is set when the thrown value is a primitive
 //     (e.g. `throw 'boom'` or `throw 42`). Stringify as a fallback.
 //
 // Preference order: description → value → text → "Uncaught exception".
 // We always fall back to *something* non-empty so the surfaced error
 // doc never carries an entry with a blank message.
-function extractExceptionMessage(details: CdpExceptionDetails): string {
+function extractExceptionMessage(
+  details: CdpExceptionDetails,
+  stackInOwnField: boolean,
+): string {
   let exception = details.exception;
   if (exception) {
     if (typeof exception.description === 'string' && exception.description) {
+      if (stackInOwnField) {
+        // Header-only: split on \n and keep the first line. This
+        // matches Error.toString() format ("TypeError: foo") and
+        // drops the redundant "    at ..." frames that V8 baked in.
+        let firstLineEnd = exception.description.indexOf('\n');
+        return firstLineEnd === -1
+          ? exception.description
+          : exception.description.slice(0, firstLineEnd);
+      }
       return exception.description;
     }
     if (exception.value !== undefined && exception.value !== null) {

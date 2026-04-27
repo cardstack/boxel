@@ -364,7 +364,7 @@ module(basename(__filename), function () {
     );
   });
 
-  test('prefers exception.description over the generic CDP text label', async function (assert) {
+  test('prefers exception.description over the generic CDP text label when no separate stack frames are available', async function (assert) {
     let client = new FakeCDPClient();
     let page = new FakePage(client);
     let recorder = makeRecorder();
@@ -378,9 +378,12 @@ module(basename(__filename), function () {
 
     // CDP frequently sets `text` to a generic label like "Uncaught"
     // or "Uncaught (in promise)" while the actionable message lives
-    // on the RemoteObject's `description`. The capture should pick
-    // the description so the surfaced error doc carries the real
-    // type + message instead of a useless label.
+    // on the RemoteObject's `description`. With no separate
+    // `stackTrace.callFrames` available, the full description
+    // (including its inline stack) is the only signal we have, so
+    // the entry preserves it verbatim — losing the embedded frames
+    // here would mean the surfaced error doc has no stack info at
+    // all.
     client.emit(
       'Runtime.exceptionThrown',
       buildExceptionThrownEvent({
@@ -394,11 +397,58 @@ module(basename(__filename), function () {
     );
 
     let entry = recorder.calls[0]?.entry;
-    assert.true(
-      entry?.text.startsWith(
-        "TypeError: Cannot read properties of undefined (reading 'foo')",
-      ),
-      `entry.text uses exception.description, got: ${entry?.text}`,
+    assert.strictEqual(
+      entry?.text,
+      "TypeError: Cannot read properties of undefined (reading 'foo')\n    at Component.bar (chunk.js:42)",
+      `entry.text keeps the full description when no callFrames are present, got: ${entry?.text}`,
+    );
+  });
+
+  test("trims the inline stack from exception.description when callFrames will populate the entry's own stack field", async function (assert) {
+    let client = new FakeCDPClient();
+    let page = new FakePage(client);
+    let recorder = makeRecorder();
+
+    await attachRuntimeExceptionCapture({
+      page: page as any,
+      getAffinityKey: () => 'test-affinity',
+      pageId: 'page-1',
+      recorder,
+    });
+
+    // V8 bakes a multi-line stack into `description` for thrown
+    // Errors. When CDP also reports the same stack via
+    // `stackTrace.callFrames` (which the entry surfaces in its own
+    // `stack` field downstream), keeping the full description in
+    // `text` would duplicate the frames AND make the message awkward
+    // for `#formatConsoleError` to append a location suffix to. So
+    // we strip everything after the header line.
+    client.emit(
+      'Runtime.exceptionThrown',
+      buildExceptionThrownEvent({
+        exceptionId: 101,
+        text: 'Uncaught (in promise)',
+        exception: {
+          description:
+            "TypeError: Cannot read properties of undefined (reading 'foo')\n    at Component.bar (chunk.js:42)\n    at Component.baz (chunk.js:84)",
+        },
+        callFrames: [
+          { url: 'chunk.js', lineNumber: 41, columnNumber: 0 },
+          { url: 'chunk.js', lineNumber: 83, columnNumber: 0 },
+        ],
+      }),
+    );
+
+    let entry = recorder.calls[0]?.entry;
+    assert.strictEqual(
+      entry?.text,
+      "TypeError: Cannot read properties of undefined (reading 'foo')",
+      `entry.text is just the header line so message and stack stay separated, got: ${entry?.text}`,
+    );
+    assert.strictEqual(
+      entry?.stackFrames?.length,
+      2,
+      'frames still flow into stackFrames so the stack lives in its own field',
     );
   });
 
