@@ -281,8 +281,20 @@ export async function runIssueLoop(
     if (issue.status !== 'in_progress') {
       try {
         await issueStore.updateIssue(issue.id, { status: 'in_progress' });
-        await syncWorkspace();
-        issue = await scheduler.refreshIssueState(issue);
+        let pickupSync = await syncWorkspace();
+        if (!pickupSync.ok) {
+          // The status flip is local until sync lands. If the sync
+          // failed, the realm is still showing `backlog` and a
+          // refresh would mask the divergence — log and skip the
+          // refresh so the next iteration's sync surfaces the same
+          // error in agent context (where it can be reacted to)
+          // rather than burying it under a stale state.
+          log.warn(
+            `  in_progress flip didn't sync to realm — realm still shows ${issue.status}; sync error: ${pickupSync.error ?? 'unknown'}`,
+          );
+        } else {
+          issue = await scheduler.refreshIssueState(issue);
+        }
       } catch (err) {
         log.warn(
           `  Failed to set issue to in_progress: ${err instanceof Error ? err.message : String(err)}`,

@@ -94,6 +94,7 @@ test.describe('runParseInMemory e2e', () => {
       realmServerToken: serverToken,
     });
 
+    let workspace: ReturnType<typeof createTestWorkspace> | undefined;
     try {
       await clearParseableFixtures(client, realmUrl);
 
@@ -137,7 +138,7 @@ test.describe('runParseInMemory e2e', () => {
         }),
       ).toBe(true);
 
-      let workspace = createTestWorkspace();
+      workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let result = await runParseInMemory({
@@ -165,6 +166,7 @@ test.describe('runParseInMemory e2e', () => {
       );
       expect(validationArtifacts).toEqual([]);
     } finally {
+      workspace?.cleanup();
       cleanup();
     }
   });

@@ -35,11 +35,40 @@ export interface TestWorkspace {
 }
 
 /**
- * Create an isolated workspace directory for a single test. Caller is
- * responsible for invoking `cleanup()` (typically from an `afterEach`).
+ * Tracks every workspace created during the test run so leftovers get
+ * removed at process exit even if the test forgot its `cleanup()`.
+ * Explicit `cleanup()` is still recommended (frees the dir mid-run);
+ * this is a safety net.
+ */
+const tracked = new Set<string>();
+let exitHookInstalled = false;
+function installExitHook() {
+  if (exitHookInstalled) return;
+  exitHookInstalled = true;
+  let sweep = () => {
+    for (let dir of tracked) {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // best-effort
+      }
+    }
+    tracked.clear();
+  };
+  process.once('exit', sweep);
+  process.once('beforeExit', sweep);
+}
+
+/**
+ * Create an isolated workspace directory for a single test. Caller
+ * should invoke `cleanup()` (typically from an `afterEach` or
+ * `finally`). Any workspace not cleaned up is removed at process
+ * exit as a safety net.
  */
 export function createTestWorkspace(): TestWorkspace {
+  installExitHook();
   let dir = mkdtempSync(join(tmpdir(), 'boxel-factory-test-ws-'));
+  tracked.add(dir);
   return {
     dir,
     write: (relativePath, content) => {
@@ -50,6 +79,7 @@ export function createTestWorkspace(): TestWorkspace {
     read: (relativePath) => readFileSync(join(dir, relativePath), 'utf8'),
     exists: (relativePath) => existsSync(join(dir, relativePath)),
     cleanup: () => {
+      tracked.delete(dir);
       try {
         rmSync(dir, { recursive: true, force: true });
       } catch {

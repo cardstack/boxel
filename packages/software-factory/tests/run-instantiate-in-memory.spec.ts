@@ -138,12 +138,13 @@ test.describe('runInstantiateInMemory e2e', () => {
       realmServerToken: serverToken,
     });
 
+    let workspace: ReturnType<typeof createTestWorkspace> | undefined;
     try {
       // The fixture realm ships with hello.gts / hello.test.gts but no Spec
       // cards. The in-memory tool — unlike the validation step — must not
       // fail on missing specs; it's a self-check that the agent can run
       // before it has produced any catalog cards.
-      let workspace = createTestWorkspace();
+      workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       let result = await runInstantiateInMemory({
@@ -166,6 +167,7 @@ test.describe('runInstantiateInMemory e2e', () => {
       );
       expect(validationArtifacts).toEqual([]);
     } finally {
+      workspace?.cleanup();
       cleanup();
     }
   });

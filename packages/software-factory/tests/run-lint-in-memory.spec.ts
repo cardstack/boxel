@@ -33,8 +33,9 @@ test.describe('runLintInMemory e2e', () => {
       realmServerToken: serverToken,
     });
 
+    let workspace: ReturnType<typeof createTestWorkspace> | undefined;
     try {
-      let workspace = createTestWorkspace();
+      workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
 
       // The fixture realm ships with a clean hello.gts and hello.test.gts.
@@ -61,6 +62,7 @@ test.describe('runLintInMemory e2e', () => {
       );
       expect(validationArtifacts).toEqual([]);
     } finally {
+      workspace?.cleanup();
       cleanup();
     }
   });

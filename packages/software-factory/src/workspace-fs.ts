@@ -19,9 +19,10 @@
 
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 
 import { ensureJsonExtension } from './realm-operations';
+import { validateRealmRelativePath } from './realm-relative-path';
 
 // ---------------------------------------------------------------------------
 // Result shapes
@@ -55,18 +56,44 @@ export interface WorkspaceDeleteResult {
 /**
  * Derive a stable workspace directory path for a target realm URL.
  *
- * Slug derivation strips the protocol and replaces any characters that
- * aren't safe in a filesystem path with `_`, yielding e.g.
- * `localhost_4201_my-realm_` from `http://localhost:4201/my-realm/`.
+ * The slug preserves the protocol so that `http://host/realm/` and
+ * `https://host/realm/` map to distinct workspaces — otherwise two
+ * unrelated realms could share state. Any character that isn't safe
+ * in a filesystem path is replaced with `_`, e.g.
+ * `http_localhost_4201_my-realm` from `http://localhost:4201/my-realm/`.
  * The slug is deterministic so repeated factory runs against the same
  * realm reuse the same on-disk workspace.
  */
 export function resolveWorkspaceDir(realmUrl: string): string {
-  let slug = realmUrl
-    .replace(/^https?:\/\//, '')
-    .replace(/[^a-zA-Z0-9_-]+/g, '_')
-    .replace(/^_+|_+$/g, '');
+  let slug = realmUrl.replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
   return join(tmpdir(), 'boxel-factory-workspaces', slug);
+}
+
+// ---------------------------------------------------------------------------
+// Path safety
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a realm-relative `path` against `workspaceDir` and reject any
+ * value that escapes the workspace.
+ *
+ * Defense in depth — every workspace-fs primitive routes its `path`
+ * argument through here so an agent-supplied path can't escape via
+ * absolute paths, `..` traversal, percent-encoded variants, or symlink
+ * tricks even if the calling tool forgets to validate. Throws on
+ * unsafe input; returns the absolute path on success.
+ */
+function resolveSafeWorkspacePath(workspaceDir: string, path: string): string {
+  let validationError = validateRealmRelativePath(path);
+  if (validationError) {
+    throw new Error(validationError);
+  }
+  let absolute = resolve(workspaceDir, path);
+  let rel = relative(resolve(workspaceDir), absolute);
+  if (rel.startsWith('..') || rel === '..') {
+    throw new Error(`Path "${path}" resolves outside the workspace directory.`);
+  }
+  return absolute;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +110,15 @@ export async function readCard(
   workspaceDir: string,
   path: string,
 ): Promise<WorkspaceReadResult> {
-  let absolute = join(workspaceDir, path);
+  let absolute: string;
+  try {
+    absolute = resolveSafeWorkspacePath(workspaceDir, path);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 
   let text: string;
   try {
@@ -115,7 +150,15 @@ export async function writeCard(
   path: string,
   content: string,
 ): Promise<WorkspaceWriteResult> {
-  let absolute = join(workspaceDir, path);
+  let absolute: string;
+  try {
+    absolute = resolveSafeWorkspacePath(workspaceDir, path);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
   try {
     await mkdir(dirname(absolute), { recursive: true });
     await writeFile(absolute, content, 'utf8');
@@ -136,7 +179,15 @@ export async function deleteCard(
   workspaceDir: string,
   path: string,
 ): Promise<WorkspaceDeleteResult> {
-  let absolute = join(workspaceDir, path);
+  let absolute: string;
+  try {
+    absolute = resolveSafeWorkspacePath(workspaceDir, path);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
   try {
     await rm(absolute, { force: true });
     return { ok: true };
@@ -172,8 +223,14 @@ export async function workspaceFileExists(
   workspaceDir: string,
   path: string,
 ): Promise<boolean> {
+  let absolute: string;
   try {
-    await stat(join(workspaceDir, path));
+    absolute = resolveSafeWorkspacePath(workspaceDir, path);
+  } catch {
+    return false;
+  }
+  try {
+    await stat(absolute);
     return true;
   } catch {
     return false;

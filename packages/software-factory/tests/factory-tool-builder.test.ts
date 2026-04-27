@@ -69,8 +69,34 @@ const DEFAULT_CARD_TYPE_SCHEMAS = new Map<
   ],
 ]);
 
+// Workspaces created during test execution. Cleaned up by a global
+// QUnit.testDone hook so we don't leak temp dirs across this file's
+// many tests; the workspace-fixture's process-exit hook is a fallback
+// for anything that slips past, but cleaning per-test is cheaper and
+// keeps the OS tmpdir from growing during the run.
+let pendingWorkspaces: TestWorkspace[] = [];
+declare const QUnit: {
+  testDone: (cb: () => void) => void;
+};
+let testDoneHookInstalled = false;
+function installTestDoneHook() {
+  if (testDoneHookInstalled) return;
+  if (typeof QUnit === 'undefined') return;
+  testDoneHookInstalled = true;
+  QUnit.testDone(() => {
+    let toClean = pendingWorkspaces;
+    pendingWorkspaces = [];
+    for (let ws of toClean) {
+      ws.cleanup();
+    }
+  });
+}
+
 function makeWorkspace(): TestWorkspace {
-  return createTestWorkspace();
+  installTestDoneHook();
+  let ws = createTestWorkspace();
+  pendingWorkspaces.push(ws);
+  return ws;
 }
 
 /**
