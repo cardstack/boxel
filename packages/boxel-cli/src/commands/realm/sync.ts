@@ -622,28 +622,28 @@ export async function sync(
     });
   }
 
-  const syncer = new RealmSyncer(
-    {
-      realmUrl,
-      localDir,
-      preferLocal: options.preferLocal,
-      preferRemote: options.preferRemote,
-      preferNewest: options.preferNewest,
-      deleteSync: options.delete,
-      dryRun: options.dryRun,
-    },
-    authenticator,
-  );
-
+  let syncer: RealmSyncer | undefined;
   try {
+    syncer = new RealmSyncer(
+      {
+        realmUrl,
+        localDir,
+        preferLocal: options.preferLocal,
+        preferRemote: options.preferRemote,
+        preferNewest: options.preferNewest,
+        deleteSync: options.delete,
+        dryRun: options.dryRun,
+      },
+      authenticator,
+    );
     await syncer.sync();
   } catch (error) {
     return {
-      pushed: syncer.pushedFiles.slice().sort(),
-      pulled: syncer.pulledFiles.slice().sort(),
-      remoteDeleted: syncer.remoteDeletedFiles.slice().sort(),
-      localDeleted: syncer.localDeletedFiles.slice().sort(),
-      skippedConflicts: syncer.skippedConflicts.slice().sort(),
+      pushed: syncer?.pushedFiles.slice().sort() ?? [],
+      pulled: syncer?.pulledFiles.slice().sort() ?? [],
+      remoteDeleted: syncer?.remoteDeletedFiles.slice().sort() ?? [],
+      localDeleted: syncer?.localDeletedFiles.slice().sort() ?? [],
+      skippedConflicts: syncer?.skippedConflicts.slice().sort() ?? [],
       hasError: true,
       error: `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
     };
