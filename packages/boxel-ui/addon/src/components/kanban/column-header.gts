@@ -19,14 +19,7 @@ interface Signature {
 const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
   <div class={{cn 'col-header' is-target=@isTarget}} ...attributes>
     <div class='col-header-left'>
-      <span
-        class='col-dot'
-        style={{cssVar
-          col-dot-bg=(if
-            @column.color @column.color 'var(--boxel-450)'
-          )
-        }}
-      ></span>
+      <span class='col-dot' style={{cssVar col-dot-bg=@column.color}}></span>
       <span class='col-name'>{{if
           @column.label
           @column.label
@@ -84,8 +77,9 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
       height: 0.625rem;
       border-radius: 50%;
       flex-shrink: 0;
-      background: var(--col-dot-bg);
-      box-shadow: 0 0 0 1.5px color-mix(in oklch, var(--col-dot-bg) 30%, transparent);
+      background: var(--col-dot-bg, var(--muted-foreground, var(--boxel-450)));
+      box-shadow: 0 0 0 1.5px
+        color-mix(in oklch, var(--col-dot-bg) 30%, transparent);
     }
     .col-name {
       font-size: 13px;

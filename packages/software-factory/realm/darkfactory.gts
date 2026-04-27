@@ -1,6 +1,7 @@
 import { tracked } from '@glimmer/tracking';
 import { dropTask } from 'ember-concurrency';
 import { get } from '@ember/helper';
+import { on } from '@ember/modifier';
 import Owner from '@ember/owner';
 
 import {
@@ -11,6 +12,7 @@ import {
   containsMany,
   linksTo,
   linksToMany,
+  Theme,
 } from 'https://cardstack.com/base/card-api';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import StringField from 'https://cardstack.com/base/string';
@@ -19,9 +21,11 @@ import DateTimeField from 'https://cardstack.com/base/datetime';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import TextAreaField from 'https://cardstack.com/base/text-area';
 
-import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { ContextButton, FieldContainer } from '@cardstack/boxel-ui/components';
 
-import { realmURL } from '@cardstack/runtime-common';
+import { realmURL, type ResolvedCodeRef } from '@cardstack/runtime-common';
+import LayoutSidebarRightCollapse from '@cardstack/boxel-icons/layout-sidebar-right-collapse';
+import LayoutSidebarRightExpand from '@cardstack/boxel-icons/layout-sidebar-right-expand';
 
 import { IssueOptionField } from './issue-option';
 import { KanbanColumnField } from './kanban-column';
@@ -53,7 +57,7 @@ export { KnowledgeArticle } from './knowledge-article';
 export { Comment } from './comment';
 export { KnowledgeTypeField } from './knowledge-article';
 
-const issueCodeRef = {
+const issueCodeRef: ResolvedCodeRef = {
   // @ts-expect-error this is not a CJS file, import.meta is allowed
   module: new URL('./darkfactory', import.meta.url).href,
   name: 'Issue',
@@ -67,6 +71,382 @@ function issueStatusColor(
     statusOptions?.length ? (statusOptions as Option[]) : issueStatusOptions,
     status ?? 'backlog',
   );
+}
+
+class IssueIsolated extends Component<typeof Issue> {
+  @tracked showSidebar = true;
+
+  get statusColor(): string | undefined {
+    const project = this.args.model?.project;
+    return issueStatusColor(
+      project?.issueStatusOptions,
+      this.args.model?.status,
+    );
+  }
+
+  toggleSidebar = () => {
+    this.showSidebar = !this.showSidebar;
+  };
+
+  <template>
+    <div class='issue-isolated'>
+      <header class='issue-header'>
+        <div class='header-chips'>
+          <span class='id-chip'>{{if
+              @model.issueId
+              @model.issueId
+              'ISSUE'
+            }}</span>
+          {{#if @model.issueType}}
+            <span class='type-chip'><@fields.issueType @format='atom' /></span>
+          {{/if}}
+          <StatusPill @color={{this.statusColor}}>
+            {{#if @model.status}}
+              <@fields.status @format='atom' />
+            {{else}}
+              Backlog
+            {{/if}}
+          </StatusPill>
+          <ContextButton
+            class='sidebar-toggle'
+            @icon={{if
+              this.showSidebar
+              LayoutSidebarRightCollapse
+              LayoutSidebarRightExpand
+            }}
+            @label={{if this.showSidebar 'Collapse sidebar' 'Expand sidebar'}}
+            @variant='ghost'
+            {{on 'click' this.toggleSidebar}}
+          />
+        </div>
+        <h1 class='issue-title'><@fields.cardTitle /></h1>
+      </header>
+
+      <div
+        class='issue-body'
+        data-sidebar={{if this.showSidebar 'open' 'closed'}}
+      >
+        <main class='issue-main'>
+          <section class='content-section'>
+            <h2 class='section-heading'>Description</h2>
+            <div class='section-body'>
+              {{#if @model.description}}
+                <@fields.description />
+              {{else}}
+                <p class='empty-section-text'>
+                  No description yet. Add context, goals, constraints, or links
+                  in edit mode.
+                </p>
+              {{/if}}
+            </div>
+          </section>
+          {{#if @model.acceptanceCriteria}}
+            <section class='content-section'>
+              <h2 class='section-heading'>Acceptance Criteria</h2>
+              <div class='section-body'>
+                <@fields.acceptanceCriteria />
+              </div>
+            </section>
+          {{/if}}
+          {{#if @model.comments.length}}
+            <section class='content-section'>
+              <h2 class='section-heading'>
+                Comments
+                <span class='count-badge'>{{@model.comments.length}}</span>
+              </h2>
+              <div class='comments-list'>
+                <@fields.comments />
+              </div>
+            </section>
+          {{/if}}
+        </main>
+
+        <aside class='issue-sidebar'>
+          <div class='issue-sidebar-inner'>
+            <dl class='meta-list'>
+              <div class='meta-item'>
+                <dt>Status</dt>
+                <dd>
+                  <StatusPill @color={{this.statusColor}}>
+                    {{#if @model.status}}
+                      <@fields.status @format='atom' />
+                    {{else}}
+                      Backlog
+                    {{/if}}
+                  </StatusPill>
+                </dd>
+              </div>
+              {{#if @model.priority}}
+                <div class='meta-item'>
+                  <dt>Priority</dt>
+                  <dd>
+                    <span
+                      class='priority-value'
+                      data-priority={{@model.priority}}
+                    >
+                      <@fields.priority @format='atom' />
+                    </span>
+                  </dd>
+                </div>
+              {{/if}}
+              {{#if @model.issueType}}
+                <div class='meta-item'>
+                  <dt>Type</dt>
+                  <dd><@fields.issueType @format='atom' /></dd>
+                </div>
+              {{/if}}
+              {{#if @model.createdAt}}
+                <div class='meta-item'>
+                  <dt>Created</dt>
+                  <dd class='meta-date'><@fields.createdAt
+                      @format='atom'
+                    /></dd>
+                </div>
+              {{/if}}
+              {{#if @model.updatedAt}}
+                <div class='meta-item'>
+                  <dt>Updated</dt>
+                  <dd class='meta-date'><@fields.updatedAt
+                      @format='atom'
+                    /></dd>
+                </div>
+              {{/if}}
+            </dl>
+
+            {{#if @model.project}}
+              <div class='sidebar-section'>
+                <h3 class='sidebar-section-title'>Project</h3>
+                <div class='sidebar-card'>
+                  <@fields.project @format='embedded' />
+                </div>
+              </div>
+            {{/if}}
+
+            {{#if @model.blockedBy.length}}
+              <div class='sidebar-section'>
+                <h3 class='sidebar-section-title'>Blocked By</h3>
+                <div class='related-list'>
+                  <@fields.blockedBy />
+                </div>
+              </div>
+            {{/if}}
+
+            {{#if @model.relatedKnowledge.length}}
+              <div class='sidebar-section'>
+                <h3 class='sidebar-section-title'>Related Knowledge</h3>
+                <div class='related-list'>
+                  <@fields.relatedKnowledge />
+                </div>
+              </div>
+            {{/if}}
+          </div>
+        </aside>
+      </div>
+    </div>
+    <style scoped>
+      .issue-isolated {
+        height: 100%;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        background: var(--background, var(--boxel-light));
+        color: var(--foreground, var(--boxel-dark));
+      }
+      .issue-header {
+        padding: var(--boxel-sp-xl) var(--boxel-sp-xl) var(--boxel-sp-lg);
+        background: var(--muted, var(--boxel-100));
+        border-bottom: 1px solid var(--border, var(--boxel-border-color));
+        display: grid;
+        gap: var(--boxel-sp-2xs);
+      }
+      .header-chips {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-2xs);
+        flex-wrap: wrap;
+      }
+      .sidebar-toggle {
+        margin-left: auto;
+        flex-shrink: 0;
+      }
+      .id-chip {
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted-foreground, var(--boxel-500));
+      }
+      .type-chip {
+        font-size: 0.6875rem;
+        font-weight: 500;
+        color: var(--muted-foreground, var(--boxel-500));
+        background: color-mix(
+          in oklch,
+          var(--muted-foreground, var(--boxel-500)) 12%,
+          transparent
+        );
+        padding: 0.2em 0.6em;
+        border-radius: 4px;
+        text-transform: capitalize;
+      }
+      .issue-title {
+        margin: 0;
+        font-size: 1.375rem;
+        font-weight: 600;
+        line-height: 1.3;
+        color: var(--foreground, var(--boxel-dark));
+      }
+      .issue-body {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        overflow: hidden;
+      }
+      .issue-main {
+        flex: 1;
+        min-width: 0;
+        padding: var(--boxel-sp-xl);
+        display: grid;
+        gap: var(--boxel-sp-xl);
+        align-content: start;
+        overflow-y: auto;
+      }
+      .content-section {
+        display: grid;
+        gap: var(--boxel-sp-2xs);
+      }
+      .section-heading {
+        margin: 0;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--foreground, var(--boxel-dark));
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-2xs);
+      }
+      .count-badge {
+        font-size: 0.6875rem;
+        font-weight: 500;
+        color: var(--muted-foreground, var(--boxel-500));
+        background: color-mix(
+          in oklch,
+          var(--muted-foreground, var(--boxel-500)) 15%,
+          transparent
+        );
+        padding: 0.1em 0.5em;
+        border-radius: 999px;
+      }
+      .section-body {
+        font-size: 0.875rem;
+        line-height: 1.6;
+        color: var(--foreground, var(--boxel-dark));
+      }
+      .empty-section-text {
+        margin: 0;
+        padding: var(--boxel-sp);
+        color: var(--muted-foreground, var(--boxel-500));
+        background: color-mix(
+          in oklch,
+          var(--muted, var(--boxel-100)) 70%,
+          transparent
+        );
+        border: 1px dashed var(--border, var(--boxel-border-color));
+        border-radius: var(--boxel-border-radius);
+      }
+      .comments-list {
+        display: grid;
+      }
+      .issue-sidebar {
+        width: 18rem;
+        flex-shrink: 0;
+        overflow: hidden;
+        border-left: 1px solid var(--border, var(--boxel-border-color));
+        transition: width 0.25s ease;
+      }
+      .issue-sidebar-inner {
+        width: 18rem;
+        padding: var(--boxel-sp-lg) var(--boxel-sp);
+        background: var(--sidebar, var(--boxel-50));
+        color: var(--sidebar-foreground, var(--foreground, var(--boxel-dark)));
+        display: grid;
+        gap: var(--boxel-sp-lg);
+        align-content: start;
+        overflow-y: auto;
+        height: 100%;
+        box-sizing: border-box;
+      }
+      .issue-body[data-sidebar='closed'] .issue-sidebar {
+        width: 0;
+        border-left-width: 0;
+      }
+      .meta-list {
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: var(--boxel-sp-2xs);
+      }
+      .meta-item {
+        display: grid;
+        grid-template-columns: 5.5rem 1fr;
+        align-items: center;
+        gap: var(--boxel-sp-2xs);
+        min-height: 1.75rem;
+      }
+      .meta-list dt {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--muted-foreground, var(--boxel-500));
+      }
+      .meta-list dd {
+        margin: 0;
+        font-size: 0.8125rem;
+        color: var(--foreground, var(--boxel-dark));
+      }
+      .priority-value {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: capitalize;
+        color: var(--_p, var(--foreground, var(--boxel-dark)));
+      }
+      .priority-value[data-priority='critical'] {
+        --_p: oklch(55% 0.22 25);
+      }
+      .priority-value[data-priority='high'] {
+        --_p: oklch(68% 0.17 55);
+      }
+      .priority-value[data-priority='medium'] {
+        --_p: oklch(75% 0.14 90);
+      }
+      .priority-value[data-priority='low'] {
+        --_p: var(--muted-foreground, var(--boxel-500));
+      }
+      .meta-date {
+        font-size: 0.75rem;
+        color: var(--muted-foreground, var(--boxel-500));
+      }
+      .sidebar-section {
+        display: grid;
+        gap: var(--boxel-sp-2xs);
+      }
+      .sidebar-section-title {
+        margin: 0;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        color: var(--muted-foreground, var(--boxel-500));
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .sidebar-card {
+        border-radius: var(--boxel-border-radius);
+        overflow: hidden;
+        border: 1px solid var(--border, var(--boxel-border-color));
+      }
+      .related-list {
+        display: grid;
+        gap: var(--boxel-sp-2xs);
+      }
+    </style>
+  </template>
 }
 
 export class Issue extends CardDef {
@@ -98,6 +478,12 @@ export class Issue extends CardDef {
     },
   });
 
+  @field cardTheme = linksTo(() => Theme, {
+    computeVia: function (this: Issue) {
+      return this.cardInfo?.theme ?? this.project?.cardTheme;
+    },
+  });
+
   static fitted = class Fitted extends Component<typeof Issue> {
     get statusColor(): string | undefined {
       const project = this.args.model?.project as Project | null;
@@ -108,9 +494,24 @@ export class Issue extends CardDef {
     }
 
     <template>
-      <div class='issue-card compact'>
-        <div class='row'>
-          <strong>{{if @model.issueId @model.issueId 'ISSUE'}}</strong>
+      <div class='issue-card'>
+        <div class='meta-row'>
+          <span class='issue-id'>{{if
+              @model.issueId
+              @model.issueId
+              'ISSUE'
+            }}</span>
+          {{#if @model.issueType}}
+            <span class='type-tag'><@fields.issueType @format='atom' /></span>
+          {{/if}}
+        </div>
+        <p class='title'><@fields.cardTitle /></p>
+        <div class='footer-row'>
+          {{#if @model.priority}}
+            <span class='priority' data-priority={{@model.priority}}>
+              <@fields.priority @format='atom' />
+            </span>
+          {{/if}}
           <StatusPill @color={{this.statusColor}}>
             {{#if @model.status}}
               <@fields.status @format='atom' />
@@ -119,22 +520,84 @@ export class Issue extends CardDef {
             {{/if}}
           </StatusPill>
         </div>
-        <div><@fields.cardTitle /></div>
       </div>
       <style scoped>
         .issue-card {
           display: grid;
-          gap: 0.35rem;
+          grid-template-rows: auto 1fr auto;
+          gap: var(--boxel-sp-2xs);
+          padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs) var(--boxel-sp-2xs)
+            var(--boxel-sp);
+          height: 100%;
+          box-sizing: border-box;
         }
-        .compact {
-          padding: 0.75rem;
-        }
-        .row {
+        .meta-row {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          gap: 0.75rem;
-          font-size: 0.8rem;
+          gap: var(--boxel-sp-2xs);
+          min-width: 0;
+        }
+        .issue-id {
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-500));
+          flex-shrink: 0;
+        }
+        .type-tag {
+          font-size: 0.625rem;
+          font-weight: 500;
+          color: var(--muted-foreground, var(--boxel-500));
+          background: color-mix(
+            in oklch,
+            var(--muted-foreground, var(--boxel-500)) 12%,
+            transparent
+          );
+          padding: 0.15em 0.45em;
+          border-radius: 3px;
+          text-transform: capitalize;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 6rem;
+        }
+        .title {
+          margin: 0;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          line-height: 1.4;
+          color: var(--card-foreground, var(--boxel-dark));
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        .footer-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: var(--boxel-sp-2xs);
+        }
+        .priority {
+          font-size: 0.625rem;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--_p, var(--muted-foreground, var(--boxel-500)));
+        }
+        .priority[data-priority='critical'] {
+          --_p: oklch(55% 0.22 25);
+        }
+        .priority[data-priority='high'] {
+          --_p: oklch(68% 0.17 55);
+        }
+        .priority[data-priority='medium'] {
+          --_p: oklch(75% 0.14 90);
+        }
+        .priority[data-priority='low'] {
+          --_p: var(--muted-foreground, var(--boxel-500));
         }
       </style>
     </template>
@@ -142,91 +605,105 @@ export class Issue extends CardDef {
 
   static embedded = this.fitted;
 
-  static isolated = class Isolated extends Component<typeof Issue> {
-    get statusColor(): string | undefined {
-      const project = this.args.model?.project;
-      return issueStatusColor(
-        project?.issueStatusOptions,
-        this.args.model?.status,
-      );
-    }
+  static isolated = IssueIsolated;
 
+  static edit = class Edit extends Component<typeof Issue> {
     <template>
-      <article class='surface'>
-        <header>
-          <div class='row'>
-            <strong>{{if @model.issueId @model.issueId 'ISSUE'}}</strong>
-            <StatusPill @color={{this.statusColor}}>
-              {{#if @model.status}}
-                <@fields.status @format='atom' />
-              {{else}}
-                Backlog
-              {{/if}}
-            </StatusPill>
+      <div class='issue-edit'>
+        <section class='edit-section'>
+          <h2 class='section-heading'>Basic Info</h2>
+          <FieldContainer @label='Summary' @tag='label' @vertical={{true}}>
+            <@fields.summary />
+          </FieldContainer>
+          <div class='field-row'>
+            <FieldContainer @label='Issue ID' @tag='label' @vertical={{true}}>
+              <@fields.issueId />
+            </FieldContainer>
+            <FieldContainer @label='Type' @tag='label' @vertical={{true}}>
+              <@fields.issueType />
+            </FieldContainer>
           </div>
-          <h1><@fields.cardTitle /></h1>
-        </header>
-        {{#if @model.project}}
-          <section>
-            <h2>Project</h2>
-            <div class='linked-card'>
-              <@fields.project @format='embedded' />
+          <div class='field-row'>
+            <FieldContainer @label='Status' @tag='label' @vertical={{true}}>
+              <@fields.status />
+            </FieldContainer>
+            <FieldContainer @label='Priority' @tag='label' @vertical={{true}}>
+              <@fields.priority />
+            </FieldContainer>
+          </div>
+        </section>
+
+        <section class='edit-section'>
+          <h2 class='section-heading'>Content</h2>
+          <FieldContainer @label='Description' @tag='label' @vertical={{true}}>
+            <div class='markdown-field-shell'>
+              {{#unless @model.description}}
+                <p class='empty-markdown-prompt'>
+                  Add context, goals, constraints, or links to help define this
+                  issue.
+                </p>
+              {{/unless}}
+              <@fields.description />
             </div>
-          </section>
-        {{/if}}
-        {{#if @model.description}}
-          <section>
-            <h2>Description</h2>
-            <@fields.description />
-          </section>
-        {{/if}}
-        {{#if @model.acceptanceCriteria}}
-          <section>
-            <h2>Acceptance Criteria</h2>
+          </FieldContainer>
+          <FieldContainer
+            @label='Acceptance Criteria'
+            @tag='label'
+            @vertical={{true}}
+          >
             <@fields.acceptanceCriteria />
-          </section>
-        {{/if}}
-        {{#if @model.relatedKnowledge.length}}
-          <section>
-            <h2>Related Knowledge</h2>
-            <@fields.relatedKnowledge />
-          </section>
-        {{/if}}
-        {{#if @model.blockedBy.length}}
-          <section>
-            <h2>Blocked By</h2>
+          </FieldContainer>
+        </section>
+
+        <section class='edit-section'>
+          <h2 class='section-heading'>Relations</h2>
+          <FieldContainer @label='Project' @vertical={{true}}>
+            <@fields.project />
+          </FieldContainer>
+          <FieldContainer @label='Blocked By' @vertical={{true}}>
             <@fields.blockedBy />
-          </section>
-        {{/if}}
-        {{#if @model.comments.length}}
-          <section class='comments-section'>
-            <h3>Comments</h3>
-            <@fields.comments />
-          </section>
-        {{/if}}
-      </article>
+          </FieldContainer>
+          <FieldContainer @label='Related Knowledge' @vertical={{true}}>
+            <@fields.relatedKnowledge />
+          </FieldContainer>
+        </section>
+      </div>
       <style scoped>
-        .surface {
-          padding: 1.5rem;
+        .issue-edit {
           display: grid;
-          gap: 1rem;
+          gap: var(--boxel-sp-xl);
+          padding: var(--boxel-sp-xl);
         }
-        .linked-card {
-          margin-bottom: 0.5rem;
+        .edit-section {
+          display: grid;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp-lg);
+          background: var(--card, var(--boxel-light));
+          border: 1px solid var(--border, var(--boxel-border-color));
+          border-radius: var(--boxel-border-radius-lg);
         }
-        .row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 0.75rem;
-        }
-        .comments-section {
-          margin-top: 1rem;
-        }
-        .comments-section h3 {
-          font-size: var(--boxel-font-size);
+        .section-heading {
+          margin: 0 0 var(--boxel-sp-2xs);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 600;
-          margin-bottom: 0.5rem;
+          color: var(--muted-foreground, var(--boxel-500));
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+        .field-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--boxel-sp);
+        }
+        .markdown-field-shell {
+          display: grid;
+          gap: var(--boxel-sp-xs);
+        }
+        .empty-markdown-prompt {
+          margin: 0;
+          font-size: 0.75rem;
+          line-height: 1.4;
+          color: var(--muted-foreground, var(--boxel-500));
         }
       </style>
     </template>
@@ -241,7 +718,7 @@ class ProjectIsolated extends Component<typeof Project> {
   constructor(owner: Owner, args: any) {
     super(owner, args);
     this.board = new ProjectKanbanController(
-      () => this.args.model,
+      () => this.args.model as Project,
       () => this.realmURL,
       issueCodeRef,
       this.args.createCard,
@@ -500,13 +977,13 @@ export class Project extends CardDef {
     }
 
     <template>
-      <div class='project-card compact'>
-        <div class='row'>
-          <strong>{{if
+      <div class='project-card'>
+        <div class='meta-row'>
+          <span class='project-code'>{{if
               @model.projectCode
               @model.projectCode
               'PROJECT'
-            }}</strong>
+            }}</span>
           <StatusPill @color={{this.statusColor}}>
             {{#if @model.projectStatus}}
               <@fields.projectStatus @format='atom' />
@@ -515,22 +992,42 @@ export class Project extends CardDef {
             {{/if}}
           </StatusPill>
         </div>
-        <div><@fields.cardTitle /></div>
+        <p class='title'><@fields.cardTitle /></p>
       </div>
       <style scoped>
         .project-card {
           display: grid;
-          gap: 0.35rem;
+          grid-template-rows: auto 1fr;
+          gap: var(--boxel-sp-2xs);
+          padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs) var(--boxel-sp-2xs)
+            var(--boxel-sp);
+          height: 100%;
+          box-sizing: border-box;
         }
-        .compact {
-          padding: 0.75rem;
-        }
-        .row {
+        .meta-row {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          gap: 0.75rem;
-          font-size: 0.8rem;
+          gap: var(--boxel-sp-2xs);
+        }
+        .project-code {
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-500));
+          flex-shrink: 0;
+        }
+        .title {
+          margin: 0;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          line-height: 1.4;
+          color: var(--card-foreground, var(--boxel-dark));
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
         }
       </style>
     </template>
@@ -562,89 +1059,128 @@ export class Project extends CardDef {
       });
     }
 
-    get groupBy(): string {
-      return this.args.model?.groupBy ?? 'status';
-    }
-
     <template>
-      <div class='kanban-edit'>
-        <div class='row'>
-          <FieldContainer @label='Project Name' @vertical={{true}}>
-            <@fields.projectName />
-          </FieldContainer>
-          <FieldContainer @label='Project Code' @vertical={{true}}>
-            <@fields.projectCode />
-          </FieldContainer>
-        </div>
+      <div class='project-edit'>
+        <section class='edit-section'>
+          <h2 class='section-heading'>Project Info</h2>
+          <div class='field-row'>
+            <FieldContainer
+              @label='Project Name'
+              @tag='label'
+              @vertical={{true}}
+            >
+              <@fields.projectName />
+            </FieldContainer>
+            <FieldContainer
+              @label='Project Code'
+              @tag='label'
+              @vertical={{true}}
+            >
+              <@fields.projectCode />
+            </FieldContainer>
+          </div>
+          <div class='field-row'>
+            <FieldContainer @label='Status' @tag='label' @vertical={{true}}>
+              <@fields.projectStatus />
+            </FieldContainer>
+            <FieldContainer @label='Theme' @tag='label' @vertical={{true}}>
+              <@fields.cardInfo.theme />
+            </FieldContainer>
+          </div>
+        </section>
 
-        <div class='row'>
-          <FieldContainer @label='Status' @vertical={{true}}>
-            <@fields.projectStatus />
-          </FieldContainer>
-        </div>
+        <section class='edit-section'>
+          <h2 class='section-heading'>Board Settings</h2>
+          <div class='field-row'>
+            <FieldContainer @label='Group By' @tag='label' @vertical={{true}}>
+              <@fields.groupBy />
+            </FieldContainer>
+            <FieldContainer
+              @label='Hide Empty Columns'
+              @tag='label'
+              @vertical={{true}}
+            >
+              <@fields.hideEmptyColumns />
+            </FieldContainer>
+          </div>
+        </section>
 
-        <div class='row'>
-          <FieldContainer @label='Theme' @vertical={{true}}>
-            <@fields.cardInfo.theme />
+        <section class='edit-section'>
+          <h2 class='section-heading'>Definition</h2>
+          <FieldContainer @label='Objective' @tag='label' @vertical={{true}}>
+            <@fields.objective />
           </FieldContainer>
-          <FieldContainer @label='Group By' @vertical={{true}}>
-            <@fields.groupBy />
+          <FieldContainer @label='Scope' @tag='label' @vertical={{true}}>
+            <@fields.scope />
           </FieldContainer>
-        </div>
+          <FieldContainer
+            @label='Technical Context'
+            @tag='label'
+            @vertical={{true}}
+          >
+            <@fields.technicalContext />
+          </FieldContainer>
+          <FieldContainer
+            @label='Success Criteria'
+            @tag='label'
+            @vertical={{true}}
+          >
+            <@fields.successCriteria />
+          </FieldContainer>
+        </section>
 
-        <div class='row'>
-          <FieldContainer @label='Hide Empty Columns' @vertical={{true}}>
-            <@fields.hideEmptyColumns />
+        <section class='edit-section'>
+          <h2 class='section-heading'>References</h2>
+          <FieldContainer
+            @label='Test Artifacts Realm URL'
+            @tag='label'
+            @vertical={{true}}
+          >
+            <@fields.testArtifactsRealmUrl />
           </FieldContainer>
-        </div>
+          <FieldContainer @label='Knowledge Base' @vertical={{true}}>
+            <@fields.knowledgeBase />
+          </FieldContainer>
+        </section>
 
-        <section class='options-section'>
-          <div class='options-section-header'>
-            <h2 class='section-title'>Issue Configuration</h2>
+        <section class='edit-section'>
+          <div class='section-header'>
+            <h2 class='section-heading'>Issue Configuration</h2>
             <p class='section-copy'>
               Define the status, priority, and type options that issues in this
               board can use.
             </p>
           </div>
-
-          <div class='options-section-body'>
-            <div class='options-config-panel'>
-              <FieldContainer @label='Issue Status Options' @vertical={{true}}>
+          <div class='config-panels'>
+            <div class='config-panel'>
+              <FieldContainer @label='Status Options' @vertical={{true}}>
                 <@fields.issueStatusOptions />
               </FieldContainer>
             </div>
-
-            <div class='options-config-panel'>
-              <FieldContainer
-                @label='Issue Priority Options'
-                @vertical={{true}}
-              >
+            <div class='config-panel'>
+              <FieldContainer @label='Priority Options' @vertical={{true}}>
                 <@fields.issuePriorityOptions />
               </FieldContainer>
             </div>
-
-            <div class='options-config-panel'>
-              <FieldContainer @label='Issue Type Options' @vertical={{true}}>
+            <div class='config-panel'>
+              <FieldContainer @label='Type Options' @vertical={{true}}>
                 <@fields.issueTypeOptions />
               </FieldContainer>
             </div>
           </div>
         </section>
-
       </div>
       <style scoped>
-        .kanban-edit {
+        .project-edit {
           display: grid;
           gap: var(--boxel-sp-xl);
+          width: 100%;
+          max-width: 72rem;
+          margin: 0 auto;
           padding: var(--boxel-sp-xl);
+          box-sizing: border-box;
         }
-        .row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: var(--boxel-sp);
-          min-width: 0;
-        }
-        .options-section {
+        .edit-section {
           display: grid;
           gap: var(--boxel-sp);
           padding: var(--boxel-sp-lg);
@@ -652,15 +1188,35 @@ export class Project extends CardDef {
           border: 1px solid var(--border, var(--boxel-border-color));
           border-radius: var(--boxel-border-radius-lg);
         }
-        .options-section-header {
+        .section-heading {
+          margin: 0 0 var(--boxel-sp-2xs);
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 600;
+          color: var(--muted-foreground, var(--boxel-500));
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+        .field-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .section-header {
           display: grid;
           gap: var(--boxel-sp-2xs);
         }
-        .options-section-body {
+        .section-copy {
+          margin: 0;
+          font-size: var(--boxel-font-size-xs);
+          line-height: 1.5;
+          color: var(--muted-foreground, var(--boxel-500));
+        }
+        .config-panels {
           display: grid;
           gap: var(--boxel-sp);
         }
-        .options-config-panel {
+        .config-panel {
           display: grid;
           gap: var(--boxel-sp);
           padding: var(--boxel-sp);
@@ -670,18 +1226,6 @@ export class Project extends CardDef {
           border-radius: var(--boxel-border-radius);
           box-shadow: inset 0 1px 0
             color-mix(in oklch, var(--card) 35%, transparent);
-        }
-        .section-title {
-          margin: 0;
-          font-size: var(--boxel-font-size-sm);
-          font-weight: 600;
-          color: var(--foreground, var(--boxel-dark));
-        }
-        .section-copy {
-          margin: 0;
-          font-size: var(--boxel-font-size-xs);
-          line-height: 1.5;
-          color: var(--muted-foreground, var(--boxel-600));
         }
       </style>
     </template>

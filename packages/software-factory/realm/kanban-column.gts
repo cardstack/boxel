@@ -33,7 +33,16 @@ export class KanbanColumnField extends FieldDef {
             style={{cssVar kanban-column-label-color=@model.color}}
           />
         {{/if}}
-        <span class='column-label'>{{if
+        <span
+          class='column-label'
+          style={{cssVar
+            kanban-column-label-color=(if
+              @model.color
+              @model.color
+              'var(--foreground)'
+            )
+          }}
+        >{{if
             @model.label
             @model.label
             'Untitled'
@@ -62,6 +71,10 @@ export class KanbanColumnField extends FieldDef {
         }
         .column-label {
           font-weight: 600;
+          color: var(
+            --kanban-column-label-color,
+            var(--foreground, var(--boxel-dark))
+          );
         }
         .wip-badge {
           font-size: 9px;

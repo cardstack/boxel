@@ -51,7 +51,7 @@ const ProjectKanbanSettingsPanel: TemplateOnlyComponent<Signature> = <template>
             <input
               type='color'
               class='color-input'
-              value={{if col.color col.color '#2b4fff'}}
+              value={{col.color}}
               {{on 'change' (fn @onColorChange col.key)}}
             />
           </label>
