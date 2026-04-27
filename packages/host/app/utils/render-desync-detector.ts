@@ -213,12 +213,17 @@ export async function runDomDesyncCheck(
   // is sourced from `globalThis.__boxelDomDesyncMicrotaskYields` (untyped at
   // runtime), so a stray non-finite / non-positive / non-integer value
   // would silently shrink the flush-window guard below `DEFAULT_MICROTASK_YIELDS`
-  // and bump false-positive risk. Round to integer, require > 0, otherwise
-  // fall back to the default.
+  // and bump false-positive risk. Round to integer, require >= 1 (a fractional
+  // override like 0.5 would otherwise floor to 0 and disable the drain
+  // entirely), otherwise fall back to the default.
   let rawYields = ctx.microtaskYields;
-  let yields =
-    typeof rawYields === 'number' && Number.isFinite(rawYields) && rawYields > 0
+  let flooredYields =
+    typeof rawYields === 'number' && Number.isFinite(rawYields)
       ? Math.floor(rawYields)
+      : NaN;
+  let yields =
+    Number.isFinite(flooredYields) && flooredYields >= 1
+      ? flooredYields
       : DEFAULT_MICROTASK_YIELDS;
   // Sanitise settleHopsMs the same way: the override is sourced from
   // globalThis (untyped), and a malformed value would either skip the
