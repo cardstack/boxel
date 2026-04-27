@@ -725,6 +725,47 @@ module(basename(__filename), function () {
                   },
                 },
               },
+              // Reproduces the whitepaper-class V8 throw-then-revoke
+              // pattern used by the timeout-with-revoked-exception test
+              // below. The constructor synchronously throws a rejection
+              // (V8 fires `Runtime.exceptionThrown` for it on the next
+              // microtask checkpoint when no handler is attached yet),
+              // then a microtask later attaches a `.catch` to the
+              // rejecting promise — V8 retracts the uncaught status and
+              // fires `Runtime.exceptionRevoked`. Production whitepaper
+              // bug fits this same shape (RSVP attaches the late catch
+              // automatically during its flush). The fixture's render
+              // itself is fine; the actual timeout in the test is
+              // forced server-side via `simulateTimeoutMs`.
+              'throws-and-late-catches.gts': `
+              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              export class ThrowsAndLateCatches extends CardDef {
+                static isolated = class extends Component<typeof this> {
+                  constructor(...args) {
+                    super(...args);
+                    let p = Promise.reject(
+                      new Error('thrown then revoked: simulated whitepaper-class bug'),
+                    );
+                    // Attach the catch a microtask later so V8 sees the
+                    // rejection as uncaught first, then retracts.
+                    queueMicrotask(() => {
+                      p.catch(() => {});
+                    });
+                  }
+                  <template>ok</template>
+                }
+              }
+            `,
+              'throws-and-late-catches.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./throws-and-late-catches'),
+                      name: 'ThrowsAndLateCatches',
+                    },
+                  },
+                },
+              },
               'directory-query.gts': `
               import { CardDef, field, contains, linksTo, linksToMany, StringField, Component, queryableValue } from 'https://cardstack.com/base/card-api';
 
@@ -1192,6 +1233,64 @@ module(basename(__filename), function () {
         });
 
         assert.notOk(result.response.error, 'prerender succeeds');
+      });
+
+      // Regression test for the whitepaper-class bug fix: the
+      // server-side timeout error doc takes a different code path
+      // through the prerender pipeline than the host-written
+      // error/unusable docs (see render-runner.ts: `#mergeConsoleErrors`
+      // runs on the same response.error regardless of how that error
+      // got there, but it's worth pinning down). The fixture
+      // `throws-and-late-catches.gts` reproduces the V8 throw +
+      // RSVP-late-catch shape: a Promise rejection that V8 reports
+      // via `Runtime.exceptionThrown`, then a microtask later a
+      // `.catch` is attached and V8 fires `Runtime.exceptionRevoked`.
+      // Earlier behavior (#4524) deleted the entry on revoke; this
+      // PR keeps it tagged. The render itself is fine — the timeout
+      // here is forced server-side via `simulateTimeoutMs`.
+      test('timeout error doc carries revoked-exception entry in additionalErrors', async function (assert) {
+        let cardURL = `${realmURL}throws-and-late-catches.json`;
+        let result = await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+          renderOptions: { cardRender: true },
+          // Tight timeout + delay-after-capture: the page renders
+          // normally (constructor throws + late-catches the rejection,
+          // CDP capture records both events), captureResult reads the
+          // ready DOM, then simulateTimeoutMs holds long enough that
+          // the outer `withTimeout` races to "Render timeout".
+          opts: { timeoutMs: 1, simulateTimeoutMs: 200 },
+        });
+
+        let timeoutError =
+          (result.response.card?.error as any) ??
+          (result.response.pageUnusableError as any);
+        assert.ok(timeoutError, 'render times out as expected');
+        assert.strictEqual(
+          timeoutError?.error?.title,
+          'Render timeout',
+          'timeout error doc has the expected title',
+        );
+
+        let additionalErrors: any[] =
+          timeoutError?.error?.additionalErrors ?? [];
+        let revokedEntry = additionalErrors.find(
+          (e) => e?.title === 'Uncaught exception (revoked by late .catch)',
+        );
+        assert.ok(
+          revokedEntry,
+          `timeout error doc carries the revoked-exception entry; ` +
+            `additionalErrors titles: ${JSON.stringify(
+              additionalErrors.map((e) => e?.title),
+            )}`,
+        );
+        assert.ok(
+          revokedEntry?.message?.includes('thrown then revoked'),
+          `revoked entry preserves the actionable exception message; got: ${revokedEntry?.message}`,
+        );
       });
 
       test('card prerender surfaces unhandled promise rejection without timing out', async function (assert) {
