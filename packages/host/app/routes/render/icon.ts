@@ -20,12 +20,14 @@ export default class RenderIconRoute extends Route<Model> {
     let renderModel =
       parentModel ??
       ((globalThis as any).__renderModel as ParentModel | undefined);
-    await renderModel?.readyPromise;
     let instance: CardDef | undefined = renderModel?.instance;
     if (!instance) {
       // the lack of an instance is dealt with in the parent route — throwing
       // here would clobber the parent's error doc (e.g. "Link Not Found" 404)
-      // with a generic 500 "Missing render instance"
+      // with a generic 500 "Missing render instance".
+      // We deliberately do NOT await renderModel?.readyPromise here (unlike
+      // render.meta): see render/html.ts for details — settling readyPromise
+      // before the render pass would drop runtime deps from captured metadata.
       transition.abort();
       return;
     }
