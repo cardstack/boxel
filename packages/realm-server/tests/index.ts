@@ -229,6 +229,7 @@ import './claim-boxel-domain-test';
 import './card-reference-resolver-test';
 import './bfm-card-references-test';
 import './loader-retry-test';
+import './package-shim-handler-test';
 import './command-parsing-utils-test';
 import './query-matches-filter-test';
 import './matches-filter-integration-test';
