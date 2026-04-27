@@ -14,10 +14,14 @@ export default defineConfig({
   testMatch: ['**/*.spec.ts'],
   fullyParallel: false,
   reporter: process.env.CI ? [['list']] : undefined,
-  // TEMP: drop to 1 worker to test OOM hypothesis on the SF runner under
-  // the vite host build. Each runQunitInBrowser test spawns Chromium and
-  // loads the full host runtime; 3 parallel browsers may exhaust runner
-  // RAM and trigger "hosted runner lost communication" deaths.
+  // The runQunitInBrowser-based tests (factory-test-realm.spec.ts and
+  // run-tests-in-memory.spec.ts) each spawn a fresh Chromium and load
+  // the full vite-bundled host runtime. With workers > 1, multiple heavy
+  // browsers run in parallel and exhaust the 7GB GitHub-hosted runner —
+  // observed as "hosted runner lost communication with the server" at
+  // ~53min. Serializing keeps total runtime at ~33min and is reliable.
+  // TODO: revisit after the vite migration stabilises (e.g. tag the
+  // heavy specs and run them in a dedicated worker pool).
   workers: 1,
   timeout: 300_000,
   expect: {

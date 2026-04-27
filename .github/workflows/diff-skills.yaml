@@ -1,9 +1,15 @@
 name: Diff Skills
 
 on:
-  # TEMP: pull_request trigger disabled while debugging vite-build SF tests.
-  # Revert this block to restore PR runs.
-  workflow_dispatch:
+  pull_request:
+    paths:
+      - "packages/base/cards/skill*.json"
+      - "packages/base/Skill/**/*.json"
+      - "packages/catalog-realm/**/Skill/**/*.json"
+      - "packages/experiments-realm/**/Skill*/**/*.json"
+      - "packages/host/tests/cards/skill-*.json"
+      - "packages/skills-realm/**/*.json"
+      - "packages/software-factory/realm/**/*skill*.json"
 
 permissions:
   contents: read
