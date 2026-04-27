@@ -854,6 +854,8 @@ The test for whether a tool retires is: _would replacing it with a skill that sa
 
 ### Target-Realm I/O Migrates to Local Filesystem
 
+**Status:** ✅ landed in CS-10882 (PR #4492). The notes below describe the design as planned; the implementation matched the plan with a few divergences captured in [_Implementation notes_](#implementation-notes-cs-10882) at the end of this section.
+
 CS-10642 landed the auth-lifecycle migration: the factory no longer manages JWTs and calls the realm through `BoxelCLIClient` instead of raw fetch. It did **not** change _where_ target-realm reads and writes go — they still round-trip over HTTP via `client.read` / `client.write` / `client.delete`. That is the next step.
 
 **Principle:** the target realm is a synced local workspace. Any code that currently does `client.read(targetRealmUrl, …)` or `client.write(targetRealmUrl, …)` against the _target realm_ is replaced by local filesystem operations. Push/pull synchronization (`client.pull`, `client.sync`) is the only path data takes between the local workspace and the target realm.
@@ -914,6 +916,19 @@ After target-realm I/O moves to the filesystem, `realm-operations.ts` shrinks fu
 
 - Replacing `client.search` with a local FS index walk. The realm's indexed search (filter by type, sort by sequenceNumber, etc.) has no equivalent in pure file operations. A local query engine is future work.
 - Replacing `client.runCommand` / `client.lint`. These are server-side host command invocations, not file I/O.
+
+#### Implementation notes (CS-10882)
+
+A few practical points where the shipped work diverged from the plan above:
+
+- **Workspace primitives, not raw `fs`.** Call sites now use `readCard` / `writeCard` / `deleteCard` / `readCardById` / `workspaceFileExists` / `ensureWorkspaceDir` / `resetWorkspaceDir` / `resolveWorkspaceDir` from a new `src/workspace-fs.ts` module instead of calling `fs.promises` directly. The result shapes mirror `BoxelCLIClient` (`{ ok, status, document?, content?, error? }`) so call sites swap cleanly. Every primitive routes its `path` argument through a shared safety guard that rejects absolute paths, `..` traversal, percent-encoded escapes, and any value that resolves outside the workspace dir — defense in depth, so an agent-supplied path can't escape even if a calling tool forgets to validate.
+- **`realm-read` / `realm-write` / `realm-delete` are scoped, not retired.** Step 4's plan was to retire these tools. CS-10882 instead leaves them registered and adds a target-realm rejection in the executor: an agent that hands them a `realm-url` matching the factory's target realm gets a `ToolSafetyError`, but the same tools remain usable for non-target realms (scratch realms, external catalogs, etc.). Full retirement is deferred to a follow-up.
+- **`SyncResult` returns structured outcome, not void.** `syncWorkspace()` callbacks now return `{ ok, error? }`. The loop refuses to mark an issue done when the post-agent or post-validator sync failed — vacuously-passing validators (no files reached the realm to validate) no longer flip an issue to `done`. The sync error is also injected into the next iteration's context so the agent can react.
+- **Initial post-seed sync throws on per-file errors.** Plan said "warning"; in practice a silent warn left the loop running with zero issues and exiting clean (`outcome=all_issues_done`). The entrypoint-level sync now throws.
+- **Workspace auto-resets on freshly-created realms.** The deterministic `os.tmpdir()/boxel-factory-workspaces/<slug>` cache breaks when a realm is recreated between runs (local has stale state, remote has only `index.json`). The entrypoint detects `targetRealm.createdRealm` and wipes the workspace before pulling. Slug now preserves protocol so `http://host/realm/` and `https://host/realm/` map to distinct dirs.
+- **stdout redirect, applied broadly.** `client.pull` / `client.sync` write progress via both `console.log` and `process.stdout.write` (`\r` tickers). A new `redirect-stdout.ts` patches both for the duration of any sync call so progress lands on stderr — the factory's `--debug` JSON summary on stdout stays clean.
+- **Cross-package fix to the realm server's `_atomic` handler.** While end-to-end testing CS-10882 we discovered that an atomic batch containing both a module (`foo.gts`) and an instance that adopts from it (`FooCard/instance.json`) returned `500 FilterRefersToNonexistentTypeError`. Cause: `_batchWrite` iterated files in arrival order and called `fileSerialization` on each instance _before_ flushing the module→index. Two-line fix: sort modules ahead of instances inside the loop, and run the index flush before serialization. Plus a regression test in `packages/realm-server/tests/atomic-endpoints-test.ts`. Also added the missing `console.error` in the atomic catch so future failures aren't silent.
+- **Cross-package fix to boxel-cli's sync planner.** Realm `_mtimes` returns paths URL-encoded (`Knowledge%20Articles/foo.json`); local listings use the decoded form. The diff treated the two as different files and a second sync would "Pull: 1" the remote copy, leaving the workspace with a duplicate. Symmetric bug in the atomic-upload response handler keyed `hrefToRelative` by the unencoded href but the realm echoes back the encoded id. Both fixed via `decodeURIComponent` at the boundary, with a regression test in `client-sync.test.ts`.
 
 #### Skill Re-enablement and Alignment (CS-10613)
 
