@@ -20,6 +20,7 @@ import {
   ensureTrailingSlash,
   type Realm,
   type LooseSingleCardDocument,
+  rri,
 } from '@cardstack/runtime-common';
 
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
@@ -39,6 +40,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   testRealmURL,
+  testRRI,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
@@ -313,7 +315,7 @@ module('Acceptance | operator mode tests', function (hooks) {
               cardDescription: 'Spec for Person Card',
               specType: 'card',
               ref: {
-                module: `${testRealmURL}person`,
+                module: testRRI('person'),
                 name: 'Person',
               },
             },
@@ -332,7 +334,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}pet`,
+                module: testRRI('pet'),
                 name: 'Pet',
               },
             },
@@ -345,7 +347,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}pet`,
+                module: testRRI('pet'),
                 name: 'Pet',
               },
             },
@@ -373,7 +375,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}person`,
+                module: testRRI('person'),
                 name: 'Person',
               },
             },
@@ -393,7 +395,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}person`,
+                module: testRRI('person'),
                 name: 'Person',
               },
             },
@@ -459,7 +461,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${realm2URL}person`,
+                module: rri(`${realm2URL}person`),
                 name: 'Person',
               },
             },
@@ -559,7 +561,7 @@ module('Acceptance | operator mode tests', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${testRealmURL}person`,
+                  module: testRRI('person'),
                   name: 'Person',
                 },
               },

@@ -11,6 +11,8 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
+  rri,
+  baseRRI,
   Deferred,
   registerCardReferencePrefix,
   unregisterCardReferencePrefix,
@@ -23,6 +25,7 @@ import {
   setupLocalIndexing,
   setupRealmCacheTeardown,
   testRealmURL,
+  testRRI,
   setupOnSave,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -504,7 +507,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         assert.deepEqual(
           json.data.meta.adoptsFrom,
           {
-            module: '../person',
+            module: rri('../person'),
             name: 'Person',
           },
           'adoptsFrom is correct',
@@ -601,7 +604,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         assert.deepEqual(
           json.data.meta.adoptsFrom,
           {
-            module: `${baseRealm.url}card-api`,
+            module: baseRRI('card-api'),
             name: 'CardDef',
           },
           'adoptsFrom is correct',
@@ -663,7 +666,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         assert.deepEqual(
           json.data.meta.adoptsFrom,
           {
-            module: `${baseRealm.url}card-api`,
+            module: baseRRI('card-api'),
             name: 'CardDef',
           },
           'adoptsFrom is correct',
@@ -731,7 +734,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         assert.deepEqual(
           json.data.meta.adoptsFrom,
           {
-            module: `${testRealmURL}person`,
+            module: testRRI('person'),
             name: 'Person',
           },
           'adoptsFrom is correct',

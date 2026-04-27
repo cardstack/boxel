@@ -17,6 +17,43 @@ export type RealmResourceIdentifier = string & { __rriBrand: unknown };
  */
 export type RealmIdentifier = string & { __riBrand: unknown };
 
+/**
+ * Brand a string as a `RealmResourceIdentifier`. Thin wrapper around
+ * `as RealmResourceIdentifier` — use at boundaries where you know a string
+ * is a valid RRI (e.g. literal modules, already-resolved URLs).
+ */
+export function rri(s: string): RealmResourceIdentifier {
+  return s as RealmResourceIdentifier;
+}
+
+/**
+ * Brand a string as a `RealmIdentifier`. Thin wrapper around
+ * `as RealmIdentifier` — use at boundaries where you know a string is a
+ * valid realm identifier (e.g. trailing-slash URLs).
+ */
+export function ri(s: string): RealmIdentifier {
+  return s as RealmIdentifier;
+}
+
+/**
+ * Build a `{ module, name }` code ref by resolving `relativePath` against
+ * `baseUrl` (typically `import.meta.url`) and branding the result as a
+ * `RealmResourceIdentifier`.
+ *
+ * Card definitions in `.gts` realm modules use this to point at sibling cards
+ * without sprinkling `as RealmResourceIdentifier` casts on every call site.
+ */
+export function codeRef(
+  baseUrl: string,
+  relativePath: string,
+  name: string,
+): { module: RealmResourceIdentifier; name: string } {
+  return {
+    module: new URL(relativePath, baseUrl).href as RealmResourceIdentifier,
+    name,
+  };
+}
+
 const prefixMappings = new Map<string, string>();
 
 export function registerCardReferencePrefix(

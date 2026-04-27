@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Query } from '@cardstack/runtime-common';
+import { baseRealm, type Query, rri } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -131,7 +131,10 @@ module('Integration | commands | search', function (hooks) {
     let result = await runQuerySearch({
       filter: {
         eq: { firstName: 'R2-D2' },
-        on: { module: 'http://test-realm/test/author', name: 'Author' },
+        on: {
+          module: rri('http://test-realm/test/author'),
+          name: 'Author',
+        },
       },
     });
     assert.strictEqual(result.cardIds.length, 1);
@@ -153,7 +156,10 @@ module('Integration | commands | search', function (hooks) {
   test('search with matches composed inside every + eq', async function (assert) {
     let result = await runQuerySearch({
       filter: {
-        on: { module: 'http://test-realm/test/author', name: 'Author' },
+        on: {
+          module: rri('http://test-realm/test/author'),
+          name: 'Author',
+        },
         every: [{ matches: 'droid' }, { eq: { firstName: 'R2-D2' } }],
       },
     });

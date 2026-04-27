@@ -1,5 +1,6 @@
 import { module, test } from 'qunit';
 
+import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 import type { TestResult } from '../src/factory-agent';
@@ -372,7 +373,12 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
     let doc = buildTestRunCardDocument(
       ['test A'],
       testRealmOptions.testResultsModuleUrl,
-      { moduleRef: { module: './test-spec', name: 'default' } },
+      {
+        moduleRef: {
+          module: rri('./test-spec'),
+          name: 'default',
+        },
+      },
     );
 
     let moduleResults = doc.data.attributes!.moduleResults as {

@@ -5,6 +5,7 @@ import type { Server } from 'http';
 import type { DirResult } from 'tmp';
 import { removeSync, writeJSONSync, writeFileSync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
   setupMatrixRoom,
@@ -95,7 +96,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: rri('./person'),
                 name: 'Person',
               },
             },

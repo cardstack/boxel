@@ -15,6 +15,7 @@
 import { resolve } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { logger } from './logger';
@@ -404,7 +405,10 @@ async function loadDarkFactorySchemas(
         client,
         realmServerUrl,
         commandRealmUrl,
-        { module: darkfactoryModule, name: cardName },
+        {
+          module: rri(darkfactoryModule),
+          name: cardName,
+        },
       );
       if (schema) {
         schemas.set(cardName, schema);
@@ -424,7 +428,7 @@ async function loadDarkFactorySchemas(
         client,
         realmServerUrl,
         commandRealmUrl,
-        { module: mod, name },
+        { module: rri(mod), name },
       );
       if (schema) {
         schemas.set(name, schema);

@@ -1,3 +1,5 @@
+import { rri } from '@cardstack/runtime-common/card-reference-resolver';
+
 import type { TestResult } from './factory-agent';
 import type {
   QunitResults,
@@ -62,7 +64,10 @@ export function parseQunitResults(results: QunitResults): TestRunAttributes {
   let moduleResults: TestModuleResultData[] = [];
   for (let [moduleName, testResults] of moduleMap) {
     moduleResults.push({
-      moduleRef: { module: moduleName, name: 'default' },
+      moduleRef: {
+        module: rri(moduleName),
+        name: 'default',
+      },
       results: testResults,
     });
   }

@@ -8,6 +8,10 @@ import { CRMTaskStatusField } from './shared';
 import GlimmerComponent from '@glimmer/component';
 import { TaskPlanner, TaskCard } from '../components/base-task-planner';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { codeRef } from '@cardstack/runtime-common';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 import type { Query, Filter } from '@cardstack/runtime-common/query';
 import { DndItem } from '@cardstack/boxel-ui/components';
 import { AppCard } from '../app-card';
@@ -263,30 +267,20 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
         orderBy: this.getOrderBy(),
       },
       taskSource: {
-        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-        module: new URL('./task', import.meta.url).href,
-        name: 'CRMTask',
+        ...codeRef(here, './task', 'CRMTask'),
         getQuery: () => this.getTaskQuery,
       },
       filters: {
         status: {
           searchKey: 'label',
           label: 'Status',
-          codeRef: {
-            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL('./task', import.meta.url).href,
-            name: 'Status',
-          },
+          codeRef: codeRef(here, './task', 'Status'),
           options: () => CRMTaskStatusField.values,
         },
         assignee: {
           searchKey: 'name',
           label: 'Assignee',
-          codeRef: {
-            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL('./representative', import.meta.url).href,
-            name: 'Representative',
-          },
+          codeRef: codeRef(here, './representative', 'Representative'),
           options: () => this.assigneeCards,
         },
       },

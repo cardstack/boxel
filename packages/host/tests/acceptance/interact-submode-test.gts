@@ -16,6 +16,7 @@ import { module, test } from 'qunit';
 import {
   Deferred,
   type LooseSingleCardDocument,
+  rri,
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
@@ -791,7 +792,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: '../person',
+                module: rri('../person'),
                 name: 'Person',
               },
             },
@@ -839,7 +840,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: '../person',
+                module: rri('../person'),
                 name: 'Person',
               },
             },
@@ -865,7 +866,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: '../person',
+                module: rri('../person'),
                 name: 'Person',
               },
             },

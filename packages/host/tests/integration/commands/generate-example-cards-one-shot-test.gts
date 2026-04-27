@@ -8,6 +8,7 @@ import {
   setupLocalIndexing,
   setupRealmServerEndpoints,
   testRealmURL,
+  testRRI,
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../../helpers';
@@ -98,7 +99,7 @@ export class TestCard extends CardDef {
     test('creates a new card instance from LLM output', async function (assert) {
       const result = await generateExampleCommand.execute({
         codeRef: {
-          module: `${testRealmURL}test-card.gts`,
+          module: testRRI('test-card.gts'),
           name: 'TestCard',
         },
         realm: testRealmURL,

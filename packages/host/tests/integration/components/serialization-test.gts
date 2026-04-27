@@ -22,6 +22,7 @@ import {
   localId,
   meta,
   PermissionsContextName,
+  rri,
 } from '@cardstack/runtime-common';
 import { realmURL } from '@cardstack/runtime-common/constants';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -39,6 +40,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  testRRI,
   cardInfo,
 } from '../../helpers';
 
@@ -145,7 +147,7 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: testRRI('test-cards'),
           name: 'Post',
         },
       },
@@ -192,14 +194,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Post',
           },
           realmURL: testRealmURL,
           fields: {
             author: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: testRRI('test-cards'),
                 name: 'Person',
               },
               realmURL: testRealmURL,
@@ -243,7 +245,7 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: testRRI('test-cards'),
           name: 'Item',
         },
       },
@@ -281,7 +283,7 @@ module('Integration | serialization', function (hooks) {
     });
     (post as any)[meta] = {
       adoptsFrom: {
-        module: `${testRealmURL}test-cards`,
+        module: testRRI('test-cards'),
         name: 'Post',
       },
       realmURL: testRealmURL,
@@ -401,14 +403,14 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: testRRI('test-cards'),
           name: 'Post',
         },
         realmURL: testRealmURL,
         fields: {
           author: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Employee',
             },
           },
@@ -598,7 +600,7 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: testRRI('test-cards'),
           name: 'Person',
         },
       },
@@ -639,7 +641,7 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: testRRI('test-cards'),
           name: 'Person',
         },
       },
@@ -695,7 +697,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `../test-cards`,
+            module: rri(`../test-cards`),
             name: 'Person',
           },
         },
@@ -778,7 +780,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
@@ -820,7 +822,7 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: testRRI('test-cards'),
           name: 'Person',
         },
       },
@@ -840,7 +842,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Person',
             },
           },
@@ -879,7 +881,7 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: testRRI('test-cards'),
           name: 'DriverCard',
         },
       },
@@ -993,7 +995,7 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: testRRI('test-cards'),
           name: 'Post',
         },
       },
@@ -1100,14 +1102,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Toy/spookyToiletPaper`,
+          id: testRRI('Toy/spookyToiletPaper'),
           type: 'card',
           attributes: {
             cardDescription: 'Toilet paper ghost: Poooo!',
@@ -1115,13 +1117,13 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Toy',
             },
           },
         },
         {
-          id: `${testRealmURL}Pet/mango`,
+          id: testRRI('Pet/mango'),
           type: 'card',
           attributes: {
             firstName: 'Mango',
@@ -1140,7 +1142,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Pet',
             },
           },
@@ -1230,7 +1232,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
@@ -1245,7 +1247,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Toy',
             },
           },
@@ -1267,7 +1269,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Pet',
             },
           },
@@ -1314,14 +1316,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Toy/spookyToiletPaper`,
+          id: testRRI('Toy/spookyToiletPaper'),
           type: 'card',
           attributes: {
             cardDescription: 'Toilet paper ghost: Poooo!',
@@ -1329,13 +1331,13 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Toy',
             },
           },
         },
         {
-          id: `${testRealmURL}Pet/mango`,
+          id: testRRI('Pet/mango'),
           type: 'card',
           attributes: {
             firstName: 'Mango',
@@ -1354,7 +1356,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Pet',
             },
           },
@@ -1467,7 +1469,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
@@ -1517,7 +1519,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
@@ -1577,7 +1579,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
@@ -1603,7 +1605,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
@@ -1642,7 +1644,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
@@ -1702,21 +1704,21 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Pet',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Person/burcu`,
+          id: testRRI('Person/burcu'),
           type: 'card',
           attributes: {
             firstName: 'Burcu',
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Person',
             },
           },
@@ -1821,14 +1823,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Person/mango`,
+          id: testRRI('Person/mango'),
           type: 'card',
           attributes: {
             firstName: 'Mango',
@@ -1843,7 +1845,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Person',
             },
           },
@@ -1886,7 +1888,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
@@ -1926,14 +1928,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Person/mango`,
+          id: testRRI('Person/mango'),
           type: 'card',
           attributes: {
             firstName: 'Mango',
@@ -1947,7 +1949,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Person',
             },
           },
@@ -2058,14 +2060,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Toy/spookyToiletPaper`,
+          id: testRRI('Toy/spookyToiletPaper'),
           type: 'card',
           attributes: {
             cardDescription: 'Toilet paper ghost: Poooo!',
@@ -2073,7 +2075,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Toy',
             },
           },
@@ -2190,14 +2192,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Toy/spookyToiletPaper`,
+          id: testRRI('Toy/spookyToiletPaper'),
           type: 'card',
           attributes: {
             cardDescription: 'Toilet paper ghost: Poooo!',
@@ -2205,7 +2207,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Toy',
             },
           },
@@ -2332,14 +2334,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Toy/spookyToiletPaper`,
+          id: testRRI('Toy/spookyToiletPaper'),
           type: 'card',
           attributes: {
             cardDescription: 'Toilet paper ghost: Poooo!',
@@ -2347,7 +2349,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Toy',
             },
           },
@@ -2430,21 +2432,21 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Person/hassan`,
+          id: testRRI('Person/hassan'),
           type: 'card',
           attributes: {
             firstName: 'Hassan',
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Person',
             },
           },
@@ -2534,7 +2536,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Post',
           },
         },
@@ -2594,7 +2596,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Post',
           },
         },
@@ -2717,7 +2719,7 @@ module('Integration | serialization', function (hooks) {
     });
     assert.deepEqual(serialized.data.meta?.fields?.author, {
       adoptsFrom: {
-        module: `${testRealmURL}test-cards`,
+        module: testRRI('test-cards'),
         name: 'Employee',
       },
     });
@@ -2752,7 +2754,7 @@ module('Integration | serialization', function (hooks) {
     );
     assert.deepEqual(serialized.data.meta?.fields?.specialField, {
       adoptsFrom: {
-        module: `${testRealmURL}test-cards`,
+        module: testRRI('test-cards'),
         name: 'SpecialStringA',
       },
     });
@@ -2790,13 +2792,13 @@ module('Integration | serialization', function (hooks) {
     assert.deepEqual(serialized.data.meta?.fields, {
       'specialField.0': {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: testRRI('test-cards'),
           name: 'SpecialStringA',
         },
       },
       'specialField.1': {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: testRRI('test-cards'),
           name: 'SpecialStringB',
         },
       },
@@ -2822,13 +2824,13 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'TestCard',
           },
           fields: {
             specialField: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: testRRI('test-cards'),
                 name: 'SpecialStringA',
               },
             },
@@ -2871,19 +2873,19 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'TestCard',
           },
           fields: {
             'specialField.0': {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: testRRI('test-cards'),
                 name: 'SpecialStringA',
               },
             },
             'specialField.1': {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: testRRI('test-cards'),
                 name: 'SpecialStringB',
               },
             },
@@ -2950,7 +2952,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}trip-info-cards`,
+            module: testRRI('trip-info-cards'),
             name: 'TripInfo',
           },
           fields: {
@@ -2958,7 +2960,7 @@ module('Integration | serialization', function (hooks) {
               fields: {
                 nextTravelGoal: {
                   adoptsFrom: {
-                    module: `${testRealmURL}trip-info-cards`,
+                    module: testRRI('trip-info-cards'),
                     name: 'TravelGoalWithProgress',
                   },
                 },
@@ -3076,7 +3078,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Post',
             },
           },
@@ -3136,7 +3138,10 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: { birthdate: '2019-10-30' },
         meta: {
-          adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+          adoptsFrom: {
+            module: testRRI('test-cards'),
+            name: 'Person',
+          },
         },
       },
     };
@@ -3178,7 +3183,10 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: { birthdate: '2019-10-30', firstBirthday: '1984-01-01' },
         meta: {
-          adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+          adoptsFrom: {
+            module: testRRI('test-cards'),
+            name: 'Person',
+          },
         },
       },
     };
@@ -3261,13 +3269,16 @@ module('Integration | serialization', function (hooks) {
           cardTheme: { links: { self: null } },
         },
         meta: {
-          adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+          adoptsFrom: {
+            module: testRRI('test-cards'),
+            name: 'Person',
+          },
         },
       });
 
       assert.deepEqual(serialized.included, [
         {
-          id: `${testRealmURL}Pet/mango`,
+          id: testRRI('Pet/mango'),
           type: 'card',
           attributes: {
             name: 'Mango',
@@ -3280,11 +3291,14 @@ module('Integration | serialization', function (hooks) {
             cardTheme: { links: { self: null } },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Pet',
+            },
           },
         },
         {
-          id: `${testRealmURL}Person/hassan`,
+          id: testRRI('Person/hassan'),
           type: 'card',
           attributes: {
             firstName: 'Hassan',
@@ -3303,7 +3317,10 @@ module('Integration | serialization', function (hooks) {
             cardTheme: { links: { self: null } },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
       ]);
@@ -3345,20 +3362,26 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: testRRI('Pet/mango'),
             type: 'card',
             attributes: { name: 'Mango' },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Pet',
+              },
             },
           },
           {
-            id: `${testRealmURL}Person/hassan`,
+            id: testRRI('Person/hassan'),
             type: 'card',
             attributes: {
               cardDescription: null,
@@ -3375,7 +3398,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: testRRI('test-cards'),
                 name: 'Person',
               },
             },
@@ -3458,7 +3481,10 @@ module('Integration | serialization', function (hooks) {
             cardTheme: { links: { self: null } },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
       });
@@ -3494,7 +3520,10 @@ module('Integration | serialization', function (hooks) {
             friendPet: { links: { self: null } },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
       };
@@ -3540,7 +3569,10 @@ module('Integration | serialization', function (hooks) {
             friend: { links: { self: `${testRealmURL}Person/hassan` } },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
       };
@@ -3607,7 +3639,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Schedule',
           },
         },
@@ -3663,7 +3695,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Schedule',
           },
         },
@@ -3802,7 +3834,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Post',
             },
           },
@@ -3875,7 +3907,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Post',
           },
         },
@@ -3946,13 +3978,13 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Post',
           },
           fields: {
             author: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: testRRI('test-cards'),
                 name: 'Employee',
               },
             },
@@ -4054,19 +4086,19 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Post',
           },
           fields: {
             author: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: testRRI('test-cards'),
                 name: 'Employee',
               },
               fields: {
                 loves: {
                   adoptsFrom: {
-                    module: `${testRealmURL}test-cards`,
+                    module: testRRI('test-cards'),
                     name: 'Pet',
                   },
                 },
@@ -4177,20 +4209,20 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Group',
           },
           fields: {
             people: [
               {
                 adoptsFrom: {
-                  module: `${testRealmURL}test-cards`,
+                  module: testRRI('test-cards'),
                   name: 'Employee',
                 },
               },
               {
                 adoptsFrom: {
-                  module: `${testRealmURL}test-cards`,
+                  module: testRRI('test-cards'),
                   name: 'Customer',
                 },
               },
@@ -4274,7 +4306,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: testRRI('test-cards'),
                 name: 'Person',
               },
             },
@@ -4288,7 +4320,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: testRRI('test-cards'),
                 name: 'QueryCard',
               },
             },
@@ -4462,7 +4494,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Article',
           },
           fields: {
@@ -4471,13 +4503,13 @@ module('Integration | serialization', function (hooks) {
                 tags: [
                   {
                     adoptsFrom: {
-                      module: `${testRealmURL}test-cards`,
+                      module: testRRI('test-cards'),
                       name: 'PriorityTag',
                     },
                   },
                   {
                     adoptsFrom: {
-                      module: `${testRealmURL}test-cards`,
+                      module: testRRI('test-cards'),
                       name: 'StatusTag',
                     },
                   },
@@ -4629,14 +4661,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Group',
           },
           fields: {
             people: [
               {
                 adoptsFrom: {
-                  module: `${testRealmURL}test-cards`,
+                  module: testRRI('test-cards'),
                   name: 'Employee',
                 },
                 fields: {
@@ -4644,7 +4676,7 @@ module('Integration | serialization', function (hooks) {
                     {},
                     {
                       adoptsFrom: {
-                        module: `${testRealmURL}test-cards`,
+                        module: testRRI('test-cards'),
                         name: 'DogWalker',
                       },
                     },
@@ -4728,14 +4760,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Pet/mango`,
+          id: testRRI('Pet/mango'),
           type: 'card',
           attributes: {
             firstName: 'Mango',
@@ -4745,13 +4777,13 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Pet',
             },
             fields: {
               favorite: {
                 adoptsFrom: {
-                  module: `${testRealmURL}test-cards`,
+                  module: testRRI('test-cards'),
                   name: 'Toy',
                 },
               },
@@ -4844,14 +4876,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Listing',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}DrumKitCard/kit`,
+          id: testRRI('DrumKitCard/kit'),
           type: 'card',
           attributes: {
             name: '808 Analog Kit',
@@ -4859,13 +4891,13 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'DrumKitCard',
             },
           },
         },
         {
-          id: `${testRealmURL}BeatMakerCard/app`,
+          id: testRRI('BeatMakerCard/app'),
           type: 'card',
           attributes: {
             cardTitle: 'Beat Maker Studio',
@@ -4873,7 +4905,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'BeatMakerCard',
             },
           },
@@ -4954,14 +4986,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Listing',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}DrumKitCard/kit`,
+          id: testRRI('DrumKitCard/kit'),
           type: 'card',
           attributes: {
             name: '808 Analog Kit',
@@ -4969,13 +5001,13 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'DrumKitCard',
             },
           },
         },
         {
-          id: `${testRealmURL}BeatMakerCard/app`,
+          id: testRRI('BeatMakerCard/app'),
           type: 'card',
           attributes: {
             cardTitle: 'Beat Maker Studio',
@@ -4983,7 +5015,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'BeatMakerCard',
             },
           },
@@ -5039,7 +5071,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: './person',
+            module: rri('./person'),
             name: 'Person',
           },
         },
@@ -5063,7 +5095,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `./person`,
+              module: rri(`./person`),
               name: 'Person',
             },
           },
@@ -5118,7 +5150,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: './post',
+            module: rri('./post'),
             name: 'Post',
           },
         },
@@ -5146,7 +5178,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `./post`,
+              module: rri(`./post`),
               name: 'Post',
             },
           },
@@ -5221,7 +5253,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: './blog',
+            module: rri('./blog'),
             name: 'Blog',
           },
         },
@@ -5264,7 +5296,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `./blog`,
+              module: rri(`./blog`),
               name: 'Blog',
             },
           },
@@ -5377,14 +5409,14 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Blog',
           },
         },
       },
       included: [
         {
-          id: `${testRealmURL}Certificate/0`,
+          id: testRRI('Certificate/0'),
           type: 'card',
           attributes: {
             level: 25,
@@ -5394,13 +5426,13 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Certificate',
             },
           },
         },
         {
-          id: `${testRealmURL}Certificate/1`,
+          id: testRRI('Certificate/1'),
           type: 'card',
           attributes: {
             level: 20,
@@ -5410,13 +5442,13 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Certificate',
             },
           },
         },
         {
-          id: `${testRealmURL}Certificate/2`,
+          id: testRRI('Certificate/2'),
           type: 'card',
           attributes: {
             level: 18,
@@ -5426,7 +5458,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Certificate',
             },
           },
@@ -5509,7 +5541,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `./test-cards`,
+              module: rri(`./test-cards`),
               name: 'Blog',
             },
           },
@@ -5521,10 +5553,10 @@ module('Integration | serialization', function (hooks) {
               level: 20,
               cardInfo,
             },
-            id: `${testRealmURL}Certificate/1`,
+            id: testRRI('Certificate/1'),
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: testRRI('test-cards'),
                 name: 'Certificate',
               },
             },
@@ -5536,10 +5568,10 @@ module('Integration | serialization', function (hooks) {
               level: 18,
               cardInfo,
             },
-            id: `${testRealmURL}Certificate/2`,
+            id: testRRI('Certificate/2'),
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: testRRI('test-cards'),
                 name: 'Certificate',
               },
             },
@@ -5551,10 +5583,10 @@ module('Integration | serialization', function (hooks) {
               level: 25,
               cardInfo,
             },
-            id: `${testRealmURL}Certificate/0`,
+            id: testRRI('Certificate/0'),
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: testRRI('test-cards'),
                 name: 'Certificate',
               },
             },
@@ -5615,7 +5647,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
@@ -5652,7 +5684,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: testRRI('test-cards'),
             name: 'Person',
           },
         },
@@ -5693,7 +5725,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `../test-cards`,
+            module: rri(`../test-cards`),
             name: 'Person',
           },
         },
@@ -5713,7 +5745,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/captain',
+                module: rri('http://localhost:4202/test/captain'),
                 name: 'Captain',
               },
             },
@@ -5738,7 +5770,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `http://localhost:4202/test/captain`,
+              module: rri(`http://localhost:4202/test/captain`),
               name: 'Boat',
             },
           },
@@ -5791,7 +5823,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Pet',
             },
           },
@@ -5914,30 +5946,39 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: testRRI('Pet/mango'),
             type: 'card',
             attributes: {
               firstName: 'Mango',
               cardInfo,
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Pet',
+              },
             },
           },
           {
-            id: `${testRealmURL}Pet/vanGogh`,
+            id: testRRI('Pet/vanGogh'),
             type: 'card',
             attributes: {
               firstName: 'Van Gogh',
               cardInfo,
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Pet',
+              },
             },
           },
         ],
@@ -5997,7 +6038,10 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
         included: [
@@ -6009,7 +6053,10 @@ module('Integration | serialization', function (hooks) {
               cardInfo,
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Pet',
+              },
             },
           },
           {
@@ -6020,7 +6067,10 @@ module('Integration | serialization', function (hooks) {
               cardInfo,
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Pet',
+              },
             },
           },
         ],
@@ -6071,12 +6121,15 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: testRRI('Pet/mango'),
             type: 'card',
             attributes: {
               cardDescription: null,
@@ -6085,11 +6138,14 @@ module('Integration | serialization', function (hooks) {
               cardInfo: {},
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Pet',
+              },
             },
           },
           {
-            id: `${testRealmURL}Pet/vanGogh`,
+            id: testRRI('Pet/vanGogh'),
             type: 'card',
             attributes: {
               cardDescription: null,
@@ -6098,7 +6154,10 @@ module('Integration | serialization', function (hooks) {
               cardInfo: {},
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Pet',
+              },
             },
           },
         ],
@@ -6195,12 +6254,15 @@ module('Integration | serialization', function (hooks) {
             ],
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: testRRI('Pet/mango'),
             type: 'card',
             attributes: {
               cardDescription: null,
@@ -6209,11 +6271,14 @@ module('Integration | serialization', function (hooks) {
               cardInfo: {},
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Pet',
+              },
             },
           },
           {
-            id: `${testRealmURL}Pet/vanGogh`,
+            id: testRRI('Pet/vanGogh'),
             type: 'card',
             attributes: {
               cardDescription: null,
@@ -6222,7 +6287,10 @@ module('Integration | serialization', function (hooks) {
               cardInfo: {},
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Pet',
+              },
             },
           },
         ],
@@ -6347,23 +6415,29 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Toy/spookyToiletPaper`,
+            id: testRRI('Toy/spookyToiletPaper'),
             type: 'card',
             attributes: {
               cardDescription: 'Toilet paper ghost: Poooo!',
               cardInfo,
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Toy' },
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Toy',
+              },
             },
           },
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: testRRI('Pet/mango'),
             type: 'card',
             attributes: {
               firstName: 'Mango',
@@ -6381,7 +6455,10 @@ module('Integration | serialization', function (hooks) {
               },
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Pet',
+              },
             },
           },
         ],
@@ -6470,7 +6547,10 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
       });
@@ -6493,7 +6573,10 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
       });
@@ -6531,7 +6614,10 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
       };
@@ -6610,21 +6696,24 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Person',
             },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: testRRI('Pet/mango'),
             type: 'card',
             attributes: {
               firstName: 'Mango',
               cardInfo,
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Pet',
+              },
             },
           },
         ],
@@ -6688,21 +6777,24 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Person',
             },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: testRRI('Pet/mango'),
             type: 'card',
             attributes: {
               firstName: 'Mango',
               cardInfo,
             },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Pet',
+              },
             },
           },
         ],
@@ -6761,12 +6853,15 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `../test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: rri(`../test-cards`),
+              name: 'Person',
+            },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Person/mango`,
+            id: testRRI('Person/mango'),
             type: 'card',
             attributes: {
               firstName: 'Mango',
@@ -6776,11 +6871,14 @@ module('Integration | serialization', function (hooks) {
               friends: { links: { self: null } },
             },
             meta: {
-              adoptsFrom: { module: `../test-cards`, name: 'Person' },
+              adoptsFrom: {
+                module: rri(`../test-cards`),
+                name: 'Person',
+              },
             },
           },
           {
-            id: `${testRealmURL}Person/vanGogh`,
+            id: testRRI('Person/vanGogh'),
             type: 'card',
             attributes: {
               firstName: 'Van Gogh',
@@ -6790,7 +6888,10 @@ module('Integration | serialization', function (hooks) {
               friends: { links: { self: null } },
             },
             meta: {
-              adoptsFrom: { module: `../test-cards`, name: 'Person' },
+              adoptsFrom: {
+                module: rri(`../test-cards`),
+                name: 'Person',
+              },
             },
           },
         ],
@@ -6834,12 +6935,15 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Person/mango`,
+            id: testRRI('Person/mango'),
             type: 'card',
             attributes: {
               cardDescription: null,
@@ -6851,13 +6955,13 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: testRRI('test-cards'),
                 name: 'Person',
               },
             },
           },
           {
-            id: `${testRealmURL}Person/vanGogh`,
+            id: testRRI('Person/vanGogh'),
             type: 'card',
             attributes: {
               cardDescription: null,
@@ -6872,7 +6976,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: testRRI('test-cards'),
                 name: 'Person',
               },
             },
@@ -6964,13 +7068,16 @@ module('Integration | serialization', function (hooks) {
           cardTheme: { links: { self: null } },
         },
         meta: {
-          adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+          adoptsFrom: {
+            module: testRRI('test-cards'),
+            name: 'Person',
+          },
         },
       });
 
       assert.deepEqual(serialized.included, [
         {
-          id: `${testRealmURL}Pet/mango`,
+          id: testRRI('Pet/mango'),
           type: 'card',
           attributes: {
             name: 'Mango',
@@ -6983,11 +7090,14 @@ module('Integration | serialization', function (hooks) {
             cardTheme: { links: { self: null } },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Pet',
+            },
           },
         },
         {
-          id: `${testRealmURL}Pet/van-gogh`,
+          id: testRRI('Pet/van-gogh'),
           type: 'card',
           attributes: {
             name: 'Van Gogh',
@@ -7000,11 +7110,14 @@ module('Integration | serialization', function (hooks) {
             cardTheme: { links: { self: null } },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Pet',
+            },
           },
         },
         {
-          id: `${testRealmURL}Friend/hassan`,
+          id: testRRI('Friend/hassan'),
           type: 'card',
           attributes: {
             firstName: 'Hassan',
@@ -7025,7 +7138,10 @@ module('Integration | serialization', function (hooks) {
             cardTheme: { links: { self: null } },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Friend' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Friend',
+            },
           },
         },
       ]);
@@ -7073,28 +7189,37 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: testRRI('Pet/mango'),
             type: 'card',
             attributes: { name: 'Mango', cardTitle: null },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Pet',
+              },
             },
           },
           {
-            id: `${testRealmURL}Pet/van-gogh`,
+            id: testRRI('Pet/van-gogh'),
             type: 'card',
             attributes: { name: 'Van Gogh', cardTitle: null },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Pet',
+              },
             },
           },
           {
-            id: `${testRealmURL}Friend/hassan`,
+            id: testRRI('Friend/hassan'),
             type: 'card',
             attributes: { firstName: 'Hassan', cardTitle: null },
             relationships: {
@@ -7109,7 +7234,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}test-cards`,
+                module: testRRI('test-cards'),
                 name: 'Friend',
               },
             },
@@ -7192,7 +7317,10 @@ module('Integration | serialization', function (hooks) {
             cardTheme: { links: { self: null } },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
       });
@@ -7229,7 +7357,10 @@ module('Integration | serialization', function (hooks) {
             friend: { links: { self: null } },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
       };
@@ -7296,16 +7427,22 @@ module('Integration | serialization', function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Person',
+            },
           },
         },
         included: [
           {
-            id: `${testRealmURL}Pet/mango`,
+            id: testRRI('Pet/mango'),
             type: 'card',
             attributes: { name: 'Mango' },
             meta: {
-              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Pet',
+              },
             },
           },
         ],
@@ -7410,7 +7547,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Sample',
             },
           },
@@ -7507,7 +7644,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Sample',
             },
           },
@@ -7661,7 +7798,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Sample',
             },
           },
@@ -7767,7 +7904,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Post',
             },
           },
@@ -7807,7 +7944,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Post',
             },
           },
@@ -7844,7 +7981,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Post',
             },
           },
@@ -7889,7 +8026,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}test-cards`,
+              module: testRRI('test-cards'),
               name: 'Post',
             },
           },

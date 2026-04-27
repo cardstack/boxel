@@ -25,6 +25,7 @@ import {
   cardIdToURL,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
+  type RealmIdentifier,
   type RenderError,
   parseRenderRouteOptions,
   serializeRenderRouteOptions,
@@ -485,7 +486,7 @@ export default class RenderRoute extends Route<Model> {
               meta: {
                 ...doc.data.meta,
                 lastModified: lastModified.getTime(),
-                realmURL,
+                realmURL: realmURL as RealmIdentifier,
                 realmInfo: { ...this.realm.info(id) },
               },
             },
