@@ -3,34 +3,40 @@ import type Transition from '@ember/routing/transition';
 
 import { cardTypeIcon } from '@cardstack/runtime-common';
 
-import type {
-  CardOrFieldTypeIcon,
-  CardDef,
-} from 'https://cardstack.com/base/card-api';
+import type { CardOrFieldTypeIcon } from 'https://cardstack.com/base/card-api';
 
 import type { Model as ParentModel } from '../render';
 
-export type Model = { Component: CardOrFieldTypeIcon } | undefined;
+export interface Model {
+  Component: CardOrFieldTypeIcon;
+}
 
 export default class RenderIconRoute extends Route<Model> {
-  async model(_: unknown, transition: Transition) {
+  beforeModel(transition: Transition) {
     let parentModel = this.modelFor('render') as ParentModel | undefined;
     // the global use below is to support in-browser rendering, where we actually don't have the
     // ability to lookup the parent route using RouterService.recognizeAndLoad()
     let renderModel =
       parentModel ??
       ((globalThis as any).__renderModel as ParentModel | undefined);
-    let instance: CardDef | undefined = renderModel?.instance;
-    if (!instance) {
-      // the lack of an instance is dealt with in the parent route — throwing
-      // here would clobber the parent's error doc (e.g. "Link Not Found" 404)
-      // with a generic 500 "Missing render instance".
-      // We deliberately do NOT await renderModel?.readyPromise here (unlike
-      // render.meta): see render/html.ts for details — settling readyPromise
-      // before the render pass would drop runtime deps from captured metadata.
+    if (!renderModel?.instance) {
+      // The lack of an instance is dealt with in the parent route — throwing
+      // (or proceeding into model() and throwing there) would clobber the
+      // parent's error doc (e.g. "Link Not Found" 404) with a generic 500
+      // "Missing render instance". See render/html.ts for why we don't await
+      // renderModel?.readyPromise here.
       transition.abort();
-      return;
     }
+  }
+
+  async model(): Promise<Model> {
+    let parentModel = this.modelFor('render') as ParentModel | undefined;
+    let renderModel =
+      parentModel ??
+      ((globalThis as any).__renderModel as ParentModel | undefined);
+    // beforeModel aborts the transition when there is no instance, so by the
+    // time model() runs we know it's defined.
+    let instance = renderModel!.instance!;
     let component = cardTypeIcon(instance);
     if (!component) {
       throw new Error(
