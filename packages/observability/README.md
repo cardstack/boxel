@@ -32,7 +32,6 @@ grafanactl/
   resources/
     folders/           # grafanactl push: Grafana folder definitions
     dashboards/        # grafanactl push: dashboard JSON, organized by folder
-    alerts/            # placeholder — alert rule groups go in provisioning/alerting/
 provisioning/          # mounted into Grafana at /etc/grafana/provisioning/
   datasources/         # data sources (Loki, Postgres, CloudWatch, Prometheus)
   alerting/            # alert rule groups, contact points, notification policies
@@ -92,15 +91,20 @@ CI will run `apply.sh --env staging` on merge to main once Phase 4 (CS-10932) la
 | CS-10914  | 2     | landed      | Package skeleton                         |
 | CS-10912  | 2     | landed      | Local `docker-compose.yml` for Grafana   |
 | CS-10913  | 2     | landed      | grafanactl `local`/`staging`/`prod` ctxs |
-| CS-10918  | 2.5   | this PR     | Loki container + data source             |
-| CS-10922  | 3     | not started | AMG export and reformat                  |
+| CS-10918  | 2.5   | landed      | Loki container + data source             |
+| CS-10922  | 3     | this PR     | AMG export and reformat                  |
 | CS-10932  | 4     | not started | CI: apply to staging on merge            |
 | CS-10933  | 4     | not started | CI: post diff comment on PRs             |
 | CS-10936  | 5     | not started | CI: apply to production                  |
+
+## Vendored content
+
+`grafanactl/resources/dashboards/boxel-status/synapse.json` is vendored from the upstream Synapse project (https://github.com/matrix-org/synapse, `contrib/grafana/`). We carry a copy because we run a Synapse server. When Synapse upgrades add new metrics worth dashboarding, re-pull from upstream and rebase any local edits. Treat as third-party code: don't modify locally without intending to own the diff.
 
 ## Known cleanups (deferred)
 
 - **Alloy log scraping config.** docker-compose has Alloy commented out; un-comment + add `alloy/config.alloy` to ship logs into local Loki. Separate ticket — not strictly required for Loki data source to be useful.
 - **Staging/production Loki ECS deployment.** Currently no Loki running in staging or production. Staging/production Grafana provisioning expects `${LOKI_URL}` to be set on the ECS task; that's an infra ticket.
-- **Alert rule provisioning.** `provisioning/alerting/` is empty. Phase 3 (CS-10922) imports alert rules from AMG.
+- **`provisioning/` delivery to staging/production ECS.** The provisioning files (data sources + alert rules) need to land on the ECS Grafana container — image bake, S3-init, or EFS mount. Decide and ship as a separate infra ticket.
+- **Secret env-var wiring for data sources.** `provisioning/datasources/*.json` omits `secureJsonData` (passwords, API keys). The staging/production ECS Grafana task needs those env vars set from SSM (`GRAFANA_DB_PASSWORD` etc.) and the provisioning files updated to reference them via `${ENV_VAR}`.
 - **CODEOWNERS.** No file in the repo today — if the team wants observability-specific reviewer requirements, file a separate ticket.
