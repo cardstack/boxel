@@ -31,8 +31,6 @@ import {
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 
-import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
-
 import type FileUploadService from '@cardstack/host/services/file-upload';
 import type { FileUploadTask } from '@cardstack/host/services/file-upload';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -43,6 +41,7 @@ import type StoreService from '@cardstack/host/services/store';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import IndexedFileTree from '../editor/indexed-file-tree';
+import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 
 interface Signature {
   Args: {};
