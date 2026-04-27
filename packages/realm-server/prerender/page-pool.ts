@@ -216,6 +216,14 @@ export class PagePool {
   // a previously-thrown exception was revoked (e.g. RSVP /
   // Backburner attached a late `.catch`).
   #exceptionKeysByPageId = new Map<string, Map<number, string>>();
+  // Per-pageId tracker of the *current* affinityKey, so the long-
+  // lived runtime-exception capture session attached on a standby
+  // page can resolve the right affinityKey at log-emit time after
+  // the page transitions through standby → real-affinity → maybe
+  // re-tagged. Kept in lockstep with `entry.affinityKey` mutations
+  // throughout this file so a single source of truth flows into
+  // both PagePool's own logs and the capture module's logs.
+  #affinityKeyByPageId = new Map<string, string>();
   // Fired from `disposeAffinity` after an affinity's tabs are torn down.
   // Consumed by the Prerenderer to clear `clearCache` batch ownership
   // for the affinity (CS-10758 step 3) — stale ownership across a page
@@ -840,7 +848,7 @@ export class PagePool {
         );
       }
       let pageId = uuidv4();
-      this.#attachPageObservability(page, 'standby', pageId);
+      await this.#attachPageObservability(page, 'standby', pageId);
       await this.#loadStandbyPage(page, pageId);
       let entry: StandbyEntry = {
         type: 'standby',
@@ -1124,7 +1132,7 @@ export class PagePool {
     try {
       page = await shared.context.newPage();
       let pageId = uuidv4();
-      this.#attachPageObservability(page, affinityKey, pageId);
+      await this.#attachPageObservability(page, affinityKey, pageId);
       await this.#loadStandbyPage(page, pageId);
       let entry: PoolEntry = {
         type: 'pool',
@@ -1199,8 +1207,13 @@ export class PagePool {
     };
     // Adoption path: the page is keeping its standby pageId, so the
     // CDP runtime-exception session attached at standby creation is
-    // still valid and stays connected. Only the console listener
-    // needs re-binding so its log lines carry the new affinityKey.
+    // still valid and stays connected. The console listener gets
+    // re-bound below to pick up the new affinityKey for its own log
+    // lines. The CDP capture reads affinityKey via the lookup map
+    // (see `#attachPageObservability`), so updating the map here
+    // flows the new affinityKey into its log lines too without
+    // re-attaching the CDP session.
+    this.#affinityKeyByPageId.set(entry.pageId, affinityKey);
     entry.page.removeAllListeners('console');
     this.#attachPageConsole(entry.page, affinityKey, entry.pageId);
     this.#addAffinityEntry(affinityKey, entry);
@@ -1260,9 +1273,13 @@ export class PagePool {
     }
     entry.affinityKey = affinityKey;
     // Re-tagging path: pageId is unchanged, so the CDP runtime-
-    // exception session stays attached to the same page. Only the
-    // console listener needs re-binding to pick up the new
-    // affinityKey for its log lines.
+    // exception session stays attached to the same page. The console
+    // listener gets re-bound below to pick up the new affinityKey;
+    // the CDP capture reads affinityKey via the lookup map (see
+    // `#attachPageObservability`), so updating the map here flows
+    // the new affinityKey into its log lines too without re-attaching
+    // the CDP session.
+    this.#affinityKeyByPageId.set(entry.pageId, affinityKey);
     entry.page.removeAllListeners('console');
     this.#attachPageConsole(entry.page, affinityKey, entry.pageId);
     this.#addAffinityEntry(affinityKey, entry);
@@ -1392,6 +1409,11 @@ export class PagePool {
       this.#consoleErrorsByPageId.delete(entry.pageId);
       this.#exceptionKeysByPageId.delete(entry.pageId);
     }
+    // affinityKey lookup map mirrors the page's identity, not its
+    // per-render state — clear it whenever the page itself is going
+    // away, which is exactly when this method runs (regardless of
+    // retainConsoleErrors, which is a separate per-render flag).
+    this.#affinityKeyByPageId.delete(entry.pageId);
   }
 
   // Returns a Promise when the release forces a context close —
@@ -1463,15 +1485,29 @@ export class PagePool {
   // would later get retracted by an upstream `.catch` (the whitepaper-
   // class bug). Both feed the same per-page bucket so render-runner
   // sees a unified additionalErrors stream.
-  #attachPageObservability(
+  //
+  // Awaited (not fire-and-forget) so the CDP `Runtime.enable` round-
+  // trip completes before callers begin page navigation — otherwise
+  // we'd miss exceptions thrown during early page boot. Attach
+  // failures inside the helper still resolve cleanly without throwing
+  // (best-effort observability must not break the render path).
+  async #attachPageObservability(
     page: Page,
     affinityKey: string,
     pageId: string,
-  ): void {
+  ): Promise<void> {
+    // Seed the affinityKey lookup map BEFORE attaching the CDP
+    // capture, so the capture's `getAffinityKey` callback can resolve
+    // immediately if an exception lands during attach.
+    this.#affinityKeyByPageId.set(pageId, affinityKey);
     this.#attachPageConsole(page, affinityKey, pageId);
-    void attachRuntimeExceptionCapture({
+    await attachRuntimeExceptionCapture({
       page,
-      affinityKey,
+      // Resolved at log-emit time so adoption / re-tagging that
+      // updates `#affinityKeyByPageId` flows through to the capture's
+      // log lines without re-attaching the CDP session.
+      getAffinityKey: () =>
+        this.#affinityKeyByPageId.get(pageId) ?? affinityKey,
       pageId,
       recorder: {
         recordThrown: (exceptionId, entry) =>

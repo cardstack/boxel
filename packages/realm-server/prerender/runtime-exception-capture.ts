@@ -69,6 +69,18 @@ const chromeLog = logger('prerenderer-chrome');
 // the type surface small and the import graph honest. The full
 // shapes are documented at:
 //   https://chromedevtools.github.io/devtools-protocol/tot/Runtime/
+interface CdpRemoteObject {
+  // For thrown Errors, `description` typically carries the full
+  // toString-style "Error: <message>\n    at ..." dump — far more
+  // actionable than the bare label CDP puts in `exceptionDetails.text`
+  // (which is often just "Uncaught" / "Uncaught (in promise)").
+  description?: string;
+  // Captured when the exception is a primitive (string, number, etc.)
+  // — RemoteObject.value carries the literal. Rare for real bugs but
+  // we surface it as a fallback rather than emit "Uncaught" with no
+  // payload.
+  value?: unknown;
+}
 interface CdpExceptionDetails {
   exceptionId: number;
   text: string;
@@ -82,6 +94,10 @@ interface CdpExceptionDetails {
       columnNumber: number;
     }>;
   };
+  // Present whenever V8 has a live exception object handle. For
+  // thrown Errors this is the actual Error instance, and its
+  // `description` field is what we want for the surfaced message.
+  exception?: CdpRemoteObject;
 }
 interface CdpExceptionThrownEvent {
   timestamp: number;
@@ -110,7 +126,13 @@ export interface RuntimeExceptionRecorder {
 
 export interface AttachRuntimeExceptionCaptureOptions {
   page: Page;
-  affinityKey: string;
+  // Resolved lazily at log-emit time so that pages whose affinity
+  // changes after attach (standby → real-affinity adoption, or one
+  // affinity → another via re-tagging) carry the CURRENT affinity in
+  // their log lines, not the value frozen when the CDP session was
+  // first attached. Caller is responsible for keeping the resolved
+  // value in sync with the page's lifecycle.
+  getAffinityKey: () => string;
   pageId: string;
   recorder: RuntimeExceptionRecorder;
 }
@@ -118,7 +140,7 @@ export interface AttachRuntimeExceptionCaptureOptions {
 export async function attachRuntimeExceptionCapture(
   opts: AttachRuntimeExceptionCaptureOptions,
 ): Promise<void> {
-  let { page, affinityKey, pageId, recorder } = opts;
+  let { page, getAffinityKey, pageId, recorder } = opts;
   let client;
   try {
     client = await page.createCDPSession();
@@ -132,7 +154,7 @@ export async function attachRuntimeExceptionCapture(
     // CDP session creation can race with page teardown — best-effort.
     log.debug(
       'Failed to attach Runtime.exceptionThrown listener for affinity %s page %s:',
-      affinityKey,
+      getAffinityKey(),
       pageId,
       e,
     );
@@ -145,9 +167,17 @@ export async function attachRuntimeExceptionCapture(
       if (!details) return;
       let entry = toConsoleErrorEntry(details);
       recorder.recordThrown(details.exceptionId, entry);
-      chromeLog.error(
+      // Logged at debug, not error: V8 fires this for every uncaught
+      // throw including the ones RSVP / Backburner catch a microtask
+      // later (which are then revoked and dropped from the bucket).
+      // Logging at error would flood production logs with transient
+      // late-catch noise. The actual surfaced exceptions reach the
+      // error doc via `additionalErrors`; that's the operator-facing
+      // signal. If you want raw V8 visibility, enable `prerenderer-
+      // chrome` at debug.
+      chromeLog.debug(
         'Runtime.exceptionThrown affinity=%s pageId=%s exceptionId=%s text=%s',
-        affinityKey,
+        getAffinityKey(),
         pageId,
         details.exceptionId,
         entry.text,
@@ -155,7 +185,7 @@ export async function attachRuntimeExceptionCapture(
     } catch (e) {
       log.debug(
         'Failed to record Runtime.exceptionThrown for affinity %s page %s:',
-        affinityKey,
+        getAffinityKey(),
         pageId,
         e,
       );
@@ -167,7 +197,7 @@ export async function attachRuntimeExceptionCapture(
       recorder.recordRevoked(event.exceptionId);
       chromeLog.debug(
         'Runtime.exceptionRevoked affinity=%s pageId=%s exceptionId=%s reason=%s',
-        affinityKey,
+        getAffinityKey(),
         pageId,
         event.exceptionId,
         event.reason,
@@ -175,7 +205,7 @@ export async function attachRuntimeExceptionCapture(
     } catch (e) {
       log.debug(
         'Failed to process Runtime.exceptionRevoked for affinity %s page %s:',
-        affinityKey,
+        getAffinityKey(),
         pageId,
         e,
       );
@@ -208,9 +238,43 @@ function toConsoleErrorEntry(details: CdpExceptionDetails): ConsoleErrorEntry {
       : undefined;
   return {
     type: 'error',
-    text: details.text || 'Uncaught exception',
+    text: extractExceptionMessage(details),
     location,
     stackFrames,
     source: 'exception',
   };
+}
+
+// Picks the most actionable text we can extract from a CDP
+// ExceptionDetails payload. The `text` field is frequently a generic
+// label like "Uncaught" or "Uncaught (in promise)" — useful for
+// classifying but useless on its own. The actual error message lives
+// on the `exception` RemoteObject:
+//
+//   • `exception.description` is the V8-side toString of the live
+//     exception object. For thrown Errors this looks like
+//     `"TypeError: Cannot read properties of undefined ...\n    at ..."`
+//     — the most actionable form.
+//   • `exception.value` is set when the thrown value is a primitive
+//     (e.g. `throw 'boom'` or `throw 42`). Stringify as a fallback.
+//
+// Preference order: description → value → text → "Uncaught exception".
+// We always fall back to *something* non-empty so the surfaced error
+// doc never carries an entry with a blank message.
+function extractExceptionMessage(details: CdpExceptionDetails): string {
+  let exception = details.exception;
+  if (exception) {
+    if (typeof exception.description === 'string' && exception.description) {
+      return exception.description;
+    }
+    if (exception.value !== undefined && exception.value !== null) {
+      try {
+        return String(exception.value);
+      } catch {
+        // String() on a value with a custom Symbol.toPrimitive that
+        // throws — fall through to the text/default path.
+      }
+    }
+  }
+  return details.text || 'Uncaught exception';
 }

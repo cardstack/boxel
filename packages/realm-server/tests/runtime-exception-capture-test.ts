@@ -90,6 +90,10 @@ function buildExceptionThrownEvent(opts: {
     lineNumber: number;
     columnNumber: number;
   }>;
+  exception?: {
+    description?: string;
+    value?: unknown;
+  };
 }) {
   return {
     timestamp: 0,
@@ -100,6 +104,7 @@ function buildExceptionThrownEvent(opts: {
       columnNumber: opts.columnNumber ?? 20,
       url: opts.url,
       stackTrace: opts.callFrames ? { callFrames: opts.callFrames } : undefined,
+      exception: opts.exception,
     },
   };
 }
@@ -112,7 +117,7 @@ module(basename(__filename), function () {
 
     await attachRuntimeExceptionCapture({
       page: page as any,
-      affinityKey: 'test-affinity',
+      getAffinityKey: () => 'test-affinity',
       pageId: 'page-1',
       recorder,
     });
@@ -193,7 +198,7 @@ module(basename(__filename), function () {
 
     await attachRuntimeExceptionCapture({
       page: page as any,
-      affinityKey: 'test-affinity',
+      getAffinityKey: () => 'test-affinity',
       pageId: 'page-1',
       recorder,
     });
@@ -243,7 +248,7 @@ module(basename(__filename), function () {
 
     await attachRuntimeExceptionCapture({
       page: page as any,
-      affinityKey: 'test-affinity',
+      getAffinityKey: () => 'test-affinity',
       pageId: 'page-1',
       recorder,
     });
@@ -290,7 +295,7 @@ module(basename(__filename), function () {
 
     await attachRuntimeExceptionCapture({
       page: page as any,
-      affinityKey: 'test-affinity',
+      getAffinityKey: () => 'test-affinity',
       pageId: 'page-1',
       recorder,
     });
@@ -321,7 +326,7 @@ module(basename(__filename), function () {
 
     await attachRuntimeExceptionCapture({
       page: page as any,
-      affinityKey: 'test-affinity',
+      getAffinityKey: () => 'test-affinity',
       pageId: 'page-1',
       recorder,
     });
@@ -342,7 +347,7 @@ module(basename(__filename), function () {
 
     await attachRuntimeExceptionCapture({
       page: page as any,
-      affinityKey: 'test-affinity',
+      getAffinityKey: () => 'test-affinity',
       pageId: 'page-1',
       recorder,
     });
@@ -359,6 +364,76 @@ module(basename(__filename), function () {
     );
   });
 
+  test('prefers exception.description over the generic CDP text label', async function (assert) {
+    let client = new FakeCDPClient();
+    let page = new FakePage(client);
+    let recorder = makeRecorder();
+
+    await attachRuntimeExceptionCapture({
+      page: page as any,
+      getAffinityKey: () => 'test-affinity',
+      pageId: 'page-1',
+      recorder,
+    });
+
+    // CDP frequently sets `text` to a generic label like "Uncaught"
+    // or "Uncaught (in promise)" while the actionable message lives
+    // on the RemoteObject's `description`. The capture should pick
+    // the description so the surfaced error doc carries the real
+    // type + message instead of a useless label.
+    client.emit(
+      'Runtime.exceptionThrown',
+      buildExceptionThrownEvent({
+        exceptionId: 100,
+        text: 'Uncaught (in promise)',
+        exception: {
+          description:
+            "TypeError: Cannot read properties of undefined (reading 'foo')\n    at Component.bar (chunk.js:42)",
+        },
+      }),
+    );
+
+    let entry = recorder.calls[0]?.entry;
+    assert.true(
+      entry?.text.startsWith(
+        "TypeError: Cannot read properties of undefined (reading 'foo')",
+      ),
+      `entry.text uses exception.description, got: ${entry?.text}`,
+    );
+  });
+
+  test('falls back to exception.value when description is missing (primitive throw)', async function (assert) {
+    let client = new FakeCDPClient();
+    let page = new FakePage(client);
+    let recorder = makeRecorder();
+
+    await attachRuntimeExceptionCapture({
+      page: page as any,
+      getAffinityKey: () => 'test-affinity',
+      pageId: 'page-1',
+      recorder,
+    });
+
+    // `throw 'boom'` produces a RemoteObject with `value` set to the
+    // primitive but no `description`. We stringify the value as a
+    // fallback so we never surface a bare "Uncaught" entry.
+    client.emit(
+      'Runtime.exceptionThrown',
+      buildExceptionThrownEvent({
+        exceptionId: 101,
+        text: 'Uncaught',
+        exception: { value: 'boom-as-primitive' },
+      }),
+    );
+
+    let entry = recorder.calls[0]?.entry;
+    assert.strictEqual(
+      entry?.text,
+      'boom-as-primitive',
+      'entry.text uses exception.value when description is absent',
+    );
+  });
+
   test('treats an empty stackTrace.callFrames as no stack (undefined, not empty array)', async function (assert) {
     let client = new FakeCDPClient();
     let page = new FakePage(client);
@@ -366,7 +441,7 @@ module(basename(__filename), function () {
 
     await attachRuntimeExceptionCapture({
       page: page as any,
-      affinityKey: 'test-affinity',
+      getAffinityKey: () => 'test-affinity',
       pageId: 'page-1',
       recorder,
     });
@@ -395,7 +470,7 @@ module(basename(__filename), function () {
 
     await attachRuntimeExceptionCapture({
       page: page as any,
-      affinityKey: 'test-affinity',
+      getAffinityKey: () => 'test-affinity',
       pageId: 'page-1',
       recorder,
     });
@@ -443,7 +518,7 @@ module(basename(__filename), function () {
     // render path. The recorder should also see no calls.
     await attachRuntimeExceptionCapture({
       page: throwingPage as any,
-      affinityKey: 'test-affinity',
+      getAffinityKey: () => 'test-affinity',
       pageId: 'page-1',
       recorder,
     });
