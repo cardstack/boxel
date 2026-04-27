@@ -4480,8 +4480,9 @@ export class Realm {
           string,
           unknown
         >;
-        if (typeof attrs.name === 'string') {
-          realmInfo.name = attrs.name;
+        let cardInfo = (attrs.cardInfo ?? {}) as Record<string, unknown>;
+        if (typeof cardInfo.name === 'string') {
+          realmInfo.name = cardInfo.name;
         }
         if (typeof attrs.backgroundURL === 'string') {
           realmInfo.backgroundURL = attrs.backgroundURL;
@@ -4601,7 +4602,22 @@ export class Realm {
           });
         }
       }
-      Object.assign(cardDoc.data.attributes!, cardAttrs);
+      // `name` is exposed on the public RealmInfo shape but stored on the
+      // RealmConfig card under cardInfo.name (the standard CardDef slot
+      // that drives cardTitle). Translate so PATCH /_config callers can
+      // keep sending { name: ... } unchanged.
+      for (let [key, value] of Object.entries(cardAttrs)) {
+        if (key === 'name') {
+          let existingCardInfo = (cardDoc.data.attributes!.cardInfo ??
+            {}) as Record<string, unknown>;
+          cardDoc.data.attributes!.cardInfo = {
+            ...existingCardInfo,
+            name: value,
+          };
+        } else {
+          cardDoc.data.attributes![key] = value;
+        }
+      }
       await this.write(cardPath, JSON.stringify(cardDoc, null, 2) + '\n');
     }
 

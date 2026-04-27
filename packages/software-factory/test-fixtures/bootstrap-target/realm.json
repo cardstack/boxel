@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Bootstrap Target Test Realm"
+      "cardInfo": { "name": "Bootstrap Target Test Realm" }
     },
     "meta": {
       "adoptsFrom": {

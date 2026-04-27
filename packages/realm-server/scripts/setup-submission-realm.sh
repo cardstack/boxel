@@ -27,7 +27,7 @@ if [ ! -f "$SUBMISSION_REALM_PATH/realm.json" ]; then
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Submissions",
+      "cardInfo": { "name": "Submissions" },
       "backgroundURL": "https://boxel-images.boxel.ai/background-images/background-for-catalog-82x.jpg",
       "iconURL": "https://boxel-images.boxel.ai/icons/Letter-s.png"
     },

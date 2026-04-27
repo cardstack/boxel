@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Experiments Workspace",
+      "cardInfo": { "name": "Experiments Workspace" },
       "backgroundURL": "https://boxel-images.boxel.ai/background-images/4k-light-streaks.jpg",
       "iconURL": "https://boxel-images.boxel.ai/icons/cardstack-black.png"
     },

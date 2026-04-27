@@ -922,7 +922,7 @@ export class RealmServer {
       data: {
         type: 'card',
         attributes: {
-          name,
+          cardInfo: { name },
           ...(iconURL ? { iconURL } : {}),
           ...(backgroundURL ? { backgroundURL } : {}),
         },

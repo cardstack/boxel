@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Test Realm Runner Fixture"
+      "cardInfo": { "name": "Test Realm Runner Fixture" }
     },
     "meta": {
       "adoptsFrom": {

@@ -28,8 +28,14 @@ export class RealmConfig extends CardDef {
   static displayName = 'Realm Config';
   static icon = MapPinnedIcon;
 
-  @field name = contains(StringField);
   @field backgroundURL = contains(StringField);
   @field iconURL = contains(StringField);
   @field hostRoutingRules = containsMany(RoutingRuleField);
+
+  @field cardTitle = contains(StringField, {
+    computeVia: function (this: RealmConfig) {
+      let name = this.cardInfo?.name?.trim();
+      return name ? `${name} Config` : `Untitled ${RealmConfig.displayName}`;
+    },
+  });
 }

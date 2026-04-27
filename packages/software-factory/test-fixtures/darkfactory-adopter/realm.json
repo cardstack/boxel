@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "DarkFactory Adopter Test Realm"
+      "cardInfo": { "name": "DarkFactory Adopter Test Realm" }
     },
     "meta": {
       "adoptsFrom": {

@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Test Workspace A",
+      "cardInfo": { "name": "Test Workspace A" },
       "backgroundURL": "https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg",
       "iconURL": "https://boxel-images.boxel.ai/icons/cardstack.png"
     },

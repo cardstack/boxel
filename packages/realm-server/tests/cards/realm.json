@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Test Realm"
+      "cardInfo": { "name": "Test Realm" }
     },
     "meta": {
       "adoptsFrom": {

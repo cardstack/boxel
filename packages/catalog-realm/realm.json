@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Legacy Catalog",
+      "cardInfo": { "name": "Legacy Catalog" },
       "backgroundURL": "https://boxel-images.boxel.ai/background-images/background-for-catalog-82x.jpg",
       "iconURL": "https://boxel-images.boxel.ai/icons/icon_catalog.png"
     },
