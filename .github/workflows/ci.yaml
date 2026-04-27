@@ -812,8 +812,9 @@ jobs:
       - name: Wait for dev stack readiness
         run: |
           timeout 600 bash -c '
-            until curl -sf http://localhost:4200 > /dev/null \
-              && curl -sf "http://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson" > /dev/null; \
+            until curl -sf http://127.0.0.1:4200 > /dev/null \
+              && curl -sf "http://127.0.0.1:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson" > /dev/null \
+              && curl -sf http://127.0.0.1:4222/ > /dev/null; \
             do sleep 2; done
           '
       - name: Create realm users
