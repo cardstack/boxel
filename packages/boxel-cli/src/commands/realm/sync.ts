@@ -8,10 +8,10 @@ import {
   CheckpointManager,
   type CheckpointChange,
 } from '../../lib/checkpoint-manager';
-import {
-  getProfileManager,
-  type ProfileManager,
-} from '../../lib/profile-manager';
+import type { ProfileManager } from '../../lib/profile-manager';
+import type { RealmAuthenticator } from '../../lib/realm-authenticator';
+import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
+import { resolveRealmSecretSeed } from '../../lib/prompt';
 import {
   type SyncManifest,
   computeFileHash,
@@ -54,9 +54,9 @@ class RealmSyncer extends RealmSyncBase {
 
   constructor(
     private syncOptions: BiSyncOptions,
-    profileManager: ProfileManager,
+    authenticator: RealmAuthenticator,
   ) {
-    super(syncOptions, profileManager);
+    super(syncOptions, authenticator);
   }
 
   private get conflictStrategy(): ConflictStrategy | null {
@@ -79,7 +79,7 @@ class RealmSyncer extends RealmSyncBase {
       console.error('Failed to access realm:', error);
       throw new Error(
         'Cannot proceed with sync: Authentication or access failed. ' +
-          'Please check your Matrix credentials and realm permissions.',
+          'Please check your credentials and realm permissions.',
       );
     }
     console.log('Realm access verified');
@@ -490,6 +490,18 @@ export interface SyncCommandOptions {
   delete?: boolean;
   dryRun?: boolean;
   profileManager?: ProfileManager;
+  /**
+   * Pre-resolved realm secret seed for administrative access. When set, the
+   * CLI mints a JWT locally and skips Matrix login + /_server-session +
+   * /_realm-auth. The `--realm-secret-seed` CLI flag is resolved via
+   * `resolveRealmSecretSeed` (env var or interactive prompt) before being
+   * passed here.
+   */
+  realmSecretSeed?: string;
+  /**
+   * @internal Test hook: supply an already-constructed authenticator.
+   */
+  authenticator?: RealmAuthenticator;
 }
 
 export interface SyncResult {
@@ -518,6 +530,10 @@ export function registerSyncCommand(realm: Command): void {
     .option('--prefer-newest', 'Resolve conflicts by keeping newest version')
     .option('--delete', 'Sync deletions both ways')
     .option('--dry-run', 'Preview without making changes')
+    .option(
+      '--realm-secret-seed',
+      'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+    )
     .action(
       async (
         localDir: string,
@@ -528,18 +544,30 @@ export function registerSyncCommand(realm: Command): void {
           preferNewest?: boolean;
           delete?: boolean;
           dryRun?: boolean;
+          realmSecretSeed?: boolean;
         },
       ) => {
-        let result = await sync(localDir, realmUrl, options);
+        const realmSecretSeed = await resolveRealmSecretSeed(
+          options.realmSecretSeed === true,
+        );
+        let result = await sync(localDir, realmUrl, {
+          preferLocal: options.preferLocal,
+          preferRemote: options.preferRemote,
+          preferNewest: options.preferNewest,
+          delete: options.delete,
+          dryRun: options.dryRun,
+          realmSecretSeed,
+        });
+        let hasPartialResults =
+          (Array.isArray(result.pushed) && result.pushed.length > 0) ||
+          (Array.isArray(result.pulled) && result.pulled.length > 0) ||
+          (Array.isArray(result.remoteDeleted) &&
+            result.remoteDeleted.length > 0) ||
+          (Array.isArray(result.localDeleted) &&
+            result.localDeleted.length > 0);
         if (result.error) {
           console.error(`Error: ${result.error}`);
-          process.exit(1);
-        }
-        if (result.hasError) {
-          console.log(
-            'Sync did not complete successfully. View logs for details',
-          );
-          process.exit(2);
+          process.exit(hasPartialResults ? 2 : 1);
         }
         console.log('Sync completed successfully');
       },
@@ -557,12 +585,19 @@ export async function sync(
   realmUrl: string,
   options: SyncCommandOptions,
 ): Promise<SyncResult> {
-  let pm = options.profileManager ?? getProfileManager();
-  let active = pm.getActiveProfile();
-  if (!active) {
-    return emptyResult({
-      error: 'No active profile. Run `boxel profile add` to create one.',
+  let authenticator: RealmAuthenticator;
+  if (options.authenticator) {
+    authenticator = options.authenticator;
+  } else {
+    const resolution = resolveRealmAuthenticator({
+      realmUrl,
+      realmSecretSeed: options.realmSecretSeed,
+      profileManager: options.profileManager,
     });
+    if (!resolution.ok) {
+      return emptyResult({ error: resolution.error });
+    }
+    authenticator = resolution.authenticator;
   }
 
   const strategies = [
@@ -583,28 +618,28 @@ export async function sync(
     });
   }
 
-  const syncer = new RealmSyncer(
-    {
-      realmUrl,
-      localDir,
-      preferLocal: options.preferLocal,
-      preferRemote: options.preferRemote,
-      preferNewest: options.preferNewest,
-      deleteSync: options.delete,
-      dryRun: options.dryRun,
-    },
-    pm,
-  );
-
+  let syncer: RealmSyncer | undefined;
   try {
+    syncer = new RealmSyncer(
+      {
+        realmUrl,
+        localDir,
+        preferLocal: options.preferLocal,
+        preferRemote: options.preferRemote,
+        preferNewest: options.preferNewest,
+        deleteSync: options.delete,
+        dryRun: options.dryRun,
+      },
+      authenticator,
+    );
     await syncer.sync();
   } catch (error) {
     return {
-      pushed: syncer.pushedFiles.slice().sort(),
-      pulled: syncer.pulledFiles.slice().sort(),
-      remoteDeleted: syncer.remoteDeletedFiles.slice().sort(),
-      localDeleted: syncer.localDeletedFiles.slice().sort(),
-      skippedConflicts: syncer.skippedConflicts.slice().sort(),
+      pushed: syncer?.pushedFiles.slice().sort() ?? [],
+      pulled: syncer?.pulledFiles.slice().sort() ?? [],
+      remoteDeleted: syncer?.remoteDeletedFiles.slice().sort() ?? [],
+      localDeleted: syncer?.localDeletedFiles.slice().sort() ?? [],
+      skippedConflicts: syncer?.skippedConflicts.slice().sort() ?? [],
       hasError: true,
       error: `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
     };
@@ -617,9 +652,21 @@ export async function sync(
     localDeleted: syncer.localDeletedFiles.slice().sort(),
     skippedConflicts: syncer.skippedConflicts.slice().sort(),
     hasError: syncer.hasError,
+    error: syncer.hasError ? buildSyncErrorMessage(syncer) : undefined,
   };
 }
 
+function buildSyncErrorMessage(syncer: RealmSyncer): string {
+  let summary = [
+    `${syncer.pushedFiles.length} pushed`,
+    `${syncer.pulledFiles.length} pulled`,
+    `${syncer.remoteDeletedFiles.length} remote deleted`,
+    `${syncer.localDeletedFiles.length} local deleted`,
+    `${syncer.skippedConflicts.length} conflicts skipped`,
+  ].join(', ');
+
+  return `Sync completed with errors. ${summary}.`;
+}
 function emptyResult(partial: Pick<SyncResult, 'error'>): SyncResult {
   return {
     pushed: [],

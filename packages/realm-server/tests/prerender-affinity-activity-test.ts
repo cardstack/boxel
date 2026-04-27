@@ -30,7 +30,12 @@ module(basename(__filename), function () {
 
   test('self is excluded from its own snapshot', function (assert) {
     let { tracker } = trackerAt(1_000_000);
-    let self = tracker.record(REALM_A, 'http://localhost/x.json', 'visit');
+    let self = tracker.record(
+      REALM_A,
+      'http://localhost/x.json',
+      'visit',
+      'file',
+    );
     assert.deepEqual(
       tracker.sameAffinityActivity(REALM_A, self.handle),
       [],
@@ -40,21 +45,37 @@ module(basename(__filename), function () {
 
   test('sibling module call on same affinity appears as queued with its URL', function (assert) {
     let { tracker, advance } = trackerAt(1_000_000);
-    let outer = tracker.record(REALM_A, 'http://localhost/index.json', 'visit');
+    let outer = tracker.record(
+      REALM_A,
+      'http://localhost/index.json',
+      'visit',
+      'file',
+    );
     advance(50);
-    tracker.record(REALM_A, 'http://localhost/customer.gts', 'module');
+    tracker.record(
+      REALM_A,
+      'http://localhost/customer.gts',
+      'module',
+      'module',
+    );
     advance(25);
 
     let snap = tracker.sameAffinityActivity(REALM_A, outer.handle);
     assert.strictEqual(snap.length, 1, 'one sibling visible');
     assert.deepEqual(
-      { url: snap[0]!.url, kind: snap[0]!.kind, state: snap[0]!.state },
+      {
+        url: snap[0]!.url,
+        kind: snap[0]!.kind,
+        queue: snap[0]!.queue,
+        state: snap[0]!.state,
+      },
       {
         url: 'http://localhost/customer.gts',
         kind: 'module',
+        queue: 'module',
         state: 'queued',
       },
-      'sibling recorded as a queued module call',
+      'sibling recorded as a queued module call on the module queue',
     );
     assert.strictEqual(
       snap[0]!.ageMs,
@@ -65,8 +86,18 @@ module(basename(__filename), function () {
 
   test('markRunning flips state; release removes the entry', function (assert) {
     let { tracker } = trackerAt(1_000_000);
-    let outer = tracker.record(REALM_A, 'http://localhost/i.json', 'visit');
-    let sibling = tracker.record(REALM_A, 'http://localhost/c.gts', 'module');
+    let outer = tracker.record(
+      REALM_A,
+      'http://localhost/i.json',
+      'visit',
+      'file',
+    );
+    let sibling = tracker.record(
+      REALM_A,
+      'http://localhost/c.gts',
+      'module',
+      'module',
+    );
 
     sibling.markRunning();
     assert.strictEqual(
@@ -85,7 +116,7 @@ module(basename(__filename), function () {
 
   test('release is idempotent and survives missing affinity', function (assert) {
     let { tracker } = trackerAt(1_000_000);
-    let h = tracker.record(REALM_A, 'http://localhost/x', 'visit');
+    let h = tracker.record(REALM_A, 'http://localhost/x', 'visit', 'file');
     h.release();
     h.release(); // must not throw
     assert.ok(true, 'release-after-release is a no-op');
@@ -93,8 +124,13 @@ module(basename(__filename), function () {
 
   test('per-affinity isolation — sibling on different affinity is NOT visible', function (assert) {
     let { tracker } = trackerAt(1_000_000);
-    let outer = tracker.record(REALM_A, 'http://localhost/i.json', 'visit');
-    tracker.record(REALM_B, 'http://localhost/other.gts', 'module');
+    let outer = tracker.record(
+      REALM_A,
+      'http://localhost/i.json',
+      'visit',
+      'file',
+    );
+    tracker.record(REALM_B, 'http://localhost/other.gts', 'module', 'module');
 
     assert.deepEqual(
       tracker.sameAffinityActivity(REALM_A, outer.handle),
@@ -110,8 +146,8 @@ module(basename(__filename), function () {
 
   test('snapshot without selfHandle returns all entries (diagnostic dump mode)', function (assert) {
     let { tracker } = trackerAt(1_000_000);
-    tracker.record(REALM_A, 'http://localhost/a', 'visit');
-    tracker.record(REALM_A, 'http://localhost/b.gts', 'module');
+    tracker.record(REALM_A, 'http://localhost/a', 'visit', 'file');
+    tracker.record(REALM_A, 'http://localhost/b.gts', 'module', 'module');
     assert.strictEqual(
       tracker.sameAffinityActivity(REALM_A).length,
       2,

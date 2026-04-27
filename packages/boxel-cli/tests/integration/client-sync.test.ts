@@ -160,4 +160,17 @@ describe('BoxelCLIClient.sync (integration)', () => {
     expect(result.hasError).toBe(true);
     expect(result.error).toContain('does not exist');
   });
+
+  it('returns an error result when realmUrl is malformed', async () => {
+    let localDir = makeLocalDir();
+
+    let result = await client.sync('not-a-valid-url', localDir, {
+      preferLocal: true,
+    });
+
+    expect(result.hasError).toBe(true);
+    expect(result.error).toContain('Invalid workspace URL');
+    expect(result.pushed).toEqual([]);
+    expect(result.pulled).toEqual([]);
+  });
 });

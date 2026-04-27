@@ -9,6 +9,7 @@ import {
   addRealmToMatrixAccountData,
   type MatrixAuth,
 } from './auth';
+import type { RealmAuthenticator } from './realm-authenticator';
 
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.boxel-cli');
 const PROFILES_FILENAME = 'profiles.json';
@@ -88,7 +89,7 @@ export function formatProfileBadge(matrixId: string): string {
   return `${DIM}[${RESET}${FG_CYAN}${username}${RESET} ${DIM}\u00b7${RESET} ${FG_MAGENTA}${env}${RESET}${DIM}]${RESET}`;
 }
 
-export class ProfileManager {
+export class ProfileManager implements RealmAuthenticator {
   private config: ProfilesConfig;
   private configDir: string;
   private profilesFile: string;

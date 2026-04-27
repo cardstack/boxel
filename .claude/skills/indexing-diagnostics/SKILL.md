@@ -150,6 +150,7 @@ LIMIT 20;
   "launchMs": 18720,             // waiting-in-page-pool time (server-side)
   "waits": {
     "semaphoreMs": 18500,        //   └ of that, waiting on the global render semaphore
+    "admissionMs": 0,            //   └ waiting on the per-affinity file-admission cap (= affinity tab max − 1)
     "tabQueueMs": 200,           //   └ waiting behind a same-affinity tab already rendering
     "tabStartupMs": 20           //   └ warming a fresh tab / standby
   },
@@ -189,14 +190,20 @@ LIMIT 20;
     "tabCount": 1,
     "pendingTotal": 7,           // peak across periodic samples during this call
     "maxPending": 7,
-    "sameAffinityActivity": [    // excludes self. A non-empty list on a
-                                 // `waiting-stability` stall is the
-                                 // self-referential prerender deadlock
-                                 // signature — the render is waiting on a
-                                 // `/_search` → `definitionLookup` response
-                                 // whose sub-prerender is queued here.
-      { "url": "…/customer.gts", "kind": "module", "state": "queued", "ageMs": 68000 },
-      { "url": "…/order.gts",    "kind": "module", "state": "queued", "ageMs": 66500 }
+    "sameAffinityActivity": [    // excludes self. Module sub-prerenders
+                                 // run on their own tab via the queue
+                                 // split — entries here during healthy
+                                 // operation show concurrent work on
+                                 // the *other* queue (e.g. a `module`
+                                 // call running alongside a `file`
+                                 // render). A non-empty list with
+                                 // `queue: 'module', state: 'queued'`
+                                 // on a `waiting-stability` stall is a
+                                 // regression signal — see the
+                                 // "Classify in one pass" table row
+                                 // below.
+      { "url": "…/customer.gts", "kind": "module", "queue": "module", "state": "running", "ageMs": 68000 },
+      { "url": "…/order.gts",    "kind": "module", "queue": "module", "state": "running", "ageMs": 66500 }
     ]
   },
   "recentQueryLoads": [          // top-N slowest completed query loads
@@ -239,13 +246,14 @@ Walk the fields top-down. The *first* positive signal wins; stop there.
 | Signal | Category | What to look at next |
 |---|---|---|
 | `waits.semaphoreMs` ≈ `totalElapsedMs` | **Launch stall (capacity)** | Fleet-wide: `prerender-queue-snapshot` lines on every prerender server around that timestamp. Is `totalPending` piled up? Add capacity, don't touch host. |
-| `waits.tabQueueMs` ≈ `totalElapsedMs` (and semaphoreMs small) | **Same-affinity contention** | Same realm's batch is serialized on one tab. Check whether `PRERENDER_AFFINITY_TAB_MAX` is 1 for this fleet, or whether a rogue user request is sharing the tab (see CS-10873 for the cancel-on-abort follow-up). |
+| `waits.admissionMs` ≈ `totalElapsedMs` (and semaphoreMs small) | **Per-affinity admission stall** | This realm hit its own file-admission cap — the server had capacity but wasn't letting this realm use it. The signal means ≥ cap concurrent file renders on one affinity. Default cap = `affinityTabMax − 1` (4 on the standard 5-tab deployment), so a single realm fanning out to ≥ 4 concurrent renders (typical catalog-sized reindex) already produces this. Grep the queue-snapshot log for `admission=pending=N/cap=N` on the same affinity to confirm waiters were piling up. If the cap looks too tight for the workload and cross-realm fairness isn't the concern, `PRERENDER_AFFINITY_FILE_CONCURRENCY` is the knob (see the tuning-knobs section). |
+| `waits.tabQueueMs` ≈ `totalElapsedMs` (and semaphoreMs / admissionMs small) | **Same-affinity contention** | Same realm's batch is serialized on one tab. Check whether `PRERENDER_AFFINITY_TAB_MAX` is 1 for this fleet, or whether a rogue user request is sharing the tab (see CS-10873 for the cancel-on-abort follow-up). |
 | `launchMs` small **and** `renderStage` is `null`/`model:start` | **Very early render stall** — transition hadn't yet rendered anything. Usually means the route threw before setting a real stage. Look at `capturedDom` (`<data-prerender-error>` is common) and console errors. |
 | `renderStage` ∈ `buildModel:fetching-source` / `buildModel:deriving-type` / `buildModel:hydrating` | **Backend stall during model build** | Usually a slow realm server or cross-realm fetch. Check realm-server logs for the same requestId; check the fetch target from `capturedDom` / `cardDocsInFlight`. |
 | `inFlightModuleImports.length > 0` | **Loader stall** | Each URL is a `.gts` / `.ts` we'd already started a `fetchModule(...)` for. Confirm the realm serves those URLs and that there's no import cycle. Often resolves with `clearCache: true` on retry (already in place) — if that's failing check for 500s on the module URL. |
 | `queryLoadsInFlight.length > 0` with `fieldName` set | **Query-field stall** | This is the CS-10820 field-driven hot path. Look at the `query`/`realms` fields — is the search hitting a remote realm server that's slow? Check `_federated-search` latency for that realm on the realm-server side. |
 | `cardDocsInFlight.length > 0` or `fileMetaDocsInFlight.length > 0` (no query fields) | **Data stall** | Usually linksTo targets that the template pulled on. Prefer `cardDocLoadsInFlight[*].ageMs` / `fileMetaDocLoadsInFlight[*].ageMs` — they tell you which individual URL is the slow one vs. a fan-out. If it's a card from a different realm, that realm may be slow or misconfigured. Also check `recentCardDocLoads` for loads that completed just before the timer fired but still dominated the budget. |
-| `renderStage` = `waiting-stability` **AND** `queryLoadsInFlight` has a `search-resource:*` entry **AND** `affinitySnapshot.sameAffinityActivity` contains `{ kind: 'module', state: 'queued' }` entries | **Self-referential prerender deadlock (definition-lookup fan-out)** | The search can't resolve a `_cardType` filter without a card definition; `CachingDefinitionLookup` fires a same-affinity `prerenderModule` to extract it; that sub-prerender queues behind the very render that's waiting on its result. Cold `modules` table / fresh realm-server restart / post-`clearAllModules` reindex makes it hit. Fix path: route `definition-lookup` extractions off the card-render affinity. |
+| `renderStage` = `waiting-stability` **AND** `queryLoadsInFlight` has a `search-resource:*` entry **AND** `affinitySnapshot.sameAffinityActivity` contains `{ queue: 'module', state: 'queued' }` entries **on the same affinity as the stuck render** | **Self-referential prerender deadlock — admission invariant broken** | A search that can't resolve a `_cardType` filter without a card definition causes `CachingDefinitionLookup` to fire a same-affinity `prerenderModule` to extract it. The queue-split + admission cap in PagePool is supposed to reserve at least one tab per affinity for `module` / `command` work precisely to prevent this sub-prerender from queuing behind the render that needs it. **Seeing this fingerprint means the invariant didn't hold**: check `PRERENDER_AFFINITY_TAB_MAX >= 2` (PagePool logs a warning at startup if not), verify the admission semaphore is acquired on `'file'` calls (`PagePool.#acquireFileAdmission`), and confirm `disposeAffinity` isn't dropping the admission semaphore mid-flight. |
 | `renderStage` = `waiting-stability` with empty in-flight arrays | **Render stall** | Nothing is loading but settlement never finishes. Classic Glimmer tracking loop — template is invalidating itself. `capturedDom` usually shows the partially-rendered component. `blockedTimerSummary` will list swallowed timers that may hint at a scheduling loop. |
 | `currentlyEvaluatingModule` non-null, or `stageAgeMs` large with empty in-flight arrays | **Synchronous browser stall (typically Glimmer compile during module eval)** | `recentModuleEvaluations` shows the worst offenders. A single URL with `ms > 5000` usually means "this module has a giant template that takes forever to compile". Many small entries (say 50+ at 100–500 ms each) summing into the stall budget mean card fan-out where each dependent card contributes a compile. Split the module, lazy-load the template, or reduce the component fan-out. |
 | `blockedTimerSummary` populated | Supplementary. Tells you which timer-driven code is fighting the render. Not a root cause on its own. |
@@ -275,7 +283,7 @@ grep "requestId=b14e" realm-server.log
 The periodic `prerender-queue-snapshot` line does NOT carry requestId (it's a fleet snapshot):
 
 ```
-prerender-queue-snapshot totalTabs=4 totalPending=7 affinities=3 | realm:acme(tabs=1, pending=5, max=5) realm:lib(tabs=2, pending=2, max=1) user:u-123(tabs=1, pending=0, max=0)
+prerender-queue-snapshot totalTabs=5 totalPending=7 affinities=3 | realm:acme(tabs=2, pending=5, max=5, busy=file:1/module:1/command:0) realm:lib(tabs=2, pending=2, max=1, busy=file:1/module:0/command:0) user:u-123(tabs=1, pending=0, max=0)
 ```
 
 Read this alongside a timeout when `waits.semaphoreMs` is large. A snapshot with `totalPending >> totalTabs` near the timestamp confirms saturation.
@@ -502,6 +510,26 @@ grep 'manually visit prerendered url .*<card-id>' realm-server.log | tail -1
 Two different tokens do two different jobs: the user-minted realm-scoped JWT got you the reindex, the indexer's full session map gets the browser tab past its auth checks for every realm the render touches.
 
 If `GRAFANA_SECRET` is configured on your server, you can skip the user-JWT step and use `curl -H "Authorization: $GRAFANA_SECRET" http://localhost:4201/_grafana-full-reindex` instead (grafana endpoint is a GET, no MIME gotcha). In dev the per-realm JWT path is almost always easier.
+
+## Prerender capacity tuning knobs
+
+Three env vars control the per-prerender-server shape. They're resolved once at `PagePool` construction; changes require a process restart.
+
+| Env var | Default | What it controls | When to change it |
+|---|---|---|---|
+| `PRERENDER_PAGE_POOL_SIZE` | `5` | Total simultaneous Chrome tabs the pool can manage. Also the `capacity` the server reports to the manager on each heartbeat, which drives warm-vacancy routing. | Fleet capacity. Raise when `waits.semaphoreMs` dominates `launchMs` across rows from all realms (server-wide saturation); lower if you need to reduce memory footprint and you can confirm from snapshots that pending rarely approaches `totalTabs`. |
+| `PRERENDER_AFFINITY_TAB_MAX` | `5` (clamped to `PRERENDER_PAGE_POOL_SIZE`) | Max tabs a single affinity (realm or user) can simultaneously hold from the pool. | Rarely. Must be ≥ 2 for the self-referential prerender deadlock to be prevented — PagePool logs a warning at startup when it isn't. Lower only if you want to force multi-realm fairness at the tab-routing level. |
+| `PRERENDER_AFFINITY_FILE_CONCURRENCY` | unset → `max(1, PRERENDER_AFFINITY_TAB_MAX − 1)` (the deadlock-safety ceiling) | Cap on concurrent `file` renders within a single affinity. Module and command calls bypass admission; they're never capped by this knob. | Cross-realm fairness. When one realm's fan-out (e.g. a catalog reindex) is stealing render budget from every other realm, lower this below the ceiling to reserve tabs for other affinities. The effective cap is always `min(env, ceiling)` so this can't accidentally break the deadlock-safety invariant. |
+
+**Default invariant**: when `PRERENDER_AFFINITY_FILE_CONCURRENCY` is unset, the effective file-admission cap equals the deadlock-safety ceiling — same behavior as before the knob existed. Changing the knob is an explicit operator decision driven by `admissionMs` telemetry; don't adjust it without data.
+
+When the cap is active and below the ceiling, PagePool logs one info line at construction:
+
+```
+file-queue admission: cap=2 (affinityTabMax=5, deadlock-safety ceiling=4)
+```
+
+Grep for `file-queue admission: cap=` in prerender-server logs to confirm the effective value in a running fleet.
 
 ## Extending the diagnostics
 

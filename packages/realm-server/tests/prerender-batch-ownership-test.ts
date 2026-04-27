@@ -3,7 +3,7 @@ import { basename } from 'path';
 import {
   computeBatchClearCacheGate,
   type BatchOwner,
-} from '../prerender/prerenderer';
+} from '../prerender/batch-ownership-gate';
 import { toAffinityKey } from '../prerender/affinity';
 import type { PrerenderVisitArgs } from '@cardstack/runtime-common';
 

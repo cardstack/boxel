@@ -1,9 +1,15 @@
-import { delay, logger, uuidv4 } from '@cardstack/runtime-common';
+import {
+  delay,
+  logger,
+  type PrerenderQueue,
+  uuidv4,
+} from '@cardstack/runtime-common';
 import type { ConsoleMessage, Page } from 'puppeteer';
 import type { BrowserContext } from 'puppeteer';
 import { resolvePrerenderManagerURL } from './config';
 import type { BrowserManager } from './browser-manager';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel';
+import { AsyncSemaphore } from './async-semaphore';
 
 type RenderSemaphore = {
   acquire(signal?: AbortSignal): Promise<() => void>;
@@ -87,6 +93,12 @@ type PoolEntry = {
   pageId: string;
   lastUsedAt: number;
   queue: TabQueue;
+  // Which PagePool queue ('file' / 'module' / 'command') the tab is
+  // currently serving, if any. Set when a getPage caller acquires the
+  // tab and cleared when they release. Powers the per-queue breakdown
+  // in `getQueueDepthSnapshot` / `getVacancySnapshot` and the
+  // `affinitySnapshot` diagnostic.
+  currentQueue?: PrerenderQueue;
   closing?: boolean;
   transitioning?: boolean;
 };
@@ -189,6 +201,30 @@ export class PagePool {
   // affinity without a successor replacement.
   #onAffinityDisposed: ((affinityKey: string) => void) | undefined;
 
+  // Per-affinity admission semaphore for the `file` queue. Capacity is
+  // `#fileAdmissionCap` — at most that many concurrent file renders on
+  // the affinity, reserving at least one tab slot for `module` /
+  // `command` work that the in-flight file renders may be waiting on
+  // (the self-referential prerender deadlock). Module and command
+  // calls bypass this semaphore entirely. Lazily created on first file
+  // call per affinity; lifecycle is tied to the affinity itself,
+  // cleared in `closeAll`.
+  #fileAdmission = new Map<string, AsyncSemaphore>();
+  // Effective per-affinity file-admission capacity. Defaults to the
+  // deadlock-safety ceiling `max(1, #affinityTabMax − 1)` (same as
+  // before the operator knob existed). When
+  // `PRERENDER_AFFINITY_FILE_CONCURRENCY` is set and ≥ 1, the value is
+  // clamped at the ceiling to preserve the deadlock-safety invariant.
+  // Resolved once at construction so tests that mutate env vars see
+  // the value frozen against the pool they're driving.
+  #fileAdmissionCap: number;
+  // When true, `#acquireFileAdmission` becomes a no-op. Used by existing
+  // PagePool unit tests that predate the admission feature and exercise
+  // tab-routing semantics directly — those tests assume `getPage` doesn't
+  // gate file calls on an affinity-level semaphore. Production call sites
+  // never set this; Prerenderer constructs PagePool without the flag.
+  #disableFileAdmission: boolean;
+
   constructor(options: {
     maxPages: number;
     serverURL: string;
@@ -198,13 +234,27 @@ export class PagePool {
     renderSemaphore?: RenderSemaphore;
     disableStandbyRefill?: boolean;
     onAffinityDisposed?: (affinityKey: string) => void;
+    disableFileAdmission?: boolean;
   }) {
     this.#maxPages = options.maxPages;
-    let envTabMax = Number(process.env.PRERENDER_AFFINITY_TAB_MAX ?? 4);
+    let envTabMax = Number(process.env.PRERENDER_AFFINITY_TAB_MAX ?? 5);
     if (!Number.isFinite(envTabMax) || envTabMax <= 0) {
       envTabMax = 1;
     }
     this.#affinityTabMax = Math.min(Math.max(1, envTabMax), this.#maxPages);
+    if (this.#affinityTabMax < 2) {
+      // Degenerate configuration: with only one tab per affinity, the
+      // file-queue admission cap clamps to 1 (see `#acquireFileAdmission`)
+      // and no tab slot can be held back for module / command work.
+      // A card render that triggers a same-affinity `.gts` extraction
+      // will still deadlock — there's no room to run the extraction
+      // while the render occupies the sole tab. Bump
+      // `PRERENDER_AFFINITY_TAB_MAX` to at least 2 for the deadlock-
+      // free guarantee.
+      log.warn(
+        `PRERENDER_AFFINITY_TAB_MAX=${this.#affinityTabMax} below 2; file-queue admission can't reserve a slot for module/command work and the self-referential prerender deadlock is not prevented`,
+      );
+    }
     // Cap on total shared contexts (active + orphaned). Default to
     // 2× maxPages so there's headroom for a handful of recently-
     // evicted contexts to survive as orphans for reuse. Enforced by
@@ -223,6 +273,39 @@ export class PagePool {
     this.#renderSemaphore = options.renderSemaphore;
     this.#disableStandbyRefill = options.disableStandbyRefill ?? false;
     this.#onAffinityDisposed = options.onAffinityDisposed;
+    this.#disableFileAdmission = options.disableFileAdmission ?? false;
+    // Resolve the per-affinity file-admission cap. Ceiling is the
+    // deadlock-safety `max(1, affinityTabMax − 1)`. Operator override
+    // via `PRERENDER_AFFINITY_FILE_CONCURRENCY`; invalid or missing
+    // values fall through to the ceiling — i.e. the pre-knob behavior.
+    let ceiling = Math.max(1, this.#affinityTabMax - 1);
+    let raw = process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+    let override: number | undefined;
+    if (raw !== undefined && raw !== '') {
+      let parsed = Number(raw);
+      if (Number.isInteger(parsed) && parsed >= 1) {
+        override = parsed;
+      } else {
+        log.warn(
+          `PRERENDER_AFFINITY_FILE_CONCURRENCY=${raw} invalid (must be an integer ≥ 1); falling back to deadlock-safety ceiling=${ceiling}`,
+        );
+      }
+    }
+    this.#fileAdmissionCap =
+      override === undefined ? ceiling : Math.min(override, ceiling);
+    if (
+      !this.#disableFileAdmission &&
+      override !== undefined &&
+      this.#fileAdmissionCap < ceiling
+    ) {
+      // Operator has explicitly lowered the cap below the ceiling.
+      // Log so the effective value is visible without grepping env.
+      // No log line when the env is unset (common case) — nothing
+      // changed.
+      log.info(
+        `file-queue admission: cap=${this.#fileAdmissionCap} (affinityTabMax=${this.#affinityTabMax}, deadlock-safety ceiling=${ceiling})`,
+      );
+    }
   }
 
   set serverURL(url: string) {
@@ -290,6 +373,18 @@ export class PagePool {
       pendingTotal: number;
       maxPending: number;
       idle: boolean;
+      // Per-queue breakdown of what the affinity's tabs are serving
+      // right now (queue types in use). Tabs without `currentQueue`
+      // are idle. The counts sum to ≤ tabCount.
+      byQueue: { file: number; module: number; command: number };
+      // Per-affinity file-admission state. `cap` is the semaphore's
+      // capacity (= max(1, affinity tab max − 1); when affinity tab
+      // max ≥ 2 this leaves at least one tab reserved for
+      // module/command work). `pending` is the number of file callers
+      // currently queued behind an exhausted semaphore waiting for a
+      // slot. Both are 0 when the semaphore hasn't been lazily created
+      // yet, or was deleted once it returned to idle.
+      admission: { pending: number; cap: number };
     }>;
   } {
     let totalTabs = 0;
@@ -300,16 +395,24 @@ export class PagePool {
       pendingTotal: number;
       maxPending: number;
       idle: boolean;
+      byQueue: { file: number; module: number; command: number };
+      admission: { pending: number; cap: number };
     }> = [];
     for (let [affinityKey, entries] of this.#affinityPages) {
       let tabCount = entries.size;
       let pendingTotal = 0;
       let maxPending = 0;
+      let byQueue = { file: 0, module: 0, command: 0 };
       for (let entry of entries) {
         let p = entry.queue.pendingCount;
         pendingTotal += p;
         if (p > maxPending) maxPending = p;
+        if (entry.currentQueue) byQueue[entry.currentQueue]++;
       }
+      let sem = this.#fileAdmission.get(affinityKey);
+      let admission = sem
+        ? { pending: sem.pendingCount, cap: sem.capacity }
+        : { pending: 0, cap: 0 };
       totalTabs += tabCount;
       totalPending += pendingTotal;
       affinities.push({
@@ -318,6 +421,8 @@ export class PagePool {
         pendingTotal,
         maxPending,
         idle: pendingTotal === 0,
+        byQueue,
+        admission,
       });
     }
     return { totalTabs, totalPending, affinities };
@@ -356,33 +461,76 @@ export class PagePool {
     return evicted;
   }
 
+  // `queue` defaults to `'file'` so existing tests and call sites that
+  // don't care about the queue split keep working unchanged. Production
+  // call sites in RenderRunner always pass an explicit queue type.
   async getPage(
     affinityKey: string,
+    queue: PrerenderQueue = 'file',
     opts?: { signal?: AbortSignal },
   ): Promise<{
     page: Page;
     reused: boolean;
     launchMs: number;
-    // CS-10872: per-stage breakdown so operators can tell "waited for
-    // the global render semaphore" (the CS-10820 saturation signal)
-    // apart from "waited behind the affinity's tab queue" apart from
-    // "warmed a new tab". All three are operationally different.
-    waits: { semaphoreMs: number; tabQueueMs: number; tabStartupMs: number };
+    // Per-stage breakdown so operators can tell "waited for the global
+    // render semaphore" (saturation) apart from "waited behind the
+    // per-affinity file-admission cap" apart from "waited behind the
+    // affinity's tab queue" apart from "warmed a new tab." All four
+    // are operationally distinct.
+    waits: {
+      semaphoreMs: number;
+      admissionMs: number;
+      tabQueueMs: number;
+      tabStartupMs: number;
+    };
     pageId: string;
     release: () => void;
   }> {
     let signal = opts?.signal;
     throwIfAborted(signal);
     let t0 = Date.now();
+    // File-queue admission control. Acquired BEFORE tab selection so
+    // an over-capacity file caller waits in its own queue rather than
+    // blocking other queues' access to tabs. Module and command calls
+    // bypass admission — they're the ones a stuck file caller may be
+    // waiting on.
+    let releaseAdmission: (() => void) | undefined;
+    let admissionMs = 0;
+    if (queue === 'file') {
+      let admissionStart = Date.now();
+      releaseAdmission = await this.#acquireFileAdmission(affinityKey, signal);
+      admissionMs = Date.now() - admissionStart;
+    }
+    // Every release path (success + the error paths below) funnels
+    // through `releaseAdmission?.()`, which already runs idle cleanup
+    // via the wrapper installed in `#acquireFileAdmission`.
     let startupStart = Date.now();
-    await this.#ensureStandbyPool();
+    try {
+      await this.#ensureStandbyPool();
+    } catch (e) {
+      releaseAdmission?.();
+      throw e;
+    }
     let tabStartupMs = Date.now() - startupStart;
-    throwIfAborted(signal);
+    try {
+      throwIfAborted(signal);
+    } catch (e) {
+      releaseAdmission?.();
+      throw e;
+    }
     let tabQueueStart = Date.now();
-    let { entry, reused, releaseTab } = await this.#selectEntryForAffinity(
-      affinityKey,
-      signal,
-    );
+    let entry: PoolEntry;
+    let reused: boolean;
+    let releaseTab: () => void;
+    try {
+      ({ entry, reused, releaseTab } = await this.#selectEntryForAffinity(
+        affinityKey,
+        signal,
+      ));
+    } catch (e) {
+      releaseAdmission?.();
+      throw e;
+    }
     let tabQueueMs = Date.now() - tabQueueStart;
     // Race between the tab being acquired and the signal firing:
     // if the signal fired while `#selectEntryForAffinity` was
@@ -390,6 +538,7 @@ export class PagePool {
     // queued acquirer isn't blocked, then throw.
     if (signal?.aborted) {
       releaseTab();
+      releaseAdmission?.();
       throwIfAborted(signal);
     }
     if (entry.affinityKey !== affinityKey) {
@@ -399,6 +548,7 @@ export class PagePool {
     if (entry.transitioning) {
       entry.transitioning = false;
     }
+    entry.currentQueue = queue;
     let semaphoreStart = Date.now();
     let releaseGlobal: (() => void) | undefined;
     try {
@@ -410,6 +560,8 @@ export class PagePool {
       // (we acquired it before queueing on the semaphore) so
       // downstream requests for the same affinity aren't stuck.
       releaseTab();
+      releaseAdmission?.();
+      entry.currentQueue = undefined;
       throw e;
     }
     let semaphoreMs = Date.now() - semaphoreStart;
@@ -426,14 +578,16 @@ export class PagePool {
         // best-effort release
       }
       releaseTab();
+      entry.currentQueue = undefined;
       entry.lastUsedAt = Date.now();
+      releaseAdmission?.();
     };
     return {
       page: entry.page,
       pageId: entry.pageId,
       reused,
       launchMs: Date.now() - t0,
-      waits: { semaphoreMs, tabQueueMs, tabStartupMs },
+      waits: { semaphoreMs, admissionMs, tabQueueMs, tabStartupMs },
       release,
     };
   }
@@ -506,6 +660,19 @@ export class PagePool {
     } catch (e) {
       log.warn(`onAffinityDisposed subscriber threw for ${affinityKey}:`, e);
     }
+    // Intentionally do NOT delete the file-queue admission semaphore
+    // for this affinity here. `disposeAffinity` with `awaitIdle: false`
+    // (the RenderRunner eviction path) returns before in-flight getPage
+    // callers have released their admission permits — deleting the
+    // semaphore now would let a subsequent file call on the same
+    // affinity lazy-create a fresh full-capacity semaphore concurrently
+    // with the old one's still-held permits, violating the
+    // `fileTabsBusy <= affinityTabMax - 1` invariant and reopening the
+    // deadlock. Let the existing semaphore persist; in-flight callers
+    // drain it normally via their `releaseAdmission` closures, and a
+    // resurrected affinity shares the same semaphore. Fully dead
+    // affinities leak a small constant per key; cleared on
+    // `closeAll()`.
     void this.#browserManager.cleanupUserDataDirs();
     void this.#ensureStandbyPool();
   }
@@ -539,6 +706,7 @@ export class PagePool {
     this.#standbys.clear();
     this.#sharedContexts.clear();
     this.#lru.clear();
+    this.#fileAdmission.clear();
     this.#ensuringStandbys = null;
     this.#creatingStandbys = 0;
   }
@@ -736,6 +904,57 @@ export class PagePool {
   #touchLRU(affinityKey: string) {
     if (this.#lru.has(affinityKey)) this.#lru.delete(affinityKey);
     this.#lru.add(affinityKey);
+  }
+
+  // File-queue admission control: per-affinity semaphore with capacity
+  // `#fileAdmissionCap` (default = `max(1, affinityTabMax − 1)`,
+  // lowerable via `PRERENDER_AFFINITY_FILE_CONCURRENCY` but always
+  // clamped at that ceiling). Guarantees at least one tab slot is
+  // always available to module / command calls on a given affinity,
+  // which is what breaks the self-referential prerender deadlock where
+  // a file render's search is waiting on a module extraction that's
+  // queued behind it. Lazy-initialized per affinity.
+  async #acquireFileAdmission(
+    affinityKey: string,
+    signal?: AbortSignal,
+  ): Promise<() => void> {
+    if (this.#disableFileAdmission) {
+      // Test opt-out — existing tab-routing unit tests predate the
+      // admission feature and assert concurrency that an enabled
+      // admission cap would block. Production PagePools never set
+      // this flag.
+      return () => {};
+    }
+    let semaphore = this.#fileAdmission.get(affinityKey);
+    if (!semaphore) {
+      semaphore = new AsyncSemaphore(this.#fileAdmissionCap);
+      this.#fileAdmission.set(affinityKey, semaphore);
+    }
+    let rawRelease = await semaphore.acquire(signal);
+    // Wrap the raw release so every release path (success or any of
+    // `getPage`'s mid-setup error bailouts) also attempts idle cleanup
+    // of the semaphore map entry. Without this, an erroring file call
+    // would leave a permanently-idle semaphore in `#fileAdmission`
+    // until the next successful file call on the same affinity swept
+    // it away — bounded but not zero leak.
+    return () => {
+      rawRelease();
+      this.#maybeDropIdleFileAdmission(affinityKey);
+    };
+  }
+
+  // Called after each file release. Drops the semaphore entry for
+  // `affinityKey` only when no callers hold permits and no waiters
+  // are queued — safe because a subsequent file call on the same
+  // affinity lazy-creates a new semaphore with the same capacity.
+  // Keeps `#fileAdmission` bounded by the number of affinities
+  // currently serving a file call, not by total affinities ever seen.
+  #maybeDropIdleFileAdmission(affinityKey: string): void {
+    let semaphore = this.#fileAdmission.get(affinityKey);
+    if (!semaphore) return;
+    if (semaphore.inUseCount === 0 && semaphore.pendingCount === 0) {
+      this.#fileAdmission.delete(affinityKey);
+    }
   }
 
   #poolEntryCount(): number {
