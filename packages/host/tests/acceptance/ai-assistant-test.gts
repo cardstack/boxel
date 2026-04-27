@@ -1278,14 +1278,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-file="pet.gts"]').exists();
 
     // Change realm
-    await click('[data-test-choose-file-modal-realm-chooser]');
-    await click('[data-test-choose-file-modal-realm-option="Base Workspace"]');
+    await click('[data-test-realm-dropdown-trigger]');
+    await waitFor('[data-test-boxel-menu-item-text="Base Workspace"]');
+    await click('[data-test-boxel-menu-item-text="Base Workspace"]');
     assert.dom('[data-test-file="boolean.gts"]').exists();
 
-    await click('[data-test-choose-file-modal-realm-chooser]');
-    await click(
-      '[data-test-choose-file-modal-realm-option="Test Workspace B"]',
-    );
+    await click('[data-test-realm-dropdown-trigger]');
+    await waitFor('[data-test-boxel-menu-item-text="Test Workspace B"]');
+    await click('[data-test-boxel-menu-item-text="Test Workspace B"]');
 
     // Add attachment item
     await click('[data-test-file="person.gts"]');
