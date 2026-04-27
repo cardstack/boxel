@@ -10,7 +10,6 @@ node_modules
 schema_tmp.sql
 test-results/.last-run.json
 .claude/settings.local.json
-.claude/*.lock
 traefik/dynamic/*.yml
 .mise.local.toml
 packages/openrouter-realm/OpenRouterModel/
