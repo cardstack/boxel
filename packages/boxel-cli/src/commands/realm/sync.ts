@@ -556,22 +556,16 @@ export function registerSyncCommand(realm: Command): void {
           preferNewest: options.preferNewest,
           delete: options.delete,
           dryRun: options.dryRun,
-          realmSecretSeed,
-        });
+        let hasPartialResults =
+          (Array.isArray(result.pushed) && result.pushed.length > 0) ||
+          (Array.isArray(result.pulled) && result.pulled.length > 0) ||
+          (Array.isArray(result.remoteDeleted) &&
+            result.remoteDeleted.length > 0) ||
+          (Array.isArray(result.localDeleted) &&
+            result.localDeleted.length > 0);
         if (result.error) {
           console.error(`Error: ${result.error}`);
-          let hasPartialResults =
-            result.pushed.length > 0 ||
-            result.pulled.length > 0 ||
-            result.remoteDeleted.length > 0 ||
-            result.localDeleted.length > 0;
           process.exit(hasPartialResults ? 2 : 1);
-        }
-        if (result.hasError) {
-          console.log(
-            'Sync did not complete successfully. View logs for details',
-          );
-          process.exit(2);
         }
         console.log('Sync completed successfully');
       },
