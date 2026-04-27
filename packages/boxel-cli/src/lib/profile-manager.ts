@@ -296,6 +296,38 @@ export class ProfileManager {
     return true;
   }
 
+  // Update one or both server URLs for an existing profile. Cached realm
+  // tokens (and the realm-server token) are tied to the previous servers,
+  // so they're cleared whenever URLs actually change.
+  // Returns true iff at least one URL changed.
+  updateUrls(
+    profileId: string,
+    urls: { matrixUrl?: string; realmServerUrl?: string },
+  ): boolean {
+    const profile = this.config.profiles[profileId];
+    if (!profile) {
+      return false;
+    }
+    let changed = false;
+    if (urls.matrixUrl && urls.matrixUrl !== profile.matrixUrl) {
+      profile.matrixUrl = urls.matrixUrl;
+      changed = true;
+    }
+    if (
+      urls.realmServerUrl &&
+      urls.realmServerUrl !== profile.realmServerUrl
+    ) {
+      profile.realmServerUrl = urls.realmServerUrl;
+      changed = true;
+    }
+    if (changed) {
+      profile.realmTokens = undefined;
+      profile.realmServerToken = undefined;
+      this.saveConfig();
+    }
+    return changed;
+  }
+
   setRealmToken(realmUrl: string, token: string): void {
     let active = this.getActiveProfile();
     if (!active) {

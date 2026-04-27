@@ -552,6 +552,17 @@ async function addProfileNonInteractive(
     if (displayName) {
       manager.updateDisplayName(matrixId, displayName);
     }
+    if (matrixUrl || realmServerUrl) {
+      const urlsChanged = manager.updateUrls(matrixId, {
+        matrixUrl,
+        realmServerUrl,
+      });
+      if (urlsChanged) {
+        console.log(
+          `${DIM}Updated server URLs and cleared cached realm tokens.${RESET}`,
+        );
+      }
+    }
     console.log(
       `${FG_GREEN}\u2713${RESET} Profile updated: ${formatProfileBadge(matrixId)}`,
     );

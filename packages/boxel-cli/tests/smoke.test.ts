@@ -238,6 +238,32 @@ describe('boxel profile add (non-interactive)', () => {
     );
   });
 
+  it('updates stored URLs when re-adding an existing profile with new URL flags', () => {
+    run([
+      '-u',
+      '@alice:my.server',
+      '-m',
+      'https://matrix.old.server',
+      '-r',
+      'https://realms.old.server/',
+    ]);
+
+    run([
+      '-u',
+      '@alice:my.server',
+      '-m',
+      'https://matrix.new.server',
+      '-r',
+      'https://realms.new.server/',
+    ]);
+
+    const config = readProfiles();
+    expect(config.profiles['@alice:my.server']).toMatchObject({
+      matrixUrl: 'https://matrix.new.server',
+      realmServerUrl: 'https://realms.new.server/',
+    });
+  });
+
   it('ignores BOXEL_ENVIRONMENT when the Matrix ID has a known standard domain', () => {
     // The Matrix ID's domain is authoritative for known standards
     // (stack.cards / boxel.ai / localhost). Even an *invalid* env value
