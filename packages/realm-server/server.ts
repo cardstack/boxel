@@ -584,17 +584,29 @@ export class RealmServer {
   // registry matches the request — caller should respond 404.
   //
   // Lookup order:
-  //   1. reconciler.knownByUrl: the Phase 3 source of truth. Iterates
-  //      registry rows and finds the one whose URL prefix contains the
-  //      request, then delegates to reconciler.lookupOrMount() which
-  //      hits reconciler.mounted on the warm path or constructs+mounts
-  //      via mountFromRow on cold first request.
-  //   2. legacy this.realms fallback: covers handler-created realms in
-  //      Phase 3 PR 1 (publish/copy push directly to this.realms; the
-  //      reconciler may not have observed them yet via NOTIFY/reconcile).
-  //      Phase 3 PR 2 removes this fallback when handlers register with
-  //      the reconciler instead of mutating this.realms directly.
+  //   1. this.realms — covers (a) realms whose mountFromRow has already
+  //      published them to this array but whose start() is still awaiting
+  //      fullIndex; the worker processing that fullIndex re-enters this
+  //      resolver to fetch <realm>/_mtimes and must hit the published
+  //      realm rather than reconciler.ensureMounted(), which would
+  //      return the same in-flight promise and deadlock the boot path;
+  //      and (b) handler-created realms in Phase 3 PR 1 (publish/copy
+  //      push directly to this.realms; the reconciler may not have
+  //      observed them via NOTIFY/reconcile yet). Phase 3 PR 2 collapses
+  //      (b) onto the reconciler.
+  //   2. reconciler.knownByUrl — the Phase 3 source of truth for never-
+  //      mounted realms. Iterates registry rows, finds the one whose URL
+  //      prefix contains the request, delegates to lookupOrMount() which
+  //      constructs+mounts via mountFromRow on the cold first request.
   private async findOrMountRealm(requestURL: URL): Promise<Realm | undefined> {
+    let legacy = this.realms.find((candidate) => {
+      let realmURL = new URL(candidate.url);
+      realmURL.protocol = requestURL.protocol;
+      return new RealmPaths(realmURL).inRealm(requestURL);
+    });
+    if (legacy) {
+      return legacy;
+    }
     for (const url of this.reconciler.knownByUrl.keys()) {
       let realmURL = new URL(url);
       realmURL.protocol = requestURL.protocol;
@@ -602,11 +614,7 @@ export class RealmServer {
         return await this.reconciler.lookupOrMount(url);
       }
     }
-    return this.realms.find((candidate) => {
-      let realmURL = new URL(candidate.url);
-      realmURL.protocol = requestURL.protocol;
-      return new RealmPaths(realmURL).inRealm(requestURL);
-    });
+    return undefined;
   }
 
   private async getPublishedRealmInfo(

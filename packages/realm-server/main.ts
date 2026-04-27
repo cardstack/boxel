@@ -414,13 +414,31 @@ const getIndexHTML = async () => {
             : {}),
         },
       );
-      // start() before push/mount: if start() throws (e.g., fullIndex fails
-      // transiently), we don't want a half-initialized Realm sitting in
-      // `realms[]` and `virtualNetwork` where the next reconcile pass would
-      // double-mount it. Wait for start to succeed, then publish.
-      await reconciledRealm.start();
+      // Publish to realms[] + virtualNetwork BEFORE awaiting start(). Phase
+      // 3 boot path needs this ordering: start() awaits a from-scratch-index
+      // job, the worker (separate process) HTTP-fetches `<realm>/_mtimes`
+      // from this realm-server, and the request handler must be able to
+      // resolve the realm. Without the publish-first ordering, that lookup
+      // re-enters reconciler.ensureMounted() for the same URL and gets the
+      // in-flight promise, deadlocking against the start() we're awaiting.
+      // If start() throws, unwind the publish so the next reconcile pass
+      // can retry from scratch.
       realms.push(reconciledRealm);
       virtualNetwork.mount(reconciledRealm.handle);
+      try {
+        await reconciledRealm.start();
+      } catch (err) {
+        const idx = realms.indexOf(reconciledRealm);
+        if (idx >= 0) {
+          realms.splice(idx, 1);
+        }
+        try {
+          virtualNetwork.unmount(reconciledRealm.handle);
+        } catch {
+          // best-effort unwind
+        }
+        throw err;
+      }
       return reconciledRealm;
     },
     unmount: async (realm) => {

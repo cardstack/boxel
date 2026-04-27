@@ -201,6 +201,80 @@ module(basename(__filename), function () {
       );
     });
 
+    test('does not deadlock when an in-flight mount triggers a self-fetch through findOrMountRealm', async function (assert) {
+      // Regression test for the Phase 3 boot deadlock: a pinned realm's
+      // realm.start() awaits a from-scratch-index job; the worker
+      // (separate process) HTTP-fetches `<realm>/_mtimes` from the same
+      // realm-server; that request goes through findOrMountRealm. If the
+      // resolver re-enters reconciler.ensureMounted() for the same URL
+      // before mountFromRow has finished publishing, it gets the
+      // in-flight promise — deadlocking the boot. main.ts's mountFromRow
+      // is required to push the realm into realms[] BEFORE awaiting
+      // realm.start(), and findOrMountRealm must check realms[] before
+      // walking knownByUrl.
+      const url = 'http://127.0.0.1:4448/luke/lazy/';
+      await seedRow(dbAdapter, {
+        url,
+        kind: 'source',
+        disk_id: 'luke/lazy',
+        owner_username: 'luke',
+        pinned: false,
+      });
+      await server.start();
+
+      // mountFromRow publishes immediately, then awaits a deferred that
+      // we resolve only AFTER a self-fetch has completed.
+      let releaseStart: (() => void) | undefined;
+      let startPromise = new Promise<void>((r) => {
+        releaseStart = r;
+      });
+      let publishedUrls: string[] = [];
+      let dlReconciler = new RealmRegistryReconciler({
+        dbAdapter,
+        mountFromRow: async (row) => {
+          let r = fakeRealm(row.url);
+          // Publish to the array (matching main.ts's Phase 3 mountFromRow
+          // ordering) BEFORE awaiting "realm.start()".
+          publishedUrls.push(row.url);
+          realms.push(r);
+          await startPromise;
+          return r;
+        },
+        unmount: async () => {},
+        pollIntervalMs: 1_000_000,
+      });
+      let dlServer = buildServer({
+        dbAdapter,
+        reconciler: dlReconciler,
+        realms,
+      });
+      await dlReconciler.reconcile();
+
+      // Kick off the cold mount — it'll hang on startPromise.
+      let mountInProgress = dlServer.testingOnlyFindOrMountRealm(
+        new URL(`${url}entry`),
+      );
+      // Yield once so the inner await reaches the deferred.
+      await new Promise((r) => setImmediate(r));
+
+      // Self-fetch arrives while the original mount is still pending.
+      // Without the fix this would wedge on the same in-flight promise.
+      let selfFetch = await dlServer.testingOnlyFindOrMountRealm(
+        new URL(`${url}_mtimes`),
+      );
+      assert.ok(selfFetch, 'self-fetch resolves to the in-flight realm');
+      assert.strictEqual(selfFetch!.url, url);
+      assert.strictEqual(
+        publishedUrls.length,
+        1,
+        'mountFromRow only invoked once — self-fetch hit realms[] fast path',
+      );
+
+      // Release the original mount so the test exits cleanly.
+      releaseStart!();
+      await mountInProgress;
+    });
+
     test('mount failure propagates so the request handler can respond 5xx; next request retries', async function (assert) {
       const url = 'http://127.0.0.1:4448/luke/flaky/';
       await seedRow(dbAdapter, {
