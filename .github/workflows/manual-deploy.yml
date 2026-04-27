@@ -314,6 +314,22 @@ jobs:
             exit 1
           fi
 
+  apply-observability:
+    # Push the observability/ package's dashboards/folders/data sources/alerts
+    # into the production self-host Grafana as part of the deploy. The
+    # called workflow has its own required-reviewers gate via the
+    # `observability-production` GitHub environment, so this step blocks
+    # until a reviewer approves it from the run UI.
+    #
+    # Production-only. Staging applies happen automatically on merge to main
+    # via observability-apply-staging.yml — no need to re-run during a
+    # manual staging deploy.
+    name: Apply observability to production
+    if: inputs.environment == 'production'
+    needs: [post-deploy-realm-server]
+    uses: ./.github/workflows/observability-apply-production.yml
+    secrets: inherit
+
   finalize-deployment:
     name: Update GitHub deployment status
     needs:
@@ -338,6 +354,7 @@ jobs:
         post-deploy-worker,
         deploy-realm-server,
         post-deploy-realm-server,
+        apply-observability,
       ]
     if: github.event_name == 'workflow_dispatch' && always()
     runs-on: ubuntu-latest

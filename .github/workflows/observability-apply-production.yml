@@ -18,7 +18,15 @@ name: Observability — apply to production
 #   that would silently apply a non-prod manifest set to prod.
 
 on:
+  # Standalone manual dispatch, e.g., to push a dashboard-only change without
+  # running the full boxel deploy.
   workflow_dispatch: {}
+  # Also reusable from `manual-deploy.yml` so a production boxel deploy
+  # applies the observability config alongside the realm-server / host /
+  # worker deploys, in the same orchestrated run. The required-reviewers
+  # gate on the `observability-production` environment still fires either
+  # way.
+  workflow_call: {}
 
 permissions:
   contents: read
