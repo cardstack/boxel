@@ -34,11 +34,19 @@ describe('boxel profile add (non-interactive)', () => {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
+  // Strip BOXEL_* from the inherited env so a developer's shell (e.g. one
+  // with BOXEL_ENVIRONMENT set for mise-tasks) can't change test behavior.
+  // Tests that exercise these vars opt in via extraEnv.
+  const sanitizedParentEnv = () =>
+    Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !key.startsWith('BOXEL_')),
+    );
+
   const run = (args: string[], extraEnv: NodeJS.ProcessEnv = {}) =>
     execFileSync(process.execPath, [cliEntry, 'profile', 'add', ...args], {
       encoding: 'utf8',
       env: {
-        ...process.env,
+        ...sanitizedParentEnv(),
         HOME: tmpHome,
         BOXEL_PASSWORD: 'hunter2',
         ...extraEnv,
@@ -132,6 +140,32 @@ describe('boxel profile add (non-interactive)', () => {
       matrixUrl: 'https://matrix.my.server',
       realmServerUrl: 'https://realms.my.server/',
     });
+  });
+
+  it("does not let the parent process's BOXEL_ENVIRONMENT leak into the child", () => {
+    // A developer running the suite with BOXEL_ENVIRONMENT set in their
+    // shell should see the same behavior as CI. We simulate that by
+    // setting it on this process's env, then assert the child still
+    // exits with the "Unknown domain" error rather than silently
+    // deriving URLs from the leaked value.
+    const previous = process.env.BOXEL_ENVIRONMENT;
+    process.env.BOXEL_ENVIRONMENT = 'leaked-from-shell';
+    try {
+      try {
+        run(['-u', '@alice:my.server']);
+        throw new Error('expected command to exit non-zero');
+      } catch (err) {
+        const e = err as { status?: number; stderr?: string };
+        expect(e.status).toBe(1);
+        expect(e.stderr).toMatch(/Unknown domain/);
+      }
+    } finally {
+      if (previous === undefined) {
+        delete process.env.BOXEL_ENVIRONMENT;
+      } else {
+        process.env.BOXEL_ENVIRONMENT = previous;
+      }
+    }
   });
 
   it('exits 1 with a clear error for a non-standard domain without URL flags', () => {
