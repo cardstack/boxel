@@ -8,12 +8,59 @@ import {
   separatedByCommas,
   type Expression,
 } from '../index';
+import {
+  type QueueCoalesceContext,
+  type QueueCoalesceDecision,
+  registerQueueJobDefinition,
+} from '../queue';
 
 export interface DailyCreditGrantArgs extends JSONTypes.Object {
   lowCreditThreshold: number;
 }
 
 export { dailyCreditGrant };
+
+function isObjectLike(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getLowCreditThreshold(args: unknown): number | undefined {
+  if (!isObjectLike(args)) {
+    return undefined;
+  }
+  let value = args.lowCreditThreshold;
+  return typeof value === 'number' ? value : undefined;
+}
+
+function chooseDailyCreditGrantCoalesceDecision(
+  context: QueueCoalesceContext,
+): QueueCoalesceDecision {
+  let { incoming, candidates } = context;
+  // Only join if the threshold matches; different thresholds describe
+  // different work and joining would silently drop the second caller's intent.
+  let incomingThreshold = getLowCreditThreshold(incoming.args);
+  let twin = candidates.find(
+    (candidate) =>
+      candidate.jobType === incoming.jobType &&
+      getLowCreditThreshold(candidate.args) === incomingThreshold,
+  );
+  if (!twin) {
+    return { type: 'insert' };
+  }
+  return {
+    type: 'join',
+    jobId: twin.id,
+    update: {
+      priority: Math.max(twin.priority, incoming.priority),
+      timeout: Math.max(twin.timeout, incoming.timeout),
+    },
+  };
+}
+
+registerQueueJobDefinition({
+  jobType: 'daily-credit-grant',
+  coalesce: chooseDailyCreditGrantCoalesceDecision,
+});
 
 const dailyCreditGrant: Task<DailyCreditGrantArgs, void> = ({
   dbAdapter,

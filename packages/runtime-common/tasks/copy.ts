@@ -1,6 +1,12 @@
 import type { Task, WorkerArgs } from './index';
 
 import { jobIdentity } from '../index';
+import {
+  type QueueCoalesceCandidate,
+  type QueueCoalesceContext,
+  type QueueCoalesceDecision,
+  registerQueueJobDefinition,
+} from '../queue';
 
 export { copy };
 
@@ -12,6 +18,53 @@ export interface CopyResult {
   totalNonErrorIndexEntries: number;
   invalidations: string[];
 }
+
+function isObjectLike(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function copySourceMatches(
+  candidate: QueueCoalesceCandidate,
+  incoming: { args: unknown },
+): boolean {
+  if (!isObjectLike(candidate.args) || !isObjectLike(incoming.args)) {
+    return false;
+  }
+  return (
+    candidate.args.realmURL === incoming.args.realmURL &&
+    candidate.args.sourceRealmURL === incoming.args.sourceRealmURL
+  );
+}
+
+function chooseCopyCoalesceDecision(
+  context: QueueCoalesceContext,
+): QueueCoalesceDecision {
+  let { incoming, candidates } = context;
+  // Only join when the destination realm AND source realm both match the
+  // incoming spec. Different (destination, source) tuples represent distinct
+  // work even though they share the indexing concurrency group.
+  let twin = candidates.find(
+    (candidate) =>
+      candidate.jobType === incoming.jobType &&
+      copySourceMatches(candidate, incoming),
+  );
+  if (!twin) {
+    return { type: 'insert' };
+  }
+  return {
+    type: 'join',
+    jobId: twin.id,
+    update: {
+      priority: Math.max(twin.priority, incoming.priority),
+      timeout: Math.max(twin.timeout, incoming.timeout),
+    },
+  };
+}
+
+registerQueueJobDefinition({
+  jobType: 'copy-index',
+  coalesce: chooseCopyCoalesceDecision,
+});
 
 const copy: Task<CopyArgs, CopyResult> = ({ reportStatus, log, indexWriter }) =>
   async function (args) {
