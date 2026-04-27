@@ -10,9 +10,8 @@ import {
   closeServer,
   matrixURL,
   matrixRegistrationSecret,
-  getTestPrerenderer,
-  stopTestPrerenderServer,
 } from '#realm-server/tests/helpers/index';
+import { createRemotePrerenderer } from '#realm-server/prerender/remote-prerenderer';
 import { registerUser } from '#realm-server/synapse';
 import {
   PgQueuePublisher,
@@ -36,6 +35,8 @@ const noopPrerenderer: Prerenderer = {
 };
 
 export const TEST_REALM_SERVER_URL = 'http://127.0.0.1:4446';
+const PRERENDER_MGR_URL =
+  process.env.PRERENDER_MGR_URL ?? 'http://localhost:4222';
 
 const TEST_USERNAME = `cli-test-${Date.now()}`;
 const TEST_PASSWORD = 'test-password-for-cli';
@@ -46,32 +47,17 @@ let publisher: PgQueuePublisher | undefined;
 let runner: PgQueueRunner | undefined;
 
 let cachedRealPrerenderer: Prerenderer | undefined;
-let realPrerendererStarted = false;
 
-const BOXEL_HOST_URL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
-
-async function probeHostApp(): Promise<boolean> {
-  try {
-    let res = await fetch(BOXEL_HOST_URL, {
-      signal: AbortSignal.timeout(2000),
-    });
-    return res.status < 500;
-  } catch {
-    return false;
-  }
-}
-
+// We use the real prerenderer (and thus real Chrome-based indexing) for some
+// tests, but since it requires the full dev stack to be running we don't want
+// to make it the default. This helper provides a cached instance of the real
+// prerenderer for tests that opt in.
+// Please start the dev stack before running tests that use this,
+// and make sure the PRERENDER_MGR_URL is correct (it should point to the prerender manager in the dev stack,
+// which is separate from the realm server's test helper prerenderer).
 async function getRealPrerenderer(): Promise<Prerenderer> {
   if (!cachedRealPrerenderer) {
-    if (!(await probeHostApp())) {
-      throw new Error(
-        `Real prerenderer requested but ${BOXEL_HOST_URL} is unreachable. ` +
-          `Start the host app (e.g. \`pnpm start\` from repo root) or ` +
-          `unset useRealPrerenderer.`,
-      );
-    }
-    cachedRealPrerenderer = await getTestPrerenderer();
-    realPrerendererStarted = true;
+    cachedRealPrerenderer = createRemotePrerenderer(PRERENDER_MGR_URL);
   }
   return cachedRealPrerenderer!;
 }
@@ -80,8 +66,9 @@ export async function startTestRealmServer(options?: {
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
   /**
    * When true, drive card indexing through the real Chrome-based
-   * prerenderer (via realm-server's test helper). Requires the host app
-   * to be running at BOXEL_HOST_URL. Default: false (uses noop stub).
+   * prerenderer (via realm-server's test helper). Requires the dev
+   * stack (host app + base realm + prerender service) to be running.
+   * Default: false (uses noop stub).
    */
   useRealPrerenderer?: boolean;
 }): Promise<void> {
@@ -148,11 +135,9 @@ export async function stopTestRealmServer(): Promise<void> {
     await dbAdapter.close();
     dbAdapter = undefined;
   }
-  if (realPrerendererStarted) {
-    await stopTestPrerenderServer();
-    cachedRealPrerenderer = undefined;
-    realPrerendererStarted = false;
-  }
+  // No prerender server to stop — `getRealPrerenderer()` connects to the
+  // dev stack's manager via PRERENDER_MGR_URL rather than starting one.
+  cachedRealPrerenderer = undefined;
 }
 
 export function createTestProfileDir(): {

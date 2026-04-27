@@ -129,15 +129,28 @@ pnpm test:integration
    repo root:
 
    ```bash
-   pnpm start
+   mise run dev-all
    ```
 
-   That uses the dev-mode host (no pre-build needed). Leave it running
-   in another terminal, then run `pnpm test:integration` from
-   `packages/boxel-cli/`.
+   This starts the host app first, waits for it to be ready, then
+   starts the realm server and supporting services (see the repo
+   root README's "ember-cli Hosted App" section for details). Leave
+   it running in another terminal, then run `pnpm test:integration`
+   from `packages/boxel-cli/`.
 
-   If you'd rather match CI exactly (production-style host serve), build
-   the host first and then run the matrix test-services task:
+   For a lighter setup (skips experiments / catalog / homepage /
+   submission realms), use the two-step recipe instead:
+
+   ```bash
+   # in one terminal
+   pnpm start                                  # from packages/host/
+
+   # in another, after host is up
+   mise run dev-minimal                        # from repo root
+   ```
+
+   To match CI exactly (production-style host serve, no live reload),
+   build the host first and then run the matrix test-services task:
 
    ```bash
    # one-time, from repo root
