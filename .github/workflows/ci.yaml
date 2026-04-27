@@ -808,14 +808,9 @@ jobs:
         run: pnpm start:matrix
         working-directory: packages/realm-server
       - name: Start dev stack (icons + host-dist + base realm + prerenderer)
-        run: mise run test-services:matrix | tee -a /tmp/server.log &
-      - name: Wait for dev stack readiness
         run: |
-          timeout 600 bash -c '
-            until curl -sf http://127.0.0.1:4200 > /dev/null \
-              && curl -sf "http://127.0.0.1:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson" > /dev/null; \
-            do sleep 2; done
-          '
+          mise run test-services:matrix | tee -a /tmp/server.log &
+          timeout 600 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf http://localhost:4201/base/ > /dev/null; do sleep 2; done'
       - name: Create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
