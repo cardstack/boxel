@@ -14,6 +14,10 @@ import {
   type ReadTranspiledResult,
 } from '../commands/read-transpiled';
 import { write as coreWrite, type WriteResult } from '../commands/file/write';
+import {
+  cancelIndexing as coreCancelIndexing,
+  type CancelIndexingResult,
+} from '../commands/realm/cancel-indexing';
 import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { pull as realmPull } from '../commands/realm/pull';
 import { sync as realmSync, type SyncResult } from '../commands/realm/sync';
@@ -105,10 +109,7 @@ export interface AtomicResult {
   error?: string;
 }
 
-export interface CancelIndexingResult {
-  ok: boolean;
-  error?: string;
-}
+export type { CancelIndexingResult };
 
 export class BoxelCLIClient {
   private pm: ProfileManager;
@@ -402,33 +403,10 @@ export class BoxelCLIClient {
    * Cancel all indexing jobs (running + pending) for a realm.
    */
   async cancelAllIndexingJobs(realmUrl: string): Promise<CancelIndexingResult> {
-    let cancelUrl = `${ensureTrailingSlash(realmUrl)}_cancel-indexing-job`;
-
-    try {
-      let response = await this.pm.authedRealmFetch(cancelUrl, {
-        method: 'POST',
-        headers: {
-          Accept: MIME.JSON,
-          'Content-Type': MIME.JSON,
-        },
-        body: JSON.stringify({ cancelPending: true }),
-      });
-
-      if (!response.ok) {
-        let body = await response.text();
-        return {
-          ok: false,
-          error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-        };
-      }
-
-      return { ok: true };
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
+    return coreCancelIndexing(realmUrl, {
+      profileManager: this.pm,
+      cancelPending: true,
+    });
   }
 
   /**
