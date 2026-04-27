@@ -1,0 +1,175 @@
+name: Observability — diff against staging
+
+# Runs on PRs touching packages/observability/** and posts a sticky comment
+# showing the diff between the PR's committed dashboards/folders and the
+# live state of the staging Grafana. Mirrors the existing terraform-plan
+# comment workflow.
+#
+# CS-10933 — implements the "Path B" diff (pull-to-tempdir + git-diff)
+# because grafanactl has no native `resources diff` subcommand. See
+# packages/observability/scripts/diff.sh for the rendering logic.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "packages/observability/**"
+      - ".github/workflows/observability-diff.yml"
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+concurrency:
+  # Cancel an in-flight diff when a new push lands on the same PR — diff is
+  # cheap and we always want the comment to reflect the latest commit.
+  group: observability-diff-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  diff:
+    name: Diff against staging
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: us-east-1
+      # Reuses the apply role from cardstack/infra#665. Permission is
+      # `ssm:GetParameter` on /staging/grafana/grafanactl_token only —
+      # which is what the diff workflow needs (read the token, then use
+      # it to pull dashboards/folders from staging Grafana).
+      AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
+      GRAFANACTL_VERSION: "0.7.0"
+      DIFF_MARKER: "<!-- observability-diff -->"
+      MAX_COMMENT_BYTES: 60000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install grafanactl
+        # Same SHA-256 verified install as the apply workflows.
+        run: |
+          set -euo pipefail
+          TARBALL="grafanactl_${GRAFANACTL_VERSION}_linux_amd64.tar.gz"
+          RELEASE_URL="https://github.com/grafana/grafanactl/releases/download/v${GRAFANACTL_VERSION}"
+          TMPDIR="$(mktemp -d)"
+          trap 'rm -rf "$TMPDIR"' EXIT
+
+          curl -fsSL "${RELEASE_URL}/${TARBALL}"    -o "${TMPDIR}/${TARBALL}"
+          curl -fsSL "${RELEASE_URL}/checksums.txt" -o "${TMPDIR}/checksums.txt"
+
+          ( cd "$TMPDIR" && grep " ${TARBALL}\$" checksums.txt | sha256sum -c - )
+
+          tar -xzf "${TMPDIR}/${TARBALL}" -C "$TMPDIR" grafanactl
+          sudo install -m 0755 "${TMPDIR}/grafanactl" /usr/local/bin/grafanactl
+          grafanactl --version
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Source GRAFANA_TOKEN from SSM
+        run: |
+          GRAFANA_TOKEN="$(aws ssm get-parameter \
+            --name /staging/grafana/grafanactl_token \
+            --with-decryption \
+            --query 'Parameter.Value' \
+            --output text)"
+          echo "::add-mask::$GRAFANA_TOKEN"
+          echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Compute diff
+        id: diff
+        working-directory: packages/observability
+        run: |
+          set -eo pipefail
+          DIFF_FILE="$(mktemp)"
+          ./scripts/diff.sh --env staging > "$DIFF_FILE"
+          # Persist the diff path for the next step (raw stdout via $GITHUB_OUTPUT
+          # has multi-line / size limits we want to handle in JS instead).
+          echo "diff_file=$DIFF_FILE" >> "$GITHUB_OUTPUT"
+          # Print to the run log too so the diff is visible without expanding
+          # the PR comment.
+          echo "::group::Computed diff"
+          cat "$DIFF_FILE"
+          echo "::endgroup::"
+
+      - name: Post sticky PR comment
+        uses: actions/github-script@v7
+        env:
+          DIFF_FILE: ${{ steps.diff.outputs.diff_file }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = process.env.DIFF_MARKER;
+            const maxBytes = parseInt(process.env.MAX_COMMENT_BYTES, 10);
+
+            const diff = fs.readFileSync(process.env.DIFF_FILE, 'utf8');
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            let body;
+            if (!diff.trim()) {
+              body = [
+                marker,
+                '## Observability diff (vs staging)',
+                '',
+                'No dashboard / folder changes detected against the staging Grafana.',
+                '',
+                `_(Run: ${runUrl})_`,
+              ].join('\n');
+            } else if (diff.length > maxBytes) {
+              const truncated = diff.slice(0, maxBytes);
+              body = [
+                marker,
+                '## Observability diff (vs staging)',
+                '',
+                `Diff truncated (${diff.length} bytes; limit ${maxBytes}). Full diff: ${runUrl}`,
+                '',
+                '```diff',
+                truncated,
+                '```',
+              ].join('\n');
+            } else {
+              body = [
+                marker,
+                '## Observability diff (vs staging)',
+                '',
+                '```diff',
+                diff,
+                '```',
+                '',
+                `_(Run: ${runUrl})_`,
+              ].join('\n');
+            }
+
+            // Find existing sticky comment.
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find(
+              (c) => c.body && c.body.startsWith(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              core.info(`Updated sticky comment ${existing.id}`);
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+              core.info('Created sticky comment');
+            }
