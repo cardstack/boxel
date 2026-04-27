@@ -1,0 +1,104 @@
+name: Observability — apply to staging
+
+# Push to main with changes under packages/observability/** triggers a
+# `grafanactl resources push` against the staging self-host Grafana.
+# Mirrors the existing terraform-apply-on-merge pattern.
+#
+# Production has its own workflow (observability-apply-production.yml from
+# CS-10936) gated on manual dispatch.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/observability/**"
+      - ".github/workflows/observability-apply-staging.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  # Never run two applies in parallel against the same environment, but
+  # don't cancel an in-flight apply when a new commit lands — let it finish
+  # cleanly so we don't leave Grafana in a half-pushed state.
+  group: observability-apply-staging
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Apply to staging
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: us-east-1
+      # IAM role used to fetch the grafanactl service-account token from SSM.
+      # Currently uses the existing boxel-host role; if/when that role is too
+      # broad for this purpose, replace with a dedicated
+      # `boxel-observability-apply` role (see CS-10932 design notes — scope
+      # principle prefers the dedicated role). Either way the role needs:
+      #   ssm:GetParameter on /staging/grafana/grafanactl_token
+      AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-host
+      GRAFANA_SERVER: https://grafana-staging.stack.cards
+      # Grafana 12.4.3 is the production pin; grafanactl version should be
+      # current enough to talk to it. Bump as needed.
+      GRAFANACTL_VERSION: "0.7.0"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install grafanactl
+        # Inline curl install rather than a third-party action, since
+        # Grafana Labs does not yet publish an official GitHub Action
+        # for grafanactl. Pinned via $GRAFANACTL_VERSION above.
+        # If the URL pattern changes upstream, update the curl and the
+        # README's install hint together.
+        run: |
+          curl -fsSL \
+            "https://github.com/grafana/grafanactl/releases/download/v${GRAFANACTL_VERSION}/grafanactl_${GRAFANACTL_VERSION}_linux_amd64.tar.gz" \
+            -o /tmp/grafanactl.tar.gz
+          sudo tar -xzf /tmp/grafanactl.tar.gz -C /usr/local/bin grafanactl
+          grafanactl --version
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Source GRAFANA_TOKEN from SSM
+        # Mirrors what packages/observability/scripts/grafanactl-env.sh does
+        # locally. Inline here so the workflow doesn't depend on bash from
+        # the repo working dir before checkout-related env vars are stable.
+        run: |
+          GRAFANA_TOKEN="$(aws ssm get-parameter \
+            --name /staging/grafana/grafanactl_token \
+            --with-decryption \
+            --query 'Parameter.Value' \
+            --output text)"
+          # Mask the token so it doesn't leak into job logs even if a
+          # downstream tool echoes it. Then export to subsequent steps.
+          echo "::add-mask::$GRAFANA_TOKEN"
+          echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
+          echo "GRAFANA_SERVER=$GRAFANA_SERVER" >> "$GITHUB_ENV"
+
+      - name: Apply
+        # apply.sh sources its own grafanactl-env.sh helper, which for
+        # `local` would `unset GRAFANA_TOKEN`. We're using `--env staging`
+        # which fetches from SSM via the helper — but in CI we already have
+        # GRAFANA_TOKEN exported, so the helper will overwrite it with a
+        # fresh fetch. That's fine and consistent.
+        working-directory: packages/observability
+        run: |
+          ./scripts/apply.sh --env staging
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Observability apply" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Target: \`$GRAFANA_SERVER\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- grafanactl: \`$GRAFANACTL_VERSION\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Status: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
