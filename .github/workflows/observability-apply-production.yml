@@ -7,9 +7,6 @@ name: Observability — apply to production
 #
 # - Only fires on workflow_dispatch (no automatic push trigger). Production
 #   dashboard changes are an intentional act, not a side-effect of merging.
-# - Job runs inside a GitHub `environment` (`observability-production`) that
-#   should be configured in repo Settings → Environments with required
-#   reviewers, so the apply waits on human approval before touching prod.
 # - Refuses to run if dispatched from any branch other than `main` (use
 #   `--ref main` from the dispatch UI). A misclick on the wrong branch can't
 #   silently apply unmerged changes to prod.
@@ -44,11 +41,13 @@ jobs:
     name: Apply to production
     runs-on: ubuntu-latest
 
-    # Required-reviewers gate. Configure the `observability-production`
-    # environment in repo Settings → Environments with the desired approver
-    # list (CS-10936 ticket says keep small — 2–3 people). The apply step
-    # blocks until an approver clicks "Review deployments → Approve" in the
-    # GitHub Actions run UI.
+    # `environment: observability-production` gives the run a production
+    # badge in the GitHub Actions UI and a clickable link to the Grafana
+    # endpoint. We deliberately do NOT configure required reviewers on the
+    # environment in repo Settings — for this workflow, the act of dispatching
+    # (or running a manual prod deploy via manual-deploy.yml) is approval
+    # enough; an additional reviewer step would just add friction without
+    # extra safety, since the dispatcher is already a trusted operator.
     environment:
       name: observability-production
       url: https://grafana.boxel.ai

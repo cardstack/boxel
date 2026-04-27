@@ -317,9 +317,9 @@ jobs:
   apply-observability:
     # Push the observability/ package's dashboards/folders/data sources/alerts
     # into the production self-host Grafana as part of the deploy. The
-    # called workflow has its own required-reviewers gate via the
-    # `observability-production` GitHub environment, so this step blocks
-    # until a reviewer approves it from the run UI.
+    # called workflow's `environment: observability-production` gives the run
+    # a production badge and a Grafana URL link, but doesn't gate (no required
+    # reviewers — dispatching the manual deploy IS the approval).
     #
     # Production-only. Staging applies happen automatically on merge to main
     # via observability-apply-staging.yml — no need to re-run during a
