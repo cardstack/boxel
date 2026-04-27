@@ -1,5 +1,5 @@
 import type { Realm } from '@cardstack/runtime-common';
-import { logger, query } from '@cardstack/runtime-common';
+import { logger, param, query } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { WorkLoop } from '@cardstack/postgres';
 
@@ -37,11 +37,11 @@ export interface ReconcilerDeps {
 
 // Reconciles a process's in-memory realm state against realm_registry.
 //
-// Phase 2 behavior (this PR): the reconcile loop mounts every row in the
-// registry that isn't already mounted locally, and unmounts anything the
-// registry no longer lists. Pinned vs unpinned is tracked but not yet
-// differentiated — Phase 3 flips the policy so only pinned rows are eagerly
-// mounted and everything else waits for mount-on-demand.
+// Phase 3 behavior: the reconcile loop eagerly mounts only `pinned=true`
+// rows (bootstrap realms — base, catalog). Non-pinned rows (source and
+// published) are left to mount on first request via lookupOrMount(),
+// which is wired into the request hot path. The reconcile loop still
+// unmounts any reconciler-owned mount whose registry row has disappeared.
 //
 // The reconciler maintains three maps:
 //   - knownByUrl:    every row the reconciler has seen, refreshed each pass.
@@ -157,15 +157,22 @@ export class RealmRegistryReconciler {
     }
     this.knownByUrl = nextKnown;
 
-    // Mount additions. In Phase 2 we eagerly mount everything (preserving
-    // today's behavior); Phase 3 will gate this on `row.pinned`.
+    // Eager mount: pinned rows only. In Phase 3, non-pinned rows wait
+    // for first-request mount via lookupOrMount(). Pinned rows
+    // (bootstrap: base, catalog) need to be available before the server
+    // accepts traffic on the home page / catalog path, so they mount on
+    // the reconciler's first pass and on every subsequent pass that
+    // detects a new pinned row.
     for (const [url, row] of nextKnown) {
+      if (!row.pinned) {
+        continue;
+      }
       if (!this.mounted.has(url)) {
         try {
           await this.ensureMounted(row);
         } catch (err: unknown) {
           log.warn(
-            `failed to mount ${url} during reconcile: ${String(err)}; leaving for next pass`,
+            `failed to mount pinned ${url} during reconcile: ${String(err)}; leaving for next pass`,
           );
         }
       }
@@ -195,8 +202,54 @@ export class RealmRegistryReconciler {
     }
   }
 
-  // Mount-on-demand primitive. Used by reconcile() for new rows and by the
-  // Phase 3 request path on the first request for a not-yet-mounted realm.
+  // Request-path entry point. Returns the mounted Realm for the URL if
+  // any; otherwise looks up the registry row (in-memory first, then a
+  // direct DB read so a request that arrives before the next reconcile
+  // poll doesn't 404 on a freshly-published realm) and mounts it via
+  // ensureMounted(). Returns undefined when the URL is not in the
+  // registry — the caller should respond 404 in that case. Mount
+  // failures propagate; the caller should respond 5xx and let the next
+  // request retry.
+  async lookupOrMount(url: string): Promise<Realm | undefined> {
+    const existing = this.mounted.get(url);
+    if (existing) {
+      return existing;
+    }
+    let row = this.knownByUrl.get(url);
+    if (!row) {
+      row = await this.#lookupRow(url);
+      if (!row) {
+        return undefined;
+      }
+      this.knownByUrl.set(url, row);
+    }
+    return this.ensureMounted(row);
+  }
+
+  async #lookupRow(url: string): Promise<RealmRegistryRow | undefined> {
+    const rows = (await query(this.#deps.dbAdapter, [
+      `SELECT id::text AS id, url, kind, disk_id, owner_username, source_url, last_published_at, pinned FROM realm_registry WHERE url = `,
+      param(url),
+    ])) as Array<Record<string, unknown>>;
+    if (rows.length === 0) {
+      return undefined;
+    }
+    const r = rows[0];
+    return {
+      id: r.id as string,
+      url: r.url as string,
+      kind: r.kind as RealmRegistryRow['kind'],
+      disk_id: r.disk_id as string,
+      owner_username: r.owner_username as string,
+      source_url: (r.source_url as string | null) ?? null,
+      last_published_at:
+        r.last_published_at == null ? null : Number(r.last_published_at),
+      pinned: r.pinned as boolean,
+    };
+  }
+
+  // Mount-on-demand primitive. Used by reconcile() for pinned rows and by
+  // lookupOrMount() (request-path) for non-pinned rows on first request.
   // Per-URL serialization: concurrent callers for the same URL share one
   // in-flight mount. Cleared from pendingMounts on settle so a retry after
   // failure gets a fresh attempt.

@@ -109,7 +109,24 @@ module(basename(__filename), function () {
       );
     });
 
-    test('reconcile mounts rows absent from the mounted map', async function (assert) {
+    test('reconcile eagerly mounts pinned rows', async function (assert) {
+      await seedRow(dbAdapter, {
+        url: 'https://cardstack.com/base/',
+        kind: 'bootstrap',
+        disk_id: '/abs/base',
+        owner_username: 'system',
+        pinned: true,
+      });
+
+      await reconciler.reconcile();
+
+      assert.deepEqual(mountCalls, ['https://cardstack.com/base/']);
+      assert.strictEqual(reconciler.mounted.size, 1);
+      assert.ok(reconciler.mounted.get('https://cardstack.com/base/'));
+    });
+
+    test('reconcile does NOT eagerly mount unpinned rows', async function (assert) {
+      // Phase 3: source/published realms wait for first-request mount.
       await seedRow(dbAdapter, {
         url: 'http://localhost:4201/luke/src/',
         kind: 'source',
@@ -119,18 +136,31 @@ module(basename(__filename), function () {
 
       await reconciler.reconcile();
 
-      assert.deepEqual(mountCalls, ['http://localhost:4201/luke/src/']);
-      assert.strictEqual(reconciler.mounted.size, 1);
-      assert.ok(reconciler.mounted.get('http://localhost:4201/luke/src/'));
+      assert.deepEqual(
+        mountCalls,
+        [],
+        'mountFromRow not called for unpinned rows during reconcile',
+      );
+      assert.strictEqual(
+        reconciler.mounted.size,
+        0,
+        'mounted map empty — non-pinned rows wait for lookupOrMount()',
+      );
+      assert.strictEqual(
+        reconciler.knownByUrl.size,
+        1,
+        'knownByUrl still tracks the row so lookupOrMount() can find it',
+      );
     });
 
-    test('registerExistingMounts suppresses re-mount for realms the legacy path already mounted', async function (assert) {
-      const url = 'http://localhost:4201/luke/src/';
+    test('registerExistingMounts suppresses re-mount for pinned realms the legacy path already mounted', async function (assert) {
+      const url = 'https://cardstack.com/base/';
       await seedRow(dbAdapter, {
         url,
-        kind: 'source',
-        disk_id: 'luke/src',
-        owner_username: 'luke',
+        kind: 'bootstrap',
+        disk_id: '/abs/base',
+        owner_username: 'system',
+        pinned: true,
       });
 
       reconciler.registerExistingMounts([makeFakeRealm(url)]);
@@ -168,6 +198,8 @@ module(basename(__filename), function () {
     });
 
     test('reconcile unmounts realms whose registry rows have been deleted', async function (assert) {
+      // Use a non-pinned row mounted on demand via lookupOrMount() to
+      // exercise the reconciler-owned unmount path under Phase 3 semantics.
       const url = 'http://localhost:4201/luke/src/';
       await seedRow(dbAdapter, {
         url,
@@ -178,8 +210,16 @@ module(basename(__filename), function () {
       await reconciler.reconcile();
       assert.strictEqual(
         reconciler.mounted.size,
+        0,
+        'unpinned row not eager-mounted',
+      );
+
+      // Trigger first-request mount.
+      await reconciler.lookupOrMount(url);
+      assert.strictEqual(
+        reconciler.mounted.size,
         1,
-        'mounted after first reconcile',
+        'lookupOrMount mounted the row on demand',
       );
 
       await deleteRow(dbAdapter, url);
@@ -275,7 +315,7 @@ module(basename(__filename), function () {
       assert.strictEqual(attempt, 2, 'mountFromRow invoked a second time');
     });
 
-    test('reconcile failure in one row does not prevent mounting the others', async function (assert) {
+    test('reconcile failure in one pinned row does not prevent mounting the others', async function (assert) {
       const localReconciler = new RealmRegistryReconciler({
         dbAdapter,
         mountFromRow: async (row) => {
@@ -288,28 +328,104 @@ module(basename(__filename), function () {
       });
 
       await seedRow(dbAdapter, {
-        url: 'http://localhost:4201/luke/bad/',
-        kind: 'source',
-        disk_id: 'luke/bad',
-        owner_username: 'luke',
+        url: 'https://cardstack.com/bad/',
+        kind: 'bootstrap',
+        disk_id: '/abs/bad',
+        owner_username: 'system',
+        pinned: true,
       });
       await seedRow(dbAdapter, {
-        url: 'http://localhost:4201/luke/good/',
-        kind: 'source',
-        disk_id: 'luke/good',
-        owner_username: 'luke',
+        url: 'https://cardstack.com/good/',
+        kind: 'bootstrap',
+        disk_id: '/abs/good',
+        owner_username: 'system',
+        pinned: true,
       });
 
       await localReconciler.reconcile();
 
       assert.ok(
-        localReconciler.mounted.has('http://localhost:4201/luke/good/'),
+        localReconciler.mounted.has('https://cardstack.com/good/'),
         'good row mounted despite sibling failure',
       );
       assert.notOk(
-        localReconciler.mounted.has('http://localhost:4201/luke/bad/'),
+        localReconciler.mounted.has('https://cardstack.com/bad/'),
         'bad row not mounted',
       );
+    });
+
+    test('lookupOrMount returns mounted realm without re-mount', async function (assert) {
+      const url = 'https://cardstack.com/base/';
+      await seedRow(dbAdapter, {
+        url,
+        kind: 'bootstrap',
+        disk_id: '/abs/base',
+        owner_username: 'system',
+        pinned: true,
+      });
+      await reconciler.reconcile();
+      assert.strictEqual(mountCalls.length, 1, 'eager mount during reconcile');
+
+      const realm = await reconciler.lookupOrMount(url);
+
+      assert.ok(realm, 'realm returned');
+      assert.strictEqual(realm!.url, url);
+      assert.strictEqual(
+        mountCalls.length,
+        1,
+        'no extra mount call — already-mounted realm returned directly',
+      );
+    });
+
+    test('lookupOrMount mounts unpinned row on first request via knownByUrl', async function (assert) {
+      const url = 'http://localhost:4201/luke/src/';
+      await seedRow(dbAdapter, {
+        url,
+        kind: 'source',
+        disk_id: 'luke/src',
+        owner_username: 'luke',
+      });
+      // Reconcile first so knownByUrl is populated but row is not eager-mounted.
+      await reconciler.reconcile();
+      assert.strictEqual(reconciler.mounted.size, 0);
+
+      const realm = await reconciler.lookupOrMount(url);
+
+      assert.ok(realm, 'realm mounted on demand');
+      assert.deepEqual(mountCalls, [url]);
+      assert.strictEqual(reconciler.mounted.size, 1);
+    });
+
+    test('lookupOrMount falls back to a direct DB lookup when knownByUrl is stale', async function (assert) {
+      // Simulates a request arriving on this instance for a freshly-published
+      // realm before the next reconcile poll picks it up.
+      const url = 'http://localhost:4201/luke/fresh/';
+      await seedRow(dbAdapter, {
+        url,
+        kind: 'source',
+        disk_id: 'luke/fresh',
+        owner_username: 'luke',
+      });
+      // Note: NO reconcile() call — knownByUrl is empty.
+      assert.strictEqual(reconciler.knownByUrl.size, 0);
+
+      const realm = await reconciler.lookupOrMount(url);
+
+      assert.ok(realm, 'realm mounted via direct DB lookup');
+      assert.deepEqual(mountCalls, [url]);
+      assert.strictEqual(
+        reconciler.knownByUrl.size,
+        1,
+        'lookupOrMount cached the row in knownByUrl',
+      );
+    });
+
+    test('lookupOrMount returns undefined for an unknown URL', async function (assert) {
+      const realm = await reconciler.lookupOrMount(
+        'http://localhost:4201/never/existed/',
+      );
+      assert.strictEqual(realm, undefined);
+      assert.deepEqual(mountCalls, []);
     });
   });
 });
