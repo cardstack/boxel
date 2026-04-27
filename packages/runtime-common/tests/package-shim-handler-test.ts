@@ -136,7 +136,7 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       }
     },
 
-  'PackageShimHandler error message names the requested URL — useful for cards that import from a typo URL':
+  'PackageShimHandler error message names the full requested URL — useful for cards that import from a typo URL':
     async (assert) => {
       let handler = new PackageShimHandler(
         (id) => `${PACKAGES_FAKE_ORIGIN}${id}`,
@@ -145,9 +145,8 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
         Loader: class {},
         baseRealm: 'https://cardstack.com/base/',
       });
-      let response = await handler.handle(
-        new Request(`${PACKAGES_FAKE_ORIGIN}@cardstack/runtime-common`),
-      );
+      let requestUrl = `${PACKAGES_FAKE_ORIGIN}@cardstack/runtime-common`;
+      let response = await handler.handle(new Request(requestUrl));
       let shimmed = (response as any)?.[Symbol.for('shimmed-module')];
       try {
         // Re-create the deterministic whitepaper bug shape: a card
@@ -161,9 +160,14 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
           /has no exported member 'markdownToHtml'/.test(err?.message ?? ''),
           `error names the missing export, got: ${err?.message}`,
         );
+        // Lock in that the FULL request URL is in the error — not
+        // just the short module-id fragment. The
+        // `https://packages/...` origin is what the loader's logs
+        // and stack traces use, so an operator searching for it
+        // should be able to find this error.
         assert.ok(
-          /(@cardstack\/runtime-common)/.test(err?.message ?? ''),
-          `error names the source module, got: ${err?.message}`,
+          (err?.message ?? '').includes(requestUrl),
+          `error names the full request URL '${requestUrl}', got: ${err?.message}`,
         );
       }
     },

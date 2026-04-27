@@ -16,12 +16,29 @@ export const PACKAGES_FAKE_ORIGIN = 'https://packages/';
 // exports are intentionally dynamic (e.g. test-only scaffolding) or
 // for explicit interop with code that probes for optional keys.
 //
-// Reflect.has(ns, ALLOW_MISSING_NAMED_EXPORTS) === true → no throw on
-// missing-key access; the Proxy returns the underlying value (which
-// may be `undefined`, matching pre-existing behavior).
+// Specifically: when the namespace has the property
+// `ALLOW_MISSING_NAMED_EXPORTS` set to the literal value `true`, the
+// strict wrapper is skipped and the namespace is returned verbatim.
+// Missing-key access then returns `undefined`, matching pre-Proxy
+// behavior. The `=== true` check (rather than truthy/`Reflect.has`)
+// avoids stray inherited properties or sentinel-shaped values from
+// accidentally opting a module out.
 export const ALLOW_MISSING_NAMED_EXPORTS = Symbol.for(
   'shim-handler.allowMissingNamedExports',
 );
+
+// Helper for shims that are intentional fallbacks — empty-or-stub
+// namespaces that exist only to keep import resolution from
+// crashing when the real module isn't present in the build (e.g.
+// the live-test scaffolding shims in `host/app/lib/externals.ts`).
+// Marks the returned object with `ALLOW_MISSING_NAMED_EXPORTS` so
+// the strict-namespace Proxy won't throw on names that the
+// fallback doesn't actually expose.
+export function fallbackShim(extras?: ModuleLike): ModuleLike {
+  let stub: ModuleLike = { ...(extras ?? {}) };
+  (stub as any)[ALLOW_MISSING_NAMED_EXPORTS] = true;
+  return stub;
+}
 
 // Wraps a shimmed module with a Proxy that throws a clear,
 // actionable error when an importer reads a name that doesn't
@@ -55,15 +72,19 @@ export function wrapWithStrictNamespace(
   }
   return new Proxy(namespace, {
     get(target, prop, receiver) {
-      // Symbol properties (Symbol.toPrimitive, Symbol.iterator, etc.)
-      // and inherited properties pass through — they're never the
-      // "I imported a name that doesn't exist" pattern. Same for
-      // own-property hits, which may be falsy/undefined values that
-      // were intentionally exported (rare, but legal).
+      // Symbol properties (Symbol.toPrimitive, Symbol.iterator,
+      // etc.) pass through — they're never the "I imported a name
+      // that doesn't exist" pattern.
       if (typeof prop !== 'string') {
         return Reflect.get(target, prop, receiver);
       }
-      if (prop in target) {
+      // Own-property check, NOT `prop in target`. An "exported
+      // member" of a namespace is an own property; inherited names
+      // like `toString`, `hasOwnProperty`, `constructor` from
+      // `Object.prototype` aren't exports. Treating them as exports
+      // (via `prop in target`) would silently let a card read those
+      // values and bypass the missing-import check.
+      if (Object.prototype.hasOwnProperty.call(target, prop)) {
         return Reflect.get(target, prop, receiver);
       }
       throw new ReferenceError(

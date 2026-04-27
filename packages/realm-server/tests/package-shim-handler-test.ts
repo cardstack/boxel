@@ -29,7 +29,7 @@ module(basename(__filename), function () {
     test('PackageShimHandler#handle wraps the served module with the strict Proxy', async function (assert) {
       await runSharedTest(packageShimHandlerTests, assert, {});
     });
-    test('PackageShimHandler error message names the requested URL — useful for cards that import from a typo URL', async function (assert) {
+    test('PackageShimHandler error message names the full requested URL — useful for cards that import from a typo URL', async function (assert) {
       await runSharedTest(packageShimHandlerTests, assert, {});
     });
   });
