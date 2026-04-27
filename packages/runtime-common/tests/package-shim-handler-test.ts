@@ -24,8 +24,10 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
         existing: 'value',
       });
       try {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        let _missing = ns.markdownToHtml;
+        // `void` to invoke the property access for its side effect
+        // (the Proxy throws) without binding the result. `let _ = …`
+        // would trip TS's noUnusedLocals despite the eslint-disable.
+        void ns.markdownToHtml;
         assert.ok(false, 'should have thrown on missing-key access');
       } catch (err: any) {
         assert.true(
@@ -125,8 +127,7 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       let shimmed = (response as any)?.[Symbol.for('shimmed-module')];
       assert.strictEqual(shimmed.existing, 1, 'present export readable');
       try {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        let _missing = shimmed.notExported;
+        void shimmed.notExported;
         assert.ok(false, 'should have thrown on missing-key access');
       } catch (err: any) {
         assert.true(
@@ -152,8 +153,7 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
         // Re-create the deterministic whitepaper bug shape: a card
         // imports `markdownToHtml` from `@cardstack/runtime-common`,
         // which doesn't actually export that name.
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        let _ = shimmed.markdownToHtml;
+        void shimmed.markdownToHtml;
         assert.ok(false, 'should have thrown');
       } catch (err: any) {
         assert.ok(
