@@ -743,6 +743,7 @@ module(basename(__filename), function () {
                 static isolated = class extends Component<typeof this> {
                   constructor(...args) {
                     super(...args);
+                    console.log('[fixture] ThrowsAndLateCatches constructor running');
                     let p = Promise.reject(
                       new Error('thrown then revoked: simulated whitepaper-class bug'),
                     );
@@ -765,6 +766,7 @@ module(basename(__filename), function () {
                     // the timer stub.
                     let mc = new MessageChannel();
                     mc.port1.onmessage = () => {
+                      console.log('[fixture] attaching late .catch');
                       p.catch(() => {});
                     };
                     mc.port2.postMessage(null);
@@ -1274,12 +1276,19 @@ module(basename(__filename), function () {
           url: cardURL,
           auth: auth(),
           renderOptions: { cardRender: true },
-          // Tight timeout + delay-after-capture: the page renders
-          // normally (constructor throws + late-catches the rejection,
-          // CDP capture records both events), captureResult reads the
-          // ready DOM, then simulateTimeoutMs holds long enough that
-          // the outer `withTimeout` races to "Render timeout".
-          opts: { timeoutMs: 1, simulateTimeoutMs: 200 },
+          // Generous-enough timeout + delay-after-capture: the page
+          // needs real wall-clock time to render the card so the
+          // constructor runs (Promise.reject + MessageChannel-deferred
+          // catch) and V8's `Runtime.exceptionThrown` /
+          // `Runtime.exceptionRevoked` events fire AND propagate over
+          // CDP into the per-page bucket. After capture lands, the
+          // page-side `simulateTimeoutMs` holds long enough that the
+          // server-side `withTimeout` wins the race and we surface a
+          // "Render timeout" error doc carrying the already-captured
+          // exception entry. A `timeoutMs: 1` would short-circuit
+          // before the page even finishes `transitionTo`, leaving
+          // the bucket empty.
+          opts: { timeoutMs: 1000, simulateTimeoutMs: 2000 },
         });
 
         let timeoutError =
@@ -1294,6 +1303,14 @@ module(basename(__filename), function () {
 
         let additionalErrors: any[] =
           timeoutError?.error?.additionalErrors ?? [];
+        // Diagnostic: when the test fails in CI, surface the full
+        // additionalErrors payload so we can see whether the bucket
+        // received the V8 events and what shape they took.
+        // eslint-disable-next-line no-console
+        console.error(
+          '[diagnostic] timeout error doc additionalErrors:',
+          JSON.stringify(additionalErrors, null, 2),
+        );
         let revokedEntry = additionalErrors.find(
           (e) => e?.title === 'Uncaught exception (revoked by late .catch)',
         );
