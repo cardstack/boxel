@@ -507,10 +507,7 @@ module(basename(__filename), function () {
               timeout: 6 * 60,
               priority: 0,
               args: {
-                realmUrls: [
-                  'http://example.com/a/',
-                  'http://example.com/b/',
-                ],
+                realmUrls: ['http://example.com/a/', 'http://example.com/b/'],
               },
             }),
           ]);
@@ -534,7 +531,7 @@ module(basename(__filename), function () {
           assert.deepEqual(
             rows[0].args.realmUrls.slice().sort(),
             ['http://example.com/a/', 'http://example.com/b/'],
-            'canonical job args contain the union of both instances\' realmUrls',
+            "canonical job args contain the union of both instances' realmUrls",
           );
         });
 
@@ -620,7 +617,6 @@ module(basename(__filename), function () {
             'both pending copy-index rows are retained when sources differ',
           );
         });
-
       },
     );
 
