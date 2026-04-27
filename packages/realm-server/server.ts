@@ -278,17 +278,29 @@ export class RealmServer {
   }
 
   async start() {
-    // Phase 3: registry-driven boot.
-    //   1. SELECT * FROM realm_registry → reconciler.knownByUrl
-    //   2. Eagerly mount only `pinned=true` rows (bootstrap realms — base,
-    //      catalog). Each pinned mount calls reconciler.ensureMounted →
-    //      mountFromRow (factory in main.ts), which constructs a Realm,
-    //      awaits realm.start(), then publishes it into the shared
-    //      `realms[]` array and the virtualNetwork.
-    //   3. Non-pinned rows: do nothing. Mount-on-demand happens in
-    //      findOrMountRealm() on first request.
-    // The reconciler's background poll loop (LISTEN realm_registry + 30s
-    // poll) is started in main.ts after this method returns.
+    // Phase 3: two paths converge here.
+    //
+    // 1. Constructor-supplied realms — test helpers and any legacy boot
+    //    code path push realms directly into `this.realms` before
+    //    server.start() runs and expect this method to call
+    //    realm.start() on them (it used to do this implicitly via
+    //    loadRealms()). They are not in reconciler.knownByUrl, so the
+    //    reconcile pass below would skip them. Iterate first, in
+    //    insertion order — realms[] is empty in production main.ts, so
+    //    this is a no-op there.
+    // 2. Reconciler-driven boot — reconciler.reconcile() reads
+    //    realm_registry into knownByUrl and eager-mounts every pinned
+    //    row via mountFromRow (the main.ts factory), which constructs
+    //    a Realm, publishes into realms[] + virtualNetwork, then
+    //    awaits realm.start() so each pinned realm is fully indexed
+    //    before this method returns. Non-pinned rows are deferred to
+    //    findOrMountRealm() on first request.
+    //
+    // The reconciler's background poll loop (LISTEN realm_registry +
+    // 30s safety poll) starts in main.ts after this method returns.
+    for (let realm of this.realms) {
+      await realm.start();
+    }
     await this.reconciler.reconcile();
   }
 
