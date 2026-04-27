@@ -137,6 +137,13 @@ export type ConsoleErrorEntry = {
   type: ReturnType<ConsoleMessage['type']>;
   text: string;
   location?: ConsoleErrorLocation;
+  // Captured CDP stack trace from the console.error site, when Puppeteer
+  // exposes it. Critical for the desync-detector path: when the runloop
+  // swallows a render exception with no JS event firing, Chrome still
+  // routes "Uncaught (in promise) ..." through console output, and the
+  // stack frames here are the only pointer back at the offending
+  // template/getter/helper.
+  stackFrames?: ConsoleErrorLocation[];
 };
 
 const log = logger('prerenderer');
@@ -202,14 +209,22 @@ export class PagePool {
   #onAffinityDisposed: ((affinityKey: string) => void) | undefined;
 
   // Per-affinity admission semaphore for the `file` queue. Capacity is
-  // `#affinityTabMax - 1` — at most N−1 concurrent file renders on the
-  // affinity, reserving at least one tab slot for `module` / `command`
-  // work that the in-flight file renders may be waiting on (the self-
-  // referential prerender deadlock). Module and command calls bypass
-  // this semaphore entirely. Lazily created on first file call per
-  // affinity; lifecycle is tied to the affinity itself, cleared in
-  // `closeAll`.
+  // `#fileAdmissionCap` — at most that many concurrent file renders on
+  // the affinity, reserving at least one tab slot for `module` /
+  // `command` work that the in-flight file renders may be waiting on
+  // (the self-referential prerender deadlock). Module and command
+  // calls bypass this semaphore entirely. Lazily created on first file
+  // call per affinity; lifecycle is tied to the affinity itself,
+  // cleared in `closeAll`.
   #fileAdmission = new Map<string, AsyncSemaphore>();
+  // Effective per-affinity file-admission capacity. Defaults to the
+  // deadlock-safety ceiling `max(1, #affinityTabMax − 1)` (same as
+  // before the operator knob existed). When
+  // `PRERENDER_AFFINITY_FILE_CONCURRENCY` is set and ≥ 1, the value is
+  // clamped at the ceiling to preserve the deadlock-safety invariant.
+  // Resolved once at construction so tests that mutate env vars see
+  // the value frozen against the pool they're driving.
+  #fileAdmissionCap: number;
   // When true, `#acquireFileAdmission` becomes a no-op. Used by existing
   // PagePool unit tests that predate the admission feature and exercise
   // tab-routing semantics directly — those tests assume `getPage` doesn't
@@ -266,6 +281,38 @@ export class PagePool {
     this.#disableStandbyRefill = options.disableStandbyRefill ?? false;
     this.#onAffinityDisposed = options.onAffinityDisposed;
     this.#disableFileAdmission = options.disableFileAdmission ?? false;
+    // Resolve the per-affinity file-admission cap. Ceiling is the
+    // deadlock-safety `max(1, affinityTabMax − 1)`. Operator override
+    // via `PRERENDER_AFFINITY_FILE_CONCURRENCY`; invalid or missing
+    // values fall through to the ceiling — i.e. the pre-knob behavior.
+    let ceiling = Math.max(1, this.#affinityTabMax - 1);
+    let raw = process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+    let override: number | undefined;
+    if (raw !== undefined && raw !== '') {
+      let parsed = Number(raw);
+      if (Number.isInteger(parsed) && parsed >= 1) {
+        override = parsed;
+      } else {
+        log.warn(
+          `PRERENDER_AFFINITY_FILE_CONCURRENCY=${raw} invalid (must be an integer ≥ 1); falling back to deadlock-safety ceiling=${ceiling}`,
+        );
+      }
+    }
+    this.#fileAdmissionCap =
+      override === undefined ? ceiling : Math.min(override, ceiling);
+    if (
+      !this.#disableFileAdmission &&
+      override !== undefined &&
+      this.#fileAdmissionCap < ceiling
+    ) {
+      // Operator has explicitly lowered the cap below the ceiling.
+      // Log so the effective value is visible without grepping env.
+      // No log line when the env is unset (common case) — nothing
+      // changed.
+      log.info(
+        `file-queue admission: cap=${this.#fileAdmissionCap} (affinityTabMax=${this.#affinityTabMax}, deadlock-safety ceiling=${ceiling})`,
+      );
+    }
   }
 
   set serverURL(url: string) {
@@ -867,11 +914,13 @@ export class PagePool {
   }
 
   // File-queue admission control: per-affinity semaphore with capacity
-  // `#affinityTabMax - 1`. Guarantees at least one tab slot is always
-  // available to module / command calls on a given affinity, which is
-  // what breaks the self-referential prerender deadlock where a file
-  // render's search is waiting on a module extraction that's queued
-  // behind it. Lazy-initialized per affinity.
+  // `#fileAdmissionCap` (default = `max(1, affinityTabMax − 1)`,
+  // lowerable via `PRERENDER_AFFINITY_FILE_CONCURRENCY` but always
+  // clamped at that ceiling). Guarantees at least one tab slot is
+  // always available to module / command calls on a given affinity,
+  // which is what breaks the self-referential prerender deadlock where
+  // a file render's search is waiting on a module extraction that's
+  // queued behind it. Lazy-initialized per affinity.
   async #acquireFileAdmission(
     affinityKey: string,
     signal?: AbortSignal,
@@ -885,8 +934,7 @@ export class PagePool {
     }
     let semaphore = this.#fileAdmission.get(affinityKey);
     if (!semaphore) {
-      let capacity = Math.max(1, this.#affinityTabMax - 1);
-      semaphore = new AsyncSemaphore(capacity);
+      semaphore = new AsyncSemaphore(this.#fileAdmissionCap);
       this.#fileAdmission.set(affinityKey, semaphore);
     }
     let rawRelease = await semaphore.acquire(signal);
@@ -1426,10 +1474,30 @@ export class PagePool {
           formatted,
         );
         if (type === 'error' || type === 'assert') {
+          // Puppeteer's ConsoleMessage.stackTrace() returns the CDP-reported
+          // call stack at the point the message was emitted. Chrome
+          // populates this for "Uncaught (in promise) ..." logs even when
+          // no JS-level error event fires, so it's our best lead for the
+          // desync class of failures.
+          let pptrStackTrace = message.stackTrace?.();
+          let stackFrames: ConsoleErrorLocation[] | undefined =
+            Array.isArray(pptrStackTrace) && pptrStackTrace.length > 0
+              ? pptrStackTrace
+                  .filter((frame) => !!frame?.url)
+                  .map((frame) => ({
+                    url: frame.url,
+                    lineNumber: frame.lineNumber,
+                    columnNumber: frame.columnNumber,
+                  }))
+              : undefined;
+          if (stackFrames && stackFrames.length === 0) {
+            stackFrames = undefined;
+          }
           this.#recordConsoleError(pageId, {
             type,
             text: formatted,
             location: locationData,
+            stackFrames,
           });
         }
       } catch (e) {
@@ -1452,7 +1520,13 @@ export class PagePool {
     if (bucket.size >= CONSOLE_ERROR_LIMIT) {
       return;
     }
-    let location = entry.location;
+    // Dedup key falls back to the top stack frame when the message has
+    // no location of its own. Browser-internal "Uncaught (in promise)
+    // ..." logs typically have no `message.location()`, so two distinct
+    // throws with the same exception text but different originating sites
+    // would otherwise collapse into one entry — and we'd lose the stack
+    // frames that are the only debugging signal for the desync class.
+    let location = entry.location ?? entry.stackFrames?.[0];
     let key = [
       entry.type,
       entry.text,

@@ -246,7 +246,8 @@ Walk the fields top-down. The *first* positive signal wins; stop there.
 | Signal | Category | What to look at next |
 |---|---|---|
 | `waits.semaphoreMs` ≈ `totalElapsedMs` | **Launch stall (capacity)** | Fleet-wide: `prerender-queue-snapshot` lines on every prerender server around that timestamp. Is `totalPending` piled up? Add capacity, don't touch host. |
-| `waits.tabQueueMs` ≈ `totalElapsedMs` (and semaphoreMs small) | **Same-affinity contention** | Same realm's batch is serialized on one tab. Check whether `PRERENDER_AFFINITY_TAB_MAX` is 1 for this fleet, or whether a rogue user request is sharing the tab (see CS-10873 for the cancel-on-abort follow-up). |
+| `waits.admissionMs` ≈ `totalElapsedMs` (and semaphoreMs small) | **Per-affinity admission stall** | This realm hit its own file-admission cap — the server had capacity but wasn't letting this realm use it. The signal means ≥ cap concurrent file renders on one affinity. Default cap = `affinityTabMax − 1` (4 on the standard 5-tab deployment), so a single realm fanning out to ≥ 4 concurrent renders (typical catalog-sized reindex) already produces this. Grep the queue-snapshot log for `admission=pending=N/cap=N` on the same affinity to confirm waiters were piling up. If the cap looks too tight for the workload and cross-realm fairness isn't the concern, `PRERENDER_AFFINITY_FILE_CONCURRENCY` is the knob (see the tuning-knobs section). |
+| `waits.tabQueueMs` ≈ `totalElapsedMs` (and semaphoreMs / admissionMs small) | **Same-affinity contention** | Same realm's batch is serialized on one tab. Check whether `PRERENDER_AFFINITY_TAB_MAX` is 1 for this fleet, or whether a rogue user request is sharing the tab (see CS-10873 for the cancel-on-abort follow-up). |
 | `launchMs` small **and** `renderStage` is `null`/`model:start` | **Very early render stall** — transition hadn't yet rendered anything. Usually means the route threw before setting a real stage. Look at `capturedDom` (`<data-prerender-error>` is common) and console errors. |
 | `renderStage` ∈ `buildModel:fetching-source` / `buildModel:deriving-type` / `buildModel:hydrating` | **Backend stall during model build** | Usually a slow realm server or cross-realm fetch. Check realm-server logs for the same requestId; check the fetch target from `capturedDom` / `cardDocsInFlight`. |
 | `inFlightModuleImports.length > 0` | **Loader stall** | Each URL is a `.gts` / `.ts` we'd already started a `fetchModule(...)` for. Confirm the realm serves those URLs and that there's no import cycle. Often resolves with `clearCache: true` on retry (already in place) — if that's failing check for 500s on the module URL. |
@@ -263,6 +264,29 @@ Walk the fields top-down. The *first* positive signal wins; stop there.
 - **`totalElapsedMs` substantially less than the configured `RENDER_TIMEOUT_MS`** — the outer request aborted, not the inner render timeout. That's a client/manager timeout (remote-prerenderer's abort message includes the elapsed). The stall is still meaningful but the budget isn't the render-timeout budget.
 - **`queryLoadsInFlight` but no `fieldName`** — this is an ad-hoc `store.search()` call, not a query field. The `source` string carries the SearchResource's `source` tag (`seed` / `search` / `live-refresh`) to help.
 - **`launchMs + renderElapsedMs ≠ totalElapsedMs`** — possible under retry, since render-runner re-enters with `clearCache: true` on known error signatures. Treat each attempt as its own story; the final stored attempt wins.
+
+### Render binding desync errors
+
+A row with `error_doc.title === 'Render binding desync'` (status 500, `evict: true`) is the render route's desync detector saying: the model reached the `ready` state but Glimmer's binding for the prerender container never updated. No JS-level error fired during the render, yet the render clearly didn't complete. This is specifically **not** a timeout — the page returned fast because the detector caught the mismatch early. The page IS evicted: Glimmer's binding failing to advance is exactly the signal that the runloop stopped working mid-render, so the half-rendered state can't be reused.
+
+**What it means.** The card's template threw during render and the Ember runloop caught the exception in a way that no observable JS event fired:
+
+- `window.error`: not fired
+- `window.unhandledrejection`: not fired
+- `RSVP.on('error')`: not fired
+- `console.error`: not called from JS
+
+Chrome's DevTools console surfaces the throw as `Uncaught (in promise) ...`, but that comes from Chrome's internal Promise-rejection tracker — it doesn't route through any JS-callable signal. So the normal render-route handlers can't see it, and the only deterministic signal left is the DOM desync: `model.status === 'ready'` in the route while `[data-prerender-status] === 'loading'` in the document.
+
+**How to debug.** The detector captures very little on its own — just the stage it was in when it gave up. The real lead is in `error_doc.additionalErrors`: every `console.error` that fired on the page (including the browser-internal "Uncaught (in promise) ..." log) is recorded with its CDP-reported stack frames. Walk those stacks top-down to find the originating getter / helper / computed. Typical causes:
+
+- A helper reference that resolved to `null`/`undefined`, causing `getInternalHelperManager` to throw on `Object.keys(null)` / `Reflect.ownKeys(undefined)`.
+- A `@field` getter that accesses `undefined.property` because an upstream link didn't materialize.
+- A template-level `{{#if (someHelper ...)}}` where `someHelper` was renamed or removed.
+
+**False-positive profile.** The detector has four gates that all have to hold simultaneously: `isReady=true`, `model.status='ready'`, DOM attribute === `loading` specifically, and the state persists across a backoff-poll grace window (a microtask drain followed by macrotask hops at 50ms → 200 → 500 → 1000 → 2000, re-checking after each — total ~3.75s of cumulative slack so Backburner's flush has real wallclock time to land even under heavy parallel CI load). The fast path exits at the first hop; only renders that stay desynced through the full series are declared failures. In-flight loads are filtered upstream by `#waitForRenderLoadStability` — by the time the detector runs the loader is quiescent. The one residual scenario is a card whose template runs a multi-second *synchronous* getter that starves the microtask queue beyond the full grace budget; when the getter finishes, the microtask queue drains, the binding flips to `ready`, and on the next hop the detector exits cleanly. So in practice false-positives require Backburner, Glimmer, and the entire JS thread to all be blocked for >3.75s — a state the route can't be in while logically `ready`.
+
+**Mitigation if you suspect a false-positive.** Two runtime knobs are exposed via `globalThis`: `__boxelDomDesyncMicrotaskYields` (default 5 microtask yields per hop) and `__boxelDomDesyncSettleHopsMs` (default `[50, 200, 500, 1000, 2000]` — the macrotask backoff series). Stretch either if a specific card family legitimately needs more flush time. The detector module (`packages/host/app/utils/render-desync-detector.ts`) has the full chart and explains why it deliberately avoids `requestAnimationFrame` (RAF + Ember autotrack has a long tail of subtle breakages — microtask + macrotask yields align with how Backburner sequences its own flushes).
 
 ## Cross-referencing logs
 
@@ -509,6 +533,26 @@ grep 'manually visit prerendered url .*<card-id>' realm-server.log | tail -1
 Two different tokens do two different jobs: the user-minted realm-scoped JWT got you the reindex, the indexer's full session map gets the browser tab past its auth checks for every realm the render touches.
 
 If `GRAFANA_SECRET` is configured on your server, you can skip the user-JWT step and use `curl -H "Authorization: $GRAFANA_SECRET" http://localhost:4201/_grafana-full-reindex` instead (grafana endpoint is a GET, no MIME gotcha). In dev the per-realm JWT path is almost always easier.
+
+## Prerender capacity tuning knobs
+
+Three env vars control the per-prerender-server shape. They're resolved once at `PagePool` construction; changes require a process restart.
+
+| Env var | Default | What it controls | When to change it |
+|---|---|---|---|
+| `PRERENDER_PAGE_POOL_SIZE` | `5` | Total simultaneous Chrome tabs the pool can manage. Also the `capacity` the server reports to the manager on each heartbeat, which drives warm-vacancy routing. | Fleet capacity. Raise when `waits.semaphoreMs` dominates `launchMs` across rows from all realms (server-wide saturation); lower if you need to reduce memory footprint and you can confirm from snapshots that pending rarely approaches `totalTabs`. |
+| `PRERENDER_AFFINITY_TAB_MAX` | `5` (clamped to `PRERENDER_PAGE_POOL_SIZE`) | Max tabs a single affinity (realm or user) can simultaneously hold from the pool. | Rarely. Must be ≥ 2 for the self-referential prerender deadlock to be prevented — PagePool logs a warning at startup when it isn't. Lower only if you want to force multi-realm fairness at the tab-routing level. |
+| `PRERENDER_AFFINITY_FILE_CONCURRENCY` | unset → `max(1, PRERENDER_AFFINITY_TAB_MAX − 1)` (the deadlock-safety ceiling) | Cap on concurrent `file` renders within a single affinity. Module and command calls bypass admission; they're never capped by this knob. | Cross-realm fairness. When one realm's fan-out (e.g. a catalog reindex) is stealing render budget from every other realm, lower this below the ceiling to reserve tabs for other affinities. The effective cap is always `min(env, ceiling)` so this can't accidentally break the deadlock-safety invariant. |
+
+**Default invariant**: when `PRERENDER_AFFINITY_FILE_CONCURRENCY` is unset, the effective file-admission cap equals the deadlock-safety ceiling — same behavior as before the knob existed. Changing the knob is an explicit operator decision driven by `admissionMs` telemetry; don't adjust it without data.
+
+When the cap is active and below the ceiling, PagePool logs one info line at construction:
+
+```
+file-queue admission: cap=2 (affinityTabMax=5, deadlock-safety ceiling=4)
+```
+
+Grep for `file-queue admission: cap=` in prerender-server logs to confirm the effective value in a running fleet.
 
 ## Extending the diagnostics
 

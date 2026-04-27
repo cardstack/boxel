@@ -8,10 +8,10 @@ import {
   CheckpointManager,
   type CheckpointChange,
 } from '../../lib/checkpoint-manager';
-import {
-  getProfileManager,
-  type ProfileManager,
-} from '../../lib/profile-manager';
+import type { ProfileManager } from '../../lib/profile-manager';
+import type { RealmAuthenticator } from '../../lib/realm-authenticator';
+import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
+import { resolveRealmSecretSeed } from '../../lib/prompt';
 import {
   type SyncManifest,
   computeFileHash,
@@ -49,9 +49,9 @@ class RealmSyncer extends RealmSyncBase {
 
   constructor(
     private syncOptions: BiSyncOptions,
-    profileManager: ProfileManager,
+    authenticator: RealmAuthenticator,
   ) {
-    super(syncOptions, profileManager);
+    super(syncOptions, authenticator);
   }
 
   private get conflictStrategy(): ConflictStrategy | null {
@@ -74,7 +74,7 @@ class RealmSyncer extends RealmSyncBase {
       console.error('Failed to access realm:', error);
       throw new Error(
         'Cannot proceed with sync: Authentication or access failed. ' +
-          'Please check your Matrix credentials and realm permissions.',
+          'Please check your credentials and realm permissions.',
       );
     }
     console.log('Realm access verified');
@@ -491,6 +491,18 @@ export interface SyncCommandOptions {
   delete?: boolean;
   dryRun?: boolean;
   profileManager?: ProfileManager;
+  /**
+   * Pre-resolved realm secret seed for administrative access. When set, the
+   * CLI mints a JWT locally and skips Matrix login + /_server-session +
+   * /_realm-auth. The `--realm-secret-seed` CLI flag is resolved via
+   * `resolveRealmSecretSeed` (env var or interactive prompt) before being
+   * passed here.
+   */
+  realmSecretSeed?: string;
+  /**
+   * @internal Test hook: supply an already-constructed authenticator.
+   */
+  authenticator?: RealmAuthenticator;
 }
 
 export function registerSyncCommand(realm: Command): void {
@@ -509,6 +521,10 @@ export function registerSyncCommand(realm: Command): void {
     .option('--prefer-newest', 'Resolve conflicts by keeping newest version')
     .option('--delete', 'Sync deletions both ways')
     .option('--dry-run', 'Preview without making changes')
+    .option(
+      '--realm-secret-seed',
+      'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+    )
     .action(
       async (
         localDir: string,
@@ -519,9 +535,20 @@ export function registerSyncCommand(realm: Command): void {
           preferNewest?: boolean;
           delete?: boolean;
           dryRun?: boolean;
+          realmSecretSeed?: boolean;
         },
       ) => {
-        await syncCommand(localDir, realmUrl, options);
+        const realmSecretSeed = await resolveRealmSecretSeed(
+          options.realmSecretSeed === true,
+        );
+        await syncCommand(localDir, realmUrl, {
+          preferLocal: options.preferLocal,
+          preferRemote: options.preferRemote,
+          preferNewest: options.preferNewest,
+          delete: options.delete,
+          dryRun: options.dryRun,
+          realmSecretSeed,
+        });
       },
     );
 }
@@ -531,13 +558,20 @@ export async function syncCommand(
   realmUrl: string,
   options: SyncCommandOptions,
 ): Promise<void> {
-  let pm = options.profileManager ?? getProfileManager();
-  let active = pm.getActiveProfile();
-  if (!active) {
-    console.error(
-      'Error: no active profile. Run `boxel profile add` to create one.',
-    );
-    process.exit(1);
+  let authenticator: RealmAuthenticator;
+  if (options.authenticator) {
+    authenticator = options.authenticator;
+  } else {
+    const resolution = resolveRealmAuthenticator({
+      realmUrl,
+      realmSecretSeed: options.realmSecretSeed,
+      profileManager: options.profileManager,
+    });
+    if (!resolution.ok) {
+      console.error(`Error: ${resolution.error}`);
+      process.exit(1);
+    }
+    authenticator = resolution.authenticator;
   }
 
   // Validate mutually exclusive strategies
@@ -569,7 +603,7 @@ export async function syncCommand(
         deleteSync: options.delete,
         dryRun: options.dryRun,
       },
-      pm,
+      authenticator,
     );
 
     await syncer.sync();

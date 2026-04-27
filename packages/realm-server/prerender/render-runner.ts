@@ -1390,8 +1390,42 @@ export class RenderRunner {
       status: 500,
       title: entry.type === 'assert' ? 'Console assert' : 'Console error',
       message: this.#formatConsoleError(entry),
+      stack: this.#formatConsoleErrorStack(entry),
       additionalErrors: null,
     }));
+  }
+
+  // When the desync detector surfaces a render error with no
+  // captured exception, the only lead back to the offending template is
+  // the call stack the browser attached to its console.error log. We
+  // assemble that into a Node-style stack string (header line +
+  // `    at <url>:<line>:<col>` frames) so the existing error viewer
+  // renders it the same as any other captured stack.
+  #formatConsoleErrorStack(entry: ConsoleErrorEntry): string | undefined {
+    let frames = entry.stackFrames;
+    if (!Array.isArray(frames) || frames.length === 0) {
+      return undefined;
+    }
+    let lines: string[] = [];
+    for (let frame of frames) {
+      if (!frame?.url) {
+        continue;
+      }
+      let segments: number[] = [];
+      if (typeof frame.lineNumber === 'number') {
+        segments.push(frame.lineNumber + 1);
+      }
+      if (typeof frame.columnNumber === 'number') {
+        segments.push(frame.columnNumber + 1);
+      }
+      let suffix = segments.length ? `:${segments.join(':')}` : '';
+      lines.push(`    at ${frame.url}${suffix}`);
+    }
+    if (lines.length === 0) {
+      return undefined;
+    }
+    let header = entry.type === 'assert' ? 'AssertionError' : 'ConsoleError';
+    return [`${header}: ${entry.text}`, ...lines].join('\n');
   }
 
   #formatConsoleError(entry: ConsoleErrorEntry): string {
