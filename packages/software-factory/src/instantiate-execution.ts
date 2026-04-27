@@ -201,7 +201,6 @@ export async function instantiateRealmSpecs(
 
   for (let spec of specs) {
     let exampleInstances = await collectExampleInstances(
-      options.client,
       options.targetRealmUrl,
       options.workspaceDir,
       spec,
@@ -316,7 +315,6 @@ export async function runInstantiateInMemory(
       options.path,
       options.targetRealmUrl,
       options.workspaceDir,
-      options.client,
       instantiateCardFn,
     );
   }
@@ -384,7 +382,6 @@ async function runSingleInstance(
   path: string,
   targetRealmUrl: string,
   workspaceDir: string,
-  client: BoxelCLIClient,
   instantiateCardFn: InstantiateCardFn,
 ): Promise<RunInstantiateResult> {
   let pathError = validateRealmRelativePath(path);
@@ -398,7 +395,6 @@ async function runSingleInstance(
   }
 
   let prepared = await prepareExampleInstance(
-    client,
     targetRealmUrl,
     workspaceDir,
     path,
@@ -442,7 +438,6 @@ async function runSingleInstance(
  * codeRef. Mirrors the per-example prep inside `instantiateRealmSpecs`.
  */
 async function prepareExampleInstance(
-  _client: BoxelCLIClient,
   targetRealmUrl: string,
   workspaceDir: string,
   exampleUrl: string,
@@ -528,7 +523,6 @@ async function prepareExampleInstance(
 }
 
 async function collectExampleInstances(
-  client: BoxelCLIClient,
   targetRealmUrl: string,
   workspaceDir: string,
   spec: SpecInfo,
@@ -536,7 +530,6 @@ async function collectExampleInstances(
   let exampleInstances: { url: string; data: string }[] = [];
   for (let exampleUrl of spec.exampleUrls) {
     let prepared = await prepareExampleInstance(
-      client,
       targetRealmUrl,
       workspaceDir,
       exampleUrl,
