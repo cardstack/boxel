@@ -15,6 +15,13 @@ export interface DailyCreditGrantArgs extends JSONTypes.Object {
 
 export { dailyCreditGrant };
 
+// No coalesce handler: the worker is idempotent at the SQL level via
+// `granted_today = false` — a duplicate run on the same day finds no
+// eligible rows and inserts nothing. The concurrency group
+// 'daily-credit-grant' also serializes execution. The worst case from a
+// concurrent enqueue is one wasted full-table scan, not a double-grant,
+// so coalescing isn't worth the extra code path.
+
 const dailyCreditGrant: Task<DailyCreditGrantArgs, void> = ({
   dbAdapter,
   log,
