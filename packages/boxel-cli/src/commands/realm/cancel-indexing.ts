@@ -1,13 +1,11 @@
 import type { Command } from 'commander';
 import {
   getProfileManager,
+  NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from '../../lib/profile-manager';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { FG_GREEN, FG_RED, RESET } from '../../lib/colors';
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
 
 export interface CancelIndexingCommandOptions {
   profileManager?: ProfileManager;
@@ -18,25 +16,9 @@ export interface CancelIndexingResult {
   error?: string;
 }
 
-export function registerCancelIndexingCommand(realm: Command): void {
-  realm
-    .command('cancel-indexing')
-    .description('Cancel all indexing jobs (running + pending) for a realm')
-    .requiredOption(
-      '--realm <realm-url>',
-      'URL of the realm to cancel indexing for',
-    )
-    .action(async (options: { realm: string }) => {
-      let result = await cancelIndexing(options.realm);
-      if (result.ok) {
-        console.log(
-          `${FG_GREEN}Cancelled indexing jobs for ${options.realm}${RESET}`,
-        );
-      } else {
-        console.error(`${FG_RED}Error: ${result.error}${RESET}`);
-        process.exit(1);
-      }
-    });
+interface CancelIndexingCliOptions {
+  realm: string;
+  json?: boolean;
 }
 
 /**
@@ -45,14 +27,14 @@ export function registerCancelIndexingCommand(realm: Command): void {
  */
 export async function cancelIndexing(
   realmUrl: string,
-  options: CancelIndexingCommandOptions = {},
+  options?: CancelIndexingCommandOptions,
 ): Promise<CancelIndexingResult> {
-  let pm = options.profileManager ?? getProfileManager();
+  let pm = options?.profileManager ?? getProfileManager();
   let active = pm.getActiveProfile();
   if (!active) {
     return {
       ok: false,
-      error: 'No active profile. Run `boxel profile add` to create one.',
+      error: NO_ACTIVE_PROFILE_ERROR,
     };
   }
 
@@ -69,7 +51,7 @@ export async function cancelIndexing(
     });
 
     if (!response.ok) {
-      let body = await response.text();
+      let body = await response.text().catch(() => '(no body)');
       return {
         ok: false,
         error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
@@ -83,4 +65,32 @@ export async function cancelIndexing(
       error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+export function registerCancelIndexingCommand(realm: Command): void {
+  realm
+    .command('cancel-indexing')
+    .description('Cancel all indexing jobs (running + pending) for a realm')
+    .requiredOption(
+      '--realm <realm-url>',
+      'URL of the realm to cancel indexing for',
+    )
+    .option('--json', 'Output raw JSON response')
+    .action(async (opts: CancelIndexingCliOptions) => {
+      let result = await cancelIndexing(opts.realm);
+
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+        if (!result.ok) {
+          process.exit(1);
+        }
+      } else if (result.ok) {
+        console.log(
+          `${FG_GREEN}Cancelled indexing jobs for ${opts.realm}${RESET}`,
+        );
+      } else {
+        console.error(`${FG_RED}Error:${RESET} ${result.error}`);
+        process.exit(1);
+      }
+    });
 }
