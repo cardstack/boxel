@@ -13,7 +13,7 @@ import {
   search as fileSearch,
   type SearchResult,
   type SearchCommandOptions,
-} from '../commands/file/search';
+} from '../commands/search';
 import {
   readTranspiledModule,
   type ReadTranspiledResult,
@@ -84,9 +84,6 @@ export interface SyncOptions {
 
 export type { DeleteResult };
 export type { WriteResult };
-
-// SearchResult is now imported from '../commands/file/search'
-// and re-exported above for backward compatibility.
 
 export interface RunCommandResult {
   status: 'ready' | 'error' | 'unusable';
@@ -207,14 +204,14 @@ export class BoxelCLIClient {
   }
 
   /**
-   * Search a realm using the `_search` endpoint.
-   * Delegates to the standalone `search()` in `commands/file/search.ts`.
+   * Federated search across one or more realms via `_federated-search`.
+   * Delegates to the standalone `search()` in `commands/search.ts`.
    */
   async search(
-    realmUrl: string,
+    realmUrls: string | string[],
     query: Record<string, unknown>,
   ): Promise<SearchResult> {
-    return fileSearch(realmUrl, query, { profileManager: this.pm });
+    return fileSearch(realmUrls, query, { profileManager: this.pm });
   }
 
   /**

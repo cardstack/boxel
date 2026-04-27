@@ -1,9 +1,11 @@
 import type { Command } from 'commander';
 import {
   getProfileManager,
+  NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
-} from '../../lib/profile-manager';
-import { FG_RED, DIM, RESET } from '../../lib/colors';
+} from '../lib/profile-manager';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { FG_RED, DIM, RESET } from '../lib/colors';
 
 export interface SearchResult {
   ok: boolean;
@@ -16,18 +18,16 @@ export interface SearchCommandOptions {
   profileManager?: ProfileManager;
 }
 
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
-
 /**
- * Search a realm using the `_search` endpoint with a JSON query.
+ * Federated search across one or more realms via the `_federated-search`
+ * server endpoint.
  *
- * Sends a QUERY request with the provided query object serialized as JSON.
- * Uses the per-realm JWT via `ProfileManager.authedRealmFetch`.
+ * Sends a QUERY request with the provided query object and a `realms` array
+ * merged into the request body. Uses the server JWT via
+ * `ProfileManager.authedRealmServerFetch`.
  */
 export async function search(
-  realmUrl: string,
+  realmUrls: string | string[],
   query: Record<string, unknown>,
   options?: SearchCommandOptions,
 ): Promise<SearchResult> {
@@ -36,20 +36,25 @@ export async function search(
   if (!active) {
     return {
       ok: false,
-      error: 'No active profile. Run `boxel profile add` to create one.',
+      error: NO_ACTIVE_PROFILE_ERROR,
     };
   }
 
-  let searchUrl = `${ensureTrailingSlash(realmUrl)}_search`;
+  let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
+  let searchUrl = `${realmServerUrl}/_federated-search`;
+
+  let realms = (Array.isArray(realmUrls) ? realmUrls : [realmUrls]).map(
+    ensureTrailingSlash,
+  );
 
   try {
-    let response = await pm.authedRealmFetch(searchUrl, {
+    let response = await pm.authedRealmServerFetch(searchUrl, {
       method: 'QUERY',
       headers: {
         Accept: 'application/vnd.card+json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(query),
+      body: JSON.stringify({ realms, ...query }),
     });
 
     if (!response.ok) {
@@ -64,7 +69,7 @@ export async function search(
     let result = (await response.json()) as {
       data?: Record<string, unknown>[];
     };
-    return { ok: true, data: result.data };
+    return { ok: true, status: response.status, data: result.data };
   } catch (err) {
     return {
       ok: false,
@@ -75,19 +80,34 @@ export async function search(
 }
 
 interface SearchCliOptions {
-  realm: string;
+  realm: string[];
   query: string;
   json?: boolean;
 }
 
-export function registerSearchCommand(file: Command): void {
-  file
+export function registerSearchCommand(program: Command): void {
+  program
     .command('search')
-    .description('Search a realm using a JSON query')
-    .requiredOption('--realm <realm-url>', 'The realm URL to search')
+    .description('Federated search across realms using a JSON query')
+    .requiredOption(
+      '--realm <realm-url>',
+      'Realm URL to search (repeatable)',
+      (val: string, acc: string[]) => {
+        acc.push(val);
+        return acc;
+      },
+      [] as string[],
+    )
     .requiredOption('--query <json>', 'JSON query object (as a string)')
     .option('--json', 'Output raw JSON response')
     .action(async (opts: SearchCliOptions) => {
+      if (opts.realm.length === 0) {
+        console.error(
+          `${FG_RED}Error:${RESET} At least one --realm is required`,
+        );
+        process.exit(1);
+      }
+
       let query: Record<string, unknown>;
       try {
         let parsed = JSON.parse(opts.query);

@@ -105,7 +105,18 @@ pnpm test
 
 # Run tests in watch mode
 pnpm test:watch
+
+# Run integration tests (requires Docker for test Postgres)
+pnpm test:integration
 ```
+
+Integration tests use a stub prerenderer by default so they don't need
+Chrome or a running host app. Tests that exercise card indexing (e.g.
+content-based search assertions) opt in by passing
+`useRealPrerenderer: true` to `startTestRealmServer()`. Those tests
+require the host app running at `BOXEL_HOST_URL` (default
+`http://localhost:4200`) — start the dev stack from the repo root with
+`pnpm start` before running them.
 
 ### Publishing
 

@@ -797,12 +797,24 @@ jobs:
       - name: Start Matrix
         run: pnpm start:matrix
         working-directory: packages/realm-server
+      - name: Start dev stack (icons + host-dist + base realm + prerenderer)
+        run: mise run test-services:matrix | tee -a /tmp/server.log &
+      - name: Wait for dev stack readiness
+        run: |
+          timeout 300 bash -c '
+            until curl -sf http://localhost:4200 > /dev/null \
+              && curl -sf "http://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson" > /dev/null; \
+            do sleep 2; done
+          '
       - name: Create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
       - name: Run integration tests
         run: pnpm test:integration
         working-directory: packages/boxel-cli
+      - name: Print server logs
+        if: ${{ !cancelled() }}
+        run: cat /tmp/server.log
 
   deploy:
     name: Deploy boxel to staging

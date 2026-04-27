@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { search } from '../../src/commands/file/search';
+import { search } from '../../src/commands/search';
 import { ProfileManager } from '../../src/lib/profile-manager';
 import {
   startTestRealmServer,
@@ -19,11 +19,12 @@ let realmUrl: string;
 
 beforeAll(async () => {
   await startTestRealmServer({
+    useRealPrerenderer: true,
     fileSystem: {
       'SearchTarget/1.json': JSON.stringify({
         data: {
           type: 'card',
-          attributes: { title: 'Searchable Card' },
+          attributes: { cardInfo: { name: 'Searchable Card' } },
           meta: {
             adoptsFrom: {
               module: 'https://cardstack.com/base/card-api',
@@ -46,7 +47,7 @@ afterAll(async () => {
   await stopTestRealmServer();
 });
 
-describe('file search (integration)', () => {
+describe('federated search (integration)', () => {
   it('returns results from the realm', async () => {
     let result = await search(realmUrl, {}, { profileManager });
     expect(result.ok, `search failed: ${result.error}`).toBe(true);
@@ -54,8 +55,30 @@ describe('file search (integration)', () => {
     expect(Array.isArray(result.data)).toBe(true);
   });
 
-  it('returns ok: false for search on invalid realm URL', async () => {
-    let result = await search('http://127.0.0.1:1/', {}, { profileManager });
+  it('finds the seeded SearchTarget card by title', async () => {
+    let result = await search(realmUrl, {}, { profileManager });
+    expect(result.ok, `search failed: ${result.error}`).toBe(true);
+    let titles = (result.data ?? []).map(
+      (entry) =>
+        (entry as { attributes?: { cardTitle?: string } }).attributes
+          ?.cardTitle,
+    );
+    expect(titles).toContain('Searchable Card');
+  });
+
+  it('accepts an array of realm URLs', async () => {
+    let result = await search([realmUrl], {}, { profileManager });
+    expect(result.ok, `search failed: ${result.error}`).toBe(true);
+    expect(result.data).toBeDefined();
+    expect(Array.isArray(result.data)).toBe(true);
+  });
+
+  it('returns ok: false for search on unknown realm URL', async () => {
+    let result = await search(
+      `${TEST_REALM_SERVER_URL}/nonexistent/`,
+      {},
+      { profileManager },
+    );
     expect(result.ok).toBe(false);
     expect(result.error).toBeDefined();
   });

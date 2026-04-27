@@ -10,6 +10,8 @@ import {
   closeServer,
   matrixURL,
   matrixRegistrationSecret,
+  getTestPrerenderer,
+  stopTestPrerenderServer,
 } from '#realm-server/tests/helpers/index';
 import { registerUser } from '#realm-server/synapse';
 import {
@@ -23,8 +25,10 @@ import type {
 } from '@cardstack/runtime-common';
 import type { Server } from 'http';
 
-// CLI tests don't need card rendering — stub out the prerenderer
-// so we don't launch Chrome.
+// Default prerenderer for CLI integration tests — returns empty render
+// output so we don't depend on Chrome or a running host app. Tests that
+// need real card indexing (e.g. content-based search assertions) opt in
+// via `useRealPrerenderer: true`.
 const noopPrerenderer: Prerenderer = {
   prerenderModule: async () => ({ html: '', status: 200 }) as any,
   prerenderVisit: async () => ({}) as any,
@@ -41,8 +45,45 @@ let dbAdapter: PgAdapter | undefined;
 let publisher: PgQueuePublisher | undefined;
 let runner: PgQueueRunner | undefined;
 
+let cachedRealPrerenderer: Prerenderer | undefined;
+let realPrerendererStarted = false;
+
+const BOXEL_HOST_URL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
+
+async function probeHostApp(): Promise<boolean> {
+  try {
+    let res = await fetch(BOXEL_HOST_URL, {
+      signal: AbortSignal.timeout(2000),
+    });
+    return res.status < 500;
+  } catch {
+    return false;
+  }
+}
+
+async function getRealPrerenderer(): Promise<Prerenderer> {
+  if (!cachedRealPrerenderer) {
+    if (!(await probeHostApp())) {
+      throw new Error(
+        `Real prerenderer requested but ${BOXEL_HOST_URL} is unreachable. ` +
+          `Start the host app (e.g. \`pnpm start\` from repo root) or ` +
+          `unset useRealPrerenderer.`,
+      );
+    }
+    cachedRealPrerenderer = await getTestPrerenderer();
+    realPrerendererStarted = true;
+  }
+  return cachedRealPrerenderer!;
+}
+
 export async function startTestRealmServer(options?: {
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
+  /**
+   * When true, drive card indexing through the real Chrome-based
+   * prerenderer (via realm-server's test helper). Requires the host app
+   * to be running at BOXEL_HOST_URL. Default: false (uses noop stub).
+   */
+  useRealPrerenderer?: boolean;
 }): Promise<void> {
   prepareTestDB();
   dbAdapter = await createTestPgAdapter();
@@ -54,6 +95,10 @@ export async function startTestRealmServer(options?: {
 
   let virtualNetwork = createVirtualNetwork();
   let realmURL = new URL(`${TEST_REALM_SERVER_URL}/test/`);
+
+  let prerenderer = options?.useRealPrerenderer
+    ? await getRealPrerenderer()
+    : noopPrerenderer;
 
   let { testRealmHttpServer: server } = await runTestRealmServer({
     testRealmDir: fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-cli-realm-')),
@@ -71,7 +116,7 @@ export async function startTestRealmServer(options?: {
       '*': ['read', 'write'],
       [`@${TEST_USERNAME}:localhost`]: ['read', 'write', 'realm-owner'],
     },
-    prerenderer: noopPrerenderer,
+    prerenderer,
   });
 
   testRealmHttpServer = server;
@@ -102,6 +147,11 @@ export async function stopTestRealmServer(): Promise<void> {
   if (dbAdapter) {
     await dbAdapter.close();
     dbAdapter = undefined;
+  }
+  if (realPrerendererStarted) {
+    await stopTestPrerenderServer();
+    cachedRealPrerenderer = undefined;
+    realPrerendererStarted = false;
   }
 }
 
