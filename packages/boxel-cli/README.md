@@ -116,30 +116,45 @@ pnpm test:integration
 
 1. **Docker** — for the test Postgres container (started automatically by
    the test runner script).
-2. **Dev stack running** — host app on `:4200` and base realm on
-   `:4201/base/`. Some integration tests (currently `search.test.ts`)
-   pass `useRealPrerenderer: true` to `startTestRealmServer()` so card
-   indexing exercises the real Chrome prerenderer. Without the dev
-   stack up, those tests fail their `beforeAll` with a clear
-   "host unreachable" message; the rest of the suite still passes
-   with a noop prerenderer.
+2. **Dev stack running** — host app on `:4200`, base realm on
+   `:4201/base/`, prerender service on `:4221`, prerender manager on
+   `:4222`, worker-base, and dev Postgres on `:5435`. Some integration
+   tests (currently `search.test.ts`) pass `useRealPrerenderer: true`
+   to `startTestRealmServer()` so card indexing exercises the real
+   Chrome prerenderer. Without the dev stack up, those tests fail
+   their `beforeAll` with a clear "host unreachable" message; the rest
+   of the suite still passes with a noop prerenderer.
 
-   Start the dev stack from `packages/realm-server/`:
+   The simplest way to start everything for local dev is from the
+   repo root:
 
    ```bash
+   pnpm start
+   ```
+
+   That uses the dev-mode host (no pre-build needed). Leave it running
+   in another terminal, then run `pnpm test:integration` from
+   `packages/boxel-cli/`.
+
+   If you'd rather match CI exactly (production-style host serve), build
+   the host first and then run the matrix test-services task:
+
+   ```bash
+   # one-time, from repo root
+   pnpm --filter @cardstack/host build
+
+   # then, from packages/realm-server/
    mise run test-services:matrix
    ```
 
-   This brings up the host dist, base realm, prerender service,
-   prerender manager, icons, worker-base, and dev Postgres — the
-   minimum needed for real card indexing. Leave it running in another
-   terminal and then run `pnpm test:integration` from
-   `packages/boxel-cli/`.
+   `mise run test-services:matrix` brings up host-dist, base realm,
+   prerender service, prerender manager, icons, worker-base, and dev
+   Postgres — the minimum needed for real card indexing. It expects
+   the host dist to already exist on disk; that's what the build step
+   above (or the CI's `test-web-assets` artifact) provides.
 
-   Alternatively, `pnpm start` from the repo root brings up the full
-   dev stack and works equivalently.
-
-In CI, the `boxel-cli-test` job runs `mise run test-services:matrix`
+In CI, the `boxel-cli-test` job downloads the pre-built `test-web-assets`
+artifact (host + icons dist) and then runs `mise run test-services:matrix`
 in the background before the integration suite (see
 `.github/workflows/ci.yaml`).
 
