@@ -41,8 +41,8 @@ program
 Environment variables (for 'add'):
   BOXEL_PASSWORD       Password; preferred over -p to avoid shell history.
   BOXEL_ENVIRONMENT    An env-mode slug (e.g. a branch name), interpreted
-                       like mise-tasks/lib/env-vars.sh: URLs are derived
-                       as http://matrix.<slug>.localhost and
+                       like scripts/env-slug.sh: URLs are derived as
+                       http://matrix.<slug>.localhost and
                        http://realm-server.<slug>.localhost/. Overridden
                        by --matrix-url / --realm-server-url if provided.`,
   )
