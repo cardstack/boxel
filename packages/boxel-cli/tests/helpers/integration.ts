@@ -35,8 +35,13 @@ const noopPrerenderer: Prerenderer = {
 };
 
 export const TEST_REALM_SERVER_URL = 'http://127.0.0.1:4446';
-const PRERENDER_MGR_URL =
-  process.env.PRERENDER_MGR_URL ?? 'http://localhost:4222';
+// Normalize `localhost` to `127.0.0.1` so Node 24 / undici doesn't try `::1`
+// first and fail when the prerender manager binds IPv4 only. Matches the
+// existing convention in `packages/realm-server/tests/helpers/index.ts:191`
+// (testPrerenderHost = '127.0.0.1') and `setup-localhost-resolver.ts`.
+const PRERENDER_MGR_URL = (
+  process.env.PRERENDER_MGR_URL ?? 'http://localhost:4222'
+).replace('://localhost', '://127.0.0.1');
 
 const TEST_USERNAME = `cli-test-${Date.now()}`;
 const TEST_PASSWORD = 'test-password-for-cli';
