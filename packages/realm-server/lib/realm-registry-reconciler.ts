@@ -253,6 +253,12 @@ export class RealmRegistryReconciler {
   // Per-URL serialization: concurrent callers for the same URL share one
   // in-flight mount. Cleared from pendingMounts on settle so a retry after
   // failure gets a fresh attempt.
+  //
+  // Emits a structured `mount` log line on every settled call: success
+  // duration, failure duration + reason, kind, pinned flag. Phase 3
+  // rollout safety relies on this signal — Loki/Grafana extract cold-
+  // mount latency, mount failure rate, and pinned-vs-lazy ratios from
+  // these lines.
   async ensureMounted(row: RealmRegistryRow): Promise<Realm> {
     const existing = this.mounted.get(row.url);
     if (existing) {
@@ -262,6 +268,7 @@ export class RealmRegistryReconciler {
     if (inflight) {
       return inflight;
     }
+    const start = Date.now();
     const promise = (async () => {
       try {
         const realm = await this.#deps.mountFromRow(row);
@@ -269,7 +276,24 @@ export class RealmRegistryReconciler {
         // Mark as reconciler-owned so the unmount phase of a future
         // reconcile() is allowed to tear it down when the row disappears.
         this.#reconcilerOwned.add(row.url);
+        log.info(
+          `mount ok url=%s kind=%s pinned=%s duration_ms=%d`,
+          row.url,
+          row.kind,
+          row.pinned,
+          Date.now() - start,
+        );
         return realm;
+      } catch (err: unknown) {
+        log.warn(
+          `mount fail url=%s kind=%s pinned=%s duration_ms=%d reason=%s`,
+          row.url,
+          row.kind,
+          row.pinned,
+          Date.now() - start,
+          err instanceof Error ? err.message : String(err),
+        );
+        throw err;
       } finally {
         this.pendingMounts.delete(row.url);
       }

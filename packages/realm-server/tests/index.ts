@@ -169,6 +169,7 @@ import './definition-lookup-test';
 import './file-watcher-events-test';
 import './full-reindex-test';
 import './indexing-test';
+import './lazy-mount-test';
 import './module-syntax-test';
 import './permissions/permission-checker-test';
 import './prerendering-test';

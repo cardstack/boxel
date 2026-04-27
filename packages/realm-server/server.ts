@@ -302,6 +302,13 @@ export class RealmServer {
     }
   }
 
+  // Test-only accessor for the request-path realm resolver. Exposed so
+  // lazy-mount integration tests can drive findOrMountRealm directly
+  // without spinning up an HTTP listener + mocked Koa context.
+  testingOnlyFindOrMountRealm(requestURL: URL): Promise<Realm | undefined> {
+    return this.findOrMountRealm(requestURL);
+  }
+
   private serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
     let acceptHeader = ctxt.header.accept ?? '';
     let lowerAcceptHeader = acceptHeader.toLowerCase();
