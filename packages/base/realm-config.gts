@@ -7,7 +7,7 @@ import {
   linksTo,
 } from './card-api';
 import StringField from './string';
-import MapPinnedIcon from '@cardstack/boxel-icons/map-pinned';
+import ShapesIcon from '@cardstack/boxel-icons/shapes';
 import LinkIcon from '@cardstack/boxel-icons/link';
 
 export class RoutingRuleField extends FieldDef {
@@ -26,7 +26,7 @@ export class RoutingRuleField extends FieldDef {
 
 export class RealmConfig extends CardDef {
   static displayName = 'Realm Config';
-  static icon = MapPinnedIcon;
+  static icon = ShapesIcon;
 
   @field backgroundURL = contains(StringField);
   @field iconURL = contains(StringField);
