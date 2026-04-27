@@ -16,10 +16,11 @@ import {
 import { write as coreWrite, type WriteResult } from '../commands/file/write';
 import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { pull as realmPull } from '../commands/realm/pull';
+import { sync as realmSync, type SyncResult } from '../commands/realm/sync';
 import { getProfileManager, type ProfileManager } from './profile-manager';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-export type { ReadResult, ListFilesResult, ReadTranspiledResult };
+export type { ReadResult, ListFilesResult, ReadTranspiledResult, SyncResult };
 
 const MIME = {
   CardSource: 'application/vnd.card+source',
@@ -53,6 +54,19 @@ export interface PullResult {
   /** Relative file paths that were downloaded. */
   files: string[];
   error?: string;
+}
+
+export interface SyncOptions {
+  /** Resolve conflicts by keeping the local version. */
+  preferLocal?: boolean;
+  /** Resolve conflicts by keeping the remote version. */
+  preferRemote?: boolean;
+  /** Resolve conflicts by keeping the newest version. */
+  preferNewest?: boolean;
+  /** Propagate deletions in both directions. */
+  delete?: boolean;
+  /** Preview without making changes. */
+  dryRun?: boolean;
 }
 
 export type { DeleteResult };
@@ -476,6 +490,26 @@ export class BoxelCLIClient {
   ): Promise<PullResult> {
     return realmPull(realmUrl, localDir, {
       delete: options?.delete,
+      profileManager: this.pm,
+    });
+  }
+
+  /**
+   * Bidirectional sync between a local workspace and a realm. Thin wrapper
+   * around the `realm sync` command's programmatic `sync()` function so the
+   * CLI and programmatic API share one implementation.
+   */
+  async sync(
+    realmUrl: string,
+    localDir: string,
+    options?: SyncOptions,
+  ): Promise<SyncResult> {
+    return realmSync(localDir, realmUrl, {
+      preferLocal: options?.preferLocal,
+      preferRemote: options?.preferRemote,
+      preferNewest: options?.preferNewest,
+      delete: options?.delete,
+      dryRun: options?.dryRun,
       profileManager: this.pm,
     });
   }
