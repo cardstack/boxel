@@ -3,6 +3,7 @@ import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
+import type { PgAdapter } from '@cardstack/postgres';
 import type { Realm, RealmAdapter } from '@cardstack/runtime-common';
 import {
   type LooseSingleCardDocument,
@@ -53,6 +54,47 @@ function formatDiskSnapshot(snapshot: DiskSnapshot): string {
   }
 }
 
+// Read the raw rows for a URL from boxel_index + boxel_index_working,
+// plus realm_versions, so we can tell whether a stale GET is the index
+// being out of date or the GET path picking up the wrong row.
+async function readIndexSnapshot(
+  dbAdapter: PgAdapter,
+  realmHref: string,
+  cardURL: string,
+  fileURL: string,
+): Promise<{
+  realmVersion: unknown;
+  stable: unknown[];
+  working: unknown[];
+}> {
+  let [versionRow] = (await dbAdapter.execute(
+    `SELECT current_version FROM realm_versions WHERE realm_url = $1`,
+    { bind: [realmHref] },
+  )) as { current_version: number }[];
+
+  let stable = (await dbAdapter.execute(
+    `SELECT url, file_alias, type, realm_version, is_deleted,
+            pristine_doc, last_modified
+       FROM boxel_index
+      WHERE realm_url = $1 AND (url = $2 OR url = $3 OR file_alias = $2 OR file_alias = $3)`,
+    { bind: [realmHref, cardURL, fileURL] },
+  )) as unknown[];
+
+  let working = (await dbAdapter.execute(
+    `SELECT url, file_alias, type, realm_version, is_deleted,
+            pristine_doc, last_modified
+       FROM boxel_index_working
+      WHERE realm_url = $1 AND (url = $2 OR url = $3 OR file_alias = $2 OR file_alias = $3)`,
+    { bind: [realmHref, cardURL, fileURL] },
+  )) as unknown[];
+
+  return {
+    realmVersion: versionRow?.current_version ?? null,
+    stable,
+    working,
+  };
+}
+
 module(basename(__filename), function () {
   module(
     'Realm-specific Endpoints: can make request to post /_atomic',
@@ -61,17 +103,20 @@ module(basename(__filename), function () {
       let testRealmHref = realmURL.href;
       let testRealm: Realm;
       let testRealmAdapter: RealmAdapter;
+      let dbAdapter: PgAdapter;
       let request: RealmRequest;
 
       function onRealmSetup(args: {
         testRealm: Realm;
         testRealmHttpServer: Server;
         testRealmAdapter: RealmAdapter;
+        dbAdapter: PgAdapter;
         request: SuperTest<Test>;
         dir: DirResult;
       }) {
         testRealm = args.testRealm;
         testRealmAdapter = args.testRealmAdapter;
+        dbAdapter = args.dbAdapter;
         request = withRealmPath(args.request, realmURL);
       }
 
@@ -936,12 +981,21 @@ module(basename(__filename), function () {
             testRealmAdapter,
             'update-person.json',
           );
+          // Snapshot boxel_index/boxel_index_working too. With the disk
+          // diagnostic from #4530 we know the file write lands; if the
+          // index rows here have firstName="Initial" it's an indexer/
+          // promotion bug, if they have "Updated" it's a GET-path bug.
+          let postUpdateIndex = await readIndexSnapshot(
+            dbAdapter,
+            testRealmHref,
+            `${testRealmHref}update-person`,
+            `${testRealmHref}update-person.json`,
+          );
 
           // The atomic POST awaits indexing, so by 201 boxel_index should
-          // be updated. The remaining CI flake is read-path readiness —
-          // most often a slow first-instance prerender / module-cache
-          // populate that the GET is waiting on. Match the 30s budget
-          // publish-unpublish-realm-test uses for the same class of wait.
+          // be updated. Poll up to 30s in case CI load delays read-path
+          // readiness; the diagnostics above are captured pre-poll so
+          // the timeout message reflects the immediate post-201 state.
           let updatedCard: LooseSingleCardDocument | undefined;
           let lastStatus: number | undefined;
           await waitUntil(
@@ -967,6 +1021,7 @@ module(basename(__filename), function () {
                   `update 201 body=${JSON.stringify(response.body)}`,
                   `disk after add=${formatDiskSnapshot(postAddDisk)}`,
                   `disk after update=${formatDiskSnapshot(postUpdateDisk)}`,
+                  `index after update=${JSON.stringify(postUpdateIndex)}`,
                 ].join(' | '),
             },
           );
