@@ -1,5 +1,5 @@
 import '../helpers/setup-realm-server';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -44,6 +44,43 @@ describe('realm cancel-indexing (integration)', () => {
     });
     expect(result.ok).toBe(false);
     expect(result.error).toBeDefined();
+  });
+
+  it('POSTs `{ cancelPending: true }` to the cancel-indexing endpoint', async () => {
+    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
+    try {
+      await cancelIndexing(realmUrl, { profileManager });
+
+      expect(fetchSpy).toHaveBeenCalledOnce();
+      let [url, init] = fetchSpy.mock.calls[0];
+      expect(String(url)).toBe(`${realmUrl}_cancel-indexing-job`);
+      expect(init!.method).toBe('POST');
+      let headers = init!.headers as Record<string, string>;
+      expect(headers['Content-Type']).toBe('application/json');
+      expect(headers['Accept']).toBe('application/json');
+      expect(JSON.parse(init!.body as string)).toEqual({ cancelPending: true });
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('returns an error with HTTP status when the realm responds non-2xx', async () => {
+    let fetchSpy = vi
+      .spyOn(profileManager, 'authedRealmFetch')
+      .mockResolvedValueOnce(
+        new Response('forbidden', {
+          status: 403,
+          statusText: 'Forbidden',
+        }),
+      );
+    try {
+      let result = await cancelIndexing(realmUrl, { profileManager });
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('HTTP 403');
+      expect(result.error).toContain('forbidden');
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 
   it('returns error result when no active profile', async () => {
