@@ -50,12 +50,12 @@ describe('realm wait-for-ready (integration)', () => {
     expect(result.error).toContain('not ready after');
   });
 
-  it('throws when no active profile', async () => {
+  it('returns an error when no active profile', async () => {
     let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
     let emptyManager = new ProfileManager(emptyDir);
-    await expect(
-      waitForReady(realmUrl, { profileManager: emptyManager }),
-    ).rejects.toThrow('No active profile');
+    let result = await waitForReady(realmUrl, { profileManager: emptyManager });
+    expect(result.ready).toBe(false);
+    expect(result.error).toContain('No active profile');
     fs.rmSync(emptyDir, { recursive: true, force: true });
   });
 });

@@ -1,30 +1,33 @@
 import type { Command } from 'commander';
 import {
   getProfileManager,
+  NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from '../../lib/profile-manager';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { FG_GREEN, FG_RED, RESET } from '../../lib/colors';
-
-export interface WaitForReadyCommandOptions {
-  timeoutMs?: number;
-  profileManager?: ProfileManager;
-}
 
 export interface WaitForReadyResult {
   ready: boolean;
   error?: string;
 }
 
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
+export interface WaitForReadyCommandOptions {
+  timeoutMs?: number;
+  profileManager?: ProfileManager;
+}
+
+interface WaitForReadyCliOptions {
+  realm: string;
+  timeout?: string;
 }
 
 /**
- * Poll `_readiness-check` until the realm is ready or the timeout is reached.
+ * Poll a realm's `_readiness-check` endpoint until it responds OK or the
+ * timeout is reached.
  *
- * Suitable for both CLI and programmatic use — no console output or
- * process.exit. The CLI wrapper (`registerWaitForReadyCommand`) handles
- * formatting and exit codes.
+ * Uses the per-realm JWT via `ProfileManager.authedRealmFetch`.
  */
 export async function waitForReady(
   realmUrl: string,
@@ -34,9 +37,10 @@ export async function waitForReady(
   let pm = options.profileManager ?? getProfileManager();
   let active = pm.getActiveProfile();
   if (!active) {
-    throw new Error(
-      'No active profile. Run `boxel profile add` to create one.',
-    );
+    return {
+      ready: false,
+      error: NO_ACTIVE_PROFILE_ERROR,
+    };
   }
 
   let readinessUrl = `${ensureTrailingSlash(realmUrl)}_readiness-check`;
@@ -46,7 +50,7 @@ export async function waitForReady(
     try {
       let response = await pm.authedRealmFetch(readinessUrl, {
         method: 'GET',
-        headers: { Accept: 'application/json' },
+        headers: { Accept: SupportedMimeType.RealmInfo },
       });
       if (response.ok) {
         return { ready: true };
@@ -61,11 +65,6 @@ export async function waitForReady(
     ready: false,
     error: `Realm not ready after ${timeoutMs}ms: ${readinessUrl}`,
   };
-}
-
-interface WaitForReadyCliOptions {
-  realm: string;
-  timeout?: string;
 }
 
 export function registerWaitForReadyCommand(realm: Command): void {
@@ -92,7 +91,9 @@ export function registerWaitForReadyCommand(realm: Command): void {
       if (result.ready) {
         console.log(`${FG_GREEN}Realm is ready.${RESET}`);
       } else {
-        console.error(`${FG_RED}${result.error ?? 'Realm not ready'}${RESET}`);
+        console.error(
+          `${FG_RED}Error:${RESET} ${result.error ?? 'Realm not ready'}`,
+        );
         process.exit(1);
       }
     });
