@@ -10,6 +10,7 @@ import { resolvePrerenderManagerURL } from './config';
 import type { BrowserManager } from './browser-manager';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel';
 import { AsyncSemaphore } from './async-semaphore';
+import { attachRuntimeExceptionCapture } from './runtime-exception-capture';
 
 type RenderSemaphore = {
   acquire(signal?: AbortSignal): Promise<() => void>;
@@ -128,7 +129,7 @@ type StandbyEntry = {
   transitioning?: boolean;
 };
 type Entry = PoolEntry | StandbyEntry;
-type ConsoleErrorLocation = {
+export type ConsoleErrorLocation = {
   url?: string;
   lineNumber?: number;
   columnNumber?: number;
@@ -144,6 +145,13 @@ export type ConsoleErrorEntry = {
   // stack frames here are the only pointer back at the offending
   // template/getter/helper.
   stackFrames?: ConsoleErrorLocation[];
+  // Discriminates 'console' (page.on('console')) vs 'exception'
+  // (Runtime.exceptionThrown over CDP). The two share storage and
+  // serialisation so they flow through the same `additionalErrors`
+  // pipeline in render-runner, but the title and stack-header are
+  // distinct so an operator can tell which layer surfaced the error.
+  // Default 'console' so existing call sites stay backward-compat.
+  source?: 'console' | 'exception';
 };
 
 const log = logger('prerenderer');
@@ -201,6 +209,13 @@ export class PagePool {
   #ensuringStandbys: Promise<void> | null = null;
   #creatingStandbys = 0;
   #consoleErrorsByPageId = new Map<string, Map<string, ConsoleErrorEntry>>();
+  // Per-pageId map of CDP exceptionId -> bucket key, owned alongside
+  // the bucket so it's cleared in lockstep on resetConsoleErrors /
+  // takeConsoleErrors / page disposal. Lets the runtime-exception
+  // capture module find the right entry to remove when V8 reports
+  // a previously-thrown exception was revoked (e.g. RSVP /
+  // Backburner attached a late `.catch`).
+  #exceptionKeysByPageId = new Map<string, Map<number, string>>();
   // Fired from `disposeAffinity` after an affinity's tabs are torn down.
   // Consumed by the Prerenderer to clear `clearCache` batch ownership
   // for the affinity (CS-10758 step 3) — stale ownership across a page
@@ -437,11 +452,13 @@ export class PagePool {
 
   resetConsoleErrors(pageId: string): void {
     this.#consoleErrorsByPageId.set(pageId, new Map());
+    this.#exceptionKeysByPageId.delete(pageId);
   }
 
   takeConsoleErrors(pageId: string): ConsoleErrorEntry[] {
     let bucket = this.#consoleErrorsByPageId.get(pageId);
     this.#consoleErrorsByPageId.delete(pageId);
+    this.#exceptionKeysByPageId.delete(pageId);
     return bucket ? [...bucket.values()] : [];
   }
 
@@ -823,7 +840,7 @@ export class PagePool {
         );
       }
       let pageId = uuidv4();
-      this.#attachPageConsole(page, 'standby', pageId);
+      this.#attachPageObservability(page, 'standby', pageId);
       await this.#loadStandbyPage(page, pageId);
       let entry: StandbyEntry = {
         type: 'standby',
@@ -1107,7 +1124,7 @@ export class PagePool {
     try {
       page = await shared.context.newPage();
       let pageId = uuidv4();
-      this.#attachPageConsole(page, affinityKey, pageId);
+      this.#attachPageObservability(page, affinityKey, pageId);
       await this.#loadStandbyPage(page, pageId);
       let entry: PoolEntry = {
         type: 'pool',
@@ -1180,6 +1197,10 @@ export class PagePool {
       lastUsedAt: Date.now(),
       queue: standby.queue,
     };
+    // Adoption path: the page is keeping its standby pageId, so the
+    // CDP runtime-exception session attached at standby creation is
+    // still valid and stays connected. Only the console listener
+    // needs re-binding so its log lines carry the new affinityKey.
     entry.page.removeAllListeners('console');
     this.#attachPageConsole(entry.page, affinityKey, entry.pageId);
     this.#addAffinityEntry(affinityKey, entry);
@@ -1238,6 +1259,10 @@ export class PagePool {
       this.#transferSharedContextBookkeeping(oldAffinityKey);
     }
     entry.affinityKey = affinityKey;
+    // Re-tagging path: pageId is unchanged, so the CDP runtime-
+    // exception session stays attached to the same page. Only the
+    // console listener needs re-binding to pick up the new
+    // affinityKey for its log lines.
     entry.page.removeAllListeners('console');
     this.#attachPageConsole(entry.page, affinityKey, entry.pageId);
     this.#addAffinityEntry(affinityKey, entry);
@@ -1365,6 +1390,7 @@ export class PagePool {
     }
     if (!retainConsoleErrors) {
       this.#consoleErrorsByPageId.delete(entry.pageId);
+      this.#exceptionKeysByPageId.delete(entry.pageId);
     }
   }
 
@@ -1427,6 +1453,68 @@ export class PagePool {
     } catch (e) {
       log.warn(`Error closing shared context for ${affinityKey}:`, e);
     }
+  }
+
+  // Attach all per-page error/exception observability surfaces. The
+  // console-message listener catches things that surfaced via the JS
+  // event layer (page logs, Chrome's late "Uncaught (in promise)..."
+  // tracker output); the runtime-exception capture catches things at
+  // V8's first-layer throw notification, even when the WebAPI dispatch
+  // would later get retracted by an upstream `.catch` (the whitepaper-
+  // class bug). Both feed the same per-page bucket so render-runner
+  // sees a unified additionalErrors stream.
+  #attachPageObservability(
+    page: Page,
+    affinityKey: string,
+    pageId: string,
+  ): void {
+    this.#attachPageConsole(page, affinityKey, pageId);
+    void attachRuntimeExceptionCapture({
+      page,
+      affinityKey,
+      pageId,
+      recorder: {
+        recordThrown: (exceptionId, entry) =>
+          this.#recordThrownException(pageId, exceptionId, entry),
+        recordRevoked: (exceptionId) =>
+          this.#recordRevokedException(pageId, exceptionId),
+      },
+    });
+  }
+
+  // Returns false if the entry could not be recorded (storage at
+  // limit or duplicate exceptionId), so the capture module knows
+  // not to expect a matching `recordRevoked` to do anything.
+  #recordThrownException(
+    pageId: string,
+    exceptionId: number,
+    entry: ConsoleErrorEntry,
+  ): boolean {
+    let bucket = this.#consoleErrorsByPageId.get(pageId);
+    if (!bucket) {
+      bucket = new Map();
+      this.#consoleErrorsByPageId.set(pageId, bucket);
+    }
+    if (bucket.size >= CONSOLE_ERROR_LIMIT) return false;
+    let key = `exception:${exceptionId}`;
+    if (bucket.has(key)) return false;
+    bucket.set(key, entry);
+    let exceptionKeys = this.#exceptionKeysByPageId.get(pageId);
+    if (!exceptionKeys) {
+      exceptionKeys = new Map();
+      this.#exceptionKeysByPageId.set(pageId, exceptionKeys);
+    }
+    exceptionKeys.set(exceptionId, key);
+    return true;
+  }
+
+  #recordRevokedException(pageId: string, exceptionId: number): void {
+    let exceptionKeys = this.#exceptionKeysByPageId.get(pageId);
+    let key = exceptionKeys?.get(exceptionId);
+    if (!key) return;
+    let bucket = this.#consoleErrorsByPageId.get(pageId);
+    bucket?.delete(key);
+    exceptionKeys!.delete(exceptionId);
   }
 
   #attachPageConsole(page: Page, affinityKey: string, pageId: string): void {
