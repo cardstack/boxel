@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { getTestPrerenderer } from '#realm-server/tests/helpers/index';
+import { baseCardRef } from '@cardstack/runtime-common';
 import { search } from '../../src/commands/search';
 import { ProfileManager } from '../../src/lib/profile-manager';
 import {
@@ -26,10 +27,24 @@ beforeAll(async () => {
       {
         realmURL: testRealmURL,
         fileSystem: {
-          'SearchTarget/1.json': JSON.stringify({
+          // Card the filter test should match.
+          'shared-card.json': JSON.stringify({
             data: {
               type: 'card',
-              attributes: { cardInfo: { name: 'Searchable Card' } },
+              attributes: { cardInfo: { name: 'Shared Card' } },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          }),
+          // Card that should be excluded by the filter.
+          'other-card.json': JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { cardInfo: { name: 'Other Card' } },
               meta: {
                 adoptsFrom: {
                   module: 'https://cardstack.com/base/card-api',
@@ -64,14 +79,7 @@ afterAll(async () => {
 });
 
 describe('federated search (integration)', () => {
-  it('returns results from the realm', async () => {
-    let result = await search(realmHref, {}, { profileManager });
-    expect(result.ok, `search failed: ${result.error}`).toBe(true);
-    expect(result.data).toBeDefined();
-    expect(Array.isArray(result.data)).toBe(true);
-  });
-
-  it('finds the seeded SearchTarget card by title', async () => {
+  it('returns all results when no filter is supplied', async () => {
     let result = await search(realmHref, {}, { profileManager });
     expect(result.ok, `search failed: ${result.error}`).toBe(true);
     let titles = (result.data ?? []).map(
@@ -79,13 +87,51 @@ describe('federated search (integration)', () => {
         (entry as { attributes?: { cardTitle?: string } }).attributes
           ?.cardTitle,
     );
-    expect(titles).toContain('Searchable Card');
+    expect(titles).toEqual(
+      expect.arrayContaining(['Shared Card', 'Other Card']),
+    );
+  });
+
+  it('filters by cardTitle and returns only the matching card', async () => {
+    let result = await search(
+      realmHref,
+      {
+        filter: {
+          on: baseCardRef,
+          eq: { cardTitle: 'Shared Card' },
+        },
+      },
+      { profileManager },
+    );
+    expect(result.ok, `search failed: ${result.error}`).toBe(true);
+    let entries = result.data ?? [];
+    expect(entries.length).toBe(1);
+    let entry = entries[0] as {
+      id?: string;
+      attributes?: { cardTitle?: string };
+    };
+    expect(entry.attributes?.cardTitle).toBe('Shared Card');
+    expect(entry.id).toBe(`${realmHref}shared-card`);
+  });
+
+  it('returns no results when the filter matches nothing', async () => {
+    let result = await search(
+      realmHref,
+      {
+        filter: {
+          on: baseCardRef,
+          eq: { cardTitle: 'Nonexistent Card' },
+        },
+      },
+      { profileManager },
+    );
+    expect(result.ok, `search failed: ${result.error}`).toBe(true);
+    expect(result.data ?? []).toEqual([]);
   });
 
   it('accepts an array of realm URLs', async () => {
     let result = await search([realmHref], {}, { profileManager });
     expect(result.ok, `search failed: ${result.error}`).toBe(true);
-    expect(result.data).toBeDefined();
     expect(Array.isArray(result.data)).toBe(true);
   });
 
