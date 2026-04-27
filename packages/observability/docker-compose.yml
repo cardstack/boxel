@@ -1,17 +1,15 @@
-# Local Grafana for previewing dashboard changes before they hit staging.
+# Local Grafana + Loki for previewing dashboards and querying logs locally.
 #
-# Run from this directory:   docker compose up -d grafana
-# Login:                     http://localhost:3001  (admin / admin)
+# Run from this directory:   docker compose up -d
+# Login to Grafana:          http://localhost:3001  (admin / admin)
+# Loki API:                  http://localhost:3100  (curl-able from host)
 # Stop:                      docker compose down
 #
-# Port 3001 avoids conflicts with traefik (80, 4230), the realm-server dev
-# stack (4201/4210/4212/4213/4221/4222/4230/4231/4232), and the host's
-# common port 3000. Image pin matches the production pin in
-# cardstack/infra:configs/grafana/.
+# Port choices avoid traefik (80, 4230), the realm-server dev stack
+# (4201/4210/4212/4213/4221/4222/4231/4232), and the host's common 3000.
 #
-# Provisioning is mounted read-only from ./grafanactl/resources/. Those
-# directories are empty until Phase 3 (CS-10922) imports the AMG dashboards.
-# AMP and CloudWatch panels will show "no data" locally — no AWS creds.
+# Image pins for Grafana match the production pin in
+# cardstack/infra:configs/grafana/. Loki + Alloy versions are pinned independently.
 
 services:
   grafana:
@@ -19,36 +17,55 @@ services:
     ports:
       - "3001:3000"
     volumes:
-      - ./grafanactl/resources/datasources:/etc/grafana/provisioning/datasources:ro
-      - ./grafanactl/resources/dashboards:/etc/grafana/provisioning/dashboards:ro
+      # File-based provisioning (read at startup, supports ${ENV_VAR}).
+      # Data sources go here because grafanactl does not manage data sources.
+      - ./provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./provisioning/alerting:/etc/grafana/provisioning/alerting:ro
+      # Dashboards arrive via grafanactl resources push (Phase 3 / CS-10922).
+      # Local file-based dashboard provisioning is also possible — uncomment
+      # the next line if a dev wants dashboards baked into the container.
+      # - ./grafanactl/resources/dashboards:/etc/grafana/provisioning/dashboards:ro
       - grafana_data:/var/lib/grafana
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_AUTH_ANONYMOUS_ENABLED: "false"
+      # Substituted into provisioning/datasources/loki.yaml at startup.
+      LOKI_URL: http://loki:3100
     extra_hosts:
       # Lets the Grafana container reach the host's Postgres
       # (boxel-pg on 5435) for the local postgres data source.
       - "host.docker.internal:host-gateway"
+    depends_on:
+      - loki
     restart: unless-stopped
 
-  # ─── Phase 2.5 placeholder (CS-10918+) ──────────────────────────────────
-  # Loki + Alloy will run alongside Grafana to provide a local LogQL data
-  # source so dashboard log panels behave the same locally and in prod.
-  # Uncomment once CS-10918 lands the loki.yaml data-source manifest and
-  # the realm-server / worker stdout has an Alloy scraping config.
-  #
-  # loki:
-  #   image: grafana/loki:3.x
-  #   ports:
-  #     - "3100:3100"
-  #   volumes:
-  #     - loki_data:/loki
+  loki:
+    image: grafana/loki:3.4.4
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+    restart: unless-stopped
+
+  # Optional: log scraper (Alloy). Commented out by default — local dev
+  # works without it (Loki is reachable, the data source resolves, queries
+  # return empty until logs are shipped). Uncomment + start once you have
+  # an alloy/config.alloy that scrapes whatever you need locally.
   #
   # alloy:
-  #   image: grafana/alloy:latest
+  #   image: grafana/alloy:v1.10.0
+  #   command:
+  #     - run
+  #     - /etc/alloy/config.alloy
+  #     - --server.http.listen-addr=0.0.0.0:12345
   #   volumes:
   #     - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #   depends_on:
+  #     - loki
+  #   restart: unless-stopped
 
 volumes:
   grafana_data:
-  # loki_data:    # uncomment with the loki service in Phase 2.5
+  loki_data:
