@@ -1306,7 +1306,6 @@ module(basename(__filename), function () {
         // Diagnostic: when the test fails in CI, surface the full
         // additionalErrors payload so we can see whether the bucket
         // received the V8 events and what shape they took.
-        // eslint-disable-next-line no-console
         console.error(
           '[diagnostic] timeout error doc additionalErrors:',
           JSON.stringify(additionalErrors, null, 2),
