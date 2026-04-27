@@ -163,20 +163,33 @@ export class RealmRegistryReconciler {
     // accepts traffic on the home page / catalog path, so they mount on
     // the reconciler's first pass and on every subsequent pass that
     // detects a new pinned row.
+    //
+    // Mounts run via Promise.all rather than a serial for-await loop.
+    // mountFromRow is responsible for synchronously publishing the realm
+    // into realms[] + virtualNetwork BEFORE awaiting realm.start(); kicking
+    // every ensureMounted off in parallel guarantees that all pinned realms
+    // are reachable in virtualNetwork before any of their start()s
+    // resolve. The OLD serial loop left intermediate realms unreachable
+    // (404) for the duration of an earlier realm's slow fullIndex —
+    // bootstrap fullIndex on a fresh DB is on the order of minutes, so
+    // any realm later in the loop was effectively offline that whole time.
+    let mountWaits: Promise<unknown>[] = [];
     for (const [url, row] of nextKnown) {
       if (!row.pinned) {
         continue;
       }
-      if (!this.mounted.has(url)) {
-        try {
-          await this.ensureMounted(row);
-        } catch (err: unknown) {
+      if (this.mounted.has(url)) {
+        continue;
+      }
+      mountWaits.push(
+        this.ensureMounted(row).catch((err: unknown) => {
           log.warn(
             `failed to mount pinned ${url} during reconcile: ${String(err)}; leaving for next pass`,
           );
-        }
-      }
+        }),
+      );
     }
+    await Promise.all(mountWaits);
 
     // Unmount removals. Only touch realms the reconciler mounted itself
     // (#reconcilerOwned); legacy-registered mounts are preserved. In a

@@ -1,7 +1,6 @@
 import { module, test } from 'qunit';
 import { basename, join } from 'path';
 import { existsSync, readJSONSync } from 'fs-extra';
-import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -320,7 +319,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           realmURL = response.body.data.id;
         }
 
-        let id: string;
         let realm = context.testRealmServer.testingOnlyRealms.find(
           (r) => r.url === realmURL,
         )!;
@@ -350,7 +348,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             );
 
           assert.strictEqual(response.status, 201, 'HTTP 201 status');
-          id = response.body.data.id;
         }
 
         let jobsBeforeRestart =
@@ -383,30 +380,28 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             'no new indexing jobs were created on boot for the created realm',
           );
 
-          let restartedRealm =
-            restartedServer.testRealmServer.testingOnlyRealms.find(
-              (r) => r.url === realmURL,
-            );
-          assert.ok(restartedRealm, 'realm is mounted after restart');
-          let restartedRequest = supertest(restartedServer.testRealmHttpServer);
-          let response = await restartedRequest
-            .get(new URL(id).pathname)
-            .set('Accept', 'application/vnd.card+json')
-            .set(
-              'Authorization',
-              `Bearer ${createJWT(restartedRealm!, ownerUserId, [
-                'read',
-                'write',
-                'realm-owner',
-              ])}`,
-            );
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let doc = response.body as SingleCardDocument;
+          // Phase 3 PR 1: source/published realms are NOT eager-mounted on
+          // restart. The reconciler tracks them in knownByUrl but defers
+          // construction + start() to the first request (lazy mount via
+          // findOrMountRealm). The production realm-server proves end-to-end
+          // lazy mount in lazy-mount-test.ts. Here we only assert that the
+          // realm survives restart in the registry — the test fixture's
+          // makeTestReconciler doesn't construct Realms from registry rows
+          // (no production-grade mountFromRow), so we can't drive the
+          // request path here.
+          let registryRows = (await context.dbAdapter.execute(
+            `SELECT url FROM realm_registry WHERE url = $1`,
+            { bind: [realmURL] },
+          )) as { url: string }[];
           assert.strictEqual(
-            doc.data.attributes?.cardTitle,
-            'Test Card',
-            'instance data is correct',
+            registryRows.length,
+            1,
+            'realm registry row persists across restart',
+          );
+          assert.strictEqual(
+            registryRows[0].url,
+            realmURL,
+            'persisted row matches the dynamically-created URL',
           );
         } finally {
           restartedServer.testRealmServer.testingOnlyUnmountRealms();

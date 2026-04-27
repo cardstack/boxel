@@ -47,6 +47,7 @@ import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { RealmServer } from '../../server';
+import { sign as jwtSign } from 'jsonwebtoken';
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
@@ -2143,6 +2144,36 @@ export function createJWT(
       realmServerURL: realm.realmServerURL,
     },
     '7d',
+  );
+}
+
+// Variant that builds a realm JWT from URL + seed instead of a Realm
+// instance. Useful when the realm hasn't been mounted yet (Phase 3 lazy
+// mount): the request that carries this JWT is the trigger that mounts
+// the realm. Auth verification on the server side uses the same shared
+// realmSecretSeed regardless of which Realm instance handles the
+// request, so the token is accepted as long as the URL claim matches.
+export function createJWTForRealmURL({
+  realmURL,
+  realmServerURL,
+  user,
+  permissions = [],
+}: {
+  realmURL: string;
+  realmServerURL: string;
+  user: string;
+  permissions?: RealmPermissions['user'];
+}) {
+  return jwtSign(
+    {
+      user,
+      realm: realmURL,
+      permissions,
+      sessionRoom: `test-session-room-for-${user}`,
+      realmServerURL,
+    },
+    realmSecretSeed,
+    { expiresIn: '7d' },
   );
 }
 
