@@ -854,7 +854,7 @@ The test for whether a tool retires is: _would replacing it with a skill that sa
 
 ### Target-Realm I/O Migrates to Local Filesystem
 
-**Status:** ✅ landed in CS-10882 (PR #4492). The notes below describe the design as planned; the implementation matched the plan with a few divergences captured in [_Implementation notes_](#implementation-notes-cs-10882) at the end of this section.
+**Status:** 🟡 in review — CS-10882 (PR #4492). The notes below describe the design as planned; the implementation in the open PR matched the plan with a few divergences captured in [_Implementation notes_](#implementation-notes-cs-10882) at the end of this section. This section will flip to "✅ landed" once the PR merges.
 
 CS-10642 landed the auth-lifecycle migration: the factory no longer manages JWTs and calls the realm through `BoxelCLIClient` instead of raw fetch. It did **not** change _where_ target-realm reads and writes go — they still round-trip over HTTP via `client.read` / `client.write` / `client.delete`. That is the next step.
 
