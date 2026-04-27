@@ -87,11 +87,21 @@ const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
 //   • 'Uncaught exception' → Runtime.exceptionThrown (V8 layer; the
 //     primary signal for the whitepaper-class bug where unhandled-
 //     rejection / window.error never fire)
+//   • 'Uncaught exception (revoked by late .catch)' → V8 fired
+//     `Runtime.exceptionRevoked` for this id, meaning RSVP / Backburner
+//     attached a `.catch` after V8 had already reported the rejection
+//     as uncaught. The render is still wedged (the late catch doesn't
+//     un-poison Glimmer's render tree) — surfacing the entry preserves
+//     the actionable stack while making the lifecycle visible.
 //   • 'Console assert'     → console.assert(...) failure
 //   • 'Console error'      → console.error(...) or Chrome's late
 //     "Uncaught (in promise) ..." console tracker line
 function titleForConsoleErrorEntry(entry: ConsoleErrorEntry): string {
-  if (entry.source === 'exception') return 'Uncaught exception';
+  if (entry.source === 'exception') {
+    return entry.revoked
+      ? 'Uncaught exception (revoked by late .catch)'
+      : 'Uncaught exception';
+  }
   return entry.type === 'assert' ? 'Console assert' : 'Console error';
 }
 
@@ -99,7 +109,9 @@ function titleForConsoleErrorEntry(entry: ConsoleErrorEntry): string {
 // title above, formatted as `<HeaderName>: <message>` so the existing
 // error viewer renders these identically to native Node stacks.
 function stackHeaderForConsoleErrorEntry(entry: ConsoleErrorEntry): string {
-  if (entry.source === 'exception') return 'UncaughtException';
+  if (entry.source === 'exception') {
+    return entry.revoked ? 'UncaughtExceptionRevoked' : 'UncaughtException';
+  }
   return entry.type === 'assert' ? 'AssertionError' : 'ConsoleError';
 }
 
