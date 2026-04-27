@@ -62,7 +62,6 @@ import {
 import {
   buildCombinedTemplateDatabase,
   buildTemplateDatabase,
-  clearModuleCache,
   clearRealmPermissions,
   cloneDatabaseFromTemplate,
   databaseExists,
@@ -475,7 +474,6 @@ export async function startFactoryRealmServer(
         );
       }
       await resetQueueState(databaseName);
-      await clearModuleCache(databaseName);
       await rebuildWorkingIndexFromIndex(databaseName);
       await seedRealmPermissions(
         databaseName,
