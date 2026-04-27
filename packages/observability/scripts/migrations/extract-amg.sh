@@ -68,7 +68,31 @@ ALERTS_DIR="provisioning/alerting"
 mkdir -p "$DASHBOARDS_DIR" "$FOLDERS_DIR" "$DATASOURCES_DIR" "$ALERTS_DIR"
 
 api() {
-  curl -sf -H "Authorization: Bearer $api_key" "$base_url$1"
+  local path="$1"
+  local response http body
+  # Capture body and trailing HTTP code in one call so we can show AMG's
+  # actual error payload (e.g., {"message":"Expired API key",...}) instead
+  # of dying silently from `set -e` on a curl -f non-2xx.
+  response="$(curl -sS \
+    -H "Authorization: Bearer $api_key" \
+    -w '__HTTP_CODE__%{http_code}' \
+    "$base_url$path")"
+  http="${response##*__HTTP_CODE__}"
+  body="${response%__HTTP_CODE__*}"
+  if [[ "$http" -lt 200 || "$http" -ge 300 ]]; then
+    echo "" >&2
+    echo "error: GET $path returned HTTP $http" >&2
+    echo "  response body:" >&2
+    printf '%s\n' "$body" | head -c 800 | sed 's/^/    /' >&2
+    echo "" >&2
+    if [[ "$http" == "401" ]]; then
+      echo "  hint: AMG API keys expire after 30 days. Rotate via:" >&2
+      echo "    cardstack/infra: /terraform-plan workspace=boxel-grafana-api-key/${env_name}" >&2
+      echo "    then apply, then re-run this script." >&2
+    fi
+    return 22
+  fi
+  printf '%s' "$body"
 }
 
 slugify() {
