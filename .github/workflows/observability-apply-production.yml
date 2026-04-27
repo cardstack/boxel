@@ -1,0 +1,147 @@
+name: Observability — apply to production
+
+# Manual-dispatch workflow that runs `grafanactl resources push --context
+# production` against the production self-host Grafana. Mirrors the staging
+# workflow (observability-apply-staging.yml) but with deliberately different
+# guardrails for prod:
+#
+# - Only fires on workflow_dispatch (no automatic push trigger). Production
+#   dashboard changes are an intentional act, not a side-effect of merging.
+# - Job runs inside a GitHub `environment` (`observability-production`) that
+#   should be configured in repo Settings → Environments with required
+#   reviewers, so the apply waits on human approval before touching prod.
+# - Refuses to run if dispatched from any branch other than `main` (use
+#   `--ref main` from the dispatch UI). A misclick on the wrong branch can't
+#   silently apply unmerged changes to prod.
+# - Pre-flight assertion that the rendered config file's production server URL
+#   matches the expected hostname — guards against a config-as-code mistake
+#   that would silently apply a non-prod manifest set to prod.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  # Never run two applies in parallel against production. cancel-in-progress
+  # is false: if a second dispatch happens while one is mid-flight, queue it
+  # rather than killing the in-flight push and leaving Grafana half-updated.
+  group: observability-apply-production
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Apply to production
+    runs-on: ubuntu-latest
+
+    # Required-reviewers gate. Configure the `observability-production`
+    # environment in repo Settings → Environments with the desired approver
+    # list (CS-10936 ticket says keep small — 2–3 people). The apply step
+    # blocks until an approver clicks "Review deployments → Approve" in the
+    # GitHub Actions run UI.
+    environment:
+      name: observability-production
+      url: https://grafana.boxel.ai
+
+    env:
+      AWS_REGION: us-east-1
+      # Dedicated, narrowly-scoped role created in cardstack/infra#666
+      # (configs/boxel-observability-apply/production). Has exactly one
+      # permission: ssm:GetParameter on /production/grafana/grafanactl_token.
+      AWS_ROLE_ARN: arn:aws:iam::120317779495:role/boxel-observability-apply
+      # Server URL is NOT set here — single source of truth is
+      # packages/observability/grafanactl/config.yaml (see staging workflow
+      # for the rationale). The pre-flight check below asserts the expected
+      # hostname for paranoia.
+      EXPECTED_GRAFANA_HOSTNAME: grafana.boxel.ai
+      GRAFANACTL_VERSION: "0.7.0"
+
+    steps:
+      - name: Refuse to apply from non-main branches
+        # workflow_dispatch lets the operator pick a ref. Production should
+        # only ever apply from main. A typo'd ref would otherwise silently
+        # push whatever's on the chosen branch to prod.
+        run: |
+          set -eo pipefail
+          REF="${{ github.ref }}"
+          if [[ "$REF" != "refs/heads/main" ]]; then
+            echo "::error::This workflow may only be dispatched against refs/heads/main." >&2
+            echo "Got ref: $REF" >&2
+            exit 1
+          fi
+          echo "Confirmed dispatch from main."
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Pre-flight — assert config.yaml's production server URL
+        # Defense against a config-as-code mistake (e.g., someone renaming
+        # the production context's server URL by accident or as part of an
+        # un-cutover Phase 6 dry-run). If config.yaml has anything other
+        # than the expected hostname for the production context, abort
+        # before fetching credentials.
+        working-directory: packages/observability
+        run: |
+          set -eo pipefail
+          ACTUAL=$(awk '/^  production:$/,/^  [a-z]/{print}' grafanactl/config.yaml \
+            | awk '/server:/{print $2; exit}')
+          echo "config.yaml production server: $ACTUAL"
+          echo "expected:                       https://${EXPECTED_GRAFANA_HOSTNAME}"
+          if [[ "$ACTUAL" != "https://${EXPECTED_GRAFANA_HOSTNAME}" ]]; then
+            echo "::error::config.yaml's production context server URL doesn't match expected hostname." >&2
+            echo "If this is intentional (e.g., Phase 6 cutover renaming to dashboard.boxel.ai)," >&2
+            echo "update EXPECTED_GRAFANA_HOSTNAME in this workflow to match." >&2
+            exit 1
+          fi
+
+      - name: Install grafanactl
+        # Same install + checksum-verify as the staging workflow.
+        run: |
+          set -euo pipefail
+          TARBALL="grafanactl_${GRAFANACTL_VERSION}_linux_amd64.tar.gz"
+          RELEASE_URL="https://github.com/grafana/grafanactl/releases/download/v${GRAFANACTL_VERSION}"
+          TMPDIR="$(mktemp -d)"
+          trap 'rm -rf "$TMPDIR"' EXIT
+
+          curl -fsSL "${RELEASE_URL}/${TARBALL}"    -o "${TMPDIR}/${TARBALL}"
+          curl -fsSL "${RELEASE_URL}/checksums.txt" -o "${TMPDIR}/checksums.txt"
+
+          ( cd "$TMPDIR" && grep " ${TARBALL}\$" checksums.txt | sha256sum -c - )
+
+          tar -xzf "${TMPDIR}/${TARBALL}" -C "$TMPDIR" grafanactl
+          sudo install -m 0755 "${TMPDIR}/grafanactl" /usr/local/bin/grafanactl
+          grafanactl --version
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Source GRAFANA_TOKEN from SSM
+        run: |
+          GRAFANA_TOKEN="$(aws ssm get-parameter \
+            --name /production/grafana/grafanactl_token \
+            --with-decryption \
+            --query 'Parameter.Value' \
+            --output text)"
+          echo "::add-mask::$GRAFANA_TOKEN"
+          echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Apply
+        working-directory: packages/observability
+        run: |
+          ./scripts/apply.sh --env production
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Observability apply (PRODUCTION)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Target: production (server URL from packages/observability/grafanactl/config.yaml)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Dispatched ref: \`${{ github.ref }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Triggered by: \`${{ github.actor }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- grafanactl: \`$GRAFANACTL_VERSION\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Status: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
