@@ -399,6 +399,18 @@ export async function runIssueLoop(
       if (agentSignaledDone && validationResults?.passed && !syncFailed) {
         try {
           await issueStore.updateIssue(issue.id, { status: 'done' });
+          // updateIssue writes the status flip to the local workspace.
+          // refreshIssueState below queries the realm's search index, so
+          // the flip has to reach the realm before the refresh — otherwise
+          // the loop reads stale `in_progress` and runs another inner
+          // iteration (or, with a low maxIterationsPerIssue, exits as
+          // max_iterations instead of done).
+          let doneSync = await syncWorkspace();
+          if (!doneSync.ok) {
+            log.warn(
+              `  Marked issue done locally but sync failed (${doneSync.error ?? 'unknown'}); refresh may still see prior status`,
+            );
+          }
           log.info(
             `  Issue marked done (agent called signal_done, validation passed, sync succeeded)`,
           );
