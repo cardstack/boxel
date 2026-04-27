@@ -1,7 +1,10 @@
 import { defineConfig } from '@playwright/test';
 
+// `render-desync=info` stays on so the desync detector's verdicts (warns
+// on detection, plus any debug logs we add later) make it into CI output;
+// everything else is at the same warn-baseline as before CS-10860.
 const defaultPlaywrightLogLevels =
-  '*=warn,software-factory:playwright=info,software-factory:playwright:support=info,software-factory:playwright:cache=info,prerenderer-chrome=none';
+  '*=warn,software-factory:playwright=info,software-factory:playwright:support=info,software-factory:playwright:cache=info,render-desync=info,prerenderer-chrome=none';
 process.env.LOG_LEVELS ??= defaultPlaywrightLogLevels;
 
 const realmPort = Number(process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4205);

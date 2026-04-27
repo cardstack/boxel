@@ -1422,8 +1422,10 @@ export class RenderRunner {
   // `    at <url>:<line>:<col>` frames) from whatever frames CDP
   // attached to the entry. Used for both console-error and
   // runtime-exception sources — the header line distinguishes them.
-  // For the runtime-exception source this is the actionable lead
-  // back at the offending template / getter / helper.
+  // For the desync-detector path (host-side surfacing of a render
+  // wedge with no JS-observable throw), this is the only lead back
+  // at the offending template / getter / helper, since Chrome
+  // populates the stack on its "Uncaught (in promise)" console line.
   #formatConsoleErrorStack(entry: ConsoleErrorEntry): string | undefined {
     let frames = entry.stackFrames;
     if (!Array.isArray(frames) || frames.length === 0) {
