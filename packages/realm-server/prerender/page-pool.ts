@@ -138,13 +138,14 @@ export type ConsoleErrorEntry = {
   type: ReturnType<ConsoleMessage['type']>;
   text: string;
   location?: ConsoleErrorLocation;
-  // Captured CDP stack frames from the originating site. For
-  // `source: 'exception'` entries this is V8's `stackTrace.callFrames`
-  // attached to a `Runtime.exceptionThrown` event. For
-  // `source: 'console'` entries it's whatever Puppeteer exposes via
-  // `ConsoleMessage.stackTrace()` (best-effort: not always populated
-  // by Chrome, but when present it's the only pointer back at the
-  // offending template/getter/helper).
+  // Captured CDP stack frames from the originating site. Today only
+  // the `source: 'exception'` path populates this — V8's
+  // `stackTrace.callFrames` attached to a `Runtime.exceptionThrown`
+  // event flow through verbatim. The field is intentionally on the
+  // shared shape so the console-error path can also wire up
+  // `ConsoleMessage.stackTrace()` later without changing the
+  // serialisation contract; absence here just means render-runner
+  // emits a SerializedError with no `stack` field for that entry.
   stackFrames?: ConsoleErrorLocation[];
   // Discriminates 'console' (page.on('console')) vs 'exception'
   // (Runtime.exceptionThrown over CDP). The two share storage and

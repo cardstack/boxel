@@ -56,7 +56,7 @@
 //   without throwing; this is best-effort observability and must
 //   not break the render path.
 
-import type { Page } from 'puppeteer';
+import type { CDPSession, Page } from 'puppeteer';
 import { logger } from '@cardstack/runtime-common';
 import type { ConsoleErrorEntry, ConsoleErrorLocation } from './page-pool';
 
@@ -141,7 +141,7 @@ export async function attachRuntimeExceptionCapture(
   opts: AttachRuntimeExceptionCaptureOptions,
 ): Promise<void> {
   let { page, getAffinityKey, pageId, recorder } = opts;
-  let client;
+  let client: CDPSession;
   try {
     client = await page.createCDPSession();
     // Register listeners BEFORE awaiting `Runtime.enable` so we don't
