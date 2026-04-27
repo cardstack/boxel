@@ -556,6 +556,8 @@ export function registerSyncCommand(realm: Command): void {
           preferNewest: options.preferNewest,
           delete: options.delete,
           dryRun: options.dryRun,
+          realmSecretSeed,
+        });
         let hasPartialResults =
           (Array.isArray(result.pushed) && result.pushed.length > 0) ||
           (Array.isArray(result.pulled) && result.pulled.length > 0) ||
