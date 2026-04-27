@@ -1,4 +1,4 @@
-import type { Command } from 'commander';
+import { InvalidArgumentError, type Command } from 'commander';
 import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
@@ -20,7 +20,17 @@ export interface WaitForReadyCommandOptions {
 
 interface WaitForReadyCliOptions {
   realm: string;
-  timeout?: string;
+  timeout?: number;
+}
+
+function parseTimeoutOption(value: string): number {
+  let n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n) || n < 0 || String(n) !== value.trim()) {
+    throw new InvalidArgumentError(
+      '--timeout must be a non-negative integer (milliseconds).',
+    );
+  }
+  return n;
 }
 
 /**
@@ -34,6 +44,12 @@ export async function waitForReady(
   options: WaitForReadyCommandOptions = {},
 ): Promise<WaitForReadyResult> {
   let timeoutMs = options.timeoutMs ?? 30_000;
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
+    return {
+      ready: false,
+      error: `Invalid timeoutMs: must be a finite, non-negative number (got ${options.timeoutMs}).`,
+    };
+  }
   let pm = options.profileManager ?? getProfileManager();
   let active = pm.getActiveProfile();
   if (!active) {
@@ -58,7 +74,9 @@ export async function waitForReady(
     } catch {
       // retry
     }
-    await new Promise((r) => setTimeout(r, 1000));
+    let remaining = timeoutMs - (Date.now() - startedAt);
+    if (remaining <= 0) break;
+    await new Promise((r) => setTimeout(r, Math.min(1000, remaining)));
   }
 
   return {
@@ -74,13 +92,15 @@ export function registerWaitForReadyCommand(realm: Command): void {
       'Poll a realm readiness-check endpoint until it responds OK or the timeout is reached',
     )
     .requiredOption('--realm <realm-url>', 'The realm URL to check')
-    .option('--timeout <ms>', 'Timeout in milliseconds (default: 30000)')
+    .option(
+      '--timeout <ms>',
+      'Timeout in milliseconds (default: 30000)',
+      parseTimeoutOption,
+    )
     .action(async (opts: WaitForReadyCliOptions) => {
-      let timeoutMs = opts.timeout ? parseInt(opts.timeout, 10) : undefined;
-
       let result: WaitForReadyResult;
       try {
-        result = await waitForReady(opts.realm, { timeoutMs });
+        result = await waitForReady(opts.realm, { timeoutMs: opts.timeout });
       } catch (err) {
         console.error(
           `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
