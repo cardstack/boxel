@@ -24,6 +24,18 @@
 #   ./scripts/apply.sh        # local — pushes the extracted dashboards/folders
 #                             # via grafanactl; data sources + alerts get
 #                             # picked up by Grafana provisioning at boot.
+#
+# Idempotency: this script clears the extracted-output dirs at start, so each
+# run produces a clean snapshot of AMG state (no stale files left behind from
+# a previous run that pulled different content).
+#
+# Secret handling: the realm-server `authHeader` shared secret used by AMG-era
+# operator-action dashboard buttons is REDACTED out of dashboard JSON before
+# it reaches disk. The dashboard's `templating.list[].query` for any constant
+# variable named `grafana_secret` is rewritten to "REPLACE_AT_APPLY_TIME". The
+# real value must be substituted before pushing to staging/prod (mechanism is
+# Phase 3.5 work — replacing GET-with-secret-in-querystring with POST-with-
+# Authorization-header eliminates the pattern entirely).
 
 set -eo pipefail
 
@@ -67,26 +79,42 @@ ALERTS_DIR="provisioning/alerting"
 
 mkdir -p "$DASHBOARDS_DIR" "$FOLDERS_DIR" "$DATASOURCES_DIR" "$ALERTS_DIR"
 
-# Sweep up scaffolding placeholders. The .gitkeep files were CS-10914
-# placeholders for empty dirs; once we write real content here grafanactl
-# (which scans the resources tree at push time) warns about them as
-# "unrecognized format gitkeep". The grafanactl/resources/alerts/ dir
-# itself is obsolete since CS-10918 — alerts now live in provisioning/alerting/.
+# Idempotency sweep: clear prior extracted output and any stale scaffolding
+# placeholders so each run produces a clean snapshot. Preserves the dirs.
+rm -f \
+  "$DASHBOARDS_DIR"/*.json \
+  "$DASHBOARDS_DIR"/*.NOTE.md \
+  "$FOLDERS_DIR"/*.json \
+  "$DATASOURCES_DIR"/*.json \
+  "$ALERTS_DIR"/*.json \
+  2>/dev/null || true
 find grafanactl/resources provisioning -name '.gitkeep' -type f -delete 2>/dev/null || true
+# CS-10918 moved alerts to provisioning/alerting/; the old grafanactl/resources/alerts/
+# dir is dead.
 rm -rf grafanactl/resources/alerts 2>/dev/null || true
 
-api() {
+# Internal: GET $path, return body on 2xx, exit non-zero on other codes —
+# except codes listed in $allow_empty_codes (space-separated), which return
+# 0 with empty body. Includes timeouts and retries so a flaky network or
+# stalled connection doesn't hang or fail silently.
+_api() {
   local path="$1"
+  local allow_empty_codes="${2:-}"
   local response http body
-  # Capture body and trailing HTTP code in one call so we can show AMG's
-  # actual error payload (e.g., {"message":"Expired API key",...}) instead
-  # of dying silently from `set -e` on a curl -f non-2xx.
   response="$(curl -sS \
+    --connect-timeout 10 \
+    --max-time 60 \
+    --retry 3 \
+    --retry-all-errors \
+    --retry-connrefused \
     -H "Authorization: Bearer $api_key" \
     -w '__HTTP_CODE__%{http_code}' \
     "$base_url$path")"
   http="${response##*__HTTP_CODE__}"
   body="${response%__HTTP_CODE__*}"
+  case " $allow_empty_codes " in
+    *" $http "*) return 0 ;;
+  esac
   if [[ "$http" -lt 200 || "$http" -ge 300 ]]; then
     echo "" >&2
     echo "error: GET $path returned HTTP $http" >&2
@@ -103,6 +131,9 @@ api() {
   printf '%s' "$body"
 }
 
+api()           { _api "$1" "" ; }
+api_or_empty()  { _api "$1" "404" ; }   # returns empty body on 404 (e.g., when alerting endpoint isn't enabled)
+
 slugify() {
   printf '%s' "$1" \
     | tr '[:upper:] _' '[:lower:]--' \
@@ -110,13 +141,26 @@ slugify() {
     | sed -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
 }
 
+# fail_on_collision <out_path> <kind> <existing_uid> <current_uid> <title>
+fail_on_collision() {
+  local out="$1" kind="$2" existing_uid="$3" current_uid="$4" title="$5"
+  if [[ -e "$out" ]]; then
+    echo "" >&2
+    echo "error: ${kind} filename collision: $out" >&2
+    echo "  current uid:  $current_uid (title: '$title')" >&2
+    echo "  fix: rename one resource in AMG, or extend the script to disambiguate (e.g., append uid)" >&2
+    exit 1
+  fi
+}
+
 # ===== Folders =====
 echo "Pulling folders..." >&2
-api /api/folders | jq -c '.[]' | while IFS= read -r folder; do
+while IFS= read -r folder; do
   uid="$(jq -r '.uid' <<<"$folder")"
   title="$(jq -r '.title' <<<"$folder")"
   slug="$(slugify "$title")"
   out="$FOLDERS_DIR/$slug.json"
+  fail_on_collision "$out" folder "" "$uid" "$title"
   echo "  folder: $title ($uid) → $out" >&2
   jq -n --arg uid "$uid" --arg title "$title" '{
     apiVersion: "folder.grafana.app/v1beta1",
@@ -124,29 +168,38 @@ api /api/folders | jq -c '.[]' | while IFS= read -r folder; do
     metadata: { name: $uid },
     spec: { title: $title }
   }' > "$out"
-done
+done < <(api /api/folders | jq -c '.[]')
 
 # ===== Dashboards =====
+# Each dashboard's `templating.list[]` is sanitized:
+#   constant variable named `grafana_secret` → query rewritten to placeholder
+# (avoids committing the realm-server admin-action shared secret to git).
 echo "Pulling dashboards..." >&2
-api '/api/search?type=dash-db' | jq -c '.[]' | while IFS= read -r row; do
+while IFS= read -r row; do
   uid="$(jq -r '.uid' <<<"$row")"
   title="$(jq -r '.title' <<<"$row")"
   slug="$(slugify "$title")"
   out="$DASHBOARDS_DIR/$slug.json"
+  fail_on_collision "$out" dashboard "" "$uid" "$title"
   echo "  dashboard: $title ($uid) → $out" >&2
-  api "/api/dashboards/uid/$uid" | jq --arg uid "$uid" '{
-    apiVersion: "dashboard.grafana.app/v1beta1",
-    kind: "Dashboard",
-    metadata: { name: $uid },
-    spec: .dashboard
-  }' > "$out"
-done
-
-# Synapse dashboard is upstream-vendored (matrix-org/synapse, contrib/grafana/).
-# The vendoring note lives in the package README under "Vendored content"
-# rather than as a sibling .NOTE.md (which grafanactl would warn about as
-# "unrecognized format md"). Clean up any leftover NOTE files from earlier runs.
-rm -f "$DASHBOARDS_DIR/synapse.NOTE.md" 2>/dev/null || true
+  api "/api/dashboards/uid/$uid" | jq --arg uid "$uid" '
+    .dashboard as $d |
+    {
+      apiVersion: "dashboard.grafana.app/v1beta1",
+      kind: "Dashboard",
+      metadata: { name: $uid },
+      spec: (
+        $d
+        | (.templating.list //= [])
+        | .templating.list |= map(
+            if .type == "constant" and .name == "grafana_secret" then
+              .query = "REPLACE_AT_APPLY_TIME"
+            else . end
+          )
+      )
+    }
+  ' > "$out"
+done < <(api '/api/search?type=dash-db' | jq -c '.[]')
 
 # ===== Data sources =====
 # Note: secureJsonData (passwords, API keys) is NEVER returned by Grafana's API.
@@ -155,10 +208,11 @@ rm -f "$DASHBOARDS_DIR/synapse.NOTE.md" 2>/dev/null || true
 # provisioning file should be edited to reference them via ${ENV_VAR}. Done as
 # a follow-up when wiring Grafana provisioning delivery to ECS.
 echo "Pulling data sources..." >&2
-api /api/datasources | jq -c '.[]' | while IFS= read -r ds; do
+while IFS= read -r ds; do
   name="$(jq -r '.name' <<<"$ds")"
   slug="$(slugify "$name")"
   out="$DATASOURCES_DIR/$slug.json"
+  fail_on_collision "$out" datasource "" "" "$name"
   echo "  datasource: $name → $out" >&2
   jq -n --argjson ds "$ds" '{
     apiVersion: 1,
@@ -173,18 +227,22 @@ api /api/datasources | jq -c '.[]' | while IFS= read -r ds; do
       jsonData: $ds.jsonData
     }]
   }' > "$out"
-done
+done < <(api /api/datasources | jq -c '.[]')
 
-# ===== Alert rules =====
-# Use Grafana's provisioning API endpoint (returns the format Grafana
-# itself expects in /etc/grafana/provisioning/alerting/).
+# ===== Alert rule groups =====
+# Use Grafana's provisioning API (returns the format Grafana itself expects in
+# /etc/grafana/provisioning/alerting/). Filenames include the folder slug to
+# disambiguate same-named rule groups across folders.
 echo "Pulling alert rule groups..." >&2
-if alerts_json="$(api /api/v1/provisioning/alert-rules 2>/dev/null)"; then
-  echo "$alerts_json" | jq -c 'group_by([.folderUID, .ruleGroup])[]' | while IFS= read -r rules; do
+alerts_json="$(api_or_empty /api/v1/provisioning/alert-rules)"
+if [[ -n "$alerts_json" && "$alerts_json" != "null" && "$alerts_json" != "[]" ]]; then
+  while IFS= read -r rules; do
     name="$(jq -r '.[0].ruleGroup' <<<"$rules")"
     folder_uid="$(jq -r '.[0].folderUID' <<<"$rules")"
-    slug="$(slugify "$name")"
-    out="$ALERTS_DIR/$slug.json"
+    rule_slug="$(slugify "$name")"
+    folder_slug="$(slugify "$folder_uid")"
+    out="$ALERTS_DIR/${folder_slug}--${rule_slug}.json"
+    fail_on_collision "$out" "alert group" "" "$folder_uid/$name" "$name"
     echo "  alert group: $name (folder=$folder_uid) → $out" >&2
     jq -n --argjson rules "$rules" --arg name "$name" --arg folder "$folder_uid" '{
       apiVersion: 1,
@@ -196,9 +254,9 @@ if alerts_json="$(api /api/v1/provisioning/alert-rules 2>/dev/null)"; then
         rules: $rules
       }]
     }' > "$out"
-  done
+  done < <(echo "$alerts_json" | jq -c 'group_by([.folderUID, .ruleGroup])[]')
 else
-  echo "  (no alert rules — /api/v1/provisioning/alert-rules returned non-200)" >&2
+  echo "  (no alert rules — endpoint returned 404 or empty array)" >&2
 fi
 
 echo "" >&2
@@ -207,6 +265,21 @@ printf '%-22s %3d files\n' "Dashboards:"   "$(find "$DASHBOARDS_DIR"   -type f -
 printf '%-22s %3d files\n' "Folders:"      "$(find "$FOLDERS_DIR"      -type f -name '*.json' 2>/dev/null | wc -l | xargs)" >&2
 printf '%-22s %3d files\n' "Data sources:" "$(find "$DATASOURCES_DIR"  -type f -name '*.json' 2>/dev/null | wc -l | xargs)" >&2
 printf '%-22s %3d files\n' "Alert groups:" "$(find "$ALERTS_DIR"       -type f -name '*.json' 2>/dev/null | wc -l | xargs)" >&2
+
+# Sanity: surface any remaining occurrences of likely-secret-shaped values so
+# the operator notices before committing. Currently checks only the known
+# shared-secret value pattern (UUID assigned to grafana_secret); extend the
+# pattern list if other secrets surface in extracted JSON.
+echo "" >&2
+echo "=== Secret scan ===" >&2
+if grep -RInE '"query"\s*:\s*"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"' "$DASHBOARDS_DIR" 2>/dev/null; then
+  echo "" >&2
+  echo "WARNING: a UUID-shaped value remains in a 'query' field above. If it's" >&2
+  echo "a constant template variable holding a shared secret, extend the" >&2
+  echo "redaction in the dashboards section of this script." >&2
+else
+  echo "no UUID-shaped values found in dashboard 'query' fields." >&2
+fi
 
 echo "" >&2
 echo "Next steps:" >&2
