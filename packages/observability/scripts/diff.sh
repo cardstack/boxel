@@ -73,11 +73,23 @@ grafanactl \
 # Color is disabled because the diff is consumed by GitHub Actions or piped
 # to a PR comment (terminal escapes don't render in either).
 #
-# `|| true`: git diff --no-index returns 1 when there's any diff. We treat
-# that as expected output, not an error — the diff IS the output.
+# Exit codes from `git diff --no-index`:
+#   0 — files identical (committed == live)
+#   1 — files differ — the diff IS the output, treat as success here
+#   2+ — real error (unreadable paths, internal git error, etc.) — propagate
+#
+# Disable -e around the diff call so exit 1 doesn't kill the script, then
+# explicitly check for 2+ and re-raise.
+set +e
 git diff \
   --no-index \
   --no-color \
   "$remote" \
-  ./grafanactl/resources/ \
-  || true
+  ./grafanactl/resources/
+diff_exit=$?
+set -e
+
+if [[ "$diff_exit" -gt 1 ]]; then
+  echo "git diff --no-index exited with $diff_exit (real error, not just a diff)" >&2
+  exit "$diff_exit"
+fi

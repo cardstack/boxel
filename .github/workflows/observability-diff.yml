@@ -32,6 +32,14 @@ jobs:
     name: Diff against staging
     runs-on: ubuntu-latest
 
+    # Skip on fork PRs. The job assumes an AWS role and fetches a Grafana
+    # service-account token from SSM, both of which are unsafe to expose
+    # to a workflow whose code is controlled by an untrusted contributor.
+    # GitHub-hosted runners on fork PRs also get reduced token permissions
+    # (no `pull-requests: write`), so the comment-posting step would fail
+    # anyway. Same guard pattern as preview-host.yml elsewhere in the repo.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+
     env:
       AWS_REGION: us-east-1
       # Reuses the apply role from cardstack/infra#665. Permission is
@@ -85,7 +93,10 @@ jobs:
           echo "::endgroup::"
 
       - name: Post sticky PR comment
-        uses: actions/github-script@v7
+        # Pinned to SHA (rather than @v7) because this step has
+        # pull-requests: write and runs after assuming an AWS role —
+        # supply-chain risk is non-negligible.
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         env:
           DIFF_FILE: ${{ steps.diff.outputs.diff_file }}
         with:
@@ -95,6 +106,10 @@ jobs:
             const maxBytes = parseInt(process.env.MAX_COMMENT_BYTES, 10);
 
             const diff = fs.readFileSync(process.env.DIFF_FILE, 'utf8');
+            // Use byte length, not character/code-unit length, since
+            // GitHub's comment limit is in bytes and dashboard JSON
+            // can include non-ASCII characters in titles/descriptions.
+            const diffBytes = Buffer.byteLength(diff, 'utf8');
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 
             let body;
@@ -107,13 +122,19 @@ jobs:
                 '',
                 `_(Run: ${runUrl})_`,
               ].join('\n');
-            } else if (diff.length > maxBytes) {
-              const truncated = diff.slice(0, maxBytes);
+            } else if (diffBytes > maxBytes) {
+              // Truncate by bytes, not characters. Walk back from a
+              // character boundary so we don't slice mid-codepoint and
+              // produce invalid UTF-8.
+              const buf = Buffer.from(diff, 'utf8');
+              let cut = maxBytes;
+              while (cut > 0 && (buf[cut] & 0xc0) === 0x80) cut--;
+              const truncated = buf.slice(0, cut).toString('utf8');
               body = [
                 marker,
                 '## Observability diff (vs staging)',
                 '',
-                `Diff truncated (${diff.length} bytes; limit ${maxBytes}). Full diff: ${runUrl}`,
+                `Diff truncated (${diffBytes} bytes; limit ${maxBytes}). Full diff: ${runUrl}`,
                 '',
                 '```diff',
                 truncated,
@@ -132,13 +153,18 @@ jobs:
               ].join('\n');
             }
 
-            // Find existing sticky comment.
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              per_page: 100,
-            });
+            // Find existing sticky comment. Paginate so we don't miss
+            // the marker on PRs with >100 comments (would otherwise
+            // create duplicates on every push).
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                per_page: 100,
+              }
+            );
             const existing = comments.find(
               (c) => c.body && c.body.startsWith(marker)
             );
