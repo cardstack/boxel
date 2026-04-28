@@ -225,4 +225,228 @@ module('Unit | kanban-drag-manager', function (hooks) {
     assert.strictEqual(manager.interactionMode, 'idle');
     assert.strictEqual(manager.activeDragIndex, null);
   });
+
+  test('hold-delay activates drag without pointer movement', async function (assert) {
+    let manager = new KanbanDragManager({
+      placements: () => placements,
+      columnCount: () => 2,
+      containerElement: () => container,
+      onChange: () => {},
+    });
+
+    container.setPointerCapture = () => {};
+    container.releasePointerCapture = () => {};
+    manager.registerContainer(container);
+
+    let card = container.querySelector('[data-card-index="0"]') as HTMLElement;
+
+    manager.onPointerDown({
+      button: 0,
+      pointerId: 4,
+      clientX: 20,
+      clientY: 20,
+      target: card,
+    } as unknown as PointerEvent);
+
+    assert.strictEqual(manager.interactionMode, 'pending');
+
+    await delay(250);
+
+    assert.strictEqual(manager.interactionMode, 'drag');
+    assert.strictEqual(manager.activeDragIndex, 0);
+    assert.strictEqual(manager.dragGhostWidth, 184);
+    assert.strictEqual(manager.pointerClientX, 20);
+    assert.strictEqual(manager.pointerClientY, 20);
+    assert.strictEqual(manager.dragOffsetX, 12);
+    assert.strictEqual(manager.dragOffsetY, 10);
+
+    manager.onPointerUp({ pointerId: 4 } as unknown as PointerEvent);
+    await delay(350);
+  });
+
+  test('pointer cancel resets drag state and restores body selection', function (assert) {
+    let manager = new KanbanDragManager({
+      placements: () => placements,
+      columnCount: () => 2,
+      containerElement: () => container,
+      onChange: () => {},
+    });
+
+    container.setPointerCapture = () => {};
+    container.releasePointerCapture = () => {};
+    manager.registerContainer(container);
+
+    let card = container.querySelector('[data-card-index="0"]') as HTMLElement;
+    manager.onPointerDown({
+      button: 0,
+      pointerId: 5,
+      clientX: 20,
+      clientY: 20,
+      target: card,
+    } as unknown as PointerEvent);
+    manager.onPointerMove({
+      pointerId: 5,
+      clientX: 260,
+      clientY: 30,
+    } as unknown as PointerEvent);
+
+    assert.strictEqual(manager.interactionMode, 'drag');
+    assert.strictEqual(document.body.style.userSelect, 'none');
+
+    manager.onPointerCancel({ pointerId: 5 } as unknown as PointerEvent);
+
+    assert.strictEqual(manager.interactionMode, 'idle');
+    assert.strictEqual(manager.activeDragIndex, null);
+    assert.strictEqual(document.body.style.userSelect, '');
+    assert.strictEqual(
+      (
+        document.body.style as CSSStyleDeclaration & {
+          webkitUserSelect?: string;
+        }
+      ).webkitUserSelect,
+      '',
+    );
+  });
+
+  test('escape while idle clears selection without calling preventDefault', function (assert) {
+    let deselected = false;
+
+    let manager = new KanbanDragManager({
+      placements: () => placements,
+      columnCount: () => 2,
+      containerElement: () => container,
+      onChange: () => {},
+      onSelect: (index: number | null) => {
+        if (index === null) deselected = true;
+      },
+    });
+
+    manager.select(0);
+    assert.strictEqual(manager.selectedIndex, 0);
+
+    let prevented = false;
+    manager.onKeyDown({
+      key: 'Escape',
+      preventDefault() {
+        prevented = true;
+      },
+    } as unknown as KeyboardEvent);
+
+    assert.false(prevented);
+    assert.strictEqual(manager.selectedIndex, null);
+    assert.true(deselected);
+  });
+
+  test('select() sets selectedIndex and calls onSelect', function (assert) {
+    let lastSelected: number | null | undefined;
+
+    let manager = new KanbanDragManager({
+      placements: () => placements,
+      columnCount: () => 2,
+      containerElement: () => container,
+      onChange: () => {},
+      onSelect: (index: number | null) => {
+        lastSelected = index;
+      },
+    });
+
+    manager.select(1);
+    assert.strictEqual(manager.selectedIndex, 1);
+    assert.strictEqual(lastSelected, 1);
+
+    manager.select(null);
+    assert.strictEqual(manager.selectedIndex, null);
+    assert.strictEqual(lastSelected, null);
+  });
+
+  test('destroy() clears the hold-timer so drag is never activated', async function (assert) {
+    let dragActivated = false;
+
+    let manager = new KanbanDragManager({
+      placements: () => placements,
+      columnCount: () => 2,
+      containerElement: () => container,
+      onChange: () => {
+        dragActivated = true;
+      },
+    });
+
+    container.setPointerCapture = () => {};
+    manager.registerContainer(container);
+
+    let card = container.querySelector('[data-card-index="0"]') as HTMLElement;
+
+    manager.onPointerDown({
+      button: 0,
+      pointerId: 5,
+      clientX: 20,
+      clientY: 20,
+      target: card,
+    } as unknown as PointerEvent);
+
+    assert.strictEqual(document.body.style.userSelect, 'none');
+    assert.strictEqual(manager.interactionMode, 'pending');
+
+    manager.destroy();
+
+    assert.strictEqual(document.body.style.userSelect, '');
+
+    await delay(250);
+
+    assert.false(dragActivated, 'onChange was not called after destroy');
+    assert.strictEqual(manager.interactionMode, 'pending');
+  });
+
+  test('dropping outside all columns when insertion is null does not call onChange', async function (assert) {
+    let changed = false;
+
+    let manager = new KanbanDragManager({
+      placements: () => placements,
+      columnCount: () => 2,
+      containerElement: () => container,
+      onChange: () => {
+        changed = true;
+      },
+    });
+
+    container.setPointerCapture = () => {};
+    container.releasePointerCapture = () => {};
+    manager.registerContainer(container);
+    (manager as any).measureSettlePosition = () => {};
+
+    let card = container.querySelector('[data-card-index="0"]') as HTMLElement;
+
+    manager.onPointerDown({
+      button: 0,
+      pointerId: 6,
+      clientX: 20,
+      clientY: 20,
+      target: card,
+    } as unknown as PointerEvent);
+    // move beyond threshold to activate drag
+    manager.onPointerMove({
+      pointerId: 6,
+      clientX: 30,
+      clientY: 20,
+    } as unknown as PointerEvent);
+    // move far outside all columns so insertion becomes null
+    manager.onPointerMove({
+      pointerId: 6,
+      clientX: 9999,
+      clientY: 20,
+    } as unknown as PointerEvent);
+
+    assert.strictEqual(manager.insertion, null);
+    assert.strictEqual(manager.interactionMode, 'drag');
+
+    manager.onPointerUp({ pointerId: 6 } as unknown as PointerEvent);
+
+    await delay(350);
+
+    assert.false(
+      changed,
+      'onChange must not fire when dropped outside the board',
+    );
+    assert.strictEqual(manager.interactionMode, 'idle');
+  });
 });

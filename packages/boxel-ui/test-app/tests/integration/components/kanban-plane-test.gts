@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
+import { click, render } from '@ember/test-helpers';
 import { setupRenderingTest } from 'test-app/tests/helpers';
 import {
   KanbanDragManager,
@@ -117,5 +117,101 @@ module('Integration | Component | kanban-plane', function (hooks) {
 
     assert.dom('[data-kanban-column]').exists({ count: 1 });
     assert.dom('.empty-col').hasText('No cards');
+  });
+
+  test('hideEmpty with all-empty board renders no columns', async function (assert) {
+    const placements: KanbanPlacement[] = [];
+    const columns: KanbanColumnConfig[] = [
+      {
+        key: 'a',
+        label: 'Alpha',
+        color: null,
+        wipLimit: null,
+        collapsed: null,
+        sortOrder: 0,
+      },
+      {
+        key: 'b',
+        label: 'Beta',
+        color: null,
+        wipLimit: null,
+        collapsed: null,
+        sortOrder: 1,
+      },
+    ];
+    const manager = new KanbanDragManager({
+      placements: () => placements,
+      columnCount: () => columns.length,
+      containerElement: () => null,
+      onChange: () => {},
+    });
+
+    await render(
+      <template>
+        <KanbanPlane
+          @columns={{columns}}
+          @placements={{placements}}
+          @manager={{manager}}
+          @hideEmpty={{true}}
+        >
+          <:card as |placement|>
+            <div>Card {{placement.index}}</div>
+          </:card>
+          <:ghost as |index|>
+            <div>Ghost {{index}}</div>
+          </:ghost>
+        </KanbanPlane>
+      </template>,
+    );
+
+    assert.dom('[data-kanban-column]').doesNotExist();
+  });
+
+  test('onAddCard fires with the column key when the add button is clicked', async function (assert) {
+    let addedColumnKey: string | null | undefined;
+
+    const columns: KanbanColumnConfig[] = [
+      {
+        key: 'todo',
+        label: 'Todo',
+        color: null,
+        wipLimit: null,
+        collapsed: null,
+        sortOrder: 0,
+      },
+    ];
+    const placements: KanbanPlacement[] = [];
+    const onAddCard = (key: string | null) => {
+      addedColumnKey = key;
+    };
+    const manager = new KanbanDragManager({
+      placements: () => placements,
+      columnCount: () => columns.length,
+      containerElement: () => null,
+      onChange: () => {},
+    });
+
+    await render(
+      <template>
+        <KanbanPlane
+          @columns={{columns}}
+          @placements={{placements}}
+          @manager={{manager}}
+          @hideEmpty={{false}}
+          @onAddCard={{onAddCard}}
+        >
+          <:card as |placement|>
+            <div>Card {{placement.index}}</div>
+          </:card>
+          <:ghost as |index|>
+            <div>Ghost {{index}}</div>
+          </:ghost>
+        </KanbanPlane>
+      </template>,
+    );
+
+    assert.dom('.col-add-btn').exists();
+    await click('.col-add-btn');
+    assert.strictEqual(addedColumnKey, 'todo');
   });
 });

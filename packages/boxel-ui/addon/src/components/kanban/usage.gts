@@ -32,7 +32,7 @@ const INITIAL_COLUMNS: KanbanColumnConfig[] = [
     key: 'backlog',
     label: 'Backlog',
     color: '#64748b',
-    wipLimit: null,
+    wipLimit: 0,
     collapsed: false,
     sortOrder: 1,
   },

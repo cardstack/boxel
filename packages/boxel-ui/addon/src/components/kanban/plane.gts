@@ -200,6 +200,8 @@ export class KanbanPlane extends Component<{
       {{BindPointerDown this.manager.onPointerDown}}
       {{on 'pointermove' this.manager.onPointerMove}}
       {{on 'pointerup' this.manager.onPointerUp}}
+      {{on 'pointercancel' this.manager.onPointerCancel}}
+      {{on 'lostpointercapture' this.manager.onLostPointerCapture}}
       {{on 'keydown' this.manager.onKeyDown}}
       tabindex='0'
     >
