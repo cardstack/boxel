@@ -114,11 +114,11 @@ aws --profile claude-staging ecs list-clusters --query 'clusterArns' --output te
 
 Claude operates against staging and prod **only as the `boxel-claude-readonly` IAM role**. The role's policy is the entire AWS-side permission surface Claude has — there is no path for Claude to access anything the role doesn't grant, regardless of what the user's own IAM groups allow. This is symmetric across staging and prod: the role exists in both accounts under the same name and is intended to grant the same permissions in both.
 
-The role is provisioned by infra-side configuration tracked under CS-10962. Anything that would require a permission outside the role's policy is out of scope for Claude — the user should run that operation themselves through whatever channel the team uses for it. This is by design: the role is the AWS-side complement to the grafana-only DB rule below, and together they make accidental writes structurally hard to issue.
+The role is provisioned by infra-side configuration tracked under CS-10962. Anything that would require a permission outside the role's policy is out of scope for Claude — the user should run that operation themselves through whatever channel the team uses for it. This is by design: the role is the AWS-side complement to the claude-readonly-only DB rule below, and together they make accidental writes structurally hard to issue.
 
 ## Connecting to the boxel RDS database
 
-The staging/prod boxel Postgres instances are **private** (`PubliclyAccessible: false`) and live inside the cardstack VPC. They are not directly reachable from a developer laptop. The only path Claude uses is SSM port-forwarding through the realm-server ECS task, authenticated as the read-only `grafana` DB user.
+The staging/prod boxel Postgres instances are **private** (`PubliclyAccessible: false`) and live inside the cardstack VPC. They are not directly reachable from a developer laptop. The only path Claude uses is SSM port-forwarding through the realm-server ECS task, authenticated as the read-only `claude_readonly_user` DB user.
 
 ### Path A — SSM port-forward → psql on localhost as the `claude_readonly_user` DB user
 
