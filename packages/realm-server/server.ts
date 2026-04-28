@@ -1,9 +1,12 @@
 import Koa from 'koa';
 import cors from '@koa/cors';
 import { Memoize } from 'typescript-memoize';
-import type { DefinitionLookup, RealmInfo } from '@cardstack/runtime-common';
-import {
+import type {
+  DefinitionLookup,
   Realm,
+  RealmInfo,
+} from '@cardstack/runtime-common';
+import {
   logger,
   SupportedMimeType,
   insertPermissions,

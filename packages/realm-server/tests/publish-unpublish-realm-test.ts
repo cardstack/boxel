@@ -39,7 +39,9 @@ module(basename(__filename), function () {
   module('publish and unpublish realm tests', function (hooks) {
     let testRealmHttpServer: Server;
     let testRealm: Realm;
-    let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>['testRealmServer'];
+    let testRealmServer: Awaited<
+      ReturnType<typeof runTestRealmServer>
+    >['testRealmServer'];
     let dbAdapter: PgAdapter;
     let publisher: QueuePublisher;
     let runner: QueueRunner;
@@ -73,23 +75,23 @@ module(basename(__filename), function () {
         testRealmServer: testRealmServer,
         testRealmHttpServer: testRealmHttpServer,
       } = await runTestRealmServer({
-          virtualNetwork,
-          testRealmDir,
-          realmsRootPath: join(dir.name, 'realm_server_3'),
-          realmURL: new URL(testRealm2URL),
-          dbAdapter,
-          publisher,
-          runner,
-          matrixURL,
-          permissions: {
-            '*': ['read', 'write'],
-            [ownerUserId]: DEFAULT_PERMISSIONS,
-          },
-          domainsForPublishedRealms: {
-            boxelSpace: 'localhost',
-            boxelSite: 'localhost:4445',
-          },
-        }));
+        virtualNetwork,
+        testRealmDir,
+        realmsRootPath: join(dir.name, 'realm_server_3'),
+        realmURL: new URL(testRealm2URL),
+        dbAdapter,
+        publisher,
+        runner,
+        matrixURL,
+        permissions: {
+          '*': ['read', 'write'],
+          [ownerUserId]: DEFAULT_PERMISSIONS,
+        },
+        domainsForPublishedRealms: {
+          boxelSpace: 'localhost',
+          boxelSite: 'localhost:4445',
+        },
+      }));
       request = supertest(testRealmHttpServer);
     }
 
