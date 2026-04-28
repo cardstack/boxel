@@ -87,10 +87,10 @@ After that, Claude can run any `aws --profile claude-staging ...` or `aws --prof
 ### Verifying the session is still valid before running a sequence of AWS calls
 
 ```sh
-grep claude_session_expiration ~/.aws/credentials
+grep claude_session_expiration ~/.aws/config
 ```
 
-Each `[claude-staging]` / `[claude-prod]` profile carries a custom key `claude_session_expiration = <ISO timestamp>`. Compare to the current time (`date -u +%FT%TZ`). If expired or absent, ask the user to run `mise run claude-aws <env> <token>`. **Do not try to refresh the session yourself** — it requires a fresh MFA code from the user.
+The `[profile claude-staging]` / `[profile claude-prod]` sections of **`~/.aws/config`** (not `~/.aws/credentials`) carry a custom key `claude_session_expiration = <ISO timestamp>`. The split is an `aws configure set` quirk — recognized credential keys (`aws_access_key_id`, `aws_secret_access_key`, `aws_session_token`) land in `~/.aws/credentials`; anything else (region, our custom expiration key) lands in `~/.aws/config`. Compare the timestamp to the current time (`date -u +%FT%TZ`). If expired or absent, ask the user to run `mise run claude-aws <env> <token>`. **Do not try to refresh the session yourself** — it requires a fresh MFA code from the user.
 
 A cheap end-to-end check that also confirms which identity Claude is operating as:
 

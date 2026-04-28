@@ -293,8 +293,11 @@ done
 aws configure set aws_access_key_id     "$ROLE_ACCESS_KEY_ID"     --profile "$TARGET_PROFILE"
 aws configure set aws_secret_access_key "$ROLE_SECRET_ACCESS_KEY" --profile "$TARGET_PROFILE"
 aws configure set aws_session_token     "$ROLE_SESSION_TOKEN"     --profile "$TARGET_PROFILE"
-# Custom key — `aws sts ...` does not read this, but Claude can grep it
-# from ~/.aws/credentials to know whether the session is still valid.
+# Custom key — `aws sts ...` does not read this, but Claude can grep
+# it to know whether the session is still valid. Note: `aws configure
+# set` routes any non-credential key to ~/.aws/config (not credentials),
+# so this line lands in ~/.aws/config alongside `region`. The skill
+# documents that location for the expiration check.
 aws configure set claude_session_expiration "$ROLE_EXPIRATION" --profile "$TARGET_PROFILE"
 
 # Carry the source profile's default region forward so commands run
