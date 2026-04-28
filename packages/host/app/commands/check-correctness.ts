@@ -290,9 +290,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     fileUrl: string,
   ): Promise<string | undefined> {
     try {
-      let { status, content } = await this.cardService.getSource(
-        rri(fileUrl),
-      );
+      let { status, content } = await this.cardService.getSource(rri(fileUrl));
       if (status !== 200) {
         return undefined;
       }

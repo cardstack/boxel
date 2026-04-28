@@ -59,8 +59,7 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
     let submittedBy = this.matrixService.userId ?? undefined;
 
     // Save the workflow card in the user's realm (where the listing lives)
-    let workflowRealm =
-      this.realm.realmOf(rri(listingId))?.href ?? realm;
+    let workflowRealm = this.realm.realmOf(rri(listingId))?.href ?? realm;
 
     // Step 1: Create the SubmissionWorkflowCard with listing linked
     let catalogRealm = this.catalogRealm;
