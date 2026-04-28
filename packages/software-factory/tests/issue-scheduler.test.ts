@@ -389,13 +389,13 @@ module('issue-scheduler > refreshIssueState', function () {
 
 module('issue-scheduler > RealmIssueStore blockedBy resolution', function () {
   // Regression for the production bug observed in factory:go where a
-  // blocked issue ("sticky-board") was never picked even after its
-  // blocker ("sticky-note") had been marked `done`. The realm's
+  // blocked issue ("kanban-board") was never picked even after its
+  // blocker ("kanban-card") had been marked `done`. The realm's
   // search index returns each card's `id` as a full URL
-  // (`http://.../Issues/sticky-note`), but `blockedBy.X.links.self`
-  // is a relative path (`../Issues/sticky-note`). The mapping
+  // (`http://.../Issues/kanban-card`), but `blockedBy.X.links.self`
+  // is a relative path (`../Issues/kanban-card`). The mapping
   // function used to reduce the relative link to its last two path
-  // segments (`Issues/sticky-note`), so the loop's `getUnblockedIssues`
+  // segments (`Issues/kanban-card`), so the loop's `getUnblockedIssues`
   // statusMap (keyed by full URL `issue.id`) never had a hit and
   // every blocked issue stayed blocked forever. Fix resolves the
   // relative link against the parent card's URL so the resulting key
@@ -404,8 +404,8 @@ module('issue-scheduler > RealmIssueStore blockedBy resolution', function () {
     let realmUrl = 'http://localhost:4201/user/my-test-realm/';
     let darkfactoryModuleUrl =
       'http://localhost:4201/software-factory/darkfactory';
-    let stickyNoteId = `${realmUrl}Issues/sticky-note`;
-    let stickyBoardId = `${realmUrl}Issues/sticky-board`;
+    let kanbanCardId = `${realmUrl}Issues/kanban-card`;
+    let kanbanBoardId = `${realmUrl}Issues/kanban-board`;
 
     let mockClient = {
       async search() {
@@ -413,28 +413,28 @@ module('issue-scheduler > RealmIssueStore blockedBy resolution', function () {
           ok: true,
           data: [
             {
-              id: stickyNoteId,
+              id: kanbanCardId,
               attributes: {
                 status: 'done',
                 priority: 'high',
                 order: 1,
-                summary: 'Implement Sticky Note card',
+                summary: 'Implement Kanban Card card',
                 issueType: 'feature',
               },
               relationships: {},
             },
             {
-              id: stickyBoardId,
+              id: kanbanBoardId,
               attributes: {
                 status: 'backlog',
                 priority: 'medium',
                 order: 2,
-                summary: 'Implement Sticky Board card',
+                summary: 'Implement Kanban Board card',
                 issueType: 'feature',
               },
               relationships: {
                 'blockedBy.0': {
-                  links: { self: '../Issues/sticky-note' },
+                  links: { self: '../Issues/kanban-card' },
                 },
               },
             },
@@ -455,13 +455,13 @@ module('issue-scheduler > RealmIssueStore blockedBy resolution', function () {
 
     // The mapping must produce a `blockedBy` entry whose key matches
     // the blocker's `id` exactly. If it doesn't, `getUnblockedIssues`
-    // can't see that the blocker is `done` and `sticky-board` will
+    // can't see that the blocker is `done` and `kanban-board` will
     // be filtered out as still-blocked.
     let picked = scheduler.pickNextIssue();
     assert.strictEqual(
       picked?.id,
-      stickyBoardId,
-      'sticky-board should be picked once sticky-note is done — got: ' +
+      kanbanBoardId,
+      'kanban-board should be picked once kanban-card is done — got: ' +
         (picked === undefined
           ? 'undefined (treated as still blocked)'
           : (picked?.id ?? 'unknown')),
