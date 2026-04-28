@@ -94,8 +94,15 @@ export default class PGLiteAdapter implements DBAdapter {
     opts?: ExecuteOptions,
   ): Promise<Record<string, PgPrimitive>[]> {
     try {
+      // The node-pg wire protocol sends all parameters as text strings.
+      // PGLite passes them as native JS types, which causes type mismatches
+      // (e.g., `->>` returns text, so `text = true` fails without an implicit
+      // cast). Stringify booleans to match node-pg behaviour.
+      let bind = opts?.bind?.map((v) =>
+        typeof v === 'boolean' ? String(v) : v,
+      );
       let result = await waitForPromise(
-        this.pglite.query(sql, opts?.bind as any[]),
+        this.pglite.query(sql, bind as any[]),
         'pglite query',
       );
       let rows = result.rows as Record<string, PgPrimitive>[];
