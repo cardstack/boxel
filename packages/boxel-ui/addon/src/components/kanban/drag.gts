@@ -13,6 +13,18 @@ import {
 
 // ── Constants ────────────────────────────────────────────────────────── //
 const DRAG_THRESHOLD_PX = 4;
+
+function placementsEqual(a: KanbanPlacement[], b: KanbanPlacement[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((p, i) => {
+    const q = b[i]!;
+    return (
+      p.index === q.index &&
+      p.column === q.column &&
+      p.sortOrder === q.sortOrder
+    );
+  });
+}
 const HOLD_DELAY_MS = 180;
 
 // ── Types ────────────────────────────────────────────────────────────── //
@@ -57,6 +69,7 @@ export class KanbanDragManager {
   @tracked settleY = 0;
   @tracked settleWidth = 0;
   @tracked settleHeight = 0;
+  @tracked announcement = '';
 
   // ── Non-tracked ────────────────────────────────────────────────────
   private activePointerId: number | null = null;
@@ -201,14 +214,28 @@ export class KanbanDragManager {
       return;
     }
 
-    if (container && this.insertion) {
+    const pendingInsertion = this.insertion;
+    const pendingDragIndex = this.dragIndex;
+
+    // No-op drop: card released at its original position — skip settle entirely.
+    if (pendingInsertion !== null && pendingDragIndex !== null) {
+      const placements = this.placementsFn();
+      const next = resolveInsertion(
+        pendingDragIndex,
+        pendingInsertion,
+        placements,
+      );
+      if (placementsEqual(placements, next)) {
+        this.resetSession();
+        return;
+      }
+    }
+
+    if (container && pendingInsertion) {
       this.measureSettlePosition(container);
     }
 
     this.isSettling = true;
-
-    const pendingInsertion = this.insertion;
-    const pendingDragIndex = this.dragIndex;
 
     setTimeout(() => {
       if (pendingInsertion && pendingDragIndex !== null) {
@@ -219,6 +246,9 @@ export class KanbanDragManager {
           placements,
         );
         this.onChangeFn(newPlacements);
+        this.announcement = 'Card moved.';
+      } else {
+        this.announcement = 'Movement cancelled.';
       }
 
       scheduleOnce('afterRender', this, this.resetSession);
@@ -336,6 +366,7 @@ export class KanbanDragManager {
   }
 
   private cancelDrag(): void {
+    this.announcement = 'Movement cancelled.';
     if (this.snapshotPlacements) {
       this.onChangeFn(this.snapshotPlacements);
     }

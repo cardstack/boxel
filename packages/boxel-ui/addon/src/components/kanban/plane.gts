@@ -209,6 +209,13 @@ export class KanbanPlane extends Component<{
       {{on 'keydown' this.manager.onKeyDown}}
       tabindex='0'
     >
+      <div
+        class='boxel-sr-only'
+        role='status'
+        aria-live='polite'
+        aria-atomic='true'
+      >{{this.manager.announcement}}</div>
+
       {{#each this.columns as |column colIdx|}}
         {{#if (this.isColumnVisible column colIdx)}}
           <div
