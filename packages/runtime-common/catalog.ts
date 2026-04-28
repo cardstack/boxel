@@ -8,7 +8,7 @@ import { resolveAdoptedCodeRef } from './code-ref';
 import { realmURL } from './constants';
 import { logger } from './log';
 import type { LocalPath } from './paths';
-import { cardIdToURL } from './card-reference-resolver';
+import { cardIdToURL, rri } from './card-reference-resolver';
 import type { RealmResourceIdentifier } from './card-reference-resolver';
 
 // @ts-ignore TODO: fix catalog types in runtime-common
@@ -194,7 +194,7 @@ function resolveTargetCodeRef(
   codeRef: ResolvedCodeRef,
   resolver: ListingPathResolver,
 ): ResolvedCodeRef {
-  if (baseRealmPath.inRealm(cardIdToURL(codeRef.module))) {
+  if (baseRealmPath.inRealm(codeRef.module)) {
     return codeRef;
   } else {
     let targetModule = resolver.target(cardIdToURL(codeRef.module).href);
@@ -219,7 +219,7 @@ export function planModuleInstall(
     };
   });
   let modulesCopy = codeRefs.flatMap((sourceCodeRef: ResolvedCodeRef) => {
-    if (baseRealmPath.inRealm(cardIdToURL(sourceCodeRef.module))) {
+    if (baseRealmPath.inRealm(sourceCodeRef.module)) {
       return [];
     }
     let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
@@ -241,10 +241,10 @@ export function planInstanceInstall(
   for (let instance of instances) {
     let sourceCodeRef = resolveAdoptedCodeRef(instance);
     let lid = resolver.local(cardIdToURL(instance.id).href);
-    if (baseRealmPath.inRealm(cardIdToURL(instance.id))) {
+    if (baseRealmPath.inRealm(rri(instance.id))) {
       throw new Error('Cannot install instance from base realm');
     }
-    if (!baseRealmPath.inRealm(cardIdToURL(sourceCodeRef.module))) {
+    if (!baseRealmPath.inRealm(sourceCodeRef.module)) {
       let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
       modulesCopy.push({
         sourceCodeRef,
