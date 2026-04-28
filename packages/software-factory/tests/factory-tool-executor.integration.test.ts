@@ -227,7 +227,7 @@ module('factory-tool-executor integration > realm-api requests', function () {
     }
   });
 
-  test('realm-search sends correct QUERY to _search with JSON body', async function (assert) {
+  test('realm-search sends correct QUERY to _federated-search with JSON body', async function (assert) {
     let captured: CapturedRequest | undefined;
 
     let { server, origin } = await startTestServer((req, respond) => {
