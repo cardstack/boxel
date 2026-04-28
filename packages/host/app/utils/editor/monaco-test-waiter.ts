@@ -219,117 +219,18 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
         }
       };
 
-      const releaseAfterTokensSettled = () => {
-        // forceFullTokenization is supposed to compute tokens synchronously,
-        // but Monaco's view layer renders the resulting coloured spans on
-        // a later animation frame, and bracket-pair colorisation runs in a
-        // worker that publishes more updates after that. A fixed N-rAF wait
-        // races those updates: we have seen the same Monaco panel captured
-        // by Percy as fully plain, partially coloured, or fully coloured on
-        // otherwise-identical runs.
-        //
-        // Strategy: poll the DOM directly for evidence that coloured token
-        // spans have actually painted (more than one distinct `mtk*` class
-        // inside the editor's view-lines), and require that signature to
-        // be stable for two consecutive rAFs before releasing. Models that
-        // never gain a second token class (a single-token editor, or one
-        // whose grammar failed to load) hit the 1500ms cap.
-        const models: MonacoSDK.editor.ITextModel[] = [];
-        const targetModel = targetEditor.getModel();
-        if (targetModel) models.push(targetModel);
-        if (diffEditor) {
-          const originalModel = diffEditor.getOriginalEditor().getModel();
-          if (originalModel && !models.includes(originalModel)) {
-            models.push(originalModel);
-          }
-        }
-
-        let tokensEverChanged = false;
-        const tokenDisposables = models.map((model) =>
-          model.onDidChangeTokens(() => {
-            tokensEverChanged = true;
-          }),
+      const releaseAfterLayoutPaint = () => {
+        // Layout/diff/indent-guide readiness has already fired by the time
+        // we reach here; give Monaco's view one paint frame plus the
+        // browser's commit to flush any final layout adjustments before
+        // Percy captures. Token colour state is intentionally not part of
+        // this wait — it is neutralised in .percy.js to avoid races with
+        // bracket-pair colorisation and async grammar registration.
+        // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- Monaco paints layout on its next rAF; the waiter must span that frame
+        requestAnimationFrame(() =>
+          // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- second frame to cover the paint following Monaco's layout
+          requestAnimationFrame(() => this.endAsync(operationId)),
         );
-
-        const editorDoms: HTMLElement[] = [];
-        const targetDom = targetEditor.getDomNode();
-        if (targetDom) editorDoms.push(targetDom);
-        if (diffEditor) {
-          const originalDom = diffEditor.getOriginalEditor().getDomNode();
-          if (originalDom && !editorDoms.includes(originalDom)) {
-            editorDoms.push(originalDom);
-          }
-        }
-
-        const tokenSignature = (): string => {
-          const sig: string[] = [];
-          for (const dom of editorDoms) {
-            const classes = new Set<string>();
-            const spans = dom.querySelectorAll('.view-lines [class*="mtk"]');
-            for (const span of Array.from(spans)) {
-              for (const cls of Array.from(span.classList)) {
-                if (cls.startsWith('mtk')) classes.add(cls);
-              }
-            }
-            // Editors with only one token class haven't painted colours yet
-            // (everything renders as `mtk1`, the default). Mark them as not-
-            // ready so polling continues until the worker reports back, or
-            // the cap fires.
-            sig.push(
-              classes.size <= 1
-                ? 'pending'
-                : Array.from(classes).sort().join(','),
-            );
-          }
-          return sig.join('|');
-        };
-
-        let lastSignature = tokenSignature();
-        let stableFrames = 0;
-        const startedAt = performance.now();
-        const maxWaitMs = 1500;
-
-        const cleanup = () => {
-          for (const d of tokenDisposables) d.dispose();
-        };
-
-        const finish = () => {
-          cleanup();
-          // Final rAF pair so the browser can paint the last token batch
-          // before Percy snapshots the DOM.
-          // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- Monaco paints tokens on its next rAF; the waiter must span that frame
-          requestAnimationFrame(() =>
-            // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- second frame to cover the paint following Monaco's layout
-            requestAnimationFrame(() => this.endAsync(operationId)),
-          );
-        };
-
-        const poll = () => {
-          const now = performance.now();
-          const currentSignature = tokenSignature();
-          const ready = !currentSignature.includes('pending');
-
-          if (currentSignature === lastSignature) {
-            stableFrames += 1;
-          } else {
-            stableFrames = 0;
-            lastSignature = currentSignature;
-          }
-
-          if (ready && tokensEverChanged && stableFrames >= 2) {
-            finish();
-            return;
-          }
-          if (now - startedAt >= maxWaitMs) {
-            finish();
-            return;
-          }
-          // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- polling for Monaco token paint stability between frames
-          requestAnimationFrame(poll);
-        };
-
-        // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- start polling on the next paint frame
-        requestAnimationFrame(poll);
       };
 
       const checkInitComplete = () => {
@@ -341,7 +242,7 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
 
         ensureTokenization();
         isInitialized = true;
-        releaseAfterTokensSettled();
+        releaseAfterLayoutPaint();
       };
 
       // Listen for layout changes to detect when initialization is complete
@@ -392,7 +293,7 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
           contentSizeDisposable.dispose();
           diffDisposable?.dispose();
           decorationsDisposable.dispose();
-          releaseAfterTokensSettled();
+          releaseAfterLayoutPaint();
         }
       }, 2000);
 

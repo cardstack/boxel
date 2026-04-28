@@ -16,6 +16,23 @@ module.exports = {
         box-shadow: none !important;
       }
       /*
+       * Monaco paints token colours in batches as the grammar registers,
+       * the worker computes bracket-pair colorisation, and the language
+       * service publishes follow-up updates. Percy can capture the
+       * editor at any of those intermediate states — fully plain,
+       * partially coloured, or fully coloured — even when the test
+       * waiter has waited for layout, diff, and indent-guide readiness.
+       * Neutralise every Monaco token span to the editor's default
+       * foreground colour so the capture is deterministic regardless
+       * of which tokenisation pass has painted. (This trades syntax-
+       * highlighting verification for stability; Percy's job is layout
+       * regressions, not grammar correctness.)
+       */
+      .monaco-editor .view-lines span[class^="mtk"],
+      .monaco-editor .view-lines span[class*=" mtk"] {
+        color: inherit !important;
+      }
+      /*
        * Land every CSS animation and transition on its final state so Percy
        * captures aren't racing the animation clock. Negative delay + 1ms
        * duration fast-forwards each animation past its last keyframe before
