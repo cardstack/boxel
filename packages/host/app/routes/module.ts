@@ -361,12 +361,13 @@ async function makeDefinition(
     name,
     cardOrFieldDef,
   }: {
-    url: URL;
+    url: RealmResourceIdentifier | URL;
     name: string;
     cardOrFieldDef: typeof BaseDef;
   },
   context: ModuleModelContext,
 ): Promise<ModuleDefinitionResult | ErrorEntry> {
+  let urlString = url instanceof URL ? url.href : url;
   try {
     let api = await context.loaderService.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`,
@@ -386,7 +387,7 @@ async function makeDefinition(
       : { type: 'types' as const, types: [] };
     if (typesMaybeError.type === 'error') {
       console.warn(
-        `encountered error indexing definition  "${url.href}/${name}": ${typesMaybeError.error.message}`,
+        `encountered error indexing definition  "${urlString}/${name}": ${typesMaybeError.error.message}`,
       );
       return {
         type: 'module-error',
@@ -399,18 +400,18 @@ async function makeDefinition(
     return {
       type: 'definition',
       definition,
-      moduleURL: trimExecutableExtension(url).href,
+      moduleURL: trimExecutableExtension(urlString),
       types: typesMaybeError.types.map(({ refURL }) => refURL),
     };
   } catch (err: any) {
     console.warn(
-      `encountered error indexing definition "${url.href}/${name}": ${err.message}`,
+      `encountered error indexing definition "${urlString}/${name}": ${err.message}`,
     );
     return {
       type: 'module-error',
       error: toSerializedError(
         err,
-        `encountered error indexing definition "${url.href}/${name}": ${describeError(err)}`,
+        `encountered error indexing definition "${urlString}/${name}": ${describeError(err)}`,
       ),
     } as ErrorEntry;
   }
