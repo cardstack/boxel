@@ -67,11 +67,11 @@ interface Signature {
 
 export default class EditFieldModal extends Component<Signature> {
   @tracked fieldCard: typeof BaseDef | undefined = undefined;
-  @tracked fieldModuleURL: URL | undefined = undefined;
+  @tracked fieldModuleURL: RealmResourceIdentifier | undefined = undefined;
   @tracked fieldName: string | undefined = undefined;
   @tracked cardinality: 'one' | 'many' = 'one';
   @tracked isFieldDef: boolean | undefined = undefined;
-  @tracked cardURL: URL | undefined = undefined;
+  @tracked cardURL: RealmResourceIdentifier | undefined = undefined;
   @tracked fieldRef: CodeRef | undefined = undefined;
 
   @tracked fieldNameErrorMessage: string | undefined;
@@ -144,8 +144,8 @@ export default class EditFieldModal extends Component<Signature> {
         throw error;
       }
 
-      this.fieldModuleURL = cardIdToURL(ref.module);
-      this.cardURL = cardIdToURL(ref.module);
+      this.fieldModuleURL = ref.module;
+      this.cardURL = ref.module;
       this.fieldRef = ref;
       return;
     }
@@ -162,9 +162,9 @@ export default class EditFieldModal extends Component<Signature> {
         loader: this.loaderService.loader,
       });
 
-      let moduleRef = moduleFrom(ref);
-      this.fieldModuleURL = cardIdToURL(moduleRef);
-      this.cardURL = cardIdToURL(moduleRef);
+      let moduleRef = rri(moduleFrom(ref));
+      this.fieldModuleURL = moduleRef;
+      this.cardURL = moduleRef;
       this.fieldRef = ref;
 
       // Field's card can descend from a FieldDef or a CardDef, so we need to determine which one it is. We do this by checking the field's type -
@@ -192,12 +192,12 @@ export default class EditFieldModal extends Component<Signature> {
         });
 
         this.isFieldDef = spec.isField;
-        this.cardURL = cardIdToURL(spec.id);
+        this.cardURL = rri(spec.id);
         this.fieldRef = spec.ref;
 
         // This transforms relative module paths, such as "../person", to absolute ones -
         // we need that absolute path to load realm info
-        this.fieldModuleURL = new URL(
+        this.fieldModuleURL = rri(
           resolveCardReference(spec.ref.module, spec.id),
         );
       }
@@ -363,10 +363,10 @@ export default class EditFieldModal extends Component<Signature> {
         <FieldContainer class='field' @label='Field Type'>
           <div class='card-chooser-area'>
             {{#if this.fieldCard.displayName}}
-              {{#if this.fieldModuleURL.href}}
+              {{#if this.fieldModuleURL}}
                 <SelectedTypePill
                   @title={{this.fieldCard.displayName}}
-                  @id={{this.fieldModuleURL.href}}
+                  @id={{this.fieldModuleURL}}
                 />
               {{/if}}
             {{/if}}

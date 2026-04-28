@@ -125,7 +125,7 @@ export class ModuleSyntax {
     fieldRef: ResolvedCodeRef; // module could be a relative path
     fieldType: FieldType;
     fieldDefinitionType: 'card' | 'field';
-    incomingRelativeTo: URL | undefined; // can be undefined when you know the url is not going to be relative
+    incomingRelativeTo: RealmResourceIdentifier | URL | undefined; // can be undefined when you know the url is not going to be relative
     outgoingRelativeTo: URL | undefined; // can be undefined when you know url is not going to be relative
     outgoingRealmURL: URL | undefined; // should be provided when the other 2 params are provided
     addFieldAtIndex?: number; // if provided, the field will be added at the specified index in the card's possibleFields map
@@ -397,7 +397,7 @@ function makeNewField({
   fieldType: FieldType;
   fieldName: string;
   cardBeingModified: CodeRef;
-  incomingRelativeTo: URL | undefined;
+  incomingRelativeTo: RealmResourceIdentifier | URL | undefined;
   outgoingRelativeTo: URL | undefined;
   outgoingRealmURL: URL | undefined;
   moduleURL: URL;
