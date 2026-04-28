@@ -1,5 +1,4 @@
 import {
-  BINARY_FILE_EXTENSIONS,
   isBotCommandFilter,
   logger,
   param,
@@ -11,6 +10,7 @@ import {
   type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command';
+import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
 import {
   CreateListingPRHandler,
   type BotTriggerEventContent,
@@ -505,11 +505,6 @@ function getCardUrl(cardResultString?: string | null): string | null {
 }
 
 
-
-function isBinaryFilename(filename: string): boolean {
-  let ext = filename.slice(filename.lastIndexOf('.')).toLowerCase();
-  return BINARY_FILE_EXTENSIONS.has(ext);
-}
 
 function extractFileContents(
   cardResultString?: string | null,
