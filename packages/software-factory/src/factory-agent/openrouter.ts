@@ -2,12 +2,6 @@
  * OpenRouter-backed factory agent — implements `LoopAgent` by driving a
  * remote LLM through OpenRouter's OpenAI-compatible tool-use protocol.
  *
- * Sibling backends live in `factory-agent-claude-code.ts` (Claude Agent SDK)
- * and eventually `factory-agent-codex-cli.ts` (Codex CLI, tracked in
- * CS-10594). The three implementations stay isolated: one file per
- * backend, all conforming to the same `LoopAgent` interface, selected
- * by `createLoopAgent()` in `factory-issue-loop-wiring.ts`.
- *
  * Flow: this agent sends tool definitions to the LLM via the API's
  * `tools` parameter. The LLM emits `tool_calls[]`, we dispatch each
  * through `FactoryTool.execute()`, feed the result back as a `role: "tool"`
@@ -181,7 +175,12 @@ export class OpenRouterFactoryAgent implements LoopAgent {
         tool_calls: assistantToolCalls,
       });
 
-      // Execute each tool call
+      // Execute each tool call. With `parallel_tool_calls: true` a single
+      // assistant turn can carry multiple tool_calls[]; if the batch contains
+      // a terminal signal (signal_done / request_clarification) alongside
+      // other tools, we still execute the whole batch so the model's other
+      // side effects land, then return the first terminal signal observed.
+      let terminalResult: AgentRunResult | undefined;
       for (let toolCall of assistantToolCalls) {
         let toolName = toolCall.function.name;
         let tool = tools.find((t) => t.name === toolName);
@@ -232,13 +231,13 @@ export class OpenRouterFactoryAgent implements LoopAgent {
         if (result && typeof result === 'object' && 'signal' in result) {
           let signal = (result as Record<string, unknown>).signal;
           if (signal === DONE_SIGNAL) {
-            // Add tool result to messages so conversation is well-formed
             messages.push({
               role: 'tool',
               tool_call_id: toolCall.id,
               content: JSON.stringify({ status: 'done' }),
             });
-            return { status: 'done', toolCalls: toolCallLog };
+            terminalResult ??= { status: 'done', toolCalls: toolCallLog };
+            continue;
           }
           if (signal === CLARIFICATION_SIGNAL) {
             let clarificationMessage = (result as Record<string, unknown>)
@@ -251,11 +250,12 @@ export class OpenRouterFactoryAgent implements LoopAgent {
                 message: clarificationMessage,
               }),
             });
-            return {
+            terminalResult ??= {
               status: 'blocked',
               toolCalls: toolCallLog,
               message: clarificationMessage,
             };
+            continue;
           }
         }
 
@@ -265,6 +265,10 @@ export class OpenRouterFactoryAgent implements LoopAgent {
           tool_call_id: toolCall.id,
           content: JSON.stringify(result),
         });
+      }
+
+      if (terminalResult) {
+        return terminalResult;
       }
     }
 
@@ -362,6 +366,11 @@ export class OpenRouterFactoryAgent implements LoopAgent {
 
     if (tools.length > 0) {
       body.tools = tools;
+      // Opt in to OpenAI-compatible parallel tool calls so a single assistant
+      // turn can emit multiple tool_calls[]. Without this, OpenRouter routes
+      // to Anthropic serialize 1 call/turn and re-send the full context each
+      // round, producing the O(n²) context blow-up observed in CS-10814.
+      body.parallel_tool_calls = true;
     }
 
     let response: Response;

@@ -457,7 +457,42 @@ export interface CardStore {
   ): Promise<SingleFileMetaDocument | CardError>;
   trackLoad(load: Promise<unknown>): void;
   loaded(): Promise<void>;
+  // CS-10872: optional diagnostic hooks used by the prerenderer's
+  // render-timeout error path to populate "what the render was
+  // waiting on". Stores that don't implement them (e.g. older test
+  // doubles) simply won't contribute a queryLoadsInFlight section.
+  trackQueryLoad?(
+    load: Promise<unknown>,
+    meta: QueryLoadMeta,
+  ): (() => void) | void;
+  queryLoadsInFlight?(): QueryLoadInfo[];
+  // Per-URL ageMs for currently-in-flight linked-field / file-meta
+  // loads. Mirrors the `cardDocsInFlight` string getter but carries
+  // "how long has this URL been loading".
+  cardDocLoadsInFlight?(): Array<{ url: string; ageMs: number }>;
+  fileMetaDocLoadsInFlight?(): Array<{ url: string; ageMs: number }>;
+  // Bounded top-N history of completed slow loads. Survives beyond
+  // the in-flight window so the post-timeout capture can see which
+  // individual queries / linked fields dominated wall time even if
+  // they completed just before the timer fired.
+  recentCardDocLoads?(): Array<{ url: string; ms: number }>;
+  recentFileMetaLoads?(): Array<{ url: string; ms: number }>;
+  recentQueryLoads?(): Array<{ meta: QueryLoadMeta; ms: number }>;
   getSearchResource: GetSearchResourceFunc;
+}
+
+export interface QueryLoadMeta {
+  // Free-form label so operators can tell "a query-field resolution"
+  // apart from "a standalone search". See SearchResource.
+  source: string;
+  query?: unknown;
+  realms?: string[];
+  cardId?: string;
+  fieldName?: string;
+}
+
+export interface QueryLoadInfo extends QueryLoadMeta {
+  ageMs: number;
 }
 
 export interface Field<
@@ -2877,6 +2912,11 @@ export class CardDef extends BaseDef {
   @field cardDescription = contains(StringField, {
     computeVia: function (this: CardDef) {
       return this.cardInfo.summary;
+    },
+  });
+  @field cardTheme: InstanceType<typeof Theme> | null = linksTo(() => Theme, {
+    computeVia: function (this: CardDef) {
+      return this.cardInfo.theme;
     },
   });
   // TODO: this will probably be an image or image url field card when we have it

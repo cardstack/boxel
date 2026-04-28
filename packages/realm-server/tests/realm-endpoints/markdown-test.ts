@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 import type { SuperTest, Test } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
 import type { Server } from 'http';
 import { closeServer, setupPermissionedRealmCached } from '../helpers';
@@ -313,7 +314,10 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           type: 'card',
           attributes: { title: 'Hello' },
           meta: {
-            adoptsFrom: { module: './basic.gts', name: 'Basic' },
+            adoptsFrom: {
+              module: rri('./basic.gts'),
+              name: 'Basic',
+            },
           },
         },
       },
@@ -323,7 +327,10 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           type: 'card',
           attributes: {},
           meta: {
-            adoptsFrom: { module: './whitespace.gts', name: 'Whitespace' },
+            adoptsFrom: {
+              module: rri('./whitespace.gts'),
+              name: 'Whitespace',
+            },
           },
         },
       },
@@ -334,7 +341,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           attributes: { name: '*Alice*' },
           meta: {
             adoptsFrom: {
-              module: './field-delegation.gts',
+              module: rri('./field-delegation.gts'),
               name: 'FieldDelegation',
             },
           },
@@ -347,7 +354,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           attributes: { body: 'Some **bold** text' },
           meta: {
             adoptsFrom: {
-              module: './markdown-field.gts',
+              module: rri('./markdown-field.gts'),
               name: 'PassThrough',
             },
           },
@@ -359,7 +366,10 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           type: 'card',
           attributes: { value: 'Hello *world* [link]' },
           meta: {
-            adoptsFrom: { module: './escape.gts', name: 'Escape' },
+            adoptsFrom: {
+              module: rri('./escape.gts'),
+              name: 'Escape',
+            },
           },
         },
       },
@@ -369,7 +379,10 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           type: 'card',
           attributes: { title: 'Fallback Title' },
           meta: {
-            adoptsFrom: { module: './fallback.gts', name: 'Fallback' },
+            adoptsFrom: {
+              module: rri('./fallback.gts'),
+              name: 'Fallback',
+            },
           },
         },
       },
@@ -379,7 +392,10 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           type: 'card',
           attributes: { title: 'Right' },
           meta: {
-            adoptsFrom: { module: './override.gts', name: 'Override' },
+            adoptsFrom: {
+              module: rri('./override.gts'),
+              name: 'Override',
+            },
           },
         },
       },
@@ -389,7 +405,10 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           type: 'card',
           attributes: { title: 'Featured' },
           meta: {
-            adoptsFrom: { module: './frontmatter.gts', name: 'Frontmatter' },
+            adoptsFrom: {
+              module: rri('./frontmatter.gts'),
+              name: 'Frontmatter',
+            },
           },
         },
       },
@@ -399,7 +418,10 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           type: 'card',
           attributes: { childTitle: 'Child' },
           meta: {
-            adoptsFrom: { module: './nested.gts', name: 'NestedChild' },
+            adoptsFrom: {
+              module: rri('./nested.gts'),
+              name: 'NestedChild',
+            },
           },
         },
       },
@@ -413,7 +435,10 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
             },
           },
           meta: {
-            adoptsFrom: { module: './nested.gts', name: 'NestedParent' },
+            adoptsFrom: {
+              module: rri('./nested.gts'),
+              name: 'NestedParent',
+            },
           },
         },
       },
@@ -423,7 +448,10 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           type: 'card',
           attributes: { title: 'Alpha' },
           meta: {
-            adoptsFrom: { module: './cache.gts', name: 'Cache' },
+            adoptsFrom: {
+              module: rri('./cache.gts'),
+              name: 'Cache',
+            },
           },
         },
       },

@@ -16,7 +16,12 @@ import stringify from 'safe-stable-stringify';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
-import { Deferred, baseRealm, skillCardRef } from '@cardstack/runtime-common';
+import {
+  Deferred,
+  baseRealm,
+  skillCardRef,
+  rri,
+} from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_ACTIVE_LLM,
@@ -35,6 +40,7 @@ import type { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 
 import {
   setupLocalIndexing,
+  addSkillToAiAssistant,
   setupOnSave,
   setupAuthEndpoints,
   setupUserSubscription,
@@ -1277,14 +1283,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-file="pet.gts"]').exists();
 
     // Change realm
-    await click('[data-test-choose-file-modal-realm-chooser]');
-    await click('[data-test-choose-file-modal-realm-option="Base Workspace"]');
+    await click('[data-test-realm-dropdown-trigger]');
+    await waitFor('[data-test-boxel-menu-item-text="Base Workspace"]');
+    await click('[data-test-boxel-menu-item-text="Base Workspace"]');
     assert.dom('[data-test-file="boolean.gts"]').exists();
 
-    await click('[data-test-choose-file-modal-realm-chooser]');
-    await click(
-      '[data-test-choose-file-modal-realm-option="Test Workspace B"]',
-    );
+    await click('[data-test-realm-dropdown-trigger]');
+    await waitFor('[data-test-boxel-menu-item-text="Test Workspace B"]');
+    await click('[data-test-boxel-menu-item-text="Test Workspace B"]');
 
     // Add attachment item
     await click('[data-test-file="person.gts"]');
@@ -1994,7 +2000,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.deepEqual(
       contextSent.codeMode!.selectedCodeRef,
       {
-        module: 'http://test-realm/test/plant',
+        module: rri('http://test-realm/test/plant'),
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',
@@ -2007,7 +2013,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.deepEqual(
       contextSent.codeMode!.inheritanceChain![0].codeRef,
       {
-        module: 'http://test-realm/test/plant',
+        module: rri('http://test-realm/test/plant'),
         name: 'Plant',
       },
       'First item in inheritanceChain is the Plant card',
@@ -2154,7 +2160,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.deepEqual(
       contextSent.codeMode!.selectedCodeRef,
       {
-        module: 'http://test-realm/test/plant',
+        module: rri('http://test-realm/test/plant'),
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',
@@ -2225,7 +2231,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.deepEqual(
       contextSent.codeMode!.selectedCodeRef,
       {
-        module: 'http://test-realm/test/plant',
+        module: rri('http://test-realm/test/plant'),
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',
@@ -2854,23 +2860,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           },
         ],
       ],
+      aiAssistantOpen: true,
     });
 
-    await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
     // First, let's add some skills to the current room
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await waitFor('[data-test-skill-menu]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(`[data-test-card-catalog-item="${testRealmURL}Skill/example"]`);
-    await click('[data-test-card-catalog-go-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(
-      `[data-test-card-catalog-item="${testRealmURL}Skill/example2"]`,
-    );
-    await click('[data-test-card-catalog-go-button]');
-
+    await addSkillToAiAssistant(`${testRealmURL}Skill/example`);
+    await addSkillToAiAssistant(`${testRealmURL}Skill/example2`);
+    await click('[data-test-skill-menu]');
     await waitUntil(
       () =>
         document.querySelectorAll(

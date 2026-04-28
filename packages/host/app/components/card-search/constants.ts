@@ -3,7 +3,7 @@ import {
   Rows4 as StripViewIcon,
 } from '@cardstack/boxel-ui/icons';
 
-import { baseRealm, type Sort } from '@cardstack/runtime-common';
+import { baseRRI, type Sort } from '@cardstack/runtime-common';
 
 export interface ViewOption {
   id: string;
@@ -37,12 +37,9 @@ export const SECTION_SHOW_MORE_INCREMENT = 5;
  * Host-local SORT_OPTIONS compatible with realm server query expectations.
  * Aligned with SORT_OPTIONS in packages/base/components/cards-grid-layout.gts.
  *
- * Sort is dual-mode:
- * - Server-side: the `sort` field is embedded in the search Query sent to
- *   the realm server, affecting prerendered search results (realm sections).
- * - Client-side: `sortAndFilterRecentCards()` in utils/card-search/recent-cards.ts
- *   applies the same sort locally to recent cards, matching by `displayName`.
- * - URL card lookup: no sort (single card).
+ * The `sort` field is embedded in the search Query sent to the realm
+ * server; realm and recents sections both apply it server-side via
+ * prerendered search. URL card lookup has no sort (single card).
  */
 export const SORT_OPTIONS: SortOption[] = [
   {
@@ -50,7 +47,7 @@ export const SORT_OPTIONS: SortOption[] = [
     sort: [
       {
         on: {
-          module: `${baseRealm.url}card-api`,
+          module: baseRRI('card-api'),
           name: 'CardDef',
         },
         by: 'cardTitle',

@@ -13,6 +13,7 @@ import type {
   LooseSingleCardDocument,
   Relationship,
 } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 
 import { logger } from './logger';
 
@@ -111,7 +112,7 @@ export function buildCardDocument(
       attributes,
       meta: {
         adoptsFrom: {
-          module: moduleUrl,
+          module: rri(moduleUrl),
           name: cardName,
         },
       },

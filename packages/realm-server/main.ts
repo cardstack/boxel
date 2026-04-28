@@ -31,6 +31,7 @@ import {
   deregisterEnvironment,
 } from './lib/dev-service-registry';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
+import { runRegistryBackfill } from './lib/realm-registry-backfill';
 
 (globalThis as any).ContentTagGlobal = ContentTagGlobal;
 
@@ -98,6 +99,13 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
 const FULL_INDEX_ON_STARTUP =
   process.env.REALM_SERVER_FULL_INDEX_ON_STARTUP !== 'false';
+// When set to 'true', skip the unconditional modules-cache clear on startup.
+// Used by the software-factory test harness, which restores a known-good
+// modules cache from a template database (URLs already rewritten to match
+// the runtime port) and would otherwise pay a full cold prerender on every
+// test's first lookupDefinition.
+const SKIP_MODULES_CACHE_CLEAR_ON_STARTUP =
+  process.env.REALM_SERVER_SKIP_MODULES_CACHE_CLEAR_ON_STARTUP === 'true';
 
 let {
   port,
@@ -297,8 +305,26 @@ const getIndexHTML = async () => {
     createPrerenderAuth,
   );
 
-  log.info('Clearing modules cache...');
-  await definitionLookup.clearAllModules();
+  if (SKIP_MODULES_CACHE_CLEAR_ON_STARTUP) {
+    log.info('Skipping modules cache clear on startup (opted out via env)');
+  } else {
+    log.info('Clearing modules cache...');
+    await definitionLookup.clearAllModules();
+  }
+
+  // Backfill realm_registry from CLI args (bootstrap), on-disk source realms,
+  // and on-disk published realms. Runs before Realm construction so the
+  // registry reflects known state before anything mounts. Shadow data only in
+  // Phase 1: no reader depends on these rows yet (see CS-10888, CS-10889).
+  await runRegistryBackfill({
+    dbAdapter,
+    realmsRootPath,
+    serverURL: new URL(String(serverURL)),
+    bootstrapRealms: paths.map((p, i) => ({
+      diskPath: String(p),
+      url: hrefs[i][0],
+    })),
+  });
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];

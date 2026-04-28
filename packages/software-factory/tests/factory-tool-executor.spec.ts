@@ -9,6 +9,7 @@
  */
 
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 
 import { test } from './fixtures';
 import { expect } from '@playwright/test';
@@ -23,37 +24,7 @@ import {
   sourceRealmURLFor,
 } from '../src/harness/shared';
 import { buildTestClient } from './helpers/test-client';
-
-test('realm-read fetches .realm.json from the test realm', async ({
-  realm,
-}) => {
-  let { client, cleanup } = buildTestClient({
-    realmUrl: realm.realmURL.href,
-    realmToken: `Bearer ${realm.ownerBearerToken}`,
-    realmServerUrl: realm.realmServerURL.href,
-    realmServerToken: `Bearer ${realm.serverToken}`,
-  });
-
-  try {
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(registry, {
-      packageRoot: process.cwd(),
-      targetRealmUrl: realm.realmURL.href,
-      allowedRealmPrefixes: [realm.realmURL.origin + '/'],
-      client,
-    });
-
-    let result = await executor.execute('realm-read', {
-      'realm-url': realm.realmURL.href,
-      path: '.realm.json',
-    });
-
-    expect(result.exitCode).toBe(0);
-    expect(typeof result.output).toBe('object');
-  } finally {
-    cleanup();
-  }
-});
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 test('realm-search returns results from the test realm', async ({ realm }) => {
   let { client, cleanup } = buildTestClient({
@@ -93,123 +64,6 @@ test('realm-search returns results from the test realm', async ({ realm }) => {
   }
 });
 
-test('realm-write creates a card and realm-read retrieves it', async ({
-  realm,
-}) => {
-  let { client, cleanup } = buildTestClient({
-    realmUrl: realm.realmURL.href,
-    realmToken: `Bearer ${realm.ownerBearerToken}`,
-    realmServerUrl: realm.realmServerURL.href,
-    realmServerToken: `Bearer ${realm.serverToken}`,
-  });
-
-  try {
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(registry, {
-      packageRoot: process.cwd(),
-      targetRealmUrl: realm.realmURL.href,
-      allowedRealmPrefixes: [realm.realmURL.origin + '/'],
-      client,
-    });
-
-    let cardJson = JSON.stringify({
-      data: {
-        type: 'card',
-        attributes: {
-          title: 'Tool Executor Write Test',
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
-            name: 'CardDef',
-          },
-        },
-      },
-    });
-
-    let writeResult = await executor.execute('realm-write', {
-      'realm-url': realm.realmURL.href,
-      path: 'ToolExecutorTest/write-test.json',
-      content: cardJson,
-    });
-
-    expect(writeResult.exitCode).toBe(0);
-
-    // Verify the written card can be read back
-    let readResult = await executor.execute('realm-read', {
-      'realm-url': realm.realmURL.href,
-      path: 'ToolExecutorTest/write-test.json',
-    });
-
-    expect(readResult.exitCode).toBe(0);
-    let output = readResult.output as {
-      data?: { attributes?: { title?: string } };
-    };
-    expect(output.data?.attributes?.title).toBe('Tool Executor Write Test');
-  } finally {
-    cleanup();
-  }
-});
-
-test('realm-delete removes a card from the test realm', async ({ realm }) => {
-  let { client, cleanup } = buildTestClient({
-    realmUrl: realm.realmURL.href,
-    realmToken: `Bearer ${realm.ownerBearerToken}`,
-    realmServerUrl: realm.realmServerURL.href,
-    realmServerToken: `Bearer ${realm.serverToken}`,
-  });
-
-  try {
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(registry, {
-      packageRoot: process.cwd(),
-      targetRealmUrl: realm.realmURL.href,
-      allowedRealmPrefixes: [realm.realmURL.origin + '/'],
-      client,
-    });
-
-    // First, write a card to delete
-    let cardJson = JSON.stringify({
-      data: {
-        type: 'card',
-        attributes: {},
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
-            name: 'CardDef',
-          },
-        },
-      },
-    });
-
-    let writeResult = await executor.execute('realm-write', {
-      'realm-url': realm.realmURL.href,
-      path: 'ToolExecutorTest/delete-test.json',
-      content: cardJson,
-    });
-    expect(writeResult.exitCode).toBe(0);
-
-    // Delete via the tool executor
-    let deleteResult = await executor.execute('realm-delete', {
-      'realm-url': realm.realmURL.href,
-      path: 'ToolExecutorTest/delete-test.json',
-    });
-    expect(deleteResult.exitCode).toBe(0);
-
-    // Verify the deletion took effect — reading the deleted card should fail
-    let readResult = await executor.execute('realm-read', {
-      'realm-url': realm.realmURL.href,
-      path: 'ToolExecutorTest/delete-test.json',
-    });
-    expect(
-      readResult.exitCode,
-      `Expected realm-read to fail after delete, but got: ${JSON.stringify(readResult.output)}`,
-    ).toBe(1);
-  } finally {
-    cleanup();
-  }
-});
-
 test('unregistered tool is rejected without reaching the server', async ({
   realm,
 }) => {
@@ -244,7 +98,7 @@ import type { FactoryTool } from '../src/factory-tool-builder';
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
 type CardWriteResult = { ok: boolean; error?: string };
-type CardReadResult = { ok: boolean; document?: LooseSingleCardDocument };
+type CardReadResult = { ok: boolean; document?: Record<string, unknown> };
 
 async function buildToolsForRealm(
   realm: {
@@ -253,6 +107,7 @@ async function buildToolsForRealm(
     ownerBearerToken: string;
   },
   client: BoxelCLIClient,
+  workspaceDir: string,
 ): Promise<FactoryTool[]> {
   let registry = new ToolRegistry();
   let executor = new ToolExecutor(registry, {
@@ -280,7 +135,7 @@ async function buildToolsForRealm(
       client,
       realm.realmServerURL.href,
       realm.realmURL.href,
-      { module: darkfactoryModule, name },
+      { module: rri(darkfactoryModule), name },
     );
     if (schema) {
       cardTypeSchemas.set(name, schema);
@@ -293,7 +148,10 @@ async function buildToolsForRealm(
     client,
     realm.realmServerURL.href,
     baseRealmUrl,
-    { module: 'https://cardstack.com/base/spec', name: 'Spec' },
+    {
+      module: rri('https://cardstack.com/base/spec'),
+      name: 'Spec',
+    },
   );
   if (specSchema) {
     cardTypeSchemas.set('Spec', specSchema);
@@ -305,6 +163,7 @@ async function buildToolsForRealm(
       darkfactoryModuleUrl: `${realm.realmServerURL.href}software-factory/darkfactory`,
       realmServerUrl: realm.realmServerURL.href,
       client,
+      workspaceDir,
       cardTypeSchemas,
     },
     executor,
@@ -323,7 +182,9 @@ test('update_project writes and reads back a project card', async ({
   });
 
   try {
-    let tools = await buildToolsForRealm(realm, client);
+    let workspace = createTestWorkspace();
+    await client.pull(realm.realmURL.href, workspace.dir);
+    let tools = await buildToolsForRealm(realm, client, workspace.dir);
     let updateProject = tools.find((t) => t.name === 'update_project')!;
     let readFile = tools.find((t) => t.name === 'read_file')!;
 
@@ -344,7 +205,8 @@ test('update_project writes and reads back a project card', async ({
     })) as CardReadResult;
 
     expect(readResult.ok).toBe(true);
-    expect(readResult.document!.data.attributes!.objective).toBe(
+    let doc = readResult.document as unknown as LooseSingleCardDocument;
+    expect(doc.data.attributes!.objective).toBe(
       'Test project for update_project tool',
     );
   } finally {
@@ -361,7 +223,9 @@ test('update_issue writes and reads back an issue card', async ({ realm }) => {
   });
 
   try {
-    let tools = await buildToolsForRealm(realm, client);
+    let workspace = createTestWorkspace();
+    await client.pull(realm.realmURL.href, workspace.dir);
+    let tools = await buildToolsForRealm(realm, client, workspace.dir);
     let updateIssue = tools.find((t) => t.name === 'update_issue')!;
     let readFile = tools.find((t) => t.name === 'read_file')!;
 
@@ -383,10 +247,11 @@ test('update_issue writes and reads back an issue card', async ({ realm }) => {
     })) as CardReadResult;
 
     expect(readResult.ok).toBe(true);
-    expect(readResult.document!.data.attributes!.summary).toBe(
+    let doc = readResult.document as unknown as LooseSingleCardDocument;
+    expect(doc.data.attributes!.summary).toBe(
       'Test issue for update_issue tool',
     );
-    expect(readResult.document!.data.attributes!.status).toBe('blocked');
+    expect(doc.data.attributes!.status).toBe('blocked');
   } finally {
     cleanup();
   }
@@ -403,7 +268,9 @@ test('add_comment appends a comment to an existing issue without changing other 
   });
 
   try {
-    let tools = await buildToolsForRealm(realm, client);
+    let workspace = createTestWorkspace();
+    await client.pull(realm.realmURL.href, workspace.dir);
+    let tools = await buildToolsForRealm(realm, client, workspace.dir);
     let writeFile = tools.find((t) => t.name === 'write_file')!;
     let addComment = tools.find((t) => t.name === 'add_comment')!;
     let readFileTool = tools.find((t) => t.name === 'read_file')!;
@@ -449,7 +316,8 @@ test('add_comment appends a comment to an existing issue without changing other 
     })) as CardReadResult;
 
     expect(readResult.ok).toBe(true);
-    let attrs = readResult.document!.data.attributes!;
+    let doc = readResult.document as unknown as LooseSingleCardDocument;
+    let attrs = doc.data.attributes!;
     // Original fields unchanged
     expect(attrs.summary).toBe('Issue for comment test');
     expect(attrs.description).toBe('Original description that must not change');
@@ -483,7 +351,9 @@ test('create_knowledge writes and reads back a knowledge article', async ({
   });
 
   try {
-    let tools = await buildToolsForRealm(realm, client);
+    let workspace = createTestWorkspace();
+    await client.pull(realm.realmURL.href, workspace.dir);
+    let tools = await buildToolsForRealm(realm, client, workspace.dir);
     let createKnowledge = tools.find((t) => t.name === 'create_knowledge')!;
     let readFile = tools.find((t) => t.name === 'read_file')!;
 
@@ -504,9 +374,8 @@ test('create_knowledge writes and reads back a knowledge article', async ({
     })) as CardReadResult;
 
     expect(readResult.ok).toBe(true);
-    expect(readResult.document!.data.attributes!.articleTitle).toBe(
-      'Test Knowledge Article',
-    );
+    let doc = readResult.document as unknown as LooseSingleCardDocument;
+    expect(doc.data.attributes!.articleTitle).toBe('Test Knowledge Article');
   } finally {
     cleanup();
   }
@@ -523,7 +392,9 @@ test('create_catalog_spec writes and reads back a Spec card', async ({
   });
 
   try {
-    let tools = await buildToolsForRealm(realm, client);
+    let workspace = createTestWorkspace();
+    await client.pull(realm.realmURL.href, workspace.dir);
+    let tools = await buildToolsForRealm(realm, client, workspace.dir);
     let createCatalogSpec = tools.find(
       (t) => t.name === 'create_catalog_spec',
     )!;
@@ -547,8 +418,9 @@ test('create_catalog_spec writes and reads back a Spec card', async ({
     })) as CardReadResult;
 
     expect(readResult.ok).toBe(true);
-    expect(readResult.document!.data.attributes!.specType).toBe('card');
-    let adoptsFrom = readResult.document!.data.meta.adoptsFrom as {
+    let doc = readResult.document as unknown as LooseSingleCardDocument;
+    expect(doc.data.attributes!.specType).toBe('card');
+    let adoptsFrom = doc.data.meta.adoptsFrom as {
       module: string;
       name: string;
     };
@@ -590,12 +462,15 @@ test.describe('realm-search with seeded fixture data', () => {
         client,
       });
 
-      let projectRead = await executor.execute('realm-read', {
-        'realm-url': realm.realmURL.href,
-        path: 'project-demo.json',
-      });
-      expect(projectRead.exitCode).toBe(0);
-      let projectDoc = projectRead.output as {
+      // Discover the darkfactory module URL by reading a known card's
+      // adoptsFrom via the BoxelCLIClient — this is setup for the
+      // realm-search assertions below.
+      let projectRead = await client.read(
+        realm.realmURL.href,
+        'project-demo.json',
+      );
+      expect(projectRead.ok).toBe(true);
+      let projectDoc = JSON.parse(projectRead.content ?? '') as {
         data: { meta: { adoptsFrom: { module: string; name: string } } };
       };
       let darkfactoryModule = projectDoc.data.meta.adoptsFrom.module;
@@ -685,15 +560,16 @@ test.describe('realm-search on a private realm', () => {
         client: ownerSetup.client,
       });
 
-      let projectRead = await ownerExecutor.execute('realm-read', {
-        'realm-url': realm.realmURL.href,
-        path: 'project-demo.json',
-      });
+      // Discover the module URL via the client for the search assertions below.
+      let projectRead = await ownerSetup.client.read(
+        realm.realmURL.href,
+        'project-demo.json',
+      );
       expect(
-        projectRead.exitCode,
-        `Failed to read project-demo: ${JSON.stringify(projectRead.output)}`,
-      ).toBe(0);
-      let projectDoc = projectRead.output as {
+        projectRead.ok,
+        `Failed to read project-demo: ${projectRead.error}`,
+      ).toBe(true);
+      let projectDoc = JSON.parse(projectRead.content ?? '') as {
         data: { meta: { adoptsFrom: { module: string; name: string } } };
       };
       let darkfactoryModule = projectDoc.data.meta.adoptsFrom.module;

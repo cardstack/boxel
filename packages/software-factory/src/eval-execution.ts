@@ -378,8 +378,8 @@ async function defaultEvaluateModule(
     { moduleUrl, realmUrl },
   );
 
-  log.info(
-    `run-command response for ${moduleUrl}: status=${response.status}, error=${response.error}, result=${response.result?.slice(0, 300)}`,
+  log.debug(
+    `run-command response for ${moduleUrl}: status=${response.status}, error=${response.error}, result=${response.result}`,
   );
 
   if (response.status !== 'ready') {

@@ -33,6 +33,11 @@ interface Signature {
     headerText?: string;
     message?: string;
     stack?: string;
+    // CS-10872: structured prerender-timeout diagnostics carried from
+    // the error doc's meta.diagnostics. Rendered in the details section
+    // beneath the stack trace so operators can classify a timeout
+    // without opening the DB or correlating CloudWatch logs.
+    diagnostics?: Record<string, unknown>;
     openDetails?: boolean;
     fileToAttach?: FileDef;
     viewInCodeMode?: boolean;
@@ -87,6 +92,78 @@ export default class ErrorDisplay
 
   private get headerText() {
     return this.args.headerText ?? `${this.args.type} Error`;
+  }
+
+  // CS-10872: pretty-print the diagnostics block so the details
+  // section is human-readable at a glance. JSON.stringify with indent
+  // keeps the structure (waits sub-object, per-item arrays) visible
+  // without imposing a bespoke layout on every possible field.
+  private get diagnosticsText(): string | undefined {
+    let d = this.args.diagnostics;
+    if (!d || typeof d !== 'object' || Object.keys(d).length === 0) {
+      return undefined;
+    }
+    try {
+      return JSON.stringify(d, null, 2);
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Summary line: pick the small handful of fields that nearly always
+  // point at the triage category (see
+  // .claude/skills/prerender-timeout-diagnostics/SKILL.md). Shown
+  // above the full JSON so operators don't have to parse the block.
+  private get diagnosticsSummary(): string | undefined {
+    let d = this.args.diagnostics as
+      | {
+          launchMs?: number;
+          renderElapsedMs?: number;
+          totalElapsedMs?: number;
+          waits?: {
+            semaphoreMs?: number;
+            tabQueueMs?: number;
+            tabStartupMs?: number;
+          };
+          renderStage?: string;
+          stageAgeMs?: number;
+          requestId?: string;
+        }
+      | undefined;
+    if (!d) return undefined;
+    let parts: string[] = [];
+    if (typeof d.totalElapsedMs === 'number') {
+      parts.push(`total=${d.totalElapsedMs}ms`);
+    }
+    if (typeof d.launchMs === 'number') {
+      let waits = d.waits;
+      if (
+        waits &&
+        (typeof waits.semaphoreMs === 'number' ||
+          typeof waits.tabQueueMs === 'number' ||
+          typeof waits.tabStartupMs === 'number')
+      ) {
+        parts.push(
+          `launch=${d.launchMs}ms (semaphore=${waits.semaphoreMs ?? 0}ms, tabQueue=${waits.tabQueueMs ?? 0}ms, tabStartup=${waits.tabStartupMs ?? 0}ms)`,
+        );
+      } else {
+        parts.push(`launch=${d.launchMs}ms`);
+      }
+    }
+    if (typeof d.renderElapsedMs === 'number') {
+      parts.push(`render=${d.renderElapsedMs}ms`);
+    }
+    if (d.renderStage) {
+      parts.push(
+        typeof d.stageAgeMs === 'number'
+          ? `stage=${d.renderStage} (age=${d.stageAgeMs}ms)`
+          : `stage=${d.renderStage}`,
+      );
+    }
+    if (d.requestId) {
+      parts.push(`requestId=${d.requestId}`);
+    }
+    return parts.length > 0 ? parts.join(' · ') : undefined;
   }
 
   <template>
@@ -155,6 +232,21 @@ export default class ErrorDisplay
                 trace could be generated.</p>
             {{/if}}
           </div>
+          {{#if this.diagnosticsText}}
+            <div class='detail-item' data-test-error-diagnostics>
+              <div class='detail-title'>Prerender diagnostics:</div>
+              {{#if this.diagnosticsSummary}}
+                <p
+                  class='diagnostics-summary'
+                  data-test-error-diagnostics-summary
+                >{{this.diagnosticsSummary}}</p>
+              {{/if}}
+              <pre
+                data-test-error-diagnostics-json
+                data-test-percy-hide
+              >{{this.diagnosticsText}}</pre>
+            </div>
+          {{/if}}
         </div>
       {{/if}}
     </div>
@@ -282,6 +374,18 @@ export default class ErrorDisplay
         color: var(--boxel-purple-700);
         font-style: italic;
         margin: 0;
+      }
+
+      .diagnostics-summary {
+        margin: 0 0 var(--boxel-sp-xs) 0;
+        font-family: var(--boxel-monospace-font-family, monospace);
+        font-size: var(--boxel-font-size-xs);
+        line-height: 1.5;
+        word-break: break-word;
+        background: #fff6d6;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius);
+        border-left: 3px solid var(--boxel-warning-200);
       }
 
       .actions {

@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "license": "MIT",
   "scripts": {
-    "catalog:setup": "[ -d contents ] || (git clone git@github.com:cardstack/boxel-catalog.git contents || git clone https://github.com/cardstack/boxel-catalog.git contents)",
-    "catalog:update": "pnpm catalog:setup && cd contents && git pull",
+    "catalog:setup": "[ -d contents ] || git clone git@github.com:cardstack/boxel-catalog.git contents || git clone https://github.com/cardstack/boxel-catalog.git contents || { echo 'both ssh and https clone failed; check GitHub auth and network'; exit 1; }",
+    "catalog:update": "sh scripts/catalog-update.sh",
     "catalog:reset": "rm -rf contents && pnpm catalog:setup"
   }
 }

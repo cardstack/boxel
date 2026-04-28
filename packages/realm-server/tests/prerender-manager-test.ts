@@ -5,7 +5,7 @@ import { basename } from 'path';
 import Koa from 'koa';
 import Router from '@koa/router';
 import type { Server } from 'http';
-import { createServer } from 'http';
+import http, { createServer } from 'http';
 import { buildPrerenderManagerApp } from '../prerender/manager-app';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
@@ -2369,6 +2369,192 @@ module(basename(__filename), function () {
         'sets draining header',
       );
       assert.strictEqual(hits, 0, 'does not proxy to prerender server');
+    });
+
+    module('client-abort propagation (CS-10873)', function () {
+      // The manager's `proxyStart`/ctxt.req close hook aborts the
+      // upstream fetch when the client disconnects mid-flight.
+      // Exercise it by spinning up a real HTTP listener (supertest's
+      // in-memory transport can't simulate a socket close cleanly)
+      // and tearing down the client request while the mock prerender
+      // is deliberately hung.
+      test('client closing the socket aborts the upstream fetch', async function (assert) {
+        let { app } = buildPrerenderManagerApp();
+        let managerServer = createServer(app.callback());
+        await new Promise<void>((resolve) =>
+          managerServer.listen(0, () => resolve()),
+        );
+        let managerPort = (managerServer.address() as any).port;
+        try {
+          let realm = 'https://realm.example/abort-test';
+          let cardURL = `${realm}/1`;
+
+          // Tell the mock to hang on the request and report back
+          // whether its inbound TCP socket closes (which is what we
+          // get from undici when it cancels the fetch). We watch the
+          // socket rather than `ctxt.req` because Node 17+ auto-
+          // destroys IncomingMessage after the body is consumed —
+          // `ctxt.req.close` fires during normal flow and wouldn't
+          // distinguish "manager aborted us" from "body read done".
+          let upstreamHit = new Deferred<void>();
+          let upstreamSocketClosed = new Deferred<void>();
+          mockPrerenderA!.setResponder(async (ctxt) => {
+            upstreamHit.fulfill();
+            ctxt.req.socket?.on('close', () => upstreamSocketClosed.fulfill());
+            // Never respond — wait forever. The outer test cleanup
+            // will tear down the server and flush this handler.
+            await new Promise(() => {});
+          });
+
+          // Register the mock.
+          await new Promise<void>((resolve, reject) => {
+            let req = http.request(
+              {
+                hostname: '127.0.0.1',
+                port: managerPort,
+                path: '/prerender-servers',
+                method: 'POST',
+                headers: { 'Content-Type': 'application/vnd.api+json' },
+              },
+              (res) => {
+                res.resume();
+                res.on('end', () => resolve());
+              },
+            );
+            req.on('error', reject);
+            req.write(
+              JSON.stringify({
+                data: {
+                  type: 'prerender-server',
+                  attributes: { capacity: 2, url: serverUrlA },
+                },
+              }),
+            );
+            req.end();
+          });
+
+          // Fire the prerender-visit request via a raw http client
+          // so we can destroy the socket mid-flight (which is what a
+          // real worker-gave-up scenario looks like).
+          let clientReq = http.request({
+            hostname: '127.0.0.1',
+            port: managerPort,
+            path: '/prerender-visit',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/vnd.api+json' },
+          });
+          clientReq.on('error', () => {
+            // expected on destroy
+          });
+          clientReq.write(JSON.stringify(makeBody(realm, cardURL)));
+          clientReq.end();
+
+          // Wait until the mock has the request in hand, then kill
+          // the client side.
+          await upstreamHit.promise;
+          clientReq.destroy();
+
+          // Manager should have propagated the abort to the upstream.
+          // We wait (bounded) for the mock's inbound socket to close.
+          let closedInTime = await Promise.race([
+            upstreamSocketClosed.promise.then(() => true),
+            new Promise<boolean>((resolve) =>
+              setTimeout(() => resolve(false), 2000),
+            ),
+          ]);
+          assert.true(
+            closedInTime,
+            'manager aborted upstream fetch after client disconnect',
+          );
+        } finally {
+          await new Promise<void>((resolve) =>
+            managerServer.close(() => resolve()),
+          );
+        }
+      });
+
+      test('aborting before discovery completes does not route to any server', async function (assert) {
+        // When the registry is empty and discoveryWaitMs is high,
+        // the manager polls waiting for a server to register. A
+        // client abort during that wait must exit the poll loop
+        // without later falling through to a proxy attempt.
+        process.env.PRERENDER_SERVER_DISCOVERY_WAIT_MS = '5000';
+        process.env.PRERENDER_SERVER_DISCOVERY_POLL_MS = '25';
+        let { app } = buildPrerenderManagerApp();
+        let managerServer = createServer(app.callback());
+        await new Promise<void>((resolve) =>
+          managerServer.listen(0, () => resolve()),
+        );
+        let managerPort = (managerServer.address() as any).port;
+        try {
+          let proxiedHits = 0;
+          mockPrerenderA!.setResponder((ctxt) => {
+            proxiedHits++;
+            ctxt.status = 201;
+            ctxt.body = '{}';
+          });
+
+          let realm = 'https://realm.example/no-servers';
+          let clientReq = http.request({
+            hostname: '127.0.0.1',
+            port: managerPort,
+            path: '/prerender-visit',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/vnd.api+json' },
+          });
+          clientReq.on('error', () => {});
+          clientReq.write(JSON.stringify(makeBody(realm, `${realm}/1`)));
+          clientReq.end();
+
+          // Give the manager a tick to start the discovery wait,
+          // then kill the client before registering any server.
+          await new Promise((r) => setTimeout(r, 100));
+          clientReq.destroy();
+
+          // Register a server *after* the abort. If the manager were
+          // to continue the poll loop past the disconnect, it would
+          // proxy to this server once it appears.
+          await new Promise<void>((resolve, reject) => {
+            let req = http.request(
+              {
+                hostname: '127.0.0.1',
+                port: managerPort,
+                path: '/prerender-servers',
+                method: 'POST',
+                headers: { 'Content-Type': 'application/vnd.api+json' },
+              },
+              (res) => {
+                res.resume();
+                res.on('end', () => resolve());
+              },
+            );
+            req.on('error', reject);
+            req.write(
+              JSON.stringify({
+                data: {
+                  type: 'prerender-server',
+                  attributes: { capacity: 2, url: serverUrlA },
+                },
+              }),
+            );
+            req.end();
+          });
+
+          // Wait long enough that a not-cancelled poll would have
+          // picked up the new server and proxied.
+          await new Promise((r) => setTimeout(r, 300));
+
+          assert.strictEqual(
+            proxiedHits,
+            0,
+            'no upstream proxy after client abort during discovery wait',
+          );
+        } finally {
+          await new Promise<void>((resolve) =>
+            managerServer.close(() => resolve()),
+          );
+        }
+      });
     });
   });
 });

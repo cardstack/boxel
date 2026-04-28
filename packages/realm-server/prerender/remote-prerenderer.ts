@@ -9,11 +9,13 @@ import {
   logger,
 } from '@cardstack/runtime-common';
 import {
+  PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
   resolvePrerenderManagerRequestTimeoutMs,
 } from './prerender-constants';
+import { randomUUID } from 'crypto';
 
 const log = logger('remote-prerenderer');
 const jsonApiHeaders = {
@@ -73,17 +75,28 @@ export function createRemotePrerenderer(
         attributes,
       },
     };
+    // CS-10872: one correlation ID per logical client call, reused on
+    // retries so operators can follow the full manager/prerender-server
+    // log story for the same intent rather than hunting through N
+    // disconnected attempts.
+    let requestId = randomUUID();
+    let affinityTag = `${attributes.affinityType}:${attributes.affinityValue}`;
 
     let attempts = 0;
     let lastError: Error | undefined;
+    let attemptStart = Date.now();
     while (attempts < maxAttempts) {
       attempts++;
+      attemptStart = Date.now();
       try {
         const ac = new AbortController();
         const timer = setTimeout(() => ac.abort(), requestTimeoutMs);
         let response = await fetch(endpoint, {
           method: 'POST',
-          headers: jsonApiHeaders,
+          headers: {
+            ...jsonApiHeaders,
+            [PRERENDER_REQUEST_ID_HEADER]: requestId,
+          },
           body: JSON.stringify(body),
           signal: ac.signal,
         }).finally(() => {
@@ -131,8 +144,16 @@ export function createRemotePrerenderer(
         lastError = e;
         if (e?.name === 'AbortError') {
           // AbortError from request timeout—consider this a hard timeout, not a retryable deployment blip.
+          // CS-10872: include the correlation ID, attempt, affinity, and
+          // elapsed so operators can grep the manager/prerender-server
+          // logs for the same requestId to see where the time went
+          // (queue wait vs slow render).
+          let elapsedMs = Date.now() - attemptStart;
           throw new Error(
-            `Prerender request to ${endpoint.href} aborted after ${requestTimeoutMs}ms`,
+            `Prerender request to ${endpoint.href} aborted after ${requestTimeoutMs}ms ` +
+              `(requestId=${requestId}, attempt=${attempts}/${maxAttempts}, ` +
+              `affinity=${affinityTag}, elapsed=${elapsedMs}ms; ` +
+              `grep manager/prerender-server logs for requestId=${requestId} to locate the stall)`,
           );
         }
         // Node.js fetch() wraps network errors in TypeError with the

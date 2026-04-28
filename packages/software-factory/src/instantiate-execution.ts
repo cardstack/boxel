@@ -14,6 +14,7 @@
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 import {
   isResolvedCodeRef,
   isSingleCardDocument,
@@ -23,6 +24,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { logger } from './logger';
 import { validateRealmRelativePath } from './realm-relative-path';
+import { readCard } from './workspace-fs';
 
 let log = logger('instantiate-execution');
 
@@ -83,6 +85,12 @@ export interface InstantiateRealmSpecsOptions {
   targetRealmUrl: string;
   realmServerUrl: string;
   client: BoxelCLIClient;
+  /**
+   * Local workspace directory to read example `.json` instances from. The
+   * realm is used for spec discovery and card instantiation (prerenderer),
+   * but example content comes from disk.
+   */
+  workspaceDir: string;
   /** Injected for testing — defaults to client.runCommand → instantiate-card. */
   instantiateCardFn?: InstantiateCardFn;
 }
@@ -100,6 +108,10 @@ export interface RunInstantiateInMemoryOptions {
   targetRealmUrl: string;
   realmServerUrl: string;
   client: BoxelCLIClient;
+  /**
+   * Local workspace directory to read example `.json` instances from.
+   */
+  workspaceDir: string;
   /**
    * When set, instantiate only this realm-relative `.json` file instead of
    * discovering every linkedExample on every Spec. Useful for mid-turn
@@ -190,8 +202,8 @@ export async function instantiateRealmSpecs(
 
   for (let spec of specs) {
     let exampleInstances = await collectExampleInstances(
-      options.client,
       options.targetRealmUrl,
+      options.workspaceDir,
       spec,
     );
 
@@ -303,7 +315,7 @@ export async function runInstantiateInMemory(
     return runSingleInstance(
       options.path,
       options.targetRealmUrl,
-      options.client,
+      options.workspaceDir,
       instantiateCardFn,
     );
   }
@@ -341,6 +353,7 @@ export async function runInstantiateInMemory(
         targetRealmUrl: options.targetRealmUrl,
         realmServerUrl: options.realmServerUrl,
         client: options.client,
+        workspaceDir: options.workspaceDir,
         instantiateCardFn,
       },
       specsResult.specs,
@@ -369,7 +382,7 @@ export async function runInstantiateInMemory(
 async function runSingleInstance(
   path: string,
   targetRealmUrl: string,
-  client: BoxelCLIClient,
+  workspaceDir: string,
   instantiateCardFn: InstantiateCardFn,
 ): Promise<RunInstantiateResult> {
   let pathError = validateRealmRelativePath(path);
@@ -382,7 +395,11 @@ async function runSingleInstance(
     );
   }
 
-  let prepared = await prepareExampleInstance(client, targetRealmUrl, path);
+  let prepared = await prepareExampleInstance(
+    targetRealmUrl,
+    workspaceDir,
+    path,
+  );
   if ('error' in prepared) {
     return emptyErrorResult(prepared.error);
   }
@@ -422,8 +439,8 @@ async function runSingleInstance(
  * codeRef. Mirrors the per-example prep inside `instantiateRealmSpecs`.
  */
 async function prepareExampleInstance(
-  client: BoxelCLIClient,
   targetRealmUrl: string,
+  workspaceDir: string,
   exampleUrl: string,
 ): Promise<
   | {
@@ -433,9 +450,13 @@ async function prepareExampleInstance(
     }
   | { error: string }
 > {
+  let exampleFilePath = exampleUrl.endsWith('.json')
+    ? exampleUrl
+    : `${exampleUrl}.json`;
+
   let rawRead;
   try {
-    rawRead = await client.read(targetRealmUrl, exampleUrl);
+    rawRead = await readCard(workspaceDir, exampleFilePath);
   } catch (err) {
     return {
       error: `Failed to read example "${exampleUrl}": ${err instanceof Error ? err.message : String(err)}`,
@@ -444,9 +465,11 @@ async function prepareExampleInstance(
 
   if (!rawRead.ok || !rawRead.document) {
     return {
-      error: `Failed to read example "${exampleUrl}": ${rawRead.error ?? `HTTP ${rawRead.status ?? 'unknown'}`}`,
+      error: `Failed to read example "${exampleUrl}": ${rawRead.error ?? (rawRead.status === 404 ? 'not found in workspace' : 'unknown error')}`,
     };
   }
+
+  let parsedDoc = rawRead.document;
 
   // A readable `.json` file isn't guaranteed to be a card document — a
   // malformed fixture or a raw JSON payload could be missing `data`,
@@ -462,13 +485,13 @@ async function prepareExampleInstance(
   // this module is exercised by the software-factory Playwright harness,
   // which can't compile the `@Memoize()` decorators reachable through
   // the heavier runtime-common entry points.
-  if (!isSingleCardDocument(rawRead.document)) {
+  if (!isSingleCardDocument(parsedDoc)) {
     return {
       error: `Example "${exampleUrl}" is not a valid card document (missing or malformed "data" / "data.meta.adoptsFrom").`,
     };
   }
 
-  let document = rawRead.document as unknown as LooseSingleCardDocument;
+  let document = parsedDoc as unknown as LooseSingleCardDocument;
   // Boxel card IDs are extensionless — the `id` is the resource URL, not
   // the .json file path. Strip any trailing `.json` so the id matches what
   // the prerender sandbox expects (and what the pre-refactor validation
@@ -489,7 +512,7 @@ async function prepareExampleInstance(
     };
   }
 
-  let moduleUrl = new URL(adoptsFrom.module, exampleCardUrl).href;
+  let moduleUrl = rri(new URL(adoptsFrom.module, exampleCardUrl).href);
   document.data.meta!.adoptsFrom = { module: moduleUrl, name: adoptsFrom.name };
   document.data.id = exampleCardUrl;
 
@@ -501,15 +524,15 @@ async function prepareExampleInstance(
 }
 
 async function collectExampleInstances(
-  client: BoxelCLIClient,
   targetRealmUrl: string,
+  workspaceDir: string,
   spec: SpecInfo,
 ): Promise<{ url: string; data: string }[]> {
   let exampleInstances: { url: string; data: string }[] = [];
   for (let exampleUrl of spec.exampleUrls) {
     let prepared = await prepareExampleInstance(
-      client,
       targetRealmUrl,
+      workspaceDir,
       exampleUrl,
     );
     if ('error' in prepared) {
@@ -712,11 +735,12 @@ async function defaultInstantiateCard(
     commandInput,
   );
 
-  // Log status/error metadata only. The serialized `response.result` can
-  // contain card attributes (user data) and bloats logs when the tool is
-  // called repeatedly mid-turn, so it stays out of the default log stream.
-  log.info(
-    `run-command response for ${cardName}: status=${response.status}, error=${response.error}`,
+  // The serialized `response.result` can contain card attributes (user
+  // data) and bloats logs when the tool is called repeatedly mid-turn,
+  // so it stays out of the default log stream. --debug raises the logger
+  // level to see the full body.
+  log.debug(
+    `run-command response for ${cardName}: status=${response.status}, error=${response.error}, result=${response.result}`,
   );
 
   if (response.status !== 'ready') {

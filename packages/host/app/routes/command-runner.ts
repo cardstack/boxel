@@ -15,6 +15,7 @@ import {
   CommandContextStamp,
   getClass,
   parseBoxelHostCommandSpecifier,
+  rri,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -232,7 +233,7 @@ function parseCommandParam(
       return undefined;
     }
     return {
-      module: `${url.origin}${pathname.slice(0, index)}`,
+      module: rri(`${url.origin}${pathname.slice(0, index)}`),
       name: pathname.slice(index + 1),
     };
   } catch {
@@ -244,7 +245,7 @@ function parseCommandParam(
     return undefined;
   }
   return {
-    module: value.slice(0, index),
+    module: rri(value.slice(0, index)),
     name: value.slice(index + 1),
   };
 }

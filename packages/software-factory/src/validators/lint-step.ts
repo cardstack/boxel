@@ -33,6 +33,12 @@ export interface LintValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
   lintResultsModuleUrl: string;
+  /**
+   * Local workspace directory mirroring the target realm. Source files are
+   * read from here; LintResult cards are written here for the orchestrator
+   * to sync.
+   */
+  workspaceDir: string;
   issueId?: string;
   /** Injected for testing — defaults to client.listFiles. */
   fetchFilenames?: (
@@ -164,6 +170,7 @@ export class LintValidationStep implements ValidationStepRunner {
         {
           targetRealmUrl,
           client: this.config.client,
+          workspaceDir: this.config.workspaceDir,
           sequenceNumber: seq,
           issueURL,
         },
@@ -193,6 +200,7 @@ export class LintValidationStep implements ValidationStepRunner {
       {
         targetRealmUrl,
         client: this.config.client,
+        workspaceDir: this.config.workspaceDir,
         lintFileFn: this.config.lintFileFn,
         readFileFn: this.config.readFileFn,
       },
@@ -213,6 +221,7 @@ export class LintValidationStep implements ValidationStepRunner {
         {
           targetRealmUrl,
           client: this.config.client,
+          workspaceDir: this.config.workspaceDir,
         },
       );
       if (!completeResult.updated) {

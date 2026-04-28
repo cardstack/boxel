@@ -8,11 +8,18 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
 import { CardList } from '../components/card-list';
-import { realmURL } from '@cardstack/runtime-common';
+import {
+  realmURL,
+  ResolvedCodeRef,
+  Query,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { ResolvedCodeRef, Query } from '@cardstack/runtime-common';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 
 interface GameStatusField {
   label: string;
@@ -65,19 +72,16 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
 
     const adoptsFromModule = new URL(
       this.selectedGameRef.adoptsFrom.module,
-      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-      import.meta.url,
+      here,
     ).href;
     const adoptsFromName = this.selectedGameRef.adoptsFrom.name;
-    // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-    const refModule = new URL(this.selectedGameRef.ref.module, import.meta.url)
-      .href;
+    const refModule = new URL(this.selectedGameRef.ref.module, here).href;
     const refName = this.selectedGameRef.ref.name;
 
     return {
       filter: {
         on: {
-          module: adoptsFromModule,
+          module: adoptsFromModule as RealmResourceIdentifier,
           name: adoptsFromName,
         },
         eq: {
@@ -144,7 +148,7 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
         gameMap.set(key, {
           adoptsFrom: adoptsFrom as ResolvedCodeRef,
           ref: {
-            module: gameResult.ref.module,
+            module: gameResult.ref.module as RealmResourceIdentifier,
             name: gameResult.ref.name,
           },
           title: gameResult.game.cardTitle,

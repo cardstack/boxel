@@ -115,6 +115,7 @@ let getFieldDescription: (typeof CardAPIModule)['getFieldDescription'];
 let ReadOnlyField: (typeof CardAPIModule)['ReadOnlyField'];
 let instanceOf: (typeof CardAPIModule)['instanceOf'];
 let CardInfoField: (typeof CardAPIModule)['CardInfoField'];
+let Theme: (typeof CardAPIModule)['Theme'];
 let enumField: (typeof EnumModule)['default'];
 let enumOptions: (typeof EnumModule)['enumOptions'];
 let enumValues: (typeof EnumModule)['enumValues'];
@@ -246,6 +247,7 @@ async function initialize() {
     ReadOnlyField,
     instanceOf,
     CardInfoField,
+    Theme,
   } = cardAPI);
 
   enumField = (await loader.import<typeof EnumModule>(`${baseRealm.url}enum`))
@@ -312,6 +314,7 @@ export {
   Skill,
   instanceOf,
   CardInfoField,
+  Theme,
   enumField,
   enumOptions,
   enumValues,

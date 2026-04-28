@@ -3,18 +3,97 @@ import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
+import type { PgAdapter } from '@cardstack/postgres';
 import type { Realm, RealmAdapter } from '@cardstack/runtime-common';
 import {
   type LooseSingleCardDocument,
+  readFileAsText,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
   createJWT,
   type RealmRequest,
+  waitUntil,
   withRealmPath,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+
+type DiskSnapshot =
+  | { kind: 'present'; lastModified: number; content: string }
+  | { kind: 'absent' }
+  | { kind: 'error'; message: string };
+
+async function readDiskSnapshot(
+  adapter: RealmAdapter,
+  path: string,
+): Promise<DiskSnapshot> {
+  try {
+    let file = await readFileAsText(path, (p) => adapter.openFile(p));
+    if (!file) {
+      return { kind: 'absent' };
+    }
+    return {
+      kind: 'present',
+      lastModified: file.lastModified,
+      content: file.content,
+    };
+  } catch (e) {
+    return { kind: 'error', message: (e as Error).message };
+  }
+}
+
+function formatDiskSnapshot(snapshot: DiskSnapshot): string {
+  switch (snapshot.kind) {
+    case 'absent':
+      return '<absent>';
+    case 'error':
+      return `<error: ${snapshot.message}>`;
+    case 'present':
+      return `lastModified=${snapshot.lastModified} content=${JSON.stringify(snapshot.content)}`;
+  }
+}
+
+// Read the raw rows for a URL from boxel_index + boxel_index_working,
+// plus realm_versions, so we can tell whether a stale GET is the index
+// being out of date or the GET path picking up the wrong row.
+async function readIndexSnapshot(
+  dbAdapter: PgAdapter,
+  realmHref: string,
+  cardURL: string,
+  fileURL: string,
+): Promise<{
+  realmVersion: unknown;
+  stable: unknown[];
+  working: unknown[];
+}> {
+  let [versionRow] = (await dbAdapter.execute(
+    `SELECT current_version FROM realm_versions WHERE realm_url = $1`,
+    { bind: [realmHref] },
+  )) as { current_version: number }[];
+
+  let stable = (await dbAdapter.execute(
+    `SELECT url, file_alias, type, realm_version, is_deleted,
+            pristine_doc, last_modified
+       FROM boxel_index
+      WHERE realm_url = $1 AND (url = $2 OR url = $3 OR file_alias = $2 OR file_alias = $3)`,
+    { bind: [realmHref, cardURL, fileURL] },
+  )) as unknown[];
+
+  let working = (await dbAdapter.execute(
+    `SELECT url, file_alias, type, realm_version, is_deleted,
+            pristine_doc, last_modified
+       FROM boxel_index_working
+      WHERE realm_url = $1 AND (url = $2 OR url = $3 OR file_alias = $2 OR file_alias = $3)`,
+    { bind: [realmHref, cardURL, fileURL] },
+  )) as unknown[];
+
+  return {
+    realmVersion: versionRow?.current_version ?? null,
+    stable,
+    working,
+  };
+}
 
 module(basename(__filename), function () {
   module(
@@ -24,17 +103,20 @@ module(basename(__filename), function () {
       let testRealmHref = realmURL.href;
       let testRealm: Realm;
       let testRealmAdapter: RealmAdapter;
+      let dbAdapter: PgAdapter;
       let request: RealmRequest;
 
       function onRealmSetup(args: {
         testRealm: Realm;
         testRealmHttpServer: Server;
         testRealmAdapter: RealmAdapter;
+        dbAdapter: PgAdapter;
         request: SuperTest<Test>;
         dir: DirResult;
       }) {
         testRealm = args.testRealm;
         testRealmAdapter = args.testRealmAdapter;
+        dbAdapter = args.dbAdapter;
         request = withRealmPath(args.request, realmURL);
       }
 
@@ -622,6 +704,88 @@ module(basename(__filename), function () {
           );
         });
 
+        test('can write new instance with new module when instance comes first in the batch', async function (assert) {
+          // Regression test: the atomic batch loop iterates files in
+          // map order. If the instance comes before the module its
+          // adoptsFrom points at, fileSerialization would (without the
+          // module-first sort and the pre-serialization index flush)
+          // try to resolve the module from the modules cache before
+          // it's been indexed, throwing FilterRefersToNonexistentTypeError
+          // and rolling back the whole batch.
+          //
+          // Reorder is safe because the operations are atomic — the
+          // realm is free to write them in any order so long as the
+          // observable result is "all or nothing".
+          let source = `
+            import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+            export class Town extends CardDef {
+              static displayName = 'Town';
+              @field name = contains(StringField);
+            }
+            `.trim();
+          let doc = {
+            'atomic:operations': [
+              // Instance listed FIRST — module SECOND.
+              {
+                op: 'add',
+                href: 'town.json',
+                data: {
+                  type: 'card',
+                  attributes: {
+                    name: 'Petaling Jaya',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './town-modules/town.gts',
+                      name: 'Town',
+                    },
+                  },
+                },
+              },
+              {
+                op: 'add',
+                href: 'town-modules/town.gts',
+                data: {
+                  type: 'source',
+                  attributes: {
+                    content: source,
+                  },
+                  meta: {},
+                },
+              },
+            ],
+          };
+          let response = await request
+            .post('/_atomic')
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+            )
+            .send(JSON.stringify(doc));
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `expected 201, got ${response.status}: ${JSON.stringify(response.body)}`,
+          );
+          assert.strictEqual(response.body['atomic:results'].length, 2);
+          let cardResponse = await request
+            .get('/town')
+            .set('Accept', SupportedMimeType.CardJson);
+          let json = cardResponse.body as LooseSingleCardDocument;
+          assert.strictEqual(json.data.attributes?.name, 'Petaling Jaya');
+          let sourceResponse = await request
+            .get('/town-modules/town.gts')
+            .set('Accept', SupportedMimeType.CardSource);
+          assert.strictEqual(
+            sourceResponse.text.trim(),
+            source,
+            'the card source is correct',
+          );
+        });
+
         test('update is a no-op when content is unchanged', async function (assert) {
           let source = `
               import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
@@ -840,7 +1004,7 @@ module(basename(__filename), function () {
             ],
           };
 
-          await request
+          let addResponse = await request
             .post('/_atomic')
             .set('Accept', SupportedMimeType.JSONAPI)
             .set(
@@ -849,6 +1013,14 @@ module(basename(__filename), function () {
             )
             .send(JSON.stringify(addDoc))
             .expect(201);
+
+          // Snapshot the on-disk serialized form right after the add so
+          // the timeout message can show whether the update actually
+          // changed the file or not.
+          let postAddDisk = await readDiskSnapshot(
+            testRealmAdapter,
+            'update-person.json',
+          );
 
           let updateDoc = {
             'atomic:operations': [
@@ -883,11 +1055,62 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 201);
           assert.strictEqual(response.body['atomic:results'].length, 1);
 
-          let updatedCardResponse = await request
-            .get('/update-person')
-            .set('Accept', SupportedMimeType.CardJson);
-          let updatedCard = updatedCardResponse.body as LooseSingleCardDocument;
-          assert.strictEqual(updatedCard.data.attributes?.firstName, 'Updated');
+          // Snapshot the on-disk serialized form right after the update.
+          // Together with postAddDisk this distinguishes "write was
+          // skipped (content-equality false positive)" from "write
+          // happened but reindex didn't pick it up".
+          let postUpdateDisk = await readDiskSnapshot(
+            testRealmAdapter,
+            'update-person.json',
+          );
+          // Snapshot boxel_index/boxel_index_working too. With the disk
+          // diagnostic from #4530 we know the file write lands; if the
+          // index rows here have firstName="Initial" it's an indexer/
+          // promotion bug, if they have "Updated" it's a GET-path bug.
+          let postUpdateIndex = await readIndexSnapshot(
+            dbAdapter,
+            testRealmHref,
+            `${testRealmHref}update-person`,
+            `${testRealmHref}update-person.json`,
+          );
+
+          // The atomic POST awaits indexing, so by 201 boxel_index should
+          // be updated. Poll up to 30s in case CI load delays read-path
+          // readiness; the diagnostics above are captured pre-poll so
+          // the timeout message reflects the immediate post-201 state.
+          let updatedCard: LooseSingleCardDocument | undefined;
+          let lastStatus: number | undefined;
+          await waitUntil(
+            async () => {
+              let updatedCardResponse = await request
+                .get('/update-person')
+                .set('Accept', SupportedMimeType.CardJson);
+              lastStatus = updatedCardResponse.status;
+              updatedCard = updatedCardResponse.body as
+                | LooseSingleCardDocument
+                | undefined;
+              return updatedCard?.data?.attributes?.firstName === 'Updated';
+            },
+            {
+              timeout: 30_000,
+              interval: 100,
+              timeoutMessage: () =>
+                [
+                  'updated firstName was not visible via /update-person',
+                  `last GET status=${lastStatus}`,
+                  `last firstName=${JSON.stringify(updatedCard?.data?.attributes?.firstName)}`,
+                  `add 201 body=${JSON.stringify(addResponse.body)}`,
+                  `update 201 body=${JSON.stringify(response.body)}`,
+                  `disk after add=${formatDiskSnapshot(postAddDisk)}`,
+                  `disk after update=${formatDiskSnapshot(postUpdateDisk)}`,
+                  `index after update=${JSON.stringify(postUpdateIndex)}`,
+                ].join(' | '),
+            },
+          );
+          assert.strictEqual(
+            updatedCard?.data.attributes?.firstName,
+            'Updated',
+          );
         });
       });
       module('validation', function (hooks) {

@@ -29,6 +29,7 @@ import {
   isRegisteredPrefix,
   cardIdToURL,
   resolveCardReference,
+  type RealmResourceIdentifier,
 } from './card-reference-resolver';
 import type { VirtualNetwork } from './virtual-network';
 
@@ -75,6 +76,22 @@ function normalizeExecutableURL(url: string): string {
     // Fallback for non-URL identifiers
     return url.replace(/\.(gts|ts|js|gjs)$/, '');
   }
+}
+
+// Application-level dedup key. Coalesces two concurrent lookups only when
+// they would hit the same (resolvedRealmURL, cache_scope, auth_user_id,
+// moduleURL) lookup context. This does NOT mirror the modules-table primary
+// key exactly: file_alias variants are intentionally not coalesced, because
+// a caller asking for an extensionless path walks a different
+// populationCandidates loop than a caller asking for `foo.gts` directly —
+// coalescing them could strand one behind the other's narrower search.
+function inFlightKey(args: {
+  resolvedRealmURL: string;
+  moduleURL: string;
+  cacheScope: CacheScope;
+  cacheUserId: string;
+}): string {
+  return `${args.resolvedRealmURL}|${args.moduleURL}|${args.cacheScope}|${args.cacheUserId}`;
 }
 
 function parseJsonValue<T>(value: T | string | null): T | null {
@@ -156,7 +173,7 @@ export interface DefinitionLookup {
     codeRef: ResolvedCodeRef,
   ): Promise<Definition | undefined>;
   invalidate(moduleURL: string): Promise<string[]>;
-  clearRealmCache(realmURL: string): Promise<void>;
+  clearRealmCache(resolvedRealmURL: string): Promise<void>;
   clearAllModules(): Promise<void>;
   registerRealm(realm: LocalRealm): void;
   forRealm(realm: LocalRealm): DefinitionLookup;
@@ -179,6 +196,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     userId: string,
     permissions: RealmPermissions,
   ) => string;
+  // Dedupes concurrent loadModuleCacheEntry calls that would hit the same
+  // cache row so a single prerenderer round-trip is shared by all waiters
+  // instead of each caller racing to the prerenderer independently.
+  #inFlight = new Map<string, Promise<ModuleCacheEntry | undefined>>();
 
   constructor(
     dbAdapter: DBAdapter,
@@ -224,7 +245,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         let canonicalCodeRef =
           canonicalModuleURL === codeRef.module
             ? codeRef
-            : { ...codeRef, module: canonicalModuleURL };
+            : {
+                ...codeRef,
+                module: canonicalModuleURL as RealmResourceIdentifier,
+              };
         let moduleId = internalKeyFor(canonicalCodeRef, undefined);
         let entry = cached.definitions[moduleId];
         if (entry && 'definition' in entry) {
@@ -265,7 +289,27 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return await query(this.#dbAdapter, expression, coerceTypes);
   }
 
-  private async loadModuleCacheEntry({
+  private async loadModuleCacheEntry(args: {
+    moduleURL: string;
+    realmURL: string;
+    resolvedRealmURL: string;
+    cacheScope: CacheScope;
+    cacheUserId: string;
+    prerenderUserId: string;
+  }): Promise<ModuleCacheEntry | undefined> {
+    let key = inFlightKey(args);
+    let existing = this.#inFlight.get(key);
+    if (existing) {
+      return await existing;
+    }
+    let pending = this.loadModuleCacheEntryUncached(args).finally(() => {
+      this.#inFlight.delete(key);
+    });
+    this.#inFlight.set(key, pending);
+    return await pending;
+  }
+
+  private async loadModuleCacheEntryUncached({
     moduleURL,
     realmURL,
     resolvedRealmURL,
@@ -386,7 +430,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     let canonicalCodeRef =
       canonicalModuleURL === codeRef.module
         ? codeRef
-        : { ...codeRef, module: canonicalModuleURL };
+        : { ...codeRef, module: canonicalModuleURL as RealmResourceIdentifier };
     let context = await this.buildLookupContext(
       canonicalModuleURL,
       contextOpts,
@@ -462,20 +506,60 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     }
     let uniqueInvalidations = [...new Set(invalidations)];
     await this.deleteModuleAliases(resolvedRealmURL, uniqueInvalidations);
+    this.dropInFlightForRealm(resolvedRealmURL, uniqueInvalidations);
     return uniqueInvalidations;
   }
 
-  async clearRealmCache(realmURL: string): Promise<void> {
+  async clearRealmCache(resolvedRealmURL: string): Promise<void> {
     await this.query([
       'DELETE FROM',
       MODULES_TABLE,
       'WHERE',
-      ...(every([['resolved_realm_url =', param(realmURL)]]) as Expression),
+      ...(every([
+        ['resolved_realm_url =', param(resolvedRealmURL)],
+      ]) as Expression),
     ]);
+    this.dropInFlightForRealm(resolvedRealmURL);
   }
 
   async clearAllModules(): Promise<void> {
     await this.query(['DELETE FROM', MODULES_TABLE]);
+    this.#inFlight.clear();
+  }
+
+  // Drops in-flight entries whose pending prerender result would no longer
+  // be valid after a cache wipe, so post-invalidation callers don't join a
+  // pre-invalidation promise. If `moduleURLs` is provided, only entries
+  // under that realm matching one of those URLs are dropped; otherwise every
+  // in-flight entry for the realm is dropped. The already-running promises
+  // still complete (we can't cancel the prerender) and may re-persist a now-
+  // stale row, but that race is narrower than before and self-heals on the
+  // next fresh prerender. What this fully prevents is waiters joining the
+  // stale promise after the invalidation returned.
+  private dropInFlightForRealm(
+    resolvedRealmURL: string,
+    moduleURLs?: string[],
+  ): void {
+    if (this.#inFlight.size === 0) {
+      return;
+    }
+    if (!moduleURLs) {
+      let prefix = `${resolvedRealmURL}|`;
+      for (let key of [...this.#inFlight.keys()]) {
+        if (key.startsWith(prefix)) {
+          this.#inFlight.delete(key);
+        }
+      }
+      return;
+    }
+    let prefixes = moduleURLs.map(
+      (moduleURL) => `${resolvedRealmURL}|${moduleURL}|`,
+    );
+    for (let key of [...this.#inFlight.keys()]) {
+      if (prefixes.some((prefix) => key.startsWith(prefix))) {
+        this.#inFlight.delete(key);
+      }
+    }
   }
 
   registerRealm(realm: LocalRealm): void {
@@ -1208,8 +1292,8 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
     return await this.#inner.invalidate(moduleURL);
   }
 
-  async clearRealmCache(realmURL: string): Promise<void> {
-    await this.#inner.clearRealmCache(realmURL);
+  async clearRealmCache(resolvedRealmURL: string): Promise<void> {
+    await this.#inner.clearRealmCache(resolvedRealmURL);
   }
 
   async clearAllModules(): Promise<void> {

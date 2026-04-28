@@ -7,10 +7,12 @@ import type {
   TestRunAttributes,
   TestRunRealmOptions,
 } from './test-run-types';
+import { readCard, writeCard } from './workspace-fs';
 
 /**
- * Create a `TestRun` card with `status: running` and pre-populated
- * `pending` result entries. Returns the card path as the handle.
+ * Create a `TestRun` card in the local workspace with `status: running`
+ * and pre-populated `pending` result entries. Returns the card path as
+ * the handle; the orchestrator syncs to the realm before subsequent steps.
  */
 export async function createTestRun(
   slug: string,
@@ -31,8 +33,8 @@ export async function createTestRun(
     },
   );
 
-  let result = await options.client.write(
-    options.targetRealmUrl,
+  let result = await writeCard(
+    options.workspaceDir,
     `${testRunId}.json`,
     JSON.stringify(document, null, 2),
   );
@@ -45,30 +47,20 @@ export async function createTestRun(
 }
 
 /**
- * Update an existing `TestRun` card with test results and final status.
+ * Update an existing `TestRun` card in the local workspace with test
+ * results and final status.
  */
 export async function completeTestRun(
   testRunId: string,
   attrs: TestRunAttributes,
   options: TestRunRealmOptions & { projectCardUrl?: string },
 ): Promise<{ updated: boolean; error?: string }> {
-  // Retry the read — after a long spawnSync (Playwright), TCP connections
-  // may be stale causing the first fetch to fail with "fetch failed".
-  let readResult: Awaited<ReturnType<typeof options.client.read>> | undefined;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    readResult = await options.client.read(options.targetRealmUrl, testRunId);
-    if (readResult.ok && readResult.document) {
-      break;
-    }
-    if (attempt < 2) {
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-  }
+  let readResult = await readCard(options.workspaceDir, `${testRunId}.json`);
 
-  if (!readResult?.ok || !readResult?.document) {
+  if (!readResult.ok || !readResult.document) {
     return {
       updated: false,
-      error: `Failed to read TestRun: ${readResult?.error}`,
+      error: `Failed to read TestRun: ${readResult.error ?? 'not found'}`,
     };
   }
 
@@ -88,8 +80,7 @@ export async function completeTestRun(
     ...completionAttrs,
   };
 
-  // Ensure the project relationship is preserved — the read-back from
-  // the realm may not include relationships if indexing hasn't completed.
+  // Preserve the project relationship on update — fresh writes below.
   if (options.projectCardUrl) {
     let existingRelationships =
       (document.data as Record<string, unknown>).relationships ?? {};
@@ -99,8 +90,8 @@ export async function completeTestRun(
     };
   }
 
-  let writeResult = await options.client.write(
-    options.targetRealmUrl,
+  let writeResult = await writeCard(
+    options.workspaceDir,
     `${testRunId}.json`,
     JSON.stringify(document, null, 2),
   );

@@ -9,6 +9,7 @@ import {
   seedValidCardWithSpec,
 } from './helpers/instantiate-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -39,14 +40,21 @@ test.describe('instantiate-validation e2e', () => {
     try {
       await seedValidCardWithSpec(client, realmUrl);
 
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let step = new InstantiateValidationStep({
         client,
         realmServerUrl,
         instantiateResultsModuleUrl,
+        workspaceDir: workspace.dir,
         issueId: 'Issues/instantiate-e2e',
       });
 
       let result = await step.run(realmUrl);
+
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // Must pass — valid card with valid example instance
       expect(result.step).toBe('instantiate');
@@ -67,7 +75,7 @@ test.describe('instantiate-validation e2e', () => {
       expect(cardRead.ok).toBe(true);
 
       let attrs = (
-        cardRead.document as unknown as {
+        JSON.parse(cardRead.content!) as {
           data?: { attributes?: Record<string, unknown> };
         }
       )?.data?.attributes;
@@ -99,14 +107,21 @@ test.describe('instantiate-validation e2e', () => {
     try {
       await seedTagsCardWithBrokenExampleAndSpec(client, realmUrl);
 
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let step = new InstantiateValidationStep({
         client,
         realmServerUrl,
         instantiateResultsModuleUrl,
+        workspaceDir: workspace.dir,
         issueId: 'Issues/instantiate-fail-e2e',
       });
 
       let result = await step.run(realmUrl);
+
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // Must fail — containsMany field received a string instead of an array
       expect(result.step).toBe('instantiate');
@@ -122,7 +137,7 @@ test.describe('instantiate-validation e2e', () => {
       expect(cardRead.ok).toBe(true);
 
       let attrs = (
-        cardRead.document as unknown as {
+        JSON.parse(cardRead.content!) as {
           data?: { attributes?: Record<string, unknown> };
         }
       )?.data?.attributes;

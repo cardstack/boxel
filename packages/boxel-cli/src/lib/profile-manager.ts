@@ -9,9 +9,13 @@ import {
   addRealmToMatrixAccountData,
   type MatrixAuth,
 } from './auth';
+import type { RealmAuthenticator } from './realm-authenticator';
 
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.boxel-cli');
 const PROFILES_FILENAME = 'profiles.json';
+
+export const NO_ACTIVE_PROFILE_ERROR =
+  'No active profile. Run `boxel profile add` to create one.';
 
 export interface Profile {
   displayName: string;
@@ -77,15 +81,15 @@ export function getEnvironmentLabel(env: Environment): string {
 
 /**
  * Format profile for display in command output
- * @example [ctse · staging]
+ * @example [ctse · stack.cards]
  */
 export function formatProfileBadge(matrixId: string): string {
   const username = getUsernameFromMatrixId(matrixId);
-  const env = getEnvironmentLabel(getEnvironmentFromMatrixId(matrixId));
-  return `${DIM}[${RESET}${FG_CYAN}${username}${RESET} ${DIM}\u00b7${RESET} ${FG_MAGENTA}${env}${RESET}${DIM}]${RESET}`;
+  const domain = getDomainFromMatrixId(matrixId);
+  return `${DIM}[${RESET}${FG_CYAN}${username}${RESET} ${DIM}\u00b7${RESET} ${FG_MAGENTA}${domain}${RESET}${DIM}]${RESET}`;
 }
 
-export class ProfileManager {
+export class ProfileManager implements RealmAuthenticator {
   private config: ProfilesConfig;
   private configDir: string;
   private profilesFile: string;
@@ -291,6 +295,35 @@ export class ProfileManager {
     this.config.profiles[profileId].displayName = displayName;
     this.saveConfig();
     return true;
+  }
+
+  // Update one or both server URLs for an existing profile. Cached realm
+  // tokens (and the realm-server token) are tied to the previous servers,
+  // so they're cleared whenever URLs actually change.
+  // Returns true iff at least one URL changed.
+  updateUrls(
+    profileId: string,
+    urls: { matrixUrl?: string; realmServerUrl?: string },
+  ): boolean {
+    const profile = this.config.profiles[profileId];
+    if (!profile) {
+      return false;
+    }
+    let changed = false;
+    if (urls.matrixUrl && urls.matrixUrl !== profile.matrixUrl) {
+      profile.matrixUrl = urls.matrixUrl;
+      changed = true;
+    }
+    if (urls.realmServerUrl && urls.realmServerUrl !== profile.realmServerUrl) {
+      profile.realmServerUrl = urls.realmServerUrl;
+      changed = true;
+    }
+    if (changed) {
+      profile.realmTokens = undefined;
+      profile.realmServerToken = undefined;
+      this.saveConfig();
+    }
+    return changed;
   }
 
   setRealmToken(realmUrl: string, token: string): void {
