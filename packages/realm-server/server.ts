@@ -917,7 +917,9 @@ export class RealmServer {
       ...(backgroundURL ? { backgroundURL } : {}),
       publishable: true,
     };
-    writeJSONSync(join(realmPath, '.realm.json'), info);
+    writeJSONSync(join(realmPath, '.realm.json'), {
+      publishable: true,
+    });
     writeJSONSync(join(realmPath, 'realm.json'), {
       data: {
         type: 'card',

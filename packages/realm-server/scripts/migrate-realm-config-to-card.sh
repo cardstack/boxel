@@ -22,33 +22,37 @@ find "$search_dir" -type f -name ".realm.json" | while read sidecar_file; do
   realm_dir=$(dirname "$sidecar_file")
   card_file="$realm_dir/realm.json"
 
-  if [ -f "$card_file" ]; then
-    echo "Skipping $realm_dir (realm.json already exists)"
-    continue
-  fi
+  if [ ! -f "$card_file" ]; then
+    echo "Migrating $realm_dir"
 
-  echo "Migrating $realm_dir"
-
-  jq -n --slurpfile sidecar "$sidecar_file" '
-    ($sidecar[0]) as $s |
-    {
-      data: {
-        type: "card",
-        attributes: (
-          {} +
-          (if $s.name then { cardInfo: { name: $s.name } } else {} end) +
-          (if $s.backgroundURL then { backgroundURL: $s.backgroundURL } else {} end) +
-          (if $s.iconURL then { iconURL: $s.iconURL } else {} end)
-        ),
-        meta: {
-          adoptsFrom: {
-            module: "https://cardstack.com/base/realm-config",
-            name: "RealmConfig"
+    jq -n --slurpfile sidecar "$sidecar_file" '
+      ($sidecar[0]) as $s |
+      {
+        data: {
+          type: "card",
+          attributes: (
+            {} +
+            (if $s.name then { cardInfo: { name: $s.name } } else {} end) +
+            (if $s.backgroundURL then { backgroundURL: $s.backgroundURL } else {} end) +
+            (if $s.iconURL then { iconURL: $s.iconURL } else {} end)
+          ),
+          meta: {
+            adoptsFrom: {
+              module: "https://cardstack.com/base/realm-config",
+              name: "RealmConfig"
+            }
           }
         }
       }
-    }
-  ' >"$card_file"
+    ' >"$card_file"
 
-  echo "  wrote $card_file"
+    echo "  wrote $card_file"
+  else
+    echo "Found existing $card_file, leaving it alone"
+  fi
+
+  # Trim the legacy fields that the card now owns. Idempotent — del() on
+  # missing keys is a no-op.
+  jq 'del(.name, .backgroundURL, .iconURL)' "$sidecar_file" >"$sidecar_file.tmp" \
+    && mv "$sidecar_file.tmp" "$sidecar_file"
 done

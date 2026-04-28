@@ -13,9 +13,6 @@ mkdir -p "$SUBMISSION_REALM_PATH"
 if [ ! -f "$SUBMISSION_REALM_PATH/.realm.json" ]; then
   cat > "$SUBMISSION_REALM_PATH/.realm.json" << 'EOF'
 {
-  "name": "Submissions",
-  "backgroundURL": "https://boxel-images.boxel.ai/background-images/background-for-catalog-82x.jpg",
-  "iconURL": "https://boxel-images.boxel.ai/icons/Letter-s.png",
   "showAsCatalog": false,
   "publishable": false
 }
