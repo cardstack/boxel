@@ -22,37 +22,40 @@ find "$search_dir" -type f -name ".realm.json" | while read sidecar_file; do
   realm_dir=$(dirname "$sidecar_file")
   card_file="$realm_dir/realm.json"
 
-  if [ ! -f "$card_file" ]; then
-    echo "Migrating $realm_dir"
+  if [ -f "$card_file" ]; then
+    # Don't trim the sidecar in this case — we can't tell whether the
+    # existing card already reflects the sidecar's name/backgroundURL/
+    # iconURL, and trimming would risk discarding the only valid copy.
+    echo "Found existing $card_file, leaving both files alone"
+    continue
+  fi
 
-    jq -n --slurpfile sidecar "$sidecar_file" '
-      ($sidecar[0]) as $s |
-      {
-        data: {
-          type: "card",
-          attributes: (
-            {} +
-            (if $s.name then { cardInfo: { name: $s.name } } else {} end) +
-            (if $s.backgroundURL then { backgroundURL: $s.backgroundURL } else {} end) +
-            (if $s.iconURL then { iconURL: $s.iconURL } else {} end)
-          ),
-          meta: {
-            adoptsFrom: {
-              module: "https://cardstack.com/base/realm-config",
-              name: "RealmConfig"
-            }
+  echo "Migrating $realm_dir"
+
+  jq -n --slurpfile sidecar "$sidecar_file" '
+    ($sidecar[0]) as $s |
+    {
+      data: {
+        type: "card",
+        attributes: (
+          {} +
+          (if $s.name then { cardInfo: { name: $s.name } } else {} end) +
+          (if $s.backgroundURL then { backgroundURL: $s.backgroundURL } else {} end) +
+          (if $s.iconURL then { iconURL: $s.iconURL } else {} end)
+        ),
+        meta: {
+          adoptsFrom: {
+            module: "https://cardstack.com/base/realm-config",
+            name: "RealmConfig"
           }
         }
       }
-    ' >"$card_file"
+    }
+  ' >"$card_file"
 
-    echo "  wrote $card_file"
-  else
-    echo "Found existing $card_file, leaving it alone"
-  fi
+  echo "  wrote $card_file"
 
-  # Trim the legacy fields that the card now owns. Idempotent — del() on
-  # missing keys is a no-op.
+  # Now safe to trim — we just wrote the card from this same sidecar.
   jq 'del(.name, .backgroundURL, .iconURL)' "$sidecar_file" >"$sidecar_file.tmp" \
     && mv "$sidecar_file.tmp" "$sidecar_file"
 done
