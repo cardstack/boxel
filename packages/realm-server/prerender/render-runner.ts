@@ -96,7 +96,7 @@ const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
 //   • 'Console assert'     → console.assert(...) failure
 //   • 'Console error'      → console.error(...) or Chrome's late
 //     "Uncaught (in promise) ..." console tracker line
-function titleForConsoleErrorEntry(entry: ConsoleErrorEntry): string {
+export function titleForConsoleErrorEntry(entry: ConsoleErrorEntry): string {
   if (entry.source === 'exception') {
     return entry.revoked
       ? 'Uncaught exception (revoked by late .catch)'
@@ -108,7 +108,9 @@ function titleForConsoleErrorEntry(entry: ConsoleErrorEntry): string {
 // Stack-trace header line. Same source-distinction logic as the
 // title above, formatted as `<HeaderName>: <message>` so the existing
 // error viewer renders these identically to native Node stacks.
-function stackHeaderForConsoleErrorEntry(entry: ConsoleErrorEntry): string {
+export function stackHeaderForConsoleErrorEntry(
+  entry: ConsoleErrorEntry,
+): string {
   if (entry.source === 'exception') {
     return entry.revoked ? 'UncaughtExceptionRevoked' : 'UncaughtException';
   }

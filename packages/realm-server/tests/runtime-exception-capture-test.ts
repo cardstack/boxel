@@ -2,6 +2,10 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import { EventEmitter } from 'events';
 import { attachRuntimeExceptionCapture } from '../prerender/runtime-exception-capture';
+import {
+  titleForConsoleErrorEntry,
+  stackHeaderForConsoleErrorEntry,
+} from '../prerender/render-runner';
 import type { ConsoleErrorEntry } from '../prerender/page-pool';
 
 // Verifies the V8-layer uncaught-exception capture wired up in
@@ -597,6 +601,74 @@ module(basename(__filename), function () {
       recorder.calls.length,
       0,
       'no recorder activity when CDP attach failed',
+    );
+  });
+
+  // The render-runner-side serialization is the other half of the
+  // keep-revoked contract: once the recorder tags an entry with
+  // `revoked: true`, the title and stack-header functions need to
+  // surface that lifecycle so operators looking at the error doc
+  // can tell a thrown-then-revoked exception apart from a plain
+  // uncaught one. These functions are otherwise only exercised
+  // through the full prerender pipeline, which we can't reliably
+  // hit in a unit-style fixture (Ember's runloop catches synthetic
+  // throws before V8 sees them as uncaught).
+  test('titleForConsoleErrorEntry distinguishes revoked exceptions', function (assert) {
+    assert.strictEqual(
+      titleForConsoleErrorEntry({
+        type: 'error',
+        text: 'TypeError: boom',
+        source: 'exception',
+      }),
+      'Uncaught exception',
+      'plain uncaught exception',
+    );
+    assert.strictEqual(
+      titleForConsoleErrorEntry({
+        type: 'error',
+        text: 'TypeError: boom',
+        source: 'exception',
+        revoked: true,
+      }),
+      'Uncaught exception (revoked by late .catch)',
+      'revoked exception keeps the entry but marks the lifecycle',
+    );
+    assert.strictEqual(
+      titleForConsoleErrorEntry({
+        type: 'error',
+        text: 'console.error message',
+        source: 'console',
+      }),
+      'Console error',
+      'console-source error is unrelated to the revoked branch',
+    );
+  });
+
+  test('stackHeaderForConsoleErrorEntry distinguishes revoked exceptions', function (assert) {
+    assert.strictEqual(
+      stackHeaderForConsoleErrorEntry({
+        type: 'error',
+        text: 'TypeError: boom',
+        source: 'exception',
+      }),
+      'UncaughtException',
+    );
+    assert.strictEqual(
+      stackHeaderForConsoleErrorEntry({
+        type: 'error',
+        text: 'TypeError: boom',
+        source: 'exception',
+        revoked: true,
+      }),
+      'UncaughtExceptionRevoked',
+    );
+    assert.strictEqual(
+      stackHeaderForConsoleErrorEntry({
+        type: 'assert',
+        text: 'assertion failed',
+        source: 'console',
+      }),
+      'AssertionError',
     );
   });
 });
