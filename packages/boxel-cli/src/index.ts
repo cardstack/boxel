@@ -7,6 +7,7 @@ import { registerReadTranspiledCommand } from './commands/read-transpiled';
 import { registerRealmCommand } from './commands/realm/index';
 import { registerFileCommand } from './commands/file/index';
 import { registerRunCommand } from './commands/run-command';
+import { registerSearchCommand } from './commands/search';
 
 const pkg = JSON.parse(
   readFileSync(resolve(__dirname, '../package.json'), 'utf-8'),
@@ -71,6 +72,7 @@ Environment variables (for 'add'):
 registerFileCommand(program);
 registerRealmCommand(program);
 registerRunCommand(program);
+registerSearchCommand(program);
 registerReadTranspiledCommand(program);
 
 program.parse();
