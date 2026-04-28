@@ -48,11 +48,11 @@ services:
       - "3100:3100"
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
-      # In grafana/loki:3.4.4 the bundled local-config.yaml uses /loki as
-      # `path_prefix` (chunks_directory: /loki/chunks, etc.), so the named
-      # volume mounts there to persist the WAL / chunks / TSDB across
-      # container recreates. Verified locally with a push → down/up →
-      # query round-trip.
+      # Custom config (mounted to the same path Loki's image expects so the
+      # default command line keeps working). The on-disk path_prefix is
+      # /loki, so the named volume below mounts there to persist the WAL /
+      # chunks / TSDB across container recreates.
+      - ./loki/config.yaml:/etc/loki/local-config.yaml:ro
       - loki_data:/loki
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3100/ready"]
@@ -62,23 +62,26 @@ services:
       start_period: 5s
     restart: unless-stopped
 
-  # Optional: log scraper (Alloy). Commented out by default — local dev
-  # works without it (Loki is reachable, the data source resolves, queries
-  # return empty until logs are shipped). Uncomment + start once you have
-  # an alloy/config.alloy that scrapes whatever you need locally.
-  #
-  # alloy:
-  #   image: grafana/alloy:v1.10.0
-  #   command:
-  #     - run
-  #     - /etc/alloy/config.alloy
-  #     - --server.http.listen-addr=0.0.0.0:12345
-  #   volumes:
-  #     - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
-  #     - /var/run/docker.sock:/var/run/docker.sock:ro
-  #   depends_on:
-  #     - loki
-  #   restart: unless-stopped
+  # Log scraper. Discovers running Docker containers via the host's
+  # Docker socket and ships their stdout into Loki. See alloy/config.alloy
+  # for the label schema.
+  alloy:
+    image: grafana/alloy:v1.10.0
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+    ports:
+      # Alloy's own UI / debug endpoints — handy for verifying targets are
+      # being discovered (http://localhost:12345/graph). Optional.
+      - "12345:12345"
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   grafana_data:
