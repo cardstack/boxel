@@ -50,12 +50,21 @@ cfg="$(./scripts/render-config.sh "$env_name")"
 remote="$(mktemp -d -t grafanactl-pull.XXXXXX)"
 trap 'rm -rf "$cfg" "$remote"' EXIT
 
-# Pull what's currently live into the tempdir. Suppress stdout so the
-# user sees only the diff at the end; stderr (errors) still surface.
+# Pull what's currently live into the tempdir. We pass explicit kind
+# arguments (`dashboards folders`) instead of letting grafanactl
+# enumerate everything because the default scan would also try to list
+# `plugins.grafana.app` (the service-account token doesn't have
+# permission — 403) and `features.grafana.app/noop` (404, doesn't exist
+# on the Grafana version we run). Both warnings would fail the pull
+# even though we don't actually want those kinds for the diff.
+#
+# Suppress stdout so the user sees only the diff at the end; stderr
+# (errors) still surface.
 grafanactl \
   --config "$cfg" \
   --context "$env_name" \
   resources pull \
+  dashboards folders \
   --path "$remote" \
   >/dev/null
 
