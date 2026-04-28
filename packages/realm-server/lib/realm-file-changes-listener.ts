@@ -1,8 +1,5 @@
 import type { Realm } from '@cardstack/runtime-common';
-import {
-  logger,
-  REALM_FILE_CHANGES_CHANNEL,
-} from '@cardstack/runtime-common';
+import { logger, REALM_FILE_CHANGES_CHANNEL } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { WorkLoop } from '@cardstack/postgres';
 
