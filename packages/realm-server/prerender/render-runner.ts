@@ -87,19 +87,33 @@ const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
 //   • 'Uncaught exception' → Runtime.exceptionThrown (V8 layer; the
 //     primary signal for the whitepaper-class bug where unhandled-
 //     rejection / window.error never fire)
+//   • 'Uncaught exception (revoked by late .catch)' → V8 fired
+//     `Runtime.exceptionRevoked` for this id, meaning RSVP / Backburner
+//     attached a `.catch` after V8 had already reported the rejection
+//     as uncaught. The render is still wedged (the late catch doesn't
+//     un-poison Glimmer's render tree) — surfacing the entry preserves
+//     the actionable stack while making the lifecycle visible.
 //   • 'Console assert'     → console.assert(...) failure
 //   • 'Console error'      → console.error(...) or Chrome's late
 //     "Uncaught (in promise) ..." console tracker line
-function titleForConsoleErrorEntry(entry: ConsoleErrorEntry): string {
-  if (entry.source === 'exception') return 'Uncaught exception';
+export function titleForConsoleErrorEntry(entry: ConsoleErrorEntry): string {
+  if (entry.source === 'exception') {
+    return entry.revoked
+      ? 'Uncaught exception (revoked by late .catch)'
+      : 'Uncaught exception';
+  }
   return entry.type === 'assert' ? 'Console assert' : 'Console error';
 }
 
 // Stack-trace header line. Same source-distinction logic as the
 // title above, formatted as `<HeaderName>: <message>` so the existing
 // error viewer renders these identically to native Node stacks.
-function stackHeaderForConsoleErrorEntry(entry: ConsoleErrorEntry): string {
-  if (entry.source === 'exception') return 'UncaughtException';
+export function stackHeaderForConsoleErrorEntry(
+  entry: ConsoleErrorEntry,
+): string {
+  if (entry.source === 'exception') {
+    return entry.revoked ? 'UncaughtExceptionRevoked' : 'UncaughtException';
+  }
   return entry.type === 'assert' ? 'AssertionError' : 'ConsoleError';
 }
 
@@ -378,13 +392,18 @@ export class RenderRunner {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
     signal?: AbortSignal;
-    // Fires after `getPageForAffinity` resolves — i.e. when this
-    // attempt stops waiting on the semaphore / tab queue and actually
-    // has a page. CS-10872 diagnostic hook; used by the Prerenderer
-    // to flip `affinitySnapshot.sameAffinityActivity[*].state` from
-    // `queued` to `running`, which is what makes the deadlock
-    // fingerprint meaningful.
-    onTabAcquired?: () => void;
+    // Fires after `getPageForAffinity` resolves AND the per-page
+    // console/exception bucket has been reset — i.e. when this attempt
+    // has a page AND the bucket is empty for THIS render. The reset
+    // happens before the callback so a test fixture that seeds the
+    // bucket via `Prerenderer.__test_seedRevokedException` doesn't
+    // get its seed wiped out by reset. Originally introduced as a
+    // CS-10872 diagnostic hook (used by the Prerenderer to flip
+    // `affinitySnapshot.sameAffinityActivity[*].state` from `queued`
+    // to `running`); the post-reset position adds a fraction of a
+    // ms to that transition but keeps the deadlock fingerprint
+    // accurate.
+    onTabAcquired?: (info: { pageId: string }) => void;
   }): Promise<{
     response: ModuleRenderResponse;
     timings: Timings;
@@ -398,7 +417,6 @@ export class RenderRunner {
 
     const { page, reused, launchMs, waits, pageId, release } =
       await this.#getPageForAffinity(affinityKey, auth, 'module', signal);
-    onTabAcquired?.();
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
@@ -408,6 +426,7 @@ export class RenderRunner {
       timedOut: false,
     };
     this.#pagePool.resetConsoleErrors(pageId);
+    onTabAcquired?.({ pageId: pageId ?? 'unknown' });
     const markTimeout = (err?: RenderError) => {
       if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
         poolInfo.timedOut = true;
@@ -554,7 +573,7 @@ export class RenderRunner {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     signal?: AbortSignal;
     // See the matching param on `prerenderModuleAttempt`.
-    onTabAcquired?: () => void;
+    onTabAcquired?: (info: { pageId: string }) => void;
   }): Promise<{
     response: RenderVisitResponse;
     timings: Timings;
@@ -574,7 +593,6 @@ export class RenderRunner {
 
     const { page, reused, launchMs, waits, pageId, release } =
       await this.#getPageForAffinity(affinityKey, auth, 'file', signal);
-    onTabAcquired?.();
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
@@ -584,6 +602,7 @@ export class RenderRunner {
       timedOut: false,
     };
     this.#pagePool.resetConsoleErrors(pageId);
+    onTabAcquired?.({ pageId: pageId ?? 'unknown' });
     const markTimeout = (err?: RenderError) => {
       if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
         poolInfo.timedOut = true;

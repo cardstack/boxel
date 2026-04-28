@@ -153,6 +153,19 @@ export type ConsoleErrorEntry = {
   // distinct so an operator can tell which layer surfaced the error.
   // Default 'console' so existing call sites stay backward-compat.
   source?: 'console' | 'exception';
+  // Set on `source: 'exception'` entries when V8 later fires
+  // `Runtime.exceptionRevoked` for the same exceptionId — i.e. some
+  // downstream code attached a `.catch` after V8 had already reported
+  // the rejection as uncaught (RSVP / Backburner / Ember runloop
+  // commonly do this). The original design dropped these as
+  // "transient noise", but the whitepaper-class render bug IS exactly
+  // this pattern: RSVP swallows the rejection so `unhandledrejection`
+  // never fires, the render is wedged anyway, and the only signal we
+  // had was being silently discarded. We now keep revoked entries in
+  // the bucket so they reach `additionalErrors`; render-runner adds
+  // a `(revoked by late .catch)` marker to the surfaced title so
+  // operators can see the lifecycle.
+  revoked?: boolean;
 };
 
 const log = logger('prerenderer');
@@ -1550,8 +1563,50 @@ export class PagePool {
     let key = exceptionKeys?.get(exceptionId);
     if (!key) return;
     let bucket = this.#consoleErrorsByPageId.get(pageId);
-    bucket?.delete(key);
-    exceptionKeys!.delete(exceptionId);
+    let entry = bucket?.get(key);
+    if (entry) {
+      // Tag the existing entry instead of deleting it. The whitepaper-
+      // class render bug fits the "thrown then revoked" pattern (RSVP
+      // / Backburner attaches a late `.catch` that retracts V8's
+      // uncaught status), and dropping these entries was actively
+      // discarding the actionable stack we'd captured. Render-runner
+      // surfaces revoked entries with `(revoked by late .catch)` in
+      // the title so operators can see the lifecycle without losing
+      // the lead.
+      entry.revoked = true;
+    }
+    // Keep the exceptionKeys mapping — there's no further follow-up
+    // event to dispatch, but a stale-but-harmless entry is better
+    // than a phantom remove if V8 ever re-fires for the same id.
+  }
+
+  // Test-only seam: writes a `source: 'exception'` entry directly
+  // into the per-page bucket and tags it as revoked, mimicking the
+  // end state of a real CDP `Runtime.exceptionThrown` ->
+  // `Runtime.exceptionRevoked` pair without needing V8 to actually
+  // fire the events. We can't synthesize a card-level fixture that
+  // produces real CDP exception events (Ember's runloop catches
+  // synthetic throws before V8 classifies them as uncaught), so
+  // this seam lets the integration tests pin down that the
+  // bucket-to-additionalErrors merge happens at every error-doc
+  // call site (timeout, render error, unusable, fileExtract,
+  // fileRender). Production code never calls this.
+  __test_seedRevokedException(
+    pageId: string,
+    entry: ConsoleErrorEntry,
+    exceptionId: number,
+  ): void {
+    // Force `source: 'exception'` so the seam can't be silently
+    // misused with a `source: 'console'` entry — that would serialize
+    // through render-runner as a "Console error", not the
+    // "Uncaught exception (revoked by late .catch)" we're trying to
+    // pin down. Clone so we don't mutate the caller's object.
+    let seededEntry: ConsoleErrorEntry = {
+      ...entry,
+      source: 'exception',
+    };
+    this.#recordThrownException(pageId, exceptionId, seededEntry);
+    this.#recordRevokedException(pageId, exceptionId);
   }
 
   #attachPageConsole(page: Page, affinityKey: string, pageId: string): void {
