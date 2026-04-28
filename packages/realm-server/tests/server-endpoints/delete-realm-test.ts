@@ -43,7 +43,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
         }),
       );
 
-    if (response.status !== 201) {
+    if (response.status !== 202) {
       throw new Error(
         `/_create-realm failed: ${JSON.stringify(response.body)}`,
       );

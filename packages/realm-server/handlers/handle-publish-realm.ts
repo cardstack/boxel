@@ -145,7 +145,7 @@ export default function handlePublishRealm({
   realmSecretSeed,
   serverURL,
   virtualNetwork,
-  realms,
+  reconciler,
   realmsRootPath,
   getMatrixRegistrationSecret,
   domainsForPublishedRealms,
@@ -337,13 +337,13 @@ export default function handlePublishRealm({
           }
 
           // Read the source realm's mount state for `.indexing()` /
-          // `.flushUpdateEvents()` / `.dir`. Reading realms[] is allowed
-          // — the stateless rule prohibits *mutating* realms[] /
-          // virtualNetwork. The source realm is necessarily mounted on
-          // this instance (the publish request hits this realm-server,
-          // and the request path lazy-mounts it via findOrMountRealm
-          // upstream of this handler).
-          let sourceRealm = realms.find((r) => r.url === sourceRealmURL);
+          // `.flushUpdateEvents()` / `.dir`. Reading the Realm instance
+          // is allowed — the stateless rule prohibits *mutating*
+          // realms[] / virtualNetwork. /_publish-realm is a server-level
+          // endpoint and doesn't pass through serveFromRealm, so the
+          // source realm isn't lazy-mounted upstream; call lookupOrMount
+          // here to mount it on this instance if it isn't already.
+          let sourceRealm = await reconciler.lookupOrMount(sourceRealmURL);
           if (!sourceRealm?.dir) {
             throw new Error(
               `Could not determine filesystem path for source realm ${sourceRealmURL}`,
