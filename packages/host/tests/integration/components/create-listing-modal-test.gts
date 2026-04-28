@@ -5,7 +5,7 @@ import { module, test } from 'qunit';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import { testRealmURL } from '../../helpers';
+import { testRealmURL, testRRI } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
 import { setupOperatorModeTests } from './operator-mode/setup';
@@ -23,7 +23,10 @@ module('Integration | components | create-listing-modal', function (hooks) {
     );
 
     ctx.operatorModeStateService.showCreateListingModal({
-      codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
+      codeRef: {
+        module: testRRI('pet'),
+        name: 'Pet',
+      },
       targetRealm: testRealmURL,
       declarationKind: 'card',
     });
@@ -44,7 +47,10 @@ module('Integration | components | create-listing-modal', function (hooks) {
     );
 
     ctx.operatorModeStateService.showCreateListingModal({
-      codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
+      codeRef: {
+        module: testRRI('pet'),
+        name: 'Pet',
+      },
       targetRealm: testRealmURL,
       declarationKind: 'card',
     });
@@ -64,7 +70,10 @@ module('Integration | components | create-listing-modal', function (hooks) {
     );
 
     ctx.operatorModeStateService.showCreateListingModal({
-      codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
+      codeRef: {
+        module: testRRI('pet'),
+        name: 'Pet',
+      },
       targetRealm: testRealmURL,
       declarationKind: 'card',
     });
@@ -82,7 +91,10 @@ module('Integration | components | create-listing-modal', function (hooks) {
     );
 
     ctx.operatorModeStateService.showCreateListingModal({
-      codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
+      codeRef: {
+        module: testRRI('pet'),
+        name: 'Pet',
+      },
       targetRealm: testRealmURL,
       declarationKind: 'card',
     });
@@ -102,7 +114,10 @@ module('Integration | components | create-listing-modal', function (hooks) {
     );
 
     ctx.operatorModeStateService.showCreateListingModal({
-      codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
+      codeRef: {
+        module: testRRI('pet'),
+        name: 'Pet',
+      },
       targetRealm: testRealmURL,
       openCardIds: [`${testRealmURL}Pet/mango`],
       declarationKind: 'card',
@@ -135,7 +150,10 @@ module('Integration | components | create-listing-modal', function (hooks) {
     );
 
     ctx.operatorModeStateService.showCreateListingModal({
-      codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
+      codeRef: {
+        module: testRRI('pet'),
+        name: 'Pet',
+      },
       targetRealm: testRealmURL,
       openCardIds: [`${testRealmURL}Pet/mango`],
       declarationKind: 'card',
@@ -164,7 +182,10 @@ module('Integration | components | create-listing-modal', function (hooks) {
     );
 
     ctx.operatorModeStateService.showCreateListingModal({
-      codeRef: { module: `${testRealmURL}pet`, name: 'PetName' },
+      codeRef: {
+        module: testRRI('pet'),
+        name: 'PetName',
+      },
       targetRealm: testRealmURL,
       declarationKind: 'field',
     });

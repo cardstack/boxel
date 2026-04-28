@@ -29,6 +29,7 @@ import {
   isRegisteredPrefix,
   cardIdToURL,
   resolveCardReference,
+  type RealmResourceIdentifier,
 } from './card-reference-resolver';
 import type { VirtualNetwork } from './virtual-network';
 
@@ -244,7 +245,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         let canonicalCodeRef =
           canonicalModuleURL === codeRef.module
             ? codeRef
-            : { ...codeRef, module: canonicalModuleURL };
+            : {
+                ...codeRef,
+                module: canonicalModuleURL as RealmResourceIdentifier,
+              };
         let moduleId = internalKeyFor(canonicalCodeRef, undefined);
         let entry = cached.definitions[moduleId];
         if (entry && 'definition' in entry) {
@@ -426,7 +430,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     let canonicalCodeRef =
       canonicalModuleURL === codeRef.module
         ? codeRef
-        : { ...codeRef, module: canonicalModuleURL };
+        : { ...codeRef, module: canonicalModuleURL as RealmResourceIdentifier };
     let context = await this.buildLookupContext(
       canonicalModuleURL,
       contextOpts,

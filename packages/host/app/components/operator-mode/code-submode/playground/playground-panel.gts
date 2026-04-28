@@ -28,6 +28,7 @@ import {
   isSpecCard,
   type Permissions,
   PermissionsContextName,
+  type RealmIdentifier,
 } from '@cardstack/runtime-common';
 
 import {
@@ -770,7 +771,7 @@ export default class PlaygroundPanel extends Component<Signature> {
               ],
             },
             adoptsFrom: specRef,
-            realmURL: this.currentRealm,
+            realmURL: this.currentRealm as RealmIdentifier,
           },
         },
       };
@@ -781,7 +782,7 @@ export default class PlaygroundPanel extends Component<Signature> {
           lid: localId,
           meta: {
             adoptsFrom: this.args.codeRef,
-            realmURL: this.currentRealm,
+            realmURL: this.currentRealm as RealmIdentifier,
           },
         },
       };

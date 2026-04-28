@@ -18,6 +18,7 @@ import {
   type RenderRouteOptions,
   type ResolvedCodeRef,
   SupportedMimeType,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
@@ -61,7 +62,7 @@ module('Acceptance | markdown file def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const markdownDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}markdown-file-def`,
+    module: `${baseRealm.url}markdown-file-def` as RealmResourceIdentifier,
     name: 'MarkdownDef',
   });
 

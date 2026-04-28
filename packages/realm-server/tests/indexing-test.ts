@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 import {
   internalKeyFor,
+  rri,
   SupportedMimeType,
   Deferred,
   IndexWriter,
@@ -236,7 +237,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './person',
+            module: rri('./person'),
             name: 'Person',
           },
         },
@@ -250,7 +251,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './person',
+            module: rri('./person'),
             name: 'Person',
           },
         },
@@ -266,7 +267,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './pet-person',
+            module: rri('./pet-person'),
             name: 'PetPerson',
           },
         },
@@ -279,7 +280,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './pet',
+            module: rri('./pet'),
             name: 'Pet',
           },
         },
@@ -299,7 +300,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './post',
+            module: rri('./post'),
             name: 'Post',
           },
         },
@@ -319,7 +320,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './post',
+            module: rri('./post'),
             name: 'Post',
           },
         },
@@ -332,7 +333,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './boom',
+            module: rri('./boom'),
             name: 'Boom',
           },
         },
@@ -345,7 +346,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './boom2',
+            module: rri('./boom2'),
             name: 'Boom',
           },
         },
@@ -358,7 +359,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './atom-boom',
+            module: rri('./atom-boom'),
             name: 'Boom',
           },
         },
@@ -371,7 +372,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './embedded-boom',
+            module: rri('./embedded-boom'),
             name: 'Boom',
           },
         },
@@ -384,7 +385,7 @@ function makeTestRealmFileSystem(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: './fitted-boom',
+            module: rri('./fitted-boom'),
             name: 'Boom',
           },
         },
@@ -395,7 +396,7 @@ function makeTestRealmFileSystem(): Record<
         attributes: {},
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: rri('https://cardstack.com/base/card-api'),
             name: 'CardDef',
           },
         },
@@ -429,7 +430,7 @@ function makeTestRealmFileSystem(): Record<
             type: 'fieldOf',
             field: 'shippingAddress',
             card: {
-              module: './order-page',
+              module: rri('./order-page'),
               name: 'OrderPage',
             },
           },
@@ -825,7 +826,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './fancy-person',
+                module: rri('./fancy-person'),
                 name: 'FancyPerson',
               },
             },
@@ -1111,7 +1112,7 @@ module(basename(__filename), function () {
       assert.deepEqual(
         doc.data.meta?.adoptsFrom,
         {
-          module: 'https://cardstack.com/base/text-file-def',
+          module: rri('https://cardstack.com/base/text-file-def'),
           name: 'TextFileDef',
         },
         'adoptsFrom sourced from pristine file resource',
@@ -1125,7 +1126,7 @@ module(basename(__filename), function () {
     test('file meta adoptsFrom prefers index types', async function (assert) {
       let fileDefModule = new URL('filedef-mismatch', testRealm).href;
       let fileDefKey = internalKeyFor(
-        { module: fileDefModule, name: 'FileDef' },
+        { module: rri(fileDefModule), name: 'FileDef' },
         undefined,
       );
       await testDbAdapter.execute(
@@ -1199,7 +1200,7 @@ module(basename(__filename), function () {
                     attributes: {},
                     meta: {
                       adoptsFrom: {
-                        module: './website',
+                        module: rri('./website'),
                         name: 'Website',
                       },
                     },
@@ -1439,7 +1440,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './person.gts',
+                  module: rri('./person.gts'),
                   name: 'Person',
                 },
               },
@@ -1449,7 +1450,10 @@ module(basename(__filename), function () {
 
         let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
-            on: { module: `${testRealm}person`, name: 'Person' },
+            on: {
+              module: rri(`${testRealm}person`),
+              name: 'Person',
+            },
             eq: { firstName: 'Mang-Mang' },
           },
         });
@@ -1756,7 +1760,10 @@ module(basename(__filename), function () {
         );
         let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
-            type: { module: `${testRealm}person`, name: 'Person' },
+            type: {
+              module: rri(`${testRealm}person`),
+              name: 'Person',
+            },
           },
         });
         assert.deepEqual(
@@ -1778,7 +1785,10 @@ module(basename(__filename), function () {
         result = (
           await realm.realmIndexQueryEngine.searchCards({
             filter: {
-              type: { module: `${testRealm}person`, name: 'Person' },
+              type: {
+                module: rri(`${testRealm}person`),
+                name: 'Person',
+              },
             },
           })
         ).data;
@@ -1823,7 +1833,7 @@ module(basename(__filename), function () {
           ?.definitionLookup as DefinitionLookup | undefined;
         if (definitionLookup) {
           await definitionLookup.lookupDefinition({
-            module: fileDefAlias,
+            module: rri(fileDefAlias),
             name: 'FileDef',
           });
         } else {
@@ -1948,7 +1958,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './deep-card',
+                  module: rri('./deep-card'),
                   name: 'DeepCard',
                 },
               },
@@ -2012,7 +2022,10 @@ module(basename(__filename), function () {
         try {
           await realm.realmIndexQueryEngine.searchCards({
             filter: {
-              on: { module: `${testRealm}deep-card`, name: 'DeepCard' },
+              on: {
+                module: rri(`${testRealm}deep-card`),
+                name: 'DeepCard',
+              },
               eq: { 'middle.leaf.value': 'Root' },
             },
           });
@@ -2063,7 +2076,7 @@ module(basename(__filename), function () {
 
           try {
             await definitionLookup.lookupDefinition({
-              module: `${testRealm}middle-field`,
+              module: rri(`${testRealm}middle-field`),
               name: 'MiddleField',
             });
           } catch (_error) {
@@ -2097,7 +2110,10 @@ module(basename(__filename), function () {
           try {
             await realm.realmIndexQueryEngine.searchCards({
               filter: {
-                on: { module: `${testRealm}deep-card`, name: 'DeepCard' },
+                on: {
+                  module: rri(`${testRealm}deep-card`),
+                  name: 'DeepCard',
+                },
                 eq: { 'middle.leaf.value': 'Root' },
               },
             });
@@ -2256,7 +2272,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './module-a',
+                  module: rri('./module-a'),
                   name: 'ModuleCard',
                 },
               },
@@ -2442,7 +2458,7 @@ module(basename(__filename), function () {
         );
 
         let personType = {
-          module: './person-rel',
+          module: rri('./person-rel'),
           name: 'PersonRel',
         };
 
@@ -2523,7 +2539,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './relationship-consumer',
+                  module: rri('./relationship-consumer'),
                   name: 'RelationshipConsumer',
                 },
               },
@@ -2685,7 +2701,7 @@ module(basename(__filename), function () {
               attributes: { cardTitle: 'target' },
               meta: {
                 adoptsFrom: {
-                  module: './query-rel-target',
+                  module: rri('./query-rel-target'),
                   name: 'QueryRelTarget',
                 },
               },
@@ -2700,7 +2716,7 @@ module(basename(__filename), function () {
               attributes: { cardTitle: 'consumer' },
               meta: {
                 adoptsFrom: {
-                  module: './query-rel-consumer',
+                  module: rri('./query-rel-consumer'),
                   name: 'QueryRelConsumer',
                 },
               },
@@ -2827,7 +2843,7 @@ module(basename(__filename), function () {
               attributes: { cardTitle: 'overlap-target' },
               meta: {
                 adoptsFrom: {
-                  module: './query-rel-overlap-target',
+                  module: rri('./query-rel-overlap-target'),
                   name: 'QueryRelOverlapTarget',
                 },
               },
@@ -2844,7 +2860,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './query-rel-overlap-consumer',
+                  module: rri('./query-rel-overlap-consumer'),
                   name: 'QueryRelOverlapConsumer',
                 },
               },
@@ -3047,7 +3063,7 @@ module(basename(__filename), function () {
               attributes: { name: 'Second One' },
               meta: {
                 adoptsFrom: {
-                  module: './second-rel',
+                  module: rri('./second-rel'),
                   name: 'SecondRel',
                 },
               },
@@ -3065,7 +3081,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './first-rel',
+                  module: rri('./first-rel'),
                   name: 'FirstRel',
                 },
               },
@@ -3082,7 +3098,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './css-relationship-consumer',
+                  module: rri('./css-relationship-consumer'),
                   name: 'CssRelationshipConsumer',
                 },
               },
@@ -3191,7 +3207,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './loop-card',
+                  module: rri('./loop-card'),
                   name: 'LoopCard',
                 },
               },
@@ -3208,7 +3224,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './loop-card',
+                  module: rri('./loop-card'),
                   name: 'LoopCard',
                 },
               },
@@ -3224,7 +3240,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './loop-consumer',
+                  module: rri('./loop-consumer'),
                   name: 'LoopConsumer',
                 },
               },
@@ -3255,7 +3271,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './loop-card',
+                  module: rri('./loop-card'),
                   name: 'LoopCard',
                 },
               },
@@ -3372,7 +3388,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './missing-child',
+                  module: rri('./missing-child'),
                   name: 'MissingChild',
                 },
               },
@@ -3388,7 +3404,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './relationship-parent',
+                  module: rri('./relationship-parent'),
                   name: 'RelationshipParent',
                 },
               },
@@ -3404,7 +3420,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './relationship-grandparent',
+                  module: rri('./relationship-grandparent'),
                   name: 'RelationshipGrandParent',
                 },
               },
@@ -3599,7 +3615,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './relationship-file-parent',
+                  module: rri('./relationship-file-parent'),
                   name: 'RelationshipFileParent',
                 },
               },
@@ -3616,7 +3632,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './relationship-file-grandparent',
+                  module: rri('./relationship-file-grandparent'),
                   name: 'RelationshipFileGrandParent',
                 },
               },
@@ -3807,7 +3823,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './file-relationship-consumer',
+                  module: rri('./file-relationship-consumer'),
                   name: 'FileRelationshipConsumer',
                 },
               },
@@ -3859,7 +3875,10 @@ module(basename(__filename), function () {
 
         let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
-            on: { module: `${testRealm}person`, name: 'Person' },
+            on: {
+              module: rri(`${testRealm}person`),
+              name: 'Person',
+            },
             eq: { firstName: 'Mango' },
           },
         });
@@ -3904,7 +3923,10 @@ module(basename(__filename), function () {
 
         let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
-            on: { module: `${testRealm}post`, name: 'Post' },
+            on: {
+              module: rri(`${testRealm}post`),
+              name: 'Post',
+            },
             eq: { nickName: 'Van Gogh-poo' },
           },
         });
@@ -3937,7 +3959,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './pet',
+                  module: rri('./pet'),
                   name: 'Pet',
                 },
               },
@@ -4014,7 +4036,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './pet',
+                  module: rri('./pet'),
                   name: 'Pet',
                 },
               },
@@ -4056,7 +4078,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './pet',
+                  module: rri('./pet'),
                   name: 'Pet',
                 },
               },
@@ -4107,7 +4129,10 @@ module(basename(__filename), function () {
 
         let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
-            on: { module: `${testRealm}post`, name: 'Post' },
+            on: {
+              module: rri(`${testRealm}post`),
+              name: 'Post',
+            },
             eq: { 'author.nickName': 'Van Gogh-poo' },
           },
         });
@@ -4119,7 +4144,10 @@ module(basename(__filename), function () {
         {
           let { data: result } = await realm.realmIndexQueryEngine.searchCards({
             filter: {
-              type: { module: `${testRealm}post`, name: 'Post' },
+              type: {
+                module: rri(`${testRealm}post`),
+                name: 'Post',
+              },
             },
           });
           assert.deepEqual(
@@ -4193,7 +4221,10 @@ module(basename(__filename), function () {
         {
           let { data: result } = await realm.realmIndexQueryEngine.searchCards({
             filter: {
-              on: { module: `${testRealm}post`, name: 'Post' },
+              on: {
+                module: rri(`${testRealm}post`),
+                name: 'Post',
+              },
               eq: { nickName: 'Van Gogh-poo' },
             },
           });
@@ -4270,7 +4301,7 @@ module(basename(__filename), function () {
               attributes: { name: 'Paris' },
               meta: {
                 adoptsFrom: {
-                  module: './city',
+                  module: rri('./city'),
                   name: 'City',
                 },
               },
@@ -4331,7 +4362,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './person',
+                  module: rri('./person'),
                   name: 'Person',
                 },
               },

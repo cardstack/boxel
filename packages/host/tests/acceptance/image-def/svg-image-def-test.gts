@@ -10,6 +10,7 @@ import {
   type RenderRouteOptions,
   type ResolvedCodeRef,
   SupportedMimeType,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
@@ -78,7 +79,7 @@ module('Acceptance | svg image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const svgDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}svg-image-def`,
+    module: `${baseRealm.url}svg-image-def` as RealmResourceIdentifier,
     name: 'SvgDef',
   });
 

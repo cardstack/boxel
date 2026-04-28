@@ -4,6 +4,7 @@ import {
   baseCardRef,
   specRef,
   type Filter,
+  type RealmResourceIdentifier,
   type Sort,
 } from '@cardstack/runtime-common';
 
@@ -82,7 +83,7 @@ module('Unit | card-search/query-builder', function () {
 
     test('search with a selected type produces a type filter alongside the search-term filter', function (assert) {
       let authorRef = {
-        module: 'http://test-realm/test/author',
+        module: 'http://test-realm/test/author' as RealmResourceIdentifier,
         name: 'Author',
       };
       let typeKey = `${authorRef.module}/${authorRef.name}`;

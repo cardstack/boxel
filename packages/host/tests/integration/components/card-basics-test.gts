@@ -44,6 +44,7 @@ import {
   cleanWhiteSpace,
   p,
   testRealmURL,
+  testRRI,
   setupCardLogs,
   saveCard,
   percySnapshot,
@@ -882,7 +883,10 @@ module('Integration | card-basics', function (hooks) {
       card.number = 42;
       card.boolean = true;
       card.languagesSpoken = ['english', 'japanese'];
-      card.ref = { module: `${testRealmURL}person`, name: 'Person' };
+      card.ref = {
+        module: testRRI('person'),
+        name: 'Person',
+      };
       let readName: string = card.firstName;
       assert.strictEqual(readName, 'arthur');
       let readNumber: number = card.number;

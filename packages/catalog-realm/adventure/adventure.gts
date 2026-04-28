@@ -23,6 +23,9 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { restartableTask, timeout } from 'ember-concurrency';
 import BookOpenIcon from '@cardstack/boxel-icons/book-open';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 import SetActiveLLMCommand from '@cardstack/boxel-host/commands/set-active-llm';
@@ -296,15 +299,10 @@ class AdventureIsolated extends Component<typeof Adventure> {
         },
       });
 
-      const gmSkillId = new URL(
-        './Skill/adventure-game-master',
-        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-        import.meta.url,
-      ).href;
+      const gmSkillId = new URL('./Skill/adventure-game-master', here).href;
       const suggestionSkillId = new URL(
         './Skill/suggestion-action-helper',
-        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-        import.meta.url,
+        here,
       ).href;
       const kickoffPrompt = `Let's begin the adventure`;
 

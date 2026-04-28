@@ -10,6 +10,7 @@ import {
   type RenderRouteOptions,
   type ResolvedCodeRef,
   SupportedMimeType,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
@@ -90,7 +91,7 @@ module('Acceptance | jpg image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const jpgDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}jpg-image-def`,
+    module: `${baseRealm.url}jpg-image-def` as RealmResourceIdentifier,
     name: 'JpgDef',
   });
 

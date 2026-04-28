@@ -8,10 +8,7 @@ import type {
   FileExtractResponse,
   RenderRouteOptions,
 } from '@cardstack/runtime-common';
-import {
-  baseRealm,
-  type Realm as RuntimeRealm,
-} from '@cardstack/runtime-common';
+import type { Realm as RuntimeRealm } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index';
 import { PagePool } from '../prerender/page-pool';
 import { RenderRunner } from '../prerender/render-runner';
@@ -28,6 +25,9 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import {
   baseCardRef,
   trimExecutableExtension,
+  rri,
+  baseRealm,
+  baseRRI,
 } from '@cardstack/runtime-common';
 import {
   installDelayedRuntimeRealmSearchPatch,
@@ -252,7 +252,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: rri('./person'),
                     name: 'Person',
                   },
                 },
@@ -298,7 +298,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './person',
+                  module: rri('./person'),
                   name: 'Person',
                 },
               },
@@ -451,7 +451,7 @@ module(basename(__filename), function () {
         renderOptions: {
           fileExtract: true,
           fileDefCodeRef: {
-            module: `${realmURL}filedef-mismatch`,
+            module: rri(`${realmURL}filedef-mismatch`),
             name: 'FileDef',
           },
         },
@@ -548,7 +548,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -574,7 +574,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './no-icon',
+                      module: rri('./no-icon'),
                       name: 'NoIcon',
                     },
                   },
@@ -598,7 +598,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './bad-icon-import',
+                      module: rri('./bad-icon-import'),
                       name: 'BadIconImport',
                     },
                   },
@@ -609,7 +609,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './broken',
+                      module: rri('./broken'),
                       name: 'Broken',
                     },
                   },
@@ -631,7 +631,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './rejects',
+                      module: rri('./rejects'),
                       name: 'Rejects',
                     },
                   },
@@ -654,7 +654,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './rsvp-rejects',
+                      module: rri('./rsvp-rejects'),
                       name: 'RsvpRejects',
                     },
                   },
@@ -675,7 +675,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './throws',
+                      module: rri('./throws'),
                       name: 'Throws',
                     },
                   },
@@ -697,7 +697,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './console-error',
+                      module: rri('./console-error'),
                       name: 'ConsoleError',
                     },
                   },
@@ -719,7 +719,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './console-no-error',
+                      module: rri('./console-no-error'),
                       name: 'ConsoleNoError',
                     },
                   },
@@ -855,7 +855,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Directory',
                     },
                   },
@@ -870,7 +870,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -892,7 +892,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -914,7 +914,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -936,7 +936,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -958,7 +958,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -1814,7 +1814,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dep-reset-consumer',
+                      module: rri('./dep-reset-consumer'),
                       name: 'DepResetConsumer',
                     },
                   },
@@ -1831,7 +1831,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dep-reset-consumer',
+                      module: rri('./dep-reset-consumer'),
                       name: 'DepResetConsumer',
                     },
                   },
@@ -1844,7 +1844,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -1857,7 +1857,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -2073,7 +2073,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './prerendered-search-live',
+                      module: rri('./prerendered-search-live'),
                       name: 'LiveSearchHost',
                     },
                   },
@@ -2083,7 +2083,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './prerendered-search-live',
+                      module: rri('./prerendered-search-live'),
                       name: 'LiveSearchInner',
                     },
                   },
@@ -2096,7 +2096,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './prerendered-search-live',
+                      module: rri('./prerendered-search-live'),
                       name: 'LiveSearchResult',
                     },
                   },
@@ -2104,6 +2104,7 @@ module(basename(__filename), function () {
               },
               'live-file-search-card.gts': `
               import { CardDef, Component, field, contains, StringField, linksTo } from 'https://cardstack.com/base/card-api';
+              import { rri } from '@cardstack/runtime-common';
 
               export class LiveFileSearchInner extends CardDef {
                 static displayName = 'Live File Search Inner';
@@ -2120,7 +2121,7 @@ module(basename(__filename), function () {
                     return {
                       filter: {
                         on: {
-                          module: 'https://cardstack.com/base/card-api',
+                          module: rri('https://cardstack.com/base/card-api'),
                           name: 'FileDef',
                         },
                         eq: {
@@ -2190,7 +2191,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './live-file-search-card',
+                      module: rri('./live-file-search-card'),
                       name: 'LiveFileSearchHost',
                     },
                   },
@@ -2200,7 +2201,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './live-file-search-card',
+                      module: rri('./live-file-search-card'),
                       name: 'LiveFileSearchInner',
                     },
                   },
@@ -2398,7 +2399,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './article',
+                    module: rri('./article'),
                     name: 'Article',
                   },
                 },
@@ -2425,7 +2426,7 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: './website',
+                    module: rri('./website'),
                     name: 'Website',
                   },
                 },
@@ -2464,7 +2465,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './auth-proxy',
+                    module: rri('./auth-proxy'),
                     name: 'AuthProxy',
                   },
                 },
@@ -2654,7 +2655,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './person',
+              module: rri('./person'),
               name: 'Person',
             },
           },
@@ -2667,7 +2668,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './person',
+              module: rri('./person'),
               name: 'Person',
             },
           },
@@ -2704,7 +2705,7 @@ module(basename(__filename), function () {
           attributes: {},
           meta: {
             adoptsFrom: {
-              module: './query-directory',
+              module: rri('./query-directory'),
               name: 'QueryDirectory',
             },
           },
@@ -2736,7 +2737,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './query-directory-proxy',
+              module: rri('./query-directory-proxy'),
               name: 'QueryDirectoryProxy',
             },
           },
@@ -2849,7 +2850,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: rri('./person'),
                 name: 'Person',
               },
             },
@@ -2862,7 +2863,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: rri('./person'),
                 name: 'Person',
               },
             },
@@ -2899,7 +2900,7 @@ module(basename(__filename), function () {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: './query-directory',
+                module: rri('./query-directory'),
                 name: 'QueryDirectory',
               },
             },
@@ -2931,7 +2932,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './query-directory-proxy',
+                module: rri('./query-directory-proxy'),
                 name: 'QueryDirectoryProxy',
               },
             },
@@ -3081,7 +3082,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -3094,7 +3095,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -3118,7 +3119,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './broken-card',
+                      module: rri('./broken-card'),
                       name: 'Broken',
                     },
                   },
@@ -3234,7 +3235,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './cat',
+                      module: rri('./cat'),
                       name: 'Cat',
                     },
                   },
@@ -3252,7 +3253,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog',
+                      module: rri('./dog'),
                       name: 'Dog',
                     },
                   },
@@ -3273,7 +3274,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog-many',
+                      module: rri('./dog-many'),
                       name: 'DogMany',
                     },
                   },
@@ -3298,7 +3299,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog-profile',
+                      module: rri('./dog-profile'),
                       name: 'DogProfile',
                     },
                   },
@@ -3341,7 +3342,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './non-isolated-links-card',
+                      module: rri('./non-isolated-links-card'),
                       name: 'NonIsolatedLinks',
                     },
                   },
@@ -3358,7 +3359,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/brand-guide',
+                      module: rri('https://cardstack.com/base/brand-guide'),
                       name: 'default',
                     },
                   },
@@ -3376,7 +3377,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './cat',
+                      module: rri('./cat'),
                       name: 'Cat',
                     },
                   },
@@ -3396,7 +3397,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './cat',
+                      module: rri('./cat'),
                       name: 'Cat',
                     },
                   },
@@ -3426,7 +3427,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './intentional-error',
+                      module: rri('./intentional-error'),
                       name: 'IntentionalError',
                     },
                   },
@@ -3455,7 +3456,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './timer-error-card',
+                      module: rri('./timer-error-card'),
                       name: 'TimerError',
                     },
                   },
@@ -3486,7 +3487,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './timer-timeout-card',
+                      module: rri('./timer-timeout-card'),
                       name: 'TimerTimeout',
                     },
                   },
@@ -3517,7 +3518,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './unusable-error',
+                      module: rri('./unusable-error'),
                       name: 'UnusableError',
                     },
                   },
@@ -3551,7 +3552,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './embedded-error',
+                      module: rri('./embedded-error'),
                       name: 'EmbeddedError',
                     },
                   },
@@ -3581,7 +3582,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog',
+                      module: rri('./dog'),
                       name: 'Dog',
                     },
                   },
@@ -6377,7 +6378,10 @@ module(basename(__filename), function () {
           data: {
             attributes: { info: `Detail ${i}` },
             meta: {
-              adoptsFrom: { module: '../detail', name: 'Detail' },
+              adoptsFrom: {
+                module: rri('../detail'),
+                name: 'Detail',
+              },
             },
           },
         };
@@ -6431,7 +6435,10 @@ module(basename(__filename), function () {
               },
             },
             meta: {
-              adoptsFrom: { module: '../child-config', name: 'ChildConfig' },
+              adoptsFrom: {
+                module: rri('../child-config'),
+                name: 'ChildConfig',
+              },
             },
           },
         };
@@ -6448,7 +6455,10 @@ module(basename(__filename), function () {
         data: {
           relationships: childRelationships,
           meta: {
-            adoptsFrom: { module: './parent-card', name: 'ParentCard' },
+            adoptsFrom: {
+              module: rri('./parent-card'),
+              name: 'ParentCard',
+            },
           },
         },
       };
@@ -6589,7 +6599,10 @@ module(basename(__filename), function () {
               data: {
                 attributes: { name: 'Maple' },
                 meta: {
-                  adoptsFrom: { module: './person', name: 'Person' },
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
                 },
               },
             },
@@ -6688,7 +6701,7 @@ module(basename(__filename), function () {
           fileExtract: true,
           fileRender: true,
           fileDefCodeRef: {
-            module: `${baseRealm.url}json-file-def`,
+            module: baseRRI('json-file-def'),
             name: 'JsonFileDef',
           },
         },

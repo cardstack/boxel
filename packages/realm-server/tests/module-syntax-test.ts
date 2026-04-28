@@ -13,6 +13,7 @@ import {
   baseCardRef,
   baseFieldRef,
   RealmPaths,
+  rri,
 } from '@cardstack/runtime-common';
 import { testRealm } from './helpers';
 import { basename } from 'path';
@@ -24,12 +25,12 @@ module(basename(__filename), function () {
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person.gts`));
       mod.addField({
         cardBeingModified: {
-          module: `${testRealm}dir/person.gts`,
+          module: rri(`${testRealm}dir/person.gts`),
           name: 'Person',
         },
         fieldName: 'age',
         fieldRef: {
-          module: 'https://cardstack.com/base/number',
+          module: rri('https://cardstack.com/base/number'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -142,12 +143,12 @@ module(basename(__filename), function () {
       // the new field must go after this field
       mod.addField({
         cardBeingModified: {
-          module: `${testRealm}dir/person.gts`,
+          module: rri(`${testRealm}dir/person.gts`),
           name: 'Person',
         },
         fieldName: 'lastName',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: rri('https://cardstack.com/base/string'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -347,7 +348,10 @@ module(basename(__filename), function () {
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/pet.gts`));
 
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/pet`, name: 'Pet' }, // Card we want to add to
+        cardBeingModified: {
+          module: rri(`${testRealm}dir/pet`),
+          name: 'Pet',
+        }, // Card we want to add to
         fieldName: 'card',
         fieldRef: baseCardRef,
         fieldType: 'linksTo',
@@ -382,7 +386,10 @@ module(basename(__filename), function () {
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/pet.gts`));
 
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/pet`, name: 'Pet' }, // Card we want to add to
+        cardBeingModified: {
+          module: rri(`${testRealm}dir/pet`),
+          name: 'Pet',
+        }, // Card we want to add to
         fieldName: 'field',
         fieldRef: baseFieldRef,
         fieldType: 'contains',
@@ -417,10 +424,13 @@ module(basename(__filename), function () {
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/pet.gts`));
 
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/pet`, name: 'Pet' }, // Card we want to add to
+        cardBeingModified: {
+          module: rri(`${testRealm}dir/pet`),
+          name: 'Pet',
+        }, // Card we want to add to
         fieldName: 'bestFriend',
         fieldRef: {
-          module: '../person',
+          module: rri('../person'),
           name: 'Person',
         },
         fieldType: 'linksTo',
@@ -456,10 +466,13 @@ module(basename(__filename), function () {
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/pet.gts`));
 
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/pet`, name: 'Pet' }, // card we want to add to
+        cardBeingModified: {
+          module: rri(`${testRealm}dir/pet`),
+          name: 'Pet',
+        }, // card we want to add to
         fieldName: 'bestFriend',
         fieldRef: {
-          module: '../person', // the other realm (will be from the /test realm not the /node-test)
+          module: rri('../person'), // the other realm (will be from the /test realm not the /node-test)
           name: 'Person',
         },
         fieldType: 'linksTo',
@@ -492,10 +505,13 @@ module(basename(__filename), function () {
 
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
         fieldName: 'firstName',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: rri('https://cardstack.com/base/string'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -541,12 +557,15 @@ module(basename(__filename), function () {
         cardBeingModified: {
           type: 'fieldOf',
           field: 'details',
-          card: { module: `${testRealm}dir/person`, name: 'Person' },
+          card: {
+            module: rri(`${testRealm}dir/person`),
+            name: 'Person',
+          },
         },
         fieldName: 'age',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module: 'https://cardstack.com/base/number',
+          module: rri('https://cardstack.com/base/number'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -599,12 +618,15 @@ module(basename(__filename), function () {
       mod.addField({
         cardBeingModified: {
           type: 'ancestorOf',
-          card: { module: `${testRealm}dir/person`, name: 'FancyPerson' },
+          card: {
+            module: rri(`${testRealm}dir/person`),
+            name: 'FancyPerson',
+          },
         },
         fieldName: 'age',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module: 'https://cardstack.com/base/number',
+          module: rri('https://cardstack.com/base/number'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -660,12 +682,15 @@ module(basename(__filename), function () {
         cardBeingModified: {
           type: 'fieldOf',
           field: 'details',
-          card: { module: `${testRealm}dir/person`, name: 'Person' },
+          card: {
+            module: rri(`${testRealm}dir/person`),
+            name: 'Person',
+          },
         },
         fieldName: 'age',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module: 'https://cardstack.com/base/number',
+          module: rri('https://cardstack.com/base/number'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -714,11 +739,14 @@ module(basename(__filename), function () {
 
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
         fieldName: 'aliases',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: rri('https://cardstack.com/base/string'),
           name: 'default',
         },
         fieldType: 'containsMany',
@@ -768,10 +796,13 @@ module(basename(__filename), function () {
     `;
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
         fieldName: 'pet',
         fieldRef: {
-          module: `${testRealm}dir/pet`,
+          module: rri(`${testRealm}dir/pet`),
           name: 'Pet',
         },
         fieldDefinitionType: 'card',
@@ -820,10 +851,13 @@ module(basename(__filename), function () {
     `;
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
         fieldName: 'friend',
         fieldRef: {
-          module: `${testRealm}dir/person`,
+          module: rri(`${testRealm}dir/person`),
           name: 'Person',
         },
         fieldType: 'linksTo',
@@ -874,12 +908,15 @@ module(basename(__filename), function () {
 
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
         fieldName: 'fullName',
         fieldType: 'contains',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: rri('https://cardstack.com/base/string'),
           name: 'default',
         },
         incomingRelativeTo: undefined,
@@ -924,10 +961,13 @@ module(basename(__filename), function () {
 
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
         fieldName: 'age',
         fieldRef: {
-          module: 'https://cardstack.com/base/number',
+          module: rri('https://cardstack.com/base/number'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -970,12 +1010,12 @@ module(basename(__filename), function () {
       try {
         mod.addField({
           cardBeingModified: {
-            module: `${testRealm}dir/person`,
+            module: rri(`${testRealm}dir/person`),
             name: 'Person',
           },
           fieldName: 'firstName',
           fieldRef: {
-            module: 'https://cardstack.com/base/string',
+            module: rri('https://cardstack.com/base/string'),
             name: 'default',
           },
           fieldType: 'contains',
@@ -1005,7 +1045,10 @@ module(basename(__filename), function () {
     `;
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.removeField(
-        { module: `${testRealm}dir/person`, name: 'Person' },
+        {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
         'firstName',
       );
 
@@ -1055,15 +1098,21 @@ module(basename(__filename), function () {
 
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       let addFieldAtIndex = mod.removeField(
-        { module: `${testRealm}dir/person`, name: 'Person' },
+        {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
         'artistName',
       );
 
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
         fieldName: 'artistNames',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: rri('https://cardstack.com/base/string'),
           name: 'default',
         },
         fieldType: 'containsMany',
@@ -1105,15 +1154,21 @@ module(basename(__filename), function () {
 
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       let addFieldAtIndex = mod.removeField(
-        { module: `${testRealm}dir/person`, name: 'Person' },
+        {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
         'firstName',
       );
 
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
         fieldName: 'firstNameAdjusted',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: rri('https://cardstack.com/base/string'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -1155,15 +1210,21 @@ module(basename(__filename), function () {
 
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       let addFieldAtIndex = mod.removeField(
-        { module: `${testRealm}dir/person`, name: 'Person' },
+        {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
         'streetName',
       );
 
       mod.addField({
-        cardBeingModified: { module: `${testRealm}dir/person`, name: 'Person' },
+        cardBeingModified: {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
         fieldName: 'streetNameAdjusted',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: rri('https://cardstack.com/base/string'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -1202,7 +1263,10 @@ module(basename(__filename), function () {
 
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.removeField(
-        { module: `${testRealm}dir/person`, name: 'Person' },
+        {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
         'firstName',
       );
 
@@ -1227,7 +1291,10 @@ module(basename(__filename), function () {
     `;
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       mod.removeField(
-        { module: `${testRealm}dir/person`, name: 'Friend' },
+        {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Friend',
+        },
         'friend',
       );
 
@@ -1268,7 +1335,10 @@ module(basename(__filename), function () {
       mod.removeField(
         {
           type: 'ancestorOf',
-          card: { module: `${testRealm}dir/person`, name: 'FancyPerson' },
+          card: {
+            module: rri(`${testRealm}dir/person`),
+            name: 'FancyPerson',
+          },
         },
         'firstName',
       );
@@ -1311,7 +1381,10 @@ module(basename(__filename), function () {
         {
           type: 'fieldOf',
           field: 'details',
-          card: { module: `${testRealm}dir/person`, name: 'Person' },
+          card: {
+            module: rri(`${testRealm}dir/person`),
+            name: 'Person',
+          },
         },
         'nickName',
       );
@@ -1348,7 +1421,10 @@ module(basename(__filename), function () {
       let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
       try {
         mod.removeField(
-          { module: `${testRealm}dir/person`, name: 'Person' },
+          {
+            module: rri(`${testRealm}dir/person`),
+            name: 'Person',
+          },
           'foo',
         );
         throw new Error('expected error was not thrown');

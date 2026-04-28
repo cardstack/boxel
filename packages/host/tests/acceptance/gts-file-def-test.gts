@@ -10,6 +10,7 @@ import {
   type RenderRouteOptions,
   type ResolvedCodeRef,
   SupportedMimeType,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
@@ -50,7 +51,7 @@ module('Acceptance | gts file def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const gtsDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}gts-file-def`,
+    module: `${baseRealm.url}gts-file-def` as RealmResourceIdentifier,
     name: 'GtsFileDef',
   });
 

@@ -9,6 +9,7 @@ import {
   compiledCard,
 } from '@cardstack/runtime-common/etc/test-fixtures';
 import type { Realm } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import {
   RealmPaths,
   type LooseSingleCardDocument,
@@ -910,7 +911,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: '../test-card',
+                      module: rri('../test-card'),
                       name: 'TestCard',
                     },
                   },

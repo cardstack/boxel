@@ -16,7 +16,12 @@ import stringify from 'safe-stable-stringify';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
-import { Deferred, baseRealm, skillCardRef } from '@cardstack/runtime-common';
+import {
+  Deferred,
+  baseRealm,
+  skillCardRef,
+  rri,
+} from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_ACTIVE_LLM,
@@ -1278,14 +1283,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-file="pet.gts"]').exists();
 
     // Change realm
-    await click('[data-test-choose-file-modal-realm-chooser]');
-    await click('[data-test-choose-file-modal-realm-option="Base Workspace"]');
+    await click('[data-test-realm-dropdown-trigger]');
+    await waitFor('[data-test-boxel-menu-item-text="Base Workspace"]');
+    await click('[data-test-boxel-menu-item-text="Base Workspace"]');
     assert.dom('[data-test-file="boolean.gts"]').exists();
 
-    await click('[data-test-choose-file-modal-realm-chooser]');
-    await click(
-      '[data-test-choose-file-modal-realm-option="Test Workspace B"]',
-    );
+    await click('[data-test-realm-dropdown-trigger]');
+    await waitFor('[data-test-boxel-menu-item-text="Test Workspace B"]');
+    await click('[data-test-boxel-menu-item-text="Test Workspace B"]');
 
     // Add attachment item
     await click('[data-test-file="person.gts"]');
@@ -1995,7 +2000,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.deepEqual(
       contextSent.codeMode!.selectedCodeRef,
       {
-        module: 'http://test-realm/test/plant',
+        module: rri('http://test-realm/test/plant'),
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',
@@ -2008,7 +2013,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.deepEqual(
       contextSent.codeMode!.inheritanceChain![0].codeRef,
       {
-        module: 'http://test-realm/test/plant',
+        module: rri('http://test-realm/test/plant'),
         name: 'Plant',
       },
       'First item in inheritanceChain is the Plant card',
@@ -2155,7 +2160,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.deepEqual(
       contextSent.codeMode!.selectedCodeRef,
       {
-        module: 'http://test-realm/test/plant',
+        module: rri('http://test-realm/test/plant'),
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',
@@ -2226,7 +2231,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.deepEqual(
       contextSent.codeMode!.selectedCodeRef,
       {
-        module: 'http://test-realm/test/plant',
+        module: rri('http://test-realm/test/plant'),
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',
