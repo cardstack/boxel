@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS boxel_index (
   head_html varchar,
   has_error boolean DEFAULT false NOT NULL,
   last_known_good_deps jsonb,
+  markdown text,
+  timing_diagnostics jsonb,
   PRIMARY KEY (url, realm_url, type)
 );
 
@@ -71,6 +73,8 @@ CREATE TABLE IF NOT EXISTS boxel_index_working (
   head_html varchar,
   has_error boolean DEFAULT false NOT NULL,
   last_known_good_deps jsonb,
+  markdown text,
+  timing_diagnostics jsonb,
   PRIMARY KEY (url, realm_url, type)
 );
 
