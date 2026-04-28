@@ -251,6 +251,19 @@ export default function handlePublishRealm({
         userId: ownerUserId,
       });
 
+      // Phase 3: /_publish-realm is a server-level endpoint and bypasses
+      // serveFromRealm, so the source realm isn't lazy-mounted by request
+      // routing. Mount it here on this instance — every downstream call
+      // (the _info fetch below, sourceRealm.indexing()/flushUpdateEvents()/.dir
+      // inside the write lock) needs it published into virtualNetwork.
+      let sourceRealm = await reconciler.lookupOrMount(sourceRealmURL);
+      if (!sourceRealm) {
+        return sendResponseForBadRequest(
+          ctxt,
+          `Source realm ${sourceRealmURL} does not exist`,
+        );
+      }
+
       let sourceRealmSession = createJWT(
         {
           user: ownerUserId,
@@ -336,14 +349,10 @@ export default function handlePublishRealm({
             realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
           }
 
-          // Read the source realm's mount state for `.indexing()` /
-          // `.flushUpdateEvents()` / `.dir`. Reading the Realm instance
-          // is allowed — the stateless rule prohibits *mutating*
-          // realms[] / virtualNetwork. /_publish-realm is a server-level
-          // endpoint and doesn't pass through serveFromRealm, so the
-          // source realm isn't lazy-mounted upstream; call lookupOrMount
-          // here to mount it on this instance if it isn't already.
-          let sourceRealm = await reconciler.lookupOrMount(sourceRealmURL);
+          // The source realm was lookupOrMounted at the top of the
+          // handler. Use it for `.indexing()` / `.flushUpdateEvents()` /
+          // `.dir`. Reading the Realm instance is allowed — the
+          // stateless rule prohibits *mutating* realms[] / virtualNetwork.
           if (!sourceRealm?.dir) {
             throw new Error(
               `Could not determine filesystem path for source realm ${sourceRealmURL}`,

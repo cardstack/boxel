@@ -24,7 +24,9 @@ import {
   fetchSessionRoom,
   hasExtension,
   executableExtensions,
+  userInitiatedPriority,
 } from '@cardstack/runtime-common';
+import { enqueueReindexRealmJob } from '@cardstack/runtime-common/jobs/reindex-realm';
 import { ensureDirSync, writeJSONSync, existsSync } from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
 import {
@@ -630,7 +632,31 @@ export class RealmServer {
         return await this.reconciler.lookupOrMount(url);
       }
     }
-    return undefined;
+    // Phase 3: knownByUrl is populated by reconciler.reconcile() on
+    // boot + LISTEN/poll. A request that arrives between a sibling
+    // instance's POST /_create-realm (or /_publish-realm) and this
+    // instance's reconciler picking up NOTIFY would otherwise 404.
+    // Fall through to a direct registry probe — try descending path
+    // prefixes against realm_registry.url.
+    let candidatePaths = candidateRealmURLs(requestURL);
+    if (candidatePaths.length === 0) {
+      return undefined;
+    }
+    let inClause: (string | ReturnType<typeof param>)[] = ['('];
+    candidatePaths.forEach((u, idx) => {
+      if (idx > 0) inClause.push(',');
+      inClause.push(param(u));
+    });
+    inClause.push(')');
+    let rows = (await query(this.dbAdapter, [
+      `SELECT url FROM realm_registry WHERE url IN`,
+      ...inClause,
+      `LIMIT 1`,
+    ])) as { url: string }[];
+    if (rows.length === 0) {
+      return undefined;
+    }
+    return await this.reconciler.lookupOrMount(rows[0].url);
   }
 
   private async getPublishedRealmInfo(
@@ -1039,6 +1065,18 @@ export class RealmServer {
       this.virtualNetwork.addURLMapping(new URL(url), actualRealmURL);
     }
 
+    // Phase 3: enqueue the from-scratch index job synchronously so the
+    // queue worker can pick it up regardless of which instance ends up
+    // mounting the realm. Previously this was implicit in
+    // `realm.start()`, which the stateless handler no longer calls.
+    await enqueueReindexRealmJob(
+      url,
+      ownerUsername,
+      this.queue,
+      this.dbAdapter,
+      userInitiatedPriority,
+    );
+
     return { url, info };
   };
 
@@ -1117,4 +1155,19 @@ function errorWithStatus(
   let error = new Error(message);
   (error as Error & { status: number }).status = status;
   return error as Error & { status: number };
+}
+
+// Build candidate realm URLs from a request URL by trimming the
+// pathname segment-by-segment. Used by findOrMountRealm's registry
+// fallback when knownByUrl is stale. Includes the origin-only form
+// (root realm) and every prefix that ends with a slash.
+function candidateRealmURLs(requestURL: URL): string[] {
+  let segments = requestURL.pathname.split('/').filter(Boolean);
+  let candidates: string[] = [];
+  // Try longest-prefix first.
+  for (let i = segments.length; i >= 0; i--) {
+    let path = i === 0 ? '/' : '/' + segments.slice(0, i).join('/') + '/';
+    candidates.push(`${requestURL.origin}${path}`);
+  }
+  return [...new Set(candidates)];
 }
