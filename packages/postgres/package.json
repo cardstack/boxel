@@ -15,7 +15,7 @@
   "devDependencies": {
     "@cardstack/local-types": "workspace:*",
     "@glint/ember-tsc": "catalog:",
-    "concurrently": "catalog:",
+    "concurrently": "catalog:"
   },
   "scripts": {
     "start:pg": "./scripts/start-pg.sh",
