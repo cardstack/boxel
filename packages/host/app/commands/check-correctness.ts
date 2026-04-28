@@ -3,6 +3,7 @@ import { service } from '@ember/service';
 import {
   isCardDocumentString,
   isCardErrorJSONAPI,
+  rri,
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
@@ -263,8 +264,9 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
 
   private async isEmptyFileContent(targetRef: string): Promise<boolean> {
     try {
-      let fileUrl = new URL(targetRef);
-      let { status, content } = await this.cardService.getSource(fileUrl);
+      let { status, content } = await this.cardService.getSource(
+        rri(targetRef),
+      );
       return status === 200 && content.trim() === '';
     } catch {
       return false;
@@ -289,7 +291,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
   ): Promise<string | undefined> {
     try {
       let { status, content } = await this.cardService.getSource(
-        new URL(fileUrl),
+        rri(fileUrl),
       );
       if (status !== 200) {
         return undefined;

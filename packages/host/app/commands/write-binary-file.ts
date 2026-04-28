@@ -2,6 +2,8 @@ import { service } from '@ember/service';
 
 import { v4 as uuidv4 } from 'uuid';
 
+import { rri } from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -134,7 +136,7 @@ export default class WriteBinaryFileCommand extends HostBaseCommand<
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {
-    let getSourceResult = await this.cardService.getSource(new URL(fileUrl));
+    let getSourceResult = await this.cardService.getSource(rri(fileUrl));
     return getSourceResult.status !== 404;
   }
 }

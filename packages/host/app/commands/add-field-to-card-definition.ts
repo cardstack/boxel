@@ -36,9 +36,7 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
     input: BaseCommandModule.AddFieldToCardDefinitionInput,
   ): Promise<undefined> {
     let moduleSource = (
-      await this.cardService.getSource(
-        cardIdToURL(input.cardDefinitionToModify.module),
-      )
+      await this.cardService.getSource(input.cardDefinitionToModify.module)
     ).content;
 
     let moduleSyntax = new ModuleSyntax(
