@@ -153,6 +153,23 @@ prompt_for_source_profile() {
     # Interactive numbered menu — same UX as `boxel profile add`.
     # Reads from ~/.aws/credentials and lets the user type a digit.
     # Falls back to a free-form prompt for the "(other)" option.
+    #
+    # Refuse to prompt when there's no controlling TTY (CI, automation,
+    # piped invocation) — the redirections below would error out
+    # unhelpfully. Tell the operator how to provide the value without
+    # the interactive flow.
+    if [ ! -r /dev/tty ]; then
+        echo "No source AWS profile is configured for '$ENV_NAME' and there's no controlling TTY to prompt on." >&2
+        echo "" >&2
+        echo "Either re-run with --source-profile <name>:" >&2
+        echo "  $0 $ENV_NAME <MFA_TOKEN> --source-profile <name>" >&2
+        echo "" >&2
+        echo "Or pre-populate ~/.config/claude-aws/config before running:" >&2
+        echo "  mkdir -p ~/.config/claude-aws && \\" >&2
+        echo "    echo '${ENV_NAME}_source_profile=<name>' >> ~/.config/claude-aws/config" >&2
+        exit 1
+    fi
+
     local available=()
     if [ -f "$HOME/.aws/credentials" ]; then
         # Strip [profile] headers down to the bare names.

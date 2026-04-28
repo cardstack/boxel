@@ -17,12 +17,39 @@
 const username = process.env.CLAUDE_DB_USER;
 const password = process.env.CLAUDE_DB_PASSWORD;
 
+// Conservative PostgreSQL identifier check. The username is interpolated
+// into raw SQL for GRANT / REVOKE below, so anything outside this
+// character set is rejected before it can become a SQL injection or a
+// silent-corruption hazard. PostgreSQL itself allows up to NAMEDATALEN-1
+// (63) characters in an identifier; this regex matches that limit and
+// disallows the leading-digit / quoted-identifier variants we don't use.
+const VALID_PG_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]{0,62}$/;
+
+function ensureProvisioningEnv() {
+  if (!username || !password) {
+    throw new Error(
+      'CLAUDE_DB_USER and CLAUDE_DB_PASSWORD must both be set in ' +
+        'staging/production. The infra side of CS-10962 surfaces these ' +
+        'from SSM into the pg-migration ECS task; if the migration is ' +
+        'running without them set, that wiring has not landed yet.',
+    );
+  }
+  if (!VALID_PG_IDENTIFIER.test(username)) {
+    throw new Error(
+      `CLAUDE_DB_USER (${JSON.stringify(username)}) does not match the ` +
+        'allowed PostgreSQL identifier pattern [A-Za-z_][A-Za-z0-9_]{0,62}. ' +
+        'Refusing to interpolate it into a GRANT / REVOKE statement.',
+    );
+  }
+}
+
 exports.up = (pgm) => {
   if (
     !['staging', 'production'].includes(process.env.REALM_SENTRY_ENVIRONMENT)
   ) {
     return;
   }
+  ensureProvisioningEnv();
 
   pgm.createRole(username, {
     login: true,
@@ -42,6 +69,7 @@ exports.down = (pgm) => {
   ) {
     return;
   }
+  ensureProvisioningEnv();
 
   pgm.sql(`REVOKE readonly_role FROM "${username}"`);
   pgm.dropRole(username);
