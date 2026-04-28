@@ -219,19 +219,69 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
         }
       };
 
-      const releaseAfterTokenPaint = () => {
-        // forceFullTokenization updates the model synchronously, but Monaco
-        // paints the resulting coloured spans on its next animation frame.
-        // Releasing the waiter before that paint lets Percy capture the
-        // intermediate plain-text state — exactly the "syntax highlighting
-        // on one side but not the other" false positive seen on main-branch
-        // codeblocks snapshots. Two RAFs covers Monaco's own
-        // scheduleAtNextAnimationFrame plus the browser's paint step.
-        // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- Monaco paints tokens on its next rAF; the waiter must span that frame
-        requestAnimationFrame(() =>
-          // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- second frame to cover the paint following Monaco's layout
-          requestAnimationFrame(() => this.endAsync(operationId)),
+      const releaseAfterTokensSettled = () => {
+        // forceFullTokenization synchronously asks Monaco to compute tokens,
+        // but the colour painting that follows is not strictly synchronous:
+        // bracket-pair colorisation runs in a worker, and language services
+        // for TS/JS can publish token updates over multiple animation frames.
+        // A fixed 2-rAF wait sometimes lands mid-tokenisation — we have seen
+        // both fully plain and partially-coloured Monaco panels captured by
+        // Percy on otherwise-identical runs. Instead, watch onDidChangeTokens
+        // on every relevant model and only release once those events have
+        // been quiet for two consecutive rAFs (or after a generous cap, so
+        // a stuck worker can't hang the test).
+        const models: MonacoSDK.editor.ITextModel[] = [];
+        const targetModel = targetEditor.getModel();
+        if (targetModel) models.push(targetModel);
+        if (diffEditor) {
+          const originalModel = diffEditor.getOriginalEditor().getModel();
+          if (originalModel && !models.includes(originalModel)) {
+            models.push(originalModel);
+          }
+        }
+
+        let lastTokenChange = performance.now();
+        const tokenDisposables = models.map((model) =>
+          model.onDidChangeTokens(() => {
+            lastTokenChange = performance.now();
+          }),
         );
+
+        const settleMs = 32; // ~2 frames quiet at 60fps
+        const startedAt = performance.now();
+        const maxWaitMs = 1500;
+
+        const cleanup = () => {
+          for (const d of tokenDisposables) d.dispose();
+        };
+
+        const finish = () => {
+          cleanup();
+          // Final rAF pair so the browser can paint the last token batch
+          // before Percy snapshots the DOM.
+          // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- Monaco paints tokens on its next rAF; the waiter must span that frame
+          requestAnimationFrame(() =>
+            // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- second frame to cover the paint following Monaco's layout
+            requestAnimationFrame(() => this.endAsync(operationId)),
+          );
+        };
+
+        const poll = () => {
+          const now = performance.now();
+          if (now - lastTokenChange >= settleMs) {
+            finish();
+            return;
+          }
+          if (now - startedAt >= maxWaitMs) {
+            finish();
+            return;
+          }
+          // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- polling for Monaco token-change quiescence between paints
+          requestAnimationFrame(poll);
+        };
+
+        // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- start polling on the next paint frame
+        requestAnimationFrame(poll);
       };
 
       const checkInitComplete = () => {
@@ -243,7 +293,7 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
 
         ensureTokenization();
         isInitialized = true;
-        releaseAfterTokenPaint();
+        releaseAfterTokensSettled();
       };
 
       // Listen for layout changes to detect when initialization is complete
@@ -294,7 +344,7 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
           contentSizeDisposable.dispose();
           diffDisposable?.dispose();
           decorationsDisposable.dispose();
-          releaseAfterTokenPaint();
+          releaseAfterTokensSettled();
         }
       }, 2000);
 

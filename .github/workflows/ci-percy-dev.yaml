@@ -73,20 +73,23 @@ jobs:
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
           SKIP_CATALOG: true
         # Filter matches exactly the snapshots we expect to exercise the fixes.
-        # Each alternative is a unique substring of one or more target test
-        # names — no `+` quantifiers, because QUnit's URL-form filter parser
-        # decodes `+` as a literal space and silently breaks the regex.
+        # Each alternative is a unique, all-lowercase substring of a target
+        # test name — the runner lowercases the filter regex but preserves
+        # the test name case, so any uppercase letter in the filter (e.g.
+        # `View Code panel`, `FieldDef`) silently fails to match. Also: no
+        # `+` quantifiers, because QUnit's URL-form filter parser decodes
+        # `+` as a literal space and breaks the regex.
         #   - codeblocks: 5 Monaco cases (paint race + indent guide)
         #   - slightly muted / retry button for message: 2 animation cases
         #   - there are no spec instances: 1 (divider icon cascade)
         #   - maintains status of: 1 Monaco (JSON codeblock in AI assistant)
-        #   - contained in a FieldDef renders in atom format: 1 control
+        #   - renders in atom format: 1 control (compound field plural)
         run: |
           set -e
           READY_URLS='http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http-get://localhost:4202/test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http-get://localhost:4202/node-test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http-get://localhost:4201/skills/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http://localhost:8008|http://localhost:5001'
           dbus-run-session -- npx percy exec -- \
             npx start-server-and-test 'pnpm run wait' "$READY_URLS" \
-            'sleep 15 && npx ember exam --path ./dist --filter "/codeblocks|slightly muted|retry button for message|there are no spec instances|maintains status of|contained in a FieldDef renders in atom format/" --preserve-test-name'
+            'sleep 15 && npx ember exam --path ./dist --filter "/codeblocks|slightly muted|retry button for message|there are no spec instances|maintains status of|renders in atom format/" --preserve-test-name'
 
       - name: Print realm server logs
         if: ${{ !cancelled() }}
