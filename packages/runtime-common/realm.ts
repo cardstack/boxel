@@ -4621,17 +4621,23 @@ export class Realm {
       }
     }
 
+    // Read and merge BOTH files before writing either. A mixed PATCH like
+    // { name, publishable } touches both the card and the sidecar, and we
+    // don't want a malformed sidecar to surface 500 *after* the card has
+    // already been mutated.
+    let cardPath: LocalPath | undefined;
+    let cardDoc:
+      | {
+          data: {
+            type: string;
+            attributes?: Record<string, unknown>;
+            meta: { adoptsFrom: { module: string; name: string } };
+          };
+        }
+      | undefined;
     if (Object.keys(cardAttrs).length > 0) {
-      let cardPath: LocalPath = this.paths.local(
-        this.paths.fileURL('realm.json'),
-      );
-      let cardDoc: {
-        data: {
-          type: string;
-          attributes?: Record<string, unknown>;
-          meta: { adoptsFrom: { module: string; name: string } };
-        };
-      } = {
+      cardPath = this.paths.local(this.paths.fileURL('realm.json'));
+      cardDoc = {
         data: {
           type: 'card',
           attributes: {},
@@ -4647,8 +4653,8 @@ export class Realm {
       if (existingCard?.content) {
         try {
           cardDoc = JSON.parse(existingCard.content);
-          cardDoc.data = cardDoc.data ?? ({} as any);
-          cardDoc.data.attributes = cardDoc.data.attributes ?? {};
+          cardDoc!.data = cardDoc!.data ?? ({} as any);
+          cardDoc!.data.attributes = cardDoc!.data.attributes ?? {};
         } catch (e: any) {
           return systemError({
             requestContext,
@@ -4662,24 +4668,23 @@ export class Realm {
       // keep sending { name: ... } unchanged.
       for (let [key, value] of Object.entries(cardAttrs)) {
         if (key === 'name') {
-          let existingCardInfo = (cardDoc.data.attributes!.cardInfo ??
+          let existingCardInfo = (cardDoc!.data.attributes!.cardInfo ??
             {}) as Record<string, unknown>;
-          cardDoc.data.attributes!.cardInfo = {
+          cardDoc!.data.attributes!.cardInfo = {
             ...existingCardInfo,
             name: value,
           };
         } else {
-          cardDoc.data.attributes![key] = value;
+          cardDoc!.data.attributes![key] = value;
         }
       }
-      await this.write(cardPath, JSON.stringify(cardDoc, null, 2) + '\n');
     }
 
+    let realmConfigPath: LocalPath | undefined;
+    let realmConfig: Record<string, unknown> | undefined;
     if (Object.keys(sidecarAttrs).length > 0) {
-      let realmConfigPath: LocalPath = this.paths.local(
-        this.paths.fileURL('.realm.json'),
-      );
-      let realmConfig: Record<string, unknown> = {};
+      realmConfigPath = this.paths.local(this.paths.fileURL('.realm.json'));
+      realmConfig = {};
       let existingConfig = await this.readFileAsText(
         realmConfigPath,
         undefined,
@@ -4694,7 +4699,13 @@ export class Realm {
           });
         }
       }
-      Object.assign(realmConfig, sidecarAttrs);
+      Object.assign(realmConfig!, sidecarAttrs);
+    }
+
+    if (cardPath !== undefined && cardDoc !== undefined) {
+      await this.write(cardPath, JSON.stringify(cardDoc, null, 2) + '\n');
+    }
+    if (realmConfigPath !== undefined && realmConfig !== undefined) {
       await this.write(
         realmConfigPath,
         JSON.stringify(realmConfig, null, 2) + '\n',
