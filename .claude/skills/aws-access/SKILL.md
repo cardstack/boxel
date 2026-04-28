@@ -25,12 +25,11 @@ Profile convention is fixed (don't change without a heads-up):
 
 ## Identity model (CS-10962)
 
-The credentials in `[claude-staging]` / `[claude-prod]` are *not* the user's IAM identity. The script chains:
+The credentials in `[claude-staging]` / `[claude-prod]` are *not* the user's IAM identity. The script does:
 
-1. The user's long-lived IAM access keys (held in their source profile, e.g. `cardstack`).
-2. `sts:GetSessionToken` with the user's MFA token — produces a 12h session-token credential bound to the user's identity. This is the MFA gate.
-3. `sts:AssumeRole arn:aws:iam::<account>:role/boxel-claude-readonly` using those session-token creds — produces a 1h credential bound to the role's identity. (AWS caps chained-role duration at 1h regardless of the role's `max_session_duration`.)
-4. The role's credentials are written to `[claude-<env>]`. The session-token creds are discarded.
+1. Reads the user's long-lived IAM access keys (held in their source profile, e.g. `cardstack`).
+2. Calls `sts:AssumeRole arn:aws:iam::<account>:role/boxel-claude-readonly` directly, passing the user's MFA token via `--serial-number` and `--token-code`. The role's trust policy requires `aws:MultiFactorAuthPresent: true`, which is satisfied by these flags. This is the MFA gate.
+3. Writes the role's credentials to `[claude-<env>]`. Session length is the role's `max_session_duration` (12h).
 
 Net effect: every `aws --profile claude-<env> ...` call Claude makes runs as `boxel-claude-readonly`, with exactly that role's policy. The user's IAM group memberships only matter to the extent that they grant `sts:AssumeRole` on the role; once the role is assumed, the user's groups are no longer in the picture. The role is the same name (`boxel-claude-readonly`) in both staging and prod, provisioned by the infra side of CS-10962.
 
@@ -61,14 +60,14 @@ Source AWS profile for staging:
 
 Type the source profile name (e.g. `cardstack`). It's saved to `~/.config/claude-aws/config` and never prompted for again unless the user passes `--source-profile <name>` to override. Same dance for prod the first time `mise run claude-aws prod <token>` is run.
 
-### 3. Per-session — refresh the role-assumed credentials (every ~1h)
+### 3. Per-session — refresh the role-assumed credentials (every ~12h)
 
 ```sh
 mise run claude-aws staging <MFA_TOKEN>
 mise run claude-aws prod    <MFA_TOKEN>
 ```
 
-Output ends with `Identity: arn:aws:iam::...:role/boxel-claude-readonly (assumed)` and `Expires: <ISO timestamp>`. The role session is 1h — the chained-role cap AWS imposes when assuming a role from session-token-derived credentials. When it expires, run the same command with a fresh MFA token.
+Output ends with `Identity: arn:aws:iam::...:role/boxel-claude-readonly (assumed)` and `Expires: <ISO timestamp>`. The role session lasts up to 12h (the role's `max_session_duration`); MFA is applied at the AssumeRole call itself via `--serial-number` / `--token-code`. When it expires, run the same command with a fresh MFA token.
 
 After that, Claude can run any `aws --profile claude-staging ...` or `aws --profile claude-prod ...` command without further intervention until expiration.
 

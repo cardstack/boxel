@@ -4,10 +4,9 @@
 #
 # Identity model (CS-10962):
 #
-#   user IAM identity
-#     └─ sts:GetSessionToken (MFA-validated)            ← step 1
-#         └─ sts:AssumeRole boxel-claude-readonly       ← step 2
-#             └─ creds written to [claude-<env>]        ← what Claude sees
+#   user IAM identity (long-lived access keys + MFA token)
+#     └─ sts:AssumeRole boxel-claude-readonly  (with --serial-number / --token-code)
+#         └─ creds written to [claude-<env>]   ← what Claude sees
 #
 # The named profile `claude-staging` / `claude-prod` ends up holding the
 # *role's* credentials, not the user's. This means every `aws --profile
@@ -15,10 +14,16 @@
 # `boxel-claude-readonly` role — independent of which IAM groups the user
 # happens to be in. The role is provisioned by separate infra.
 #
-# Unlike `set-staging.sh` / `set-prod.sh`, which export env vars into the
-# current shell, this script writes the temporary credentials to a named
-# profile in ~/.aws/credentials so that a separate shell (e.g. Claude
-# Code's Bash tool) can pick them up via `aws --profile claude-<env>`.
+# We call AssumeRole directly (with --serial-number / --token-code so MFA
+# is applied at the role-assumption boundary itself), rather than chaining
+# GetSessionToken → AssumeRole. The direct path matches the security model
+# more cleanly and gets the full 12h role session — chaining would cap us
+# at 1h regardless of the role's max_session_duration.
+#
+# This script writes the temporary credentials to a named profile in
+# ~/.aws/credentials rather than exporting shell-local environment
+# variables, so a separate shell (e.g. Claude Code's Bash tool) can pick
+# them up via `aws --profile claude-<env>`.
 #
 # Usage:
 #   claude-aws staging <MFA_TOKEN>
@@ -38,6 +43,18 @@
 
 set -euo pipefail
 
+# Fail early with a clear hint if a required dep is missing — without
+# this, the user gets an opaque "jq: command not found" mid-script.
+require_command() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        echo "Error: required command '$1' is not installed or not on PATH." >&2
+        echo "Install $1 and try again." >&2
+        exit 1
+    fi
+}
+require_command aws
+require_command jq
+
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/claude-aws"
 CONFIG_FILE="$CONFIG_DIR/config"
 
@@ -45,6 +62,10 @@ CONFIG_FILE="$CONFIG_DIR/config"
 # by the infra side of CS-10962. Don't make this configurable; the whole
 # point is that "what Claude is" is fixed and reviewable.
 ROLE_NAME="boxel-claude-readonly"
+
+# Role's max_session_duration is 12h; AssumeRole-with-MFA from long-lived
+# user creds (the path we use) honors that fully.
+ROLE_DURATION_SECONDS=43200
 
 usage() {
     echo "Usage: $0 <staging|prod> <MFA_TOKEN> [--source-profile <name>]" >&2
@@ -181,13 +202,13 @@ else
     fi
 fi
 
-# --- step 1: get session token (MFA) --------------------------------------
+# --- discover MFA ARN + account ------------------------------------------
 
 # Auto-detect the caller's MFA ARN from their IAM user — keeps the
 # script portable across team members without per-user editing.
 # The MFA ARN looks like: arn:aws:iam::<account-id>:mfa/<device-name>
 # We use the same ARN to figure out which AWS account we're in below,
-# so we don't need a second sts:GetCallerIdentity round-trip.
+# so we don't need a sts:GetCallerIdentity round-trip.
 MFA_ARN=$(aws iam list-mfa-devices \
     --profile "$SOURCE_PROFILE" \
     --query 'MFADevices[0].SerialNumber' \
@@ -209,41 +230,32 @@ fi
 
 ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${ROLE_NAME}"
 
-SESSION_OUTPUT=$(aws sts get-session-token \
-    --serial-number "$MFA_ARN" \
-    --token-code "$MFA_TOKEN" \
-    --profile "$SOURCE_PROFILE")
+# --- assume the boxel-claude-readonly role with MFA ----------------------
 
-SESSION_ACCESS_KEY_ID=$(echo "$SESSION_OUTPUT" | jq -r '.Credentials.AccessKeyId')
-SESSION_SECRET_ACCESS_KEY=$(echo "$SESSION_OUTPUT" | jq -r '.Credentials.SecretAccessKey')
-SESSION_SESSION_TOKEN=$(echo "$SESSION_OUTPUT" | jq -r '.Credentials.SessionToken')
-
-# --- step 2: assume the boxel-claude-readonly role -------------------------
-
-# Use the GetSessionToken creds via env vars to call AssumeRole. Inline
-# `env ...` keeps them out of any persistent profile — if this script
-# crashes between steps, no half-baked creds linger in ~/.aws/credentials.
+# Direct AssumeRole — MFA is applied at the role-assumption boundary itself
+# via --serial-number / --token-code. The role's trust policy requires
+# `aws:MultiFactorAuthPresent`, which is satisfied by these flags.
 #
-# Duration cap: when chaining (assuming a role from session-token-derived
-# credentials), AWS enforces a 1h ceiling regardless of the role's
-# max_session_duration. We pass 3600 explicitly so the API call doesn't
-# guess based on defaults.
+# We pass --output json explicitly so the call doesn't depend on the
+# user's `output = ...` AWS CLI default; jq below would break if the
+# format were `text` or `table`.
 #
 # Exit non-zero on AssumeRole failure. Do NOT fall back to writing the
-# session-token creds — that would silently put the user's full IAM
+# user's long-lived creds — that would silently put the user's full IAM
 # identity into [claude-<env>], which is the exact thing CS-10962 fixes.
 ASSUME_STDERR=$(mktemp)
 trap 'rm -f "$ASSUME_STDERR"' EXIT
 
 set +e
-ASSUME_OUTPUT=$(env \
-    AWS_ACCESS_KEY_ID="$SESSION_ACCESS_KEY_ID" \
-    AWS_SECRET_ACCESS_KEY="$SESSION_SECRET_ACCESS_KEY" \
-    AWS_SESSION_TOKEN="$SESSION_SESSION_TOKEN" \
-    aws sts assume-role \
-        --role-arn "$ROLE_ARN" \
-        --role-session-name "claude-${ENV_NAME}-$(date +%s)" \
-        --duration-seconds 3600 \
+ASSUME_OUTPUT=$(aws sts assume-role \
+    --profile "$SOURCE_PROFILE" \
+    --serial-number "$MFA_ARN" \
+    --token-code "$MFA_TOKEN" \
+    --role-arn "$ROLE_ARN" \
+    --role-session-name "claude-${ENV_NAME}-$(date +%s)" \
+    --duration-seconds "$ROLE_DURATION_SECONDS" \
+    --output json \
+    --no-cli-pager \
     2> "$ASSUME_STDERR")
 ASSUME_STATUS=$?
 set -e
@@ -255,16 +267,28 @@ if [ "$ASSUME_STATUS" -ne 0 ]; then
     echo "If the role does not exist yet, the infra side of CS-10962 has not" >&2
     echo "been applied to account $ACCOUNT_ID. If the role exists but you got" >&2
     echo "AccessDenied, check that your IAM user is in a group that's allowed" >&2
-    echo "to assume $ROLE_NAME (read-only or full-access)." >&2
+    echo "to assume $ROLE_NAME (read-only or full-access). If the MFA token" >&2
+    echo "was rejected, wait for a fresh code and retry." >&2
     exit 1
 fi
 
-ROLE_ACCESS_KEY_ID=$(echo "$ASSUME_OUTPUT"     | jq -r '.Credentials.AccessKeyId')
-ROLE_SECRET_ACCESS_KEY=$(echo "$ASSUME_OUTPUT" | jq -r '.Credentials.SecretAccessKey')
-ROLE_SESSION_TOKEN=$(echo "$ASSUME_OUTPUT"     | jq -r '.Credentials.SessionToken')
-ROLE_EXPIRATION=$(echo "$ASSUME_OUTPUT"        | jq -r '.Credentials.Expiration')
+ROLE_ACCESS_KEY_ID=$(printf '%s' "$ASSUME_OUTPUT"     | jq -r '.Credentials.AccessKeyId')
+ROLE_SECRET_ACCESS_KEY=$(printf '%s' "$ASSUME_OUTPUT" | jq -r '.Credentials.SecretAccessKey')
+ROLE_SESSION_TOKEN=$(printf '%s' "$ASSUME_OUTPUT"     | jq -r '.Credentials.SessionToken')
+ROLE_EXPIRATION=$(printf '%s' "$ASSUME_OUTPUT"        | jq -r '.Credentials.Expiration')
 
-# --- write the role's creds (NOT the session-token creds) to the profile --
+# Defensive check: STS should always return non-empty creds on a successful
+# call, but if jq somehow extracted "null" (e.g. a future API shape change),
+# we'd silently write a broken profile. Catch that here.
+for var_name in ROLE_ACCESS_KEY_ID ROLE_SECRET_ACCESS_KEY ROLE_SESSION_TOKEN ROLE_EXPIRATION; do
+    if [ -z "${!var_name}" ] || [ "${!var_name}" = "null" ]; then
+        echo "AssumeRole returned empty/null $var_name. Aborting without writing profile." >&2
+        echo "Raw response: $ASSUME_OUTPUT" >&2
+        exit 1
+    fi
+done
+
+# --- write the role's creds to the named profile -------------------------
 
 aws configure set aws_access_key_id     "$ROLE_ACCESS_KEY_ID"     --profile "$TARGET_PROFILE"
 aws configure set aws_secret_access_key "$ROLE_SECRET_ACCESS_KEY" --profile "$TARGET_PROFILE"
