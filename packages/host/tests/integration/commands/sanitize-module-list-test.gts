@@ -28,7 +28,7 @@ class StubRealmService extends RealmService {
       info: testRealmInfo,
     };
   }
-  realmOfURL = (url: URL): URL | undefined => {
+  realmOf = (url: URL): URL | undefined => {
     for (const realm of readableRealms) {
       if (url.href.startsWith(realm)) {
         return new URL(realm);

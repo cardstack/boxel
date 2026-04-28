@@ -39,6 +39,7 @@ import {
   realmURL as realmURLSymbol,
   localId as localIdSymbol,
   meta,
+  rri,
   logger,
   formattedError,
   SupportedMimeType,
@@ -1603,7 +1604,7 @@ export default class StoreService extends Service implements StoreInterface {
           // Source-mode loads in render context don't include realm metadata.
           // Query-backed relationship fields require realmURL to build their
           // fallback search query.
-          let realmURL = this.realm.realmOfURL(cardIdToURL(url))?.href;
+          let realmURL = this.realm.realmOf(rri(url))?.href;
           if (realmURL) {
             json.data.meta = {
               ...(json.data.meta ?? {}),
@@ -2095,7 +2096,7 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
 
-    let realmURL = this.realm.realmOfURL(url);
+    let realmURL = this.realm.realmOf(url);
     if (!realmURL) {
       console.warn(
         `could not determine realm for card ${url.href} when trying to subscribe to realm`,

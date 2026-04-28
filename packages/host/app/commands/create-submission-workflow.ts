@@ -60,7 +60,7 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
 
     // Save the workflow card in the user's realm (where the listing lives)
     let workflowRealm =
-      this.realm.realmOfRRI(rri(listingId))?.href ?? realm;
+      this.realm.realmOf(rri(listingId))?.href ?? realm;
 
     // Step 1: Create the SubmissionWorkflowCard with listing linked
     let catalogRealm = this.catalogRealm;

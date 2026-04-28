@@ -39,7 +39,7 @@ export default class WriteTextFileCommand extends HostBaseCommand<
     }
     let realm;
     if (input.realm) {
-      realm = this.realm.realmOfURL(new URL(input.realm));
+      realm = this.realm.realmOf(rri(input.realm));
       if (!realm) {
         throw new Error(`Invalid or unknown realm provided: ${input.realm}`);
       }

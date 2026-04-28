@@ -932,20 +932,13 @@ export default class RealmService extends Service {
     return realmsMeta;
   }
 
-  realmOfURL(url: URL) {
+  realmOf(input: RealmResourceIdentifier | URL): URL | undefined {
     for (const realm of this.realms.keys()) {
       let realmURL = new URL(realm);
-      if (new RealmPaths(realmURL).inRealm(url)) {
-        return new URL(realmURL);
-      }
-    }
-    return undefined;
-  }
-
-  realmOfRRI(rri: RealmResourceIdentifier): URL | undefined {
-    for (const realm of this.realms.keys()) {
-      let realmURL = new URL(realm);
-      if (new RealmPaths(realmURL).inRealmRRI(rri)) {
+      let paths = new RealmPaths(realmURL);
+      let inside =
+        input instanceof URL ? paths.inRealm(input) : paths.inRealmRRI(input);
+      if (inside) {
         return new URL(realmURL);
       }
     }

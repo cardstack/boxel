@@ -433,7 +433,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       return undefined;
     }
     try {
-      return this.realm.realmOfRRI(rri(selectedCardId))?.href;
+      return this.realm.realmOf(rri(selectedCardId))?.href;
     } catch {
       return undefined;
     }

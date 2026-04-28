@@ -556,7 +556,7 @@ export default class OperatorModeStateService extends Service {
   private getRealmURLFromItemId(itemId: string): string {
     try {
       const url = cardIdToURL(itemId);
-      return this.realm.realmOfURL(url)?.href ?? this.realmURL;
+      return this.realm.realmOf(url)?.href ?? this.realmURL;
     } catch (error) {
       return this.realmURL;
     }

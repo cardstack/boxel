@@ -20,6 +20,7 @@ import {
   delay,
   getClass,
   identifyCard,
+  rri,
   type PatchData,
 } from '@cardstack/runtime-common';
 
@@ -157,7 +158,7 @@ export default class CommandService extends Service {
 
     let realmURL: URL | undefined;
     try {
-      realmURL = this.realm.realmOfURL(new URL(fileUrl)) ?? undefined;
+      realmURL = this.realm.realmOf(rri(fileUrl)) ?? undefined;
     } catch (_e) {
       return clientRequestId;
     }

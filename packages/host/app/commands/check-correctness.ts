@@ -194,7 +194,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
   ): { moduleURL: URL; realmURL: URL; fileURL: URL } | undefined {
     try {
       let fileURL = new URL(targetRef);
-      let realmURL = this.realm.realmOfURL(fileURL);
+      let realmURL = this.realm.realmOf(fileURL);
       if (!realmURL) {
         return undefined;
       }
