@@ -291,17 +291,36 @@ export class KanbanDragManager {
       return;
     }
 
-    if (
-      (e.key === ' ' || e.key === 'Enter') &&
-      this.interactionMode === 'idle'
-    ) {
-      const cardEl = (e.target as HTMLElement)?.closest?.(
-        '[data-card-index]',
-      ) as HTMLElement | null;
-      if (cardEl) {
-        e.preventDefault();
-        const index = parseInt(cardEl.getAttribute('data-card-index')!, 10);
-        this.startKeyboardDrag(index);
+    if (this.interactionMode === 'idle') {
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault();
+          this.navigateFocus('up');
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          this.navigateFocus('down');
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          this.navigateFocus('left');
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          this.navigateFocus('right');
+          break;
+        case ' ':
+        case 'Enter': {
+          const cardEl = (e.target as HTMLElement)?.closest?.(
+            '[data-card-index]',
+          ) as HTMLElement | null;
+          if (cardEl) {
+            e.preventDefault();
+            const index = parseInt(cardEl.getAttribute('data-card-index')!, 10);
+            this.startKeyboardDrag(index);
+          }
+          break;
+        }
       }
     }
   };
@@ -491,15 +510,79 @@ export class KanbanDragManager {
         this.announcement = 'Card returned to original position.';
       }
     }
+    const focusTarget = pendingIndex;
     this.resetSession();
+    if (focusTarget !== null) {
+      scheduleOnce('afterRender', this, this.focusCard, focusTarget);
+    }
   }
 
   private cancelKeyboardDrag(): void {
+    const focusTarget = this.kbGrabIndex;
     this.announcement = 'Movement cancelled.';
     if (this.snapshotPlacements) {
       this.onChangeFn(this.snapshotPlacements);
     }
     this.resetSession();
+    if (focusTarget !== null) {
+      scheduleOnce('afterRender', this, this.focusCard, focusTarget);
+    }
+  }
+
+  private navigateFocus(direction: 'up' | 'down' | 'left' | 'right'): void {
+    const placements = this.placementsFn();
+    if (placements.length === 0) return;
+
+    const currentIndex = this.selectedIndex;
+    const current =
+      currentIndex !== null
+        ? placements.find((p) => p.index === currentIndex)
+        : null;
+
+    const colCards = (col: number) =>
+      placements
+        .filter((p) => p.column === col)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+
+    let targetCard: KanbanPlacement | undefined;
+
+    if (!current) {
+      targetCard = placements
+        .slice()
+        .sort((a, b) => a.column - b.column || a.sortOrder - b.sortOrder)[0];
+    } else if (direction === 'up') {
+      const cards = colCards(current.column);
+      const idx = cards.findIndex((p) => p.index === current.index);
+      targetCard = cards[idx - 1];
+    } else if (direction === 'down') {
+      const cards = colCards(current.column);
+      const idx = cards.findIndex((p) => p.index === current.index);
+      targetCard = cards[idx + 1];
+    } else {
+      const delta = direction === 'left' ? -1 : 1;
+      const totalCols = this.columnCountFn();
+      let col = current.column + delta;
+      while (col >= 0 && col < totalCols) {
+        const cards = colCards(col);
+        if (cards.length > 0) {
+          targetCard = cards[Math.min(current.sortOrder - 1, cards.length - 1)];
+          break;
+        }
+        col += delta;
+      }
+    }
+
+    if (!targetCard) return;
+    this.selectedIndex = targetCard.index;
+    this.onSelectFn?.(targetCard.index);
+    scheduleOnce('afterRender', this, this.focusCard, targetCard.index);
+  }
+
+  private focusCard(index: number): void {
+    const el = this.containerFn()?.querySelector(
+      `[data-card-index="${index}"]`,
+    ) as HTMLElement | null;
+    el?.focus();
   }
 
   private insertionToSlot(

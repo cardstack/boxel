@@ -196,6 +196,16 @@ export class KanbanPlane extends Component<{
     return this.manager.activeDragIndex ?? -1;
   }
 
+  get roverIndex(): number | null {
+    const sel = this.manager.selectedIndex;
+    if (sel !== null) return sel;
+    for (let colIdx = 0; colIdx < this.columns.length; colIdx++) {
+      const cards = this.columnCards(colIdx);
+      if (cards.length > 0) return cards[0]!.index;
+    }
+    return null;
+  }
+
   // ── Template ───────────────────────────────────────────────────────
 
   <template>
@@ -253,6 +263,7 @@ export class KanbanPlane extends Component<{
                   @placement={{placement}}
                   @isSelected={{eq placement.index this.manager.selectedIndex}}
                   @isSource={{this.isSource placement}}
+                  @isRover={{eq placement.index this.roverIndex}}
                   @size={{this.cardSize}}
                   @shiftStyle={{this.cardShiftStyle placement}}
                   @isDragging={{this.isDragging}}

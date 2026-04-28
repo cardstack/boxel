@@ -9,6 +9,7 @@ import type { KanbanPlacement } from './engine.ts';
 interface Signature {
   Args: {
     isDragging: boolean;
+    isRover: boolean;
     isSelected: boolean;
     isSource: boolean;
     placement: KanbanPlacement;
@@ -32,7 +33,7 @@ const KanbanCard: TemplateOnlyComponent<Signature> = <template>
     @size={{@size}}
     @style={{@shiftStyle}}
     role='listitem'
-    tabindex={{if @isSource '-1' '0'}}
+    tabindex={{if @isRover '0' '-1'}}
     aria-current={{if @isSelected 'true'}}
     aria-hidden={{if @isSource 'true'}}
     data-card-index={{@placement.index}}
