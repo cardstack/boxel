@@ -1581,6 +1581,26 @@ export class PagePool {
     // than a phantom remove if V8 ever re-fires for the same id.
   }
 
+  // Test-only seam: writes a `source: 'exception'` entry directly
+  // into the per-page bucket and tags it as revoked, mimicking the
+  // end state of a real CDP `Runtime.exceptionThrown` ->
+  // `Runtime.exceptionRevoked` pair without needing V8 to actually
+  // fire the events. We can't synthesize a card-level fixture that
+  // produces real CDP exception events (Ember's runloop catches
+  // synthetic throws before V8 classifies them as uncaught), so
+  // this seam lets the integration tests pin down that the
+  // bucket-to-additionalErrors merge happens at every error-doc
+  // call site (timeout, render error, unusable, fileExtract,
+  // fileRender). Production code never calls this.
+  __test_seedRevokedException(
+    pageId: string,
+    entry: ConsoleErrorEntry,
+    exceptionId: number,
+  ): void {
+    this.#recordThrownException(pageId, exceptionId, entry);
+    this.#recordRevokedException(pageId, exceptionId);
+  }
+
   #attachPageConsole(page: Page, affinityKey: string, pageId: string): void {
     page.on('console', async (message: ConsoleMessage) => {
       try {

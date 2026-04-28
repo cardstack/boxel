@@ -392,13 +392,18 @@ export class RenderRunner {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
     signal?: AbortSignal;
-    // Fires after `getPageForAffinity` resolves — i.e. when this
-    // attempt stops waiting on the semaphore / tab queue and actually
-    // has a page. CS-10872 diagnostic hook; used by the Prerenderer
-    // to flip `affinitySnapshot.sameAffinityActivity[*].state` from
-    // `queued` to `running`, which is what makes the deadlock
-    // fingerprint meaningful.
-    onTabAcquired?: () => void;
+    // Fires after `getPageForAffinity` resolves AND the per-page
+    // console/exception bucket has been reset — i.e. when this attempt
+    // has a page AND the bucket is empty for THIS render. The reset
+    // happens before the callback so a test fixture that seeds the
+    // bucket via `Prerenderer.__test_seedRevokedException` doesn't
+    // get its seed wiped out by reset. Originally introduced as a
+    // CS-10872 diagnostic hook (used by the Prerenderer to flip
+    // `affinitySnapshot.sameAffinityActivity[*].state` from `queued`
+    // to `running`); the post-reset position adds a fraction of a
+    // ms to that transition but keeps the deadlock fingerprint
+    // accurate.
+    onTabAcquired?: (info: { pageId: string }) => void;
   }): Promise<{
     response: ModuleRenderResponse;
     timings: Timings;
@@ -412,7 +417,6 @@ export class RenderRunner {
 
     const { page, reused, launchMs, waits, pageId, release } =
       await this.#getPageForAffinity(affinityKey, auth, 'module', signal);
-    onTabAcquired?.();
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
@@ -422,6 +426,7 @@ export class RenderRunner {
       timedOut: false,
     };
     this.#pagePool.resetConsoleErrors(pageId);
+    onTabAcquired?.({ pageId: pageId ?? 'unknown' });
     const markTimeout = (err?: RenderError) => {
       if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
         poolInfo.timedOut = true;
@@ -568,7 +573,7 @@ export class RenderRunner {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     signal?: AbortSignal;
     // See the matching param on `prerenderModuleAttempt`.
-    onTabAcquired?: () => void;
+    onTabAcquired?: (info: { pageId: string }) => void;
   }): Promise<{
     response: RenderVisitResponse;
     timings: Timings;
@@ -588,7 +593,6 @@ export class RenderRunner {
 
     const { page, reused, launchMs, waits, pageId, release } =
       await this.#getPageForAffinity(affinityKey, auth, 'file', signal);
-    onTabAcquired?.();
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
@@ -598,6 +602,7 @@ export class RenderRunner {
       timedOut: false,
     };
     this.#pagePool.resetConsoleErrors(pageId);
+    onTabAcquired?.({ pageId: pageId ?? 'unknown' });
     const markTimeout = (err?: RenderError) => {
       if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
         poolInfo.timedOut = true;

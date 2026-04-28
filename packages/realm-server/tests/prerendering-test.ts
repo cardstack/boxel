@@ -1194,6 +1194,88 @@ module(basename(__filename), function () {
         assert.notOk(result.response.error, 'prerender succeeds');
       });
 
+      // Pins down the bucket-to-additionalErrors merge for
+      // `source: 'exception'` entries on the timeout error-doc path.
+      // We can't synthesize a fixture that produces real CDP
+      // `Runtime.exceptionThrown` events (Ember's runloop catches
+      // synthetic throws before V8 classifies them as uncaught), so
+      // we use the `__test_seedRevokedException` seam to mimic the
+      // end state of a real CDP throw+revoke pair on the actual
+      // page being rendered. The render itself is healthy — the
+      // `simulateTimeoutMs` / tight `timeoutMs` combo forces a
+      // server-side "Render timeout" doc, and we verify the seeded
+      // entry rides along on `additionalErrors` with the
+      // revoked-by-late-catch title from render-runner's serializer.
+      test('CDP-trapped revoked exception lands in timeout error-doc additionalErrors', async function (assert) {
+        let cardURL = `${realmURL}1.json`;
+        let result = await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+          renderOptions: { cardRender: true },
+          // tight timeout + simulated delay → server-side withTimeout
+          // wins and we surface a Render timeout doc.
+          opts: { timeoutMs: 1, simulateTimeoutMs: 200 },
+          // Seed runs AFTER `resetConsoleErrors` (render-runner moved
+          // the onTabAcquired callback to that point), so the seed
+          // survives into the bucket the merge later drains.
+          onTabAcquired: ({ pageId }) => {
+            prerenderer.__test_seedRevokedException(
+              pageId,
+              {
+                type: 'error',
+                text: 'TypeError: simulated whitepaper-class bug',
+                source: 'exception',
+                stackFrames: [
+                  {
+                    url: 'http://localhost:4200/host.js',
+                    lineNumber: 42,
+                    columnNumber: 7,
+                  },
+                ],
+              },
+              424241,
+            );
+          },
+        });
+
+        let timeoutError =
+          (result.response.card?.error as any) ??
+          (result.response.pageUnusableError as any);
+        assert.ok(timeoutError, 'render times out');
+        assert.strictEqual(
+          timeoutError?.error?.title,
+          'Render timeout',
+          'timeout doc title',
+        );
+
+        let additionalErrors: any[] =
+          timeoutError?.error?.additionalErrors ?? [];
+        let revokedEntry = additionalErrors.find(
+          (e) => e?.title === 'Uncaught exception (revoked by late .catch)',
+        );
+        assert.ok(
+          revokedEntry,
+          `seeded revoked exception surfaces on the timeout doc; ` +
+            `additionalErrors titles: ${JSON.stringify(
+              additionalErrors.map((e) => e?.title),
+            )}`,
+        );
+        assert.ok(
+          revokedEntry?.message?.includes('whitepaper-class bug'),
+          `revoked entry preserves the actionable exception message; got: ${revokedEntry?.message}`,
+        );
+        let revokedStack: unknown = revokedEntry?.stack;
+        assert.ok(
+          typeof revokedStack === 'string'
+            ? revokedStack.includes('UncaughtExceptionRevoked')
+            : false,
+          `revoked entry stack uses the UncaughtExceptionRevoked header; got: ${revokedStack}`,
+        );
+      });
+
       test('card prerender surfaces unhandled promise rejection without timing out', async function (assert) {
         let cardURL = `${realmURL}rejects.json`;
 
