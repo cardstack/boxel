@@ -65,6 +65,7 @@ export class KanbanDragManager {
   private dragIndex: number | null = null;
   private holdTimer: ReturnType<typeof setTimeout> | null = null;
   private snapshotPlacements: KanbanPlacement[] | null = null;
+  private suppressLostPointerCapture = false;
 
   // ── Public container ref ───────────────────────────────────────────
   containerRef: HTMLElement | null = null;
@@ -101,6 +102,7 @@ export class KanbanDragManager {
     }
 
     const hitIndex = parseInt(cardEl.getAttribute('data-card-index')!, 10);
+    this.suppressLostPointerCapture = false;
     this.activePointerId = e.pointerId;
     this.startClientX = e.clientX;
     this.startClientY = e.clientY;
@@ -132,6 +134,9 @@ export class KanbanDragManager {
   onLostPointerCapture = (event: Event): void => {
     const e = event as PointerEvent;
     if (e.pointerId !== this.activePointerId) return;
+    if (this.suppressLostPointerCapture) {
+      return;
+    }
     this.abortPointerInteraction();
   };
 
@@ -173,7 +178,7 @@ export class KanbanDragManager {
     if (e.pointerId !== this.activePointerId) return;
 
     const container = this.containerFn();
-    if (container) container.releasePointerCapture(e.pointerId);
+    if (container) this.releasePointerCapture(container, e.pointerId);
 
     if (this.interactionMode === 'pending') {
       if (this.holdTimer) {
@@ -340,16 +345,25 @@ export class KanbanDragManager {
   private abortPointerInteraction(): void {
     const container = this.containerFn();
     if (container && this.activePointerId !== null) {
-      try {
-        container.releasePointerCapture(this.activePointerId);
-      } catch (_) {
-        /* ok */
-      }
+      this.releasePointerCapture(container, this.activePointerId);
     }
     this.resetSession();
   }
 
+  private releasePointerCapture(
+    container: HTMLElement,
+    pointerId: number,
+  ): void {
+    this.suppressLostPointerCapture = true;
+    try {
+      container.releasePointerCapture(pointerId);
+    } catch (_) {
+      this.suppressLostPointerCapture = false;
+    }
+  }
+
   private resetSession(): void {
+    this.suppressLostPointerCapture = false;
     this.activePointerId = null;
     this.activeDragIndex = null;
     this.insertion = null;

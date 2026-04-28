@@ -308,6 +308,60 @@ module('Unit | kanban-drag-manager', function (hooks) {
     );
   });
 
+  test('normal drop ignores the lostpointercapture caused by releasing capture', async function (assert) {
+    let changedPlacements: KanbanPlacement[] | undefined;
+
+    let manager = new KanbanDragManager({
+      placements: () => placements,
+      columnCount: () => 2,
+      containerElement: () => container,
+      onChange: (nextPlacements: KanbanPlacement[]) => {
+        changedPlacements = nextPlacements;
+      },
+    });
+
+    container.setPointerCapture = () => {};
+    container.releasePointerCapture = (pointerId: number) => {
+      manager.onLostPointerCapture({ pointerId } as unknown as PointerEvent);
+    };
+    manager.registerContainer(container);
+    (manager as any).measureSettlePosition = () => {};
+
+    let card = container.querySelector('[data-card-index="0"]') as HTMLElement;
+
+    manager.onPointerDown({
+      button: 0,
+      pointerId: 6,
+      clientX: 20,
+      clientY: 20,
+      target: card,
+    } as unknown as PointerEvent);
+    manager.onPointerMove({
+      pointerId: 6,
+      clientX: 260,
+      clientY: 30,
+    } as unknown as PointerEvent);
+    manager.onPointerMove({
+      pointerId: 6,
+      clientX: 260,
+      clientY: 30,
+    } as unknown as PointerEvent);
+
+    manager.onPointerUp({ pointerId: 6 } as unknown as PointerEvent);
+
+    assert.true(manager.isSettling);
+    assert.strictEqual(manager.activeDragIndex, 0);
+    assert.strictEqual(manager.interactionMode, 'drag');
+
+    await delay(350);
+
+    assert.deepEqual(changedPlacements, [
+      { index: 0, column: 1, sortOrder: 1 },
+      { index: 1, column: 1, sortOrder: 2 },
+    ]);
+    assert.strictEqual(manager.interactionMode, 'idle');
+  });
+
   test('escape while idle clears selection without calling preventDefault', function (assert) {
     let deselected = false;
 

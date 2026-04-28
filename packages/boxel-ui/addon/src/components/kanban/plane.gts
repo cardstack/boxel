@@ -141,8 +141,7 @@ export class KanbanPlane extends Component<{
       (p) => p.index !== this.manager.activeDragIndex,
     );
 
-    if (colCards.length === 0)
-      return sanitizeHtmlSafe(`top: 0; height: ${ghostH}px`);
+    if (colCards.length === 0) return sanitizeHtmlSafe(`height: ${ghostH}px`);
 
     const insertIdx = Math.min(ins.position - 1, colCards.length);
 
@@ -155,8 +154,9 @@ export class KanbanPlane extends Component<{
         const parentRect = lastEl.parentElement.getBoundingClientRect();
         const cs = getComputedStyle(lastEl);
         const matrix = new DOMMatrix(cs.transform);
+        const offset = rect.bottom - matrix.m42 - parentRect.top + 6;
         return sanitizeHtmlSafe(
-          `top: ${rect.bottom - matrix.m42 - parentRect.top + 6}px; height: ${ghostH}px`,
+          `transform: translateY(${offset}px); height: ${ghostH}px`,
         );
       }
     } else {
@@ -168,23 +168,24 @@ export class KanbanPlane extends Component<{
         const parentRect = beforeEl.parentElement.getBoundingClientRect();
         const cs = getComputedStyle(beforeEl);
         const matrix = new DOMMatrix(cs.transform);
+        const offset = rect.top - matrix.m42 - parentRect.top - 3;
         return sanitizeHtmlSafe(
-          `top: ${rect.top - matrix.m42 - parentRect.top - 3}px; height: ${ghostH}px`,
+          `transform: translateY(${offset}px); height: ${ghostH}px`,
         );
       }
     }
-    return sanitizeHtmlSafe(`top: 0; height: ${ghostH}px`);
+    return sanitizeHtmlSafe(`height: ${ghostH}px`);
   };
 
   get ghostStyle(): SafeString {
     const m = this.manager;
     if (m.isSettling) {
       return sanitizeHtmlSafe(
-        `left: ${m.settleX}px; top: ${m.settleY}px; width: ${m.settleWidth}px; height: ${m.settleHeight}px`,
+        `translate: ${m.settleX}px ${m.settleY}px; width: ${m.settleWidth}px; height: ${m.settleHeight}px`,
       );
     }
     return sanitizeHtmlSafe(
-      `left: ${m.pointerClientX - m.dragOffsetX}px; top: ${m.pointerClientY - m.dragOffsetY}px; width: ${m.dragGhostWidth}px; height: ${m.dragGhostHeight}px`,
+      `translate: ${m.pointerClientX - m.dragOffsetX}px ${m.pointerClientY - m.dragOffsetY}px; width: ${m.dragGhostWidth}px; height: ${m.dragGhostHeight}px`,
     );
   }
 
@@ -367,6 +368,7 @@ export class KanbanPlane extends Component<{
       /* ── Insertion Box ──────────────────────────────────────────── */
       .insertion-box {
         position: absolute;
+        top: 0;
         left: 0.5rem;
         right: 0.5rem;
         border-radius: var(--_kanban-radius);
@@ -379,7 +381,7 @@ export class KanbanPlane extends Component<{
         color: var(--_kanban-primary-foreground);
         z-index: 0;
         pointer-events: none;
-        transition: top 120ms ease-out;
+        transition: transform 120ms ease-out;
       }
 
       /* ── Empty Column ───────────────────────────────────────────── */

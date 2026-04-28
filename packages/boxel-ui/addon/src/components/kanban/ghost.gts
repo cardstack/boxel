@@ -27,7 +27,10 @@ const KanbanGhost: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     .ghost {
       position: fixed;
+      left: 0;
+      top: 0;
       z-index: 9;
+      will-change: transform;
       pointer-events: none;
       border-radius: var(--_kanban-radius, 0.5rem);
       overflow: hidden;
@@ -38,17 +41,19 @@ const KanbanGhost: TemplateOnlyComponent<Signature> = <template>
         0 8px 20px color-mix(in oklch, black 12%, transparent),
         0 2px 6px color-mix(in oklch, black 6%, transparent);
       opacity: 0.97;
-      transform: rotate(-2.5deg) scale(1.03);
+      rotate: -2.5deg;
+      scale: 1.03;
     }
     .ghost.settling {
       transition:
-        left 180ms cubic-bezier(0.4, 0, 0.2, 1),
-        top 180ms cubic-bezier(0.4, 0, 0.2, 1),
+        translate 180ms cubic-bezier(0.4, 0, 0.2, 1),
         width 180ms cubic-bezier(0.4, 0, 0.2, 1),
         height 180ms cubic-bezier(0.4, 0, 0.2, 1),
-        transform 180ms ease-out,
+        rotate 180ms ease-out,
+        scale 180ms ease-out,
         box-shadow 180ms ease-out;
-      transform: rotate(0deg) scale(1);
+      rotate: 0deg;
+      scale: 1;
       box-shadow:
         0 1px 2px color-mix(in oklch, black 6%, transparent),
         0 0 0 1px color-mix(in oklch, black 4%, transparent);
