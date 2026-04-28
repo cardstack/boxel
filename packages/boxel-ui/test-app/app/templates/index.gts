@@ -85,9 +85,7 @@ class IndexComponent extends Component {
     </FreestyleGuide>
     <style scoped>
       .boxel-freestyle-guide {
-        color: var(--foreground, var(--boxel-dark));
         font-family: var(--font-sans, var(--boxel-font-family));
-        background-color: var(--background, var(--boxel-light));
         font-size: var(--boxel-body-font-size, 0.875rem);
         line-height: var(--boxel-body-line-height, calc(18 / 13));
       }
