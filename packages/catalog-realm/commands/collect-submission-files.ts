@@ -169,7 +169,7 @@ export default class CollectSubmissionFilesCommand extends Command<
       return path;
     };
 
-    // Build a map of source URL (extension-less) → PR path (extension-less).
+    // Build a map of source URL → PR path.
     // After the PR merges into the catalog, cross-realm references in the
     // submitted files must resolve to their new co-located files. We rewrite
     // all references in file contents to relative paths so the submission is
@@ -218,21 +218,32 @@ export default class CollectSubmissionFilesCommand extends Command<
         let source = await readSourceCommand.execute({
           path: `${listing.id}.json`,
         });
+
+        // Resolve thumbnail URL before rewriting listing.json so we can
+        // rewrite absolute thumbnail references to the copied PR asset path.
+        let rawThumbnailUrl = extractThumbnailUrl(source.content);
+        let thumbnailUrl: string | undefined;
+        let thumbnailPath: string | undefined;
+        if (rawThumbnailUrl) {
+          thumbnailUrl = new URL(rawThumbnailUrl, `${listing.id}.json`).href;
+          thumbnailPath = toRepoRelativePath(thumbnailUrl, '');
+          urlToRepoPath.set(thumbnailUrl, thumbnailPath);
+        }
+
         filesWithContent.push({
           path,
           content: rewriteReferences(source.content, path),
         });
 
-        // Resolve thumbnail URL against listing.id before rewriteReferences turns it relative.
-        let rawThumbnailUrl = extractThumbnailUrl(source.content);
-        if (rawThumbnailUrl) {
-          let thumbnailUrl = new URL(rawThumbnailUrl, `${listing.id}.json`).href;
-          let thumbnailPath = toRepoRelativePath(thumbnailUrl, '');
-          if (!seenPaths.has(thumbnailPath)) {
-            seenPaths.add(thumbnailPath);
-            let binary = await readBinaryFileCommand.execute({ url: thumbnailUrl });
-            filesWithContent.push({ path: thumbnailPath, content: binary.base64Content ?? '' });
-          }
+        if (thumbnailUrl && thumbnailPath && !seenPaths.has(thumbnailPath)) {
+          seenPaths.add(thumbnailPath);
+          let binary = await readBinaryFileCommand.execute({
+            url: thumbnailUrl,
+          });
+          filesWithContent.push({
+            path: thumbnailPath,
+            content: binary.base64Content ?? '',
+          });
         }
       }
     }
