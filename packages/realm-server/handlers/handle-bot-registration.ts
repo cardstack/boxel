@@ -91,7 +91,7 @@ export function handleBotRegistrationRequest({
         `,`,
         param(username),
         `,`,
-        dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
+        dbExpression('NOW()'),
         `) `,
         `RETURNING id, username, created_at`,
       ]);

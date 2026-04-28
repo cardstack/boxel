@@ -1155,12 +1155,9 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       'SELECT DISTINCT url, file_alias',
       'FROM',
       MODULES_TABLE,
-      dbExpression({
-        pg: `CROSS JOIN LATERAL jsonb_array_elements_text(
+      dbExpression(`CROSS JOIN LATERAL jsonb_array_elements_text(
                COALESCE(deps, '[]'::jsonb)
-             ) AS dep(value)`,
-        sqlite: `CROSS JOIN json_each(COALESCE(deps, '[]')) AS dep`,
-      }),
+             ) AS dep(value)`),
       'WHERE',
       ...(every([
         ['resolved_realm_url =', param(resolvedRealmURL)],

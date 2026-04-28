@@ -23,21 +23,11 @@ export type PgPrimitive =
 
 export interface Param {
   param?: PgPrimitive;
-  pg?: PgPrimitive;
-  sqlite?: PgPrimitive;
   kind: 'param';
 }
 
-// pg/sqlite carries either a raw SQL fragment (scalar) or an inline
-// Expression array, which lets adapter-specific branches thread parameters
-// through without concatenating user input into SQL text. The scalar type
-// deliberately excludes JSON arrays/objects — both to avoid rendering them
-// as SQL text (never a valid use case) and to make the Array.isArray()
-// branch in expressionToSql() unambiguously mean "inline Expression".
-type DBSpecificScalar = string | number | boolean | null;
 export interface DBSpecificExpression {
-  pg?: DBSpecificScalar | Expression;
-  sqlite?: DBSpecificScalar | Expression;
+  pg?: string | number | boolean | null;
   kind: 'db-specific-expression';
 }
 
@@ -114,21 +104,7 @@ export function separatedByCommas(expressions: unknown[][]): unknown {
   }, []);
 }
 
-export function param(value: { pg?: PgPrimitive; sqlite?: PgPrimitive }): Param;
-export function param(value: PgPrimitive): Param;
-export function param(
-  value: PgPrimitive | { pg?: PgPrimitive; sqlite?: PgPrimitive },
-): Param {
-  if (
-    value &&
-    typeof value === 'object' &&
-    ('pg' in value || 'sqlite' in value)
-  ) {
-    return {
-      ...value,
-      kind: 'param',
-    };
-  }
+export function param(value: PgPrimitive): Param {
   return { param: value, kind: 'param' };
 }
 
@@ -140,14 +116,8 @@ export function isParam(expression: any): expression is Param {
   );
 }
 
-export function dbExpression({
-  pg,
-  sqlite,
-}: {
-  pg?: DBSpecificScalar | Expression;
-  sqlite?: DBSpecificScalar | Expression;
-}): DBSpecificExpression {
-  return { pg, sqlite, kind: 'db-specific-expression' };
+export function dbExpression(pg: string | number | boolean | null): DBSpecificExpression {
+  return { pg, kind: 'db-specific-expression' };
 }
 
 export function isDbExpression(
@@ -389,17 +359,14 @@ export async function query(
   query: Expression,
   coerceTypes?: TypeCoercion,
 ) {
-  let sql = await expressionToSql(dbAdapter.kind, query);
+  let sql = expressionToSql(query);
   return await dbAdapter.execute(sql.text, {
     coerceTypes,
     bind: sql.values,
   });
 }
 
-export function expressionToSql(
-  dbAdapterKind: DBAdapter['kind'],
-  query: Expression,
-) {
+export function expressionToSql(query: Expression) {
   let values: PgPrimitive[] = [];
   let nonce = 0;
   let tableValuedFunctions = new Map<
@@ -412,15 +379,10 @@ export function expressionToSql(
 
   let renderElement = (element: Expression[number]): string => {
     if (isDbExpression(element)) {
-      let value = element[dbAdapterKind];
-      if (Array.isArray(value)) {
-        return (value as Expression).map(renderElement).join(' ');
-      }
-      return (value as DBSpecificScalar | undefined) == null
-        ? ''
-        : String(value);
+      let value = element.pg;
+      return value == null ? '' : String(value);
     } else if (isParam(element)) {
-      let value = element[dbAdapterKind] ?? element.param ?? null;
+      let value = element.param ?? null;
       values.push(
         value && typeof value === 'object' ? JSON.stringify(value) : value,
       );

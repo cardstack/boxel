@@ -5,14 +5,12 @@ export interface TypeCoercion {
 }
 
 export interface ExecuteOptions {
-  // SQLite has a very limited set of data types. we can coerce the resulting
-  // types into values that match pg using this option
   bind?: PgPrimitive[];
   coerceTypes?: TypeCoercion;
 }
 
 export interface DBAdapter {
-  kind: 'pg' | 'sqlite';
+  kind: 'pg';
   isClosed: boolean;
   execute: (
     sql: string,

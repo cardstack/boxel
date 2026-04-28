@@ -24,10 +24,7 @@ export async function forceCancelJobById(
       [`result =`, param(result)],
       [`status = 'rejected'`],
       [
-        dbExpression({
-          pg: `finished_at = NOW()`,
-          sqlite: `finished_at = CURRENT_TIMESTAMP`,
-        }),
+        dbExpression(`finished_at = NOW()`),
       ],
     ]),
     `WHERE id =`,
@@ -36,18 +33,13 @@ export async function forceCancelJobById(
 
   await query(dbAdapter, [
     `UPDATE job_reservations SET`,
-    dbExpression({
-      pg: `completed_at = NOW()`,
-      sqlite: `completed_at = CURRENT_TIMESTAMP`,
-    }),
+    dbExpression(`completed_at = NOW()`),
     `WHERE job_id =`,
     param(jobId),
     `AND completed_at IS NULL`,
   ] as Expression);
 
-  if (dbAdapter.kind === 'pg') {
-    await query(dbAdapter, [`NOTIFY jobs_finished`] as Expression);
-  }
+  await query(dbAdapter, [`NOTIFY jobs_finished`] as Expression);
 }
 
 export async function findJobIdForReservationId(
@@ -74,10 +66,7 @@ export async function findRunningJobIdsForConcurrencyGroup(
     `AND j.status = 'unfulfilled'`,
     `AND jr.completed_at IS NULL`,
     `AND`,
-    dbExpression({
-      pg: `jr.locked_until > NOW()`,
-      sqlite: `jr.locked_until > CURRENT_TIMESTAMP`,
-    }),
+    dbExpression(`jr.locked_until > NOW()`),
     `ORDER BY j.id ASC`,
   ] as Expression)) as { id: string }[];
   return rows.map((row) => row.id);

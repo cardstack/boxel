@@ -567,10 +567,7 @@ export class Batch {
         ['i.type = ', param('instance')],
         ['i.types IS NOT NULL'],
         [
-          dbExpression({
-            pg: `(i.types->>0) IS NOT NULL`,
-            sqlite: `json_extract(i.types, '$[0]') IS NOT NULL`,
-          }),
+          dbExpression(`(i.types->>0) IS NOT NULL`),
         ],
         any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
       ]),
@@ -878,9 +875,7 @@ export class Batch {
     }
 
     let uniqueUrls = [...new Set(urls)];
-    // SQLite has a lower parameter limit than Postgres. Chunk URL lookups to
-    // keep IN-clause parameter counts within safe bounds for both adapters.
-    let urlBatchSize = this.#dbAdapter.kind === 'sqlite' ? 900 : 5000;
+    let urlBatchSize = 5000;
     let workingRows: DependencyIndexRow[] = [];
     let productionRows: DependencyIndexRow[] = [];
     for (let i = 0; i < uniqueUrls.length; i += urlBatchSize) {
@@ -1003,40 +998,22 @@ export class Batch {
       let depCondition: Expression = searchBothForms
         ? (any([
             [
-              dbExpression({
-                sqlite: `deps_array_element =`,
-                pg: `i.deps @>`,
-              }),
-              param({
-                sqlite: resolvedPath,
-                pg: `["${resolvedPath}"]`,
-              }),
+              dbExpression(`i.deps @>`),
+              param(`["${resolvedPath}"]`),
             ],
             [
-              dbExpression({
-                sqlite: `deps_array_element =`,
-                pg: `i.deps @>`,
-              }),
-              param({
-                sqlite: unresolvedPath,
-                pg: `["${unresolvedPath}"]`,
-              }),
+              dbExpression(`i.deps @>`),
+              param(`["${unresolvedPath}"]`),
             ],
           ]) as Expression)
         : ([
-            dbExpression({
-              sqlite: `deps_array_element =`,
-              pg: `i.deps @>`,
-            }),
-            param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
+            dbExpression(`i.deps @>`),
+            param(`["${resolvedPath}"]`),
           ] as Expression);
       rows = (await this.#query([
         'SELECT i.url, i.file_alias, i.type',
         'FROM boxel_index_working as i',
-        dbExpression({
-          sqlite:
-            'CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element',
-        }),
+        dbExpression(''),
         'WHERE',
         ...every([
           depCondition,

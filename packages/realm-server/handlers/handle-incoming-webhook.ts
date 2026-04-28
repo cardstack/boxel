@@ -139,9 +139,9 @@ export function handleCreateIncomingWebhookRequest({
         `,`,
         param(signingSecret),
         `,`,
-        dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
+        dbExpression('NOW()'),
         `,`,
-        dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
+        dbExpression('NOW()'),
         `) `,
         `RETURNING id, username, webhook_path, verification_type, verification_config, signing_secret, created_at, updated_at`,
       ]);

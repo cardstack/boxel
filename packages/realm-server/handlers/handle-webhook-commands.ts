@@ -137,9 +137,9 @@ export function handleCreateWebhookCommandRequest({
         `,`,
         filter !== null ? param(filter as unknown as PgPrimitive) : `NULL`,
         `,`,
-        dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
+        dbExpression('NOW()'),
         `,`,
-        dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
+        dbExpression('NOW()'),
         `) `,
         `RETURNING id, incoming_webhook_id, command, command_filter, created_at, updated_at`,
       ]);

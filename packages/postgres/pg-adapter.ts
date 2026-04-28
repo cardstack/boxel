@@ -146,7 +146,7 @@ export class PgAdapter implements DBAdapter {
 
     let client = await this.pool.connect();
     let query = async (expression: Expression) => {
-      let sql = expressionToSql(this.kind, expression);
+      let sql = expressionToSql(expression);
       log.debug('search: %s trace: %j', sql.text, sql.values);
       let { rows } = await client.query(sql);
       return rows;

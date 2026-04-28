@@ -31,7 +31,6 @@ declare const config: {
   loginMessageTimeoutMs: number;
   minSaveTaskDurationMs: number;
   cardRenderTimeout: number;
-  sqlSchema: string;
   pgSchema: string;
   assetsURL: string;
   stripePaymentLink: string;

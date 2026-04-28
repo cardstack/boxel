@@ -43,7 +43,7 @@ export async function retrieveScopedCSS({
   ];
 
   if (log) {
-    let sql = expressionToSql(dbAdapter.kind, scopedCSSQuery);
+    let sql = expressionToSql(scopedCSSQuery);
     let compactSql = sql.text.replace(/\s+/g, ' ').trim();
     let values = JSON.stringify(sql.values);
     log.trace(

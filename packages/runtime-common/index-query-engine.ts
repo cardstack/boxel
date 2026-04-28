@@ -728,20 +728,11 @@ export class IndexQueryEngine {
       ...[
         `(
       CASE WHEN ANY_VALUE(${fieldName}) IS NOT NULL AND `,
-        dbExpression({
-          pg: `jsonb_typeof(ANY_VALUE(${fieldName})) = 'object'`,
-          sqlite: `json_type(ANY_VALUE(${fieldName})) = 'object'`,
-        }),
+        dbExpression(`jsonb_typeof(ANY_VALUE(${fieldName})) = 'object'`),
         ` THEN ( SELECT value FROM `,
-        dbExpression({
-          pg: `jsonb_each_text(ANY_VALUE(${fieldName}))`,
-          sqlite: `json_each(ANY_VALUE(${fieldName}))`,
-        }),
+        dbExpression(`jsonb_each_text(ANY_VALUE(${fieldName}))`),
         ` WHERE key = (SELECT replace(ANY_VALUE( `,
-        dbExpression({
-          pg: `types[0]::text`,
-          sqlite: `json_extract(types, '$[0]')`,
-        }),
+        dbExpression(`types[0]::text`),
         `), '"', ''))) ELSE NULL END), NULL)`,
       ],
     );
@@ -776,10 +767,7 @@ export class IndexQueryEngine {
       usedRenderTypeColumnExpression.push(
         ...[
           `ELSE replace(ANY_VALUE(`,
-          dbExpression({
-            pg: `types[0]::text`,
-            sqlite: `json_extract(types, '$[0]')`,
-          }),
+          dbExpression(`types[0]::text`),
           `), '"', '') END`,
         ],
       );
@@ -787,10 +775,7 @@ export class IndexQueryEngine {
       usedRenderTypeColumnExpression.push(
         ...[
           `replace(ANY_VALUE(`,
-          dbExpression({
-            pg: `types[0]::text`,
-            sqlite: `json_extract(types, '$[0]')`,
-          }),
+          dbExpression(`types[0]::text`),
           `), '"', '')`,
         ],
       );
@@ -944,20 +929,13 @@ export class IndexQueryEngine {
       filter.matches.trim() === ''
         ? ['FALSE']
         : [
-            dbExpression({
-              pg: [
+            dbExpression([
                 `to_tsvector('english', coalesce(i.markdown, ''))`,
                 '@@',
                 `websearch_to_tsquery('english',`,
                 param(filter.matches),
                 `)`,
-              ],
-              sqlite: [
-                `LOWER(i.markdown) LIKE LOWER(`,
-                param(`%${escapeSqliteLikePattern(filter.matches)}%`),
-                `) ESCAPE '\\'`,
-              ],
-            }),
+              ]),
           ];
     return every([
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
@@ -977,7 +955,7 @@ export class IndexQueryEngine {
           type: onRef,
           path: key,
           value: [query, 'IS NULL'],
-          pluralValue: [query, dbExpression({ pg: "= 'null'", sqlite: 'IS NULL' })],
+          pluralValue: [query, dbExpression("= 'null'")],
           usePluralContainer: true,
           errorHint: 'filter',
         }),
@@ -1035,7 +1013,7 @@ export class IndexQueryEngine {
           type: onRef,
           path: key,
           value: [query, 'IS NULL'],
-          pluralValue: [query, dbExpression({ pg: "= 'null'", sqlite: 'IS NULL' })],
+          pluralValue: [query, dbExpression("= 'null'")],
           usePluralContainer: true,
           errorHint: 'filter',
         }),
@@ -1060,7 +1038,7 @@ export class IndexQueryEngine {
           type: onRef,
           path: key,
           value: [query, 'IS NULL'],
-          pluralValue: [query, dbExpression({ pg: "= 'null'", sqlite: 'IS NULL' })],
+          pluralValue: [query, dbExpression("= 'null'")],
           usePluralContainer: true,
           errorHint: 'filter',
         }),
@@ -1267,10 +1245,10 @@ export class IndexQueryEngine {
       // no cast is needed there.
       if (isNumericField) {
         exp = [
-          dbExpression({ pg: '(', sqlite: '' }),
+          dbExpression('('),
           'search_doc',
           ...exp,
-          dbExpression({ pg: ')::numeric', sqlite: '' }),
+          dbExpression(')::numeric'),
         ];
       } else {
         exp = ['search_doc', ...exp];
@@ -1306,12 +1284,11 @@ export class IndexQueryEngine {
           );
         }
         // The jsonb ->> operator returns text, so filter values compared
-        // against it must be text-compatible. In PGLite, boolean params keep
-        // their native JS type (unlike node-pg which stringifies everything
-        // in the wire protocol), causing "text = boolean" type errors.
-        // Stringify booleans for the PG path only.
+        // against it must be text-compatible. PGLite passes native JS
+        // booleans (unlike node-pg which stringifies in the wire protocol),
+        // causing "text = boolean" type errors. Stringify booleans here.
         if (typeof queryValue === 'boolean') {
-          return [param({ pg: String(queryValue), sqlite: queryValue })];
+          return [param(String(queryValue))];
         }
         return [param(queryValue)];
       },
@@ -1479,13 +1456,6 @@ function assertIndexEntry<T>(obj: T): Omit<
 
 function tableFromOpts(opts: WIPOptions | undefined) {
   return opts?.useWorkInProgressIndex ? 'boxel_index_working' : 'boxel_index';
-}
-
-// SQLite LIKE treats `%` and `_` as wildcards. With `ESCAPE '\'` we can
-// neutralize user-supplied wildcards by prefixing them (and the escape
-// char itself) with a backslash before binding.
-function escapeSqliteLikePattern(value: string): string {
-  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
 function assertNever(value: never) {

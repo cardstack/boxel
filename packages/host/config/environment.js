@@ -6,7 +6,6 @@ const DEFAULT_CARD_RENDER_TIMEOUT_MS = 30_000;
 const DEFAULT_CARD_SIZE_LIMIT_BYTES = 512 * 1024; // 512KB
 const DEFAULT_FILE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024; // 5MB
 
-let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
 let pgSchema = fs.readFileSync(
   path.join(__dirname, 'pg_schema.sql'),
   'utf8',
@@ -143,7 +142,6 @@ module.exports = function (environment) {
     ENV.serverEchoDebounceMs = 0;
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;
-    ENV.sqlSchema = sqlSchema;
     ENV.pgSchema = pgSchema;
     ENV.featureFlags = {
       SHOW_ASK_AI: true,
@@ -169,29 +167,6 @@ module.exports = function (environment) {
 
   return ENV;
 };
-
-function getLatestSchemaFile() {
-  const migrationsDir = path.resolve(
-    path.join(__dirname, '..', '..', 'postgres', 'migrations'),
-  );
-  let migrations = fs.readdirSync(migrationsDir);
-  let lastMigration = migrations
-    .filter((f) => f !== '.eslintrc.js')
-    .sort()
-    .pop();
-  const schemaDir = path.join(__dirname, 'schema');
-  let files = fs.readdirSync(schemaDir);
-  let latestSchemaFile = files.sort().pop();
-  if (
-    lastMigration.replace(/_.*/, '') !== latestSchemaFile.replace(/_.*/, '') &&
-    ['development', 'test'].includes(process.env.EMBER_ENV)
-  ) {
-    throw new Error(
-      `The sqlite schema file is out of date--please regenerate the sqlite schema file using \`pnpm make-schema\` in the postgres package`,
-    );
-  }
-  return path.join(schemaDir, latestSchemaFile);
-}
 
 function withTrailingSlash(url) {
   return url.endsWith('/') ? url : `${url}/`;

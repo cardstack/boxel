@@ -146,7 +146,7 @@ export function handleBotCommandsRequest({
         `,`,
         param(filter as unknown as PgPrimitive),
         `,`,
-        dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
+        dbExpression('NOW()'),
         `) `,
         `RETURNING id, bot_id, command, command_filter, created_at`,
       ]);
