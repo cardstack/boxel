@@ -220,16 +220,20 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
       };
 
       const releaseAfterTokensSettled = () => {
-        // forceFullTokenization synchronously asks Monaco to compute tokens,
-        // but the colour painting that follows is not strictly synchronous:
-        // bracket-pair colorisation runs in a worker, and language services
-        // for TS/JS can publish token updates over multiple animation frames.
-        // A fixed 2-rAF wait sometimes lands mid-tokenisation — we have seen
-        // both fully plain and partially-coloured Monaco panels captured by
-        // Percy on otherwise-identical runs. Instead, watch onDidChangeTokens
-        // on every relevant model and only release once those events have
-        // been quiet for two consecutive rAFs (or after a generous cap, so
-        // a stuck worker can't hang the test).
+        // forceFullTokenization is supposed to compute tokens synchronously,
+        // but Monaco's view layer renders the resulting coloured spans on
+        // a later animation frame, and bracket-pair colorisation runs in a
+        // worker that publishes more updates after that. A fixed N-rAF wait
+        // races those updates: we have seen the same Monaco panel captured
+        // by Percy as fully plain, partially coloured, or fully coloured on
+        // otherwise-identical runs.
+        //
+        // Strategy: poll the DOM directly for evidence that coloured token
+        // spans have actually painted (more than one distinct `mtk*` class
+        // inside the editor's view-lines), and require that signature to
+        // be stable for two consecutive rAFs before releasing. Models that
+        // never gain a second token class (a single-token editor, or one
+        // whose grammar failed to load) hit the 1500ms cap.
         const models: MonacoSDK.editor.ITextModel[] = [];
         const targetModel = targetEditor.getModel();
         if (targetModel) models.push(targetModel);
@@ -240,14 +244,48 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
           }
         }
 
-        let lastTokenChange = performance.now();
+        let tokensEverChanged = false;
         const tokenDisposables = models.map((model) =>
           model.onDidChangeTokens(() => {
-            lastTokenChange = performance.now();
+            tokensEverChanged = true;
           }),
         );
 
-        const settleMs = 32; // ~2 frames quiet at 60fps
+        const editorDoms: HTMLElement[] = [];
+        const targetDom = targetEditor.getDomNode();
+        if (targetDom) editorDoms.push(targetDom);
+        if (diffEditor) {
+          const originalDom = diffEditor.getOriginalEditor().getDomNode();
+          if (originalDom && !editorDoms.includes(originalDom)) {
+            editorDoms.push(originalDom);
+          }
+        }
+
+        const tokenSignature = (): string => {
+          const sig: string[] = [];
+          for (const dom of editorDoms) {
+            const classes = new Set<string>();
+            const spans = dom.querySelectorAll('.view-lines [class*="mtk"]');
+            for (const span of Array.from(spans)) {
+              for (const cls of Array.from(span.classList)) {
+                if (cls.startsWith('mtk')) classes.add(cls);
+              }
+            }
+            // Editors with only one token class haven't painted colours yet
+            // (everything renders as `mtk1`, the default). Mark them as not-
+            // ready so polling continues until the worker reports back, or
+            // the cap fires.
+            sig.push(
+              classes.size <= 1
+                ? 'pending'
+                : Array.from(classes).sort().join(','),
+            );
+          }
+          return sig.join('|');
+        };
+
+        let lastSignature = tokenSignature();
+        let stableFrames = 0;
         const startedAt = performance.now();
         const maxWaitMs = 1500;
 
@@ -268,7 +306,17 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
 
         const poll = () => {
           const now = performance.now();
-          if (now - lastTokenChange >= settleMs) {
+          const currentSignature = tokenSignature();
+          const ready = !currentSignature.includes('pending');
+
+          if (currentSignature === lastSignature) {
+            stableFrames += 1;
+          } else {
+            stableFrames = 0;
+            lastSignature = currentSignature;
+          }
+
+          if (ready && tokensEverChanged && stableFrames >= 2) {
             finish();
             return;
           }
@@ -276,7 +324,7 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
             finish();
             return;
           }
-          // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- polling for Monaco token-change quiescence between paints
+          // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- polling for Monaco token paint stability between frames
           requestAnimationFrame(poll);
         };
 
