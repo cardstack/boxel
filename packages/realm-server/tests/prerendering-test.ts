@@ -743,7 +743,9 @@ module(basename(__filename), function () {
                 static isolated = class extends Component<typeof this> {
                   constructor(...args) {
                     super(...args);
-                    console.log('[fixture] ThrowsAndLateCatches constructor running');
+                    // console.error (not log) so the per-page console
+                    // bucket captures it — diagnostic only.
+                    console.error('[fixture] ThrowsAndLateCatches constructor running');
                     let p = Promise.reject(
                       new Error('thrown then revoked: simulated whitepaper-class bug'),
                     );
@@ -766,7 +768,8 @@ module(basename(__filename), function () {
                     // the timer stub.
                     let mc = new MessageChannel();
                     mc.port1.onmessage = () => {
-                      console.log('[fixture] attaching late .catch');
+                      // console.error so the bucket captures it.
+                      console.error('[fixture] attaching late .catch');
                       p.catch(() => {});
                     };
                     mc.port2.postMessage(null);
@@ -1276,19 +1279,22 @@ module(basename(__filename), function () {
           url: cardURL,
           auth: auth(),
           renderOptions: { cardRender: true },
-          // Generous-enough timeout + delay-after-capture: the page
+          // Generous timeout + larger delay-after-capture: the page
           // needs real wall-clock time to render the card so the
           // constructor runs (Promise.reject + MessageChannel-deferred
           // catch) and V8's `Runtime.exceptionThrown` /
           // `Runtime.exceptionRevoked` events fire AND propagate over
-          // CDP into the per-page bucket. After capture lands, the
-          // page-side `simulateTimeoutMs` holds long enough that the
-          // server-side `withTimeout` wins the race and we surface a
-          // "Render timeout" error doc carrying the already-captured
-          // exception entry. A `timeoutMs: 1` would short-circuit
-          // before the page even finishes `transitionTo`, leaving
-          // the bucket empty.
-          opts: { timeoutMs: 1000, simulateTimeoutMs: 2000 },
+          // CDP into the per-page bucket. Once `captureResult` lands,
+          // the page-side `simulateTimeoutMs` holds long enough that
+          // the server-side `withTimeout` wins the race and we surface
+          // a "Render timeout" error doc carrying the already-captured
+          // exception entry. We've seen empty buckets in CI with
+          // shorter values — under contention the page-side render
+          // can stretch past 1s, and a too-tight `timeoutMs` short-
+          // circuits before the constructor has even run. Five seconds
+          // here is well under the production `cardRenderTimeout` of
+          // 90s and gives slow CI workers ample headroom.
+          opts: { timeoutMs: 5000, simulateTimeoutMs: 7000 },
         });
 
         let timeoutError =
