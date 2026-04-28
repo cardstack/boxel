@@ -1,3 +1,4 @@
+import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 
 import {
@@ -11,6 +12,7 @@ interface Signature {
   Args: {
     fullWidth?: boolean;
     size?: FittedFormatId;
+    style?: SafeString | string;
   };
   Blocks: { default: [] };
   Element: HTMLDivElement;
@@ -45,7 +47,7 @@ export default class FittedCardContainer extends Component<Signature> {
   }
 
   get containerStyle() {
-    let style = ``;
+    let style = this.args.style?.toString().trim();
     let formatSpec = this.formatSpec;
 
     if (!formatSpec) {
@@ -53,9 +55,9 @@ export default class FittedCardContainer extends Component<Signature> {
     }
 
     if (this.args.fullWidth) {
-      style += `width: 100%; height: ${formatSpec.height}px;`;
+      style = `${style ? `${style}; ` : ''}width: 100%; height: ${formatSpec.height}px;`;
     } else {
-      style += `width: ${formatSpec.width}px; height: ${formatSpec.height}px;`;
+      style = `${style ? `${style}; ` : ''}width: ${formatSpec.width}px; height: ${formatSpec.height}px;`;
     }
 
     return sanitizeHtmlSafe(style);

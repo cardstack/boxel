@@ -55,7 +55,7 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px 14px 8px;
+      padding: 0.75rem 0.875rem 0.5rem;
       flex-shrink: 0;
     }
     .col-header.is-target {
@@ -65,12 +65,12 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
         transparent
       );
       color: var(--accent-foreground, var(--boxel-dark));
-      border-radius: 8px 8px 0 0;
+      border-radius: 0.5rem 0.5rem 0 0;
     }
     .col-header-left {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 0.5rem;
     }
     .col-dot {
       width: 0.625rem;
@@ -82,22 +82,22 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
         color-mix(in oklch, var(--col-dot-bg) 30%, transparent);
     }
     .col-name {
-      font-size: 13px;
+      font-size: 0.8125rem;
       font-weight: 600;
       letter-spacing: -0.01em;
     }
     .col-count {
-      font-size: 12px;
+      font-size: 0.75rem;
       font-weight: 500;
       color: var(--muted-foreground, var(--boxel-450));
     }
     .col-header-right {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 0.25rem;
     }
     .col-wip {
-      font-size: 10px;
+      font-size: 0.625rem;
       color: var(--muted-foreground);
       font-family: var(--font-mono, var(--boxel-monospace-font-family));
     }

@@ -1,15 +1,19 @@
+import { cn } from '@cardstack/boxel-ui/helpers';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { SafeString } from '@ember/template';
-import { cn } from '@cardstack/boxel-ui/helpers';
+
+import type { FittedFormatId } from '../../helpers.ts';
+import FittedCardContainer from '../fitted-card-container/index.gts';
 import type { KanbanPlacement } from './engine.ts';
 
 interface Signature {
   Args: {
-    placement: KanbanPlacement;
+    isDragging: boolean;
     isSelected: boolean;
     isSource: boolean;
+    placement: KanbanPlacement;
     shiftStyle: SafeString;
-    isDragging: boolean;
+    size?: FittedFormatId;
   };
   Blocks: {
     default: [];
@@ -18,28 +22,26 @@ interface Signature {
 }
 
 const KanbanCard: TemplateOnlyComponent<Signature> = <template>
-  <div
+  <FittedCardContainer
     class={{cn
       'card'
       selected=@isSelected
       dragging=@isSource
       board-dragging=@isDragging
     }}
-    style={{@shiftStyle}}
+    @size={{@size}}
+    @style={{@shiftStyle}}
     data-card-index={{@placement.index}}
     ...attributes
   >
     {{yield}}
-  </div>
+  </FittedCardContainer>
 
   <style scoped>
     .card {
       flex-shrink: 0;
-      height: 170px;
-      border-radius: 8px;
+      border-radius: var(--boxel-border-radius);
       overflow: hidden;
-      color: var(--card-foreground, var(--boxel-dark));
-      background: var(--card, var(--boxel-light));
       box-shadow:
         0 1px 2px rgba(0, 0, 0, 0.06),
         0 0 0 1px rgba(0, 0, 0, 0.04);
@@ -66,7 +68,7 @@ const KanbanCard: TemplateOnlyComponent<Signature> = <template>
       height: 0;
       min-height: 0;
       overflow: hidden;
-      margin: -3px 0;
+      margin: -0.1875rem 0;
     }
   </style>
 </template>;

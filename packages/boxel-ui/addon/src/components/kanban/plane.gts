@@ -1,31 +1,39 @@
 // KanbanPlane — Vertical columns with insertion-based drag.
 
+import {
+  cn,
+  eq,
+  fittedFormatById,
+  sanitizeHtmlSafe,
+} from '@cardstack/boxel-ui/helpers';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import type { SafeString } from '@ember/template';
-import { cn, eq, sanitizeHtmlSafe } from '@cardstack/boxel-ui/helpers';
+
+import type { FittedFormatId } from '../../helpers.ts';
+import { KanbanCard } from './card.gts';
+import { KanbanColumnHeader } from './column-header.gts';
 import type { KanbanDragManager } from './drag.gts';
 import {
-  type KanbanPlacement,
   type KanbanColumnConfig,
+  type KanbanPlacement,
   cardsInColumn,
   columnCount as colCount,
 } from './engine.ts';
-import { CaptureElement, BindPointerDown } from './modifiers.gts';
-import { KanbanColumnHeader } from './column-header.gts';
-import { KanbanCard } from './card.gts';
 import { KanbanGhost } from './ghost.gts';
+import { BindPointerDown, CaptureElement } from './modifiers.gts';
 
 export class KanbanPlane extends Component<{
   Args: {
+    cardSize?: FittedFormatId;
     columns: KanbanColumnConfig[];
-    placements: KanbanPlacement[];
-    manager: KanbanDragManager;
-    interactive: boolean;
     hideEmpty?: boolean;
+    interactive: boolean;
+    manager: KanbanDragManager;
     onAddCard?: (columnKey: string | null) => void;
+    placements: KanbanPlacement[];
   };
   Blocks: {
     card: [KanbanPlacement];
@@ -39,6 +47,22 @@ export class KanbanPlane extends Component<{
 
   get columns(): KanbanColumnConfig[] {
     return this.args.columns;
+  }
+
+  get cardSize(): FittedFormatId {
+    return this.args.cardSize ?? 'regular-tile';
+  }
+
+  get cardFormat() {
+    return (
+      fittedFormatById.get(this.cardSize) ??
+      fittedFormatById.get('regular-tile')!
+    );
+  }
+
+  get columnStyle(): SafeString {
+    let width = this.cardFormat.width + 16;
+    return sanitizeHtmlSafe(`flex-basis: ${width}px; min-width: ${width}px;`);
   }
 
   captureRef = (el: HTMLElement): void => {
@@ -95,7 +119,7 @@ export class KanbanPlane extends Component<{
 
   cardShiftStyle = (p: KanbanPlacement): SafeString => {
     if (this.shouldShiftDown(p)) {
-      const gap = (this.manager.dragGhostHeight || 170) + 8;
+      const gap = (this.manager.dragGhostHeight || this.cardFormat.height) + 8;
       return sanitizeHtmlSafe(`transform: translateY(${gap}px)`);
     }
     return sanitizeHtmlSafe('');
@@ -113,7 +137,7 @@ export class KanbanPlane extends Component<{
     if (!this.showInsertionBox(colIndex) || !this.containerElement)
       return sanitizeHtmlSafe('display: none');
     const ins = this.manager.insertion!;
-    const ghostH = this.manager.dragGhostHeight || 170;
+    const ghostH = this.manager.dragGhostHeight || this.cardFormat.height;
     const colCards = this.columnCards(colIndex).filter(
       (p) => p.index !== this.manager.activeDragIndex,
     );
@@ -189,6 +213,7 @@ export class KanbanPlane extends Component<{
               is-target=(this.isTargetColumn colIdx)
               is-over-wip=(this.isOverWip column colIdx)
             }}
+            style={{this.columnStyle}}
             data-kanban-column={{colIdx}}
           >
             <KanbanColumnHeader
@@ -212,6 +237,7 @@ export class KanbanPlane extends Component<{
                   @placement={{placement}}
                   @isSelected={{eq placement.index this.manager.selectedIndex}}
                   @isSource={{this.isSource placement}}
+                  @size={{this.cardSize}}
                   @shiftStyle={{this.cardShiftStyle placement}}
                   @isDragging={{this.isDragging}}
                 >
@@ -238,9 +264,9 @@ export class KanbanPlane extends Component<{
       /* ── Board ──────────────────────────────────────────────────── */
       .board {
         display: flex;
-        gap: 8px;
+        gap: 0.5rem;
         height: 100%;
-        padding: 12px;
+        padding: 0.75rem;
         overflow-x: auto;
         outline: none;
       }
@@ -257,10 +283,8 @@ export class KanbanPlane extends Component<{
       .column {
         display: flex;
         flex-direction: column;
-        flex: 0 0 300px;
-        min-width: 260px;
         height: 100%;
-        border-radius: 8px;
+        border-radius: 0.5rem;
         background: var(--sidebar, var(--boxel-100));
         color: var(--sidebar-foreground, var(--boxel-700));
       }
@@ -275,16 +299,16 @@ export class KanbanPlane extends Component<{
         overflow-y: auto;
         display: flex;
         flex-direction: column;
-        gap: 6px;
-        padding: 4px 8px 8px;
+        gap: 0.375rem;
+        padding: 0.25rem 0.5rem 0.5rem;
         position: relative;
       }
 
       /* ── Insertion Box ──────────────────────────────────────────── */
       .insertion-box {
         position: absolute;
-        left: 8px;
-        right: 8px;
+        left: 0.5rem;
+        right: 0.5rem;
         border-radius: 0.5rem;
         background: color-mix(
           in oklch,
@@ -307,9 +331,9 @@ export class KanbanPlane extends Component<{
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 32px 16px;
+        padding: 2rem 1rem;
         color: var(--muted-foreground, var(--boxel-450));
-        font-size: 13px;
+        font-size: 0.8125rem;
         font-style: italic;
       }
     </style>

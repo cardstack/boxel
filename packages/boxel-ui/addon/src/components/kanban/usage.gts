@@ -1,10 +1,19 @@
 import { fn, get } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
+import { type FittedFormatId, fittedFormatById } from '../../helpers.ts';
+import {
+  Card as CardIcon,
+  Grid3x3 as GridIcon,
+  Rows4 as RowsIcon,
+} from '../../icons.gts';
+import CardContainer from '../card-container/index.gts';
+import Switch from '../switch/index.gts';
+import type { ViewItem } from '../view-selector/index.gts';
+import ViewSelector from '../view-selector/index.gts';
 import { KanbanColumnHeader } from './column-header.gts';
 import { KanbanDragManager } from './drag.gts';
 import {
@@ -63,13 +72,35 @@ const INITIAL_CARDS: DemoCard[] = [
   { title: 'Publish examples', kind: 'Docs' },
 ];
 
+const KANBAN_CARD_SIZE_OPTIONS: FittedFormatId[] = [
+  'double-strip',
+  'regular-tile',
+  'compact-card',
+];
+
+const KANBAN_VIEW_OPTIONS: ViewItem[] = [
+  { id: 'tile', icon: GridIcon },
+  { id: 'strip', icon: RowsIcon },
+  { id: 'card', icon: CardIcon },
+];
+
+const KANBAN_VIEW_TO_SIZE: Record<string, FittedFormatId> = {
+  card: 'compact-card',
+  strip: 'double-strip',
+  tile: 'regular-tile',
+};
+
 export default class KanbanUsage extends Component {
+  fittedFormats = KANBAN_CARD_SIZE_OPTIONS;
+  sizeViewOptions = KANBAN_VIEW_OPTIONS;
   @tracked columns = INITIAL_COLUMNS;
   @tracked cards = INITIAL_CARDS;
   @tracked placements = autoPlaceKanban(INITIAL_CARDS.length, 4);
   @tracked hideEmpty = false;
   @tracked selectedIndex: number | null = null;
   @tracked openedIndex: number | null = null;
+  @tracked cardSizeView = 'grid';
+  @tracked cardSize: FittedFormatId = 'regular-tile';
 
   manager = new KanbanDragManager({
     placements: () => this.placements,
@@ -102,6 +133,15 @@ export default class KanbanUsage extends Component {
 
   get secondColumn(): KanbanColumnConfig {
     return this.columns[1] ?? this.columns[0]!;
+  }
+
+  formatTitle(size: FittedFormatId) {
+    return fittedFormatById.get(size)?.title ?? size;
+  }
+
+  @action updateCardSizeView(view: string): void {
+    this.cardSizeView = view;
+    this.cardSize = KANBAN_VIEW_TO_SIZE[view] ?? 'regular-tile';
   }
 
   @action toggleHideEmpty(): void {
@@ -153,13 +193,20 @@ export default class KanbanUsage extends Component {
       <:example>
         <div class='kanban-usage'>
           <div class='kanban-usage-toolbar'>
-            <button
-              type='button'
-              class='kanban-toggle'
-              {{on 'click' this.toggleHideEmpty}}
-            >
-              {{if this.hideEmpty 'Show empty columns' 'Hide empty columns'}}
-            </button>
+            <label class='kanban-toggle'>
+              <Switch
+                @label='Hide empty columns'
+                @isEnabled={{this.hideEmpty}}
+                @onChange={{this.toggleHideEmpty}}
+              />
+              <span class='kanban-toggle-label'>Hide empty columns</span>
+            </label>
+            <ViewSelector
+              class='kanban-size-picker'
+              @items={{this.sizeViewOptions}}
+              @selectedId={{this.cardSizeView}}
+              @onChange={{this.updateCardSizeView}}
+            />
             {{#if this.selectedCard}}
               <span class='kanban-meta'>
                 Selected:
@@ -180,23 +227,24 @@ export default class KanbanUsage extends Component {
               @placements={{this.placements}}
               @manager={{this.manager}}
               @interactive={{true}}
+              @cardSize={{this.cardSize}}
               @hideEmpty={{this.hideEmpty}}
               @onAddCard={{this.addCard}}
             >
               <:card as |placement|>
                 {{#let (get this.cards placement.index) as |card|}}
-                  <div class='demo-card'>
+                  <CardContainer class='demo-card'>
                     <div class='demo-card-kind'>{{card.kind}}</div>
                     <div class='demo-card-title'>{{card.title}}</div>
-                  </div>
+                  </CardContainer>
                 {{/let}}
               </:card>
               <:ghost as |dragIndex|>
                 {{#let (get this.cards dragIndex) as |card|}}
-                  <div class='demo-card demo-card--ghost'>
+                  <CardContainer class='demo-card demo-card--ghost'>
                     <div class='demo-card-kind'>{{card.kind}}</div>
                     <div class='demo-card-title'>{{card.title}}</div>
-                  </div>
+                  </CardContainer>
                 {{/let}}
               </:ghost>
             </KanbanPlane>
@@ -226,6 +274,14 @@ export default class KanbanUsage extends Component {
           @description='Enables interactive keyboard and pointer behavior for drag and selection.'
           @value={{true}}
           @defaultValue={{true}}
+        />
+        <Args.String
+          @name='cardSize'
+          @description='Fitted card size id used for the card wrapper and for column sizing within the kanban plane.'
+          @options={{this.fittedFormats}}
+          @value={{this.cardSize}}
+          @onInput={{fn (mut this.cardSize)}}
+          @defaultValue='regular-tile'
         />
         <Args.Bool
           @name='hideEmpty'
@@ -301,14 +357,18 @@ export default class KanbanUsage extends Component {
         gap: var(--boxel-sp-sm);
         flex-wrap: wrap;
       }
+      .kanban-size-picker {
+        display: inline-flex;
+        --boxel-view-option-group-column-gap: var(--boxel-sp-xs);
+      }
       .kanban-toggle {
-        padding: 0.375rem 0.625rem;
-        font: inherit;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+      .kanban-toggle-label {
+        font-size: 0.8125rem;
         color: var(--foreground, var(--boxel-dark));
-        background: var(--muted, var(--boxel-100));
-        border: 1px solid var(--border, var(--boxel-border-color));
-        border-radius: 0.375rem;
-        cursor: pointer;
       }
       .kanban-meta {
         font-size: 0.8125rem;
