@@ -39,6 +39,7 @@ module(basename(__filename), function () {
   module('publish and unpublish realm tests', function (hooks) {
     let testRealmHttpServer: Server;
     let testRealm: Realm;
+    let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>['testRealmServer'];
     let dbAdapter: PgAdapter;
     let publisher: QueuePublisher;
     let runner: QueueRunner;
@@ -67,8 +68,11 @@ module(basename(__filename), function () {
       runner: QueueRunner,
     ) {
       virtualNetwork = createVirtualNetwork();
-      ({ testRealm: testRealm, testRealmHttpServer: testRealmHttpServer } =
-        await runTestRealmServer({
+      ({
+        testRealm: testRealm,
+        testRealmServer: testRealmServer,
+        testRealmHttpServer: testRealmHttpServer,
+      } = await runTestRealmServer({
           virtualNetwork,
           testRealmDir,
           realmsRootPath: join(dir.name, 'realm_server_3'),
@@ -190,7 +194,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(response.status, 201, 'HTTP 201 status');
+        assert.strictEqual(response.status, 202, 'HTTP 202 status');
         assert.strictEqual(response.body.data.type, 'published_realm');
         assert.ok(response.body.data.id, 'published realm has an ID');
         assert.strictEqual(
@@ -205,6 +209,34 @@ module(basename(__filename), function () {
         assert.ok(
           response.body.data.attributes.lastPublishedAt,
           'last published at timestamp is present',
+        );
+        assert.strictEqual(
+          response.body.data.attributes.status,
+          'pending',
+          'status is pending — client should poll _readiness-check',
+        );
+
+        // Phase 3: publish only writes registry + NOTIFY + enqueues
+        // an indexing job. Drive a reconcile pass to mount the new
+        // published realm, then wait for the from-scratch-index job
+        // to populate boxel_index before asserting on it below.
+        let publishedRealmURLEarly =
+          response.body.data.attributes.publishedRealmURL;
+        await testRealmServer.testingOnlyReconcile();
+        await waitUntil(
+          async () => {
+            let rows = await dbAdapter.execute(
+              `SELECT 1 FROM boxel_index WHERE realm_url = $1 LIMIT 1`,
+              { bind: [publishedRealmURLEarly] },
+            );
+            return rows.length > 0 ? rows : undefined;
+          },
+          {
+            timeout: 30_000,
+            interval: 100,
+            timeoutMessage:
+              'boxel_index entries for published realm did not appear',
+          },
         );
 
         // Verify that the correct directory within _published was created
@@ -428,7 +460,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(publishResponse.status, 201, 'HTTP 201 status');
+        assert.strictEqual(publishResponse.status, 202, 'HTTP 202 status');
         let publishedRealmURL =
           publishResponse.body.data.attributes.publishedRealmURL;
         let publishedRealmPath = new URL(publishedRealmURL).pathname;
@@ -543,7 +575,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(response.status, 201, 'HTTP 201 status');
+        assert.strictEqual(response.status, 202, 'HTTP 202 status');
 
         let publishedRealmId = response.body.data.id;
         let publishedRealmPath = join(
@@ -587,7 +619,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(firstResponse.status, 201, 'First publish succeeds');
+        assert.strictEqual(firstResponse.status, 202, 'First publish succeeds');
         let firstTimestamp = firstResponse.body.data.attributes.lastPublishedAt;
 
         // Wait a bit to ensure timestamp difference
@@ -612,7 +644,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(secondResponse.status, 201, 'Republish succeeds');
+        assert.strictEqual(secondResponse.status, 202, 'Republish succeeds');
         assert.strictEqual(
           secondResponse.body.data.id,
           firstResponse.body.data.id,
@@ -729,7 +761,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(republishResponse.status, 201, 'Republish succeeds');
+        assert.strictEqual(republishResponse.status, 202, 'Republish succeeds');
 
         // Verify the file no longer exists on disk in the published realm
         assert.notOk(
@@ -758,7 +790,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(publishResponse.status, 201, 'Publish succeeds');
+        assert.strictEqual(publishResponse.status, 202, 'Publish succeeds');
         let publishedRealmURL =
           publishResponse.body.data.attributes.publishedRealmURL;
 
@@ -959,7 +991,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(publishResponse.status, 201, 'Publish succeeds');
+        assert.strictEqual(publishResponse.status, 202, 'Publish succeeds');
         let publishedRealmURL =
           publishResponse.body.data.attributes.publishedRealmURL;
 
@@ -1048,7 +1080,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(firstResponse.status, 201, 'First publish succeeds');
+        assert.strictEqual(firstResponse.status, 202, 'First publish succeeds');
 
         // Simulate a stale modules cache entry with an error for the published realm
         let moduleUrl = `${publishedRealmURL}my-module`;
@@ -1090,7 +1122,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(secondResponse.status, 201, 'Republish succeeds');
+        assert.strictEqual(secondResponse.status, 202, 'Republish succeeds');
 
         // Verify the stale modules cache entries were cleared
         let modulesAfter = await dbAdapter.execute(
@@ -1127,7 +1159,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(firstResponse.status, 201, 'First publish succeeds');
+        assert.strictEqual(firstResponse.status, 202, 'First publish succeeds');
 
         let republishResponse = await request
           .post('/_publish-realm')
@@ -1147,7 +1179,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(republishResponse.status, 201, `Republish succeeds`);
+        assert.strictEqual(republishResponse.status, 202, `Republish succeeds`);
         assert.strictEqual(
           republishResponse.body.data.id,
           firstResponse.body.data.id,

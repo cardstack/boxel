@@ -315,6 +315,13 @@ export class RealmServer {
     return this.findOrMountRealm(requestURL);
   }
 
+  // Test-only synchronous reconcile pass. The production reconciler
+  // wakes on NOTIFY realm_registry, but tests need a deterministic
+  // way to drive the post-DELETE unmount path without polling.
+  testingOnlyReconcile(): Promise<void> {
+    return this.reconciler.reconcile();
+  }
+
   private serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
     let acceptHeader = ctxt.header.accept ?? '';
     let lowerAcceptHeader = acceptHeader.toLowerCase();
