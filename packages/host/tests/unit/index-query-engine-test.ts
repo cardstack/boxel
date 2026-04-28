@@ -20,7 +20,7 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
-import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+import type PGLiteAdapter from '@cardstack/host/lib/pglite-adapter';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -43,7 +43,7 @@ let codeRef: typeof import('https://cardstack.com/base/code-ref');
 let { resolvedBaseRealmURL } = ENV;
 
 module('Unit | query', function (hooks) {
-  let dbAdapter: SQLiteAdapter;
+  let dbAdapter: PGLiteAdapter;
   let indexQueryEngine: IndexQueryEngine;
   let loader: Loader;
   let testCards: { [name: string]: CardDef } = {};

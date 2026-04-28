@@ -7,6 +7,10 @@ const DEFAULT_CARD_SIZE_LIMIT_BYTES = 512 * 1024; // 512KB
 const DEFAULT_FILE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024; // 5MB
 
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
+let pgSchema = fs.readFileSync(
+  path.join(__dirname, 'pg_schema.sql'),
+  'utf8',
+);
 
 // Environment-mode: when BOXEL_ENVIRONMENT is set, derive default URLs from Traefik hostnames.
 // ENV_SLUG is set by mise's env-vars.sh; fall back to computing it for non-mise contexts.
@@ -140,6 +144,7 @@ module.exports = function (environment) {
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;
     ENV.sqlSchema = sqlSchema;
+    ENV.pgSchema = pgSchema;
     ENV.featureFlags = {
       SHOW_ASK_AI: true,
     };

@@ -48,7 +48,7 @@ import {
   render as renderIntoElement,
   teardown as teardownIsolatedRender,
 } from '@cardstack/host/lib/isolated-render';
-import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+import PGLiteAdapter from '@cardstack/host/lib/pglite-adapter';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
 import {
@@ -103,7 +103,7 @@ export {
   envSkillId,
 } from '@cardstack/host/lib/utils';
 
-const { sqlSchema } = ENV;
+const { pgSchema } = ENV;
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 type ModuleHooks = {
@@ -158,12 +158,12 @@ export function cleanupMonacoEditorModels() {
 }
 
 export async function getDbAdapter() {
-  let dbAdapter = (globalThis as any).__sqliteAdapter as
-    | SQLiteAdapter
+  let dbAdapter = (globalThis as any).__pgliteAdapter as
+    | PGLiteAdapter
     | undefined;
   if (!dbAdapter) {
-    dbAdapter = new SQLiteAdapter(sqlSchema);
-    (globalThis as any).__sqliteAdapter = dbAdapter;
+    dbAdapter = new PGLiteAdapter(pgSchema);
+    (globalThis as any).__pgliteAdapter = dbAdapter;
   }
   return dbAdapter;
 }

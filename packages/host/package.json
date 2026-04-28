@@ -65,6 +65,7 @@
     "@floating-ui/dom": "catalog:",
     "@glimmer/component": "catalog:",
     "@glimmer/tracking": "^1.1.2",
+    "@glint/ember-tsc": "catalog:",
     "@glint/template": "catalog:",
     "@lezer/markdown": "catalog:",
     "@percy/cli": "catalog:",
@@ -197,10 +198,10 @@
     "typescript": "catalog:",
     "uuid": "catalog:",
     "wait-for-localhost-cli": "catalog:",
-    "webpack": "catalog:",
-    "@glint/ember-tsc": "catalog:"
+    "webpack": "catalog:"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.4.5",
     "ember-modify-based-class-resource": "catalog:",
     "reactiveweb": "catalog:",
     "unique-names-generator": "^4.7.1"

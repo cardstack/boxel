@@ -17,7 +17,7 @@ import {
 import { CachingDefinitionLookup } from '@cardstack/runtime-common/definition-lookup';
 import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
 
-import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+import type PGLiteAdapter from '@cardstack/host/lib/pglite-adapter';
 import type LocalIndexer from '@cardstack/host/services/local-indexer';
 
 import {
@@ -70,7 +70,7 @@ const makeCardTypeSummary = (
   icon_html: iconHTML,
 });
 
-const fetchRealmMetaRows = async (adapter: SQLiteAdapter) =>
+const fetchRealmMetaRows = async (adapter: PGLiteAdapter) =>
   adapter.execute(`SELECT value FROM realm_meta r WHERE r.realm_url = $1`, {
     bind: [testRealmURL],
     coerceTypes: {
@@ -78,7 +78,7 @@ const fetchRealmMetaRows = async (adapter: SQLiteAdapter) =>
     },
   });
 
-const fetchRealmMeta = async (adapter: SQLiteAdapter) => {
+const fetchRealmMeta = async (adapter: PGLiteAdapter) => {
   let rows = await fetchRealmMetaRows(adapter);
   return {
     rows,
@@ -87,7 +87,7 @@ const fetchRealmMeta = async (adapter: SQLiteAdapter) => {
 };
 
 module('Unit | index-writer', function (hooks) {
-  let adapter: SQLiteAdapter;
+  let adapter: PGLiteAdapter;
   let indexWriter: IndexWriter;
   let indexQueryEngine: IndexQueryEngine;
   setupTest(hooks);
