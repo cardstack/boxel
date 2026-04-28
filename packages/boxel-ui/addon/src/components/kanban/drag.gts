@@ -7,6 +7,7 @@ import { tracked } from '@glimmer/tracking';
 import {
   type InsertionPoint,
   type KanbanPlacement,
+  cardsInColumn,
   findInsertionFromPointer,
   resolveInsertion,
 } from './engine.ts';
@@ -31,7 +32,7 @@ const HOLD_DELAY_MS = 180;
 
 type BodyStyle = CSSStyleDeclaration & { webkitUserSelect: string };
 
-export type KanbanInteractionMode = 'idle' | 'pending' | 'drag';
+export type KanbanInteractionMode = 'idle' | 'pending' | 'drag' | 'kb-drag';
 
 export interface KanbanDragManagerOptions {
   columnCount: () => number;
@@ -70,6 +71,7 @@ export class KanbanDragManager {
   @tracked settleWidth = 0;
   @tracked settleHeight = 0;
   @tracked announcement = '';
+  @tracked kbGrabIndex: number | null = null;
 
   // ── Non-tracked ────────────────────────────────────────────────────
   private activePointerId: number | null = null;
@@ -90,6 +92,16 @@ export class KanbanDragManager {
     this.onChangeFn = opts.onChange;
     this.onSelectFn = opts.onSelect;
     this.onOpenFn = opts.onOpen;
+  }
+
+  get isDragging(): boolean {
+    return this.interactionMode === 'drag';
+  }
+
+  get isActivelyMoving(): boolean {
+    return (
+      this.interactionMode === 'drag' || this.interactionMode === 'kb-drag'
+    );
   }
 
   registerContainer = (el: HTMLElement): void => {
@@ -259,13 +271,37 @@ export class KanbanDragManager {
 
   onKeyDown = (event: Event): void => {
     const e = event as KeyboardEvent;
+
     if (e.key === 'Escape') {
-      if (this.interactionMode !== 'idle') {
+      if (this.interactionMode === 'kb-drag') {
+        e.preventDefault();
+        this.cancelKeyboardDrag();
+      } else if (this.interactionMode !== 'idle') {
         e.preventDefault();
         this.cancelDrag();
       } else {
         this.selectedIndex = null;
         this.onSelectFn?.(null);
+      }
+      return;
+    }
+
+    if (this.interactionMode === 'kb-drag') {
+      this.handleKeyboardMove(e);
+      return;
+    }
+
+    if (
+      (e.key === ' ' || e.key === 'Enter') &&
+      this.interactionMode === 'idle'
+    ) {
+      const cardEl = (e.target as HTMLElement)?.closest?.(
+        '[data-card-index]',
+      ) as HTMLElement | null;
+      if (cardEl) {
+        e.preventDefault();
+        const index = parseInt(cardEl.getAttribute('data-card-index')!, 10);
+        this.startKeyboardDrag(index);
       }
     }
   };
@@ -365,6 +401,138 @@ export class KanbanDragManager {
     }
   }
 
+  private startKeyboardDrag(index: number): void {
+    const placements = this.placementsFn();
+    const placement = placements.find((p) => p.index === index);
+    if (!placement) return;
+
+    const colCards = cardsInColumn(placement.column, placements).filter(
+      (p) => p.index !== index,
+    );
+    const slot = colCards.filter(
+      (c) => c.sortOrder < placement.sortOrder,
+    ).length;
+
+    this.interactionMode = 'kb-drag';
+    this.activeDragIndex = index;
+    this.kbGrabIndex = index;
+    this.selectedIndex = index;
+    this.snapshotPlacements = placements.map((p) => ({ ...p }));
+    this.insertion = this.slotToInsertion(placement.column, slot, colCards);
+    this.onSelectFn?.(index);
+    this.announcement =
+      'Grabbed. Use arrow keys to move, Space or Enter to drop, Escape to cancel.';
+  }
+
+  private handleKeyboardMove(e: KeyboardEvent): void {
+    const movingKeys = [
+      'ArrowUp',
+      'ArrowDown',
+      'ArrowLeft',
+      'ArrowRight',
+      ' ',
+      'Enter',
+    ];
+    if (!movingKeys.includes(e.key)) return;
+    e.preventDefault();
+
+    if (e.key === ' ' || e.key === 'Enter') {
+      this.commitKeyboardDrag();
+      return;
+    }
+
+    if (!this.insertion) return;
+    const placements = this.placementsFn();
+    const { column } = this.insertion;
+    const totalColumns = this.columnCountFn();
+
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const newColumn =
+        e.key === 'ArrowLeft'
+          ? Math.max(0, column - 1)
+          : Math.min(totalColumns - 1, column + 1);
+      if (newColumn === column) return;
+      const currentColCards = cardsInColumn(column, placements).filter(
+        (p) => p.index !== this.activeDragIndex,
+      );
+      const currentSlot = this.insertionToSlot(this.insertion, currentColCards);
+      const newColCards = cardsInColumn(newColumn, placements).filter(
+        (p) => p.index !== this.activeDragIndex,
+      );
+      const newSlot = Math.min(currentSlot, newColCards.length);
+      this.insertion = this.slotToInsertion(newColumn, newSlot, newColCards);
+      this.announcement = `Column ${newColumn + 1}. Position ${newSlot + 1} of ${newColCards.length + 1}.`;
+      return;
+    }
+
+    const colCards = cardsInColumn(column, placements).filter(
+      (p) => p.index !== this.activeDragIndex,
+    );
+    const currentSlot = this.insertionToSlot(this.insertion, colCards);
+    const newSlot =
+      e.key === 'ArrowUp'
+        ? Math.max(0, currentSlot - 1)
+        : Math.min(colCards.length, currentSlot + 1);
+    if (newSlot === currentSlot) return;
+    this.insertion = this.slotToInsertion(column, newSlot, colCards);
+    this.announcement = `Position ${newSlot + 1} of ${colCards.length + 1}.`;
+  }
+
+  private commitKeyboardDrag(): void {
+    const pendingInsertion = this.insertion;
+    const pendingIndex = this.kbGrabIndex;
+    if (pendingInsertion !== null && pendingIndex !== null) {
+      const placements = this.placementsFn();
+      const next = resolveInsertion(pendingIndex, pendingInsertion, placements);
+      if (!placementsEqual(placements, next)) {
+        this.onChangeFn(next);
+        this.announcement = 'Card dropped.';
+      } else {
+        this.announcement = 'Card returned to original position.';
+      }
+    }
+    this.resetSession();
+  }
+
+  private cancelKeyboardDrag(): void {
+    this.announcement = 'Movement cancelled.';
+    if (this.snapshotPlacements) {
+      this.onChangeFn(this.snapshotPlacements);
+    }
+    this.resetSession();
+  }
+
+  private insertionToSlot(
+    insertion: InsertionPoint,
+    colCards: KanbanPlacement[],
+  ): number {
+    if (insertion.insertBeforeIndex === -1) return colCards.length;
+    const idx = colCards.findIndex(
+      (c) => c.index === insertion.insertBeforeIndex,
+    );
+    return idx === -1 ? colCards.length : idx;
+  }
+
+  private slotToInsertion(
+    column: number,
+    slot: number,
+    colCards: KanbanPlacement[],
+  ): InsertionPoint {
+    if (slot >= colCards.length) {
+      return {
+        column,
+        insertBeforeIndex: -1,
+        position: (colCards[colCards.length - 1]?.sortOrder ?? 0) + 1,
+      };
+    }
+    const beforeCard = colCards[slot]!;
+    return {
+      column,
+      insertBeforeIndex: beforeCard.index,
+      position: beforeCard.sortOrder,
+    };
+  }
+
   private cancelDrag(): void {
     this.announcement = 'Movement cancelled.';
     if (this.snapshotPlacements) {
@@ -397,6 +565,7 @@ export class KanbanDragManager {
     this.suppressLostPointerCapture = false;
     this.activePointerId = null;
     this.activeDragIndex = null;
+    this.kbGrabIndex = null;
     this.insertion = null;
     this.isSettling = false;
     this.settleX = 0;

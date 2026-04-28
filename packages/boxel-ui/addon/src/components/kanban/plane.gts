@@ -92,10 +92,13 @@ export class KanbanPlane extends Component<{
   };
 
   get isDragging(): boolean {
-    return this.manager.interactionMode === 'drag';
+    return this.manager.isDragging;
+  }
+  get isActivelyMoving(): boolean {
+    return this.manager.isActivelyMoving;
   }
   get showGhost(): boolean {
-    return this.manager.activeDragIndex !== null;
+    return this.manager.activeDragIndex !== null && this.manager.isDragging;
   }
   get isSettling(): boolean {
     return this.manager.isSettling;
@@ -106,12 +109,12 @@ export class KanbanPlane extends Component<{
 
   isTargetColumn = (colIndex: number): boolean => {
     const ins = this.manager.insertion;
-    return ins !== null && ins.column === colIndex && this.isDragging;
+    return ins !== null && ins.column === colIndex && this.isActivelyMoving;
   };
 
   shouldShiftDown = (p: KanbanPlacement): boolean => {
     const ins = this.manager.insertion;
-    if (!ins || !this.isDragging || p.column !== ins.column) return false;
+    if (!ins || !this.isActivelyMoving || p.column !== ins.column) return false;
     if (p.index === this.manager.activeDragIndex) return false;
     return p.sortOrder >= ins.position;
   };
@@ -128,7 +131,7 @@ export class KanbanPlane extends Component<{
     return (
       this.manager.insertion !== null &&
       this.manager.insertion.column === colIndex &&
-      this.isDragging
+      this.isActivelyMoving
     );
   };
 
