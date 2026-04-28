@@ -18,6 +18,21 @@ import DndKanbanBoard, {
   type DndItem,
   DndColumn,
 } from './components/drag-and-drop/index.gts';
+import {
+  KanbanPlane,
+  KanbanDragManager,
+  KanbanColumnHeader,
+  KanbanCard,
+  KanbanGhost,
+  type KanbanPlacement,
+  type KanbanColumnConfig,
+  type InsertionPoint,
+  autoPlaceKanban,
+  cardsInColumn,
+  columnCount as kanbanColumnCount,
+  resolveInsertion,
+  findInsertionFromPointer,
+} from './components/kanban/index.gts';
 import BoxelDropdown, {
   type DropdownAPI as BoxelDropdownAPI,
 } from './components/dropdown/index.gts';
@@ -75,6 +90,9 @@ import ViewSelector, {
 
 export {
   type Filter,
+  type InsertionPoint,
+  type KanbanColumnConfig,
+  type KanbanPlacement,
   type SortOption,
   type ViewItem,
   Accordion,
@@ -112,6 +130,16 @@ export {
   DndItem,
   DndKanbanBoard,
   EmailInput,
+  KanbanCard,
+  KanbanColumnHeader,
+  KanbanDragManager,
+  KanbanGhost,
+  KanbanPlane,
+  autoPlaceKanban,
+  cardsInColumn,
+  findInsertionFromPointer,
+  kanbanColumnCount,
+  resolveInsertion,
   EntityDisplayWithIcon,
   EntityDisplayWithThumbnail,
   FieldContainer,
