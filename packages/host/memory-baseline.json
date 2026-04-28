@@ -7,55 +7,55 @@
   },
   "modules": {
     "Acceptance | AI Assistant tests": {
-      "delta_mb": 211.8
+      "delta_mb": 170.1
     },
     "Acceptance | avif image def": {
       "delta_mb": 42.1
     },
     "Acceptance | basic tests": {
-      "delta_mb": 27
+      "delta_mb": 10.3
     },
     "Acceptance | Code patches tests": {
-      "delta_mb": 75.8
+      "delta_mb": 76.1
     },
     "Acceptance | code submode | create-file tests": {
-      "delta_mb": 119.3
+      "delta_mb": 119.4
     },
     "Acceptance | code submode | editor tests": {
-      "delta_mb": 47.7
+      "delta_mb": 47.6
     },
     "Acceptance | code submode | file def live reload": {
-      "delta_mb": 27.4
+      "delta_mb": 27.5
     },
     "Acceptance | code submode | file def navigation": {
       "delta_mb": 44.8
     },
     "Acceptance | code submode | file-tree tests": {
-      "delta_mb": 171.4
+      "delta_mb": 152.4
     },
     "Acceptance | code submode | head format preview": {
       "delta_mb": 46.1
     },
     "Acceptance | code submode | inspector tests": {
-      "delta_mb": 136.4
+      "delta_mb": 155.5
     },
     "Acceptance | code submode | recent files tests": {
-      "delta_mb": 92.8
+      "delta_mb": 76.1
     },
     "Acceptance | code submode | schema editor tests": {
-      "delta_mb": 101
+      "delta_mb": 118.1
     },
     "Acceptance | code submode tests": {
-      "delta_mb": 208.1
+      "delta_mb": 224.7
     },
     "Acceptance | code-submode | card playground": {
-      "delta_mb": 261.5
+      "delta_mb": 244.9
     },
     "Acceptance | code-submode | field playground": {
-      "delta_mb": 123.2
+      "delta_mb": 123.3
     },
     "Acceptance | Commands tests": {
-      "delta_mb": 98.4
+      "delta_mb": 115.1
     },
     "Acceptance | csv file def": {
       "delta_mb": 42.3
@@ -64,7 +64,7 @@
       "delta_mb": 1.3
     },
     "Acceptance | file chooser tests": {
-      "delta_mb": 55.7
+      "delta_mb": 55.6
     },
     "Acceptance | file chooser tests | upload size limit": {
       "delta_mb": 0.1
@@ -82,7 +82,7 @@
       "delta_mb": 39.7
     },
     "Acceptance | host mode tests": {
-      "delta_mb": 115.9
+      "delta_mb": 116
     },
     "Acceptance | host submode": {
       "delta_mb": -11.9
@@ -91,10 +91,10 @@
       "delta_mb": -24.7
     },
     "Acceptance | interact submode creation & permissions": {
-      "delta_mb": -7.9
+      "delta_mb": 10.9
     },
     "Acceptance | interact submode tests": {
-      "delta_mb": 230.2
+      "delta_mb": 230.3
     },
     "Acceptance | jpg image def": {
       "delta_mb": 42.1
@@ -103,10 +103,10 @@
       "delta_mb": 39.9
     },
     "Acceptance | markdown BFM card references": {
-      "delta_mb": 36.2
+      "delta_mb": 36
     },
     "Acceptance | markdown file def": {
-      "delta_mb": 14.7
+      "delta_mb": 14.8
     },
     "Acceptance | operator mode tests": {
       "delta_mb": 194
@@ -115,10 +115,10 @@
       "delta_mb": 8.5
     },
     "Acceptance | prerender | file-extract": {
-      "delta_mb": 39.5
+      "delta_mb": 39.4
     },
     "Acceptance | prerender | html": {
-      "delta_mb": 16.8
+      "delta_mb": 16.7
     },
     "Acceptance | prerender | meta": {
       "delta_mb": 26.5
@@ -127,16 +127,16 @@
       "delta_mb": 2.9
     },
     "Acceptance | Query Fields | host respects server-populated results": {
-      "delta_mb": -52.3
+      "delta_mb": -52.4
     },
     "Acceptance | Spec preview": {
-      "delta_mb": 103.2
+      "delta_mb": 103.1
     },
     "Acceptance | svg image def": {
       "delta_mb": 22.9
     },
     "Acceptance | text file def": {
-      "delta_mb": 14.3
+      "delta_mb": 14.2
     },
     "Acceptance | theme-card-test": {
       "delta_mb": 48.7
@@ -145,7 +145,7 @@
       "delta_mb": 38.8
     },
     "Acceptance | webp image def": {
-      "delta_mb": 5.9
+      "delta_mb": 5.8
     },
     "Acceptance | workspace-chooser": {
       "delta_mb": 14.6
@@ -166,16 +166,16 @@
       "delta_mb": 6.8
     },
     "Integration | ai-assistant-panel | codeblocks": {
-      "delta_mb": -8.3
+      "delta_mb": -8.4
     },
     "Integration | ai-assistant-panel | commands": {
-      "delta_mb": 539.9
+      "delta_mb": 542.1
     },
     "Integration | ai-assistant-panel | debug-message": {
       "delta_mb": 4
     },
     "Integration | ai-assistant-panel | file-attachment": {
-      "delta_mb": 36.8
+      "delta_mb": 36.9
     },
     "Integration | ai-assistant-panel | general": {
       "delta_mb": 53.2
@@ -184,7 +184,7 @@
       "delta_mb": 4.1
     },
     "Integration | ai-assistant-panel | reasoning": {
-      "delta_mb": 14.7
+      "delta_mb": 14.6
     },
     "Integration | ai-assistant-panel | scrolling": {
       "delta_mb": -24.9
@@ -205,13 +205,13 @@
       "delta_mb": 36.9
     },
     "Integration | card-catalog": {
-      "delta_mb": -37.2
+      "delta_mb": -37.3
     },
     "Integration | card-copy": {
-      "delta_mb": 17.1
+      "delta_mb": 17
     },
     "Integration | card-delete": {
-      "delta_mb": -8.8
+      "delta_mb": -8.9
     },
     "Integration | CardDef-FieldDef relationships test": {
       "delta_mb": 5.7
@@ -220,7 +220,7 @@
       "delta_mb": 5.5
     },
     "Integration | Command | create-specs": {
-      "delta_mb": -10
+      "delta_mb": -10.2
     },
     "Integration | Command | generate-example-cards (one-shot)": {
       "delta_mb": -1.6
@@ -247,7 +247,7 @@
       "delta_mb": 17.4
     },
     "Integration | commands | apply-markdown-edit": {
-      "delta_mb": 23.5
+      "delta_mb": 6.7
     },
     "Integration | commands | apply-search-replace-block": {
       "delta_mb": -7
@@ -259,19 +259,19 @@
       "delta_mb": 17.3
     },
     "Integration | commands | can-read-realm": {
-      "delta_mb": -2.7
+      "delta_mb": -2
     },
     "Integration | commands | cancel-indexing-job": {
       "delta_mb": -44.3
     },
     "Integration | commands | check-correctness": {
-      "delta_mb": 53.4
+      "delta_mb": 53.7
     },
     "Integration | commands | commands-calling": {
       "delta_mb": 10.1
     },
     "Integration | commands | copy-and-edit": {
-      "delta_mb": 21.7
+      "delta_mb": 21.8
     },
     "Integration | commands | copy-card": {
       "delta_mb": 32.3
@@ -280,7 +280,7 @@
       "delta_mb": 39.2
     },
     "Integration | commands | copy-source": {
-      "delta_mb": -11.5
+      "delta_mb": -11.6
     },
     "Integration | commands | create-listing-pr-request": {
       "delta_mb": -2.3
@@ -340,7 +340,7 @@
       "delta_mb": -8.1
     },
     "Integration | commands | read-file-for-ai-assistant": {
-      "delta_mb": 14.2
+      "delta_mb": 14.1
     },
     "Integration | commands | read-source": {
       "delta_mb": 23.2
@@ -358,7 +358,7 @@
       "delta_mb": 36.9
     },
     "Integration | commands | search-and-choose": {
-      "delta_mb": 16.5
+      "delta_mb": 16.6
     },
     "Integration | commands | search-google-images": {
       "delta_mb": 0.1
@@ -370,7 +370,7 @@
       "delta_mb": 13.7
     },
     "Integration | commands | send-request-via-proxy": {
-      "delta_mb": 47.1
+      "delta_mb": 47.2
     },
     "Integration | commands | set-user-system-card": {
       "delta_mb": 13.7
@@ -394,7 +394,7 @@
       "delta_mb": 14.2
     },
     "Integration | commands | write-text-file": {
-      "delta_mb": 3.6
+      "delta_mb": 3.7
     },
     "Integration | Component | ErrorDisplay | diagnostics": {
       "delta_mb": 4.1
@@ -409,7 +409,7 @@
       "delta_mb": 6.9
     },
     "Integration | components | create-listing-modal": {
-      "delta_mb": 50.5
+      "delta_mb": 66.7
     },
     "Integration | components | realm field": {
       "delta_mb": 10.4
@@ -424,13 +424,13 @@
       "delta_mb": 8.6
     },
     "Integration | enumField": {
-      "delta_mb": 65.9
+      "delta_mb": 65.8
     },
     "Integration | field configuration": {
-      "delta_mb": 9.9
+      "delta_mb": 9.8
     },
     "Integration | field markdown domain": {
-      "delta_mb": 11.4
+      "delta_mb": 11.3
     },
     "Integration | field markdown primitives": {
       "delta_mb": 9
@@ -454,16 +454,16 @@
       "delta_mb": 12.3
     },
     "Integration | operator-mode | basics": {
-      "delta_mb": 263.9
+      "delta_mb": 258.8
     },
     "Integration | operator-mode | card catalog": {
       "delta_mb": 231.4
     },
     "Integration | operator-mode | links": {
-      "delta_mb": 43.7
+      "delta_mb": 85.5
     },
     "Integration | operator-mode | ui": {
-      "delta_mb": 30.4
+      "delta_mb": 30.3
     },
     "Integration | overlay-menu-items": {
       "delta_mb": 18
@@ -478,16 +478,16 @@
       "delta_mb": 15
     },
     "Integration | realm": {
-      "delta_mb": 25.1
+      "delta_mb": 25
     },
     "Integration | realm indexing": {
       "delta_mb": 33.3
     },
     "Integration | realm querying": {
-      "delta_mb": 85.1
+      "delta_mb": 85.2
     },
     "Integration | rendered-markdown": {
-      "delta_mb": 7
+      "delta_mb": 6.9
     },
     "Integration | RichMarkdownField": {
       "delta_mb": 6.8
@@ -499,13 +499,13 @@
       "delta_mb": 11.2
     },
     "Integration | serialization": {
-      "delta_mb": -15.1
+      "delta_mb": -15.2
     },
     "Integration | serializeFileDef": {
       "delta_mb": 8.5
     },
     "Integration | Store": {
-      "delta_mb": 197.6
+      "delta_mb": 197.5
     },
     "Integration | text-input-validator": {
       "delta_mb": 24.3
@@ -553,7 +553,7 @@
       "delta_mb": 0
     },
     "Unit | file-def-manager canonicalize": {
-      "delta_mb": 0.1
+      "delta_mb": 0
     },
     "Unit | FileDef menu items": {
       "delta_mb": 6.8
