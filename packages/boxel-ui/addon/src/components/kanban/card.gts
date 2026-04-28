@@ -31,6 +31,9 @@ const KanbanCard: TemplateOnlyComponent<Signature> = <template>
     }}
     @size={{@size}}
     @style={{@shiftStyle}}
+    role='listitem'
+    aria-current={{if @isSelected 'true'}}
+    aria-hidden={{if @isSource 'true'}}
     data-card-index={{@placement.index}}
     ...attributes
   >

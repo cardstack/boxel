@@ -30,7 +30,15 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
     </div>
     <div class='col-header-right'>
       {{#if @column.wipLimit}}
-        <span class={{cn 'col-wip' over=@isOverWip}}>
+        <span
+          class={{cn 'col-wip' over=@isOverWip}}
+          aria-label={{if
+            @isOverWip
+            (concat 'WIP limit ' @column.wipLimit ', exceeded')
+            (concat 'WIP limit ' @column.wipLimit)
+          }}
+          aria-live='polite'
+        >
           Max
           {{@column.wipLimit}}
         </span>

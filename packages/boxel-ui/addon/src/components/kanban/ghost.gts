@@ -14,7 +14,13 @@ interface Signature {
 }
 
 const KanbanGhost: TemplateOnlyComponent<Signature> = <template>
-  <div class={{cn 'ghost' settling=@isSettling}} style={{@style}} ...attributes>
+  {{! Visual drag preview only — original card remains in the AT }}
+  <div
+    class={{cn 'ghost' settling=@isSettling}}
+    style={{@style}}
+    aria-hidden='true'
+    ...attributes
+  >
     {{yield}}
   </div>
 

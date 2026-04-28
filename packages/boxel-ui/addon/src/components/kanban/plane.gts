@@ -26,6 +26,7 @@ import { BindPointerDown, CaptureElement } from './modifiers.gts';
 
 export class KanbanPlane extends Component<{
   Args: {
+    boardLabel?: string;
     cardSize?: FittedFormatId;
     columns: KanbanColumnConfig[];
     hideEmpty?: boolean;
@@ -196,6 +197,8 @@ export class KanbanPlane extends Component<{
   <template>
     <div
       class={{cn 'board' is-dragging=this.isDragging}}
+      role='region'
+      aria-label={{if @boardLabel @boardLabel 'Kanban board'}}
       {{CaptureElement this.captureRef}}
       {{BindPointerDown this.manager.onPointerDown}}
       {{on 'pointermove' this.manager.onPointerMove}}
@@ -213,6 +216,8 @@ export class KanbanPlane extends Component<{
               is-target=(this.isTargetColumn colIdx)
               is-over-wip=(this.isOverWip column colIdx)
             }}
+            role='group'
+            aria-label={{if column.label column.label 'Untitled'}}
             style={{this.columnStyle}}
             data-kanban-column={{colIdx}}
           >
@@ -224,7 +229,7 @@ export class KanbanPlane extends Component<{
               @onAddCard={{if @onAddCard (fn @onAddCard column.key)}}
             />
 
-            <div class='col-body'>
+            <div class='col-body' role='list'>
               {{#if (this.showInsertionBox colIdx)}}
                 <div
                   class='insertion-box'
@@ -246,7 +251,7 @@ export class KanbanPlane extends Component<{
               {{/each}}
 
               {{#unless (this.columnCardCount colIdx)}}
-                <div class='empty-col'>No cards</div>
+                <div class='empty-col' aria-hidden='true'>No cards</div>
               {{/unless}}
             </div>
           </div>
