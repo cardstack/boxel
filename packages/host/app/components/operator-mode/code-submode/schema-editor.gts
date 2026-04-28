@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 
 import { cached } from '@glimmer/tracking';
 
-import { getPlural } from '@cardstack/runtime-common';
+import { getPlural, rri } from '@cardstack/runtime-common';
 import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
@@ -172,7 +172,7 @@ export default class SchemaEditor extends Component<Signature> {
   get moduleSyntax() {
     return new ModuleSyntax(
       this.args.file.content,
-      new URL(this.args.file.url),
+      rri(this.args.file.url),
     );
   }
 

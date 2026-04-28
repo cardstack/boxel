@@ -1,6 +1,5 @@
 import { service } from '@ember/service';
 
-import { cardIdToURL } from '@cardstack/runtime-common';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import type { FieldType } from 'https://cardstack.com/base/card-api';
@@ -41,7 +40,7 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
 
     let moduleSyntax = new ModuleSyntax(
       moduleSource,
-      cardIdToURL(input.cardDefinitionToModify.module),
+      input.cardDefinitionToModify.module,
     );
 
     moduleSyntax.addField({

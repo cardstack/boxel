@@ -27,9 +27,13 @@ import {
   baseCardRef,
   baseFieldRef,
   type CodeRef,
+  type RealmResourceIdentifier,
   type ResolvedCodeRef,
 } from './index';
-import { resolveCardReference } from './card-reference-resolver';
+import {
+  cardIdToURL,
+  resolveCardReference,
+} from './card-reference-resolver';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
@@ -59,8 +63,9 @@ export class ModuleSyntax {
   declare private ast: t.File;
   private url: URL;
 
-  constructor(src: string, url: URL) {
-    this.url = trimExecutableExtension(url);
+  constructor(src: string, url: RealmResourceIdentifier | URL) {
+    let normalized = url instanceof URL ? url : cardIdToURL(url);
+    this.url = trimExecutableExtension(normalized);
     this.analyze(src);
   }
 

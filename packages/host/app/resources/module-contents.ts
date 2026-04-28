@@ -6,6 +6,7 @@ import { task } from 'ember-concurrency';
 
 import { Resource } from 'ember-modify-based-class-resource';
 
+import { rri } from '@cardstack/runtime-common';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import type { Ready } from '@cardstack/host/resources/file';
@@ -103,7 +104,7 @@ export class ModuleContentsResource
     }
     let moduleSyntax = new ModuleSyntax(
       executableFile.content,
-      new URL(executableFile.url),
+      rri(executableFile.url),
     );
     let declarations =
       await this.moduleContentsService.assembleFromModuleSyntax(
