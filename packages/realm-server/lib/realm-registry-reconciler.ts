@@ -263,7 +263,18 @@ export class RealmRegistryReconciler {
   // registry — the caller should respond 404 in that case. Mount
   // failures propagate; the caller should respond 5xx and let the next
   // request retry.
+  //
+  // pendingMounts is checked BEFORE mounted because ensureMounted()
+  // publishes the Realm into mounted synchronously before awaiting
+  // realm.start(). A concurrent caller that took the mounted fast-path
+  // would receive a not-yet-started Realm; routing it through the
+  // in-flight promise instead lets the caller await start() like the
+  // original requester.
   async lookupOrMount(url: string): Promise<Realm | undefined> {
+    const inflight = this.pendingMounts.get(url);
+    if (inflight) {
+      return inflight;
+    }
     const existing = this.mounted.get(url);
     if (existing) {
       return existing;
@@ -316,13 +327,19 @@ export class RealmRegistryReconciler {
   // mount latency, mount failure rate, and pinned-vs-lazy ratios from
   // these lines.
   async ensureMounted(row: RealmRegistryRow): Promise<Realm> {
-    const existing = this.mounted.get(row.url);
-    if (existing) {
-      return existing;
-    }
+    // pendingMounts checked before mounted: see lookupOrMount() above.
+    // The Realm is published into mounted synchronously before its
+    // start() promise resolves, so a caller hitting the mounted
+    // fast-path would receive a not-yet-started Realm. Falling through
+    // to the in-flight promise lets concurrent callers await start()
+    // alongside the originator.
     const inflight = this.pendingMounts.get(row.url);
     if (inflight) {
       return inflight;
+    }
+    const existing = this.mounted.get(row.url);
+    if (existing) {
+      return existing;
     }
     const start = Date.now();
     let realm: Realm;

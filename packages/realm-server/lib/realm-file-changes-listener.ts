@@ -1,10 +1,12 @@
 import type { Realm } from '@cardstack/runtime-common';
-import { logger } from '@cardstack/runtime-common';
+import {
+  logger,
+  REALM_FILE_CHANGES_CHANNEL,
+} from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { WorkLoop } from '@cardstack/postgres';
 
 const log = logger('realm-server:file-changes-listener');
-const CHANNEL = 'realm_file_changes';
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
 
 // Cross-instance cache invalidation. When any realm-server emits
@@ -50,7 +52,7 @@ export class RealmFileChangesListener {
     this.#started = true;
     this.#loop.run(async (loop) => {
       await this.#deps.dbAdapter.listen(
-        CHANNEL,
+        REALM_FILE_CHANGES_CHANNEL,
         (notification: { payload?: string }) => {
           // Invalidate synchronously on wake rather than forcing a reconcile
           // pass: there is nothing to poll from the DB side, the whole
