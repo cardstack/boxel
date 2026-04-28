@@ -32,6 +32,7 @@
     "commander": "^13.1.0",
     "dotenv": "^16.4.7",
     "ignore": "catalog:",
+    "jsonwebtoken": "catalog:",
     "p-limit": "^7.3.0"
   },
   "devDependencies": {
@@ -39,6 +40,7 @@
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "content-tag": "catalog:",
+    "@types/jsonwebtoken": "catalog:",
     "@types/node": "catalog:",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",

@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { SupportedMimeType, rri } from '@cardstack/runtime-common';
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -132,7 +132,7 @@ function buildCardJson(model: OpenRouterApiModel) {
       },
       meta: {
         adoptsFrom: {
-          module: '../openrouter-model',
+          module: rri('../openrouter-model'),
           name: 'OpenRouterModel',
         },
       },
@@ -224,7 +224,7 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
             },
             meta: {
               adoptsFrom: {
-                module: '../openrouter-model',
+                module: rri('../openrouter-model'),
                 name: 'OpenRouterModel',
               },
             },

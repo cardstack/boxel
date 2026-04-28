@@ -16,10 +16,14 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import {
+  codeRef,
   type LooseSingleCardDocument,
   ResolvedCodeRef,
   TypedFilter,
 } from '@cardstack/runtime-common';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 import {
   type SortOption,
   sortByCardTitleAsc,
@@ -430,11 +434,7 @@ export class BlogApp extends CardDef {
       displayName: 'Date Published',
       sort: [
         {
-          on: {
-            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL('./blog-post', import.meta.url).href,
-            name: 'BlogPost',
-          },
+          on: codeRef(here, './blog-post', 'BlogPost'),
           by: 'publishDate',
           direction: 'desc',
         },
@@ -465,33 +465,21 @@ export class BlogApp extends CardDef {
       createNewButtonText: 'Post',
       showAdminData: true,
       sortOptions: BlogApp.sortOptionList,
-      cardRef: {
-        name: 'BlogPost',
-        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-        module: new URL('./blog-post', import.meta.url).href,
-      },
+      cardRef: codeRef(here, './blog-post', 'BlogPost'),
     },
     {
       displayName: 'Author Bios',
       icon: AuthorIcon,
       cardTypeName: 'Author',
       createNewButtonText: 'Author',
-      cardRef: {
-        name: 'Author',
-        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-        module: new URL('./author', import.meta.url).href,
-      },
+      cardRef: codeRef(here, './author', 'Author'),
     },
     {
       displayName: 'Categories',
       icon: CategoriesIcon,
       cardTypeName: 'Category',
       createNewButtonText: 'Category',
-      cardRef: {
-        name: 'BlogCategory',
-        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-        module: new URL('./blog-category', import.meta.url).href,
-      },
+      cardRef: codeRef(here, './blog-category', 'BlogCategory'),
     },
   ];
 

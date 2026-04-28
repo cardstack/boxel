@@ -1,3 +1,5 @@
+import { rri } from '@cardstack/runtime-common';
+
 import {
   contains,
   linksToMany,
@@ -9,7 +11,10 @@ import StringField from 'https://cardstack.com/base/string';
 
 const fileSearchQuery = {
   filter: {
-    type: { module: 'https://cardstack.com/base/card-api', name: 'FileDef' },
+    type: {
+      module: rri('https://cardstack.com/base/card-api'),
+      name: 'FileDef',
+    },
   },
   realm: '$REALM',
 };

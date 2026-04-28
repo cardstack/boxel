@@ -31,6 +31,7 @@ import {
   getFieldDefinitions,
   CardError,
   unixTime,
+  type RealmResourceIdentifier,
   type RenderRouteOptions,
 } from '@cardstack/runtime-common';
 import {
@@ -320,7 +321,10 @@ export async function buildModuleModel(
             },
             context,
           );
-          let codeRef = internalKeyFor({ module: id, name }, undefined);
+          let codeRef = internalKeyFor(
+            { module: id as RealmResourceIdentifier, name },
+            undefined,
+          );
           definitions[codeRef] = definition;
         }
       }

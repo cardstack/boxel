@@ -234,7 +234,7 @@ export function getBoxComponent(
     }
     let css = isThemeCard(cardDef)
       ? cardDef.cssVariables
-      : cardDef?.cardInfo?.theme?.cssVariables;
+      : cardDef?.cardTheme?.cssVariables;
     return sanitizeHtmlSafe(extractCssVariables(css));
   }
 
@@ -242,7 +242,7 @@ export function getBoxComponent(
     if (isThemeCard(cardDef)) {
       return Boolean(cardDef?.cssVariables?.trim());
     }
-    return cardDef?.cardInfo?.theme != null;
+    return cardDef?.cardTheme != null;
   }
 
   function getCssImports(card?: CardDef) {
@@ -254,7 +254,7 @@ export function getBoxComponent(
         return card.cssImports;
       }
     }
-    return card?.cardInfo?.theme?.cssImports;
+    return card?.cardTheme?.cssImports;
   }
 
   let component = class FieldComponent extends Component<BoxComponentSignature> {

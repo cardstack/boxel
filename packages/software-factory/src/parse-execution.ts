@@ -30,6 +30,7 @@ import { specRef } from '@cardstack/runtime-common/constants';
 import { logger } from './logger';
 import type { ParseErrorData, ParseFileResultData } from './parse-result-cards';
 import { validateRealmRelativePath } from './realm-relative-path';
+import { readCard } from './workspace-fs';
 
 let log = logger('parse-execution');
 
@@ -98,7 +99,13 @@ export interface DiscoverFilesOptions {
 export interface ParseRealmFilesOptions {
   targetRealmUrl: string;
   client: BoxelCLIClient;
-  /** Injected for testing — defaults to client.read. */
+  /**
+   * Local workspace directory to read source files from. The realm is
+   * used for spec discovery (via `client.search`) but content comes from
+   * disk.
+   */
+  workspaceDir: string;
+  /** Injected for testing — defaults to reading from the workspace. */
   readFileFn?: (
     realmUrl: string,
     path: string,
@@ -131,6 +138,10 @@ export interface ParseRealmFilesOutput {
 export interface RunParseInMemoryOptions {
   targetRealmUrl: string;
   client: BoxelCLIClient;
+  /**
+   * Local workspace directory to read source files from.
+   */
+  workspaceDir: string;
   /**
    * When set, parse only this realm-relative file instead of discovering all
    * parseable files. Useful for mid-turn self-validation right after writing
@@ -255,17 +266,14 @@ export async function parseRealmFiles(
 ): Promise<ParseRealmFilesOutput> {
   let readFileFn =
     options.readFileFn ??
-    (async (realmUrl: string, path: string) => {
-      let result = await options.client.read(realmUrl, path);
+    (async (_realmUrl: string, path: string) => {
+      let result = await readCard(options.workspaceDir, path);
       return {
         ok: result.ok,
         content: result.content,
-        document:
-          result.content && path.endsWith('.json')
-            ? (JSON.parse(result.content) as {
-                data: Record<string, unknown>;
-              })
-            : undefined,
+        document: result.document as
+          | { data: Record<string, unknown> }
+          | undefined,
         error: result.error,
       };
     });
@@ -471,6 +479,7 @@ export async function runParseInMemory(
       {
         targetRealmUrl: options.targetRealmUrl,
         client: options.client,
+        workspaceDir: options.workspaceDir,
       },
       gtsFiles,
       jsonFiles,

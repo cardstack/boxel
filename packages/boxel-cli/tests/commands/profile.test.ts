@@ -171,6 +171,77 @@ describe('ProfileManager', () => {
     expect(profile!.displayName).toBe('New Name');
   });
 
+  it('updateUrls replaces stored URLs and clears cached tokens', async () => {
+    await manager.addProfile(
+      '@testuser:my.server',
+      'pass',
+      undefined,
+      'https://matrix.old.server',
+      'https://realms.old.server/',
+    );
+    manager.setRealmServerToken('cached-server-token');
+    manager.setRealmToken('https://realms.old.server/r/', 'cached-realm-token');
+
+    const changed = manager.updateUrls('@testuser:my.server', {
+      matrixUrl: 'https://matrix.new.server',
+      realmServerUrl: 'https://realms.new.server/',
+    });
+
+    expect(changed).toBe(true);
+    const profile = manager.getProfile('@testuser:my.server')!;
+    expect(profile.matrixUrl).toBe('https://matrix.new.server');
+    expect(profile.realmServerUrl).toBe('https://realms.new.server/');
+    expect(profile.realmTokens).toBeUndefined();
+    expect(profile.realmServerToken).toBeUndefined();
+  });
+
+  it('updateUrls returns false and preserves tokens when nothing changes', async () => {
+    await manager.addProfile(
+      '@testuser:my.server',
+      'pass',
+      undefined,
+      'https://matrix.my.server',
+      'https://realms.my.server/',
+    );
+    manager.setRealmServerToken('cached-server-token');
+
+    const changed = manager.updateUrls('@testuser:my.server', {
+      matrixUrl: 'https://matrix.my.server',
+      realmServerUrl: 'https://realms.my.server/',
+    });
+
+    expect(changed).toBe(false);
+    expect(manager.getRealmServerToken()).toBe('cached-server-token');
+  });
+
+  it('updateUrls accepts a partial update', async () => {
+    await manager.addProfile(
+      '@testuser:my.server',
+      'pass',
+      undefined,
+      'https://matrix.old.server',
+      'https://realms.my.server/',
+    );
+
+    const changed = manager.updateUrls('@testuser:my.server', {
+      matrixUrl: 'https://matrix.new.server',
+    });
+
+    expect(changed).toBe(true);
+    const profile = manager.getProfile('@testuser:my.server')!;
+    expect(profile.matrixUrl).toBe('https://matrix.new.server');
+    // realmServerUrl is unchanged
+    expect(profile.realmServerUrl).toBe('https://realms.my.server/');
+  });
+
+  it('updateUrls returns false for nonexistent profile', () => {
+    expect(
+      manager.updateUrls('@nonexistent:my.server', {
+        matrixUrl: 'https://matrix.x',
+      }),
+    ).toBe(false);
+  });
+
   it('handles corrupted config file gracefully', async () => {
     // Write invalid JSON to the config file
     const profilesFile = path.join(tmpDir, 'profiles.json');

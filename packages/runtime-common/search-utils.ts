@@ -1,3 +1,4 @@
+import type { RealmResourceIdentifier } from './card-reference-resolver';
 import { ensureTrailingSlash } from './paths';
 import { assertQuery, InvalidQueryError, type Query } from './query';
 import {
@@ -19,7 +20,7 @@ export type SearchRequestErrorCode =
   | 'invalid-prerendered-html-format';
 
 type PrerenderedRenderType = {
-  module: string;
+  module: RealmResourceIdentifier;
   name: string;
 };
 
@@ -71,7 +72,7 @@ function normalizeRenderType(
   ) {
     let { module, name } = value as { module?: unknown; name?: unknown };
     if (typeof module === 'string' && typeof name === 'string') {
-      return { module, name };
+      return { module: module as RealmResourceIdentifier, name };
     }
   }
   return undefined;

@@ -4,6 +4,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   isCardInstance,
+  rri,
   SupportedMimeType,
   isFieldDef,
   isResolvedCodeRef,
@@ -116,7 +117,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
         relationships,
         meta: {
           adoptsFrom: {
-            module: `${catalogRealm}catalog-app/listing/listing`,
+            module: rri(`${catalogRealm}catalog-app/listing/listing`),
             name: listingSubClass[listingType],
           },
         },

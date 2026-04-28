@@ -271,7 +271,8 @@ const BOXEL_CLI_TOOLS: ToolManifest[] = [
 const REALM_API_TOOLS: ToolManifest[] = [
   {
     name: 'realm-read',
-    description: 'Fetch a card or file from a realm. Auth: per-realm JWT.',
+    description:
+      'Fetch a card or file from a realm over HTTP. For the factory target realm, use `read_file` instead — it reads from the local workspace and stays in sync with the realm. This tool is reserved for scratch / non-target realms. Auth: per-realm JWT.',
     category: 'realm-api',
     outputFormat: 'json',
     args: [
@@ -279,7 +280,7 @@ const REALM_API_TOOLS: ToolManifest[] = [
         name: 'realm-url',
         type: 'string',
         required: true,
-        description: 'Realm base URL',
+        description: 'Realm base URL (must not be the target realm)',
       },
       {
         name: 'path',
@@ -292,7 +293,7 @@ const REALM_API_TOOLS: ToolManifest[] = [
   {
     name: 'realm-write',
     description:
-      'Create or update a card or file in a realm. Auth: per-realm JWT.',
+      'Create or update a card or file in a realm over HTTP. For the factory target realm, use `write_file` instead — it writes to the local workspace and syncs to the realm between iterations. This tool is reserved for scratch / non-target realms. Auth: per-realm JWT.',
     category: 'realm-api',
     outputFormat: 'json',
     args: [
@@ -300,7 +301,7 @@ const REALM_API_TOOLS: ToolManifest[] = [
         name: 'realm-url',
         type: 'string',
         required: true,
-        description: 'Realm base URL',
+        description: 'Realm base URL (must not be the target realm)',
       },
       {
         name: 'path',
@@ -318,7 +319,8 @@ const REALM_API_TOOLS: ToolManifest[] = [
   },
   {
     name: 'realm-delete',
-    description: 'Delete a card or file from a realm. Auth: per-realm JWT.',
+    description:
+      'Delete a card or file from a realm over HTTP. For the factory target realm, delete through the workspace (remove the file locally, it will be propagated on the next sync). This tool is reserved for scratch / non-target realms. Auth: per-realm JWT.',
     category: 'realm-api',
     outputFormat: 'json',
     args: [
@@ -326,7 +328,7 @@ const REALM_API_TOOLS: ToolManifest[] = [
         name: 'realm-url',
         type: 'string',
         required: true,
-        description: 'Realm base URL',
+        description: 'Realm base URL (must not be the target realm)',
       },
       {
         name: 'path',

@@ -3,7 +3,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, baseCardRef } from '@cardstack/runtime-common';
+import { baseCardRef, baseRealm, baseRRI } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
@@ -15,7 +15,7 @@ import {
   setupLocalIndexing,
   type CardDocFiles,
   setupIntegrationTestRealm,
-  testModuleRealm,
+  testModuleRRI,
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../helpers';
@@ -56,7 +56,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}article`,
+            module: testModuleRRI('article'),
             name: 'Article',
           },
         },
@@ -72,7 +72,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}book`,
+            module: testModuleRRI('book'),
             name: 'Book',
           },
         },
@@ -94,7 +94,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}post`,
+            module: testModuleRRI('post'),
             name: 'Post',
           },
         },
@@ -116,7 +116,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}article`,
+            module: testModuleRRI('article'),
             name: 'Article',
           },
         },
@@ -135,7 +135,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}book`,
+            module: testModuleRRI('book'),
             name: 'Book',
           },
         },
@@ -154,7 +154,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}book`,
+            module: testModuleRRI('book'),
             name: 'Book',
           },
         },
@@ -173,7 +173,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}book`,
+            module: testModuleRRI('book'),
             name: 'Book',
           },
         },
@@ -187,13 +187,13 @@ module(`Integration | realm querying`, function (hooks) {
           cardDescription: 'A card that represents a blog post',
           specType: 'card',
           ref: {
-            module: `${testModuleRealm}post`,
+            module: testModuleRRI('post'),
             name: 'Post',
           },
         },
         meta: {
           adoptsFrom: {
-            module: `${baseRealm.url}spec`,
+            module: baseRRI('spec'),
             name: 'Spec',
           },
         },
@@ -207,13 +207,13 @@ module(`Integration | realm querying`, function (hooks) {
           cardDescription: 'A card that represents an online article ',
           specType: 'card',
           ref: {
-            module: `${testModuleRealm}article`,
+            module: testModuleRRI('article'),
             name: 'Article',
           },
         },
         meta: {
           adoptsFrom: {
-            module: `${baseRealm.url}spec`,
+            module: baseRRI('spec'),
             name: 'Spec',
           },
         },
@@ -229,7 +229,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}event`,
+            module: testModuleRRI('event'),
             name: 'Event',
           },
         },
@@ -245,7 +245,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}event`,
+            module: testModuleRRI('event'),
             name: 'Event',
           },
         },
@@ -260,7 +260,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}dog`,
+            module: testModuleRRI('dog'),
             name: 'Dog',
           },
         },
@@ -275,7 +275,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}dog`,
+            module: testModuleRRI('dog'),
             name: 'Dog',
           },
         },
@@ -290,7 +290,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}dog`,
+            module: testModuleRRI('dog'),
             name: 'Dog',
           },
         },
@@ -311,7 +311,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}friend`,
+            module: testModuleRRI('friend'),
             name: 'Friend',
           },
         },
@@ -332,7 +332,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}friend`,
+            module: testModuleRRI('friend'),
             name: 'Friend',
           },
         },
@@ -367,7 +367,7 @@ module(`Integration | realm querying`, function (hooks) {
         relationships: {},
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}booking`,
+            module: testModuleRRI('booking'),
             name: 'Booking',
           },
         },
@@ -417,7 +417,7 @@ module(`Integration | realm querying`, function (hooks) {
         relationships: {},
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}booking`,
+            module: testModuleRRI('booking'),
             name: 'Booking',
           },
         },
@@ -432,7 +432,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}person`,
+            module: testModuleRRI('person'),
             name: 'Person',
           },
         },
@@ -447,7 +447,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}person`,
+            module: testModuleRRI('person'),
             name: 'Person',
           },
         },
@@ -473,7 +473,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}friends`,
+            module: testModuleRRI('friends'),
             name: 'Friends',
           },
         },
@@ -487,7 +487,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}friends`,
+            module: testModuleRRI('friends'),
             name: 'Friends',
           },
         },
@@ -508,7 +508,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}friends`,
+            module: testModuleRRI('friends'),
             name: 'Friends',
           },
         },
@@ -523,7 +523,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}type-examples`,
+            module: testModuleRRI('type-examples'),
             name: 'TypeExamples',
           },
         },
@@ -538,7 +538,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}type-examples`,
+            module: testModuleRRI('type-examples'),
             name: 'TypeExamples',
           },
         },
@@ -552,7 +552,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}type-examples`,
+            module: testModuleRRI('type-examples'),
             name: 'TypeExamples',
           },
         },
@@ -566,7 +566,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testModuleRealm}type-examples`,
+            module: testModuleRRI('type-examples'),
             name: 'TypeExamples',
           },
         },
@@ -594,7 +594,7 @@ module(`Integration | realm querying`, function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${testModuleRealm}file-query-card`,
+                  module: testModuleRRI('file-query-card'),
                   name: 'FileQueryCard',
                 },
               },
@@ -609,12 +609,15 @@ module(`Integration | realm querying`, function (hooks) {
   test(`can search for cards by using the 'eq' filter`, async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}post`, name: 'Post' },
+        on: {
+          module: testModuleRRI('post'),
+          name: 'Post',
+        },
         eq: { cardTitle: 'Card 1', cardDescription: 'Sample post' },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${paths.url}card-1`, `${paths.url}cards/1`],
     );
   });
@@ -622,12 +625,15 @@ module(`Integration | realm querying`, function (hooks) {
   test(`can use 'eq' to find empty values`, async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+        on: {
+          module: testModuleRRI('booking'),
+          name: 'Booking',
+        },
         eq: { 'posts.author.lastName': null },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${testRealmURL}booking1`],
     );
   });
@@ -636,14 +642,14 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}type-examples`,
+          module: testModuleRRI('type-examples'),
           name: 'TypeExamples',
         },
         eq: { stringField: null },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${testRealmURL}noname`],
     );
   });
@@ -652,14 +658,14 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}type-examples`,
+          module: testModuleRRI('type-examples'),
           name: 'TypeExamples',
         },
         eq: { stringArrayField: null },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${testRealmURL}alicia`, `${testRealmURL}margaret`],
     );
   });
@@ -668,14 +674,14 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}friends`,
+          module: testModuleRRI('friends'),
           name: 'Friends',
         },
         eq: { friends: null },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${testRealmURL}empty`, `${testRealmURL}missing`],
     );
   });
@@ -684,14 +690,14 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}friend`,
+          module: testModuleRRI('friend'),
           name: 'Friend',
         },
         every: [{ eq: { firstName: 'Mango' } }, { eq: { friend: null } }],
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${testRealmURL}friend2`],
     );
   });
@@ -699,12 +705,15 @@ module(`Integration | realm querying`, function (hooks) {
   test(`can search for cards by using a computed field`, async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}post`, name: 'Post' },
+        on: {
+          module: testModuleRRI('post'),
+          name: 'Post',
+        },
         eq: { 'author.fullName': 'Carl Stack' },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${paths.url}cards/1`],
     );
   });
@@ -712,12 +721,15 @@ module(`Integration | realm querying`, function (hooks) {
   test('can search for cards by using a linksTo field', async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}friend`, name: 'Friend' },
+        on: {
+          module: testModuleRRI('friend'),
+          name: 'Friend',
+        },
         eq: { 'friend.firstName': 'Mango' },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${paths.url}friend1`],
     );
   });
@@ -726,25 +738,28 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${baseRealm.url}spec`,
+          module: baseRRI('spec'),
           name: 'Spec',
         },
         eq: {
           ref: {
-            module: `${testModuleRealm}post`,
+            module: testModuleRRI('post'),
             name: 'Post',
           },
         },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${paths.url}spec-1`],
     );
   });
 
   test('can search for file-meta entries by FileDef type', async function (assert) {
-    let fileDefRef = { module: `${baseRealm.url}card-api`, name: 'FileDef' };
+    let fileDefRef = {
+      module: baseRRI('card-api'),
+      name: 'FileDef',
+    };
     let result = (await queryEngine.searchCards({
       filter: {
         type: fileDefRef,
@@ -764,7 +779,10 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can search for file-meta entries by url', async function (assert) {
-    let fileDefRef = { module: `${baseRealm.url}card-api`, name: 'FileDef' };
+    let fileDefRef = {
+      module: baseRRI('card-api'),
+      name: 'FileDef',
+    };
     let targetUrl = `${testRealmURL}files/sample.txt`;
     let result = (await queryEngine.searchCards({
       filter: {
@@ -788,7 +806,7 @@ module(`Integration | realm querying`, function (hooks) {
 
   test('can search for file-meta entries by FileDef subclass type', async function (assert) {
     let markdownRef = {
-      module: `${baseRealm.url}markdown-file-def`,
+      module: baseRRI('markdown-file-def'),
       name: 'MarkdownDef',
     };
     let result = (await queryEngine.searchCards({
@@ -810,7 +828,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${testModuleRealm}post`,
+          module: testModuleRRI('post'),
           name: 'Post',
         },
         every: [
@@ -826,12 +844,15 @@ module(`Integration | realm querying`, function (hooks) {
   test('can handle a filter with double negatives', async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}post`, name: 'Post' },
+        on: {
+          module: testModuleRRI('post'),
+          name: 'Post',
+        },
         not: { not: { not: { eq: { 'author.firstName': 'Carl' } } } },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${paths.url}card-1`],
     );
   });
@@ -839,11 +860,14 @@ module(`Integration | realm querying`, function (hooks) {
   test('can filter by card type', async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        type: { module: `${testModuleRealm}article`, name: 'Article' },
+        type: {
+          module: testModuleRRI('article'),
+          name: 'Article',
+        },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${paths.url}card-1`, `${paths.url}cards/2`],
       'found cards of type Article',
     );
@@ -851,12 +875,15 @@ module(`Integration | realm querying`, function (hooks) {
     matching = (
       await queryEngine.searchCards({
         filter: {
-          type: { module: `${testModuleRealm}post`, name: 'Post' },
+          type: {
+            module: testModuleRRI('post'),
+            name: 'Post',
+          },
         },
       })
     ).data;
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${paths.url}card-1`, `${paths.url}cards/1`, `${paths.url}cards/2`],
       'found cards of type Post',
     );
@@ -865,7 +892,10 @@ module(`Integration | realm querying`, function (hooks) {
   test(`can filter on a card's own fields using range`, async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}post`, name: 'Post' },
+        on: {
+          module: testModuleRRI('post'),
+          name: 'Post',
+        },
         range: {
           views: { lte: 10, gt: 5 },
           'author.posts': { gte: 1 },
@@ -873,7 +903,7 @@ module(`Integration | realm querying`, function (hooks) {
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${paths.url}cards/1`],
     );
   });
@@ -882,7 +912,10 @@ module(`Integration | realm querying`, function (hooks) {
     {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
-          on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+          on: {
+            module: testModuleRRI('booking'),
+            name: 'Booking',
+          },
           range: {
             'posts.views': { gt: 10, lte: 16 },
             'posts.author.posts': { gte: 5, lt: 10 },
@@ -890,21 +923,24 @@ module(`Integration | realm querying`, function (hooks) {
         },
       });
       assert.deepEqual(
-        matching.map((m) => m.id),
+        matching.map((m) => m.id as string),
         [`${paths.url}booking2`],
       );
     }
     {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
-          on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+          on: {
+            module: testModuleRRI('booking'),
+            name: 'Booking',
+          },
           range: {
             'posts.views': { lte: 0 },
           },
         },
       });
       assert.deepEqual(
-        matching.map((m) => m.id),
+        matching.map((m) => m.id as string),
         [`${paths.url}booking2`],
       );
     }
@@ -913,14 +949,17 @@ module(`Integration | realm querying`, function (hooks) {
   test('can use an eq filter with a date field', async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}event`, name: 'Event' },
+        on: {
+          module: testModuleRRI('event'),
+          name: 'Event',
+        },
         eq: {
           date: '2024-10-30',
         },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${paths.url}event-1`],
     );
   });
@@ -928,12 +967,15 @@ module(`Integration | realm querying`, function (hooks) {
   test(`can filter on a nested field using 'eq'`, async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}post`, name: 'Post' },
+        on: {
+          module: testModuleRRI('post'),
+          name: 'Post',
+        },
         eq: { 'author.firstName': 'Carl' },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${paths.url}cards/1`, `${paths.url}cards/2`],
     );
   });
@@ -942,12 +984,15 @@ module(`Integration | realm querying`, function (hooks) {
     {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
-          on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+          on: {
+            module: testModuleRRI('booking'),
+            name: 'Booking',
+          },
           eq: { 'hosts.firstName': 'Arthur' },
         },
       });
       assert.deepEqual(
-        matching.map((m) => m.id),
+        matching.map((m) => m.id as string),
         [`${paths.url}booking1`, `${paths.url}booking2`],
         'eq on hosts.firstName',
       );
@@ -955,7 +1000,10 @@ module(`Integration | realm querying`, function (hooks) {
     {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
-          on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+          on: {
+            module: testModuleRRI('booking'),
+            name: 'Booking',
+          },
           eq: { 'hosts.firstName': null },
         },
       });
@@ -964,7 +1012,10 @@ module(`Integration | realm querying`, function (hooks) {
     {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
-          on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+          on: {
+            module: testModuleRRI('booking'),
+            name: 'Booking',
+          },
           eq: {
             'posts.author.firstName': 'A',
             'posts.author.lastName': 'B',
@@ -972,7 +1023,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
       });
       assert.deepEqual(
-        matching.map((m) => m.id),
+        matching.map((m) => m.id as string),
         [`${paths.url}booking2`],
         'eq on posts.author.firstName and posts.author.lastName',
       );
@@ -980,7 +1031,10 @@ module(`Integration | realm querying`, function (hooks) {
     {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
-          on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+          on: {
+            module: testModuleRRI('booking'),
+            name: 'Booking',
+          },
           eq: {
             'hosts.firstName': 'Arthur',
             'posts.author.lastName': null,
@@ -988,7 +1042,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
       });
       assert.deepEqual(
-        matching.map((m) => m.id),
+        matching.map((m) => m.id as string),
         [`${paths.url}booking1`],
         'eq on hosts.firstName, posts.author.firstName, and null posts.author.lastName',
       );
@@ -1000,14 +1054,14 @@ module(`Integration | realm querying`, function (hooks) {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: {
-            module: `${testModuleRealm}booking`,
+            module: testModuleRRI('booking'),
             name: 'Booking',
           },
           eq: { sponsors: 'Nintendo' },
         },
       });
       assert.deepEqual(
-        matching.map((m) => m.id),
+        matching.map((m) => m.id as string),
         [`${paths.url}booking1`],
         'eq on sponsors',
       );
@@ -1016,7 +1070,7 @@ module(`Integration | realm querying`, function (hooks) {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: {
-            module: `${testModuleRealm}booking`,
+            module: testModuleRRI('booking'),
             name: 'Booking',
           },
           eq: { sponsors: 'Playstation' },
@@ -1032,7 +1086,7 @@ module(`Integration | realm querying`, function (hooks) {
       let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: {
-            module: `${testModuleRealm}booking`,
+            module: testModuleRRI('booking'),
             name: 'Booking',
           },
           eq: {
@@ -1042,7 +1096,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
       });
       assert.deepEqual(
-        matching.map((m) => m.id),
+        matching.map((m) => m.id as string),
         [`${paths.url}booking2`],
         'eq on hosts.firstName and null sponsors',
       );
@@ -1052,12 +1106,15 @@ module(`Integration | realm querying`, function (hooks) {
   test('can negate a filter', async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}article`, name: 'Article' },
+        on: {
+          module: testModuleRRI('article'),
+          name: 'Article',
+        },
         not: { eq: { 'author.firstName': 'Carl' } },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${testRealmURL}card-1`],
     );
   });
@@ -1068,20 +1125,23 @@ module(`Integration | realm querying`, function (hooks) {
         any: [
           {
             on: {
-              module: `${testModuleRealm}article`,
+              module: testModuleRRI('article'),
               name: 'Article',
             },
             eq: { 'author.firstName': 'Cardy' },
           },
           {
-            on: { module: `${testModuleRealm}book`, name: 'Book' },
+            on: {
+              module: testModuleRRI('book'),
+              name: 'Book',
+            },
             eq: { 'author.firstName': 'Cardy' },
           },
         ],
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${paths.url}card-1`, `${paths.url}card-2`],
     );
   });
@@ -1092,15 +1152,21 @@ module(`Integration | realm querying`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testModuleRealm}article`, name: 'Article' },
+          on: {
+            module: testModuleRRI('article'),
+            name: 'Article',
+          },
         },
       ],
       filter: {
-        type: { module: `${testModuleRealm}article`, name: 'Article' },
+        type: {
+          module: testModuleRRI('article'),
+          name: 'Article',
+        },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [`${paths.url}cards/2`, `${paths.url}card-1`],
     );
   });
@@ -1110,16 +1176,22 @@ module(`Integration | realm querying`, function (hooks) {
       sort: [
         {
           by: 'author.firstName',
-          on: { module: `${testModuleRealm}article`, name: 'Article' },
+          on: {
+            module: testModuleRRI('article'),
+            name: 'Article',
+          },
           direction: 'desc',
         },
       ],
       filter: {
-        type: { module: `${testModuleRealm}post`, name: 'Post' },
+        type: {
+          module: testModuleRRI('post'),
+          name: 'Post',
+        },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [
         `${paths.url}cards/1`, // type is post
         `${paths.url}cards/2`, // Carl
@@ -1141,7 +1213,7 @@ module(`Integration | realm querying`, function (hooks) {
     // note that the card id is always included as a secondary sort
     // field in the case of ties for the specified sort field
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [
         `${paths.url}card-1`, // article
         `${paths.url}cards/2`, // article
@@ -1180,21 +1252,30 @@ module(`Integration | realm querying`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testModuleRealm}book`, name: 'Book' },
+          on: {
+            module: testModuleRRI('book'),
+            name: 'Book',
+          },
           direction: 'asc',
         },
         {
           by: 'author.firstName',
-          on: { module: `${testModuleRealm}book`, name: 'Book' },
+          on: {
+            module: testModuleRRI('book'),
+            name: 'Book',
+          },
           direction: 'desc',
         },
       ],
       filter: {
-        type: { module: `${testModuleRealm}book`, name: 'Book' },
+        type: {
+          module: testModuleRRI('book'),
+          name: 'Book',
+        },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [
         `${paths.url}books/2`, // Van Gogh Ab
         `${paths.url}books/1`, // Mango Ab
@@ -1209,19 +1290,28 @@ module(`Integration | realm querying`, function (hooks) {
       sort: [
         {
           by: 'editions',
-          on: { module: `${testModuleRealm}book`, name: 'Book' },
+          on: {
+            module: testModuleRRI('book'),
+            name: 'Book',
+          },
         },
         {
           by: 'author.lastName',
-          on: { module: `${testModuleRealm}book`, name: 'Book' },
+          on: {
+            module: testModuleRRI('book'),
+            name: 'Book',
+          },
         },
       ],
       filter: {
-        type: { module: `${testModuleRealm}book`, name: 'Book' },
+        type: {
+          module: testModuleRRI('book'),
+          name: 'Book',
+        },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [
         `${paths.url}books/2`, // 3
         `${paths.url}books/1`, // 10 Abdel-Rahman
@@ -1236,11 +1326,17 @@ module(`Integration | realm querying`, function (hooks) {
       sort: [
         {
           by: 'pubDate',
-          on: { module: `${testModuleRealm}book`, name: 'Book' },
+          on: {
+            module: testModuleRRI('book'),
+            name: 'Book',
+          },
         },
       ],
       filter: {
-        type: { module: `${testModuleRealm}book`, name: 'Book' },
+        type: {
+          module: testModuleRRI('book'),
+          name: 'Book',
+        },
       },
     });
     // note that sorting by nulls is problematic in that sqlite
@@ -1249,7 +1345,7 @@ module(`Integration | realm querying`, function (hooks) {
     // assertions around the positions of nulls as it cannot be run
     // consistently between postgres, sqlite, and our in-memory index
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [
         `${paths.url}books/1`, // 2022-07-01
         `${paths.url}books/3`, // 2022-08-01
@@ -1264,20 +1360,29 @@ module(`Integration | realm querying`, function (hooks) {
       sort: [
         {
           by: 'editions',
-          on: { module: `${testModuleRealm}book`, name: 'Book' },
+          on: {
+            module: testModuleRRI('book'),
+            name: 'Book',
+          },
           direction: 'desc',
         },
         {
           by: 'author.lastName',
-          on: { module: `${testModuleRealm}book`, name: 'Book' },
+          on: {
+            module: testModuleRRI('book'),
+            name: 'Book',
+          },
         },
       ],
       filter: {
-        type: { module: `${testModuleRealm}book`, name: 'Book' },
+        type: {
+          module: testModuleRRI('book'),
+          name: 'Book',
+        },
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [
         `${paths.url}books/3`, // 200
         `${paths.url}books/1`, // 10 Abdel-Rahman
@@ -1292,11 +1397,17 @@ module(`Integration | realm querying`, function (hooks) {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testModuleRealm}book`, name: 'Book' },
+          on: {
+            module: testModuleRRI('book'),
+            name: 'Book',
+          },
         },
         {
           by: 'author.firstName',
-          on: { module: `${testModuleRealm}book`, name: 'Book' },
+          on: {
+            module: testModuleRRI('book'),
+            name: 'Book',
+          },
           direction: 'desc',
         },
       ],
@@ -1304,13 +1415,13 @@ module(`Integration | realm querying`, function (hooks) {
         any: [
           {
             type: {
-              module: `${testModuleRealm}book`,
+              module: testModuleRRI('book'),
               name: 'Book',
             },
           },
           {
             type: {
-              module: `${testModuleRealm}article`,
+              module: testModuleRRI('article'),
               name: 'Article',
             },
           },
@@ -1318,7 +1429,7 @@ module(`Integration | realm querying`, function (hooks) {
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [
         `${paths.url}books/2`, // Ab Van Gogh
         `${paths.url}books/1`, // Ab Mango
@@ -1335,25 +1446,34 @@ module(`Integration | realm querying`, function (hooks) {
       sort: [
         {
           by: 'author.firstName',
-          on: { module: `${testModuleRealm}book`, name: 'Book' },
+          on: {
+            module: testModuleRRI('book'),
+            name: 'Book',
+          },
           direction: 'desc',
         },
       ],
       filter: {
         every: [
           {
-            on: { module: `${testModuleRealm}book`, name: 'Book' },
+            on: {
+              module: testModuleRRI('book'),
+              name: 'Book',
+            },
             not: { eq: { 'author.lastName': 'Aguilar' } },
           },
           {
-            on: { module: `${testModuleRealm}book`, name: 'Book' },
+            on: {
+              module: testModuleRRI('book'),
+              name: 'Book',
+            },
             eq: { editions: 10 },
           },
         ],
       },
     });
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [
         `${paths.url}books/1`, // Mango
         `${paths.url}card-2`, // Cardy
@@ -1369,7 +1489,7 @@ module(`Integration | realm querying`, function (hooks) {
     });
     assert.strictEqual(matching.length, 6);
     assert.deepEqual(
-      matching.map((m) => m.id),
+      matching.map((m) => m.id as string),
       [
         `${paths.url}card-1`,
         `${paths.url}cards/1`,
@@ -1384,25 +1504,31 @@ module(`Integration | realm querying`, function (hooks) {
   test(`can search on specific card by using 'contains' filter`, async function (assert) {
     let { data: personMatchingByTitle } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}person`, name: 'Person' },
+        on: {
+          module: testModuleRRI('person'),
+          name: 'Person',
+        },
         contains: { cardTitle: 'ca' },
       },
     });
     assert.strictEqual(personMatchingByTitle.length, 2);
     assert.deepEqual(
-      personMatchingByTitle.map((m) => m.id),
+      personMatchingByTitle.map((m) => m.id as string),
       [`${paths.url}person-card1`, `${paths.url}person-card2`],
     );
 
     let { data: dogMatchingByFirstName } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}dog`, name: 'Dog' },
+        on: {
+          module: testModuleRRI('dog'),
+          name: 'Dog',
+        },
         contains: { firstName: 'go' },
       },
     });
     assert.strictEqual(dogMatchingByFirstName.length, 3);
     assert.deepEqual(
-      dogMatchingByFirstName.map((m) => m.id),
+      dogMatchingByFirstName.map((m) => m.id as string),
       [`${paths.url}mango`, `${paths.url}ringo`, `${paths.url}vangogh`],
     );
   });
@@ -1410,7 +1536,10 @@ module(`Integration | realm querying`, function (hooks) {
   test(`can use 'contains' filter to find 'null' values`, async function (assert) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
-        on: { module: `${testModuleRealm}dog`, name: 'Dog' },
+        on: {
+          module: testModuleRRI('dog'),
+          name: 'Dog',
+        },
         contains: { cardTitle: null },
       },
     });

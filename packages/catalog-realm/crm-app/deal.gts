@@ -19,8 +19,11 @@ import AddressField from 'https://cardstack.com/base/address';
 import WebsiteField from 'https://cardstack.com/base/website';
 import PercentageField from 'https://cardstack.com/base/percentage';
 
-import { Query } from '@cardstack/runtime-common';
+import { codeRef, Query } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 
 import { action } from '@ember/object';
 import { restartableTask } from 'ember-concurrency';
@@ -66,11 +69,7 @@ interface DealSizeSummary {
   positive: boolean;
 }
 
-const taskSource = {
-  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-  module: new URL('./task', import.meta.url).href,
-  name: 'CRMTask',
-};
+const taskSource = codeRef(here, './task', 'CRMTask');
 
 class EditTemplate extends Component<typeof Deal> {
   <template>
@@ -193,11 +192,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
   get dealQuery(): Query {
     return {
       filter: {
-        type: {
-          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./crm/deal', import.meta.url).href,
-          name: 'Deal',
-        },
+        type: codeRef(here, './crm/deal', 'Deal'),
       },
     };
   }

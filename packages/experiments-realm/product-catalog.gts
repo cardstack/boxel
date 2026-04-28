@@ -5,6 +5,7 @@ import {
   field,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
+import { codeRef } from '@cardstack/runtime-common';
 import { IkeaProduct } from './ikea-product';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -12,25 +13,20 @@ import { animatable } from '@cardstack/view-transitions';
 import { Plane } from './plane';
 import { Tray } from './transition-tray';
 
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
+
+const ikeaProductRef = codeRef(here, './ikea-product', 'IkeaProduct');
+
 export class ProductCatalog extends CardDef {
   static displayName = 'Product Catalog';
 
   @field products = linksToMany(IkeaProduct, {
     query: {
-      filter: {
-        type: {
-          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./ikea-product', import.meta.url).href,
-          name: 'IkeaProduct',
-        },
-      },
+      filter: { type: ikeaProductRef },
       sort: [
         {
-          on: {
-            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL('./ikea-product', import.meta.url).href,
-            name: 'IkeaProduct',
-          },
+          on: ikeaProductRef,
           by: 'productName',
           direction: 'asc',
         },

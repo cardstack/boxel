@@ -18,7 +18,11 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import type { QueryResultsMeta } from '@cardstack/runtime-common';
-import type { Query, Format } from '@cardstack/runtime-common';
+import type {
+  Query,
+  Format,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import type { PrerenderedCardCollectionDocument } from '@cardstack/runtime-common/document-types';
 import { isPrerenderedCardCollectionDocument } from '@cardstack/runtime-common/document-types';
 
@@ -322,7 +326,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
             iconHtml: r.attributes?.iconHtml,
             // adoptsFrom in prerendered results is always a ResolvedCodeRef
             usedRenderType: r.meta?.adoptsFrom as
-              | { module: string; name: string }
+              | { module: RealmResourceIdentifier; name: string }
               | undefined,
             ...(isFileMeta ? { isFileMeta } : {}),
           },

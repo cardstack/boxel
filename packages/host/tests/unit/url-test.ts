@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 
 import {
   type LooseCardResource,
+  type RealmResourceIdentifier,
   relativeURL,
   visitInstanceURLs,
 } from '@cardstack/runtime-common';
@@ -95,7 +96,7 @@ module('Unit | url', function () {
       let json: LooseCardResource = {
         meta: {
           adoptsFrom: {
-            module: `https://test-realm/foo-bar-def`,
+            module: `https://test-realm/foo-bar-def` as RealmResourceIdentifier,
             name: 'TestCard',
           },
         },
@@ -121,7 +122,7 @@ module('Unit | url', function () {
       assert.deepEqual(json, {
         meta: {
           adoptsFrom: {
-            module: `https://test-realm/foo-bar-def`,
+            module: `https://test-realm/foo-bar-def` as RealmResourceIdentifier,
             name: 'TestCard',
           },
         },

@@ -1,5 +1,5 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
-import { settled } from '@ember/test-helpers';
+import { click, settled } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -31,6 +31,8 @@ import {
   containsMany,
   linksTo,
   linksToMany,
+  CardInfoField,
+  Theme,
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
@@ -661,5 +663,27 @@ module('Integration | computeds', function (hooks) {
     assert
       .dom('[data-test-categories] [data-test-category-name]')
       .exists({ count: 3 });
+  });
+
+  test('CardDef.cardTheme resolves from cardInfo.theme', async function (assert) {
+    class Article extends CardDef {
+      static displayName = 'Article';
+    }
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: { 'test-cards.gts': { Article } },
+    });
+    let theme = new Theme({
+      cardInfo: new CardInfoField({ name: 'Ocean Blue' }),
+    });
+    let instance = new Article({
+      cardInfo: new CardInfoField({ theme }),
+    });
+
+    await renderCard(loader, instance, 'edit');
+    await click('[data-test-toggle-preview]');
+    assert
+      .dom('[data-test-edit-preview="cardTheme"]')
+      .containsText('Ocean Blue');
   });
 });

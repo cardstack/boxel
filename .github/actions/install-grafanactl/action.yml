@@ -1,0 +1,34 @@
+name: Install grafanactl
+description: |
+  Download and install the pinned grafanactl release on the Ubuntu runner,
+  verifying the SHA-256 checksum from the release's grafanactl_checksums.txt
+  before placing the binary on PATH. Used by the observability-apply-staging,
+  observability-apply-production, and observability-diff workflows.
+
+inputs:
+  version:
+    description: grafanactl release version (without the leading 'v', e.g. "0.1.10")
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GRAFANACTL_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        TARBALL="grafanactl_Linux_x86_64.tar.gz"
+        CHECKSUMS="grafanactl_checksums.txt"
+        RELEASE_URL="https://github.com/grafana/grafanactl/releases/download/v${GRAFANACTL_VERSION}"
+        TMPDIR="$(mktemp -d)"
+        trap 'rm -rf "$TMPDIR"' EXIT
+
+        curl -fsSL "${RELEASE_URL}/${TARBALL}"   -o "${TMPDIR}/${TARBALL}"
+        curl -fsSL "${RELEASE_URL}/${CHECKSUMS}" -o "${TMPDIR}/${CHECKSUMS}"
+
+        ( cd "$TMPDIR" && grep " ${TARBALL}\$" "${CHECKSUMS}" | sha256sum -c - )
+
+        tar -xzf "${TMPDIR}/${TARBALL}" -C "$TMPDIR" grafanactl
+        sudo install -m 0755 "${TMPDIR}/grafanactl" /usr/local/bin/grafanactl
+        grafanactl --version

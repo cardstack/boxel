@@ -16,6 +16,7 @@ import type {
 } from './lint-result-cards';
 import { logger } from './logger';
 import { validateRealmRelativePath } from './realm-relative-path';
+import { readCard } from './workspace-fs';
 
 let log = logger('lint-execution');
 
@@ -40,6 +41,11 @@ export interface LintErrorViolation {
 export interface LintRealmFilesOptions {
   targetRealmUrl: string;
   client: BoxelCLIClient;
+  /**
+   * Local workspace directory to read source files from. The realm is
+   * used for linting (the `_lint` endpoint), not for fetching content.
+   */
+  workspaceDir: string;
   /** Injected for testing — defaults to client.listFiles. */
   fetchFilenames?: (
     realmUrl: string,
@@ -50,7 +56,7 @@ export interface LintRealmFilesOptions {
     source: string,
     filename: string,
   ) => Promise<LintResult>;
-  /** Injected for testing — defaults to client.read (content only). */
+  /** Injected for testing — defaults to reading from the workspace. */
   readFileFn?: (
     realmUrl: string,
     path: string,
@@ -71,6 +77,11 @@ export interface LintRealmFilesOutput {
 export interface RunLintInMemoryOptions {
   targetRealmUrl: string;
   client: BoxelCLIClient;
+  /**
+   * Local workspace directory to read source files from. The realm is used
+   * only for the `_lint` POST; content comes from disk.
+   */
+  workspaceDir: string;
   /**
    * When set, lint only this realm-relative file instead of discovering
    * all lintable files. Useful for mid-turn self-validation right after
@@ -150,8 +161,8 @@ export async function lintRealmFiles(
       options.client.lint(realmUrl, source, filename));
   let readFileFn =
     options.readFileFn ??
-    (async (realmUrl: string, path: string) => {
-      let result = await options.client.read(realmUrl, path);
+    (async (_realmUrl: string, path: string) => {
+      let result = await readCard(options.workspaceDir, path);
       return {
         ok: result.ok,
         content: result.content,
@@ -281,6 +292,7 @@ export async function runLintInMemory(
       {
         targetRealmUrl: options.targetRealmUrl,
         client: options.client,
+        workspaceDir: options.workspaceDir,
       },
       lintableFiles,
     );

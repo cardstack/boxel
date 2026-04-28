@@ -4,7 +4,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, baseRRI } from '@cardstack/runtime-common';
 
 import {
   suggestCardChooserTitle,
@@ -13,6 +13,7 @@ import {
 
 import {
   testRealmURL,
+  testRRI,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupRealmCacheTeardown,
@@ -85,7 +86,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   test('filter on', async function (assert) {
     let filter = {
-      on: { module: `${testRealmURL}booking`, name: 'Booking' },
+      on: {
+        module: testRRI('booking'),
+        name: 'Booking',
+      },
       eq: { booker: 'Arthur' },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
@@ -99,7 +103,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   test('filter by type', async function (assert) {
     let filter = {
-      type: { module: `${testRealmURL}booking`, name: 'Booking' },
+      type: {
+        module: testRRI('booking'),
+        name: 'Booking',
+      },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
     assert.deepEqual(suggestions, [
@@ -114,11 +121,17 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
     let filter = {
       every: [
         {
-          on: { module: `${testRealmURL}article`, name: 'Article' },
+          on: {
+            module: testRRI('article'),
+            name: 'Article',
+          },
           eq: { author: 'Kafka' },
         },
         {
-          on: { module: `${testRealmURL}book`, name: 'Book' },
+          on: {
+            module: testRRI('book'),
+            name: 'Book',
+          },
           eq: { author: 'Kafka' },
         },
       ],
@@ -140,11 +153,17 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
     let filter = {
       any: [
         {
-          on: { module: `${testRealmURL}article`, name: 'Article' },
+          on: {
+            module: testRRI('article'),
+            name: 'Article',
+          },
           eq: { author: 'Kafka' },
         },
         {
-          on: { module: `${testRealmURL}book`, name: 'Book' },
+          on: {
+            module: testRRI('book'),
+            name: 'Book',
+          },
           eq: { author: 'Kafka' },
         },
       ],
@@ -156,13 +175,24 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   test('filter with every with type and on', async function (assert) {
     let filter = {
       every: [
-        { type: { module: `${testRealmURL}booking`, name: 'Booking' } },
         {
-          on: { module: `${testRealmURL}article`, name: 'Article' },
+          type: {
+            module: testRRI('booking'),
+            name: 'Booking',
+          },
+        },
+        {
+          on: {
+            module: testRRI('article'),
+            name: 'Article',
+          },
           eq: { author: 'Kafka' },
         },
         {
-          on: { module: `${testRealmURL}book`, name: 'Book' },
+          on: {
+            module: testRRI('book'),
+            name: 'Book',
+          },
           eq: { author: 'Kafka' },
         },
       ],
@@ -186,7 +216,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   test('filter by not', async function (assert) {
     let filter = {
-      on: { module: `${testRealmURL}article`, name: 'Article' },
+      on: {
+        module: testRRI('article'),
+        name: 'Article',
+      },
       not: { eq: { author: 'Carl' } },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
@@ -200,7 +233,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   test('filter by range', async function (assert) {
     let filter = {
-      on: { module: `${testRealmURL}post`, name: 'Post' },
+      on: {
+        module: testRRI('post'),
+        name: 'Post',
+      },
       range: { views: { lte: 10, gt: 5 }, 'author.posts': { gte: 1 } },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
@@ -214,7 +250,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   test('filter by card instance', async function (assert) {
     let filter = {
-      type: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
+      type: {
+        module: baseRRI('card-api'),
+        name: 'CardDef',
+      },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
     assert.deepEqual(suggestions, [
@@ -237,7 +276,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
         { eq: { cardTitle: 'Card 1' } },
         { not: { eq: { 'author.firstName': 'Cardy' } } },
       ],
-      type: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
+      type: {
+        module: baseRRI('card-api'),
+        name: 'CardDef',
+      },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
     assert.deepEqual(suggestions, [
@@ -260,17 +302,20 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
     let filter = {
       every: [
         {
-          type: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
+          type: {
+            module: baseRRI('card-api'),
+            name: 'CardDef',
+          },
         },
         {
           on: {
-            module: `${testRealmURL}post`,
+            module: testRRI('post'),
             name: 'Post',
           },
           every: [
             {
               type: {
-                module: `${testRealmURL}article`,
+                module: testRRI('article'),
                 name: 'Article',
               },
             },
@@ -297,7 +342,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   test('filter with on specifying multiSelect option', async function (assert) {
     let filter = {
-      on: { module: `${testRealmURL}booking`, name: 'Booking' },
+      on: {
+        module: testRRI('booking'),
+        name: 'Booking',
+      },
       eq: { booker: 'Arthur' },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, {
@@ -314,7 +362,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   test('filter with on but checking for "an"', async function (assert) {
     let filter = {
-      on: { module: `${testRealmURL}article`, name: 'Article' },
+      on: {
+        module: testRRI('article'),
+        name: 'Article',
+      },
       eq: { author: 'Kafka' },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
@@ -329,7 +380,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   test(`displays the right title even CodeRef is 'fieldOf' codeRef`, async function (assert) {
     let filter = {
       type: {
-        card: { module: `${testRealmURL}post`, name: 'Post' },
+        card: {
+          module: testRRI('post'),
+          name: 'Post',
+        },
         type: 'fieldOf',
         field: 'article',
       },
@@ -347,7 +401,10 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   test(`displays the right title even CodeRef is 'ancestorOf' codeRef`, async function (assert) {
     let filter = {
       type: {
-        card: { module: `${testRealmURL}blog-post`, name: 'BlogPost' },
+        card: {
+          module: testRRI('blog-post'),
+          name: 'BlogPost',
+        },
         type: 'ancestorOf',
       },
       eq: { 'post.title': 'Kafka' },

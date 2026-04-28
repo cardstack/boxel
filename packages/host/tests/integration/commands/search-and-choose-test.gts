@@ -14,6 +14,7 @@ import {
   setupRealmServerEndpoints,
   testRealmInfo,
   testRealmURL,
+  testRRI,
   withCachedRealmSetup,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
@@ -149,11 +150,11 @@ export class ContextCard extends CardDef {
   test('LLM index selection uses sourceContextCodeRef as context', async function (assert) {
     let result = await searchAndChooseCommand.execute({
       candidateTypeCodeRef: {
-        module: `${testRealmURL}choice.gts`,
+        module: testRRI('choice.gts'),
         name: 'Choice',
       },
       sourceContextCodeRef: {
-        module: `${testRealmURL}context-card.gts`,
+        module: testRRI('context-card.gts'),
         name: 'ContextCard',
       },
       max: 1,

@@ -1,0 +1,19 @@
+{
+  "apiVersion": 1,
+  "datasources": [
+    {
+      "name": "boxel-db",
+      "uid": "cef5v5sl9k7i8f",
+      "type": "grafana-postgresql-datasource",
+      "access": "proxy",
+      "url": "boxel-staging-20240503192029063000000002.cbuq0sp3cf76.us-east-1.rds.amazonaws.com",
+      "isDefault": true,
+      "editable": false,
+      "jsonData": {
+        "database": "boxel",
+        "postgresVersion": "1300",
+        "user": "grafana"
+      }
+    }
+  ]
+}

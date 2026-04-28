@@ -1,4 +1,4 @@
-import type { ProfileManager } from './profile-manager';
+import type { RealmAuthenticator } from './realm-authenticator';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import ignoreModule from 'ignore';
@@ -21,6 +21,22 @@ async function pathExists(p: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Decode an `atomic:results` `data.id` (or any href the realm echoes
+ * back with URL-encoded path segments). Used so paths that contain
+ * spaces or other characters that get percent-encoded on the wire
+ * round-trip to the same relative path the local listing uses.
+ * Falls back to the raw value on a malformed escape so a single bad
+ * entry can't kill the whole sync.
+ */
+function decodeAtomicResultId(id: string): string {
+  try {
+    return decodeURIComponent(id);
+  } catch {
+    return id;
   }
 }
 
@@ -49,7 +65,7 @@ export abstract class RealmSyncBase {
 
   constructor(
     protected options: SyncOptions,
-    protected profileManager: ProfileManager,
+    protected authenticator: RealmAuthenticator,
   ) {
     this.normalizedRealmUrl = this.normalizeRealmUrl(options.realmUrl);
   }
@@ -98,7 +114,7 @@ export abstract class RealmSyncBase {
     try {
       const url = this.buildDirectoryUrl(dir);
 
-      const response = await this.profileManager.authedRealmFetch(url, {
+      const response = await this.authenticator.authedRealmFetch(url, {
         headers: {
           Accept: 'application/vnd.api+json',
         },
@@ -178,7 +194,7 @@ export abstract class RealmSyncBase {
     try {
       const url = `${this.normalizedRealmUrl}_mtimes`;
 
-      const response = await this.profileManager.authedRealmFetch(url, {
+      const response = await this.authenticator.authedRealmFetch(url, {
         headers: {
           Accept: SupportedMimeType.Mtimes,
         },
@@ -217,7 +233,22 @@ export abstract class RealmSyncBase {
           }
         }
         for (const [fileUrl, mtime] of remoteMtimeEntries) {
-          const relativePath = fileUrl.replace(this.normalizedRealmUrl, '');
+          const rawRelativePath = fileUrl.replace(this.normalizedRealmUrl, '');
+          // Realm `_mtimes` keys are URL-encoded (e.g. spaces → %20).
+          // The local file listing uses decoded paths
+          // (`Knowledge Articles/foo.json`), so leaving the remote
+          // form encoded makes the diff treat the encoded and decoded
+          // variants as two separate files — sync then "downloads"
+          // the remote copy alongside the existing local one and
+          // duplicates the workspace.
+          let relativePath: string;
+          try {
+            relativePath = decodeURIComponent(rawRelativePath);
+          } catch {
+            // Malformed percent escape — fall back to the raw value
+            // so a single bad entry doesn't kill the whole sync.
+            relativePath = rawRelativePath;
+          }
           if (!this.shouldIgnoreRemoteFile(relativePath)) {
             mtimes.set(relativePath, mtime);
           }
@@ -355,7 +386,7 @@ export abstract class RealmSyncBase {
     const content = await fs.readFile(localPath, 'utf8');
     const url = this.buildFileUrl(relativePath);
 
-    const response = await this.profileManager.authedRealmFetch(url, {
+    const response = await this.authenticator.authedRealmFetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'text/plain;charset=UTF-8',
@@ -423,7 +454,7 @@ export abstract class RealmSyncBase {
     );
 
     const url = `${this.normalizedRealmUrl}_atomic`;
-    const response = await this.profileManager.authedRealmFetch(url, {
+    const response = await this.authenticator.authedRealmFetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/vnd.api+json',
@@ -439,9 +470,15 @@ export abstract class RealmSyncBase {
       const hrefToRelative = new Map(
         entries.map(([rel]) => [this.buildFileUrl(rel), rel]),
       );
+      // The realm normalizes hrefs: a path with a space goes out as
+      // `Knowledge Articles/...` but comes back URL-encoded as
+      // `Knowledge%20Articles/...`. Decode the response id before the
+      // map lookup so we resolve back to the original relative path
+      // instead of falling through to the raw encoded URL.
       const succeeded = (body['atomic:results'] ?? [])
         .map((r) => r.data?.id)
         .filter((id): id is string => typeof id === 'string')
+        .map((id) => decodeAtomicResultId(id))
         .map((id) => hrefToRelative.get(id) ?? id);
       for (const rel of succeeded) {
         console.log(`  Uploaded: ${rel}`);
@@ -461,7 +498,7 @@ export abstract class RealmSyncBase {
     const perFile = (errorBody.errors ?? []).map((e) => {
       const detail = e.detail ?? '';
       const match = detail.match(/Resource (\S+) /);
-      const href = match ? match[1] : '';
+      const href = match ? decodeAtomicResultId(match[1]) : '';
       const relMap = new Map(
         entries.map(([rel]) => [this.buildFileUrl(rel), rel]),
       );
@@ -495,7 +532,7 @@ export abstract class RealmSyncBase {
 
     const url = this.buildFileUrl(relativePath);
 
-    const response = await this.profileManager.authedRealmFetch(url, {
+    const response = await this.authenticator.authedRealmFetch(url, {
       headers: {
         Accept: SupportedMimeType.CardSource,
       },
@@ -531,7 +568,7 @@ export abstract class RealmSyncBase {
 
     const url = this.buildFileUrl(relativePath);
 
-    const response = await this.profileManager.authedRealmFetch(url, {
+    const response = await this.authenticator.authedRealmFetch(url, {
       method: 'DELETE',
       headers: {
         Accept: SupportedMimeType.CardSource,

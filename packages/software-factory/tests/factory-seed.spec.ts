@@ -7,6 +7,7 @@ import type { FactoryBrief } from '../src/factory-brief';
 import { RealmIssueStore } from '../src/issue-scheduler';
 import { expect, test } from './fixtures';
 import { buildTestClient } from './helpers/test-client';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const bootstrapTargetDir = resolve(
   process.cwd(),
@@ -51,34 +52,46 @@ function buildSeedContext(realm: {
     '../software-factory/darkfactory',
     realm.realmURL,
   ).href;
-  let { client, cleanup } = buildTestClient({
+  let { client, cleanup: clientCleanup } = buildTestClient({
     realmUrl: realm.realmURL.href,
     realmToken: `Bearer ${realm.ownerBearerToken}`,
     realmServerUrl: realm.realmServerURL.href,
     realmServerToken: `Bearer ${realm.serverToken}`,
   });
 
+  let workspace = createTestWorkspace();
+
   return {
     client,
-    cleanup,
+    cleanup: () => {
+      clientCleanup();
+      workspace.cleanup();
+    },
     darkfactoryModuleUrl,
-    seedOptions: { client, darkfactoryModuleUrl },
+    workspaceDir: workspace.dir,
+    seedOptions: {
+      darkfactoryModuleUrl,
+      workspaceDir: workspace.dir,
+    },
   };
 }
 
 test('creates bootstrap seed issue in a live realm', async ({ realm }) => {
-  let { client, cleanup, darkfactoryModuleUrl, seedOptions } =
+  let { client, cleanup, darkfactoryModuleUrl, workspaceDir, seedOptions } =
     buildSeedContext(realm);
 
   try {
-    let result = await createSeedIssue(
-      stickyNoteBrief,
-      realm.realmURL.href,
-      seedOptions,
-    );
+    let result = await createSeedIssue(stickyNoteBrief, seedOptions);
 
     expect(result.issueId).toBe('Issues/bootstrap-seed');
     expect(result.status).toBe('created');
+
+    // The seed lives on local disk until we sync to the realm — mirrors
+    // the entrypoint orchestration (createSeedIssue + post-seed sync).
+    let syncResult = await client.sync(realm.realmURL.href, workspaceDir, {
+      preferLocal: true,
+    });
+    expect(syncResult.hasError).toBe(false);
 
     // Verify the card is readable with correct fields
     let issueResponse = await client.authedFetch(
@@ -121,6 +134,7 @@ test('creates bootstrap seed issue in a live realm', async ({ realm }) => {
       realmUrl: realm.realmURL.href,
       darkfactoryModuleUrl,
       client,
+      workspaceDir,
     });
 
     let issues = await issueStore.listIssues();
@@ -137,18 +151,10 @@ test('seed issue creation is idempotent', async ({ realm }) => {
   let { cleanup, seedOptions } = buildSeedContext(realm);
 
   try {
-    let result1 = await createSeedIssue(
-      stickyNoteBrief,
-      realm.realmURL.href,
-      seedOptions,
-    );
+    let result1 = await createSeedIssue(stickyNoteBrief, seedOptions);
     expect(result1.status).toBe('created');
 
-    let result2 = await createSeedIssue(
-      stickyNoteBrief,
-      realm.realmURL.href,
-      seedOptions,
-    );
+    let result2 = await createSeedIssue(stickyNoteBrief, seedOptions);
     expect(result2.status).toBe('existing');
     expect(result2.issueId).toBe(result1.issueId);
   } finally {

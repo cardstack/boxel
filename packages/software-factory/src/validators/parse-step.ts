@@ -50,6 +50,12 @@ export interface ParseValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
   parseResultsModuleUrl: string;
+  /**
+   * Local workspace directory mirroring the target realm. Source files are
+   * read from here (glint still runs in its own tmp dir); ParseResult
+   * cards are written here for the orchestrator to sync.
+   */
+  workspaceDir: string;
   issueId?: string;
   /** Injected for testing — defaults to client.listFiles. */
   fetchFilenames?: (
@@ -188,6 +194,7 @@ export class ParseValidationStep implements ValidationStepRunner {
         {
           targetRealmUrl,
           client: this.config.client,
+          workspaceDir: this.config.workspaceDir,
           sequenceNumber: seq,
           issueURL,
         },
@@ -217,6 +224,7 @@ export class ParseValidationStep implements ValidationStepRunner {
       {
         targetRealmUrl,
         client: this.config.client,
+        workspaceDir: this.config.workspaceDir,
         readFileFn: this.config.readFileFn,
         runGlintCheckFn: this.config.runGlintCheckFn,
       },
@@ -238,6 +246,7 @@ export class ParseValidationStep implements ValidationStepRunner {
         {
           targetRealmUrl,
           client: this.config.client,
+          workspaceDir: this.config.workspaceDir,
         },
       );
       if (!completeResult.updated) {

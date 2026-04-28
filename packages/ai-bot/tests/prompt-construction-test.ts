@@ -28,6 +28,7 @@ import {
   type LooseCardResource,
   ensureTrailingSlash,
   skillCardRef,
+  rri,
 } from '@cardstack/runtime-common';
 import {
   buildPromptForModel,
@@ -215,20 +216,20 @@ Current date and time: 2025-06-11T11:43:00.533Z
               codeMode: {
                 currentFile: 'http://localhost:4201/experiments/author.gts',
                 selectedCodeRef: {
-                  module: 'http://localhost:4201/experiments/author',
+                  module: rri('http://localhost:4201/experiments/author'),
                   name: 'Address',
                 },
                 inheritanceChain: [
                   {
                     codeRef: {
-                      module: 'http://localhost:4201/experiments/author',
+                      module: rri('http://localhost:4201/experiments/author'),
                       name: 'Address',
                     },
                     fields: ['street', 'city', 'state'],
                   },
                   {
                     codeRef: {
-                      module: 'https://cardstack.com/base/card-api',
+                      module: rri('https://cardstack.com/base/card-api'),
                       name: 'CardDef',
                     },
                     fields: [],
@@ -399,7 +400,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
                 activeSpecId:
                   'http://localhost:4201/experiments/Spec/author-spec-1',
                 selectedCodeRef: {
-                  module: 'http://localhost:4201/experiments/author',
+                  module: rri('http://localhost:4201/experiments/author'),
                   name: 'Author',
                 },
               },

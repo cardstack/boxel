@@ -31,6 +31,7 @@ import {
   setupOnSave,
   setupUserSubscription,
   testRealmURL,
+  testRRI,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   withoutLoaderMonitoring,
@@ -1401,7 +1402,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       );
 
       let { data: results } = await realm.realmIndexQueryEngine.searchCards({
-        filter: { type: { module: `${testRealmURL}person`, name: 'Person' } },
+        filter: {
+          type: {
+            module: testRRI('person'),
+            name: 'Person',
+          },
+        },
       });
       assert.strictEqual(results.length, 0);
 
@@ -1427,7 +1433,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .exists({ count: 1 }, 'new card shows up in instance chooser dropdown');
 
       ({ data: results } = await realm.realmIndexQueryEngine.searchCards({
-        filter: { type: { module: `${testRealmURL}person`, name: 'Person' } },
+        filter: {
+          type: {
+            module: testRRI('person'),
+            name: 'Person',
+          },
+        },
       }));
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].id, newCardId);
@@ -1437,7 +1448,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       removeRecentFiles();
       const cardId = `${testRealmURL}Person/pet-mango`;
       let { data: results } = await realm.realmIndexQueryEngine.searchCards({
-        filter: { type: { module: `${testRealmURL}person`, name: 'Pet' } },
+        filter: {
+          type: {
+            module: testRRI('person'),
+            name: 'Pet',
+          },
+        },
       });
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].id, cardId);
@@ -1456,7 +1472,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-option-index="0"]').containsText('Mango');
 
       ({ data: results } = await realm.realmIndexQueryEngine.searchCards({
-        filter: { type: { module: `${testRealmURL}person`, name: 'Pet' } },
+        filter: {
+          type: {
+            module: testRRI('person'),
+            name: 'Pet',
+          },
+        },
       }));
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].id, cardId);

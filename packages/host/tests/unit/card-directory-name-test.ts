@@ -1,5 +1,6 @@
 import { module, test } from 'qunit';
 
+import { rri } from '@cardstack/runtime-common';
 import type { CodeRef } from '@cardstack/runtime-common';
 import { getCardDirectoryName } from '@cardstack/runtime-common/helpers/card-directory-name';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
@@ -13,23 +14,32 @@ module('Unit | runtime-common | card directory names', function () {
     });
 
     test('returns explicit export names when provided', function (assert) {
-      let ref: CodeRef = { module: '../pet', name: 'PetCard' };
+      let ref: CodeRef = {
+        module: rri('../pet'),
+        name: 'PetCard',
+      };
       assert.strictEqual(getCardDirectoryName(ref, paths), 'PetCard');
     });
 
     test('infers directory from module name for default exports', function (assert) {
-      let ref: CodeRef = { module: '../pet', name: 'default' };
+      let ref: CodeRef = {
+        module: rri('../pet'),
+        name: 'default',
+      };
       assert.strictEqual(getCardDirectoryName(ref, paths), 'Pet');
     });
 
     test('uses parent directory when module is an index file', function (assert) {
-      let ref: CodeRef = { module: '../animals/index', name: 'default' };
+      let ref: CodeRef = {
+        module: rri('../animals/index'),
+        name: 'default',
+      };
       assert.strictEqual(getCardDirectoryName(ref, paths), 'Animals');
     });
 
     test('strips executable extensions before inferring name', function (assert) {
       let ref: CodeRef = {
-        module: '../cards/preview-card.gts',
+        module: rri('../cards/preview-card.gts'),
         name: 'default',
       };
       assert.strictEqual(getCardDirectoryName(ref, paths), 'PreviewCard');
@@ -37,14 +47,17 @@ module('Unit | runtime-common | card directory names', function () {
 
     test('sanitizes names with dashes and encoded characters', function (assert) {
       let ref: CodeRef = {
-        module: '../fancy/%E2%9C%A8-sparkle-card',
+        module: rri('../fancy/%E2%9C%A8-sparkle-card'),
         name: 'default',
       };
       assert.strictEqual(getCardDirectoryName(ref, paths), 'SparkleCard');
     });
 
     test('prefixes directories that would start with invalid characters', function (assert) {
-      let ref: CodeRef = { module: '../123', name: 'default' };
+      let ref: CodeRef = {
+        module: rri('../123'),
+        name: 'default',
+      };
       assert.strictEqual(getCardDirectoryName(ref, paths), 'Card123');
     });
 
@@ -52,7 +65,10 @@ module('Unit | runtime-common | card directory names', function () {
       let ref: CodeRef = {
         type: 'fieldOf',
         field: 'bio',
-        card: { module: '../person', name: 'default' },
+        card: {
+          module: rri('../person'),
+          name: 'default',
+        },
       };
       assert.strictEqual(getCardDirectoryName(ref, paths), 'Person');
     });

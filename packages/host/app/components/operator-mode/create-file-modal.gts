@@ -47,6 +47,8 @@ import {
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
   type CardErrorJSONAPI,
+  type RealmIdentifier,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
@@ -832,7 +834,7 @@ export default class CreateFileModal extends Component<Signature> {
     const absoluteModuleHref = (
       codeRefWithAbsoluteURL(
         {
-          module: spec?.moduleHref ?? module,
+          module: (spec?.moduleHref ?? module) as RealmResourceIdentifier,
           name: exportName,
         },
         new URL(this.selectedRealmURL),
@@ -954,7 +956,7 @@ export class ${className} extends ${exportName} {
       data: {
         meta: {
           adoptsFrom: ref,
-          realmURL: this.selectedRealmURL,
+          realmURL: this.selectedRealmURL as RealmIdentifier,
         },
       },
     };

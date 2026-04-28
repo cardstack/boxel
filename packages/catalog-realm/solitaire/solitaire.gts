@@ -35,7 +35,10 @@ import {
 import ValidationSteps, {
   type ValidationStep,
 } from '../components/validation-steps';
-import { realmURL } from '@cardstack/runtime-common';
+import { codeRef, realmURL } from '@cardstack/runtime-common';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 import type Owner from '@ember/owner';
 
 // Constants
@@ -855,11 +858,7 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
     const game = this.args.model;
     const createdAt = new Date();
 
-    const codeRef = {
-      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-      module: new URL('../solitaire/solitaire', import.meta.url).href,
-      name: 'Solitaire',
-    };
+    const solitaireRef = codeRef(here, '../solitaire/solitaire', 'Solitaire');
 
     const commandContext = this.args.context?.commandContext;
     if (!commandContext) {
@@ -879,7 +878,7 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
         }),
       }),
       createdAt,
-      ref: codeRef,
+      ref: solitaireRef,
     });
 
     // Record the game result

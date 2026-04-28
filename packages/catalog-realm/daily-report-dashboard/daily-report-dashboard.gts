@@ -8,6 +8,10 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import DashboardIcon from '@cardstack/boxel-icons/layout-dashboard';
 import type { Query } from '@cardstack/runtime-common';
+import { codeRef } from '@cardstack/runtime-common';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 import { task } from 'ember-concurrency';
 import { PolicyManual } from './policy-manual';
 import { GenerateDailyReport } from '../commands/generate-daily-report';
@@ -16,11 +20,7 @@ class Isolated extends Component<typeof DailyReportDashboard> {
   get dailyReportsQuery(): Query {
     return {
       filter: {
-        on: {
-          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./daily-report', import.meta.url).href,
-          name: 'DailyReport',
-        },
+        on: codeRef(here, './daily-report', 'DailyReport'),
         eq: {
           'policyManual.id': this.args.model.policyManual!.id,
         },
@@ -29,11 +29,7 @@ class Isolated extends Component<typeof DailyReportDashboard> {
       sort: [
         {
           by: 'reportDate',
-          on: {
-            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL('./daily-report', import.meta.url).href,
-            name: 'DailyReport',
-          },
+          on: codeRef(here, './daily-report', 'DailyReport'),
           direction: 'desc',
         },
       ],

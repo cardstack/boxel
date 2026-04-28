@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 
 import type { LooseCardResource } from '@cardstack/runtime-common';
-import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common';
+import { codeRefWithAbsoluteURL, rri } from '@cardstack/runtime-common';
 import {
   getValueForResourcePath,
   normalizeQueryDefinition,
@@ -12,7 +12,10 @@ module('normalizeQueryDefinition', function () {
     type: 'containsMany',
     isPrimitive: false,
     isComputed: false,
-    fieldOrCard: { module: 'https://example.com/test', name: 'Test' },
+    fieldOrCard: {
+      module: rri('https://example.com/test'),
+      name: 'Test',
+    },
   } as const;
 
   test('resolves serialized resources with base paths and dot paths', function (assert) {
@@ -20,7 +23,10 @@ module('normalizeQueryDefinition', function () {
     let resource: LooseCardResource = {
       id: 'https://realm.example/cards/1',
       meta: {
-        adoptsFrom: { module: 'https://example.com/base', name: 'BaseCard' },
+        adoptsFrom: {
+          module: rri('https://example.com/base'),
+          name: 'BaseCard',
+        },
       },
       attributes: {
         profile: { city: 'NYC', realmVal: 'https://other.realm/' },
@@ -184,7 +190,10 @@ module('normalizeQueryDefinition', function () {
       fieldDefinition.fieldOrCard,
       relativeTo,
     );
-    let typeRef = { module: 'https://example.com/other', name: 'Other' };
+    let typeRef = {
+      module: rri('https://example.com/other'),
+      name: 'Other',
+    };
 
     let normalized = normalizeQueryDefinition({
       fieldDefinition,
@@ -208,7 +217,10 @@ module('normalizeQueryDefinition', function () {
   test('does not overwrite existing on in leaf filters', function (assert) {
     let realmURL = new URL('https://realm.example/');
     let relativeTo = new URL('https://realm.example/cards/1');
-    let existingOn = { module: 'https://example.com/custom', name: 'Custom' };
+    let existingOn = {
+      module: rri('https://example.com/custom'),
+      name: 'Custom',
+    };
 
     let normalized = normalizeQueryDefinition({
       fieldDefinition,

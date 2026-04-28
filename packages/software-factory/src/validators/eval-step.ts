@@ -44,6 +44,12 @@ export interface EvalValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
   evalResultsModuleUrl: string;
+  /**
+   * Local workspace directory mirroring the target realm. EvalResult
+   * cards are written here for the orchestrator to sync. (Eval itself
+   * reads modules via the prerenderer, which fetches them from the realm.)
+   */
+  workspaceDir: string;
   issueId?: string;
   /** Injected for testing — defaults to client.listFiles. */
   fetchFilenames?: (
@@ -165,6 +171,7 @@ export class EvalValidationStep implements ValidationStepRunner {
         {
           targetRealmUrl,
           client: this.config.client,
+          workspaceDir: this.config.workspaceDir,
           sequenceNumber: seq,
           issueURL,
         },
@@ -217,6 +224,7 @@ export class EvalValidationStep implements ValidationStepRunner {
         {
           targetRealmUrl,
           client: this.config.client,
+          workspaceDir: this.config.workspaceDir,
         },
       );
       if (!completeResult.updated) {

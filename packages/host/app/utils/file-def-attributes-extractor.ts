@@ -10,6 +10,7 @@ import {
   type CodeRef,
   type FileMetaResource,
   type QueryFieldMeta,
+  type RealmResourceIdentifier,
   type RenderError,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -392,7 +393,7 @@ export function buildFileResource(
     }
   }
   return {
-    id: fileURL,
+    id: fileURL as RealmResourceIdentifier,
     type: 'file-meta',
     attributes: mergedAttributes,
     meta: {

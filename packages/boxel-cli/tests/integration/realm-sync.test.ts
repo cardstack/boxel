@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { syncCommand } from '../../src/commands/realm/sync';
+import { sync } from '../../src/commands/realm/sync';
 import { pushCommand } from '../../src/commands/realm/push';
 import { createRealm } from '../../src/commands/realm/create';
 import { CheckpointManager } from '../../src/lib/checkpoint-manager';
@@ -182,7 +182,7 @@ describe('realm sync (integration)', () => {
     writeLocalFile(localDir, 'card.gts', 'export const card = true;\n');
     writeLocalFile(localDir, 'data.json', '{"title":"Hello"}\n');
 
-    await syncCommand(localDir, realmUrl, {
+    await sync(localDir, realmUrl, {
       preferLocal: true,
       profileManager,
     });
@@ -207,7 +207,7 @@ describe('realm sync (integration)', () => {
     // Write files directly to remote
     await writeRemoteFile(realmUrl, 'remote-only.gts', 'export const r = 1;\n');
 
-    await syncCommand(localDir, realmUrl, {
+    await sync(localDir, realmUrl, {
       preferRemote: true,
       profileManager,
     });
@@ -230,7 +230,7 @@ describe('realm sync (integration)', () => {
     writeLocalFile(localDir, 'a.gts', 'export const a = 2;\n');
     await writeRemoteFile(realmUrl, 'b.gts', 'export const b = 2;\n');
 
-    await syncCommand(localDir, realmUrl, { profileManager });
+    await sync(localDir, realmUrl, { profileManager });
 
     // a.gts should be pushed (local change)
     expect(await fetchRemoteFile(realmUrl, 'a.gts')).toContain('a = 2');
@@ -254,7 +254,7 @@ describe('realm sync (integration)', () => {
       'export const v = "remote";\n',
     );
 
-    await syncCommand(localDir, realmUrl, {
+    await sync(localDir, realmUrl, {
       preferLocal: true,
       profileManager,
     });
@@ -282,7 +282,7 @@ describe('realm sync (integration)', () => {
       'export const v = "remote";\n',
     );
 
-    await syncCommand(localDir, realmUrl, {
+    await sync(localDir, realmUrl, {
       preferRemote: true,
       profileManager,
     });
@@ -303,7 +303,7 @@ describe('realm sync (integration)', () => {
     // Delete locally
     fs.unlinkSync(path.join(localDir, 'to-delete.gts'));
 
-    await syncCommand(localDir, realmUrl, {
+    await sync(localDir, realmUrl, {
       preferLocal: true,
       profileManager,
     });
@@ -324,7 +324,7 @@ describe('realm sync (integration)', () => {
     // Delete remotely
     await deleteRemoteFile(realmUrl, 'to-delete.gts');
 
-    await syncCommand(localDir, realmUrl, {
+    await sync(localDir, realmUrl, {
       preferRemote: true,
       profileManager,
     });
@@ -347,7 +347,7 @@ describe('realm sync (integration)', () => {
     fs.unlinkSync(path.join(localDir, 'local-del.gts'));
     await deleteRemoteFile(realmUrl, 'remote-del.gts');
 
-    await syncCommand(localDir, realmUrl, {
+    await sync(localDir, realmUrl, {
       delete: true,
       profileManager,
     });
@@ -372,7 +372,7 @@ describe('realm sync (integration)', () => {
       'export const ro = 1;\n',
     );
 
-    await syncCommand(localDir, realmUrl, {
+    await sync(localDir, realmUrl, {
       preferLocal: true,
       dryRun: true,
       profileManager,
@@ -401,7 +401,7 @@ describe('realm sync (integration)', () => {
     writeLocalFile(localDir, 'a.gts', 'export const a = 2;\n');
     await writeRemoteFile(realmUrl, 'b.gts', 'export const b = 2;\n');
 
-    await syncCommand(localDir, realmUrl, { profileManager });
+    await sync(localDir, realmUrl, { profileManager });
 
     let newManifest = readManifest(localDir);
     // Both hashes should have changed
@@ -425,13 +425,13 @@ describe('realm sync (integration)', () => {
     });
 
     // First sync to pull any realm-default files (e.g. index.json) and stabilize
-    await syncCommand(localDir, realmUrl, { profileManager });
+    await sync(localDir, realmUrl, { profileManager });
 
     let cm = new CheckpointManager(localDir);
     let before = await cm.getCheckpoints();
 
     // Sync again with no changes
-    await syncCommand(localDir, realmUrl, { profileManager });
+    await sync(localDir, realmUrl, { profileManager });
 
     let after = await cm.getCheckpoints();
     // No new checkpoint should be created
@@ -445,7 +445,7 @@ describe('realm sync (integration)', () => {
     writeLocalFile(localDir, '.realm.json', '{"name":"hacked"}\n');
     writeLocalFile(localDir, 'normal.gts', 'export const n = 1;\n');
 
-    await syncCommand(localDir, realmUrl, {
+    await sync(localDir, realmUrl, {
       preferLocal: true,
       profileManager,
     });
@@ -461,7 +461,7 @@ describe('realm sync (integration)', () => {
 
     writeLocalFile(localDir, 'new-file.gts', 'export const nf = 1;\n');
 
-    await syncCommand(localDir, realmUrl, {
+    await sync(localDir, realmUrl, {
       preferLocal: true,
       profileManager,
     });
@@ -483,7 +483,7 @@ describe('realm sync (integration)', () => {
       'export const v = "remote";\n',
     );
 
-    await syncCommand(localDir, realmUrl, {
+    await sync(localDir, realmUrl, {
       preferLocal: true,
       profileManager,
     });
@@ -506,7 +506,7 @@ describe('realm sync (integration)', () => {
     fs.unlinkSync(path.join(localDir, 'dvc.gts'));
     await writeRemoteFile(realmUrl, 'dvc.gts', 'export const dvc = 2;\n');
 
-    await syncCommand(localDir, realmUrl, {
+    await sync(localDir, realmUrl, {
       preferLocal: true,
       profileManager,
     });
@@ -527,7 +527,7 @@ describe('realm sync (integration)', () => {
     writeLocalFile(localDir, 'cvd.gts', 'export const cvd = 2;\n');
     await deleteRemoteFile(realmUrl, 'cvd.gts');
 
-    await syncCommand(localDir, realmUrl, {
+    await sync(localDir, realmUrl, {
       preferRemote: true,
       profileManager,
     });

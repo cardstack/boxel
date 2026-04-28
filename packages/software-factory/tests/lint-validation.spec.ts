@@ -6,6 +6,7 @@ import { LintValidationStep } from '../src/validators/lint-step';
 import type { LintValidationDetails } from '../src/validators/lint-step';
 import { BAD_LINT_GTS } from './helpers/lint-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -115,14 +116,23 @@ test.describe('lint-validation e2e', () => {
     });
 
     try {
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let step = new LintValidationStep({
         client,
         realmServerUrl,
         lintResultsModuleUrl,
+        workspaceDir: workspace.dir,
         issueId: 'Issues/lint-e2e',
       });
 
       let result = await step.run(realmUrl);
+
+      // Sync the LintResult artifact card to the realm so the read-back
+      // assertion below sees it via HTTP.
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // The fixture realm has hello.gts and hello.test.gts — both lintable.
       // hello.gts should be clean; result should reflect that.

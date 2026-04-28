@@ -1,0 +1,311 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "worker-status-group",
+      "folder": "defd2d156sav4d",
+      "interval": "60s",
+      "rules": [
+        {
+          "id": 6,
+          "uid": "eerxlrqsghzwgd",
+          "orgID": 1,
+          "folderUID": "defd2d156sav4d",
+          "ruleGroup": "worker-status-group",
+          "title": "Worker Startup",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 10800,
+                "to": 0
+              },
+              "datasourceUid": "cef5x9o3yzawwf",
+              "model": {
+                "datasource": {
+                  "type": "cloudwatch",
+                  "uid": "cef5x9o3yzawwf"
+                },
+                "dimensions": {},
+                "expression": "filter @message like /\\[worker .* priority .*\\]: worker ready/\n| parse @message /priority (?<priority>\\d+)\\]: worker ready/\n| fields @timestamp, \n    if(priority=\"0\", \"All Priorities\", if(priority=\"10\", \"High Priority\", priority)) as priorityLabel\n| stats count() by bin(5m), priorityLabel",
+                "id": "",
+                "intervalMs": 1000,
+                "label": "",
+                "logGroups": [
+                  {
+                    "accountId": "680542703984",
+                    "arn": "arn:aws:logs:us-east-1:680542703984:log-group:ecs-boxel-worker-staging",
+                    "name": "ecs-boxel-worker-staging"
+                  }
+                ],
+                "matchExact": true,
+                "maxDataPoints": 43200,
+                "metricEditorMode": 0,
+                "metricName": "",
+                "metricQueryType": 0,
+                "namespace": "",
+                "period": "",
+                "queryMode": "Logs",
+                "refId": "A",
+                "region": "default",
+                "sqlExpression": "",
+                "statistic": "Average",
+                "statsGroups": [
+                  "bin(5m)",
+                  "priorityLabel"
+                ]
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 10800,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        4,
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": []
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "avg"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "C",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "threshold"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0,
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": []
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "avg"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "max",
+                "refId": "C",
+                "type": "reduce"
+              }
+            }
+          ],
+          "updated": "2025-07-15T13:39:25Z",
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "30s",
+          "provenance": "api",
+          "isPaused": false,
+          "notification_settings": null
+        },
+        {
+          "id": 7,
+          "uid": "berxlrqsnzoxse",
+          "orgID": 1,
+          "folderUID": "defd2d156sav4d",
+          "ruleGroup": "worker-status-group",
+          "title": "Worker Reap",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 10800,
+                "to": 0
+              },
+              "datasourceUid": "cef5x9o3yzawwf",
+              "model": {
+                "datasource": {
+                  "type": "cloudwatch",
+                  "uid": "cef5x9o3yzawwf"
+                },
+                "dimensions": {},
+                "expression": "filter @message like /worker .* exited\\. spawning replacement worker/\n| stats count() by bin(5m)",
+                "id": "",
+                "intervalMs": 1000,
+                "label": "",
+                "logGroups": [
+                  {
+                    "accountId": "680542703984",
+                    "arn": "arn:aws:logs:us-east-1:680542703984:log-group:ecs-boxel-worker-staging",
+                    "name": "ecs-boxel-worker-staging"
+                  }
+                ],
+                "matchExact": true,
+                "maxDataPoints": 43200,
+                "metricEditorMode": 0,
+                "metricName": "",
+                "metricQueryType": 0,
+                "namespace": "",
+                "period": "",
+                "queryMode": "Logs",
+                "refId": "A",
+                "region": "default",
+                "sqlExpression": "",
+                "statistic": "Average",
+                "statsGroups": [
+                  "bin(5m)"
+                ]
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 10800,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        1,
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": []
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "avg"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "C",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "threshold"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0,
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": []
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "avg"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "max",
+                "refId": "C",
+                "settings": {
+                  "mode": ""
+                },
+                "type": "reduce"
+              }
+            }
+          ],
+          "updated": "2025-07-15T13:39:25Z",
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "30s",
+          "provenance": "api",
+          "isPaused": false,
+          "notification_settings": null
+        }
+      ]
+    }
+  ]
+}

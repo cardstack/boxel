@@ -17,6 +17,7 @@ import {
   baseRealm,
   type Format,
   type Query,
+  type RealmResourceIdentifier,
   type Sort,
 } from '@cardstack/runtime-common';
 
@@ -50,7 +51,7 @@ export const SORT_OPTIONS: SortOption[] = [
     sort: [
       {
         on: {
-          module: `${baseRealm.url}card-api`,
+          module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
           name: 'CardDef',
         },
         by: 'cardTitle',

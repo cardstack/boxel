@@ -20,6 +20,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  testRRI,
 } from '../../helpers';
 import {
   CardDef,
@@ -101,7 +102,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}author`,
+                module: testRRI('author'),
                 name: 'Author',
               },
             },
@@ -116,7 +117,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}author`,
+                module: testRRI('author'),
                 name: 'Author',
               },
             },
@@ -131,7 +132,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}author`,
+                module: testRRI('author'),
                 name: 'Author',
               },
             },
@@ -154,7 +155,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
           return {
             filter: {
               on: {
-                module: `${testRealmURL}author`,
+                module: testRRI('author'),
                 name: 'Author',
               },
               eq: {

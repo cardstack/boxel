@@ -3,6 +3,7 @@ import { service } from '@ember/service';
 import {
   loadCardDef,
   specRef,
+  type RealmResourceIdentifier,
   type ResolvedCodeRef,
   isCardDef,
   isFieldDef,
@@ -313,7 +314,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
           throw new Error('declaration no name');
         }
         let specCodeRef: ResolvedCodeRef = {
-          module: url.replace('.gts', ''), // Remember to remove .gts extension
+          module: url.replace('.gts', '') as RealmResourceIdentifier, // Remember to remove .gts extension
           name,
         };
 

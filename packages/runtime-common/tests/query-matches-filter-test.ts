@@ -1,3 +1,4 @@
+import type { RealmResourceIdentifier } from '../card-reference-resolver';
 import type { SharedTests } from '../helpers';
 import type { Filter } from '../query';
 import {
@@ -13,7 +14,7 @@ import {
 } from '../query';
 
 const sampleRef = {
-  module: 'http://localhost:4201/test/person',
+  module: 'http://localhost:4201/test/person' as RealmResourceIdentifier,
   name: 'Person',
 };
 

@@ -464,6 +464,162 @@ module(basename(__filename), function () {
       );
     });
 
+    module(
+      'cross-instance coalesce for index-related job types',
+      function (nestedHooks) {
+        let publisher2: QueuePublisher;
+        let adapter2: PgAdapter;
+
+        nestedHooks.beforeEach(async function () {
+          // simulate a second realm-server instance: a separate PgAdapter +
+          // PgQueuePublisher pointed at the same database
+          adapter2 = new PgAdapter();
+          publisher2 = new PgQueuePublisher(adapter2);
+
+          // ensure both adapters have live DB connections so concurrent
+          // publishes have realistic timing (mirrors the existing
+          // 'multiple queue clients' setup pattern below)
+          await adapter.execute('select 1');
+          await adapter2.execute('select 1');
+
+          // stop the runner so jobs queue up and we can inspect the canonical
+          // pending row(s) before any worker dequeues them
+          await runner.destroy();
+        });
+
+        nestedHooks.afterEach(async function () {
+          await publisher2.destroy();
+          await adapter2.close();
+        });
+
+        test('full-reindex: concurrent enqueues from two instances coalesce into one canonical pending job and union realmUrls', async function (assert) {
+          let [first, second] = await Promise.all([
+            publisher.publish<void>({
+              jobType: 'full-reindex',
+              concurrencyGroup: 'full-reindex-group',
+              timeout: 6 * 60,
+              priority: 0,
+              args: { realmUrls: ['http://example.com/a/'] },
+            }),
+            publisher2.publish<void>({
+              jobType: 'full-reindex',
+              concurrencyGroup: 'full-reindex-group',
+              timeout: 6 * 60,
+              priority: 0,
+              args: {
+                realmUrls: ['http://example.com/a/', 'http://example.com/b/'],
+              },
+            }),
+          ]);
+
+          assert.strictEqual(
+            first.id,
+            second.id,
+            'two instances enqueueing full-reindex converge to one canonical job',
+          );
+
+          let rows = (await adapter.execute(
+            `SELECT id, args
+             FROM jobs
+             WHERE job_type = 'full-reindex' AND status = 'unfulfilled'`,
+          )) as { id: number; args: { realmUrls: string[] } }[];
+          assert.strictEqual(
+            rows.length,
+            1,
+            'only one pending full-reindex row exists after cross-instance coalesce',
+          );
+          assert.deepEqual(
+            rows[0].args.realmUrls.slice().sort(),
+            ['http://example.com/a/', 'http://example.com/b/'],
+            "canonical job args contain the union of both instances' realmUrls",
+          );
+        });
+
+        test('copy-index: concurrent enqueues from two instances for same (destination, source) coalesce into one job', async function (assert) {
+          let realmURL = 'http://example.com/copy-dest/';
+          let sourceRealmURL = 'http://example.com/copy-src/';
+
+          let [first, second] = await Promise.all([
+            publisher.publish({
+              jobType: 'copy-index',
+              concurrencyGroup: `indexing:${realmURL}`,
+              timeout: 4 * 60,
+              priority: userInitiatedPriority,
+              args: { realmURL, realmUsername: 'owner', sourceRealmURL },
+            }),
+            publisher2.publish({
+              jobType: 'copy-index',
+              concurrencyGroup: `indexing:${realmURL}`,
+              timeout: 4 * 60,
+              priority: userInitiatedPriority,
+              args: { realmURL, realmUsername: 'owner', sourceRealmURL },
+            }),
+          ]);
+
+          assert.strictEqual(
+            first.id,
+            second.id,
+            'two instances enqueueing copy-index for same source+dest converge',
+          );
+
+          let rows = (await adapter.execute(
+            `SELECT id
+             FROM jobs
+             WHERE job_type = 'copy-index' AND status = 'unfulfilled'`,
+          )) as { id: number }[];
+          assert.strictEqual(
+            rows.length,
+            1,
+            'only one pending copy-index row exists',
+          );
+        });
+
+        test('copy-index: enqueues with different sourceRealmURL stay as separate jobs', async function (assert) {
+          let realmURL = 'http://example.com/copy-dest/';
+
+          let first = await publisher.publish({
+            jobType: 'copy-index',
+            concurrencyGroup: `indexing:${realmURL}`,
+            timeout: 4 * 60,
+            priority: userInitiatedPriority,
+            args: {
+              realmURL,
+              realmUsername: 'owner',
+              sourceRealmURL: 'http://example.com/src-a/',
+            },
+          });
+          let second = await publisher2.publish({
+            jobType: 'copy-index',
+            concurrencyGroup: `indexing:${realmURL}`,
+            timeout: 4 * 60,
+            priority: userInitiatedPriority,
+            args: {
+              realmURL,
+              realmUsername: 'owner',
+              sourceRealmURL: 'http://example.com/src-b/',
+            },
+          });
+
+          assert.notStrictEqual(
+            first.id,
+            second.id,
+            'different sourceRealmURL describes distinct work; rows are not coalesced',
+          );
+
+          let rows = (await adapter.execute(
+            `SELECT id
+             FROM jobs
+             WHERE job_type = 'copy-index' AND status = 'unfulfilled'`,
+          )) as { id: number }[];
+          assert.strictEqual(
+            rows.length,
+            2,
+            'both pending copy-index rows are retained when sources differ',
+          );
+        });
+      },
+    );
+
     test('worker stops waiting for job after its been running longer than max time-out', async function (assert) {
       let events: string[] = [];
       let runs = 0;

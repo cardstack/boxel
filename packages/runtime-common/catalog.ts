@@ -9,6 +9,7 @@ import { realmURL } from './constants';
 import { logger } from './log';
 import type { LocalPath } from './paths';
 import { cardIdToURL } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './card-reference-resolver';
 
 // @ts-ignore TODO: fix catalog types in runtime-common
 import type { Listing } from '@cardstack/catalog/listing/listing';
@@ -199,7 +200,7 @@ function resolveTargetCodeRef(
     let targetModule = resolver.target(cardIdToURL(codeRef.module).href);
     return {
       name: codeRef.name,
-      module: targetModule,
+      module: targetModule as RealmResourceIdentifier,
     };
   }
 }
@@ -212,7 +213,10 @@ export function planModuleInstall(
     return new InstallPlan([], []);
   }
   let codeRefs: ResolvedCodeRef[] = specs.map((s) => {
-    return { module: s.moduleHref, name: s.ref.name };
+    return {
+      module: s.moduleHref as RealmResourceIdentifier,
+      name: s.ref.name,
+    };
   });
   let modulesCopy = codeRefs.flatMap((sourceCodeRef: ResolvedCodeRef) => {
     if (baseRealmPath.inRealm(cardIdToURL(sourceCodeRef.module))) {

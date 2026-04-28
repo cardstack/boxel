@@ -1,17 +1,17 @@
 /**
  * Seed issue creation for the issue-driven agentic loop.
  *
- * Creates a single "bootstrap" issue in the target realm that the agent
- * picks up as its first task. The agent reads the brief, creates Project,
- * KnowledgeArticle, and implementation Issue cards, then marks the seed
- * issue as done.
+ * Writes a single "bootstrap" issue to the local factory workspace that
+ * the agent picks up as its first task once the orchestrator syncs the
+ * workspace into the target realm. The agent reads the brief, creates
+ * Project, KnowledgeArticle, and implementation Issue cards, then marks
+ * the seed issue as done.
  */
-
-import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
 import type { FactoryBrief } from './factory-brief';
 
 import { logger } from './logger';
+import { readCard, writeCard } from './workspace-fs';
 
 /**
  * Infer the darkfactory module URL from a target realm URL.
@@ -34,8 +34,13 @@ export interface SeedIssueResult {
 }
 
 export interface SeedIssueOptions {
-  client: BoxelCLIClient;
   darkfactoryModuleUrl: string;
+  /**
+   * Local workspace directory mirroring the target realm. The seed issue
+   * is written here; the orchestrator syncs it to the realm before the
+   * issue loop starts picking issues.
+   */
+  workspaceDir: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -59,32 +64,30 @@ const SEED_ISSUE_FILE = `${SEED_ISSUE_PATH}.json`;
  */
 export async function createSeedIssue(
   brief: FactoryBrief,
-  targetRealmUrl: string,
   options: SeedIssueOptions,
 ): Promise<SeedIssueResult> {
-  let { client, darkfactoryModuleUrl } = options;
+  let { darkfactoryModuleUrl, workspaceDir } = options;
 
-  // Check if seed issue already exists
-  let existing = await client.read(targetRealmUrl, SEED_ISSUE_PATH);
+  // The factory entrypoint pulls the target realm into `workspaceDir`
+  // before calling us, so a pre-existing seed shows up locally.
+  let existing = await readCard(workspaceDir, SEED_ISSUE_FILE);
   if (existing.ok) {
-    log.info(`Seed issue already exists at ${SEED_ISSUE_PATH}`);
+    log.info(`Seed issue already exists at ${SEED_ISSUE_FILE}`);
     return { issueId: SEED_ISSUE_PATH, status: 'existing' };
   }
 
-  // Only proceed to create if the read failed with 404 (not found).
-  // Any other failure (auth, network, server error) should be surfaced —
-  // including network errors where status is undefined.
+  // Anything other than "file missing" is a real problem — surface it.
   if (existing.status !== 404) {
     throw new Error(
-      `Failed to check for existing seed issue: ${existing.error ?? `HTTP ${existing.status}`}`,
+      `Failed to check for existing seed issue: ${existing.error ?? 'unknown error'}`,
     );
   }
 
   let document = buildSeedIssueDocument(brief, darkfactoryModuleUrl);
 
   log.info(`Creating seed issue at ${SEED_ISSUE_FILE}`);
-  let writeResult = await client.write(
-    targetRealmUrl,
+  let writeResult = await writeCard(
+    workspaceDir,
     SEED_ISSUE_FILE,
     JSON.stringify(document, null, 2),
   );
@@ -92,18 +95,6 @@ export async function createSeedIssue(
   if (!writeResult.ok) {
     throw new Error(
       `Failed to create seed issue: ${writeResult.error ?? 'unknown error'}`,
-    );
-  }
-
-  // Wait for the card to be indexed and readable
-  let readable = await client.waitForFile(targetRealmUrl, SEED_ISSUE_PATH, {
-    timeoutMs: 15_000,
-    pollMs: 250,
-  });
-
-  if (!readable) {
-    throw new Error(
-      `Seed issue written but not readable after 15s: ${SEED_ISSUE_PATH}`,
     );
   }
 

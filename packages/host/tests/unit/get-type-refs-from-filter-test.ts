@@ -1,11 +1,27 @@
 import { module, test } from 'qunit';
 
-import { getTypeRefsFromFilter, type Filter } from '@cardstack/runtime-common';
+import {
+  getTypeRefsFromFilter,
+  type Filter,
+  rri,
+} from '@cardstack/runtime-common';
 
-const typeRef = { module: 'https://example.com/card', name: 'MyCard' };
-const typeRef2 = { module: 'https://example.com/card', name: 'OtherCard' };
-const typeRef3 = { module: 'https://example.com/card', name: 'ThirdCard' };
-const typeRef4 = { module: 'https://example.com/card', name: 'FourthCard' };
+const typeRef = {
+  module: rri('https://example.com/card'),
+  name: 'MyCard',
+};
+const typeRef2 = {
+  module: rri('https://example.com/card'),
+  name: 'OtherCard',
+};
+const typeRef3 = {
+  module: rri('https://example.com/card'),
+  name: 'ThirdCard',
+};
+const typeRef4 = {
+  module: rri('https://example.com/card'),
+  name: 'FourthCard',
+};
 
 module('Unit | getTypeRefsFromFilter', function () {
   test('returns result from top-level `on` (EveryFilter with scoping)', function (assert) {

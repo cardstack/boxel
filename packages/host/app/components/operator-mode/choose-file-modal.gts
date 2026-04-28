@@ -15,7 +15,6 @@ import onKeyMod from 'ember-keyboard/modifiers/on-key';
 import {
   BoxelButton,
   FieldContainer,
-  BoxelSelect,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 
@@ -42,6 +41,7 @@ import type StoreService from '@cardstack/host/services/store';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import IndexedFileTree from '../editor/indexed-file-tree';
+import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 
 interface Signature {
   Args: {};
@@ -263,12 +263,15 @@ export default class ChooseFileModal extends Component<Signature> {
   }
 
   @action
-  private selectRealm(realm: any) {
-    this.selectedRealm = realm;
+  private selectRealm({ path }: RealmDropdownItem) {
+    let realm = this.knownRealms.find((r) => r.url.href === path);
+    if (realm) {
+      this.selectedRealm = realm;
+    }
   }
 
   @action
-  private async selectFile(file: LocalPath) {
+  private selectFile(file: LocalPath) {
     this.selectedFile = file;
   }
 
@@ -314,11 +317,13 @@ export default class ChooseFileModal extends Component<Signature> {
 
   <template>
     <style scoped>
-      :deep(.dialog-box__content) {
-        overflow: hidden;
-      }
       .choose-file-modal {
         --horizontal-gap: var(--boxel-sp-xs);
+        --stack-card-footer-height: auto;
+      }
+      .choose-file-modal :deep(.dialog-box__content) {
+        display: flex;
+        flex-direction: column;
       }
       .choose-file-modal[data-drop-zone-active]::before {
         content: '';
@@ -368,10 +373,9 @@ export default class ChooseFileModal extends Component<Signature> {
       }
       .footer {
         display: flex;
+        flex: 1;
         justify-content: space-between;
-        max-width: 100%;
-        min-width: 13rem;
-        align-items: flex-start;
+        align-items: center;
         gap: var(--boxel-sp-xs);
       }
       .footer-left {
@@ -384,31 +388,14 @@ export default class ChooseFileModal extends Component<Signature> {
         align-items: center;
         margin-left: auto;
       }
-      fieldset.field {
-        border: none;
-        padding: 0;
-        margin-inline: 0;
-      }
       .realm-chooser {
         width: 100%;
-      }
-      .realm-chooser__options {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-      }
-      .realm-chooser__options img {
-        width: 16px;
-        height: 16px;
-      }
-      .realm-chooser__options span {
-        font: 500 var(--boxel-font-sm);
       }
       .choose-file {
         overflow: visible;
       }
       .choose-file :deep(.content) {
-        height: 267px;
+        height: 230px;
         overflow: auto;
         align-items: flex-start;
         border: var(--boxel-border);
@@ -421,11 +408,6 @@ export default class ChooseFileModal extends Component<Signature> {
       }
       .choose-file :deep(.content [data-file-tree-nav]:focus-visible) {
         outline: none;
-      }
-      :deep(.dialog-box__footer) {
-        height: auto;
-        border: none;
-        padding: 0 var(--boxel-sp) 40px var(--boxel-sp);
       }
       .upload-progress {
         display: flex;
@@ -482,22 +464,13 @@ export default class ChooseFileModal extends Component<Signature> {
       >
         <:content>
           <FieldContainer class='field' @label='Workspace'>
-            <BoxelSelect
+            <RealmDropdown
               class='realm-chooser'
-              @options={{this.knownRealms}}
-              @selected={{this.selectedRealm}}
-              @onChange={{this.selectRealm}}
+              @selectedRealmURL={{this.selectedRealm.url.href}}
+              @onSelect={{this.selectRealm}}
+              @displayReadOnlyTag={{true}}
               data-test-choose-file-modal-realm-chooser
-              as |item|
-            >
-              <div
-                class='realm-chooser__options'
-                data-test-choose-file-modal-realm-option={{item.info.name}}
-              >
-                <img src={{item.info.iconURL}} alt='realm icon' />
-                <span>{{item.info.name}}</span>
-              </div>
-            </BoxelSelect>
+            />
           </FieldContainer>
           <FieldContainer
             class='field choose-file'
@@ -515,74 +488,74 @@ export default class ChooseFileModal extends Component<Signature> {
               />
             {{/each}}
           </FieldContainer>
-          <FieldContainer class='field buttons' @label='' @tag='div'>
-            <div class='footer'>
-              <div class='footer-left'>
-                {{#if (eq this.currentUpload.state 'picking')}}
-                  <BoxelButton
-                    @size='tall'
-                    @disabled={{true}}
-                    data-test-choose-file-modal-upload-button
-                  >
-                    Choose a file&hellip;
-                  </BoxelButton>
-                {{else if (eq this.currentUpload.state 'uploading')}}
-                  <div
-                    class='upload-progress'
-                    data-test-choose-file-modal-upload-progress
-                  >
-                    <span
-                      class='upload-file-name'
-                    >{{this.currentUpload.fileName}}</span>
-                    <LoadingIndicator class='upload-spinner' />
-                  </div>
-                {{else if (eq this.currentUpload.state 'error')}}
-                  <div class='upload-error-row'>
-                    <div
-                      class='upload-error'
-                      data-test-choose-file-modal-upload-error
-                    >{{this.currentUpload.error}}</div>
-                    <BoxelButton
-                      @size='tall'
-                      {{on 'click' this.triggerUpload}}
-                      data-test-choose-file-modal-upload-button
-                    >
-                      Retry&hellip;
-                    </BoxelButton>
-                  </div>
-                {{else}}
+        </:content>
+        <:footer>
+          <div class='footer'>
+            <div class='footer-left'>
+              {{#if (eq this.currentUpload.state 'picking')}}
+                <BoxelButton
+                  @size='tall'
+                  @disabled={{true}}
+                  data-test-choose-file-modal-upload-button
+                >
+                  Choose a file&hellip;
+                </BoxelButton>
+              {{else if (eq this.currentUpload.state 'uploading')}}
+                <div
+                  class='upload-progress'
+                  data-test-choose-file-modal-upload-progress
+                >
+                  <span
+                    class='upload-file-name'
+                  >{{this.currentUpload.fileName}}</span>
+                  <LoadingIndicator class='upload-spinner' />
+                </div>
+              {{else if (eq this.currentUpload.state 'error')}}
+                <div class='upload-error-row'>
                   <BoxelButton
                     @size='tall'
                     {{on 'click' this.triggerUpload}}
                     data-test-choose-file-modal-upload-button
                   >
-                    Upload&hellip;
+                    Retry&hellip;
                   </BoxelButton>
-                {{/if}}
-              </div>
-              <div class='footer-buttons'>
+                  <div
+                    class='upload-error'
+                    data-test-choose-file-modal-upload-error
+                  >{{this.currentUpload.error}}</div>
+                </div>
+              {{else}}
                 <BoxelButton
                   @size='tall'
-                  {{on 'click' (fn (perform this.pickTask) undefined)}}
-                  {{onKeyMod 'Escape'}}
-                  data-test-choose-file-modal-cancel-button
+                  {{on 'click' this.triggerUpload}}
+                  data-test-choose-file-modal-upload-button
                 >
-                  Cancel
+                  Upload&hellip;
                 </BoxelButton>
-                <BoxelButton
-                  @kind='primary'
-                  @size='tall'
-                  @disabled={{this.isUploadBusy}}
-                  {{on 'click' (fn (perform this.pickTask) this.selectedFile)}}
-                  {{onKeyMod 'Enter'}}
-                  data-test-choose-file-modal-add-button
-                >
-                  Add
-                </BoxelButton>
-              </div>
+              {{/if}}
             </div>
-          </FieldContainer>
-        </:content>
+            <div class='footer-buttons'>
+              <BoxelButton
+                @size='tall'
+                {{on 'click' (fn (perform this.pickTask) undefined)}}
+                {{onKeyMod 'Escape'}}
+                data-test-choose-file-modal-cancel-button
+              >
+                Cancel
+              </BoxelButton>
+              <BoxelButton
+                @kind='primary'
+                @size='tall'
+                @disabled={{this.isUploadBusy}}
+                {{on 'click' (fn (perform this.pickTask) this.selectedFile)}}
+                {{onKeyMod 'Enter'}}
+                data-test-choose-file-modal-add-button
+              >
+                Add
+              </BoxelButton>
+            </div>
+          </div>
+        </:footer>
       </ModalContainer>
     {{/if}}
   </template>

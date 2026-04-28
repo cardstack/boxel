@@ -8,10 +8,7 @@ import type {
   FileExtractResponse,
   RenderRouteOptions,
 } from '@cardstack/runtime-common';
-import {
-  baseRealm,
-  type Realm as RuntimeRealm,
-} from '@cardstack/runtime-common';
+import type { Realm as RuntimeRealm } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index';
 import { PagePool } from '../prerender/page-pool';
 import { RenderRunner } from '../prerender/render-runner';
@@ -28,6 +25,9 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import {
   baseCardRef,
   trimExecutableExtension,
+  rri,
+  baseRealm,
+  baseRRI,
 } from '@cardstack/runtime-common';
 import {
   installDelayedRuntimeRealmSearchPatch,
@@ -252,7 +252,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: rri('./person'),
                     name: 'Person',
                   },
                 },
@@ -298,7 +298,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './person',
+                  module: rri('./person'),
                   name: 'Person',
                 },
               },
@@ -451,7 +451,7 @@ module(basename(__filename), function () {
         renderOptions: {
           fileExtract: true,
           fileDefCodeRef: {
-            module: `${realmURL}filedef-mismatch`,
+            module: rri(`${realmURL}filedef-mismatch`),
             name: 'FileDef',
           },
         },
@@ -548,7 +548,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -574,7 +574,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './no-icon',
+                      module: rri('./no-icon'),
                       name: 'NoIcon',
                     },
                   },
@@ -598,7 +598,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './bad-icon-import',
+                      module: rri('./bad-icon-import'),
                       name: 'BadIconImport',
                     },
                   },
@@ -609,7 +609,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './broken',
+                      module: rri('./broken'),
                       name: 'Broken',
                     },
                   },
@@ -631,7 +631,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './rejects',
+                      module: rri('./rejects'),
                       name: 'Rejects',
                     },
                   },
@@ -654,7 +654,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './rsvp-rejects',
+                      module: rri('./rsvp-rejects'),
                       name: 'RsvpRejects',
                     },
                   },
@@ -675,7 +675,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './throws',
+                      module: rri('./throws'),
                       name: 'Throws',
                     },
                   },
@@ -697,7 +697,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './console-error',
+                      module: rri('./console-error'),
                       name: 'ConsoleError',
                     },
                   },
@@ -719,7 +719,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './console-no-error',
+                      module: rri('./console-no-error'),
                       name: 'ConsoleNoError',
                     },
                   },
@@ -855,7 +855,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Directory',
                     },
                   },
@@ -870,7 +870,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -892,7 +892,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -914,7 +914,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -936,7 +936,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -958,7 +958,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -1803,7 +1803,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dep-reset-consumer',
+                      module: rri('./dep-reset-consumer'),
                       name: 'DepResetConsumer',
                     },
                   },
@@ -1820,7 +1820,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dep-reset-consumer',
+                      module: rri('./dep-reset-consumer'),
                       name: 'DepResetConsumer',
                     },
                   },
@@ -1833,7 +1833,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -1846,7 +1846,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -2062,7 +2062,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './prerendered-search-live',
+                      module: rri('./prerendered-search-live'),
                       name: 'LiveSearchHost',
                     },
                   },
@@ -2072,7 +2072,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './prerendered-search-live',
+                      module: rri('./prerendered-search-live'),
                       name: 'LiveSearchInner',
                     },
                   },
@@ -2085,7 +2085,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './prerendered-search-live',
+                      module: rri('./prerendered-search-live'),
                       name: 'LiveSearchResult',
                     },
                   },
@@ -2093,6 +2093,7 @@ module(basename(__filename), function () {
               },
               'live-file-search-card.gts': `
               import { CardDef, Component, field, contains, StringField, linksTo } from 'https://cardstack.com/base/card-api';
+              import { rri } from '@cardstack/runtime-common';
 
               export class LiveFileSearchInner extends CardDef {
                 static displayName = 'Live File Search Inner';
@@ -2109,7 +2110,7 @@ module(basename(__filename), function () {
                     return {
                       filter: {
                         on: {
-                          module: 'https://cardstack.com/base/card-api',
+                          module: rri('https://cardstack.com/base/card-api'),
                           name: 'FileDef',
                         },
                         eq: {
@@ -2179,7 +2180,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './live-file-search-card',
+                      module: rri('./live-file-search-card'),
                       name: 'LiveFileSearchHost',
                     },
                   },
@@ -2189,7 +2190,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './live-file-search-card',
+                      module: rri('./live-file-search-card'),
                       name: 'LiveFileSearchInner',
                     },
                   },
@@ -2387,7 +2388,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './article',
+                    module: rri('./article'),
                     name: 'Article',
                   },
                 },
@@ -2414,7 +2415,7 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: './website',
+                    module: rri('./website'),
                     name: 'Website',
                   },
                 },
@@ -2453,7 +2454,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './auth-proxy',
+                    module: rri('./auth-proxy'),
                     name: 'AuthProxy',
                   },
                 },
@@ -2643,7 +2644,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './person',
+              module: rri('./person'),
               name: 'Person',
             },
           },
@@ -2656,7 +2657,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './person',
+              module: rri('./person'),
               name: 'Person',
             },
           },
@@ -2693,7 +2694,7 @@ module(basename(__filename), function () {
           attributes: {},
           meta: {
             adoptsFrom: {
-              module: './query-directory',
+              module: rri('./query-directory'),
               name: 'QueryDirectory',
             },
           },
@@ -2725,7 +2726,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './query-directory-proxy',
+              module: rri('./query-directory-proxy'),
               name: 'QueryDirectoryProxy',
             },
           },
@@ -2838,7 +2839,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: rri('./person'),
                 name: 'Person',
               },
             },
@@ -2851,7 +2852,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: rri('./person'),
                 name: 'Person',
               },
             },
@@ -2888,7 +2889,7 @@ module(basename(__filename), function () {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: './query-directory',
+                module: rri('./query-directory'),
                 name: 'QueryDirectory',
               },
             },
@@ -2920,7 +2921,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './query-directory-proxy',
+                module: rri('./query-directory-proxy'),
                 name: 'QueryDirectoryProxy',
               },
             },
@@ -3070,7 +3071,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -3083,7 +3084,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -3107,7 +3108,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './broken-card',
+                      module: rri('./broken-card'),
                       name: 'Broken',
                     },
                   },
@@ -3223,7 +3224,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './cat',
+                      module: rri('./cat'),
                       name: 'Cat',
                     },
                   },
@@ -3241,7 +3242,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog',
+                      module: rri('./dog'),
                       name: 'Dog',
                     },
                   },
@@ -3262,7 +3263,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog-many',
+                      module: rri('./dog-many'),
                       name: 'DogMany',
                     },
                   },
@@ -3287,7 +3288,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog-profile',
+                      module: rri('./dog-profile'),
                       name: 'DogProfile',
                     },
                   },
@@ -3330,7 +3331,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './non-isolated-links-card',
+                      module: rri('./non-isolated-links-card'),
                       name: 'NonIsolatedLinks',
                     },
                   },
@@ -3347,7 +3348,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/brand-guide',
+                      module: rri('https://cardstack.com/base/brand-guide'),
                       name: 'default',
                     },
                   },
@@ -3365,7 +3366,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './cat',
+                      module: rri('./cat'),
                       name: 'Cat',
                     },
                   },
@@ -3385,7 +3386,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './cat',
+                      module: rri('./cat'),
                       name: 'Cat',
                     },
                   },
@@ -3415,7 +3416,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './intentional-error',
+                      module: rri('./intentional-error'),
                       name: 'IntentionalError',
                     },
                   },
@@ -3444,7 +3445,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './timer-error-card',
+                      module: rri('./timer-error-card'),
                       name: 'TimerError',
                     },
                   },
@@ -3475,7 +3476,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './timer-timeout-card',
+                      module: rri('./timer-timeout-card'),
                       name: 'TimerTimeout',
                     },
                   },
@@ -3506,7 +3507,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './unusable-error',
+                      module: rri('./unusable-error'),
                       name: 'UnusableError',
                     },
                   },
@@ -3540,7 +3541,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './embedded-error',
+                      module: rri('./embedded-error'),
                       name: 'EmbeddedError',
                     },
                   },
@@ -3570,7 +3571,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog',
+                      module: rri('./dog'),
                       name: 'Dog',
                     },
                   },
@@ -4895,6 +4896,237 @@ module(basename(__filename), function () {
           }
         });
 
+        test('PRERENDER_AFFINITY_FILE_CONCURRENCY unset: cap equals the deadlock-safety ceiling (no behavior change)', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let prevFileConcurrency =
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '5';
+            delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            ({ pool } = makeStubPagePool({
+              maxPages: 5,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+            let lease = await pool.getPage('realm-a', 'file');
+            let snap = pool.getQueueDepthSnapshot();
+            let affinity = snap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              affinity!.admission.cap,
+              4,
+              'default cap equals ceiling (affinityTabMax=5 → 4)',
+            );
+            lease.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+            if (prevFileConcurrency === undefined) {
+              delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            } else {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY =
+                prevFileConcurrency;
+            }
+          }
+        });
+
+        test('PRERENDER_AFFINITY_FILE_CONCURRENCY lowers the cap below the ceiling', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let prevFileConcurrency =
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '5';
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY = '1';
+            ({ pool } = makeStubPagePool({
+              maxPages: 5,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            let first = await pool.getPage('realm-a', 'file');
+            let snap1 = pool.getQueueDepthSnapshot();
+            let affinity1 = snap1.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              affinity1!.admission.cap,
+              1,
+              'cap lowered to env override when override < ceiling',
+            );
+
+            // Second file call blocks on admission because cap=1.
+            let holdMs = 20;
+            let secondPromise = pool.getPage('realm-a', 'file');
+            setTimeout(() => first.release(), holdMs);
+            let second = await secondPromise;
+            assert.ok(
+              second.waits.admissionMs >= holdMs - 5,
+              `second file call waited for admission (${second.waits.admissionMs}ms)`,
+            );
+            second.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+            if (prevFileConcurrency === undefined) {
+              delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            } else {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY =
+                prevFileConcurrency;
+            }
+          }
+        });
+
+        test('PRERENDER_AFFINITY_FILE_CONCURRENCY above ceiling is clamped to the ceiling', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let prevFileConcurrency =
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '3';
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY = '99';
+            ({ pool } = makeStubPagePool({
+              maxPages: 3,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+            let lease = await pool.getPage('realm-a', 'file');
+            let snap = pool.getQueueDepthSnapshot();
+            let affinity = snap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              affinity!.admission.cap,
+              2,
+              'cap clamped to deadlock-safety ceiling (tabMax=3 → 2) even when env asks for 99',
+            );
+            lease.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+            if (prevFileConcurrency === undefined) {
+              delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            } else {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY =
+                prevFileConcurrency;
+            }
+          }
+        });
+
+        test('invalid PRERENDER_AFFINITY_FILE_CONCURRENCY falls back to the ceiling', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let prevFileConcurrency =
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '5';
+            // Includes the empty-string case: it fails the
+            // `raw !== ''` guard in the constructor and is treated
+            // like unset — no warning, falls through to the ceiling.
+            for (let badValue of ['0', '-1', '3.5', 'abc', 'NaN', '']) {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY = badValue;
+              let { pool } = makeStubPagePool({
+                maxPages: 5,
+                disableFileAdmission: false,
+              });
+              try {
+                await pool.warmStandbys();
+                let lease = await pool.getPage('realm-a', 'file');
+                let snap = pool.getQueueDepthSnapshot();
+                let affinity = snap.affinities.find(
+                  (a) => a.affinityKey === 'realm-a',
+                );
+                assert.strictEqual(
+                  affinity!.admission.cap,
+                  4,
+                  `invalid env value ${JSON.stringify(badValue)} falls back to ceiling (4)`,
+                );
+                lease.release();
+              } finally {
+                await pool.closeAll();
+              }
+            }
+          } finally {
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+            if (prevFileConcurrency === undefined) {
+              delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            } else {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY =
+                prevFileConcurrency;
+            }
+          }
+        });
+
+        test('module / command calls still bypass admission when PRERENDER_AFFINITY_FILE_CONCURRENCY=1', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let prevFileConcurrency =
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '3';
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY = '1';
+            ({ pool } = makeStubPagePool({
+              maxPages: 3,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            // A file call holds the only admission slot.
+            let fileLease = await pool.getPage('realm-a', 'file');
+
+            // Module and command calls skip admission entirely — they
+            // don't queue behind the file slot. Both should land
+            // immediately on a fresh tab.
+            let moduleLease = await pool.getPage('realm-a', 'module');
+            assert.strictEqual(
+              moduleLease.waits.admissionMs,
+              0,
+              'module call bypasses admission even with cap exhausted',
+            );
+            moduleLease.release();
+
+            let commandLease = await pool.getPage('realm-a', 'command');
+            assert.strictEqual(
+              commandLease.waits.admissionMs,
+              0,
+              'command call bypasses admission even with cap exhausted',
+            );
+            commandLease.release();
+
+            fileLease.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+            if (prevFileConcurrency === undefined) {
+              delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            } else {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY =
+                prevFileConcurrency;
+            }
+          }
+        });
+
         test('prefers idle tab aligned to realm over standby tabs', async function (assert) {
           let { pool } = makeStubPagePool({ maxPages: 2 });
           await pool.warmStandbys();
@@ -6135,7 +6367,10 @@ module(basename(__filename), function () {
           data: {
             attributes: { info: `Detail ${i}` },
             meta: {
-              adoptsFrom: { module: '../detail', name: 'Detail' },
+              adoptsFrom: {
+                module: rri('../detail'),
+                name: 'Detail',
+              },
             },
           },
         };
@@ -6189,7 +6424,10 @@ module(basename(__filename), function () {
               },
             },
             meta: {
-              adoptsFrom: { module: '../child-config', name: 'ChildConfig' },
+              adoptsFrom: {
+                module: rri('../child-config'),
+                name: 'ChildConfig',
+              },
             },
           },
         };
@@ -6206,7 +6444,10 @@ module(basename(__filename), function () {
         data: {
           relationships: childRelationships,
           meta: {
-            adoptsFrom: { module: './parent-card', name: 'ParentCard' },
+            adoptsFrom: {
+              module: rri('./parent-card'),
+              name: 'ParentCard',
+            },
           },
         },
       };
@@ -6347,7 +6588,10 @@ module(basename(__filename), function () {
               data: {
                 attributes: { name: 'Maple' },
                 meta: {
-                  adoptsFrom: { module: './person', name: 'Person' },
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
                 },
               },
             },
@@ -6446,7 +6690,7 @@ module(basename(__filename), function () {
           fileExtract: true,
           fileRender: true,
           fileDefCodeRef: {
-            module: `${baseRealm.url}json-file-def`,
+            module: baseRRI('json-file-def'),
             name: 'JsonFileDef',
           },
         },

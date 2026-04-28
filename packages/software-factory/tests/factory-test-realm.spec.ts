@@ -14,6 +14,7 @@ import {
   PASSING_TEST_GTS,
   writeAndAwaitIndex,
 } from './helpers/qunit-test-fixtures';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -56,6 +57,9 @@ test.describe('factory-test-realm e2e', () => {
       });
       expect(moduleResponse.status).toBe(200);
 
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let handle = await executeTestRunFromRealm({
         targetRealmUrl: realmUrl,
         testResultsModuleUrl,
@@ -63,8 +67,14 @@ test.describe('factory-test-realm e2e', () => {
         slug: 'hello-e2e',
         testNames: [],
         client,
+        workspaceDir: workspace.dir,
         hostAppUrl: realm.hostAppUrl,
       });
+
+      // Push the TestRun card to the realm so the client.read assertion
+      // below finds it via HTTP.
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // Handle assertions
       expect(handle.testRunId).toContain('Validations/test_hello-e2e');
@@ -125,6 +135,9 @@ test.describe('factory-test-realm e2e', () => {
         FAILING_TEST_GTS,
       );
 
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let handle = await executeTestRunFromRealm({
         targetRealmUrl: realmUrl,
         testResultsModuleUrl,
@@ -132,8 +145,12 @@ test.describe('factory-test-realm e2e', () => {
         slug: 'hello-fail',
         testNames: [],
         client,
+        workspaceDir: workspace.dir,
         hostAppUrl: realm.hostAppUrl,
       });
+
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // Handle assertions
       expect(handle.testRunId).toContain('Validations/test_hello-fail');
@@ -176,19 +193,23 @@ test.describe('factory-test-realm e2e', () => {
     }
   });
 
-  test('error path: unreachable realm returns error immediately', async () => {
+  test('error path: unwritable workspace returns error immediately', async () => {
+    // Point workspaceDir at a path that exists as a regular file — that
+    // blocks directory creation inside writeCard and surfaces an fs
+    // error without needing any HTTP round trip.
+    let workspace = createTestWorkspace();
+    workspace.write('blocker', 'file');
     let options: TestRunRealmOptions = {
       targetRealmUrl: 'http://localhost:1/',
       testResultsModuleUrl: 'http://localhost:1/software-factory/test-results',
-      client: createMockClient({
-        fetch: async () => {
-          throw new Error('ECONNREFUSED');
-        },
-      }),
+      client: createMockClient(),
+      workspaceDir: `${workspace.dir}/blocker`,
     };
 
     let result = await createTestRun('error-test', ['test A'], options);
     expect(result.created).toBe(false);
     expect(result.error).toBeTruthy();
+
+    workspace.cleanup();
   });
 });

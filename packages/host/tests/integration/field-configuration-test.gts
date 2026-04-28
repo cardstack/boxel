@@ -20,6 +20,7 @@ import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import {
   testRealmURL,
+  testRRI,
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
@@ -167,11 +168,11 @@ function buildThemeDocument(palette: string): SingleCardDocument {
   return {
     data: {
       type: 'card',
-      id: `${testRealmURL}ThemeCard/main`,
+      id: testRRI('ThemeCard/main'),
       attributes: { palette },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}reactive`,
+          module: testRRI('reactive'),
           name: 'ThemeCard',
         },
       },
@@ -300,7 +301,7 @@ module('Integration | field configuration', function (hooks) {
         'ThemeCard/main.json': {
           data: {
             type: 'card',
-            id: `${testRealmURL}ThemeCard/main`,
+            id: testRRI('ThemeCard/main'),
             attributes: { palette: 'purple' },
             meta: {
               adoptsFrom: {

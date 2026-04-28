@@ -20,6 +20,15 @@ import {
   type ResolveFactoryTargetRealmOptions,
 } from './factory-target-realm';
 import type { IssueLoopResult } from './issue-loop';
+import { logger } from './logger';
+import { withStdoutRedirected } from './redirect-stdout';
+import {
+  ensureWorkspaceDir,
+  resetWorkspaceDir,
+  resolveWorkspaceDir,
+} from './workspace-fs';
+
+let log = logger('factory-entrypoint');
 
 export interface FactoryEntrypointOptions {
   briefUrl: string;
@@ -84,13 +93,30 @@ export interface RunFactoryEntrypointDependencies {
   ) => Promise<FactoryTargetRealmBootstrapResult>;
   createSeed?: (
     brief: FactoryBrief,
-    targetRealmUrl: string,
     options: {
-      client: BoxelCLIClient;
       darkfactoryModuleUrl: string;
+      workspaceDir: string;
     },
   ) => Promise<SeedIssueResult>;
   runIssueLoop?: (config: IssueLoopWiringConfig) => Promise<IssueLoopResult>;
+  /**
+   * Pull the target realm into the workspace. Tests stub this out so
+   * they don't make real HTTP calls. Defaults to `client.pull`.
+   */
+  pullTargetRealm?: (
+    client: BoxelCLIClient,
+    realmUrl: string,
+    workspaceDir: string,
+  ) => Promise<void>;
+  /**
+   * Push the workspace to the target realm (prefer-local). Tests stub
+   * this out. Defaults to `client.sync({ preferLocal: true })`.
+   */
+  syncWorkspaceToRealm?: (
+    client: BoxelCLIClient,
+    realmUrl: string,
+    workspaceDir: string,
+  ) => Promise<void>;
 }
 export { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
@@ -107,7 +133,7 @@ export function getFactoryEntrypointUsage(): string {
     '  --realm-server-url <url>   Realm server URL (default: from active Boxel profile)',
     '  --no-retry-blocked          Skip retrying blocked issues (by default, blocked issues are reset to backlog)',
     '  --agent <provider>          LLM backend: "claude" (default, uses Claude Code Agent SDK),',
-    '                              "codex" (not yet implemented — tracked in CS-10594),',
+    '                              "codex" (not yet implemented),',
     '                              "openrouter" (defaults to anthropic/claude-opus-4),',
     '                              or "openrouter=<model-id>" to pick a specific OpenRouter model',
     '                              (e.g., "openrouter=anthropic/claude-sonnet-4").',
@@ -237,12 +263,39 @@ export async function runFactoryEntrypoint(
 
   let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealm.url);
 
-  // Create the seed issue in the realm
-  let seedResult = await (dependencies?.createSeed ?? createSeedIssue)(
-    brief,
-    targetRealm.url,
-    { client, darkfactoryModuleUrl },
-  );
+  // Establish the local workspace for target-realm I/O. Every factory
+  // read/write against the target realm happens against this directory;
+  // the realm itself is reached only via `client.pull` / `client.sync`.
+  // The path is deterministic per realm so re-runs reuse state.
+  //
+  // When the realm was just created by bootstrap, any pre-existing
+  // workspace state is guaranteed to be orphaned (the remote has only
+  // index.json, so local files from a prior run would fail the
+  // subsequent atomic sync). Reset in that case so users don't need to
+  // `rm -rf` by hand when iterating against a recreated realm.
+  let workspaceDir = resolveWorkspaceDir(targetRealm.url);
+  if (targetRealm.createdRealm) {
+    await resetWorkspaceDir(workspaceDir);
+    log.info(`Reset workspace for freshly-created realm: ${workspaceDir}`);
+  } else {
+    await ensureWorkspaceDir(workspaceDir);
+    log.info(`Workspace directory: ${workspaceDir}`);
+  }
+
+  let pullTargetRealm = dependencies?.pullTargetRealm ?? defaultPullTargetRealm;
+  await pullTargetRealm(client, targetRealm.url, workspaceDir);
+
+  // Create the seed issue locally
+  let seedResult = await (dependencies?.createSeed ?? createSeedIssue)(brief, {
+    darkfactoryModuleUrl,
+    workspaceDir,
+  });
+
+  // Push the freshly-written seed (and any other pre-existing workspace
+  // state) to the realm so the scheduler's `listIssues()` query sees it.
+  let syncWorkspaceToRealm =
+    dependencies?.syncWorkspaceToRealm ?? defaultSyncWorkspaceToRealm;
+  await syncWorkspaceToRealm(client, targetRealm.url, workspaceDir);
 
   let summary = buildFactoryEntrypointSummary(
     options,
@@ -259,6 +312,7 @@ export async function runFactoryEntrypoint(
     realmServerUrl: targetRealm.serverUrl,
     ownerUsername: targetRealm.ownerUsername,
     client,
+    workspaceDir,
     agent: options.agent,
     openRouterModel: options.openRouterModel,
     debug: options.debug,
@@ -351,6 +405,48 @@ export function buildFactoryEntrypointSummary(
       nextStep: 'run-issue-loop',
     },
   };
+}
+
+async function defaultPullTargetRealm(
+  client: BoxelCLIClient,
+  realmUrl: string,
+  workspaceDir: string,
+): Promise<void> {
+  let result = await withStdoutRedirected(() =>
+    client.pull(realmUrl, workspaceDir),
+  );
+  if (result.error) {
+    throw new Error(
+      `Failed to pull target realm into workspace ${workspaceDir}: ${result.error}`,
+    );
+  }
+  log.info(
+    `Pulled ${result.files.length} file(s) from target realm into workspace`,
+  );
+}
+
+async function defaultSyncWorkspaceToRealm(
+  client: BoxelCLIClient,
+  realmUrl: string,
+  workspaceDir: string,
+): Promise<void> {
+  let result = await withStdoutRedirected(() =>
+    client.sync(realmUrl, workspaceDir, { preferLocal: true }),
+  );
+  if (result.error) {
+    throw new Error(`Failed to sync workspace to realm: ${result.error}`);
+  }
+  // The initial post-seed sync is load-bearing: if any file failed to
+  // upload, the seed issue isn't actually on the realm, and the loop
+  // would immediately exit with `all_issues_done` and zero iterations —
+  // silently masking the real failure. Fail fast instead.
+  if (result.hasError) {
+    throw new Error(
+      'Initial workspace sync completed with per-file errors — see prior log lines. ' +
+        'The seed issue and any other workspace state may not have reached the realm, ' +
+        'which would cause the issue loop to exit immediately with zero issues.',
+    );
+  }
 }
 
 function requireStringValue(

@@ -10,6 +10,7 @@ import {
   type RenderRouteOptions,
   type ResolvedCodeRef,
   SupportedMimeType,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
@@ -136,7 +137,7 @@ module('Acceptance | avif image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const avifDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}avif-image-def`,
+    module: `${baseRealm.url}avif-image-def` as RealmResourceIdentifier,
     name: 'AvifDef',
   });
 

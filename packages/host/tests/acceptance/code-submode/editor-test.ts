@@ -11,6 +11,7 @@ import {
   type LooseSingleCardDocument,
   Deferred,
   baseRealm,
+  rri,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 
@@ -23,6 +24,7 @@ import {
   setupOnSave,
   setupRealmCacheTeardown,
   testRealmURL,
+  testRRI,
   getMonacoContent,
   setMonacoContent,
   setupAcceptanceTestRealm,
@@ -392,7 +394,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}person`,
+            module: testRRI('person'),
             name: 'Person',
           },
         },
@@ -423,7 +425,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}pet`,
+            module: testRRI('pet'),
             name: 'Pet',
           },
         },
@@ -471,7 +473,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}pet`,
+            module: testRRI('pet'),
             name: 'Pet',
           },
         },
@@ -535,7 +537,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `../pet`,
+            module: rri(`../pet`),
             name: 'Pet',
           },
         },

@@ -13,7 +13,11 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import DateTimeField from 'https://cardstack.com/base/datetime';
-import { type Query, type Filter } from '@cardstack/runtime-common';
+import {
+  type Query,
+  type Filter,
+  rri,
+} from '@cardstack/runtime-common';
 
 import CardList from 'https://cardstack.com/base/components/card-list';
 
@@ -26,7 +30,7 @@ class Isolated extends Component<typeof OpenRouterIndex> {
 
   get modelRef() {
     return {
-      module: `${this.realmHref}openrouter-model`,
+      module: rri(`${this.realmHref}openrouter-model`),
       name: 'OpenRouterModel',
     };
   }

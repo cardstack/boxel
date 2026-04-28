@@ -23,6 +23,9 @@ import { MergeableSection } from './components/isolated/mergeable-section';
 import { PrCiStatusField } from './fields/ci-status-field';
 import { PrReviewStatusField } from './fields/review-status-field';
 
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
+
 import {
   renderPrActionLabel,
   getStateColor,
@@ -45,8 +48,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
   }
 
   get githubEventCardRef() {
-    // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-    return buildGithubEventCardRef(import.meta.url);
+    return buildGithubEventCardRef(here);
   }
 
   // ── Queries ──
@@ -347,8 +349,7 @@ class FittedTemplate extends Component<typeof PrCard> {
   }
 
   get githubEventCardRef() {
-    // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-    return buildGithubEventCardRef(import.meta.url);
+    return buildGithubEventCardRef(here);
   }
 
   // ── Queries ──

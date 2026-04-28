@@ -32,6 +32,10 @@ import {
 import type { Realm } from './realm';
 import { FILE_META_RESERVED_KEYS } from './realm';
 import { RealmPaths } from './paths';
+import type {
+  RealmResourceIdentifier,
+  RealmIdentifier,
+} from './card-reference-resolver';
 import type { Filter, Query } from './query';
 import { CardError, type SerializedError } from './error';
 import {
@@ -1025,7 +1029,9 @@ export class RealmIndexQueryEngine {
                 absolutizeInstanceURL(url, rewrittenResource.id, setURL),
               );
               visitModuleDeps(rewrittenResource, (url, setURL) =>
-                absolutizeInstanceURL(url, rewrittenResource.id, setURL),
+                absolutizeInstanceURL(url, rewrittenResource.id, (newURL) =>
+                  setURL(newURL as RealmResourceIdentifier),
+                ),
               );
               included.push(rewrittenResource);
             }
@@ -1178,7 +1184,13 @@ function relativizeResource(
     let absoluteModuleURL = new URL(
       resolveCardReference(moduleURL, resourceURL),
     );
-    setModuleURL(maybeRelativeURL(absoluteModuleURL, primaryURL, realmURL));
+    setModuleURL(
+      maybeRelativeURL(
+        absoluteModuleURL,
+        primaryURL,
+        realmURL,
+      ) as RealmResourceIdentifier,
+    );
   });
 }
 
@@ -1252,14 +1264,14 @@ function fileResourceFromIndex(
     attributes[key] = value;
   }
   return {
-    id: fileURL.href,
+    id: fileURL.href as RealmResourceIdentifier,
     type: 'file-meta',
     attributes: {
       ...attributes,
     },
     meta: {
-      adoptsFrom,
-      realmURL: fileEntry.realmURL,
+      adoptsFrom: adoptsFrom as CodeRef,
+      realmURL: fileEntry.realmURL as RealmIdentifier,
     },
     links: { self: fileURL.href },
   };

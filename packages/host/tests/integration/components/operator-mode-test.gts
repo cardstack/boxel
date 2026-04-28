@@ -4,7 +4,7 @@ import GlimmerComponent from '@glimmer/component';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { Deferred, localId } from '@cardstack/runtime-common';
+import { Deferred, localId, rri } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -121,7 +121,7 @@ module('Integration | operator-mode | basics', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: '../friend-with-css.gts',
+                  module: rri('../friend-with-css.gts'),
                   name: 'FriendWithCSS',
                 },
               },

@@ -1,0 +1,54 @@
+import { module, test } from 'qunit';
+import { basename } from 'path';
+import { runSharedTest } from '@cardstack/runtime-common/helpers';
+import packageShimHandlerTests from '@cardstack/runtime-common/tests/package-shim-handler-test';
+
+module(basename(__filename), function () {
+  module('shimAsyncModule retry (CS-10860 follow-up)', function () {
+    test('returns the resolved module on first attempt when there is no failure', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('retries a transient ChunkLoadError up to the configured budget', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('fails fast on a non-retryable error without burning the retry budget', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('after exhausting all retries, throws the last error from the resolver', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('isRetryableShimResolveError matches webpack ChunkLoadError', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('isRetryableShimResolveError matches generic chunk-load message', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('isRetryableShimResolveError matches native dynamic-import network failure', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('isRetryableShimResolveError matches Chrome ERR_CONNECTION_RESET', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('isRetryableShimResolveError matches Node ECONNRESET via err.code', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('isRetryableShimResolveError matches HTTP 502/503/504 — aligned with loader.ts policy', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('isRetryableShimResolveError does NOT match SyntaxError', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('isRetryableShimResolveError does NOT match TypeError from module evaluation', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('isRetryableShimResolveError handles non-error inputs without throwing', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('shimAsyncModule retries on transient resolver failure and ultimately serves the module', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('shimAsyncModule returns null from handle() when the resolver throws permanently', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+  });
+});

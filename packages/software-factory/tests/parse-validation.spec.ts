@@ -9,6 +9,7 @@ import {
   VALID_MODULE_GTS,
 } from './helpers/parse-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -110,6 +111,9 @@ test.describe('parse-validation e2e', () => {
         timeoutMs: 30_000,
       });
 
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       // Scope to only the file we wrote — the fixture realm has pre-existing
       // .gts files that may produce glint errors in CI due to type resolution
       // differences. We only want to validate our test file.
@@ -117,6 +121,7 @@ test.describe('parse-validation e2e', () => {
         client,
         realmServerUrl,
         parseResultsModuleUrl,
+        workspaceDir: workspace.dir,
         issueId: 'Issues/parse-e2e',
         fetchFilenames: async () => ({
           filenames: ['parse-test-card.gts', 'ParseTestCard/example-1.json'],
@@ -124,6 +129,9 @@ test.describe('parse-validation e2e', () => {
       });
 
       let result = await step.run(realmUrl);
+
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // Must pass — valid GTS + valid JSON example
       expect(result.step).toBe('parse');
@@ -184,16 +192,23 @@ test.describe('parse-validation e2e', () => {
         timeoutMs: 30_000,
       });
 
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       // Scope to only the broken file we wrote
       let step = new ParseValidationStep({
         client,
         realmServerUrl,
         parseResultsModuleUrl,
+        workspaceDir: workspace.dir,
         issueId: 'Issues/parse-fail-e2e',
         fetchFilenames: async () => ({ filenames: ['broken-card.gts'] }),
       });
 
       let result = await step.run(realmUrl);
+
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // Must fail — unclosed template tag
       expect(result.step).toBe('parse');
@@ -242,12 +257,15 @@ test.describe('parse-validation e2e', () => {
     });
 
     try {
+      let workspace = createTestWorkspace();
+
       // Simulate a bootstrap scenario: no .gts files and no specs.
       // Inject empty file list so pre-existing fixture files don't interfere.
       let step = new ParseValidationStep({
         client,
         realmServerUrl,
         parseResultsModuleUrl,
+        workspaceDir: workspace.dir,
         issueId: 'Issues/parse-bootstrap-e2e',
         fetchFilenames: async () => ({ filenames: [] }),
         searchSpecsFn: async () => ({ specs: [] }),

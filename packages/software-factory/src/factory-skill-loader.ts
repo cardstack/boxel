@@ -64,10 +64,9 @@ const FACTORY_WORKFLOW_KEYWORDS = [
 ];
 
 /**
- * CLI skills that depend on boxel CLI commands. These are excluded from the
- * factory agent's tool registry (boxel-cli tools are not available until
- * CS-10520 lands). They remain valid for human Claude Code sessions but
- * should not be resolved for the factory execution loop.
+ * CLI skills that depend on boxel CLI commands. Excluded from the factory
+ * agent's tool registry — these skills reference commands the agent
+ * cannot invoke. They remain valid for human Claude Code sessions.
  */
 const CLI_ONLY_SKILLS: readonly string[] = [
   'boxel-sync',
@@ -140,16 +139,13 @@ export class DefaultSkillResolver implements SkillResolver {
   /**
    * Determine which skills to load based on issue and project context.
    *
-   * Resolution rules (from the phase-1 plan):
-   * 1. boxel-development + boxel-file-structure — always loaded (common case)
+   * Resolution rules:
+   * 1. boxel-development + boxel-file-structure — always loaded
    * 2. ember-best-practices — when issue involves .gts component code
    * 3. software-factory-operations — for factory delivery workflow issues
    * 4. KnowledgeArticle tags can specify additional skills
    *
-   * CLI skills (boxel-sync, boxel-track, boxel-watch, boxel-restore,
-   * boxel-repair, boxel-setup) are excluded because the factory agent's
-   * tool registry does not include boxel-cli tools (deferred to CS-10520).
-   * These skills reference commands the agent cannot invoke.
+   * CLI skills are excluded (see `CLI_ONLY_SKILLS`).
    */
   resolve(issue: IssueData, project: ProjectData): string[] {
     let issueText = extractIssueText(issue);

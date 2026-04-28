@@ -29,6 +29,11 @@ import {
   Job,
 } from '@cardstack/runtime-common';
 import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/indexer';
+// Side-effect imports: these modules call registerQueueJobDefinition() at
+// load time, so any process that constructs a PgQueuePublisher gets the
+// coalesce handlers registered before publish() is called.
+import '@cardstack/runtime-common/tasks/copy';
+import '@cardstack/runtime-common/tasks/full-reindex';
 import type { PgAdapter } from './pg-adapter';
 import * as Sentry from '@sentry/node';
 

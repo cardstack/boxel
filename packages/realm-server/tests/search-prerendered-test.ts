@@ -2,8 +2,9 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import { setupPermissionedRealmCached, createJWT } from './helpers';
-import { PRERENDERED_HTML_FORMATS, baseRealm } from '@cardstack/runtime-common';
+import { PRERENDERED_HTML_FORMATS, baseRRI } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -68,7 +69,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -99,7 +100,7 @@ module(basename(__filename), function () {
             let query: Query & { prerenderedHtmlFormat: string } = {
               filter: {
                 on: {
-                  module: `${realmHref}person`,
+                  module: rri(`${realmHref}person`),
                   name: 'Person',
                 },
                 eq: {
@@ -159,7 +160,7 @@ module(basename(__filename), function () {
             let queryBase: Query = {
               filter: {
                 on: {
-                  module: `${baseRealm.url}card-api`,
+                  module: baseRRI('card-api'),
                   name: 'FileDef',
                 },
                 eq: {
@@ -297,7 +298,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: rri('./person'),
                     name: 'Person',
                   },
                 },
@@ -311,7 +312,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: rri('./person'),
                     name: 'Person',
                   },
                 },
@@ -326,7 +327,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './fancy-person',
+                    module: rri('./fancy-person'),
                     name: 'FancyPerson',
                   },
                 },
@@ -341,7 +342,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './fancy-person',
+                    module: rri('./fancy-person'),
                     name: 'FancyPerson',
                   },
                 },
@@ -428,7 +429,7 @@ module(basename(__filename), function () {
           let query: Query & { prerenderedHtmlFormat: string } = {
             filter: {
               on: {
-                module: `${realmHref}fancy-person`,
+                module: rri(`${realmHref}fancy-person`),
                 name: 'FancyPerson',
               },
               not: {
@@ -480,7 +481,7 @@ module(basename(__filename), function () {
           let query: Query & { prerenderedHtmlFormat: string } = {
             filter: {
               on: {
-                module: `${realmHref}person`,
+                module: rri(`${realmHref}person`),
                 name: 'Person',
               },
               eq: {
@@ -554,7 +555,10 @@ module(basename(__filename), function () {
             sort: [
               {
                 by: 'firstName',
-                on: { module: `${realmHref}person`, name: 'Person' },
+                on: {
+                  module: rri(`${realmHref}person`),
+                  name: 'Person',
+                },
                 direction: 'desc',
               },
             ],
@@ -587,7 +591,10 @@ module(basename(__filename), function () {
             sort: [
               {
                 by: 'firstName',
-                on: { module: `${realmHref}person`, name: 'Person' },
+                on: {
+                  module: rri(`${realmHref}person`),
+                  name: 'Person',
+                },
                 direction: 'asc',
               },
             ],
@@ -665,7 +672,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -694,7 +701,7 @@ module(basename(__filename), function () {
             let query: Query & { prerenderedHtmlFormat: string } = {
               filter: {
                 on: {
-                  module: `${realmHref}person`,
+                  module: rri(`${realmHref}person`),
                   name: 'Person',
                 },
                 eq: {
@@ -813,7 +820,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: rri('./person'),
                     name: 'Person',
                   },
                 },
@@ -827,7 +834,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: rri('./person'),
                     name: 'Person',
                   },
                 },
@@ -842,7 +849,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './fancy-person',
+                    module: rri('./fancy-person'),
                     name: 'FancyPerson',
                   },
                 },
@@ -857,7 +864,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './fancy-person',
+                    module: rri('./fancy-person'),
                     name: 'FancyPerson',
                   },
                 },
@@ -1082,7 +1089,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: rri('./person'),
                     name: 'Person',
                   },
                 },

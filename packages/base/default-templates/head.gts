@@ -26,7 +26,7 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
   }
 
   get themeIcon(): string | undefined {
-    let theme = this.args.model?.cardInfo?.theme;
+    let theme = this.args.model?.cardTheme;
     return (
       (theme as BrandGuide | undefined)?.markUsage?.socialMediaProfileIcon ??
       theme?.cardThumbnailURL

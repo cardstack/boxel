@@ -20,13 +20,14 @@ import {
 } from './constants';
 import { CardError } from './error';
 import { cardIdToURL } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './card-reference-resolver';
 import type { LooseCardResource, FileMetaResource } from './index';
 import { trimExecutableExtension } from './index';
 import { resolveCardReference } from './card-reference-resolver';
 import type { RuntimeDependencyTrackingContext } from './dependency-tracker';
 
 export type ResolvedCodeRef = {
-  module: string;
+  module: RealmResourceIdentifier;
   name: string;
 };
 
@@ -144,7 +145,7 @@ export function codeRefWithAbsoluteURL(
       if (opts?.trimExecutableExtension) {
         moduleURL = trimExecutableExtension(moduleURL);
       }
-      return { ...ref, module: moduleURL.href };
+      return { ...ref, module: moduleURL.href as RealmResourceIdentifier };
     } catch {
       return { ...ref };
     }
@@ -219,8 +220,11 @@ export function identifyCard(
   let ref = Loader.identify(card);
   if (ref) {
     return maybeRelativeURL
-      ? { ...ref, module: maybeRelativeURL(ref.module) }
-      : ref;
+      ? {
+          ...ref,
+          module: maybeRelativeURL(ref.module) as RealmResourceIdentifier,
+        }
+      : (ref as ResolvedCodeRef);
   }
 
   let local = localIdentities.get(card);
@@ -455,8 +459,8 @@ function isRelativePath(moduleId: unknown): moduleId is string {
 }
 
 type VisitModuleDep = (
-  moduleURL: string,
-  setModuleURL: (newURL: string) => void,
+  moduleURL: RealmResourceIdentifier,
+  setModuleURL: (newURL: RealmResourceIdentifier) => void,
 ) => void;
 
 function visitCodeRef(codeRef: CodeRef, visit: VisitModuleDep): void {

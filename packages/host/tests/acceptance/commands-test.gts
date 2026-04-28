@@ -54,6 +54,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   testRealmURL,
+  testRRI,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
@@ -587,8 +588,16 @@ module('Acceptance | Commands tests', function (hooks) {
     await click('[data-test-schedule-meeting-button]');
     await waitUntil(() => getRoomIds().length > 0);
     let roomId = getRoomIds().pop()!;
-    let message = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
+    let message = (await waitUntil(() => {
+      let roomEvents = getRoomEvents(roomId);
+      for (let i = roomEvents.length - 1; i >= 0; i--) {
+        let event = roomEvents[i];
+        if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
+          return event;
+        }
+      }
+      return undefined;
+    }))!;
     let boxelMessageData = JSON.parse(message.content.data);
     let meetingCardEventId = boxelMessageData.attachedCards[0];
     let meetingCardId = meetingCardEventId.sourceUrl;
@@ -746,7 +755,7 @@ module('Acceptance | Commands tests', function (hooks) {
         {
           id: '29e8addb-197b-4d6d-b0a9-547959bf7c96',
           name: buildCommandFunctionName({
-            module: `${testRealmURL}search-and-open-card-command`,
+            module: testRRI('search-and-open-card-command'),
             name: 'default',
           }),
           arguments: JSON.stringify({
@@ -816,7 +825,7 @@ module('Acceptance | Commands tests', function (hooks) {
         {
           id: '29e8addb-197b-4d6d-b0a9-547959bf7c96',
           name: buildCommandFunctionName({
-            module: `${testRealmURL}search-and-open-card-command`,
+            module: testRRI('search-and-open-card-command'),
             name: 'default',
           }),
           arguments: JSON.stringify({

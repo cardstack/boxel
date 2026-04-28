@@ -1,6 +1,7 @@
 import qs from 'qs';
 import { module, test } from 'qunit';
 
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import { parseQuery } from '@cardstack/runtime-common/query';
 
@@ -16,7 +17,7 @@ module('Unit | qs | parse', function () {
     let query: Query = {
       filter: {
         on: {
-          module: `${testRealmURL}book`,
+          module: `${testRealmURL}book` as RealmResourceIdentifier,
           name: 'Book',
         },
         every: [
@@ -45,7 +46,10 @@ module('Unit | qs | parse', function () {
       sort: [
         {
           by: 'author.lastName',
-          on: { module: `${testRealmURL}book`, name: 'Book' },
+          on: {
+            module: `${testRealmURL}book` as RealmResourceIdentifier,
+            name: 'Book',
+          },
         },
       ],
     };

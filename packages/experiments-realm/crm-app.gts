@@ -48,7 +48,11 @@ import { URGENCY_TAG_VALUES } from './crm/urgency-tag';
 import { DEAL_STATUS_VALUES } from './crm/deal-status';
 import DealSummary from './crm/deal-summary';
 import { CRMTaskPlanner } from './crm/task-planner';
-import type { LooseSingleCardDocument, Sort } from '@cardstack/runtime-common';
+import type {
+  LooseSingleCardDocument,
+  RealmResourceIdentifier,
+  Sort,
+} from '@cardstack/runtime-common';
 import type { TaskSortBy, TaskSortOrder } from './crm/task-planner';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import {
@@ -303,7 +307,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
           }
           const lastIndex = summary.id.lastIndexOf('/');
           let cardRef = {
-            module: summary.id.substring(0, lastIndex),
+            module: summary.id.substring(0, lastIndex) as RealmResourceIdentifier,
             name: summary.id.substring(lastIndex + 1),
           };
           filter.cardRef = cardRef;

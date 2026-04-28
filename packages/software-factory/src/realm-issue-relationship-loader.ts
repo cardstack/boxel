@@ -1,11 +1,11 @@
 /**
- * Concrete IssueRelationshipLoader that reads related cards from the realm.
+ * Concrete IssueRelationshipLoader that reads related cards from the
+ * local workspace mirror of the target realm.
  *
- * Traverses an issue's `project` and `relatedKnowledge` relationship links
- * to load the Project card and KnowledgeArticle cards via BoxelCLIClient.read.
+ * Traverses an issue's `project` and `relatedKnowledge` relationship
+ * links and reads the Project / KnowledgeArticle cards from disk.
  */
 
-import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import type {
@@ -16,6 +16,8 @@ import type {
 
 import type { IssueRelationshipLoader } from './factory-context-builder';
 
+import { toRealmRelativePath } from './realm-operations';
+import { readCardById } from './workspace-fs';
 import { logger } from './logger';
 
 let log = logger('realm-issue-loader');
@@ -25,8 +27,17 @@ let log = logger('realm-issue-loader');
 // ---------------------------------------------------------------------------
 
 export interface RealmIssueRelationshipLoaderConfig {
+  /**
+   * Local workspace directory mirroring the target realm. Relationship
+   * cards (Project, KnowledgeArticle) are read from this directory.
+   */
+  workspaceDir: string;
+  /**
+   * Target realm URL. Issue ids passed in from the scheduler are full
+   * URLs (that's what the search index returns); we strip this prefix
+   * before treating the id as a workspace path.
+   */
   realmUrl: string;
-  client: BoxelCLIClient;
 }
 
 // ---------------------------------------------------------------------------
@@ -34,12 +45,12 @@ export interface RealmIssueRelationshipLoaderConfig {
 // ---------------------------------------------------------------------------
 
 export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
+  private workspaceDir: string;
   private realmUrl: string;
-  private client: BoxelCLIClient;
 
   constructor(config: RealmIssueRelationshipLoaderConfig) {
+    this.workspaceDir = config.workspaceDir;
     this.realmUrl = config.realmUrl;
-    this.client = config.client;
   }
 
   /**
@@ -60,16 +71,16 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
     }
 
     let cardId = resolveRelativeLink(projectLink);
-    let result = await this.client.read(this.realmUrl, cardId);
+    let result = await readCardById(this.workspaceDir, cardId);
 
-    if (!result.ok || !result.content) {
+    if (!result.ok || !result.document) {
       log.warn(
         `Could not load project for issue "${issue.id}" (status ${result.status ?? 'N/A'}): ${result.error ?? 'not found'}`,
       );
       return undefined;
     }
 
-    let document = JSON.parse(result.content) as LooseSingleCardDocument;
+    let document = result.document as unknown as LooseSingleCardDocument;
     return {
       id: cardId,
       ...document.data.attributes,
@@ -99,9 +110,9 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
     for (let link of knowledgeLinks) {
       let cardId = resolveRelativeLink(link);
       try {
-        let result = await this.client.read(this.realmUrl, cardId);
-        if (result.ok && result.content) {
-          let document = JSON.parse(result.content) as LooseSingleCardDocument;
+        let result = await readCardById(this.workspaceDir, cardId);
+        if (result.ok && result.document) {
+          let document = result.document as unknown as LooseSingleCardDocument;
           articles.push({
             id: cardId,
             ...document.data.attributes,
@@ -123,22 +134,25 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
   }
 
   /**
-   * Fetch the full issue card from the realm to get relationship data.
-   * The SchedulableIssue from the scheduler only has scheduling fields —
-   * relationships and issueType are not included.
+   * Fetch the full issue card from the local workspace to get relationship
+   * data. The SchedulableIssue from the scheduler only has scheduling
+   * fields — relationships and issueType are not included.
    */
   private async fetchFullIssue(
     issueId: string,
   ): Promise<Record<string, unknown> | undefined> {
-    let result = await this.client.read(this.realmUrl, issueId);
-    if (!result.ok || !result.content) {
+    let result = await readCardById(
+      this.workspaceDir,
+      toRealmRelativePath(issueId, this.realmUrl),
+    );
+    if (!result.ok || !result.document) {
       log.warn(
         `Could not fetch full issue "${issueId}" (status ${result.status ?? 'N/A'}): ${result.error ?? 'not found'}`,
       );
       return undefined;
     }
 
-    let document = JSON.parse(result.content) as LooseSingleCardDocument;
+    let document = result.document as unknown as LooseSingleCardDocument;
     return {
       id: issueId,
       ...document.data.attributes,

@@ -22,9 +22,15 @@ import { htmlSafe } from '@ember/template';
 import { eq, lt, gt, subtract } from '@cardstack/boxel-ui/helpers';
 import { cached } from '@glimmer/tracking';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common';
+import type {
+  LooseSingleCardDocument,
+  Query,
+} from '@cardstack/runtime-common';
+import { codeRef } from '@cardstack/runtime-common';
 import type Owner from '@ember/owner';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 
 // Simple date formatting helper for calendar
 function formatCalendarDate(
@@ -752,11 +758,7 @@ class CalendarIsolated extends Component<typeof CalendarCard> {
   }
 
   private _addEvent = restartableTask(async () => {
-    const calendarEventSource = {
-      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-      module: new URL(import.meta.url).href,
-      name: 'CalendarEvent',
-    };
+    const calendarEventSource = codeRef(here, here, 'CalendarEvent');
 
     // Use the current date being viewed, not today's date
     const eventDate = new Date(this.currentDate);
@@ -3037,16 +3039,12 @@ export class CalendarCard extends CardDef {
         every: [
           {
             type: {
-              // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-              module: new URL(import.meta.url).href,
-              name: 'CalendarEvent',
+              ...codeRef(here, here, 'CalendarEvent'),
             },
           },
           {
             on: {
-              // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-              module: new URL(import.meta.url).href,
-              name: 'CalendarEvent',
+              ...codeRef(here, here, 'CalendarEvent'),
             },
             eq: { 'calendar.id': this.id },
           },
@@ -3055,11 +3053,7 @@ export class CalendarCard extends CardDef {
       sort: [
         {
           by: 'startTime',
-          on: {
-            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-            module: new URL(import.meta.url).href,
-            name: 'CalendarEvent',
-          },
+          on: codeRef(here, here, 'CalendarEvent'),
           direction: 'asc',
         },
       ],

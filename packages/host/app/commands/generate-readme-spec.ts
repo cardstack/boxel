@@ -1,5 +1,7 @@
 import { service } from '@ember/service';
 
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { SpecType } from 'https://cardstack.com/base/spec';
@@ -72,7 +74,7 @@ Requirements:
     const result = await generateReadmeCommand.execute({
       codeRef: {
         name: input.spec.ref.name,
-        module: input.spec.moduleHref,
+        module: input.spec.moduleHref as RealmResourceIdentifier,
       },
       userPrompt,
       systemPrompt,

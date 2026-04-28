@@ -1,6 +1,8 @@
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
+import { readCard, writeCard } from './workspace-fs';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -22,6 +24,8 @@ export interface InstantiateResultAttributes {
 export interface InstantiateResultRealmOptions {
   targetRealmUrl: string;
   client: BoxelCLIClient;
+  /** Local workspace directory — InstantiateResult cards are written here. */
+  workspaceDir: string;
 }
 
 export interface CreateInstantiateResultOptions {
@@ -59,8 +63,8 @@ export async function createInstantiateResult(
     },
   );
 
-  let result = await options.client.write(
-    options.targetRealmUrl,
+  let result = await writeCard(
+    options.workspaceDir,
     `${instantiateResultId}.json`,
     JSON.stringify(document, null, 2),
   );
@@ -80,19 +84,19 @@ export async function completeInstantiateResult(
   attrs: InstantiateResultAttributes,
   options: InstantiateResultRealmOptions & { projectCardUrl?: string },
 ): Promise<{ updated: boolean; error?: string }> {
-  let readResult = await options.client.read(
-    options.targetRealmUrl,
-    instantiateResultId,
+  let readResult = await readCard(
+    options.workspaceDir,
+    `${instantiateResultId}.json`,
   );
 
-  if (!readResult.ok || !readResult.content) {
+  if (!readResult.ok || !readResult.document) {
     return {
       updated: false,
-      error: `Failed to read InstantiateResult: ${readResult.error}`,
+      error: `Failed to read InstantiateResult: ${readResult.error ?? 'not found'}`,
     };
   }
 
-  let document = JSON.parse(readResult.content) as LooseSingleCardDocument;
+  let document = readResult.document as unknown as LooseSingleCardDocument;
   let completionAttrs: Record<string, unknown> = {
     status: attrs.status,
     completedAt: new Date().toISOString(),
@@ -117,8 +121,8 @@ export async function completeInstantiateResult(
     };
   }
 
-  let writeResult = await options.client.write(
-    options.targetRealmUrl,
+  let writeResult = await writeCard(
+    options.workspaceDir,
     `${instantiateResultId}.json`,
     JSON.stringify(document, null, 2),
   );

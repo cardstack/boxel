@@ -49,6 +49,12 @@ export interface InstantiateValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
   instantiateResultsModuleUrl: string;
+  /**
+   * Local workspace directory mirroring the target realm. Example instance
+   * JSON is read from here; InstantiateResult cards are written here for
+   * the orchestrator to sync.
+   */
+  workspaceDir: string;
   issueId?: string;
   /** Injected for testing — defaults to client.listFiles. */
   fetchFilenames?: (
@@ -214,6 +220,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         {
           targetRealmUrl,
           client: this.config.client,
+          workspaceDir: this.config.workspaceDir,
           sequenceNumber: seq,
           issueURL,
         },
@@ -240,6 +247,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         targetRealmUrl,
         realmServerUrl: this.config.realmServerUrl,
         client: this.config.client,
+        workspaceDir: this.config.workspaceDir,
         instantiateCardFn: this.config.instantiateCardFn,
       },
       specInfos,
@@ -271,6 +279,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         {
           targetRealmUrl,
           client: this.config.client,
+          workspaceDir: this.config.workspaceDir,
         },
       );
       if (!completeResult.updated) {

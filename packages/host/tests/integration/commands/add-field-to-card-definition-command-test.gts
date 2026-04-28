@@ -4,6 +4,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { rri } from '@cardstack/runtime-common';
+
 import AddFieldToCardDefinitionCommand from '@cardstack/host/commands/add-field-to-card-definition';
 
 import RealmService from '@cardstack/host/services/realm';
@@ -69,13 +71,13 @@ module(
 
       await addFieldToCardDefinitionCommand.execute({
         cardDefinitionToModify: {
-          module: 'http://test-realm/test/person',
+          module: rri('http://test-realm/test/person'),
           name: 'Person',
         },
         fieldName: 'lastName',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: rri('https://cardstack.com/base/string'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -107,14 +109,14 @@ module(
 
       await addFieldToCardDefinitionCommand.execute({
         cardDefinitionToModify: {
-          module: 'http://test-realm/test/person',
+          module: rri('http://test-realm/test/person'),
           name: 'Person',
         },
         fieldName: 'rapName',
         fieldDefinitionType: 'field',
         fieldType: 'contains',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: rri('https://cardstack.com/base/string'),
           name: 'default',
         },
         incomingRelativeTo: undefined,

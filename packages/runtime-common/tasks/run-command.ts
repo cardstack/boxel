@@ -19,6 +19,11 @@ export interface RunCommandArgs extends JSONTypes.Object {
   commandInput: JSONTypes.Object | null;
 }
 
+// No coalesce handler: each run-command enqueue is a distinct invocation
+// (different `command`/`runAs`/`commandInput`) whose result is returned to its
+// caller. Joining would route one caller's response to another. The realm
+// concurrency group already serializes per-realm execution.
+
 export { runCommand };
 
 const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({

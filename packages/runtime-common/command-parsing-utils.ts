@@ -1,4 +1,5 @@
 import type { ResolvedCodeRef } from './code-ref';
+import type { RealmResourceIdentifier } from './card-reference-resolver';
 import { ensureTrailingSlash } from './paths';
 
 export function parseBoxelHostCommandSpecifier(
@@ -11,7 +12,8 @@ export function parseBoxelHostCommandSpecifier(
     return undefined;
   }
   return {
-    module: `@cardstack/boxel-host/commands/${match[1]}`,
+    module:
+      `@cardstack/boxel-host/commands/${match[1]}` as RealmResourceIdentifier,
     name: match[2],
   };
 }
@@ -45,7 +47,8 @@ export function commandUrlToCodeRef(
   }
 
   return {
-    module: `${ensureTrailingSlash(realmURL)}commands/${parsedPath.commandName}`,
+    module:
+      `${ensureTrailingSlash(realmURL)}commands/${parsedPath.commandName}` as RealmResourceIdentifier,
     name: parsedPath.exportName,
   };
 }

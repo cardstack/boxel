@@ -7,6 +7,7 @@ import {
   isCardError,
 } from './index';
 import { cardIdToURL } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './card-reference-resolver';
 
 async function loadDocumentWithRequest(
   fetch: typeof globalThis.fetch,
@@ -94,7 +95,7 @@ export async function loadCardDocument(
   }
   if (!json.data.id) {
     // card source format is not serialized with the ID, so we add that back in.
-    json.data.id = url;
+    json.data.id = url as RealmResourceIdentifier;
   }
   return json;
 }
@@ -124,7 +125,7 @@ export async function loadFileMetaDocument(
   }
   if (!json.data.id) {
     // card source format is not serialized with the ID, so we add that back in.
-    json.data.id = url;
+    json.data.id = url as RealmResourceIdentifier;
   }
   return json;
 }

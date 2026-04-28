@@ -13,7 +13,10 @@ import WebsiteField from 'https://cardstack.com/base/website';
 import AddressField from 'https://cardstack.com/base/address';
 
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-import { Query } from '@cardstack/runtime-common';
+import { codeRef, Query } from '@cardstack/runtime-common';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 import { restartableTask } from 'ember-concurrency';
 
 import { Company } from './company';
@@ -43,11 +46,7 @@ import ContactIcon from '@cardstack/boxel-icons/contact';
 import PlusIcon from '@cardstack/boxel-icons/plus';
 import TrendingUp from '@cardstack/boxel-icons/trending-up';
 
-const taskSource = {
-  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-  module: new URL('./task', import.meta.url).href,
-  name: 'CRMTask',
-};
+const taskSource = codeRef(here, './task', 'CRMTask');
 
 class EditTemplate extends Component<typeof Account> {
   <template>
@@ -116,11 +115,7 @@ class IsolatedTemplate extends Component<typeof Account> {
   get dealQuery(): Query {
     return {
       filter: {
-        on: {
-          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./deal', import.meta.url).href,
-          name: 'Deal',
-        },
+        on: codeRef(here, './deal', 'Deal'),
         every: [
           { eq: { 'account.id': this.args.model.id ?? '' } },
           { eq: { isActive: true } },
@@ -267,11 +262,7 @@ class IsolatedTemplate extends Component<typeof Account> {
   get lifetimeValueQuery(): Query {
     return {
       filter: {
-        on: {
-          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./deal', import.meta.url).href,
-          name: 'Deal',
-        },
+        on: codeRef(here, './deal', 'Deal'),
         every: [
           { eq: { 'account.id': this.args.model.id ?? '' } },
           { eq: { 'status.label': 'Closed Won' } },
@@ -684,11 +675,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
   get dealQuery(): Query {
     return {
       filter: {
-        on: {
-          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./deal', import.meta.url).href,
-          name: 'Deal',
-        },
+        on: codeRef(here, './deal', 'Deal'),
         every: [
           { eq: { 'account.id': this.args.model.id ?? '' } },
           { eq: { isActive: true } },
@@ -788,11 +775,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
   get lifetimeValueQuery(): Query {
     return {
       filter: {
-        on: {
-          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-          module: new URL('./deal', import.meta.url).href,
-          name: 'Deal',
-        },
+        on: codeRef(here, './deal', 'Deal'),
         every: [
           { eq: { 'account.id': this.args.model.id ?? '' } },
           { eq: { 'status.label': 'Closed Won' } },

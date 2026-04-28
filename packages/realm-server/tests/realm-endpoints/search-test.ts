@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import { baseRealm, type Realm } from '@cardstack/runtime-common';
+import { baseRealm, baseRRI, type Realm, rri } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupPermissionedRealmCached,
@@ -33,7 +33,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       return {
         filter: {
           on: {
-            module: `${realmHref}person`,
+            module: rri(`${realmHref}person`),
             name: 'Person',
           },
           eq: {
@@ -47,7 +47,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       return {
         filter: {
           type: {
-            module: `${baseRealm.url}card-api`,
+            module: baseRRI('card-api'),
             name: 'FileDef',
           },
         },
@@ -102,7 +102,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           let unknownTypeQuery: Query = {
             filter: {
               on: {
-                module: 'http://some-realm-server/some-realm/some-card',
+                module: rri('http://some-realm-server/some-realm/some-card'),
                 name: 'SomeCard',
               },
               eq: {
@@ -133,7 +133,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           let paginationQuery: Query = {
             filter: {
               type: {
-                module: `${realmHref}person`,
+                module: rri(`${realmHref}person`),
                 name: 'Person',
               },
             },
@@ -144,7 +144,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             sort: [
               {
                 by: 'firstName',
-                on: { module: `${realmHref}person`, name: 'Person' },
+                on: {
+                  module: rri(`${realmHref}person`),
+                  name: 'Person',
+                },
                 direction: 'asc',
               },
             ],
@@ -574,7 +577,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './friend',
+                    module: rri('./friend'),
                     name: 'Friend',
                   },
                 },
@@ -595,7 +598,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './friend',
+                    module: rri('./friend'),
                     name: 'Friend',
                   },
                 },
@@ -609,7 +612,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './friend',
+                    module: rri('./friend'),
                     name: 'Friend',
                   },
                 },
@@ -623,7 +626,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           return {
             filter: {
               on: {
-                module: `${realmHref}friend`,
+                module: rri(`${realmHref}friend`),
                 name: 'Friend',
               },
               eq: {
@@ -974,7 +977,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { firstName: 'Mango', city: 'Barksville' },
                 meta: {
-                  adoptsFrom: { module: './person', name: 'Person' },
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
                 },
               },
             },
@@ -983,7 +989,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { firstName: 'Van Gogh', city: 'Barksville' },
                 meta: {
-                  adoptsFrom: { module: './person', name: 'Person' },
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
                 },
               },
             },
@@ -992,7 +1001,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { firstName: 'Ringo', city: 'Waggington' },
                 meta: {
-                  adoptsFrom: { module: './person', name: 'Person' },
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
                 },
               },
             },
@@ -1225,7 +1237,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { title: 'Book A', editions: 3 },
                 meta: {
-                  adoptsFrom: { module: './book', name: 'Book' },
+                  adoptsFrom: {
+                    module: rri('./book'),
+                    name: 'Book',
+                  },
                 },
               },
             },
@@ -1234,7 +1249,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { title: 'Book B', editions: 200 },
                 meta: {
-                  adoptsFrom: { module: './book', name: 'Book' },
+                  adoptsFrom: {
+                    module: rri('./book'),
+                    name: 'Book',
+                  },
                 },
               },
             },
@@ -1243,7 +1261,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 type: 'card',
                 attributes: { title: 'Book C', editions: 10 },
                 meta: {
-                  adoptsFrom: { module: './book', name: 'Book' },
+                  adoptsFrom: {
+                    module: rri('./book'),
+                    name: 'Book',
+                  },
                 },
               },
             },

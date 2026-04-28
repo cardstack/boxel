@@ -18,6 +18,7 @@ import { validate as uuidValidate } from 'uuid';
 import {
   baseRealm,
   CachingDefinitionLookup,
+  cardDefComputedFields,
   ensureTrailingSlash,
   getCreatedTime,
   IndexWriter,
@@ -29,6 +30,7 @@ import {
   testHostModeRealmURL,
   testRealmInfo,
   testRealmURL,
+  testRRI,
   Worker,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
@@ -37,9 +39,13 @@ import {
   type Prerenderer,
   type RealmAction,
   type RealmAdapter,
+  ri,
+  rri,
   type RealmInfo,
   type RealmPermissions,
   type RenderError,
+  type RealmIdentifier,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
@@ -81,6 +87,7 @@ export {
   testHostModeRealmURL,
   testRealmURL,
   testRealmInfo,
+  testRRI,
   percySnapshot,
 };
 export { createJWT, testRealmSecretSeed } from './test-auth';
@@ -94,7 +101,15 @@ export { setupOperatorModeStateCleanup } from './operator-mode-state';
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
 
-export const testModuleRealm = 'http://localhost:4202/test/';
+export const testModuleRealm = ri('http://localhost:4202/test/');
+
+/**
+ * Build a `RealmResourceIdentifier` for a module in `testModuleRealm`.
+ * Shorter than `` rri(`${testModuleRealm}${path}`) ``.
+ */
+export function testModuleRRI(path: string): RealmResourceIdentifier {
+  return rri(`${testModuleRealm}${path}`);
+}
 
 export {
   catalogRealm,
@@ -105,6 +120,8 @@ export {
 } from '@cardstack/host/lib/utils';
 
 const { sqlSchema } = ENV;
+
+export const cardDefFieldCount = cardDefComputedFields?.length + 1; // standard computeds + `cardInfo`
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 type ModuleHooks = {
@@ -1438,7 +1455,7 @@ export async function saveCard(
   id: string,
   loader: Loader,
   store?: CardStore,
-  realmURL?: string,
+  realmURL?: RealmIdentifier,
 ) {
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
   let doc = api.serializeCard(instance);

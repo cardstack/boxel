@@ -46,6 +46,7 @@ export async function resolveTestRun(
     targetRealmUrl: options.targetRealmUrl,
     testResultsModuleUrl: options.testResultsModuleUrl,
     client: options.client,
+    workspaceDir: options.workspaceDir,
   };
 
   let resumeResult = options.forceNew
@@ -558,6 +559,7 @@ export async function executeTestRunFromRealm(
     targetRealmUrl: options.targetRealmUrl,
     testResultsModuleUrl: options.testResultsModuleUrl,
     client: options.client,
+    workspaceDir: options.workspaceDir,
   };
   let completeOptions = {
     ...realmOptions,

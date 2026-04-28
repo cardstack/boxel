@@ -80,6 +80,29 @@ const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
   [`Failed to execute 'removeChild' on 'Node'`, 'NotFoundError'],
 ];
 
+// Title shown on the SerializedError that wraps a captured console
+// or runtime-exception entry. Distinct labels make it obvious in the
+// error doc which CDP layer surfaced the signal:
+//
+//   • 'Uncaught exception' → Runtime.exceptionThrown (V8 layer; the
+//     primary signal for the whitepaper-class bug where unhandled-
+//     rejection / window.error never fire)
+//   • 'Console assert'     → console.assert(...) failure
+//   • 'Console error'      → console.error(...) or Chrome's late
+//     "Uncaught (in promise) ..." console tracker line
+function titleForConsoleErrorEntry(entry: ConsoleErrorEntry): string {
+  if (entry.source === 'exception') return 'Uncaught exception';
+  return entry.type === 'assert' ? 'Console assert' : 'Console error';
+}
+
+// Stack-trace header line. Same source-distinction logic as the
+// title above, formatted as `<HeaderName>: <message>` so the existing
+// error viewer renders these identically to native Node stacks.
+function stackHeaderForConsoleErrorEntry(entry: ConsoleErrorEntry): string {
+  if (entry.source === 'exception') return 'UncaughtException';
+  return entry.type === 'assert' ? 'AssertionError' : 'ConsoleError';
+}
+
 export class RenderRunner {
   #pagePool: PagePool;
   #boxelHostURL: string;
@@ -1388,10 +1411,44 @@ export class RenderRunner {
   ): SerializedError[] {
     return consoleErrors.map((entry) => ({
       status: 500,
-      title: entry.type === 'assert' ? 'Console assert' : 'Console error',
+      title: titleForConsoleErrorEntry(entry),
       message: this.#formatConsoleError(entry),
+      stack: this.#formatConsoleErrorStack(entry),
       additionalErrors: null,
     }));
+  }
+
+  // Assembles a Node-style stack string (header line +
+  // `    at <url>:<line>:<col>` frames) from whatever frames CDP
+  // attached to the entry. Used for both console-error and
+  // runtime-exception sources — the header line distinguishes them.
+  // For the runtime-exception source this is the actionable lead
+  // back at the offending template / getter / helper.
+  #formatConsoleErrorStack(entry: ConsoleErrorEntry): string | undefined {
+    let frames = entry.stackFrames;
+    if (!Array.isArray(frames) || frames.length === 0) {
+      return undefined;
+    }
+    let lines: string[] = [];
+    for (let frame of frames) {
+      if (!frame?.url) {
+        continue;
+      }
+      let segments: number[] = [];
+      if (typeof frame.lineNumber === 'number') {
+        segments.push(frame.lineNumber + 1);
+      }
+      if (typeof frame.columnNumber === 'number') {
+        segments.push(frame.columnNumber + 1);
+      }
+      let suffix = segments.length ? `:${segments.join(':')}` : '';
+      lines.push(`    at ${frame.url}${suffix}`);
+    }
+    if (lines.length === 0) {
+      return undefined;
+    }
+    let header = stackHeaderForConsoleErrorEntry(entry);
+    return [`${header}: ${entry.text}`, ...lines].join('\n');
   }
 
   #formatConsoleError(entry: ConsoleErrorEntry): string {
