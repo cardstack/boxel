@@ -359,6 +359,8 @@ async function main(): Promise<void> {
         'https://realms.example.test/software-factory/darkfactory',
       realmServerUrl: 'https://realms.example.test/',
       client: toolBuilderClient,
+      // Smoke test doesn't exercise fs I/O — any real path is fine.
+      workspaceDir: '/tmp/boxel-factory-smoke',
     },
     toolBuilderExecutor,
     registry,

@@ -68,6 +68,8 @@ import {
   type LooseSingleResourceDocument,
   type StoreReadType,
   type CardResource,
+  type RealmIdentifier,
+  type RealmResourceIdentifier,
   type Saved,
   resolveCardReference,
 } from '@cardstack/runtime-common';
@@ -302,6 +304,91 @@ export default class StoreService extends Service implements StoreInterface {
     this.store.trackLoad(load);
   }
 
+  // CS-10872: pass-through so SearchResource / other callers can tag
+  // their load promises with the metadata we want to see in a timeout
+  // error document ("what query fields were still pending").
+  trackQueryLoad(
+    load: Promise<unknown>,
+    meta: import('https://cardstack.com/base/card-api').QueryLoadMeta,
+  ): (() => void) | void {
+    return (
+      this.store as unknown as {
+        trackQueryLoad?: (
+          l: Promise<unknown>,
+          m: import('https://cardstack.com/base/card-api').QueryLoadMeta,
+        ) => (() => void) | void;
+      }
+    ).trackQueryLoad?.(load, meta);
+  }
+
+  queryLoadsInFlight(): import('https://cardstack.com/base/card-api').QueryLoadInfo[] {
+    return (
+      (
+        this.store as unknown as {
+          queryLoadsInFlight?: () => import('https://cardstack.com/base/card-api').QueryLoadInfo[];
+        }
+      ).queryLoadsInFlight?.() ?? []
+    );
+  }
+
+  // CS-10872: pass-throughs for the per-item diagnostic accessors.
+  // Each returns [] when the underlying store doesn't implement the
+  // hook (older test doubles, in-memory stores in node-side tests).
+  cardDocLoadsInFlight(): Array<{ url: string; ageMs: number }> {
+    return (
+      (
+        this.store as unknown as {
+          cardDocLoadsInFlight?: () => Array<{ url: string; ageMs: number }>;
+        }
+      ).cardDocLoadsInFlight?.() ?? []
+    );
+  }
+  fileMetaDocLoadsInFlight(): Array<{ url: string; ageMs: number }> {
+    return (
+      (
+        this.store as unknown as {
+          fileMetaDocLoadsInFlight?: () => Array<{
+            url: string;
+            ageMs: number;
+          }>;
+        }
+      ).fileMetaDocLoadsInFlight?.() ?? []
+    );
+  }
+  recentCardDocLoads(): Array<{ url: string; ms: number }> {
+    return (
+      (
+        this.store as unknown as {
+          recentCardDocLoads?: () => Array<{ url: string; ms: number }>;
+        }
+      ).recentCardDocLoads?.() ?? []
+    );
+  }
+  recentFileMetaLoads(): Array<{ url: string; ms: number }> {
+    return (
+      (
+        this.store as unknown as {
+          recentFileMetaLoads?: () => Array<{ url: string; ms: number }>;
+        }
+      ).recentFileMetaLoads?.() ?? []
+    );
+  }
+  recentQueryLoads(): Array<{
+    meta: import('https://cardstack.com/base/card-api').QueryLoadMeta;
+    ms: number;
+  }> {
+    return (
+      (
+        this.store as unknown as {
+          recentQueryLoads?: () => Array<{
+            meta: import('https://cardstack.com/base/card-api').QueryLoadMeta;
+            ms: number;
+          }>;
+        }
+      ).recentQueryLoads?.() ?? []
+    );
+  }
+
   get cardDocsInFlight() {
     return this.store.cardDocsInFlight;
   }
@@ -317,7 +404,10 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<string | CardErrorJSONAPI> {
     return await this.withTestWaiters(async () => {
       if (opts?.realm) {
-        doc.data.meta = { ...(doc.data.meta ?? {}), realmURL: opts.realm };
+        doc.data.meta = {
+          ...(doc.data.meta ?? {}),
+          realmURL: opts.realm as RealmIdentifier,
+        };
       }
       let cardOrError = await this.getCardInstance({
         idOrDoc: doc,
@@ -1507,7 +1597,7 @@ export default class StoreService extends Service implements StoreInterface {
         }
         if (!json.data.id) {
           // card source format is not serialized with the ID, so we add that back in.
-          json.data.id = url;
+          json.data.id = url as RealmResourceIdentifier;
         }
         if (!json.data.meta?.realmURL) {
           // Source-mode loads in render context don't include realm metadata.
@@ -1517,7 +1607,7 @@ export default class StoreService extends Service implements StoreInterface {
           if (realmURL) {
             json.data.meta = {
               ...(json.data.meta ?? {}),
-              realmURL,
+              realmURL: realmURL as RealmIdentifier,
             };
           }
         }

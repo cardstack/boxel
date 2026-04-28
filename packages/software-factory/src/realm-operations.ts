@@ -3,13 +3,16 @@
  * across the factory to be worth centralizing (read-patch-write for
  * comments, sequence-number derivation, and the pull wrapper).
  *
- * All realm HTTP I/O and auth is owned by BoxelCLIClient — callers pass
- * in a `client` and never touch tokens directly.
+ * Read/search operations go through `client.search` (for realm-index
+ * queries); card mutations go through the local workspace and reach the
+ * realm via `client.sync` orchestrated by the loop.
  */
 
-import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+
+import { readCard, writeCard } from './workspace-fs';
 
 /**
  * Ensure a card instance path ends with `.json`. The realm API uses
@@ -23,23 +26,34 @@ export function ensureJsonExtension(path: string): string {
   return path;
 }
 
+/**
+ * Strip a realm URL prefix from an id. Search-index results return
+ * `card.id` as a full URL (`http://.../Issues/foo`), but workspace-fs
+ * primitives expect a realm-relative path (`Issues/foo`). Pass the id
+ * through this helper at the boundary before treating it as a path.
+ */
+export function toRealmRelativePath(id: string, realmUrl: string): string {
+  let base = ensureTrailingSlash(realmUrl);
+  return id.startsWith(base) ? id.slice(base.length) : id;
+}
+
 // ---------------------------------------------------------------------------
 // Issue Comments (read-patch-write)
 // ---------------------------------------------------------------------------
 
 /**
- * Append a comment to an issue card using read-patch-write.
- * Issue descriptions are immutable — all post-creation context goes through comments.
+ * Append a comment to an issue card using read-patch-write against the
+ * local workspace. Issue descriptions are immutable — all post-creation
+ * context goes through comments.
  */
 export async function addCommentToIssue(
-  client: BoxelCLIClient,
-  realmUrl: string,
+  workspaceDir: string,
   path: string,
   comment: { body: string; author: string; datetime?: string },
 ): Promise<{ ok: boolean; error?: string }> {
   let filePath = ensureJsonExtension(path);
 
-  let existing = await client.read(realmUrl, filePath);
+  let existing = await readCard(workspaceDir, filePath);
   if (!existing.ok || !existing.document) {
     return {
       ok: false,
@@ -63,7 +77,7 @@ export async function addCommentToIssue(
   attrs.updatedAt = new Date().toISOString();
   document.data.attributes = attrs;
 
-  return client.write(realmUrl, filePath, JSON.stringify(document, null, 2));
+  return writeCard(workspaceDir, filePath, JSON.stringify(document, null, 2));
 }
 
 // ---------------------------------------------------------------------------
@@ -117,21 +131,4 @@ export async function getNextValidationSequenceNumber(
   }
 
   return maxSeq + 1;
-}
-
-// ---------------------------------------------------------------------------
-// Pull Realm Files
-// ---------------------------------------------------------------------------
-
-/**
- * Download all files from a remote realm to a local directory.
- * Thin wrapper over `BoxelCLIClient.pull` for call sites that still
- * spawn their own client.
- */
-export async function pullRealmFiles(
-  realmUrl: string,
-  localDir: string,
-): Promise<{ files: string[]; error?: string }> {
-  let client = new BoxelCLIClient();
-  return client.pull(realmUrl, localDir);
 }

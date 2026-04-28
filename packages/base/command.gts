@@ -142,6 +142,11 @@ export class SwitchSubmodeInput extends CardDef {
   @field createFile = contains(BooleanField);
 }
 
+export class PersistModuleInspectorViewInput extends CardDef {
+  @field codePath = contains(StringField);
+  @field moduleInspectorView = contains(StringField); // 'schema' | 'spec' | 'preview'
+}
+
 export class SwitchSubmodeResult extends CardDef {
   @field codePath = contains(StringField);
 }
@@ -152,6 +157,32 @@ export class WriteTextFileInput extends CardDef {
   @field path = contains(StringField);
   @field overwrite = contains(BooleanField);
   @field useNonConflictingFilename = contains(BooleanField);
+}
+
+export class WriteBinaryFileInput extends CardDef {
+  @field path = contains(StringField);
+  @field realm = contains(StringField);
+  @field base64Content = contains(StringField);
+  @field contentType = contains(StringField);
+  @field useNonConflictingFilename = contains(BooleanField);
+}
+
+export class WriteBinaryFileResult extends CardDef {
+  @field fileUrl = contains(StringField);
+}
+
+export class GenerateThumbnailInput extends CardDef {
+  @field prompt = contains(StringField);
+  @field sourceImageUrl = contains(StringField);
+  @field targetRealmUrl = contains(StringField);
+  @field targetPath = contains(StringField); // optional: subfolder within realm, e.g. "thumbnails"
+  @field targetCardId = contains(StringField);
+  @field cardName = contains(StringField); // card name for filename generation
+  @field llmModel = contains(StringField);
+}
+
+export class GenerateThumbnailOutput extends CardDef {
+  @field imageDefUrl = contains(StringField);
 }
 
 export class CreateInstanceInput extends CardDef {
@@ -226,7 +257,9 @@ export class LintAndFixInput extends CardDef {
 
 export class LintAndFixResult extends CardDef {
   @field output = contains(StringField);
-  @field lintIssues = containsMany(StringField);
+  @field lintIssues = containsMany(StringField); // all remaining issues (errors + warnings)
+  @field lintErrors = containsMany(StringField); // severity 2 only (unfixable errors)
+  @field lintWarnings = containsMany(StringField); // severity 1 only
 }
 
 export class PatchCodeResultField extends FieldDef {
@@ -532,6 +565,84 @@ export class RealmMetaField extends FieldDef {
 
 export class GetAllRealmMetasResult extends CardDef {
   @field results = containsMany(RealmMetaField);
+}
+
+export class GetAvailableRealmUrlsResult extends CardDef {
+  @field urls = containsMany(StringField);
+}
+
+export class GetCatalogRealmUrlsResult extends CardDef {
+  @field urls = containsMany(StringField);
+}
+
+export class FetchCardJsonInput extends CardDef {
+  @field url = contains(StringField);
+}
+
+export class FetchCardJsonResult extends CardDef {
+  @field document = contains(JsonField);
+}
+
+export class ExecuteAtomicOperationsInput extends CardDef {
+  @field realmUrl = contains(StringField);
+  @field operations = containsMany(JsonField);
+}
+
+export class ExecuteAtomicOperationsResult extends CardDef {
+  @field results = containsMany(JsonField);
+}
+
+export class StoreAddInput extends CardDef {
+  @field document = contains(JsonField);
+  @field realm = contains(StringField);
+}
+
+export class GetRealmOfUrlInput extends CardDef {
+  @field url = contains(StringField);
+}
+
+export class GetRealmOfUrlResult extends CardDef {
+  @field realmUrl = contains(StringField); // empty string if not found
+}
+
+export class CanReadRealmInput extends CardDef {
+  @field realmUrl = contains(StringField);
+}
+
+export class CanReadRealmResult extends CardDef {
+  @field canRead = contains(BooleanField);
+}
+
+export class AuthedFetchInput extends CardDef {
+  @field url = contains(StringField);
+  @field method = contains(StringField);
+  @field acceptHeader = contains(StringField);
+}
+
+export class AuthedFetchResult extends CardDef {
+  @field ok = contains(BooleanField);
+  @field status = contains(NumberField);
+  @field body = contains(JsonField);
+}
+
+export class GetDefaultWritableRealmResult extends CardDef {
+  @field realmUrl = contains(StringField); // empty string if no writable realm found
+}
+
+export class ValidateRealmInput extends CardDef {
+  @field realmUrl = contains(StringField);
+}
+
+export class ValidateRealmResult extends CardDef {
+  @field realmUrl = contains(StringField); // normalized with trailing slash
+}
+
+export class SanitizeModuleListInput extends CardDef {
+  @field moduleUrls = containsMany(StringField);
+}
+
+export class SanitizeModuleListResult extends CardDef {
+  @field moduleUrls = containsMany(StringField);
 }
 
 export class SearchGoogleImagesInput extends CardDef {

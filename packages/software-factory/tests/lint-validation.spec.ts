@@ -4,24 +4,15 @@ import { expect, test } from './fixtures';
 
 import { LintValidationStep } from '../src/validators/lint-step';
 import type { LintValidationDetails } from '../src/validators/lint-step';
+import { BAD_LINT_GTS } from './helpers/lint-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
   'test-fixtures',
   'test-realm-runner',
 );
-
-// A .gts file with a lint violation that can't be auto-fixed.
-// The `no-unused-vars` rule flags `unusedVar` and auto-fix cannot remove it.
-const BAD_LINT_GTS = `import {
-  CardDef,
-} from 'https://cardstack.com/base/card-api';
-
-let unusedVar = 42;
-
-export class BadCard extends CardDef {}
-`;
 
 test.use({ realmDir: fixtureRealmDir });
 test.use({ realmServerMode: 'isolated' });
@@ -52,7 +43,7 @@ test.describe('lint-validation e2e', () => {
       );
 
       // The fixture's hello.gts should be clean
-      let errors = lintResult.messages.filter((m) => m.severity === 2);
+      let errors = (lintResult.messages ?? []).filter((m) => m.severity === 2);
       expect(errors).toEqual([]);
     } finally {
       cleanup();
@@ -95,7 +86,7 @@ test.describe('lint-validation e2e', () => {
       );
 
       // Should have at least one error (unused variable)
-      let errors = lintResult.messages.filter((m) => m.severity === 2);
+      let errors = (lintResult.messages ?? []).filter((m) => m.severity === 2);
       expect(errors.length).toBeGreaterThan(0);
 
       // Verify the message shape
@@ -125,14 +116,23 @@ test.describe('lint-validation e2e', () => {
     });
 
     try {
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let step = new LintValidationStep({
         client,
         realmServerUrl,
         lintResultsModuleUrl,
+        workspaceDir: workspace.dir,
         issueId: 'Issues/lint-e2e',
       });
 
       let result = await step.run(realmUrl);
+
+      // Sync the LintResult artifact card to the realm so the read-back
+      // assertion below sees it via HTTP.
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // The fixture realm has hello.gts and hello.test.gts — both lintable.
       // hello.gts should be clean; result should reflect that.
@@ -151,7 +151,7 @@ test.describe('lint-validation e2e', () => {
       expect(cardRead.ok).toBe(true);
 
       let attrs = (
-        cardRead.document as unknown as {
+        JSON.parse(cardRead.content!) as {
           data?: { attributes?: Record<string, unknown> };
         }
       )?.data?.attributes;

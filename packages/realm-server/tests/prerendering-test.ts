@@ -8,13 +8,11 @@ import type {
   FileExtractResponse,
   RenderRouteOptions,
 } from '@cardstack/runtime-common';
-import {
-  baseRealm,
-  type Realm as RuntimeRealm,
-} from '@cardstack/runtime-common';
+import type { Realm as RuntimeRealm } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index';
 import { PagePool } from '../prerender/page-pool';
 import { RenderRunner } from '../prerender/render-runner';
+import { BrowserManager } from '../prerender/browser-manager';
 
 import {
   setupPermissionedRealmsCached,
@@ -22,10 +20,14 @@ import {
   testCreatePrerenderAuth,
   getPrerendererForTesting,
 } from './helpers';
+import { prerenderCard, prerenderFileExtract } from './helpers/prerender';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import {
   baseCardRef,
   trimExecutableExtension,
+  rri,
+  baseRealm,
+  baseRRI,
 } from '@cardstack/runtime-common';
 import {
   installDelayedRuntimeRealmSearchPatch,
@@ -62,18 +64,22 @@ class TestSemaphore {
   };
 }
 
-function makeStubPagePool(
-  maxPages: number,
-  renderSemaphore?: { acquire(): Promise<() => void> },
-  createContextDelay?: (contextNumber: number) => Promise<void>,
-  options?: {
-    disableStandbyRefill?: boolean;
-    standbyTimeoutMs?: number;
-    closeContextDelay?: (id: string) => Promise<void>;
-    onContextCreated?: (id: string) => void;
-    onContextClosed?: (id: string) => void;
-  },
-) {
+interface StubPagePoolOptions {
+  maxPages: number;
+  renderSemaphore?: { acquire(): Promise<() => void> };
+  createContextDelay?: (contextNumber: number) => Promise<void>;
+  disableStandbyRefill?: boolean;
+  standbyTimeoutMs?: number;
+  closeContextDelay?: (id: string) => Promise<void>;
+  onContextCreated?: (id: string) => void;
+  onContextClosed?: (id: string) => void;
+  // Default `true` for back-compat with existing tab-routing unit
+  // tests that predate the admission feature. Admission-control
+  // tests opt in by passing `false`.
+  disableFileAdmission?: boolean;
+}
+
+function makeStubPagePool(opts: StubPagePoolOptions) {
   function makeStorage(): Storage {
     let values: Record<string, string> = {};
     return {
@@ -104,12 +110,12 @@ function makeStubPagePool(
   let browser = {
     async createBrowserContext() {
       let counter = ++contextCounter;
-      if (createContextDelay) {
-        await createContextDelay(counter);
+      if (opts.createContextDelay) {
+        await opts.createContextDelay(counter);
       }
       let id = `ctx-${counter}`;
       contextsCreated.push(id);
-      options?.onContextCreated?.(id);
+      opts.onContextCreated?.(id);
       let localStorage = makeStorage();
       let context = {
         async newPage() {
@@ -129,6 +135,13 @@ function makeStubPagePool(
                 (globalThis as any).localStorage = originalLocalStorage;
               }
             },
+            async close() {
+              // CS-10817 step 3: PagePool closes individual pool pages
+              // (without closing the shared context) on entry
+              // disposal. Context-level bookkeeping still runs via
+              // the context.close() hook above.
+              return;
+            },
             browserContext() {
               return context;
             },
@@ -141,11 +154,11 @@ function makeStubPagePool(
           } as any;
         },
         async close() {
-          if (options?.closeContextDelay) {
-            await options.closeContextDelay(id);
+          if (opts.closeContextDelay) {
+            await opts.closeContextDelay(id);
           }
           contextsClosed.push(id);
-          options?.onContextClosed?.(id);
+          opts.onContextClosed?.(id);
           return;
         },
       } as any;
@@ -161,13 +174,14 @@ function makeStubPagePool(
     },
   };
   let pool = new PagePool({
-    maxPages,
+    maxPages: opts.maxPages,
     serverURL: 'http://localhost',
     browserManager: browserManager as any,
     boxelHostURL: 'http://localhost:4200',
-    standbyTimeoutMs: options?.standbyTimeoutMs ?? 500,
-    renderSemaphore,
-    disableStandbyRefill: options?.disableStandbyRefill,
+    standbyTimeoutMs: opts.standbyTimeoutMs ?? 500,
+    renderSemaphore: opts.renderSemaphore,
+    disableStandbyRefill: opts.disableStandbyRefill,
+    disableFileAdmission: opts.disableFileAdmission ?? true,
   });
   return { pool, contextsCreated, contextsClosed };
 }
@@ -238,7 +252,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: rri('./person'),
                     name: 'Person',
                   },
                 },
@@ -258,7 +272,7 @@ module(basename(__filename), function () {
     test('reuses pooled page and picks up updated instance', async function (assert) {
       const cardURL = `${realmURL}1`;
 
-      let first = await prerenderer.prerenderCard({
+      let first = await prerenderCard(prerenderer, {
         affinityType: 'realm',
         affinityValue: realmURL,
         realm: realmURL,
@@ -284,7 +298,7 @@ module(basename(__filename), function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: './person',
+                  module: rri('./person'),
                   name: 'Person',
                 },
               },
@@ -298,7 +312,7 @@ module(basename(__filename), function () {
       await realm.realmIndexUpdater.fullIndex();
       realm.__testOnlyClearCaches();
 
-      let second = await prerenderer.prerenderCard({
+      let second = await prerenderCard(prerenderer, {
         affinityType: 'realm',
         affinityValue: realmURL,
         realm: realmURL,
@@ -428,7 +442,7 @@ module(basename(__filename), function () {
       await realmAdapter.write('broken-file.mismatch', 'broken mismatch file');
       realm.__testOnlyClearCaches();
 
-      let result = await prerenderer.prerenderFileExtract({
+      let result = await prerenderFileExtract(prerenderer, {
         affinityType: 'realm',
         affinityValue: realmURL,
         realm: realmURL,
@@ -437,7 +451,7 @@ module(basename(__filename), function () {
         renderOptions: {
           fileExtract: true,
           fileDefCodeRef: {
-            module: `${realmURL}filedef-mismatch`,
+            module: rri(`${realmURL}filedef-mismatch`),
             name: 'FileDef',
           },
         },
@@ -534,7 +548,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -560,7 +574,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './no-icon',
+                      module: rri('./no-icon'),
                       name: 'NoIcon',
                     },
                   },
@@ -584,7 +598,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './bad-icon-import',
+                      module: rri('./bad-icon-import'),
                       name: 'BadIconImport',
                     },
                   },
@@ -595,7 +609,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './broken',
+                      module: rri('./broken'),
                       name: 'Broken',
                     },
                   },
@@ -617,7 +631,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './rejects',
+                      module: rri('./rejects'),
                       name: 'Rejects',
                     },
                   },
@@ -640,7 +654,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './rsvp-rejects',
+                      module: rri('./rsvp-rejects'),
                       name: 'RsvpRejects',
                     },
                   },
@@ -661,7 +675,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './throws',
+                      module: rri('./throws'),
                       name: 'Throws',
                     },
                   },
@@ -683,7 +697,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './console-error',
+                      module: rri('./console-error'),
                       name: 'ConsoleError',
                     },
                   },
@@ -705,7 +719,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './console-no-error',
+                      module: rri('./console-no-error'),
                       name: 'ConsoleNoError',
                     },
                   },
@@ -841,7 +855,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Directory',
                     },
                   },
@@ -856,7 +870,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -878,7 +892,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -900,7 +914,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -922,7 +936,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -944,7 +958,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './directory-query',
+                      module: rri('./directory-query'),
                       name: 'Person',
                     },
                   },
@@ -996,7 +1010,7 @@ module(basename(__filename), function () {
       test('card prerender hoists module transpile errors', async function (assert) {
         let brokenCard = `${realmURL}broken.json`;
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1044,7 +1058,7 @@ module(basename(__filename), function () {
       test('card prerender surfaces actionable error for bad icon import', async function (assert) {
         let cardURL = `${realmURL}bad-icon-import.json`;
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1069,7 +1083,7 @@ module(basename(__filename), function () {
       test('card prerender surfaces empty render container', async function (assert) {
         let cardURL = `${realmURL}no-icon.json`;
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1111,7 +1125,7 @@ module(basename(__filename), function () {
       test('card prerender surfaces runtime render errors without timing out', async function (assert) {
         let cardURL = `${realmURL}throws.json`;
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1142,7 +1156,7 @@ module(basename(__filename), function () {
       test('card prerender includes console errors when render fails', async function (assert) {
         let cardURL = `${realmURL}console-error.json`;
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1169,7 +1183,7 @@ module(basename(__filename), function () {
       test('card prerender ignores console errors on success', async function (assert) {
         let cardURL = `${realmURL}console-no-error.json`;
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1183,7 +1197,7 @@ module(basename(__filename), function () {
       test('card prerender surfaces unhandled promise rejection without timing out', async function (assert) {
         let cardURL = `${realmURL}rejects.json`;
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1214,7 +1228,7 @@ module(basename(__filename), function () {
       test('card prerender surfaces RSVP rejection without timing out', async function (assert) {
         let cardURL = `${realmURL}rsvp-rejects.json`;
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1301,7 +1315,7 @@ module(basename(__filename), function () {
             return { ...pageInfo, page };
           };
 
-          let result = await prerenderer.prerenderCard({
+          let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL,
             realm: realmURL,
@@ -1351,7 +1365,7 @@ module(basename(__filename), function () {
           installRealmServerAssertOwnRealmServerBypassPatch();
         let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(150);
         try {
-          let result = await prerenderer.prerenderCard({
+          let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL,
             realm: realmURL,
@@ -1477,6 +1491,66 @@ module(basename(__filename), function () {
           'timeout retains page identifier',
         );
 
+        // The timeout error must carry the structured diagnostics
+        // block so operators can classify the stall. Diagnostics
+        // live on `response.meta.diagnostics` (the consolidated
+        // channel — the indexer reads from there and persists into
+        // `boxel_index.timing_diagnostics`, mirroring to
+        // `error_doc.diagnostics` at write time for UI compat).
+        let diagnostics = (timedOut.response as any)?.meta?.diagnostics;
+        assert.strictEqual(
+          typeof diagnostics,
+          'object',
+          'timeout error includes diagnostics object',
+        );
+        assert.notStrictEqual(diagnostics, null, 'diagnostics is not null');
+        assert.strictEqual(
+          typeof diagnostics?.launchMs,
+          'number',
+          'diagnostics.launchMs is populated by server-side enrichment',
+        );
+        let waitsShape =
+          typeof diagnostics?.waits?.semaphoreMs === 'number' &&
+          typeof diagnostics?.waits?.admissionMs === 'number' &&
+          typeof diagnostics?.waits?.tabQueueMs === 'number' &&
+          typeof diagnostics?.waits?.tabStartupMs === 'number';
+        assert.true(
+          waitsShape,
+          'diagnostics.waits carries per-stage breakdown',
+        );
+        assert.strictEqual(
+          typeof diagnostics?.renderElapsedMs,
+          'number',
+          'diagnostics.renderElapsedMs is populated',
+        );
+        assert.strictEqual(
+          typeof diagnostics?.totalElapsedMs,
+          'number',
+          'diagnostics.totalElapsedMs is populated',
+        );
+        // Note: diagnostics.requestId is only populated on the HTTP
+        // path (prerender-app stamps it from x-boxel-prerender-request-id).
+        // The in-process Prerenderer call used by this test doesn't
+        // have one, so we don't assert it here. See the separate
+        // prerender-server-test for the HTTP-path requestId coverage.
+        // Host-side fields (recentModuleEvaluations / cardDocsInFlight
+        // / queryLoadsInFlight) are also best-effort: the withTimeout
+        // capture at `timeoutMs:1` races the page teardown, so the
+        // page may already be closed by the time we attempt the
+        // diagnostic page.evaluate(). When present, their shape must
+        // be { url, ms } — when absent, the server-side timings
+        // above are sufficient to classify the stall as a timeout.
+        let moduleEvals = diagnostics?.recentModuleEvaluations;
+        if (Array.isArray(moduleEvals) && moduleEvals.length > 0) {
+          let allShaped = moduleEvals.every(
+            (e: any) => typeof e?.url === 'string' && typeof e?.ms === 'number',
+          );
+          assert.true(
+            allShaped,
+            `diagnostics.recentModuleEvaluations entries carry { url, ms }`,
+          );
+        }
+
         let afterTimeout = await prerenderer.prerenderModule({
           affinityType: 'realm',
           affinityValue: realmURL,
@@ -1500,10 +1574,136 @@ module(basename(__filename), function () {
         );
       });
 
+      test('card prerender timeout surfaces query-field and linked-field load timings in diagnostics', async function (assert) {
+        // CS-10872: exercise a card render that depends on a
+        // `linksToMany` query field (which itself fans out into
+        // per-row `linksTo` loads). We slow the server-side search
+        // enough that a tight render timeout catches the render with
+        // a pending query-field load and/or its linked-field loads.
+        // The assertions below require the diagnostics to name the
+        // individual query and linked-field URLs, not just a count.
+        const cardURL = `${realmURL}directory-ops`;
+        let realmServerPatch =
+          installRealmServerAssertOwnRealmServerBypassPatch();
+        let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(8_000);
+        try {
+          let result = await prerenderer.prerenderVisit({
+            affinityType: 'realm',
+            affinityValue: realmURL,
+            realm: realmURL,
+            url: cardURL,
+            auth: auth(),
+            renderOptions: { cardRender: true },
+            opts: { timeoutMs: 2_000 },
+          });
+
+          let timeoutError =
+            (result.response.card?.error as any) ??
+            (result.response.pageUnusableError as any);
+          assert.ok(
+            timeoutError,
+            'timed-out card render surfaces a RenderError',
+          );
+          assert.strictEqual(
+            timeoutError?.error?.title,
+            'Render timeout',
+            'error title is "Render timeout"',
+          );
+
+          // Diagnostics live on `response.meta.diagnostics` — the
+          // consolidated channel the indexer reads from and persists
+          // onto `boxel_index.timing_diagnostics` (mirrored to
+          // `error_doc.diagnostics` for UI compat).
+          let diagnostics = (result.response as any)?.meta?.diagnostics;
+          assert.strictEqual(
+            typeof diagnostics,
+            'object',
+            'timeout error carries diagnostics block',
+          );
+          assert.notStrictEqual(diagnostics, null, 'diagnostics is not null');
+
+          // Server-side launch / render breakdown must always be present.
+          assert.strictEqual(
+            typeof diagnostics?.launchMs,
+            'number',
+            'diagnostics.launchMs populated',
+          );
+          let waitsShape =
+            typeof diagnostics?.waits?.semaphoreMs === 'number' &&
+            typeof diagnostics?.waits?.admissionMs === 'number' &&
+            typeof diagnostics?.waits?.tabQueueMs === 'number' &&
+            typeof diagnostics?.waits?.tabStartupMs === 'number';
+          assert.true(waitsShape, 'diagnostics.waits breakdown populated');
+          assert.strictEqual(
+            typeof diagnostics?.renderElapsedMs,
+            'number',
+            'diagnostics.renderElapsedMs populated',
+          );
+
+          // Render-stage breadcrumb: we got past route setup, so the
+          // stage should name *something* from buildModel:* or later.
+          assert.strictEqual(
+            typeof diagnostics?.renderStage,
+            'string',
+            `diagnostics.renderStage populated (got ${JSON.stringify(
+              diagnostics?.renderStage,
+            )})`,
+          );
+
+          // The core assertion: the in-flight OR recent query-load
+          // list must name at least one entry. Whether it's still
+          // pending or just completed depends on exact timing of the
+          // delayed search vs. the 2s timeout, so we accept either.
+          let queryLoads: Array<Record<string, unknown>> = [
+            ...(Array.isArray(diagnostics?.queryLoadsInFlight)
+              ? diagnostics.queryLoadsInFlight
+              : []),
+            ...(Array.isArray(diagnostics?.recentQueryLoads)
+              ? diagnostics.recentQueryLoads
+              : []),
+          ];
+          assert.true(
+            queryLoads.length > 0,
+            `diagnostics surface at least one query load (in-flight or recent): ${JSON.stringify(
+              diagnostics,
+            )}`,
+          );
+          // Every tracked query load should be tagged with a source
+          // string (SearchResource annotates seed/search/live-refresh).
+          let allTagged = queryLoads.every((entry) => {
+            let meta = (entry as any)?.meta ?? entry;
+            return typeof meta?.source === 'string';
+          });
+          assert.true(
+            allTagged,
+            'each query load entry is tagged with a `source` identifier',
+          );
+
+          // Loader must have recorded at least one module evaluation
+          // for the directory-query module (or its dependencies). The
+          // history is bounded and captures Glimmer-compile cost.
+          let moduleEvals = diagnostics?.recentModuleEvaluations;
+          let moduleEvalsShape =
+            Array.isArray(moduleEvals) &&
+            moduleEvals.length > 0 &&
+            moduleEvals.every(
+              (e: any) =>
+                typeof e?.url === 'string' && typeof e?.ms === 'number',
+            );
+          assert.true(
+            moduleEvalsShape,
+            'diagnostics.recentModuleEvaluations names compiled modules with ms timings',
+          );
+        } finally {
+          await realmServerPatch.restore();
+          delayedSearchPatch.restore();
+        }
+      });
+
       test('file prerender returns extracted metadata', async function (assert) {
         const fileURL = `${realmURL}notes.txt`;
 
-        let result = await prerenderer.prerenderFileExtract({
+        let result = await prerenderFileExtract(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1614,7 +1814,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dep-reset-consumer',
+                      module: rri('./dep-reset-consumer'),
                       name: 'DepResetConsumer',
                     },
                   },
@@ -1631,7 +1831,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dep-reset-consumer',
+                      module: rri('./dep-reset-consumer'),
                       name: 'DepResetConsumer',
                     },
                   },
@@ -1644,7 +1844,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -1657,7 +1857,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -1674,7 +1874,7 @@ module(basename(__filename), function () {
       });
 
       test('resets runtime deps between consecutive prerenders', async function (assert) {
-        let first = await prerenderer.prerenderCard({
+        let first = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1687,7 +1887,7 @@ module(basename(__filename), function () {
           'first prerender includes first relationship target',
         );
 
-        let second = await prerenderer.prerenderCard({
+        let second = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
@@ -1873,7 +2073,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './prerendered-search-live',
+                      module: rri('./prerendered-search-live'),
                       name: 'LiveSearchHost',
                     },
                   },
@@ -1883,7 +2083,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './prerendered-search-live',
+                      module: rri('./prerendered-search-live'),
                       name: 'LiveSearchInner',
                     },
                   },
@@ -1896,7 +2096,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './prerendered-search-live',
+                      module: rri('./prerendered-search-live'),
                       name: 'LiveSearchResult',
                     },
                   },
@@ -1904,6 +2104,7 @@ module(basename(__filename), function () {
               },
               'live-file-search-card.gts': `
               import { CardDef, Component, field, contains, StringField, linksTo } from 'https://cardstack.com/base/card-api';
+              import { rri } from '@cardstack/runtime-common';
 
               export class LiveFileSearchInner extends CardDef {
                 static displayName = 'Live File Search Inner';
@@ -1920,7 +2121,7 @@ module(basename(__filename), function () {
                     return {
                       filter: {
                         on: {
-                          module: 'https://cardstack.com/base/card-api',
+                          module: rri('https://cardstack.com/base/card-api'),
                           name: 'FileDef',
                         },
                         eq: {
@@ -1990,7 +2191,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './live-file-search-card',
+                      module: rri('./live-file-search-card'),
                       name: 'LiveFileSearchHost',
                     },
                   },
@@ -2000,7 +2201,7 @@ module(basename(__filename), function () {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: './live-file-search-card',
+                      module: rri('./live-file-search-card'),
                       name: 'LiveFileSearchInner',
                     },
                   },
@@ -2040,7 +2241,7 @@ module(basename(__filename), function () {
             `<div data-test-stale-card-html>${sentinel}</div>`,
           );
 
-          let result = await prerenderer.prerenderCard({
+          let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL,
             realm: realmURL,
@@ -2094,7 +2295,7 @@ module(basename(__filename), function () {
             `<article data-test-stale-file-html>${sentinel}</article>`,
           );
 
-          let result = await prerenderer.prerenderCard({
+          let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL,
             realm: realmURL,
@@ -2198,7 +2399,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './article',
+                    module: rri('./article'),
                     name: 'Article',
                   },
                 },
@@ -2225,7 +2426,7 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: './website',
+                    module: rri('./website'),
                     name: 'Website',
                   },
                 },
@@ -2264,7 +2465,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './auth-proxy',
+                    module: rri('./auth-proxy'),
                     name: 'AuthProxy',
                   },
                 },
@@ -2318,7 +2519,7 @@ module(basename(__filename), function () {
     test('file prerender surfaces auth error without timing out', async function (assert) {
       const fileURL = `${providerRealmURL}secret.txt`;
 
-      let result = await prerenderer.prerenderFileExtract({
+      let result = await prerenderFileExtract(prerenderer, {
         affinityType: 'realm',
         affinityValue: providerRealmURL,
         realm: providerRealmURL,
@@ -2351,7 +2552,7 @@ module(basename(__filename), function () {
     test('card prerender surfaces auth error without timing out', async function (assert) {
       const cardURL = `${consumerRealmURL}auth-proxy-1`;
 
-      let result = await prerenderer.prerenderCard({
+      let result = await prerenderCard(prerenderer, {
         affinityType: 'realm',
         affinityValue: consumerRealmURL,
         realm: consumerRealmURL,
@@ -2383,7 +2584,7 @@ module(basename(__filename), function () {
     test('card prerender surfaces auth error from linked fetch', async function (assert) {
       const cardURL = `${consumerRealmURL}auth-proxy-1`;
 
-      let result = await prerenderer.prerenderCard({
+      let result = await prerenderCard(prerenderer, {
         affinityType: 'realm',
         affinityValue: consumerRealmURL,
         realm: consumerRealmURL,
@@ -2454,7 +2655,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './person',
+              module: rri('./person'),
               name: 'Person',
             },
           },
@@ -2467,7 +2668,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './person',
+              module: rri('./person'),
               name: 'Person',
             },
           },
@@ -2504,7 +2705,7 @@ module(basename(__filename), function () {
           attributes: {},
           meta: {
             adoptsFrom: {
-              module: './query-directory',
+              module: rri('./query-directory'),
               name: 'QueryDirectory',
             },
           },
@@ -2536,7 +2737,7 @@ module(basename(__filename), function () {
           },
           meta: {
             adoptsFrom: {
-              module: './query-directory-proxy',
+              module: rri('./query-directory-proxy'),
               name: 'QueryDirectoryProxy',
             },
           },
@@ -2570,7 +2771,7 @@ module(basename(__filename), function () {
         installRealmServerAssertOwnRealmServerBypassPatch();
       let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(150);
       try {
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: publicRealmURL,
           realm: publicRealmURL,
@@ -2649,7 +2850,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: rri('./person'),
                 name: 'Person',
               },
             },
@@ -2662,7 +2863,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: rri('./person'),
                 name: 'Person',
               },
             },
@@ -2699,7 +2900,7 @@ module(basename(__filename), function () {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: './query-directory',
+                module: rri('./query-directory'),
                 name: 'QueryDirectory',
               },
             },
@@ -2731,7 +2932,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: './query-directory-proxy',
+                module: rri('./query-directory-proxy'),
                 name: 'QueryDirectoryProxy',
               },
             },
@@ -2766,7 +2967,7 @@ module(basename(__filename), function () {
         let searchRequestObserverPatch = installSearchRequestObserverPatch();
         let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(150);
         try {
-          let result = await prerenderer.prerenderCard({
+          let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: privateRealmURL,
             realm: privateRealmURL,
@@ -2881,7 +3082,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -2894,7 +3095,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './person',
+                      module: rri('./person'),
                       name: 'Person',
                     },
                   },
@@ -2918,7 +3119,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './broken-card',
+                      module: rri('./broken-card'),
                       name: 'Broken',
                     },
                   },
@@ -3034,7 +3235,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './cat',
+                      module: rri('./cat'),
                       name: 'Cat',
                     },
                   },
@@ -3052,7 +3253,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog',
+                      module: rri('./dog'),
                       name: 'Dog',
                     },
                   },
@@ -3073,7 +3274,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog-many',
+                      module: rri('./dog-many'),
                       name: 'DogMany',
                     },
                   },
@@ -3098,7 +3299,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog-profile',
+                      module: rri('./dog-profile'),
                       name: 'DogProfile',
                     },
                   },
@@ -3141,7 +3342,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './non-isolated-links-card',
+                      module: rri('./non-isolated-links-card'),
                       name: 'NonIsolatedLinks',
                     },
                   },
@@ -3158,7 +3359,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/brand-guide',
+                      module: rri('https://cardstack.com/base/brand-guide'),
                       name: 'default',
                     },
                   },
@@ -3176,7 +3377,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './cat',
+                      module: rri('./cat'),
                       name: 'Cat',
                     },
                   },
@@ -3196,7 +3397,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './cat',
+                      module: rri('./cat'),
                       name: 'Cat',
                     },
                   },
@@ -3226,7 +3427,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './intentional-error',
+                      module: rri('./intentional-error'),
                       name: 'IntentionalError',
                     },
                   },
@@ -3255,7 +3456,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './timer-error-card',
+                      module: rri('./timer-error-card'),
                       name: 'TimerError',
                     },
                   },
@@ -3286,7 +3487,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './timer-timeout-card',
+                      module: rri('./timer-timeout-card'),
                       name: 'TimerTimeout',
                     },
                   },
@@ -3317,7 +3518,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './unusable-error',
+                      module: rri('./unusable-error'),
                       name: 'UnusableError',
                     },
                   },
@@ -3351,7 +3552,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './embedded-error',
+                      module: rri('./embedded-error'),
                       name: 'EmbeddedError',
                     },
                   },
@@ -3381,7 +3582,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './dog',
+                      module: rri('./dog'),
                       name: 'Dog',
                     },
                   },
@@ -3405,7 +3606,7 @@ module(basename(__filename), function () {
 
         hooks.before(async () => {
           const testCardURL = `${realmURL2}1`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3527,7 +3728,7 @@ module(basename(__filename), function () {
 
         test('isUsed field includes a field in search doc that is not rendered in template', async function (assert) {
           const testCardURL = `${realmURL2}is-used`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3552,7 +3753,7 @@ module(basename(__filename), function () {
 
         test('isUsed linksToMany field includes links in search doc that are not rendered in template', async function (assert) {
           const testCardURL = `${realmURL2}is-used-many`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3582,7 +3783,7 @@ module(basename(__filename), function () {
 
         test('isUsed compound field includes nested linksTo relationship in search doc', async function (assert) {
           const testCardURL = `${realmURL2}is-used-field-def`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3607,7 +3808,7 @@ module(basename(__filename), function () {
 
         test('isUsed compound field includes nested linksToMany relationships in search doc', async function (assert) {
           const testCardURL = `${realmURL2}is-used-field-def`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3637,7 +3838,7 @@ module(basename(__filename), function () {
 
         test('non-isolated formats render linked fields and those links appear in search doc', async function (assert) {
           const testCardURL = `${realmURL2}non-isolated-links`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3736,7 +3937,7 @@ module(basename(__filename), function () {
         hooks.beforeEach(disposeAllRealms);
         test('error during render', async function (assert) {
           const testCardURL = `${realmURL2}2`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3768,12 +3969,13 @@ module(basename(__filename), function () {
             headHTML: null,
             iconHTML: null,
             isolatedHTML: null,
+            markdown: null,
           });
         });
 
         test('error includes blocked timer summary when timers fire', async function (assert) {
           const testCardURL = `${realmURL2}timer-error`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3812,14 +4014,14 @@ module(basename(__filename), function () {
 
         test('timeout includes blocked timer summary in stack', async function (assert) {
           const testCardURL = `${realmURL2}timer-timeout`;
-          await prerenderer.prerenderCard({
+          await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
           });
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3850,7 +4052,7 @@ module(basename(__filename), function () {
 
         test('missing link surfaces 404 without eviction', async function (assert) {
           const testCardURL = `${realmURL2}missing-link`;
-          let result = await prerenderer.prerenderCard({
+          let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3877,7 +4079,7 @@ module(basename(__filename), function () {
 
         test('fetch failed surfaces error without eviction', async function (assert) {
           const testCardURL = `${realmURL2}fetch-failed`;
-          let result = await prerenderer.prerenderCard({
+          let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3904,7 +4106,7 @@ module(basename(__filename), function () {
 
         test('embedded error markup triggers render error', async function (assert) {
           const testCardURL = `${realmURL2}4`;
-          let { response } = await prerenderer.prerenderCard({
+          let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3924,7 +4126,7 @@ module(basename(__filename), function () {
         test('unusable triggers eviction and short-circuit', async function (assert) {
           // Render the card that forces unusable
           const unusableURL = `${realmURL2}3`;
-          let unusable = await prerenderer.prerenderCard({
+          let unusable = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -3993,7 +4195,7 @@ module(basename(__filename), function () {
 
           // After unusable, the realm should be evicted; a subsequent render should not reuse
           const healthyURL = `${realmURL2}1`;
-          let next = await prerenderer.prerenderCard({
+          let next = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4009,7 +4211,7 @@ module(basename(__filename), function () {
 
         test('prerender surfaces module syntax errors without timing out', async function (assert) {
           const cardURL = `${realmURL2}broken`;
-          let broken = await prerenderer.prerenderCard({
+          let broken = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4034,7 +4236,7 @@ module(basename(__filename), function () {
         test('evicts on timeout and does not reuse', async function (assert) {
           const testCardURL = `${realmURL2}1`;
           // First render to initialize pool
-          let first = await prerenderer.prerenderCard({
+          let first = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4044,7 +4246,7 @@ module(basename(__filename), function () {
           assert.false(first.pool.reused, 'first call not reused');
 
           // Now trigger a timeout; this should evict the realm
-          let timeoutRun = await prerenderer.prerenderCard({
+          let timeoutRun = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4066,7 +4268,7 @@ module(basename(__filename), function () {
           );
 
           // A subsequent render should not reuse the previously pooled page
-          let afterTimeout = await prerenderer.prerenderCard({
+          let afterTimeout = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4083,14 +4285,14 @@ module(basename(__filename), function () {
 
         test('reuses the same page within a realm', async function (assert) {
           const testCardURL = `${realmURL2}1`;
-          let first = await prerenderer.prerenderCard({
+          let first = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
           });
-          let second = await prerenderer.prerenderCard({
+          let second = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4121,14 +4323,14 @@ module(basename(__filename), function () {
         test('reuses the same page within a user affinity', async function (assert) {
           const testCardURL = `${realmURL2}1`;
           const userAffinityValue = testUserId;
-          let first = await prerenderer.prerenderCard({
+          let first = await prerenderCard(prerenderer, {
             affinityType: 'user',
             affinityValue: userAffinityValue,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
           });
-          let second = await prerenderer.prerenderCard({
+          let second = await prerenderCard(prerenderer, {
             affinityType: 'user',
             affinityValue: userAffinityValue,
             realm: realmURL2,
@@ -4160,21 +4362,21 @@ module(basename(__filename), function () {
           const testCardURL = `${realmURL2}1`;
           const sharedAffinityValue = 'shared-affinity-value';
 
-          let firstRealm = await prerenderer.prerenderCard({
+          let firstRealm = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: sharedAffinityValue,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
           });
-          let firstUser = await prerenderer.prerenderCard({
+          let firstUser = await prerenderCard(prerenderer, {
             affinityType: 'user',
             affinityValue: sharedAffinityValue,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
           });
-          let secondRealm = await prerenderer.prerenderCard({
+          let secondRealm = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: sharedAffinityValue,
             realm: realmURL2,
@@ -4212,14 +4414,14 @@ module(basename(__filename), function () {
             [realmURL1]: ['read', 'write', 'realm-owner'], // introduce a different token set
           });
 
-          let first = await prerenderer.prerenderCard({
+          let first = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: authA,
           });
-          let second = await prerenderer.prerenderCard({
+          let second = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4247,14 +4449,14 @@ module(basename(__filename), function () {
         test('does not reuse across different realms', async function (assert) {
           const testCardURL1 = `${realmURL1}1`;
           const testCardURL2 = `${realmURL2}1`;
-          let r1 = await prerenderer.prerenderCard({
+          let r1 = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL1,
             realm: realmURL1,
             url: testCardURL1,
             auth: auth(),
           });
-          let r2 = await prerenderer.prerenderCard({
+          let r2 = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4275,7 +4477,7 @@ module(basename(__filename), function () {
           const cardB = `${realmURL2}1`;
           const cardC = `${realmURL3}1`;
 
-          let firstA = await prerenderer.prerenderCard({
+          let firstA = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL1,
             realm: realmURL1,
@@ -4284,7 +4486,7 @@ module(basename(__filename), function () {
           });
           assert.false(firstA.pool.reused, 'first A not reused');
 
-          let firstB = await prerenderer.prerenderCard({
+          let firstB = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL2,
             realm: realmURL2,
@@ -4294,7 +4496,7 @@ module(basename(__filename), function () {
           assert.false(firstB.pool.reused, 'first B not reused');
 
           // Now adding C should evict the LRU (A), since maxPages=2
-          let firstC = await prerenderer.prerenderCard({
+          let firstC = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL3,
             realm: realmURL3,
@@ -4304,7 +4506,7 @@ module(basename(__filename), function () {
           assert.false(firstC.pool.reused, 'first C not reused');
 
           // Returning to A should not reuse because it was evicted
-          let secondA = await prerenderer.prerenderCard({
+          let secondA = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL1,
             realm: realmURL1,
@@ -4328,7 +4530,10 @@ module(basename(__filename), function () {
 
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '1';
-            ({ pool } = makeStubPagePool(1, semaphore));
+            ({ pool } = makeStubPagePool({
+              maxPages: 1,
+              renderSemaphore: semaphore,
+            }));
             await pool.warmStandbys();
 
             let run = async (realm: string) => {
@@ -4366,7 +4571,10 @@ module(basename(__filename), function () {
 
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
-            ({ pool } = makeStubPagePool(2, semaphore));
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              renderSemaphore: semaphore,
+            }));
             await pool.warmStandbys();
 
             let run = async (realm: string) => {
@@ -4395,8 +4603,543 @@ module(basename(__filename), function () {
           }
         });
 
+        test('file-queue admission holds the last tab for module calls', async function (assert) {
+          // Invariant: `fileTabsBusy ≤ N − 1`. With tab-max=2, at most
+          // one file render can be admitted at a time, reserving the
+          // other tab for module calls. This prevents the self-
+          // referential prerender deadlock (a file render blocked on a
+          // module extraction that's queued behind it).
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let semaphore = new TestSemaphore(2);
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              renderSemaphore: semaphore,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            let firstFile = await pool.getPage('realm-a', 'file');
+            let secondFileAdmitted = false;
+            let secondFilePromise = pool
+              .getPage('realm-a', 'file')
+              .then((lease) => {
+                secondFileAdmitted = true;
+                return lease;
+              });
+            await new Promise((r) => setTimeout(r, 10));
+            assert.false(
+              secondFileAdmitted,
+              'second file call waits behind admission control',
+            );
+
+            let moduleLease = await pool.getPage('realm-a', 'module');
+            assert.ok(
+              moduleLease.page,
+              'module call bypasses admission and lands on a tab',
+            );
+            moduleLease.release();
+
+            firstFile.release();
+            let secondFile = await secondFilePromise;
+            assert.true(
+              secondFileAdmitted,
+              'releasing the first file frees the admission slot',
+            );
+            secondFile.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('cancelling while waiting for file admission releases cleanly', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let semaphore = new TestSemaphore(2);
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              renderSemaphore: semaphore,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            let firstFile = await pool.getPage('realm-a', 'file');
+            let controller = new AbortController();
+            let cancelled = pool.getPage('realm-a', 'file', {
+              signal: controller.signal,
+            });
+            controller.abort();
+            await assert.rejects(
+              cancelled,
+              'aborted while queued on admission',
+            );
+
+            // Subsequent module call still goes through.
+            let moduleLease = await pool.getPage('realm-a', 'module');
+            assert.ok(moduleLease.page);
+            moduleLease.release();
+
+            firstFile.release();
+            // And after releasing, a new file admission succeeds.
+            let thirdFile = await pool.getPage('realm-a', 'file');
+            thirdFile.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('waits.admissionMs reports time spent in the file-admission queue', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            let first = await pool.getPage('realm-a', 'file');
+            assert.strictEqual(
+              first.waits.admissionMs,
+              0,
+              'first file call does not wait for admission (slot available)',
+            );
+
+            // Second file call blocks on the admission semaphore (cap=1
+            // at tabMax=2). Release the first after a short hold; the
+            // second's admissionMs should reflect that hold.
+            let holdMs = 20;
+            let secondPromise = pool.getPage('realm-a', 'file');
+            setTimeout(() => first.release(), holdMs);
+            let second = await secondPromise;
+            assert.ok(
+              second.waits.admissionMs >= holdMs - 5,
+              `second file call reports admissionMs ≥ ${holdMs}ms (actual: ${second.waits.admissionMs})`,
+            );
+            second.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('module / command calls bypass admission, waits.admissionMs is zero', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            // Hold the only admission slot with a file call.
+            let fileLease = await pool.getPage('realm-a', 'file');
+
+            // Module / command calls bypass admission and land immediately.
+            let moduleLease = await pool.getPage('realm-a', 'module');
+            assert.strictEqual(
+              moduleLease.waits.admissionMs,
+              0,
+              'module call skips admission entirely',
+            );
+            moduleLease.release();
+
+            let commandLease = await pool.getPage('realm-a', 'command');
+            assert.strictEqual(
+              commandLease.waits.admissionMs,
+              0,
+              'command call skips admission entirely',
+            );
+            commandLease.release();
+
+            fileLease.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('getQueueDepthSnapshot reports per-affinity admission pending/cap', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            // Before any file call has hit this affinity, admission
+            // semaphore hasn't been lazily created. Snapshot reports
+            // cap=0, pending=0 so operators can distinguish "admission
+            // not configured for this affinity yet" from "cap is 0".
+            let first = await pool.getPage('realm-a', 'file');
+            let snap1 = pool.getQueueDepthSnapshot();
+            let a1 = snap1.affinities.find((a) => a.affinityKey === 'realm-a');
+            assert.ok(a1, 'realm-a shows up in snapshot');
+            assert.strictEqual(
+              a1!.admission.cap,
+              1,
+              'admission cap = affinityTabMax − 1',
+            );
+            assert.strictEqual(
+              a1!.admission.pending,
+              0,
+              'no admission waiters when only caller holds the slot',
+            );
+
+            // Second file call blocks on admission. Snapshot should
+            // report one pending waiter.
+            let secondPromise = pool.getPage('realm-a', 'file');
+            await new Promise((r) => setTimeout(r, 10));
+            let snap2 = pool.getQueueDepthSnapshot();
+            let a2 = snap2.affinities.find((a) => a.affinityKey === 'realm-a');
+            assert.strictEqual(
+              a2!.admission.pending,
+              1,
+              'one waiter queued behind the exhausted admission semaphore',
+            );
+
+            first.release();
+            let second = await secondPromise;
+            second.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('idle file-admission semaphore is dropped so the map does not grow unbounded', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            // While a file call holds admission, the semaphore is
+            // present in the snapshot with a non-zero cap.
+            let lease = await pool.getPage('realm-a', 'file');
+            let busySnap = pool.getQueueDepthSnapshot();
+            let busyAffinity = busySnap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              busyAffinity!.admission.cap,
+              1,
+              'semaphore is present while a file call holds admission',
+            );
+
+            // After release and with no waiters, the semaphore is
+            // idle. It should be dropped so the map stays bounded by
+            // affinities currently serving a file call, not by total
+            // affinities ever seen.
+            lease.release();
+            let idleSnap = pool.getQueueDepthSnapshot();
+            let idleAffinity = idleSnap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              idleAffinity!.admission.cap,
+              0,
+              'semaphore is dropped once in-use and pending both return to 0',
+            );
+            assert.strictEqual(
+              idleAffinity!.admission.pending,
+              0,
+              'no waiters on the dropped semaphore',
+            );
+
+            // A fresh file call on the same affinity lazy-creates a
+            // new semaphore — cheap, and the admission cap is
+            // recomputed from the current affinityTabMax.
+            let next = await pool.getPage('realm-a', 'file');
+            let reusedSnap = pool.getQueueDepthSnapshot();
+            let reusedAffinity = reusedSnap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              reusedAffinity!.admission.cap,
+              1,
+              'subsequent file call lazy-creates a fresh semaphore',
+            );
+            next.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('PRERENDER_AFFINITY_FILE_CONCURRENCY unset: cap equals the deadlock-safety ceiling (no behavior change)', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let prevFileConcurrency =
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '5';
+            delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            ({ pool } = makeStubPagePool({
+              maxPages: 5,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+            let lease = await pool.getPage('realm-a', 'file');
+            let snap = pool.getQueueDepthSnapshot();
+            let affinity = snap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              affinity!.admission.cap,
+              4,
+              'default cap equals ceiling (affinityTabMax=5 → 4)',
+            );
+            lease.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+            if (prevFileConcurrency === undefined) {
+              delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            } else {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY =
+                prevFileConcurrency;
+            }
+          }
+        });
+
+        test('PRERENDER_AFFINITY_FILE_CONCURRENCY lowers the cap below the ceiling', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let prevFileConcurrency =
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '5';
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY = '1';
+            ({ pool } = makeStubPagePool({
+              maxPages: 5,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            let first = await pool.getPage('realm-a', 'file');
+            let snap1 = pool.getQueueDepthSnapshot();
+            let affinity1 = snap1.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              affinity1!.admission.cap,
+              1,
+              'cap lowered to env override when override < ceiling',
+            );
+
+            // Second file call blocks on admission because cap=1.
+            let holdMs = 20;
+            let secondPromise = pool.getPage('realm-a', 'file');
+            setTimeout(() => first.release(), holdMs);
+            let second = await secondPromise;
+            assert.ok(
+              second.waits.admissionMs >= holdMs - 5,
+              `second file call waited for admission (${second.waits.admissionMs}ms)`,
+            );
+            second.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+            if (prevFileConcurrency === undefined) {
+              delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            } else {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY =
+                prevFileConcurrency;
+            }
+          }
+        });
+
+        test('PRERENDER_AFFINITY_FILE_CONCURRENCY above ceiling is clamped to the ceiling', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let prevFileConcurrency =
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '3';
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY = '99';
+            ({ pool } = makeStubPagePool({
+              maxPages: 3,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+            let lease = await pool.getPage('realm-a', 'file');
+            let snap = pool.getQueueDepthSnapshot();
+            let affinity = snap.affinities.find(
+              (a) => a.affinityKey === 'realm-a',
+            );
+            assert.strictEqual(
+              affinity!.admission.cap,
+              2,
+              'cap clamped to deadlock-safety ceiling (tabMax=3 → 2) even when env asks for 99',
+            );
+            lease.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+            if (prevFileConcurrency === undefined) {
+              delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            } else {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY =
+                prevFileConcurrency;
+            }
+          }
+        });
+
+        test('invalid PRERENDER_AFFINITY_FILE_CONCURRENCY falls back to the ceiling', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let prevFileConcurrency =
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '5';
+            // Includes the empty-string case: it fails the
+            // `raw !== ''` guard in the constructor and is treated
+            // like unset — no warning, falls through to the ceiling.
+            for (let badValue of ['0', '-1', '3.5', 'abc', 'NaN', '']) {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY = badValue;
+              let { pool } = makeStubPagePool({
+                maxPages: 5,
+                disableFileAdmission: false,
+              });
+              try {
+                await pool.warmStandbys();
+                let lease = await pool.getPage('realm-a', 'file');
+                let snap = pool.getQueueDepthSnapshot();
+                let affinity = snap.affinities.find(
+                  (a) => a.affinityKey === 'realm-a',
+                );
+                assert.strictEqual(
+                  affinity!.admission.cap,
+                  4,
+                  `invalid env value ${JSON.stringify(badValue)} falls back to ceiling (4)`,
+                );
+                lease.release();
+              } finally {
+                await pool.closeAll();
+              }
+            }
+          } finally {
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+            if (prevFileConcurrency === undefined) {
+              delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            } else {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY =
+                prevFileConcurrency;
+            }
+          }
+        });
+
+        test('module / command calls still bypass admission when PRERENDER_AFFINITY_FILE_CONCURRENCY=1', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          let prevFileConcurrency =
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+          let pool: PagePool | undefined;
+          try {
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '3';
+            process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY = '1';
+            ({ pool } = makeStubPagePool({
+              maxPages: 3,
+              disableFileAdmission: false,
+            }));
+            await pool.warmStandbys();
+
+            // A file call holds the only admission slot.
+            let fileLease = await pool.getPage('realm-a', 'file');
+
+            // Module and command calls skip admission entirely — they
+            // don't queue behind the file slot. Both should land
+            // immediately on a fresh tab.
+            let moduleLease = await pool.getPage('realm-a', 'module');
+            assert.strictEqual(
+              moduleLease.waits.admissionMs,
+              0,
+              'module call bypasses admission even with cap exhausted',
+            );
+            moduleLease.release();
+
+            let commandLease = await pool.getPage('realm-a', 'command');
+            assert.strictEqual(
+              commandLease.waits.admissionMs,
+              0,
+              'command call bypasses admission even with cap exhausted',
+            );
+            commandLease.release();
+
+            fileLease.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+            if (prevFileConcurrency === undefined) {
+              delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
+            } else {
+              process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY =
+                prevFileConcurrency;
+            }
+          }
+        });
+
         test('prefers idle tab aligned to realm over standby tabs', async function (assert) {
-          let { pool } = makeStubPagePool(2);
+          let { pool } = makeStubPagePool({ maxPages: 2 });
           await pool.warmStandbys();
 
           let first = await pool.getPage('realm-a');
@@ -4419,7 +5162,7 @@ module(basename(__filename), function () {
           let originalNow = Date.now;
           let now = 1000;
           (Date as any).now = () => now;
-          let { pool } = makeStubPagePool(1);
+          let { pool } = makeStubPagePool({ maxPages: 1 });
 
           try {
             await pool.warmStandbys(); // standby at t=1000
@@ -4453,7 +5196,7 @@ module(basename(__filename), function () {
 
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '1';
-            ({ pool } = makeStubPagePool(2));
+            ({ pool } = makeStubPagePool({ maxPages: 2 }));
             await pool.warmStandbys();
 
             let first = await pool.getPage('realm-a');
@@ -4495,7 +5238,7 @@ module(basename(__filename), function () {
 
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
-            ({ pool } = makeStubPagePool(2));
+            ({ pool } = makeStubPagePool({ maxPages: 2 }));
             await pool.warmStandbys();
 
             let first = await pool.getPage('realm-a');
@@ -4551,7 +5294,7 @@ module(basename(__filename), function () {
         });
 
         test('queued cross-realm requests realign the tab per request', async function (assert) {
-          let { pool } = makeStubPagePool(1);
+          let { pool } = makeStubPagePool({ maxPages: 1 });
           await pool.warmStandbys();
 
           let first = await pool.getPage('realm-a');
@@ -4595,7 +5338,8 @@ module(basename(__filename), function () {
         });
 
         test('does not reassign a busy tab with queued work across realms', async function (assert) {
-          let { pool } = makeStubPagePool(1, undefined, undefined, {
+          let { pool } = makeStubPagePool({
+            maxPages: 1,
             disableStandbyRefill: true,
           });
 
@@ -4632,7 +5376,8 @@ module(basename(__filename), function () {
         });
 
         test('queues same-realm request when tab is transitioning', async function (assert) {
-          let { pool } = makeStubPagePool(1, undefined, undefined, {
+          let { pool } = makeStubPagePool({
+            maxPages: 1,
             disableStandbyRefill: true,
           });
 
@@ -4700,7 +5445,8 @@ module(basename(__filename), function () {
 
           try {
             process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
-            ({ pool } = makeStubPagePool(2, undefined, undefined, {
+            ({ pool } = makeStubPagePool({
+              maxPages: 2,
               closeContextDelay: async () => closeGate,
               onContextCreated() {
                 active++;
@@ -4741,7 +5487,7 @@ module(basename(__filename), function () {
         });
 
         test('creates spare standby when pool is at capacity', async function (assert) {
-          let { pool, contextsCreated } = makeStubPagePool(1);
+          let { pool, contextsCreated } = makeStubPagePool({ maxPages: 1 });
           await pool.warmStandbys();
           assert.strictEqual(
             contextsCreated.length,
@@ -4763,7 +5509,7 @@ module(basename(__filename), function () {
         });
 
         test('standby pages bind to the first realm they serve', async function (assert) {
-          let { pool } = makeStubPagePool(2);
+          let { pool } = makeStubPagePool({ maxPages: 2 });
           await pool.warmStandbys(); // fill initial standbys
 
           let realmAFirst = await pool.getPage('realm-a');
@@ -4803,7 +5549,7 @@ module(basename(__filename), function () {
         });
 
         test('each tab uses a separate browser context', async function (assert) {
-          let { pool } = makeStubPagePool(2);
+          let { pool } = makeStubPagePool({ maxPages: 2 });
           await pool.warmStandbys();
 
           let first = await pool.getPage('realm-a');
@@ -4844,7 +5590,9 @@ module(basename(__filename), function () {
         });
 
         test('evicts idle realms without touching standbys', async function (assert) {
-          let { pool, contextsCreated, contextsClosed } = makeStubPagePool(2);
+          let { pool, contextsCreated, contextsClosed } = makeStubPagePool({
+            maxPages: 2,
+          });
           await pool.warmStandbys();
 
           assert.strictEqual(
@@ -4887,7 +5635,9 @@ module(basename(__filename), function () {
         });
 
         test('idle eviction skips unassigned standbys', async function (assert) {
-          let { pool, contextsCreated, contextsClosed } = makeStubPagePool(1);
+          let { pool, contextsCreated, contextsClosed } = makeStubPagePool({
+            maxPages: 1,
+          });
           await pool.warmStandbys();
 
           let createdBeforeSweep = contextsCreated.length;
@@ -4906,6 +5656,246 @@ module(basename(__filename), function () {
             'no contexts closed when only standbys are present',
           );
           await pool.closeAll();
+        });
+      });
+
+      module('shared BrowserContext (CS-10817)', function () {
+        test('disposeAffinity with retainSharedContext keeps an orphan for re-warm', async function (assert) {
+          let { pool } = makeStubPagePool({ maxPages: 2 });
+          await pool.warmStandbys();
+
+          let first = await pool.getPage('realm-a');
+          let firstContext = first.page.browserContext();
+          first.release();
+          // Simulates the eviction path in render-runner.ts (unusable
+          // / retry) — the page is dead but the realm's warm cache
+          // in the BrowserContext is still valid.
+          await pool.disposeAffinity('realm-a', {
+            awaitIdle: true,
+            retainSharedContext: true,
+          });
+
+          let snapshot = pool.getSharedContextSnapshot();
+          let orphan = snapshot.entries.find(
+            (e) => e.affinityKey === 'realm-a',
+          );
+          assert.ok(orphan, 'shared context row kept for realm-a');
+          assert.strictEqual(
+            orphan?.pageCount,
+            0,
+            'pageCount is zero (orphan)',
+          );
+          assert.false(
+            orphan?.closing,
+            'orphan is not marked closing until cap evicts or explicit close',
+          );
+          // Subsequent getPage for the same affinity must reuse the
+          // orphan context, not spawn a fresh one.
+          let second = await pool.getPage('realm-a');
+          assert.strictEqual(
+            second.page.browserContext(),
+            firstContext,
+            're-warm spawns the new page in the orphan BrowserContext',
+          );
+          second.release();
+          await pool.closeAll();
+        });
+
+        test('disposeAffinity without retainSharedContext closes the context', async function (assert) {
+          let { pool } = makeStubPagePool({ maxPages: 2 });
+          await pool.warmStandbys();
+
+          let first = await pool.getPage('realm-a');
+          let firstContext = first.page.browserContext();
+          first.release();
+          await pool.disposeAffinity('realm-a');
+
+          assert.strictEqual(
+            pool
+              .getSharedContextSnapshot()
+              .entries.find((e) => e.affinityKey === 'realm-a'),
+            undefined,
+            'dispose without retain tears the shared-context row down',
+          );
+
+          let second = await pool.getPage('realm-a');
+          assert.notStrictEqual(
+            second.page.browserContext(),
+            firstContext,
+            'post-dispose visit gets a fresh BrowserContext',
+          );
+          second.release();
+          await pool.closeAll();
+        });
+
+        test('LRU evicts the oldest orphan when #sharedContextCap is exceeded', async function (assert) {
+          let originalNow = Date.now;
+          let now = 1000;
+          (Date as any).now = () => now;
+          let previousCap = process.env.PRERENDER_SHARED_CONTEXT_CAP;
+          process.env.PRERENDER_SHARED_CONTEXT_CAP = '2';
+          let { pool, contextsClosed } = makeStubPagePool({
+            maxPages: 3,
+            disableStandbyRefill: true,
+          });
+          let orphanFor = async (affinityKey: string) => {
+            let lease = await pool.getPage(affinityKey);
+            lease.release();
+            await pool.disposeAffinity(affinityKey, {
+              awaitIdle: true,
+              retainSharedContext: true,
+            });
+            now += 10;
+          };
+          try {
+            await pool.warmStandbys();
+
+            await orphanFor('realm-a'); // t=1000
+            await orphanFor('realm-b'); // t=1010
+            // size = 2 so far; still within cap=2.
+            assert.strictEqual(
+              pool.getSharedContextSnapshot().entries.length,
+              2,
+              'two orphans retained under the cap',
+            );
+
+            // Creating a third orphan pushes total to 3 > cap=2 —
+            // oldest orphan (realm-a) evicted.
+            await orphanFor('realm-c');
+            let snapshot = pool.getSharedContextSnapshot();
+            assert.false(
+              snapshot.entries.some((e) => e.affinityKey === 'realm-a'),
+              'oldest orphan evicted by LRU when cap exceeded',
+            );
+            assert.true(
+              snapshot.entries.some((e) => e.affinityKey === 'realm-b'),
+              'newer orphan retained',
+            );
+            assert.true(
+              snapshot.entries.some((e) => e.affinityKey === 'realm-c'),
+              'most-recent orphan retained',
+            );
+            assert.ok(
+              contextsClosed.length >= 1,
+              'evicted orphan context was closed by LRU sweep',
+            );
+          } finally {
+            await pool.closeAll();
+            (Date as any).now = originalNow;
+            if (previousCap === undefined) {
+              delete process.env.PRERENDER_SHARED_CONTEXT_CAP;
+            } else {
+              process.env.PRERENDER_SHARED_CONTEXT_CAP = previousCap;
+            }
+          }
+        });
+
+        test('LRU does not evict active (in-use) shared contexts', async function (assert) {
+          let previousCap = process.env.PRERENDER_SHARED_CONTEXT_CAP;
+          process.env.PRERENDER_SHARED_CONTEXT_CAP = '1';
+          let { pool } = makeStubPagePool({
+            maxPages: 3,
+            disableStandbyRefill: true,
+          });
+          try {
+            await pool.warmStandbys();
+
+            // realm-a is held — active (pageCount=1). Exceeding cap
+            // must NOT evict it.
+            let first = await pool.getPage('realm-a');
+
+            // Orphan realm-b.
+            let second = await pool.getPage('realm-b');
+            second.release();
+            await pool.disposeAffinity('realm-b', {
+              awaitIdle: true,
+              retainSharedContext: true,
+            });
+
+            // Claim realm-c — two shared contexts exist (realm-a
+            // active, realm-b orphan). Claiming realm-c pushes total
+            // to 3 > cap=1; sweep should close realm-b, leave realm-a.
+            let third = await pool.getPage('realm-c');
+
+            let snapshot = pool.getSharedContextSnapshot();
+            assert.true(
+              snapshot.entries.some((e) => e.affinityKey === 'realm-a'),
+              'active realm-a context survives LRU sweep',
+            );
+            assert.false(
+              snapshot.entries.some((e) => e.affinityKey === 'realm-b'),
+              'orphan realm-b evicted to make room under cap',
+            );
+
+            first.release();
+            third.release();
+          } finally {
+            await pool.closeAll();
+            if (previousCap === undefined) {
+              delete process.env.PRERENDER_SHARED_CONTEXT_CAP;
+            } else {
+              process.env.PRERENDER_SHARED_CONTEXT_CAP = previousCap;
+            }
+          }
+        });
+
+        test('additional tabs at tabMax > 1 do not leak their BrowserContext on close', async function (assert) {
+          // Regression guard: when a second/third getPage takes
+          // another standby, that standby's BrowserContext is
+          // different from the one recorded in `#sharedContexts` for
+          // the affinity. `#closeEntry` has to notice the mismatch
+          // and close the entry's own context — otherwise the
+          // shared-context bookkeeping would only tear down the
+          // first-registered context and leak the rest.
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+          process.env.PRERENDER_AFFINITY_TAB_MAX = '3';
+          let { pool, contextsCreated, contextsClosed } = makeStubPagePool({
+            maxPages: 3,
+          });
+          try {
+            await pool.warmStandbys();
+
+            let createdBefore = contextsCreated.length;
+            let first = await pool.getPage('realm-a');
+            let second = await pool.getPage('realm-a');
+            let third = await pool.getPage('realm-a');
+
+            // First page adopts a standby's context; subsequent tabs
+            // take another standby, so the contexts differ —
+            // #closeEntry's mismatch branch is what guarantees no
+            // leak.
+            assert.notStrictEqual(
+              first.page.browserContext(),
+              second.page.browserContext(),
+              'second tab uses the next standby BrowserContext',
+            );
+            assert.strictEqual(
+              pool.getSharedContextSnapshot().entries.length,
+              1,
+              'sharedContexts tracks exactly one context for the affinity',
+            );
+
+            let closedBefore = contextsClosed.length;
+            first.release();
+            second.release();
+            third.release();
+            await pool.disposeAffinity('realm-a');
+
+            let netCreated = contextsCreated.length - createdBefore;
+            let netClosed = contextsClosed.length - closedBefore;
+            assert.strictEqual(
+              netClosed,
+              netCreated,
+              'every BrowserContext opened during the test was closed — no leak',
+            );
+          } finally {
+            await pool.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+            } else {
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
+            }
+          }
         });
       });
     });
@@ -4959,7 +5949,16 @@ module(basename(__filename), function () {
 
           return {
             response,
-            timings: { launchMs: 0, renderMs: 1 },
+            timings: {
+              launchMs: 0,
+              renderMs: 1,
+              waits: {
+                semaphoreMs: 0,
+                admissionMs: 0,
+                tabQueueMs: 0,
+                tabStartupMs: 0,
+              },
+            },
             pool: {
               pageId: `page-${attemptCount}`,
               affinityType,
@@ -5013,7 +6012,7 @@ module(basename(__filename), function () {
 
   module('prerender - file retries', function () {
     test('file prerender retries with clear cache on retry signature', async function (assert) {
-      let originalAttempt = RenderRunner.prototype.prerenderFileExtractAttempt;
+      let originalAttempt = RenderRunner.prototype.prerenderVisitAttempt;
       let prerenderer: Prerenderer | undefined;
       let attempts: Array<RenderRouteOptions | undefined> = [];
       let retryRealm = 'https://file-retry.example/';
@@ -5021,13 +6020,13 @@ module(basename(__filename), function () {
 
       try {
         let attemptCount = 0;
-        RenderRunner.prototype.prerenderFileExtractAttempt = async function (
-          args: Parameters<RenderRunner['prerenderFileExtractAttempt']>[0],
+        RenderRunner.prototype.prerenderVisitAttempt = async function (
+          args: Parameters<RenderRunner['prerenderVisitAttempt']>[0],
         ) {
           let { affinityType, affinityValue, url, renderOptions } = args;
           attempts.push(renderOptions);
           attemptCount++;
-          let response: FileExtractResponse =
+          let fileExtract: FileExtractResponse =
             attemptCount === 1
               ? {
                   id: url,
@@ -5055,8 +6054,17 @@ module(basename(__filename), function () {
                 };
 
           return {
-            response,
-            timings: { launchMs: 0, renderMs: 1 },
+            response: { fileExtract },
+            timings: {
+              launchMs: 0,
+              renderMs: 1,
+              waits: {
+                semaphoreMs: 0,
+                admissionMs: 0,
+                tabQueueMs: 0,
+                tabStartupMs: 0,
+              },
+            },
             pool: {
               pageId: `page-${attemptCount}`,
               affinityType,
@@ -5073,13 +6081,12 @@ module(basename(__filename), function () {
           serverURL: 'http://127.0.0.1:4225',
         });
 
-        let result = await prerenderer.prerenderFileExtract({
+        let result = await prerenderFileExtract(prerenderer, {
           affinityType: 'realm',
           affinityValue: retryRealm,
           realm: retryRealm,
           url: fileURL,
           auth: 'test-auth',
-          renderOptions: { fileExtract: true },
         });
 
         assert.strictEqual(
@@ -5103,7 +6110,7 @@ module(basename(__filename), function () {
           'successful response returned after retry',
         );
       } finally {
-        RenderRunner.prototype.prerenderFileExtractAttempt = originalAttempt;
+        RenderRunner.prototype.prerenderVisitAttempt = originalAttempt;
         await prerenderer?.stop();
       }
     });
@@ -5111,7 +6118,7 @@ module(basename(__filename), function () {
 
   module('prerender - card retries', function () {
     test('card prerender retries with clear cache on retry signature', async function (assert) {
-      let originalAttempt = RenderRunner.prototype.prerenderCardAttempt;
+      let originalAttempt = RenderRunner.prototype.prerenderVisitAttempt;
       let prerenderer: Prerenderer | undefined;
       let attempts: Array<RenderRouteOptions | undefined> = [];
       let retryRealm = 'https://card-retry.example/';
@@ -5119,8 +6126,8 @@ module(basename(__filename), function () {
 
       try {
         let attemptCount = 0;
-        RenderRunner.prototype.prerenderCardAttempt = async function (
-          args: Parameters<RenderRunner['prerenderCardAttempt']>[0],
+        RenderRunner.prototype.prerenderVisitAttempt = async function (
+          args: Parameters<RenderRunner['prerenderVisitAttempt']>[0],
         ) {
           let {
             affinityType,
@@ -5142,8 +6149,9 @@ module(basename(__filename), function () {
             atomHTML: null,
             embeddedHTML: null,
             fittedHTML: null,
+            markdown: null,
           };
-          let response: RenderResponse =
+          let card: RenderResponse =
             attemptCount === 1
               ? {
                   ...baseResponse,
@@ -5161,8 +6169,17 @@ module(basename(__filename), function () {
               : baseResponse;
 
           return {
-            response,
-            timings: { launchMs: 0, renderMs: 1 },
+            response: { card },
+            timings: {
+              launchMs: 0,
+              renderMs: 1,
+              waits: {
+                semaphoreMs: 0,
+                admissionMs: 0,
+                tabQueueMs: 0,
+                tabStartupMs: 0,
+              },
+            },
             pool: {
               pageId: `page-${attemptCount}`,
               affinityType,
@@ -5179,7 +6196,7 @@ module(basename(__filename), function () {
           serverURL: 'http://127.0.0.1:4225',
         });
 
-        let result = await prerenderer.prerenderCard({
+        let result = await prerenderCard(prerenderer, {
           affinityType: 'realm',
           affinityValue: retryRealm,
           realm: retryRealm,
@@ -5192,14 +6209,14 @@ module(basename(__filename), function () {
           2,
           'prerender retries once with clearCache',
         );
-        assert.strictEqual(
+        assert.deepEqual(
           attempts[0],
-          undefined,
-          'first attempt uses provided render options',
+          { cardRender: true },
+          'first attempt uses cardRender pass flag',
         );
         assert.deepEqual(
           attempts[1],
-          { clearCache: true },
+          { cardRender: true, clearCache: true },
           'second attempt enables clearCache',
         );
         assert.notOk(result.response.error, 'successful response returned');
@@ -5209,7 +6226,90 @@ module(basename(__filename), function () {
           'final response came from retry attempt',
         );
       } finally {
-        RenderRunner.prototype.prerenderCardAttempt = originalAttempt;
+        RenderRunner.prototype.prerenderVisitAttempt = originalAttempt;
+        await prerenderer?.stop();
+      }
+    });
+  });
+
+  module('prerender - concurrent restart coalescing', function () {
+    test('concurrent failures trigger a single browser restart', async function (assert) {
+      // Regression guard for the race where two visits failing in the same
+      // tick each called #restartBrowser, both closeAll'd the pool
+      // concurrently, and the second caller hit "Failed to find context with
+      // id <X>" as its BrowserContext.close() landed after the first already
+      // disposed the context.
+      let originalAttempt = RenderRunner.prototype.prerenderVisitAttempt;
+      let originalRestart = BrowserManager.prototype.restartBrowser;
+      let prerenderer: Prerenderer | undefined;
+      let restartCount = 0;
+      let retryRealm = 'https://concurrent-restart.example/';
+      let cardURL = `${retryRealm}card`;
+
+      try {
+        // Force every visit attempt to throw an unrecoverable error so the
+        // prerenderer catch block calls #restartBrowser for each caller.
+        RenderRunner.prototype.prerenderVisitAttempt = async function () {
+          throw new Error('simulated unrecoverable prerender failure');
+        };
+        // Introduce a small delay inside restartBrowser so concurrent
+        // callers actually overlap in time — without this the fast
+        // synchronous-ish no-op restart would serialize naturally.
+        BrowserManager.prototype.restartBrowser = async function (
+          this: BrowserManager,
+        ) {
+          restartCount++;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return await originalRestart.call(this);
+        };
+
+        prerenderer = getPrerendererForTesting({
+          maxPages: 2,
+          serverURL: 'http://127.0.0.1:4225',
+        });
+
+        // Fire three visits concurrently. Each will fail on its first
+        // attempt, trigger #restartBrowser, and then retry once more (per
+        // the prerenderVisit wrapper in prerenderer.ts). With the mutex
+        // in place, all three callers coalesce onto a single in-flight
+        // restart.
+        let results = await Promise.allSettled([
+          prerenderCard(prerenderer, {
+            affinityType: 'realm',
+            affinityValue: retryRealm,
+            realm: retryRealm,
+            url: cardURL,
+            auth: 'test-auth',
+          }),
+          prerenderCard(prerenderer, {
+            affinityType: 'realm',
+            affinityValue: retryRealm,
+            realm: retryRealm,
+            url: `${cardURL}-2`,
+            auth: 'test-auth',
+          }),
+          prerenderCard(prerenderer, {
+            affinityType: 'realm',
+            affinityValue: retryRealm,
+            realm: retryRealm,
+            url: `${cardURL}-3`,
+            auth: 'test-auth',
+          }),
+        ]);
+
+        assert.strictEqual(
+          results.filter((r) => r.status === 'rejected').length,
+          3,
+          'all three visits fail (no working render path available)',
+        );
+        assert.strictEqual(
+          restartCount,
+          1,
+          'three concurrent failing visits coalesce into a single browser restart',
+        );
+      } finally {
+        RenderRunner.prototype.prerenderVisitAttempt = originalAttempt;
+        BrowserManager.prototype.restartBrowser = originalRestart;
         await prerenderer?.stop();
       }
     });
@@ -5278,7 +6378,10 @@ module(basename(__filename), function () {
           data: {
             attributes: { info: `Detail ${i}` },
             meta: {
-              adoptsFrom: { module: '../detail', name: 'Detail' },
+              adoptsFrom: {
+                module: rri('../detail'),
+                name: 'Detail',
+              },
             },
           },
         };
@@ -5332,7 +6435,10 @@ module(basename(__filename), function () {
               },
             },
             meta: {
-              adoptsFrom: { module: '../child-config', name: 'ChildConfig' },
+              adoptsFrom: {
+                module: rri('../child-config'),
+                name: 'ChildConfig',
+              },
             },
           },
         };
@@ -5349,7 +6455,10 @@ module(basename(__filename), function () {
         data: {
           relationships: childRelationships,
           meta: {
-            adoptsFrom: { module: './parent-card', name: 'ParentCard' },
+            adoptsFrom: {
+              module: rri('./parent-card'),
+              name: 'ParentCard',
+            },
           },
         },
       };
@@ -5393,7 +6502,7 @@ module(basename(__filename), function () {
           let cardURL = `${parentRealmURL}parent`;
 
           let startMs = Date.now();
-          let result = await prerenderer.prerenderCard({
+          let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: parentRealmURL,
             realm: parentRealmURL,
@@ -5428,4 +6537,216 @@ module(basename(__filename), function () {
       });
     },
   );
+
+  // Composite "visit" prerender — fuses the three passes into one call.
+  module('prerenderVisit - composite pass orchestration', function (hooks) {
+    let realmURL = 'http://127.0.0.1:4458/test/';
+    let prerenderServerURL = new URL(realmURL).origin;
+    let testUserId = '@user1:localhost';
+    let permissions: RealmPermissions = {
+      [realmURL]: ['read', 'write', 'realm-owner'],
+    };
+    let prerenderer: Prerenderer;
+    let auth = () => {
+      let sessions = JSON.parse(
+        testCreatePrerenderAuth(testUserId, permissions),
+      ) as Record<string, string>;
+      let token = sessions[realmURL];
+      if (token) {
+        sessions[new URL(realmURL).origin + '/'] = token;
+      }
+      return JSON.stringify(sessions);
+    };
+
+    hooks.before(async () => {
+      prerenderer = getPrerendererForTesting({
+        maxPages: 2,
+        serverURL: prerenderServerURL,
+      });
+    });
+
+    hooks.after(async () => {
+      await prerenderer.stop();
+    });
+
+    hooks.afterEach(async () => {
+      await prerenderer.disposeAffinity({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+      });
+    });
+
+    setupPermissionedRealmsCached(hooks, {
+      realms: [
+        {
+          realmURL,
+          permissions: {
+            '*': ['read'],
+            [testUserId]: ['read', 'write', 'realm-owner'],
+          },
+          fileSystem: {
+            'person.gts': `
+              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+              export class Person extends CardDef {
+                static displayName = "Person";
+                @field name = contains(StringField);
+                static isolated = class extends Component<typeof this> {
+                  <template>{{@model.name}}</template>
+                }
+              }
+            `,
+            'maple.json': {
+              data: {
+                attributes: { name: 'Maple' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    test('all three passes populate all sub-fields', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      let result = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: {
+          cardRender: true,
+          fileExtract: true,
+          fileRender: true,
+        },
+      });
+
+      assert.ok(result.response.card, 'card sub-response populated');
+      assert.ok(
+        result.response.fileExtract,
+        'fileExtract sub-response populated',
+      );
+      assert.ok(
+        result.response.fileRender,
+        'fileRender sub-response populated',
+      );
+      assert.notOk(result.response.pageUnusableError, 'no page-unusable error');
+      assert.ok(
+        result.response.card?.isolatedHTML?.includes('Maple'),
+        'card isolated HTML rendered',
+      );
+      assert.strictEqual(
+        result.response.fileExtract?.status,
+        'ready',
+        'file extract reports ready',
+      );
+    });
+
+    test('cardRender-only visit leaves file sub-fields unset', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      let result = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: { cardRender: true },
+      });
+
+      assert.ok(result.response.card, 'card sub-response populated');
+      assert.notOk(result.response.fileExtract, 'fileExtract skipped');
+      assert.notOk(result.response.fileRender, 'fileRender skipped');
+    });
+
+    test('fileExtract-only visit returns only the extract', async function (assert) {
+      const moduleURL = `${realmURL}person.gts`;
+      let result = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: moduleURL,
+        auth: auth(),
+        renderOptions: { fileExtract: true },
+      });
+
+      assert.ok(result.response.fileExtract, 'fileExtract populated');
+      assert.notOk(result.response.card, 'card skipped');
+      assert.notOk(result.response.fileRender, 'fileRender skipped');
+      assert.strictEqual(
+        result.response.fileExtract?.status,
+        'ready',
+        'file extract reports ready',
+      );
+    });
+
+    test('fileExtract + fileRender chains resource automatically', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      // Caller does NOT supply fileData; it should be derived from the extract
+      // pass's resource within the composite. The caller does supply
+      // fileDefCodeRef (like the indexer does) — that's the one piece the
+      // composite can't infer on its own since it depends on file extension
+      // and the caller's file-def resolution rules.
+      let result = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: {
+          fileExtract: true,
+          fileRender: true,
+          fileDefCodeRef: {
+            module: baseRRI('json-file-def'),
+            name: 'JsonFileDef',
+          },
+        },
+      });
+
+      assert.ok(result.response.fileExtract, 'fileExtract populated');
+      assert.ok(
+        result.response.fileRender,
+        'fileRender populated via chained resource',
+      );
+      assert.notOk(
+        result.response.fileRender?.error,
+        `fileRender completed without error: ${JSON.stringify(result.response.fileRender?.error)}`,
+      );
+    });
+
+    test('reuses a single pooled page for all three passes', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      // Warm the pool
+      await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: {
+          cardRender: true,
+          fileExtract: true,
+          fileRender: true,
+        },
+      });
+      // Second call should reuse the warm page
+      let result = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: {
+          cardRender: true,
+          fileExtract: true,
+          fileRender: true,
+        },
+      });
+      assert.true(result.pool.reused, 'second visit reused the pooled page');
+    });
+  });
 });

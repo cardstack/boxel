@@ -8,10 +8,7 @@ import {
   type AffinityType,
   logger,
   type RenderRouteOptions,
-  type RenderResponse,
   type ModuleRenderResponse,
-  type FileExtractResponse,
-  type FileRenderResponse,
   type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import {
@@ -21,12 +18,16 @@ import {
   fetchRequestFromContext,
 } from '../middleware';
 import { Prerenderer } from './index';
+import type { Timings } from './render-runner';
 import { resolvePrerenderManagerURL } from './config';
 import {
+  PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
+  sanitizePrerenderRequestId,
 } from './prerender-constants';
+import { randomUUID } from 'crypto';
 
 type PrerenderServer = Server & {
   __stopPrerenderer?: () => Promise<void>;
@@ -34,6 +35,27 @@ type PrerenderServer = Server & {
 
 let log = logger('prerender-server');
 const defaultPrerenderServerPort = 4221;
+
+// Stamp the per-request `requestId` onto `response.meta.requestId`
+// so it flows through the same channel as timings / host-side
+// diagnostics and ends up on `boxel_index.timing_diagnostics` for
+// cross-log grepping. The launch/waits/render/total timings are
+// already attached inside Prerenderer (regardless of HTTP vs
+// in-process); this layer just adds the HTTP-only correlation id.
+// Exported so the diagnostics-persistence regression tests can
+// exercise it directly.
+export function decorateRenderErrorDiagnostics(
+  response: any,
+  requestId: string,
+): void {
+  if (!response || typeof response !== 'object') {
+    return;
+  }
+  response.meta = {
+    ...(response.meta ?? {}),
+    requestId,
+  };
+}
 
 export function buildPrerenderApp(options: {
   serverURL: string;
@@ -43,11 +65,15 @@ export function buildPrerenderApp(options: {
 }): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   prerenderer: Prerenderer;
+  // Resolved pool size (explicit option → env → default). Returned so
+  // `createPrerenderHttpServer` can report the same value to the
+  // manager in `sendHeartbeat` without duplicating the resolution.
+  maxPages: number;
 } {
   let app = new Koa<Koa.DefaultState, Koa.Context>();
   let router = new Router();
   let maxPages =
-    options?.maxPages ?? Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
+    options?.maxPages ?? Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 5);
   let prerenderer = new Prerenderer({
     maxPages,
     serverURL: options.serverURL,
@@ -110,7 +136,7 @@ export function buildPrerenderApp(options: {
 
   type PrerenderExecResult<R> = {
     response: R;
-    timings: { launchMs: number; renderMs: number };
+    timings: Timings;
     pool: {
       pageId: string;
       affinityType: AffinityType;
@@ -230,7 +256,10 @@ export function buildPrerenderApp(options: {
       infoLabel: string;
       warnTimeoutMessage: (target: string) => string;
       errorContext: string;
-      execute: (args: A) => Promise<PrerenderExecResult<R>>;
+      execute: (
+        args: A,
+        opts: { signal: AbortSignal },
+      ) => Promise<PrerenderExecResult<R>>;
       afterResponse?: (target: string, response: R) => void;
       parseAttributes: (attrs: any) => RouteParseResult<A>;
       errorMessage?: string | ((err: any) => string);
@@ -238,6 +267,29 @@ export function buildPrerenderApp(options: {
     },
   ) {
     router.post(path, async (ctxt: Koa.Context) => {
+      // CS-10872: echo manager's correlation ID so operators can grep
+      // one ID across client → manager → prerender-server. Fall back
+      // to a mint if the caller didn't supply one (direct calls, tests).
+      // CS-10872: sanitize to keep grepable IDs in logs & headers.
+      let requestId =
+        sanitizePrerenderRequestId(ctxt.get(PRERENDER_REQUEST_ID_HEADER)) ??
+        randomUUID();
+      ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
+      // Propagate client-disconnect through to the Prerenderer so a
+      // queued render can bail out of the semaphore / tab-queue wait
+      // instead of finishing work no one is waiting for. The manager
+      // aborts its upstream `fetch` on client close, which closes
+      // this request's socket. We listen on `ctxt.res` (not
+      // `ctxt.req`) because Node 17+ auto-destroys IncomingMessage
+      // after the body is consumed, firing `req.close` during normal
+      // flow; `res.close` fires after flushing on success or on
+      // real connection tear-down before the response is sent.
+      let ac = new AbortController();
+      const onClientClose = () => {
+        if (ctxt.res.writableEnded) return;
+        ac.abort();
+      };
+      ctxt.res.on('close', onClientClose);
       try {
         let request = await fetchRequestFromContext(ctxt);
         let raw = await request.text();
@@ -296,7 +348,7 @@ export function buildPrerenderApp(options: {
 
         let start = Date.now();
         let execPromise = options
-          .execute(routeArgs)
+          .execute(routeArgs, { signal: ac.signal })
           .then((result) => ({ result }));
         let drainPromise = options.drainingPromise
           ? options.drainingPromise.then(() => ({ draining: true as const }))
@@ -337,17 +389,34 @@ export function buildPrerenderApp(options: {
         let poolFlagSuffix =
           poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
         log.info(
-          '%s %s total=%dms launch=%dms render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+          '%s %s requestId=%s total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
           options.infoLabel,
           parsed.logTarget,
+          requestId,
           totalMs,
           timings.launchMs,
+          timings.waits.semaphoreMs,
+          timings.waits.tabQueueMs,
+          timings.waits.tabStartupMs,
           timings.renderMs,
           pool.pageId,
           pool.affinityType,
           pool.affinityValue,
           poolFlagSuffix,
         );
+        decorateRenderErrorDiagnostics(response, requestId);
+        // Timings are already embedded inside `response.meta.diagnostics`
+        // by `Prerenderer.decorateRenderErrorsWithTimings` — the indexer
+        // reads them from there. Keep the envelope `meta.timing`
+        // populated (at the JSON:API envelope level) so existing
+        // log/telemetry consumers that read the envelope don't have
+        // to migrate.
+        let envelopeTiming = {
+          launchMs: timings.launchMs,
+          renderMs: timings.renderMs,
+          totalMs,
+          waits: timings.waits,
+        };
         ctxt.status = 201;
         ctxt.set('Content-Type', 'application/vnd.api+json');
         ctxt.body = {
@@ -357,11 +426,7 @@ export function buildPrerenderApp(options: {
             attributes: response,
           },
           meta: {
-            timing: {
-              launchMs: timings.launchMs,
-              renderMs: timings.renderMs,
-              totalMs,
-            },
+            timing: envelopeTiming,
             pool,
           },
         };
@@ -370,6 +435,14 @@ export function buildPrerenderApp(options: {
         }
         options.afterResponse?.(parsed.logTarget, response);
       } catch (err: any) {
+        // Swallow caller-cancelled: the socket is already closed,
+        // nothing to report to them, no error metric to emit.
+        if ((err as { name?: string })?.name === 'PrerenderCancelledError') {
+          log.debug(
+            `prerender cancelled before completion requestId=${requestId}`,
+          );
+          return;
+        }
         Sentry.captureException(err);
         log.error(`Unhandled error in ${options.errorContext}:`, err);
         ctxt.status = 500;
@@ -385,32 +458,11 @@ export function buildPrerenderApp(options: {
             },
           ],
         };
+      } finally {
+        ctxt.res.off('close', onClientClose);
       }
     });
   }
-
-  registerPrerenderRoute('/prerender-card', {
-    requestDescription: 'prerender request',
-    responseType: 'prerender-result',
-    infoLabel: 'prerendered',
-    warnTimeoutMessage: (url) => `render of ${url} timed out`,
-    errorContext: '/prerender-card',
-    parseAttributes: parseDefaultPrerenderAttributes,
-    execute: (args) => prerenderer.prerenderCard(args),
-    drainingPromise: options.drainingPromise,
-    afterResponse: (url, response) => {
-      const cardResponse = response as RenderResponse;
-      if (cardResponse.error) {
-        log.debug(
-          `render of ${url} resulted in error doc:\n${JSON.stringify(cardResponse.error, null, 2)}`,
-        );
-      } else {
-        log.debug(
-          `render of ${url} resulted in search doc:\n${JSON.stringify(cardResponse.searchDoc, null, 2)}`,
-        );
-      }
-    },
-  });
 
   registerPrerenderRoute('/prerender-module', {
     requestDescription: 'module prerender request',
@@ -419,32 +471,14 @@ export function buildPrerenderApp(options: {
     warnTimeoutMessage: (url) => `module render of ${url} timed out`,
     errorContext: '/prerender-module',
     parseAttributes: parseDefaultPrerenderAttributes,
-    execute: (args) => prerenderer.prerenderModule(args),
+    execute: (args, { signal }) =>
+      prerenderer.prerenderModule({ ...args, signal }),
     drainingPromise: options.drainingPromise,
     afterResponse: (url, response) => {
       const moduleResponse = response as ModuleRenderResponse;
       if (moduleResponse.status === 'error' && moduleResponse.error) {
         log.debug(
           `module render of ${url} resulted in error doc:\n${JSON.stringify(moduleResponse.error, null, 2)}`,
-        );
-      }
-    },
-  });
-
-  registerPrerenderRoute('/prerender-file-extract', {
-    requestDescription: 'file extract prerender request',
-    responseType: 'prerender-file-extract-result',
-    infoLabel: 'file extract prerendered',
-    warnTimeoutMessage: (url) => `file extract render of ${url} timed out`,
-    errorContext: '/prerender-file-extract',
-    parseAttributes: parseDefaultPrerenderAttributes,
-    execute: (args) => prerenderer.prerenderFileExtract(args),
-    drainingPromise: options.drainingPromise,
-    afterResponse: (url, response) => {
-      const fileResponse = response as FileExtractResponse;
-      if (fileResponse.status === 'error' && fileResponse.error) {
-        log.debug(
-          `file extract of ${url} resulted in error doc:\n${JSON.stringify(fileResponse.error, null, 2)}`,
         );
       }
     },
@@ -460,20 +494,36 @@ export function buildPrerenderApp(options: {
       errorContext: '/run-command',
       errorMessage: 'Error running command',
       parseAttributes: parseRunCommandAttributes,
-      execute: (args) =>
+      execute: (args, { signal }) =>
         prerenderer.runCommand({
           userId: args.affinityValue,
           auth: args.auth,
           command: args.command,
           commandInput: args.commandInput as Record<string, unknown> | null,
+          signal,
         }),
       drainingPromise: options.drainingPromise,
     },
   );
 
-  // File render route needs additional attributes (fileData, types)
-  // beyond what registerPrerenderRoute handles, so we register it directly.
-  router.post('/prerender-file-render', async (ctxt: Koa.Context) => {
+  // Composite visit prerender: runs a caller-selected subset of
+  // {fileExtract, cardRender, fileRender} on a single page acquisition.
+  router.post('/prerender-visit', async (ctxt: Koa.Context) => {
+    // CS-10872: sanitize to keep grepable IDs in logs & headers —
+    // same contract as the shared `registerPrerenderRoute` wrapper
+    // used by /prerender-module, /prerender-file-extract, etc.
+    let requestId =
+      sanitizePrerenderRequestId(ctxt.get(PRERENDER_REQUEST_ID_HEADER)) ??
+      randomUUID();
+    ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
+    // Client-disconnect → cancel the render. See the note on the
+    // shared `registerPrerenderRoute` wrapper above.
+    let ac = new AbortController();
+    const onClientClose = () => {
+      if (ctxt.res.writableEnded) return;
+      ac.abort();
+    };
+    ctxt.res.on('close', onClientClose);
     try {
       let request = await fetchRequestFromContext(ctxt);
       let raw = await request.text();
@@ -519,15 +569,40 @@ export function buildPrerenderApp(options: {
         .filter(({ value }) => !isNonEmptyString(value))
         .map(({ name }) => name);
 
-      if (!fileData) {
-        missing.push('fileData');
+      // At least one pass must be requested
+      if (
+        !renderOptions.fileExtract &&
+        !renderOptions.cardRender &&
+        !renderOptions.fileRender
+      ) {
+        missing.push('renderOptions.{fileExtract|cardRender|fileRender}');
       }
-      if (!Array.isArray(types)) {
-        missing.push('types');
+
+      // If fileRender is requested without fileData, we need fileExtract so
+      // the composite can chain the extract's resource into render. When
+      // fileExtract isn't requested AND fileData isn't supplied, reject —
+      // the host route model hook requires fileData to populate its model.
+      if (renderOptions.fileRender && !fileData && !renderOptions.fileExtract) {
+        missing.push(
+          'fileData (required when fileRender pass is requested without fileExtract)',
+        );
+      }
+      // Chaining fileExtract → fileRender also needs fileDefCodeRef so the
+      // renderer can resolve the file definition for the extracted resource.
+      // Catch this at the HTTP boundary rather than failing mid-render.
+      if (
+        renderOptions.fileRender &&
+        !fileData &&
+        renderOptions.fileExtract &&
+        !renderOptions.fileDefCodeRef
+      ) {
+        missing.push(
+          'renderOptions.fileDefCodeRef (required when fileRender chains off fileExtract)',
+        );
       }
 
       log.debug(
-        `received file render prerender request ${rawUrl}: affinityType=${rawAffinityType} affinityValue=${rawAffinityValue} realm=${rawRealm}`,
+        `received visit prerender request ${rawUrl}: affinityType=${rawAffinityType} affinityValue=${rawAffinityValue} realm=${rawRealm} options=${JSON.stringify(renderOptions)}`,
       );
       if (missing.length > 0) {
         ctxt.status = 400;
@@ -547,18 +622,28 @@ export function buildPrerenderApp(options: {
       let affinityValue = rawAffinityValue as string;
       let url = rawUrl as string;
       let auth = rawAuth as string;
+      // Optional batch id (CS-10758 step 3). If absent or not a non-empty
+      // string the prerenderer treats the visit as batch-less and strips
+      // any `clearCache: true` when an active batch owns the affinity.
+      let rawBatchId = attrs.batchId;
+      let batchId =
+        typeof rawBatchId === 'string' && rawBatchId.trim().length > 0
+          ? rawBatchId
+          : undefined;
 
       let start = Date.now();
       let execPromise = prerenderer
-        .prerenderFileRender({
+        .prerenderVisit({
           affinityType,
           affinityValue,
           realm,
           url,
           auth,
-          fileData,
-          types,
           renderOptions,
+          ...(fileData ? { fileData } : {}),
+          ...(Array.isArray(types) ? { types } : {}),
+          ...(batchId ? { batchId } : {}),
+          signal: ac.signal,
         })
         .then((result) => ({ result }));
       let drainPromise = options.drainingPromise
@@ -570,7 +655,7 @@ export function buildPrerenderApp(options: {
       if ('draining' in raceResult) {
         execPromise.catch((e) =>
           log.debug(
-            'file render prerender execute settled after drain (ignored):',
+            'visit prerender execute settled after drain (ignored):',
             e,
           ),
         );
@@ -601,45 +686,60 @@ export function buildPrerenderApp(options: {
         .join(', ');
       let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
       log.info(
-        'file render prerendered %s total=%dms launch=%dms render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+        'visit prerendered %s requestId=%s total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
         url,
+        requestId,
         totalMs,
         timings.launchMs,
+        timings.waits.semaphoreMs,
+        timings.waits.tabQueueMs,
+        timings.waits.tabStartupMs,
         timings.renderMs,
         pool.pageId,
         pool.affinityType,
         pool.affinityValue,
         poolFlagSuffix,
       );
+      decorateRenderErrorDiagnostics(response, requestId);
+      // Timings are already inside `response.meta.diagnostics`. Here
+      // we just populate the JSON:API envelope `meta.timing` that
+      // existing telemetry consumers still read.
+      let envelopeTiming = {
+        launchMs: timings.launchMs,
+        renderMs: timings.renderMs,
+        totalMs,
+        waits: timings.waits,
+      };
       ctxt.status = 201;
       ctxt.set('Content-Type', 'application/vnd.api+json');
       ctxt.body = {
         data: {
-          type: 'prerender-file-render-result',
+          type: 'prerender-visit-result',
           id: url,
           attributes: response,
         },
         meta: {
-          timing: {
-            launchMs: timings.launchMs,
-            renderMs: timings.renderMs,
-            totalMs,
-          },
+          timing: envelopeTiming,
           pool,
         },
       };
       if (pool.timedOut) {
-        log.warn(`file render of ${url} timed out`);
+        log.warn(`visit render of ${url} timed out`);
       }
-      const fileResponse = response as FileRenderResponse;
-      if (fileResponse.error) {
+      if (response.pageUnusableError) {
         log.debug(
-          `file render of ${url} resulted in error doc:\n${JSON.stringify(fileResponse.error, null, 2)}`,
+          `visit of ${url} hit pageUnusableError:\n${JSON.stringify(response.pageUnusableError, null, 2)}`,
         );
       }
     } catch (err: any) {
+      if ((err as { name?: string })?.name === 'PrerenderCancelledError') {
+        log.debug(
+          `prerender-visit cancelled before completion requestId=${requestId}`,
+        );
+        return;
+      }
       Sentry.captureException(err);
-      log.error('Unhandled error in /prerender-file-render:', err);
+      log.error('Unhandled error in /prerender-visit:', err);
       ctxt.status = 500;
       ctxt.body = {
         errors: [
@@ -648,6 +748,71 @@ export function buildPrerenderApp(options: {
             message: err?.message ?? 'Unknown error',
           },
         ],
+      };
+    } finally {
+      ctxt.res.off('close', onClientClose);
+    }
+  });
+
+  // Release an indexing batch's ownership of an affinity's warm loader
+  // (CS-10758 step 3). Called by the indexer's `finally` block via the
+  // manager's broadcast proxy. No-op if this server isn't the current
+  // owner — safe to broadcast to servers that never saw the batch.
+  router.post('/release-batch', async (ctxt: Koa.Context) => {
+    try {
+      let request = await fetchRequestFromContext(ctxt);
+      let raw = await request.text();
+      let body: any;
+      try {
+        body = raw ? JSON.parse(raw) : {};
+      } catch (e) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [{ status: 400, message: 'Invalid JSON body' }],
+        };
+        return;
+      }
+      let attrs = body?.data?.attributes ?? {};
+      let batchId = attrs.batchId;
+      let affinityType = attrs.affinityType;
+      let affinityValue = attrs.affinityValue;
+      let missing: string[] = [];
+      if (typeof batchId !== 'string' || batchId.trim().length === 0) {
+        missing.push('batchId');
+      }
+      if (affinityType !== 'realm' && affinityType !== 'user') {
+        missing.push('affinityType');
+      }
+      if (
+        typeof affinityValue !== 'string' ||
+        affinityValue.trim().length === 0
+      ) {
+        missing.push('affinityValue');
+      }
+      if (missing.length > 0) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [
+            {
+              status: 400,
+              message: `Missing or invalid attributes: ${missing.join(', ')}`,
+            },
+          ],
+        };
+        return;
+      }
+      await prerenderer.releaseBatch({
+        batchId,
+        affinityType: affinityType as AffinityType,
+        affinityValue,
+      });
+      ctxt.status = 204;
+    } catch (err: any) {
+      Sentry.captureException(err);
+      log.error('Unhandled error in /release-batch:', err);
+      ctxt.status = 500;
+      ctxt.body = {
+        errors: [{ status: 500, message: err?.message ?? 'Unknown error' }],
       };
     }
   });
@@ -695,7 +860,7 @@ export function buildPrerenderApp(options: {
     log.error(`prerender server HTTP error: ${err.message}`);
   });
 
-  return { app, prerenderer };
+  return { app, prerenderer, maxPages };
 }
 
 function resolvePrerenderServerURL(port?: number): string {
@@ -723,15 +888,28 @@ async function unregisterWithManager(serverURL: string) {
 export function createPrerenderHttpServer(options?: {
   maxPages?: number;
   port?: number;
+  // Default true. Gates the process-wide uncaughtException AND
+  // unhandledRejection handlers, both of which call process.exit(1). In tests
+  // pass false so the qunit runner isn't torn down before teardown hooks can
+  // release hardcoded test ports (CS-10813).
+  fatalExitOnUncaught?: boolean;
 }): Server {
   let draining = false;
   let drainingResolved = false;
   let drainingDeferred = new Deferred<void>();
   let heartbeatTimer: NodeJS.Timeout | undefined;
   let isClosing = false;
-  let fatalExitInProgress = false;
+  let fatalExitOnUncaught = options?.fatalExitOnUncaught ?? true;
   let serverURL = resolvePrerenderServerURL(options?.port);
-  let { app, prerenderer } = buildPrerenderApp({
+  let {
+    app,
+    prerenderer,
+    // Reuse the resolved value `buildPrerenderApp` computed so
+    // `sendHeartbeat` reports the same pool size the PagePool was
+    // actually constructed with — no duplicate resolution, no drift
+    // when the default or env var changes.
+    maxPages: resolvedMaxPages,
+  } = buildPrerenderApp({
     maxPages: options?.maxPages,
     serverURL,
     isDraining: () => draining,
@@ -767,7 +945,7 @@ export function createPrerenderHttpServer(options?: {
   async function sendHeartbeat(status?: 'active' | 'draining') {
     try {
       const managerURL = resolvePrerenderManagerURL();
-      const capacity = Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
+      const capacity = resolvedMaxPages;
       let body = {
         data: {
           type: 'prerender-server',
@@ -776,6 +954,10 @@ export function createPrerenderHttpServer(options?: {
             url: serverURL,
             status: status ?? (draining ? 'draining' : 'active'),
             warmedAffinities: prerenderer.getWarmAffinities(),
+            // Per-affinity vacancy snapshot. Consumed by the prerender
+            // manager's warm-vacancy-first routing (CS-10758). Additive to
+            // warmedAffinities for rolling-deploy back-compat.
+            affinityVacancy: prerenderer.getVacancySnapshot(),
           },
         },
       };
@@ -869,37 +1051,46 @@ export function createPrerenderHttpServer(options?: {
   process.on('SIGTERM', shutdownHandler);
   process.on('SIGINT', shutdownHandler);
 
-  async function handleFatal(
-    type: 'uncaughtException' | 'unhandledRejection',
-    err: any,
-  ) {
-    if (fatalExitInProgress) return;
-    fatalExitInProgress = true;
-    log.error(`Fatal ${type}; shutting down prerenderer`, err);
-    try {
-      await prerenderer.stop();
-    } catch (e: any) {
-      log.warn('Error stopping prerenderer during fatal shutdown:', e);
-    }
-    try {
-      server.close();
-    } catch (e: any) {
-      log.warn('Error closing server during fatal shutdown:', e);
-    }
-    setTimeout(() => process.exit(1), 100);
-  }
+  let uncaughtExceptionHandler: ((err: unknown) => void) | undefined;
+  let unhandledRejectionHandler: ((err: unknown) => void) | undefined;
+  if (fatalExitOnUncaught) {
+    let fatalExitInProgress = false;
+    const handleFatal = async (
+      type: 'uncaughtException' | 'unhandledRejection',
+      err: any,
+    ) => {
+      if (fatalExitInProgress) return;
+      fatalExitInProgress = true;
+      log.error(`Fatal ${type}; shutting down prerenderer`, err);
+      try {
+        await prerenderer.stop();
+      } catch (e: any) {
+        log.warn('Error stopping prerenderer during fatal shutdown:', e);
+      }
+      try {
+        server.close();
+      } catch (e: any) {
+        log.warn('Error closing server during fatal shutdown:', e);
+      }
+      setTimeout(() => process.exit(1), 100);
+    };
 
-  const uncaughtExceptionHandler = (err: unknown) =>
-    handleFatal('uncaughtException', err);
-  const unhandledRejectionHandler = (err: unknown) =>
-    handleFatal('unhandledRejection', err);
-  process.on('uncaughtException', uncaughtExceptionHandler);
-  process.on('unhandledRejection', unhandledRejectionHandler);
+    uncaughtExceptionHandler = (err: unknown) =>
+      handleFatal('uncaughtException', err);
+    unhandledRejectionHandler = (err: unknown) =>
+      handleFatal('unhandledRejection', err);
+    process.on('uncaughtException', uncaughtExceptionHandler);
+    process.on('unhandledRejection', unhandledRejectionHandler);
+  }
   server.on('close', () => {
     process.off('SIGTERM', shutdownHandler);
     process.off('SIGINT', shutdownHandler);
-    process.off('uncaughtException', uncaughtExceptionHandler);
-    process.off('unhandledRejection', unhandledRejectionHandler);
+    if (uncaughtExceptionHandler) {
+      process.off('uncaughtException', uncaughtExceptionHandler);
+    }
+    if (unhandledRejectionHandler) {
+      process.off('unhandledRejection', unhandledRejectionHandler);
+    }
   });
   return server;
 }

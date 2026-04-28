@@ -352,6 +352,11 @@ export default class RealmServerService extends Service {
   }
 
   @cached
+  get displayedCatalogRealmURLs() {
+    return this.catalogRealmURLs;
+  }
+
+  @cached
   get availableRealmIndexCardIds() {
     return this.availableRealmURLs.map((url) => `${url}index`);
   }
@@ -422,18 +427,8 @@ export default class RealmServerService extends Service {
     }
 
     let { data } = await response.json();
-    let externalCatalogURL = ENV.resolvedExternalCatalogRealmURL;
-    let showExternalCatalog =
-      window.localStorage.getItem('boxel:externalCatalog') === 'true';
 
     data.forEach((publicRealm: { id: string }) => {
-      if (
-        externalCatalogURL &&
-        publicRealm.id === externalCatalogURL &&
-        !showExternalCatalog
-      ) {
-        return;
-      }
       if (!this.availableRealms.find((r) => r.url === publicRealm.id)) {
         this.availableRealms.push({
           type: 'catalog',
@@ -441,15 +436,6 @@ export default class RealmServerService extends Service {
         });
       }
     });
-
-    if (showExternalCatalog && externalCatalogURL) {
-      if (!this.availableRealms.find((r) => r.url === externalCatalogURL)) {
-        this.availableRealms.push({
-          type: 'catalog',
-          url: externalCatalogURL,
-        });
-      }
-    }
 
     this._ready.fulfill();
   }

@@ -5,7 +5,10 @@ import { SupportedMimeType } from '@cardstack/runtime-common';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
-import { formatLintIssues } from '../utils/lint-formatting';
+import {
+  formatLintIssues,
+  formatLintIssuesBySeverity,
+} from '../utils/lint-formatting';
 
 import type NetworkService from '../services/network';
 
@@ -42,9 +45,12 @@ export default class LintAndFixCommand extends HostBaseCommand<
     });
     if (response.status === 200) {
       let result = await response.json();
+      let { errors, warnings } = formatLintIssuesBySeverity(result?.messages);
       return new LintAndFixResult({
         output: result.output,
         lintIssues: formatLintIssues(result?.messages),
+        lintErrors: errors,
+        lintWarnings: warnings,
       });
     }
     let result = await response.json();

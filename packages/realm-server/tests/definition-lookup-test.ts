@@ -9,6 +9,7 @@ import {
   type ModulePrerenderArgs,
   type ModuleRenderResponse,
   type Prerenderer,
+  rri,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
@@ -29,7 +30,7 @@ function buildDefinition(
     definition: {
       type: 'card-def',
       codeRef: {
-        module: moduleAlias,
+        module: rri(moduleAlias),
         name,
       },
       displayName: name,
@@ -64,7 +65,10 @@ function buildModuleResponse(
   deps: string[],
   error?: ErrorEntry,
 ): ModuleRenderResponse {
-  let definitionId = internalKeyFor({ module: moduleURL, name }, undefined);
+  let definitionId = internalKeyFor(
+    { module: rri(moduleURL), name },
+    undefined,
+  );
   let definitions = error
     ? {}
     : {
@@ -100,9 +104,6 @@ module(basename(__filename), function () {
     hooks.before(async () => {
       virtualNetwork = createVirtualNetwork();
       mockRemotePrerenderer = {
-        async prerenderCard() {
-          throw new Error('Not implemented in mock');
-        },
         async prerenderModule(args: ModulePrerenderArgs) {
           prerenderModuleCalls++;
           let moduleURL = new URL(args.url);
@@ -122,7 +123,7 @@ module(basename(__filename), function () {
                 definition: {
                   type: 'card-def',
                   codeRef: {
-                    module: moduleURL.href,
+                    module: rri(moduleURL.href),
                     name: 'Person',
                   },
                   displayName: 'Person',
@@ -132,7 +133,7 @@ module(basename(__filename), function () {
                       isPrimitive: true,
                       isComputed: false,
                       fieldOrCard: {
-                        module: 'https://cardstack.com/base/string',
+                        module: rri('https://cardstack.com/base/string'),
                         name: 'default',
                       },
                       serializerName: undefined,
@@ -144,10 +145,7 @@ module(basename(__filename), function () {
             },
           });
         },
-        async prerenderFileExtract() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileRender() {
+        async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },
         async runCommand() {
@@ -196,7 +194,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: rri('./person'),
                     name: 'Person',
                   },
                 },
@@ -227,7 +225,7 @@ module(basename(__filename), function () {
 
     test('lookupDefinition', async function (assert) {
       let definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -239,7 +237,7 @@ module(basename(__filename), function () {
 
       // second call should hit the cache and not call prerenderModule again
       definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -252,7 +250,7 @@ module(basename(__filename), function () {
 
     test('invalidation', async function (assert) {
       let definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -265,7 +263,7 @@ module(basename(__filename), function () {
       await definitionLookup.invalidate('http://some-realm-url/person.gts');
 
       definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -278,7 +276,7 @@ module(basename(__filename), function () {
       await definitionLookup.invalidate(`${realmURL}person.gts`);
 
       definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -291,7 +289,7 @@ module(basename(__filename), function () {
 
     test('invalidates module cache entries without file extensions', async function (assert) {
       let definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -304,7 +302,7 @@ module(basename(__filename), function () {
       await definitionLookup.invalidate(`${realmURL}person`);
 
       definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -323,13 +321,7 @@ module(basename(__filename), function () {
       let calls = 0;
 
       let prerenderer: Prerenderer = {
-        async prerenderCard() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileExtract() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileRender() {
+        async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },
         async runCommand() {
@@ -339,7 +331,7 @@ module(basename(__filename), function () {
           calls++;
           let moduleAlias = trimExecutableExtension(new URL(args.url)).href;
           let definitionId = internalKeyFor(
-            { module: args.url, name: 'Person' },
+            { module: rri(args.url), name: 'Person' },
             undefined,
           );
           return {
@@ -357,7 +349,7 @@ module(basename(__filename), function () {
                 definition: {
                   type: 'card-def',
                   codeRef: {
-                    module: moduleAlias,
+                    module: rri(moduleAlias),
                     name: 'Person',
                   },
                   displayName: `Person v${version}`,
@@ -387,7 +379,7 @@ module(basename(__filename), function () {
       });
 
       let definition = await lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person v1');
@@ -397,7 +389,7 @@ module(basename(__filename), function () {
       await lookup.invalidate(moduleURL);
 
       definition = await lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person v2');
@@ -416,13 +408,7 @@ module(basename(__filename), function () {
       let calls = 0;
 
       let prerenderer: Prerenderer = {
-        async prerenderCard() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileExtract() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileRender() {
+        async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },
         async runCommand() {
@@ -459,7 +445,7 @@ module(basename(__filename), function () {
       });
 
       let definition = await lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'DeletedCard',
       });
       assert.ok(definition, 'definition is cached before deletion');
@@ -470,7 +456,7 @@ module(basename(__filename), function () {
 
       await assert.rejects(
         lookup.lookupDefinition({
-          module: moduleURL,
+          module: rri(moduleURL),
           name: 'DeletedCard',
         }),
         'lookup fails after module deletion invalidation',
@@ -496,13 +482,7 @@ module(basename(__filename), function () {
       let calls = new Map<string, number>();
 
       let prerenderer: Prerenderer = {
-        async prerenderCard() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileExtract() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileRender() {
+        async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },
         async runCommand() {
@@ -546,19 +526,19 @@ module(basename(__filename), function () {
       });
 
       await lookup.lookupDefinition({
-        module: deepModule,
+        module: rri(deepModule),
         name: 'DeepCard',
       });
       await lookup.lookupDefinition({
-        module: middleModule,
+        module: rri(middleModule),
         name: 'MiddleField',
       });
       await lookup.lookupDefinition({
-        module: leafModule,
+        module: rri(leafModule),
         name: 'LeafField',
       });
       await lookup.lookupDefinition({
-        module: otherModule,
+        module: rri(otherModule),
         name: 'OtherCard',
       });
 
@@ -616,7 +596,7 @@ module(basename(__filename), function () {
       );
 
       await lookup.lookupDefinition({
-        module: deepModule,
+        module: rri(deepModule),
         name: 'DeepCard',
       });
       assert.strictEqual(
@@ -645,13 +625,7 @@ module(basename(__filename), function () {
 
       let calls = new Map<string, number>();
       let prerenderer: Prerenderer = {
-        async prerenderCard() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileExtract() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileRender() {
+        async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },
         async runCommand() {
@@ -700,23 +674,23 @@ module(basename(__filename), function () {
       });
 
       await lookup.lookupDefinition({
-        module: blogAppModule,
+        module: rri(blogAppModule),
         name: 'BlogApp',
       });
       await lookup.lookupDefinition({
-        module: authorModule,
+        module: rri(authorModule),
         name: 'Author',
       });
       await lookup.lookupDefinition({
-        module: blogCategoryModule,
+        module: rri(blogCategoryModule),
         name: 'BlogCategory',
       });
       await lookup.lookupDefinition({
-        module: blogPostModule,
+        module: rri(blogPostModule),
         name: 'BlogPost',
       });
       await lookup.lookupDefinition({
-        module: otherModule,
+        module: rri(otherModule),
         name: 'OtherCard',
       });
 
@@ -780,7 +754,7 @@ module(basename(__filename), function () {
       );
 
       await lookup.lookupDefinition({
-        module: blogPostModule,
+        module: rri(blogPostModule),
         name: 'BlogPost',
       });
       assert.strictEqual(
@@ -803,13 +777,7 @@ module(basename(__filename), function () {
       };
 
       let prerenderer: Prerenderer = {
-        async prerenderCard() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileExtract() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileRender() {
+        async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },
         async runCommand() {
@@ -900,7 +868,7 @@ module(basename(__filename), function () {
 
       await assert.rejects(
         lookup.lookupDefinition({
-          module: deepModule,
+          module: rri(deepModule),
           name: 'DeepCard',
         }),
         'deep-card errors when missing',
@@ -911,14 +879,14 @@ module(basename(__filename), function () {
 
       await assert.rejects(
         lookup.lookupDefinition({
-          module: middleModule,
+          module: rri(middleModule),
           name: 'MiddleField',
         }),
         'middle-field errors when missing',
       );
       await assert.rejects(
         lookup.lookupDefinition({
-          module: deepModule,
+          module: rri(deepModule),
           name: 'DeepCard',
         }),
         'deep-card errors when middle-field is missing',
@@ -954,21 +922,21 @@ module(basename(__filename), function () {
 
       await assert.rejects(
         lookup.lookupDefinition({
-          module: leafModule,
+          module: rri(leafModule),
           name: 'LeafField',
         }),
         'leaf-field errors when missing',
       );
       await assert.rejects(
         lookup.lookupDefinition({
-          module: middleModule,
+          module: rri(middleModule),
           name: 'MiddleField',
         }),
         'middle-field errors when leaf-field is missing',
       );
       await assert.rejects(
         lookup.lookupDefinition({
-          module: deepModule,
+          module: rri(deepModule),
           name: 'DeepCard',
         }),
         'deep-card errors when leaf-field is missing',
@@ -998,15 +966,15 @@ module(basename(__filename), function () {
       await lookup.invalidate(leafModule);
 
       await lookup.lookupDefinition({
-        module: leafModule,
+        module: rri(leafModule),
         name: 'LeafField',
       });
       await lookup.lookupDefinition({
-        module: middleModule,
+        module: rri(middleModule),
         name: 'MiddleField',
       });
       await lookup.lookupDefinition({
-        module: deepModule,
+        module: rri(deepModule),
         name: 'DeepCard',
       });
 
@@ -1048,7 +1016,7 @@ module(basename(__filename), function () {
       });
 
       await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
 
@@ -1065,7 +1033,7 @@ module(basename(__filename), function () {
       await dbAdapter.execute('DELETE FROM modules');
 
       await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
 
@@ -1109,7 +1077,7 @@ module(basename(__filename), function () {
         });
 
         await scopedLookup.lookupDefinition({
-          module: remoteModuleURL,
+          module: rri(remoteModuleURL),
           name: 'Person',
         });
 
@@ -1157,7 +1125,7 @@ module(basename(__filename), function () {
         });
 
         await scopedLookup.lookupDefinition({
-          module: remoteModuleURL,
+          module: rri(remoteModuleURL),
           name: 'Person',
         });
 
@@ -1181,13 +1149,7 @@ module(basename(__filename), function () {
       let shouldError = true;
 
       let prerenderer: Prerenderer = {
-        async prerenderCard() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileExtract() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderFileRender() {
+        async prerenderVisit() {
           throw new Error('Not implemented in mock');
         },
         async runCommand() {
@@ -1231,7 +1193,7 @@ module(basename(__filename), function () {
       // 1. First lookup caches the error
       await assert.rejects(
         lookup.lookupDefinition({
-          module: moduleURL,
+          module: rri(moduleURL),
           name: 'TransientError',
         }),
         /nonexistent type/,
@@ -1243,7 +1205,7 @@ module(basename(__filename), function () {
       shouldError = false;
       await assert.rejects(
         lookup.lookupDefinition({
-          module: moduleURL,
+          module: rri(moduleURL),
           name: 'TransientError',
         }),
         /nonexistent type/,
@@ -1263,7 +1225,7 @@ module(basename(__filename), function () {
 
       // 4. Now the stale error should trigger a re-prerender which succeeds
       let definition = await lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'TransientError',
       });
       assert.ok(
@@ -1279,7 +1241,7 @@ module(basename(__filename), function () {
 
       // 5. Subsequent lookups should use the now-healthy cache
       definition = await lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'TransientError',
       });
       assert.ok(definition, 'lookup succeeds from healthy cache');
@@ -1288,6 +1250,367 @@ module(basename(__filename), function () {
         2,
         'prerenderModule not called again — healthy entry is cached',
       );
+    });
+
+    test('coalesces concurrent lookups of the same module into one prerender call', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+
+      let moduleURL = `${realmURL}coalesce-same.gts`;
+      let calls = 0;
+      let releaseGate!: () => void;
+      let gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          await gate;
+          return buildModuleResponse(args.url, 'CoalesceSame', []);
+        },
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      let p1 = lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'CoalesceSame',
+      });
+      let p2 = lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'CoalesceSame',
+      });
+      let p3 = lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'CoalesceSame',
+      });
+
+      // Yield to the event loop so all three calls drain through the
+      // buildLookupContext awaits and reach the in-flight gate before we
+      // release it. setTimeout(0) crosses the macrotask boundary, which
+      // drains every pending microtask — more reliable than a single
+      // `await Promise.resolve()` when there are several chained awaits.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      releaseGate();
+      let [d1, d2, d3] = await Promise.all([p1, p2, p3]);
+
+      assert.strictEqual(
+        calls,
+        1,
+        'prerenderModule called once for three concurrent same-module lookups',
+      );
+      assert.strictEqual(d1?.displayName, 'CoalesceSame');
+      assert.strictEqual(d2?.displayName, 'CoalesceSame');
+      assert.strictEqual(d3?.displayName, 'CoalesceSame');
+    });
+
+    test('does not coalesce concurrent lookups of different modules', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+
+      let moduleA = `${realmURL}coalesce-a.gts`;
+      let moduleB = `${realmURL}coalesce-b.gts`;
+      let calls = new Map<string, number>();
+      let releaseGate!: () => void;
+      let gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls.set(args.url, (calls.get(args.url) ?? 0) + 1);
+          await gate;
+          let name = args.url === moduleA ? 'CoalesceA' : 'CoalesceB';
+          return buildModuleResponse(args.url, name, []);
+        },
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      let pA = lookup.lookupDefinition({
+        module: rri(moduleA),
+        name: 'CoalesceA',
+      });
+      let pB = lookup.lookupDefinition({
+        module: rri(moduleB),
+        name: 'CoalesceB',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      releaseGate();
+      let [dA, dB] = await Promise.all([pA, pB]);
+
+      assert.strictEqual(
+        calls.get(moduleA),
+        1,
+        'prerenderModule called once for module A',
+      );
+      assert.strictEqual(
+        calls.get(moduleB),
+        1,
+        'prerenderModule called once for module B',
+      );
+      assert.strictEqual(dA?.displayName, 'CoalesceA');
+      assert.strictEqual(dB?.displayName, 'CoalesceB');
+    });
+
+    test('shares errored prerender result with concurrent waiters and releases in-flight slot on rejection', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+
+      let moduleURL = `${realmURL}coalesce-error.gts`;
+      let calls = 0;
+      let releaseGate!: () => void;
+      let gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          await gate;
+          return buildModuleResponse(args.url, 'CoalesceError', [], {
+            type: 'module-error',
+            error: {
+              id: args.url,
+              message: 'simulated prerender failure',
+              status: 500,
+              title: 'Render error',
+              deps: [],
+              additionalErrors: null,
+            },
+          });
+        },
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      let p1 = lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'CoalesceError',
+      });
+      let p2 = lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'CoalesceError',
+      });
+      let p3 = lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'CoalesceError',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      releaseGate();
+      let results = await Promise.allSettled([p1, p2, p3]);
+
+      assert.strictEqual(
+        calls,
+        1,
+        'prerenderModule called once for three concurrent erroring lookups',
+      );
+      for (let result of results) {
+        assert.strictEqual(
+          result.status,
+          'rejected',
+          'all concurrent waiters receive the shared rejection',
+        );
+      }
+
+      // The error row is persisted with a fresh timestamp, so a follow-up
+      // lookup should be served from the cache without re-invoking prerender.
+      await assert.rejects(
+        lookup.lookupDefinition({
+          module: rri(moduleURL),
+          name: 'CoalesceError',
+        }),
+        /nonexistent type/,
+      );
+      assert.strictEqual(
+        calls,
+        1,
+        'follow-up lookup after settle hits cached error without a new prerender',
+      );
+
+      // Backdate the cached error past the TTL to simulate a stale error.
+      // The in-flight slot must have been released for the next call to form
+      // a fresh prerender gate rather than awaiting the already-settled
+      // in-flight promise and returning its rejection.
+      await dbAdapter.execute(
+        `UPDATE modules SET created_at = $1 WHERE url = $2`,
+        { bind: [Date.now() - 60_000, moduleURL] },
+      );
+
+      await assert.rejects(
+        lookup.lookupDefinition({
+          module: rri(moduleURL),
+          name: 'CoalesceError',
+        }),
+        /nonexistent type/,
+      );
+      assert.strictEqual(
+        calls,
+        2,
+        'stale cached error triggers a fresh prerender — in-flight slot was released after prior failure',
+      );
+    });
+
+    test('invalidate drops in-flight entries so post-invalidation lookups do not join the stale promise', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+
+      let moduleURL = `${realmURL}coalesce-invalidate.gts`;
+      let calls = 0;
+      let releaseGate!: () => void;
+      let gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          let version = calls;
+          await gate;
+          let definitionId = internalKeyFor(
+            { module: rri(args.url), name: 'CoalesceInvalidate' },
+            undefined,
+          );
+          let moduleAlias = trimExecutableExtension(new URL(args.url)).href;
+          return {
+            id: args.url,
+            status: 'ready',
+            nonce: 'test-nonce',
+            isShimmed: false,
+            lastModified: Date.now(),
+            createdAt: Date.now(),
+            deps: [],
+            definitions: {
+              [definitionId]: {
+                type: 'definition',
+                moduleURL: moduleAlias,
+                definition: {
+                  type: 'card-def',
+                  codeRef: {
+                    module: rri(moduleAlias),
+                    name: 'CoalesceInvalidate',
+                  },
+                  displayName: `CoalesceInvalidate v${version}`,
+                  fields: {},
+                },
+                types: [],
+              },
+            },
+          };
+        },
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      // Caller A starts the prerender and parks at the gate.
+      let pA = lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'CoalesceInvalidate',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Invalidate while A is still in flight; this must drop the in-flight
+      // slot so caller B doesn't piggyback on A's pre-invalidation promise.
+      await lookup.invalidate(moduleURL);
+
+      let pB = lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'CoalesceInvalidate',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      releaseGate();
+      let [dA, dB] = await Promise.all([pA, pB]);
+
+      assert.strictEqual(
+        calls,
+        2,
+        'invalidate dropped the in-flight entry so caller B triggered its own prerender',
+      );
+      assert.strictEqual(dA?.displayName, 'CoalesceInvalidate v1');
+      assert.strictEqual(dB?.displayName, 'CoalesceInvalidate v2');
     });
   });
 });

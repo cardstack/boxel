@@ -1,5 +1,9 @@
 import { Deferred } from './deferred';
-import { resolveCardReference } from './card-reference-resolver';
+import {
+  resolveCardReference,
+  type RealmResourceIdentifier,
+  type RealmIdentifier,
+} from './card-reference-resolver';
 import {
   collectDependentModuleCacheInvalidations,
   extractModuleDependencyKeys,
@@ -32,6 +36,7 @@ import {
 import {
   systemError,
   notFound,
+  notAcceptable,
   methodNotAllowed,
   badRequest,
   CardError,
@@ -689,6 +694,7 @@ export class Realm {
       )
       .post('(/|/.+/)', SupportedMimeType.CardJson, this.createCard.bind(this))
       .get('/.*', SupportedMimeType.CardJson, this.getCard.bind(this))
+      .get('/.*', SupportedMimeType.Markdown, this.getCardMarkdown.bind(this))
       .patch(
         '/.+(?<!.json)',
         SupportedMimeType.CardJson,
@@ -1082,7 +1088,23 @@ export class Realm {
       invalidations = new Set([...invalidations, ...workingInvalidations]);
     };
 
-    for (let [path, content] of files) {
+    // Iterate modules (executable extensions) before everything else so
+    // any instance in the same batch finds its module indexed when
+    // fileSerialization runs. Without this, a batch that contains both
+    // `foo.gts` and `FooCard/instance.json` iterated in the client's
+    // natural (often alphabetical) order leaves the instance ahead of
+    // the module, the flush-on-transition below never fires, and
+    // fileSerialization throws FilterRefersToNonexistentTypeError.
+    // Stable within each group — only the module/non-module partition
+    // changes, not the relative order inside it.
+    let orderedFiles = [...files].sort(([pathA], [pathB]) => {
+      let aIsModule = hasExecutableExtension(pathA);
+      let bIsModule = hasExecutableExtension(pathB);
+      if (aIsModule === bIsModule) return 0;
+      return aIsModule ? -1 : 1;
+    });
+
+    for (let [path, content] of orderedFiles) {
       let url = this.paths.fileURL(path);
       let currentWriteType: 'module' | 'instance' | undefined =
         hasExecutableExtension(path)
@@ -1092,6 +1114,21 @@ export class Realm {
               isCardDocumentString(content)
             ? 'instance'
             : undefined;
+
+      // Flush any modules written so far in this batch to the index
+      // BEFORE we serialize the next instance. fileSerialization calls
+      // lookupDefinition, which needs dependent modules to be indexed;
+      // without this, the first instance after a module in the batch
+      // throws FilterRefersToNonexistentTypeError and the whole atomic
+      // batch rolls back.
+      // TODO: we could be more precise here and keep track of what
+      // modules the instances depend on and only flush when an instance
+      // depends on a module that is part of this operation.
+      if (lastWriteType === 'module' && currentWriteType === 'instance') {
+        await performIndex();
+        urls = [];
+      }
+
       if (typeof content === 'string') {
         try {
           let doc = JSON.parse(content);
@@ -1134,17 +1171,6 @@ export class Realm {
       }
       let contentHash = computeContentHash(content);
       let contentSize = computeContentSize(content);
-      if (lastWriteType === 'module' && currentWriteType === 'instance') {
-        // we need to generate/update possible definition in order for
-        // instance file serialization that may depend on the included module to
-        // work. TODO: we could be more precise here and keep track of what
-        // modules the instances depend on and only flush the modules to index
-        // when you you see that you have an instance that you are about to
-        // write to disk that depends on a module that is part of this
-        // operation.
-        await performIndex();
-        urls = [];
-      }
       this.sendIndexInitiationEvent(url.href);
       await this.trackOwnWrite(path);
       let { lastModified } = await this.#adapter.write(path, content);
@@ -1454,6 +1480,12 @@ export class Realm {
         if (e instanceof CardError) {
           return responseWithError(e, requestContext);
         }
+        // Log the underlying exception before returning 500 — otherwise
+        // callers only see "Write Error" and the original stack trace is
+        // lost, making atomic-batch failures effectively undebuggable.
+        this.#log.error(
+          `Atomic write failed: ${e.message}\n${e.stack ?? '(no stack)'}`,
+        );
         return createResponse({
           body: JSON.stringify({
             errors: [{ title: 'Write Error', detail: e.message }],
@@ -2095,23 +2127,45 @@ export class Realm {
       etagVariant?: string;
     },
   ): Promise<ResponseWithNodeStream> {
+    let contentType = options?.defaultHeaders?.['content-type'];
+    // Only advertise `public` caching when the realm is world-readable;
+    // otherwise the response is auth-gated and must not be stored by shared
+    // caches (e.g. CDNs) where it could be served to another user.
+    let cacheVisibility = requestContext.permissions['*']?.includes('read')
+      ? 'public'
+      : 'private';
+    // Serve realm-hosted images (e.g. realm icons and backgrounds) with an
+    // explicit Cache-Control so browsers don't fall back to Last-Modified
+    // heuristics. must-revalidate + ETag keeps updates responsive while
+    // avoiding repeated revalidation within a browsing session.
+    let cacheControl = contentType?.startsWith('image/')
+      ? `${cacheVisibility}, max-age=60, must-revalidate`
+      : `${cacheVisibility}, max-age=0`;
     let etag = buildEtag(ref.lastModified, options?.etagVariant);
+    let lastModified = formatRFC7231(ref.lastModified * 1000);
     if (etag && request.headers.get('if-none-match') === etag) {
       return createResponse({
         body: null,
-        init: { status: 304 },
+        init: {
+          status: 304,
+          headers: {
+            'cache-control': cacheControl,
+            'last-modified': lastModified,
+            etag,
+          },
+        },
         requestContext,
       });
     }
     let createdFromDb = await this.getCreatedTime(ref.path);
     let headers: Record<string, string> = {
       ...(options?.defaultHeaders || {}),
-      'last-modified': formatRFC7231(ref.lastModified * 1000),
+      'last-modified': lastModified,
       ...(Symbol.for('shimmed-module') in ref
         ? { 'X-Boxel-Shimmed-Module': 'true' }
         : {}),
       ...(etag ? { etag } : {}),
-      'cache-control': 'public, max-age=0', // instructs the browser to check with server before using cache
+      'cache-control': cacheControl,
     };
     if (createdFromDb != null) {
       headers['x-created'] = formatRFC7231(createdFromDb * 1000);
@@ -2597,7 +2651,7 @@ export class Realm {
     let doc: SingleFileMetaDocument = {
       data: {
         type: 'file-meta',
-        id: fileURL,
+        id: fileURL as RealmResourceIdentifier,
         attributes: {
           name,
           url: fileURL,
@@ -2611,7 +2665,7 @@ export class Realm {
         meta: {
           adoptsFrom: fileDefCodeRef,
           realmInfo,
-          realmURL: this.url,
+          realmURL: this.url as RealmIdentifier,
         },
         links: { self: fileURL },
       },
@@ -2687,14 +2741,14 @@ export class Realm {
     let doc: SingleFileMetaDocument = {
       data: {
         type: 'file-meta',
-        id: fileURL,
+        id: fileURL as RealmResourceIdentifier,
         attributes: {
           ...attributes,
         },
         meta: {
           adoptsFrom,
           realmInfo,
-          realmURL: this.url,
+          realmURL: this.url as RealmIdentifier,
           ...(fileEntry.resource?.meta?.queryFieldDefs
             ? { queryFieldDefs: fileEntry.resource.meta.queryFieldDefs }
             : {}),
@@ -3044,7 +3098,12 @@ export class Realm {
           realmURL: new URL(this.url),
         });
         visitModuleDeps(resource, (moduleURL, setModuleURL) => {
-          setModuleURL(resolveCardReference(moduleURL, instanceURL));
+          setModuleURL(
+            resolveCardReference(
+              moduleURL,
+              instanceURL,
+            ) as RealmResourceIdentifier,
+          );
         });
       }
       let fileSerialization: LooseSingleCardDocument | undefined;
@@ -3225,6 +3284,51 @@ export class Realm {
     } finally {
       this.#logRequestPerformance(request, start);
     }
+  }
+
+  private async getCardMarkdown(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let requestedLocalPath = this.paths.local(new URL(request.url));
+    let localPath = requestedLocalPath;
+    if (localPath === '') {
+      localPath = 'index';
+    }
+    localPath = localPath.replace(/\.json$/, '');
+    let url = this.paths.fileURL(localPath);
+    let entry = await this.#realmIndexQueryEngine.instance(url, {
+      includeErrors: true,
+    });
+    if (!entry) {
+      if (await this.nonJsonFileExists(localPath)) {
+        return unsupportedMediaType(request, requestContext);
+      }
+      return notFound(request, requestContext);
+    }
+    if (entry.type === 'instance-error') {
+      return notAcceptable(
+        request,
+        requestContext,
+        `markdown representation unavailable: ${request.url} has an indexing error`,
+      );
+    }
+    if (entry.markdown == null) {
+      return notAcceptable(
+        request,
+        requestContext,
+        `markdown representation not available for ${request.url}`,
+      );
+    }
+    return createResponse({
+      body: entry.markdown,
+      init: {
+        headers: {
+          'content-type': 'text/markdown; charset=utf-8',
+        },
+      },
+      requestContext,
+    });
   }
 
   private async removeCard(

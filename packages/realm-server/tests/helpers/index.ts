@@ -21,6 +21,7 @@ import type {
 import {
   Realm,
   baseRealm,
+  rri,
   VirtualNetwork,
   Worker,
   insertPermissions,
@@ -158,7 +159,7 @@ export async function waitUntil<T>(
   options: {
     timeout?: number;
     interval?: number;
-    timeoutMessage?: string;
+    timeoutMessage?: string | (() => string);
   } = {},
 ): Promise<T> {
   let timeout = options.timeout ?? 1000;
@@ -172,9 +173,12 @@ export async function waitUntil<T>(
     }
     await new Promise((resolve) => setTimeout(resolve, interval));
   }
+  let message =
+    typeof options.timeoutMessage === 'function'
+      ? options.timeoutMessage()
+      : options.timeoutMessage;
   throw new Error(
-    'Timeout waiting for condition' +
-      (options.timeoutMessage ? `: ${options.timeoutMessage}` : ''),
+    'Timeout waiting for condition' + (message ? `: ${message}` : ''),
   );
 }
 
@@ -392,7 +396,16 @@ export async function createTestPgAdapter(options?: {
 }
 
 export async function closeServer(server: Server) {
-  await new Promise<void>((r) => (server ? server.close(() => r()) : r()));
+  if (!server) {
+    return;
+  }
+  // Force-close idle keep-alive sockets so server.close() resolves promptly.
+  // Without this, a lingering connection from the host page (puppeteer fetching
+  // from the realm server) can hold the port bound long after the test moves
+  // on, causing EADDRINUSE when the next test tries to re-bind.
+  server.closeIdleConnections?.();
+  server.closeAllConnections?.();
+  await new Promise<void>((r) => server.close(() => r()));
 }
 
 function trackServer(server: Server): Server {
@@ -570,6 +583,7 @@ async function startTestPrerenderServer(): Promise<string> {
   }
   let server = createPrerenderHttpServer({
     maxPages: 1,
+    fatalExitOnUncaught: false, // tests share the qunit process; see CS-10813
   });
   prerenderServer = server;
   trackServer(server);
@@ -935,7 +949,19 @@ export async function runTestRealmServer({
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   trackServer(testRealmHttpServer);
-  await testRealmServer.start();
+  try {
+    await testRealmServer.start();
+  } catch (err) {
+    // Close the http listener so the port is released — otherwise a throw
+    // from start() leaves the listener bound, causing EADDRINUSE on the next
+    // retry.
+    try {
+      await closeServer(testRealmHttpServer);
+    } catch {
+      // best-effort cleanup
+    }
+    throw err;
+  }
   return {
     testRealmDir,
     testRealm,
@@ -2055,7 +2081,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'ReadOnlyField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2064,7 +2090,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: true,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2073,7 +2099,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: true,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2082,7 +2108,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: true,
     fieldOrCard: {
       name: 'MaybeBase64Field',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2091,7 +2117,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'CardInfoField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: false,
   },
@@ -2100,7 +2126,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2109,7 +2135,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2118,7 +2144,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'MaybeBase64Field',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2127,7 +2153,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'MarkdownField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2136,7 +2162,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'Theme',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: false,
   },
@@ -2145,7 +2171,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'ReadOnlyField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2154,7 +2180,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: true,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2163,7 +2189,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: true,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2172,7 +2198,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: true,
     fieldOrCard: {
       name: 'MaybeBase64Field',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2181,7 +2207,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'CardInfoField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: false,
   },
@@ -2190,7 +2216,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2199,7 +2225,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2208,7 +2234,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'MaybeBase64Field',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2217,7 +2243,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'MarkdownField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2226,7 +2252,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'CSSField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2235,7 +2261,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'CssImportField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2244,7 +2270,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'Theme',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: false,
   },
@@ -2253,7 +2279,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'ReadOnlyField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2262,7 +2288,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: true,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2271,7 +2297,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'CardInfoField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: false,
   },
@@ -2280,7 +2306,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2289,7 +2315,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2298,7 +2324,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'MaybeBase64Field',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2307,7 +2333,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'MarkdownField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2316,7 +2342,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: true,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2325,7 +2351,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'CSSField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2334,7 +2360,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'CssImportField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2343,7 +2369,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: true,
     fieldOrCard: {
       name: 'MaybeBase64Field',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2352,7 +2378,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'Theme',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: false,
   },
@@ -2361,7 +2387,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'ReadOnlyField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2370,7 +2396,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: true,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2379,7 +2405,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'CardInfoField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: false,
   },
@@ -2388,7 +2414,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2397,7 +2423,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2406,7 +2432,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'MaybeBase64Field',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2415,7 +2441,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'MarkdownField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2424,7 +2450,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: true,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2433,7 +2459,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'CSSField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2442,7 +2468,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'CssImportField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2451,7 +2477,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: true,
     fieldOrCard: {
       name: 'MaybeBase64Field',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2460,7 +2486,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'Theme',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: false,
   },
@@ -2469,7 +2495,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'ReadOnlyField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2478,7 +2504,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: true,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2487,7 +2513,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'CardInfoField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: false,
   },
@@ -2496,7 +2522,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2506,7 +2532,7 @@ export const cardDefinition: Definition['fields'] = {
       isComputed: false,
       fieldOrCard: {
         name: 'StringField',
-        module: 'https://cardstack.com/base/card-api',
+        module: rri('https://cardstack.com/base/card-api'),
       },
       isPrimitive: true,
     },
@@ -2516,7 +2542,7 @@ export const cardDefinition: Definition['fields'] = {
       isComputed: false,
       fieldOrCard: {
         name: 'MaybeBase64Field',
-        module: 'https://cardstack.com/base/card-api',
+        module: rri('https://cardstack.com/base/card-api'),
       },
       isPrimitive: true,
     },
@@ -2526,7 +2552,7 @@ export const cardDefinition: Definition['fields'] = {
       isComputed: true,
       fieldOrCard: {
         name: 'StringField',
-        module: 'https://cardstack.com/base/card-api',
+        module: rri('https://cardstack.com/base/card-api'),
       },
       isPrimitive: true,
     },
@@ -2535,7 +2561,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'CSSField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2544,7 +2570,7 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'CssImportField',
-      module: 'https://cardstack.com/base/card-api',
+      module: rri('https://cardstack.com/base/card-api'),
     },
     isPrimitive: true,
   },
@@ -2554,7 +2580,7 @@ export const cardDefinition: Definition['fields'] = {
       isComputed: true,
       fieldOrCard: {
         name: 'MaybeBase64Field',
-        module: 'https://cardstack.com/base/card-api',
+        module: rri('https://cardstack.com/base/card-api'),
       },
       isPrimitive: true,
     },
@@ -2564,7 +2590,7 @@ export const cardDefinition: Definition['fields'] = {
       isComputed: false,
       fieldOrCard: {
         name: 'Theme',
-        module: 'https://cardstack.com/base/card-api',
+        module: rri('https://cardstack.com/base/card-api'),
       },
       isPrimitive: false,
     },

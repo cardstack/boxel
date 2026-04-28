@@ -2,6 +2,7 @@ import type * as JSONTypes from 'json-typescript';
 import flatten from 'lodash/flatten';
 import stringify from 'safe-stable-stringify';
 import type { ResolvedCodeRef } from './index';
+import type { RealmResourceIdentifier } from './card-reference-resolver';
 import {
   type CardResource,
   type CodeRef,
@@ -46,6 +47,7 @@ import {
   type InFilter,
   type NotFilter,
   type ContainsFilter,
+  type MatchesFilter,
   type Sort,
   type RangeFilter,
   RANGE_OPERATORS,
@@ -82,6 +84,7 @@ export interface IndexedFile {
   embeddedHtml: { [refURL: string]: string } | null;
   fittedHtml: { [refURL: string]: string } | null;
   atomHtml: string | null;
+  markdown: string | null;
   realmVersion: number;
   realmURL: string;
   indexedAt: number | null;
@@ -98,6 +101,7 @@ export interface IndexedInstance {
   embeddedHtml: { [refURL: string]: string } | null;
   fittedHtml: { [refURL: string]: string } | null;
   atomHtml: string | null;
+  markdown: string | null;
   searchDoc: Record<string, any> | null;
   types: string[] | null;
   deps: string[] | null;
@@ -219,6 +223,7 @@ export class IndexQueryEngine {
       atom_html: atomHtml,
       embedded_html: embeddedHtml,
       fitted_html: fittedHtml,
+      markdown,
       search_doc: searchDoc,
       realm_version: realmVersion,
       realm_url: realmURL,
@@ -237,6 +242,7 @@ export class IndexQueryEngine {
       embeddedHtml,
       fittedHtml,
       atomHtml,
+      markdown,
       searchDoc,
       types,
       indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
@@ -308,6 +314,7 @@ export class IndexQueryEngine {
       embedded_html: embeddedHtml,
       fitted_html: fittedHtml,
       atom_html: atomHtml,
+      markdown,
       realm_version: realmVersion,
       realm_url: realmURL,
       indexed_at: indexedAt,
@@ -334,6 +341,7 @@ export class IndexQueryEngine {
       embeddedHtml,
       fittedHtml,
       atomHtml,
+      markdown,
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt:
         resourceCreatedAt != null ? parseInt(resourceCreatedAt) : null,
@@ -523,7 +531,7 @@ export class IndexQueryEngine {
       { filter, sort, page },
       opts,
       [
-        'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(search_doc) AS search_doc, ANY_VALUE(types) AS types, ANY_VALUE(display_names) AS display_names, ANY_VALUE(deps) AS deps, ANY_VALUE(last_modified) AS last_modified, ANY_VALUE(resource_created_at) AS resource_created_at, ANY_VALUE(isolated_html) AS isolated_html, ANY_VALUE(head_html) AS head_html, ANY_VALUE(embedded_html) AS embedded_html, ANY_VALUE(fitted_html) AS fitted_html, ANY_VALUE(atom_html) AS atom_html, ANY_VALUE(realm_version) AS realm_version, ANY_VALUE(realm_url) AS realm_url, ANY_VALUE(indexed_at) AS indexed_at',
+        'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(search_doc) AS search_doc, ANY_VALUE(types) AS types, ANY_VALUE(display_names) AS display_names, ANY_VALUE(deps) AS deps, ANY_VALUE(last_modified) AS last_modified, ANY_VALUE(resource_created_at) AS resource_created_at, ANY_VALUE(isolated_html) AS isolated_html, ANY_VALUE(head_html) AS head_html, ANY_VALUE(embedded_html) AS embedded_html, ANY_VALUE(fitted_html) AS fitted_html, ANY_VALUE(atom_html) AS atom_html, ANY_VALUE(markdown) AS markdown, ANY_VALUE(realm_version) AS realm_version, ANY_VALUE(realm_url) AS realm_url, ANY_VALUE(indexed_at) AS indexed_at',
       ],
       'file',
     );
@@ -564,6 +572,7 @@ export class IndexQueryEngine {
       fittedHtml:
         (result.fitted_html as { [refURL: string]: string } | null) ?? null,
       atomHtml: result.atom_html ?? null,
+      markdown: result.markdown ?? null,
       lastModified,
       resourceCreatedAt,
       realmVersion: result.realm_version ?? 0,
@@ -675,7 +684,7 @@ export class IndexQueryEngine {
             module: card.used_render_type.substring(
               0,
               moduleNameSeparatorIndex,
-            ),
+            ) as RealmResourceIdentifier,
             name: card.used_render_type.substring(moduleNameSeparatorIndex + 1),
           };
         }
@@ -821,6 +830,8 @@ export class IndexQueryEngine {
       return this.notCondition(filter, on, typeConditionRef);
     } else if ('range' in filter) {
       return this.rangeCondition(filter, on, typeConditionRef);
+    } else if ('matches' in filter) {
+      return this.matchesCondition(filter, on, typeConditionRef);
     } else if ('every' in filter) {
       return every([
         ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
@@ -914,6 +925,43 @@ export class IndexQueryEngine {
       ...Object.entries(filter.range).map(([key, filterValue]) => {
         return this.fieldRangeFilter(key, filterValue as RangeFilterValue, on);
       }),
+    ]);
+  }
+
+  // Full-text matches predicate. Postgres uses tsvector/tsquery on the
+  // indexed markdown column; SQLite falls back to a case-insensitive
+  // substring LIKE with `%`/`_`/`\` escaped in JS before binding. An
+  // empty/whitespace-only query short-circuits to FALSE so SQLite doesn't
+  // match every non-null row (PG's websearch_to_tsquery already yields an
+  // empty tsquery that matches nothing — we match that behavior here).
+  private matchesCondition(
+    filter: MatchesFilter,
+    _on: CodeRef,
+    typeConditionRef?: CodeRef,
+  ): CardExpression {
+    let typeRef = typeConditionRef;
+    let predicate: CardExpression =
+      filter.matches.trim() === ''
+        ? ['FALSE']
+        : [
+            dbExpression({
+              pg: [
+                `to_tsvector('english', coalesce(i.markdown, ''))`,
+                '@@',
+                `websearch_to_tsquery('english',`,
+                param(filter.matches),
+                `)`,
+              ],
+              sqlite: [
+                `LOWER(i.markdown) LIKE LOWER(`,
+                param(`%${escapeSqliteLikePattern(filter.matches)}%`),
+                `) ESCAPE '\\'`,
+              ],
+            }),
+          ];
+    return every([
+      ...(typeRef ? [this.typeCondition(typeRef)] : []),
+      predicate,
     ]);
   }
 
@@ -1423,6 +1471,13 @@ function assertIndexEntry<T>(obj: T): Omit<
 
 function tableFromOpts(opts: WIPOptions | undefined) {
   return opts?.useWorkInProgressIndex ? 'boxel_index_working' : 'boxel_index';
+}
+
+// SQLite LIKE treats `%` and `_` as wildcards. With `ESCAPE '\'` we can
+// neutralize user-supplied wildcards by prefixing them (and the escape
+// char itself) with a backslash before binding.
+function escapeSqliteLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
 function assertNever(value: never) {

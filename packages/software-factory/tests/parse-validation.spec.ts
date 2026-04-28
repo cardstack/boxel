@@ -4,44 +4,18 @@ import { expect, test } from './fixtures';
 
 import { ParseValidationStep } from '../src/validators/parse-step';
 import type { ParseValidationDetails } from '../src/validators/parse-step';
+import {
+  BROKEN_TEMPLATE_GTS,
+  VALID_MODULE_GTS,
+} from './helpers/parse-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
   'test-fixtures',
   'test-realm-runner',
 );
-
-// A valid .gts card module — intentionally simple (no Component<typeof X>)
-// to avoid BaseDef constraint errors that vary between CI and local type
-// resolution environments.
-const VALID_MODULE_GTS = `import {
-  CardDef,
-  field,
-  contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-
-export class ParseTestCard extends CardDef {
-  static displayName = 'Parse Test Card';
-  @field name = contains(StringField);
-}
-`;
-
-// A .gts module with an unclosed template tag (GTS syntax error)
-const BROKEN_TEMPLATE_GTS = `import {
-  CardDef,
-  Component,
-} from 'https://cardstack.com/base/card-api';
-
-export class BrokenCard extends CardDef {
-  static displayName = 'Broken Card';
-  static isolated = class Isolated extends Component<typeof BrokenCard> {
-    <template>
-      <div>Hello world</div>
-  };
-}
-`;
 
 test.use({ realmDir: fixtureRealmDir });
 test.use({ realmServerMode: 'isolated' });
@@ -137,6 +111,9 @@ test.describe('parse-validation e2e', () => {
         timeoutMs: 30_000,
       });
 
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       // Scope to only the file we wrote — the fixture realm has pre-existing
       // .gts files that may produce glint errors in CI due to type resolution
       // differences. We only want to validate our test file.
@@ -144,6 +121,7 @@ test.describe('parse-validation e2e', () => {
         client,
         realmServerUrl,
         parseResultsModuleUrl,
+        workspaceDir: workspace.dir,
         issueId: 'Issues/parse-e2e',
         fetchFilenames: async () => ({
           filenames: ['parse-test-card.gts', 'ParseTestCard/example-1.json'],
@@ -151,6 +129,9 @@ test.describe('parse-validation e2e', () => {
       });
 
       let result = await step.run(realmUrl);
+
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // Must pass — valid GTS + valid JSON example
       expect(result.step).toBe('parse');
@@ -169,7 +150,9 @@ test.describe('parse-validation e2e', () => {
       expect(cardRead.ok).toBe(true);
 
       let attrs = (
-        cardRead.document as { data?: { attributes?: Record<string, unknown> } }
+        JSON.parse(cardRead.content!) as {
+          data?: { attributes?: Record<string, unknown> };
+        }
       )?.data?.attributes;
       expect(attrs).toBeTruthy();
       expect(attrs?.status).toBe('passed');
@@ -209,16 +192,23 @@ test.describe('parse-validation e2e', () => {
         timeoutMs: 30_000,
       });
 
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       // Scope to only the broken file we wrote
       let step = new ParseValidationStep({
         client,
         realmServerUrl,
         parseResultsModuleUrl,
+        workspaceDir: workspace.dir,
         issueId: 'Issues/parse-fail-e2e',
         fetchFilenames: async () => ({ filenames: ['broken-card.gts'] }),
       });
 
       let result = await step.run(realmUrl);
+
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // Must fail — unclosed template tag
       expect(result.step).toBe('parse');
@@ -240,7 +230,9 @@ test.describe('parse-validation e2e', () => {
       expect(cardRead.ok).toBe(true);
 
       let attrs = (
-        cardRead.document as { data?: { attributes?: Record<string, unknown> } }
+        JSON.parse(cardRead.content!) as {
+          data?: { attributes?: Record<string, unknown> };
+        }
       )?.data?.attributes;
       expect(attrs).toBeTruthy();
       expect(attrs?.status).toBe('failed');
@@ -265,12 +257,15 @@ test.describe('parse-validation e2e', () => {
     });
 
     try {
+      let workspace = createTestWorkspace();
+
       // Simulate a bootstrap scenario: no .gts files and no specs.
       // Inject empty file list so pre-existing fixture files don't interfere.
       let step = new ParseValidationStep({
         client,
         realmServerUrl,
         parseResultsModuleUrl,
+        workspaceDir: workspace.dir,
         issueId: 'Issues/parse-bootstrap-e2e',
         fetchFilenames: async () => ({ filenames: [] }),
         searchSpecsFn: async () => ({ specs: [] }),

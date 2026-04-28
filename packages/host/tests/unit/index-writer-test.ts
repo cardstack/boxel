@@ -9,10 +9,13 @@ import {
   internalKeyFor,
   baseCardRef,
   coerceTypes,
+  ri,
+  rri,
   type LooseCardResource,
   type IndexedInstance,
   type BoxelIndexTable,
   type CardResource,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import { CachingDefinitionLookup } from '@cardstack/runtime-common/definition-lookup';
 import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
@@ -23,6 +26,7 @@ import type LocalIndexer from '@cardstack/host/services/local-indexer';
 import {
   getDbAdapter,
   testRealmURL,
+  testRRI,
   setupIndex,
   makeRenderer,
   createPrerenderAuth,
@@ -30,7 +34,7 @@ import {
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-const testRealmURL2 = `http://test-realm/test2/`;
+const testRealmURL2 = ri(`http://test-realm/test2/`);
 const testRealmURLObject = new URL(testRealmURL);
 
 type RealmMetaValue = {
@@ -40,15 +44,16 @@ type RealmMetaValue = {
   total: number;
 };
 
-const internalKeysFor = (...refs: { module: string; name: string }[]) =>
-  refs.map((ref) => internalKeyFor(ref, testRealmURLObject));
+const internalKeysFor = (
+  ...refs: { module: RealmResourceIdentifier; name: string }[]
+) => refs.map((ref) => internalKeyFor(ref, testRealmURLObject));
 
 const makeCardResource = (
   id: string,
   name: string,
-  adoptsFrom: { module: string; name: string },
+  adoptsFrom: { module: RealmResourceIdentifier; name: string },
 ): CardResource => ({
-  id: `${testRealmURL}${id}`,
+  id: testRRI(id),
   type: 'card',
   attributes: {
     name,
@@ -320,14 +325,14 @@ module('Unit | index-writer', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `./person`,
+                module: rri(`./person`),
                 name: 'Person',
               },
             },
           } as LooseCardResource,
           search_doc: { name: 'Mango' },
           deps: [`${testRealmURL}person`],
-          types: [{ module: `./person`, name: 'Person' }, baseCardRef].map(
+          types: [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
             (i) => internalKeyFor(i, new URL(testRealmURL)),
           ),
         },
@@ -335,14 +340,14 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let resource: CardResource = {
-      id: `${testRealmURL}1.json`,
+      id: testRRI('1.json'),
       type: 'card',
       attributes: {
         name: 'Van Gogh',
       },
       meta: {
         adoptsFrom: {
-          module: `./fancy-person`,
+          module: rri(`./fancy-person`),
           name: 'FancyPerson',
         },
       },
@@ -358,8 +363,11 @@ module('Unit | index-writer', function (hooks) {
       deps: new Set([`${testRealmURL}fancy-person`]),
       displayNames: ['Fancy Person', 'Person', 'Card'],
       types: [
-        { module: `./fancy-person`, name: 'FancyPerson' },
-        { module: `./person`, name: 'Person' },
+        {
+          module: rri(`./fancy-person`),
+          name: 'FancyPerson',
+        },
+        { module: rri(`./person`), name: 'Person' },
         baseCardRef,
       ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
     });
@@ -389,15 +397,15 @@ module('Unit | index-writer', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `./person`,
+              module: rri(`./person`),
               name: 'Person',
             },
           },
         },
         search_doc: { name: 'Mango' },
         deps: [`${testRealmURL}person`],
-        types: [{ module: `./person`, name: 'Person' }, baseCardRef].map((i) =>
-          internalKeyFor(i, new URL(testRealmURL)),
+        types: [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+          (i) => internalKeyFor(i, new URL(testRealmURL)),
         ),
       },
       'live version of the doc has not changed',
@@ -427,7 +435,7 @@ module('Unit | index-writer', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `./fancy-person`,
+              module: rri(`./fancy-person`),
               name: 'FancyPerson',
             },
           },
@@ -435,8 +443,11 @@ module('Unit | index-writer', function (hooks) {
         search_doc: { name: 'Van Gogh' },
         deps: [`${testRealmURL}fancy-person`],
         types: [
-          { module: `./fancy-person`, name: 'FancyPerson' },
-          { module: `./person`, name: 'Person' },
+          {
+            module: rri(`./fancy-person`),
+            name: 'FancyPerson',
+          },
+          { module: rri(`./person`), name: 'Person' },
           baseCardRef,
         ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
       },
@@ -469,7 +480,7 @@ module('Unit | index-writer', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `./fancy-person`,
+              module: rri(`./fancy-person`),
               name: 'FancyPerson',
             },
           },
@@ -477,8 +488,11 @@ module('Unit | index-writer', function (hooks) {
         search_doc: { name: 'Van Gogh' },
         deps: [`${testRealmURL}fancy-person`],
         types: [
-          { module: `./fancy-person`, name: 'FancyPerson' },
-          { module: `./person`, name: 'Person' },
+          {
+            module: rri(`./fancy-person`),
+            name: 'FancyPerson',
+          },
+          { module: rri(`./person`), name: 'Person' },
           baseCardRef,
         ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
       },
@@ -487,22 +501,23 @@ module('Unit | index-writer', function (hooks) {
   });
 
   test('can copy index entries', async function (assert) {
-    let types = [{ module: `./person`, name: 'Person' }, baseCardRef].map((i) =>
-      internalKeyFor(i, new URL(testRealmURL)),
+    let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+      (i) => internalKeyFor(i, new URL(testRealmURL)),
     );
-    let destTypes = [{ module: `./person`, name: 'Person' }, baseCardRef].map(
-      (i) => internalKeyFor(i, new URL(testRealmURL2)),
-    );
+    let destTypes = [
+      { module: rri(`./person`), name: 'Person' },
+      baseCardRef,
+    ].map((i) => internalKeyFor(i, new URL(testRealmURL2)));
     let modified = Date.now();
     let resource: CardResource = {
-      id: `${testRealmURL}1`,
+      id: testRRI('1'),
       type: 'card',
       attributes: {
         name: 'Mango',
       },
       meta: {
         adoptsFrom: {
-          module: `./person`,
+          module: rri(`./person`),
           name: 'Person',
         },
       },
@@ -587,7 +602,7 @@ module('Unit | index-writer', function (hooks) {
         has_error: false,
         pristine_doc: {
           ...resource,
-          id: `${testRealmURL2}1`,
+          id: rri(`${testRealmURL2}1`),
           meta: {
             ...resource.meta,
             realmURL: testRealmURL2,
@@ -628,7 +643,9 @@ module('Unit | index-writer', function (hooks) {
         atom_html: `<span class="atom">Atom HTML</span>`,
         head_html: `<span class="head">Head HTML</span>`,
         icon_html: '<svg>test icon</svg>',
+        markdown: null,
         is_deleted: null,
+        timing_diagnostics: null,
       },
       'the copied instance is correct',
     );
@@ -656,19 +673,19 @@ module('Unit | index-writer', function (hooks) {
   });
 
   test('error entry includes last known good state when available', async function (assert) {
-    let types = [{ module: `./person`, name: 'Person' }, baseCardRef].map((i) =>
-      internalKeyFor(i, new URL(testRealmURL)),
+    let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+      (i) => internalKeyFor(i, new URL(testRealmURL)),
     );
     let modified = Date.now();
     let resource: CardResource = {
-      id: `${testRealmURL}1`,
+      id: testRRI('1'),
       type: 'card',
       attributes: {
         name: 'Mango',
       },
       meta: {
         adoptsFrom: {
-          module: `./person`,
+          module: rri(`./person`),
           name: 'Person',
         },
       },
@@ -719,10 +736,28 @@ module('Unit | index-writer', function (hooks) {
     });
     await batch.done();
 
-    let [{ indexed_at: _remove, ...errorEntry }] = (await adapter.execute(
+    let [rawErrorEntry] = (await adapter.execute(
       'SELECT * FROM boxel_index WHERE realm_version = 2 AND type = \'instance\' AND has_error = TRUE ORDER BY url COLLATE "POSIX"',
       { coerceTypes },
     )) as unknown as BoxelIndexTable[];
+    // Strip non-deterministic write-time stamps from both the row and
+    // the error_doc (the indexer mirrors timing_diagnostics onto
+    // error_doc.diagnostics for UI compat); they're verified
+    // separately below.
+    let {
+      indexed_at: _remove,
+      timing_diagnostics,
+      ...errorEntry
+    } = rawErrorEntry;
+    assert.ok(errorEntry.error_doc, 'row has an error_doc');
+    // The indexer mirrors `timing_diagnostics` onto `error_doc.diagnostics`
+    // for UI compat. Strip it out before the deep-equal (and verify the
+    // mirror relationship separately below). `diagnostics` is a declared
+    // optional field on `SerializedError`, so this is a plain destructure
+    // — no cast needed.
+    let { diagnostics: errorDocDiagnostics, ...errorDocWithoutDiagnostics } =
+      errorEntry.error_doc!;
+    errorEntry.error_doc = errorDocWithoutDiagnostics;
     assert.deepEqual(
       errorEntry,
       {
@@ -763,8 +798,20 @@ module('Unit | index-writer', function (hooks) {
         resource_created_at: String(modified),
         is_deleted: null,
         icon_html: '<svg>test icon</svg>',
+        markdown: null,
       },
       'the error entry includes last known good state of instance',
+    );
+    assert.ok(timing_diagnostics, 'timing_diagnostics populated on error row');
+    assert.strictEqual(
+      typeof timing_diagnostics,
+      'object',
+      'timing_diagnostics is an object',
+    );
+    assert.deepEqual(
+      errorDocDiagnostics,
+      timing_diagnostics,
+      'error_doc.diagnostics mirrors timing_diagnostics',
     );
   });
 
@@ -785,10 +832,24 @@ module('Unit | index-writer', function (hooks) {
     });
     await batch.done();
 
-    let [{ indexed_at: _remove, ...errorEntry }] = (await adapter.execute(
+    let [rawErrorEntry] = (await adapter.execute(
       'SELECT * FROM boxel_index WHERE realm_version = 2 AND type = \'instance\' AND has_error = TRUE ORDER BY url COLLATE "POSIX"',
       { coerceTypes },
     )) as unknown as BoxelIndexTable[];
+    let {
+      indexed_at: _remove,
+      timing_diagnostics,
+      ...errorEntry
+    } = rawErrorEntry;
+    assert.ok(errorEntry.error_doc, 'row has an error_doc');
+    // The indexer mirrors `timing_diagnostics` onto `error_doc.diagnostics`
+    // for UI compat. Strip it out before the deep-equal (and verify the
+    // mirror relationship separately below). `diagnostics` is a declared
+    // optional field on `SerializedError`, so this is a plain destructure
+    // — no cast needed.
+    let { diagnostics: errorDocDiagnostics, ...errorDocWithoutDiagnostics } =
+      errorEntry.error_doc!;
+    errorEntry.error_doc = errorDocWithoutDiagnostics;
     assert.deepEqual(
       errorEntry,
       {
@@ -819,8 +880,20 @@ module('Unit | index-writer', function (hooks) {
         resource_created_at: null,
         is_deleted: false,
         icon_html: null,
+        markdown: null,
       },
       'the error entry does not include last known good state of instance',
+    );
+    assert.ok(timing_diagnostics, 'timing_diagnostics populated on error row');
+    assert.strictEqual(
+      typeof timing_diagnostics,
+      'object',
+      'timing_diagnostics is an object',
+    );
+    assert.deepEqual(
+      errorDocDiagnostics,
+      timing_diagnostics,
+      'error_doc.diagnostics mirrors timing_diagnostics',
     );
   });
 
@@ -905,6 +978,7 @@ module('Unit | index-writer', function (hooks) {
         fittedHtml: null,
         atomHtml: null,
         headHtml: null,
+        markdown: null,
         searchDoc: null,
         types: null,
         indexedAt: null,
@@ -925,7 +999,7 @@ module('Unit | index-writer', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `./person`,
+          module: rri(`./person`),
           name: 'Person',
         },
       },
@@ -972,7 +1046,7 @@ module('Unit | index-writer', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `./person`,
+          module: rri(`./person`),
           name: 'Person',
         },
       },
@@ -993,14 +1067,14 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let resource: CardResource = {
-      id: `${testRealmURL}1.json`,
+      id: testRRI('1.json'),
       type: 'card',
       attributes: {
         name: 'Van Gogh',
       },
       meta: {
         adoptsFrom: {
-          module: `./person`,
+          module: rri(`./person`),
           name: 'Person',
         },
       },
@@ -1026,14 +1100,14 @@ module('Unit | index-writer', function (hooks) {
         realmURL: testRealmURL,
         canonicalURL: `${testRealmURL}1.json`,
         instance: {
-          id: `${testRealmURL}1`,
+          id: testRRI('1'),
           type: 'card',
           attributes: {
             name: 'Mango',
           },
           meta: {
             adoptsFrom: {
-              module: `./person`,
+              module: rri(`./person`),
               name: 'Person',
             },
           },
@@ -1049,6 +1123,7 @@ module('Unit | index-writer', function (hooks) {
         embeddedHtml: null,
         fittedHtml: null,
         headHtml: null,
+        markdown: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
@@ -1070,7 +1145,7 @@ module('Unit | index-writer', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `./person`,
+                module: rri(`./person`),
                 name: 'Person',
               },
             },
@@ -1080,14 +1155,14 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let resource: CardResource = {
-      id: `${testRealmURL}1.json`,
+      id: testRRI('1.json'),
       type: 'card',
       attributes: {
         name: 'Van Gogh',
       },
       meta: {
         adoptsFrom: {
-          module: `./person`,
+          module: rri(`./person`),
           name: 'Person',
         },
       },
@@ -1121,14 +1196,14 @@ module('Unit | index-writer', function (hooks) {
         realmURL: testRealmURL,
         canonicalURL: `${testRealmURL}1.json`,
         instance: {
-          id: `${testRealmURL}1.json`,
+          id: testRRI('1.json'),
           type: 'card',
           attributes: {
             name: 'Van Gogh',
           },
           meta: {
             adoptsFrom: {
-              module: `./person`,
+              module: rri(`./person`),
               name: 'Person',
             },
           },
@@ -1143,9 +1218,61 @@ module('Unit | index-writer', function (hooks) {
         fittedHtml: null,
         atomHtml: null,
         headHtml: null,
+        markdown: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
+    }
+  });
+
+  test('persists and reads back markdown for an instance entry', async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [],
+    );
+    let resource: CardResource = {
+      id: testRRI('1.json'),
+      type: 'card',
+      attributes: { name: 'Van Gogh' },
+      meta: {
+        adoptsFrom: {
+          module: rri(`./person`),
+          name: 'Person',
+        },
+      },
+    };
+    let now = Date.now();
+    let markdown = '# Van Gogh\n\n- email: vangogh@example.com';
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
+    await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'instance',
+      resource,
+      lastModified: now,
+      resourceCreatedAt: now,
+      searchData: { name: 'Van Gogh' },
+      deps: new Set(),
+      displayNames: [],
+      types: [],
+      markdown,
+    });
+
+    let entry = await indexQueryEngine.getInstance(
+      new URL(`${testRealmURL}1`),
+      { useWorkInProgressIndex: true },
+    );
+    if (entry?.type === 'instance') {
+      assert.strictEqual(
+        entry.markdown,
+        markdown,
+        'markdown round-trips through updateEntry + getInstance',
+      );
+    } else {
+      assert.ok(
+        false,
+        `expected index entry to be an instance (got ${entry?.type})`,
+      );
     }
   });
 
@@ -1226,17 +1353,20 @@ module('Unit | index-writer', function (hooks) {
   test('update realm meta when indexing is done', async function (assert) {
     let iconHTML = '<svg>test icon</svg>';
     let personTypes = internalKeysFor(
-      { module: './person', name: 'Person' },
+      { module: rri('./person'), name: 'Person' },
       baseCardRef,
     );
     let fancyPersonTypes = internalKeysFor(
-      { module: './fancy-person', name: 'FancyPerson' },
-      { module: './person', name: 'Person' },
+      {
+        module: rri('./fancy-person'),
+        name: 'FancyPerson',
+      },
+      { module: rri('./person'), name: 'Person' },
       baseCardRef,
     );
     let petTypes = internalKeysFor(
-      { module: './pet', name: 'Pet' },
-      { module: './card-api', name: 'CardDef' },
+      { module: rri('./pet'), name: 'Pet' },
+      { module: rri('./card-api'), name: 'CardDef' },
       baseCardRef,
     );
     await setupIndex(
@@ -1255,7 +1385,7 @@ module('Unit | index-writer', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `./person`,
+                module: rri(`./person`),
                 name: 'Person',
               },
             },
@@ -1270,7 +1400,7 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let resource2 = makeCardResource('2', 'Van Gogh', {
-      module: './fancy-person',
+      module: rri('./fancy-person'),
       name: 'FancyPerson',
     });
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
@@ -1330,7 +1460,7 @@ module('Unit | index-writer', function (hooks) {
 
     batch = await indexWriter.createBatch(new URL(testRealmURL));
     let resource3 = makeCardResource('3', 'Van Gogh2', {
-      module: './fancy-person',
+      module: rri('./fancy-person'),
       name: 'FancyPerson',
     });
     await batch.invalidate([new URL(`${testRealmURL}3.json`)]);
@@ -1347,7 +1477,7 @@ module('Unit | index-writer', function (hooks) {
       iconHTML,
     });
     let resource4 = makeCardResource('4', 'Mango', {
-      module: './pet',
+      module: rri('./pet'),
       name: 'Pet',
     });
     await batch.invalidate([new URL(`${testRealmURL}4.json`)]);
@@ -1402,11 +1532,11 @@ module('Unit | index-writer', function (hooks) {
   test('update realm meta includes error entries with last known good state', async function (assert) {
     let iconHTML = '<svg>test icon</svg>';
     let personTypes = internalKeysFor(
-      { module: './person', name: 'Person' },
+      { module: rri('./person'), name: 'Person' },
       baseCardRef,
     );
     let personResource = makeCardResource('1', 'Mango', {
-      module: './person',
+      module: rri('./person'),
       name: 'Person',
     });
 

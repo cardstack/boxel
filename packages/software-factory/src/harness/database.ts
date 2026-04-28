@@ -423,6 +423,26 @@ export async function rewriteClonedRealmServerUrls(
            SET realm_url = replace(realm_url, $1, $2)`,
           [fromURL, toURL],
         );
+        // Without this, lookupDefinition misses every cached module on the
+        // first request after clone and pays a full prerender (~45s for a
+        // module with deep transitive imports), which can blow past the
+        // 60s realm-search tool timeout.
+        await client.query(
+          `UPDATE modules
+           SET url = replace(url, $1, $2),
+               file_alias = replace(file_alias, $1, $2),
+               resolved_realm_url = replace(resolved_realm_url, $1, $2),
+               definitions = replace(definitions::text, $1, $2)::jsonb,
+               deps = replace(deps::text, $1, $2)::jsonb,
+               error_doc = replace(error_doc::text, $1, $2)::jsonb`,
+          [fromURL, toURL],
+        );
+        await client.query(
+          `UPDATE realm_registry
+           SET url = replace(url, $1, $2),
+               source_url = replace(source_url, $1, $2)`,
+          [fromURL, toURL],
+        );
 
         await client.query('COMMIT');
       } catch (error) {

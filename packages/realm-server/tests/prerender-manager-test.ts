@@ -5,7 +5,7 @@ import { basename } from 'path';
 import Koa from 'koa';
 import Router from '@koa/router';
 import type { Server } from 'http';
-import { createServer } from 'http';
+import http, { createServer } from 'http';
 import { buildPrerenderManagerApp } from '../prerender/manager-app';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
@@ -119,7 +119,7 @@ module(basename(__filename), function () {
       // Make a prerender request to assign a realm to a server
       let realm = 'https://realm.example/R';
       let body = makeBody(realm, `${realm}/1`);
-      let proxyResponse = await request.post('/prerender-card').send(body);
+      let proxyResponse = await request.post('/prerender-visit').send(body);
       assert.strictEqual(proxyResponse.status, 201, 'proxy request successful');
       let assignedServer = proxyResponse.headers['x-boxel-prerender-target'];
 
@@ -235,7 +235,7 @@ module(basename(__filename), function () {
       let cardURL = `${realm}/1`;
 
       let proxyResponse = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(makeBody(realm, cardURL));
 
       assert.strictEqual(proxyResponse.status, 201, 'proxy request successful');
@@ -247,11 +247,11 @@ module(basename(__filename), function () {
 
       assert.strictEqual(
         proxyResponse.body?.data?.type,
-        'prerender-result',
+        'prerender-visit-result',
         'card result type returned',
       );
       assert.true(
-        proxyResponse.body?.data?.attributes?.ok,
+        proxyResponse.body?.data?.attributes?.card?.ok,
         'card proxy payload echoed',
       );
     });
@@ -331,6 +331,245 @@ module(basename(__filename), function () {
       );
     });
 
+    test('heartbeat records affinityVacancy per-affinity {idle, tabCount}', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      let warmKey = realmAffinityKey('https://realm.example/A');
+      let busyKey = realmAffinityKey('https://realm.example/B');
+
+      let registration = await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 4,
+            url: serverUrlA,
+            status: 'active',
+            warmedAffinities: [warmKey, busyKey],
+            affinityVacancy: {
+              [warmKey]: { idle: true, tabCount: 1 },
+              [busyKey]: { idle: false, tabCount: 2 },
+            },
+          },
+        },
+      });
+      assert.strictEqual(registration.status, 204, 'heartbeat accepted');
+
+      let health = await request.get('/');
+      let server = (health.body.included as any[]).find(
+        (s) => s.id === serverUrlA,
+      );
+      assert.ok(server, 'server present in health included');
+      assert.deepEqual(
+        server.attributes.affinityVacancy,
+        {
+          [warmKey]: { idle: true, tabCount: 1 },
+          [busyKey]: { idle: false, tabCount: 2 },
+        },
+        'affinityVacancy snapshot round-trips through the heartbeat',
+      );
+
+      // Subsequent heartbeat with updated vacancy overwrites the snapshot.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 4,
+            url: serverUrlA,
+            status: 'active',
+            warmedAffinities: [warmKey, busyKey],
+            affinityVacancy: {
+              [warmKey]: { idle: true, tabCount: 1 },
+              [busyKey]: { idle: true, tabCount: 2 },
+            },
+          },
+        },
+      });
+      let health2 = await request.get('/');
+      let server2 = (health2.body.included as any[]).find(
+        (s) => s.id === serverUrlA,
+      );
+      assert.deepEqual(
+        server2.attributes.affinityVacancy[busyKey],
+        { idle: true, tabCount: 2 },
+        'busy affinity flips to idle on the next heartbeat',
+      );
+    });
+
+    test('heartbeat without affinityVacancy is accepted (legacy server during rollout)', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      let registration = await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            status: 'active',
+            warmedAffinities: [realmAffinityKey('https://realm.example/A')],
+            // affinityVacancy intentionally omitted — predates CS-10758
+          },
+        },
+      });
+      assert.strictEqual(registration.status, 204, 'legacy heartbeat accepted');
+
+      let health = await request.get('/');
+      let server = (health.body.included as any[]).find(
+        (s) => s.id === serverUrlA,
+      );
+      assert.deepEqual(
+        server.attributes.affinityVacancy,
+        {},
+        'missing affinityVacancy normalized to empty object, not null',
+      );
+    });
+
+    test('heartbeat drops malformed affinityVacancy entries', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      let goodKey = realmAffinityKey('https://realm.example/A');
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            status: 'active',
+            warmedAffinities: [goodKey],
+            affinityVacancy: {
+              [goodKey]: { idle: true, tabCount: 1 },
+              badShape1: { idle: 'yes', tabCount: 1 }, // wrong idle type
+              badShape2: { idle: true }, // missing tabCount
+              badShape3: null, // not an object
+              badTabCountNaN: { idle: true, tabCount: NaN },
+              badTabCountInf: { idle: true, tabCount: Infinity },
+              badTabCountNegative: { idle: true, tabCount: -1 },
+              badTabCountFractional: { idle: true, tabCount: 1.5 },
+            },
+          },
+        },
+      });
+
+      let health = await request.get('/');
+      let server = (health.body.included as any[]).find(
+        (s) => s.id === serverUrlA,
+      );
+      assert.deepEqual(
+        server.attributes.affinityVacancy,
+        { [goodKey]: { idle: true, tabCount: 1 } },
+        'only well-formed entries are recorded (tabCount must be a finite non-negative integer)',
+      );
+    });
+
+    test('heartbeat affinityVacancy rejects prototype-pollution keys', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      let goodKey = realmAffinityKey('https://realm.example/A');
+
+      // Build the payload via JSON.parse so `__proto__` is encoded as a
+      // literal property key in the wire payload rather than being treated
+      // as the object-literal prototype-setter shortcut (which would leave
+      // it out of Object.keys entirely).
+      let maliciousPayload = JSON.parse(
+        JSON.stringify({
+          [goodKey]: { idle: true, tabCount: 1 },
+        }).replace(
+          '}',
+          `,"__proto__":{"idle":true,"tabCount":999},"constructor":{"idle":true,"tabCount":999},"prototype":{"idle":true,"tabCount":999}}`,
+        ),
+      );
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            status: 'active',
+            warmedAffinities: [goodKey],
+            affinityVacancy: maliciousPayload,
+          },
+        },
+      });
+
+      // Object.prototype itself must not have been polluted.
+      assert.strictEqual(
+        ({} as any).tabCount,
+        undefined,
+        'Object.prototype.tabCount unchanged — __proto__ payload ignored',
+      );
+
+      let health = await request.get('/');
+      let server = (health.body.included as any[]).find(
+        (s) => s.id === serverUrlA,
+      );
+      assert.deepEqual(
+        Object.keys(server.attributes.affinityVacancy),
+        [goodKey],
+        'only the legitimate key is recorded; prototype-pollution keys are dropped',
+      );
+    });
+
+    test('heartbeat without affinityVacancy clears previously-reported snapshot (rollback safe)', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      let key = realmAffinityKey('https://realm.example/A');
+
+      // First heartbeat: reports vacancy.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            status: 'active',
+            warmedAffinities: [key],
+            affinityVacancy: { [key]: { idle: true, tabCount: 1 } },
+          },
+        },
+      });
+
+      let health1 = await request.get('/');
+      let server1 = (health1.body.included as any[]).find(
+        (s) => s.id === serverUrlA,
+      );
+      assert.deepEqual(
+        server1.attributes.affinityVacancy,
+        { [key]: { idle: true, tabCount: 1 } },
+        'vacancy recorded on the first heartbeat',
+      );
+
+      // Simulate a rollback: same server, next heartbeat omits
+      // affinityVacancy. Stale data must not persist.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            status: 'active',
+            warmedAffinities: [key],
+            // affinityVacancy intentionally omitted
+          },
+        },
+      });
+
+      let health2 = await request.get('/');
+      let server2 = (health2.body.included as any[]).find(
+        (s) => s.id === serverUrlA,
+      );
+      assert.deepEqual(
+        server2.attributes.affinityVacancy,
+        {},
+        'vacancy snapshot is cleared when a subsequent heartbeat omits the field',
+      );
+    });
+
     test('heartbeat: url required; heartbeat updates warmed affinities and status', async function (assert) {
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
@@ -388,7 +627,9 @@ module(basename(__filename), function () {
         'https://realm.example/R',
         'https://realm.example/R/1',
       );
-      let firstProxyResponse = await request.post('/prerender-card').send(body);
+      let firstProxyResponse = await request
+        .post('/prerender-visit')
+        .send(body);
       assert.strictEqual(firstProxyResponse.status, 201, 'proxy 201');
       let firstTarget = firstProxyResponse.headers['x-boxel-prerender-target'];
       assert.ok(
@@ -396,7 +637,7 @@ module(basename(__filename), function () {
         'target is one of servers',
       );
       let secondProxyResponse = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(body);
       assert.strictEqual(secondProxyResponse.status, 201, 'proxy 201 again');
       assert.strictEqual(
@@ -406,7 +647,12 @@ module(basename(__filename), function () {
       );
     });
 
-    test('proxy: rotation with multiplex>1, capacity and pressure', async function (assert) {
+    test('proxy: repeated requests stick to the same server (no round-robin) when multiplex>1', async function (assert) {
+      // CS-10758: vacancy-first routing replaces the old LRU rotation. Two
+      // sequential requests for the same affinity should stay on the same
+      // server as long as that server remains the best candidate — stickiness
+      // comes from soft tie-break within a priority bucket, not from an
+      // explicit round-robin.
       process.env.PRERENDER_MULTIPLEX = '2';
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
@@ -428,19 +674,21 @@ module(basename(__filename), function () {
         'https://realm.example/R',
         'https://realm.example/R/1',
       );
-      let firstProxyResponse = await request.post('/prerender-card').send(body);
+      let firstProxyResponse = await request
+        .post('/prerender-visit')
+        .send(body);
       let firstTarget = firstProxyResponse.headers['x-boxel-prerender-target'];
       let secondProxyResponse = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(body);
       let secondTarget =
         secondProxyResponse.headers['x-boxel-prerender-target'];
       assert.notStrictEqual(firstTarget, undefined, 'first target exists');
       assert.notStrictEqual(secondTarget, undefined, 'second target exists');
-      assert.notStrictEqual(
-        firstTarget,
+      assert.strictEqual(
         secondTarget,
-        'rotates between servers when multiplex>1',
+        firstTarget,
+        'subsequent requests stick to the chosen server rather than rotating',
       );
 
       // capacity: distribute different realms across servers first
@@ -449,7 +697,7 @@ module(basename(__filename), function () {
         'https://realm.example/R2/1',
       );
       let realm2ProxyResponse = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(realm2RequestBody);
       let realm2Target =
         realm2ProxyResponse.headers['x-boxel-prerender-target'];
@@ -464,7 +712,7 @@ module(basename(__filename), function () {
         'https://realm.example/R3/1',
       );
       let realm3ProxyResponse = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(realm3RequestBody);
       let realm3Target =
         realm3ProxyResponse.headers['x-boxel-prerender-target'];
@@ -494,7 +742,9 @@ module(basename(__filename), function () {
       let realm = 'https://realm.example/R';
       let body = makeBody(realm, `${realm}/1`);
       let affinityKey = realmAffinityKey(realm);
-      let firstProxyResponse = await request.post('/prerender-card').send(body);
+      let firstProxyResponse = await request
+        .post('/prerender-visit')
+        .send(body);
       assert.strictEqual(firstProxyResponse.status, 201, 'initial proxy ok');
       let firstTarget = firstProxyResponse.headers['x-boxel-prerender-target'];
       assert.ok(firstTarget, 'proxy response includes target header');
@@ -518,7 +768,7 @@ module(basename(__filename), function () {
 
       // next request should succeed; mapping for that realm should no longer be required
       let secondProxyResponse = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(body);
       assert.strictEqual(
         secondProxyResponse.status,
@@ -553,7 +803,9 @@ module(basename(__filename), function () {
       let realm = 'https://realm.example/R';
       let body = makeBody(realm, `${realm}/1`);
       let affinityKey = realmAffinityKey(realm);
-      let firstProxyResponse = await request.post('/prerender-card').send(body);
+      let firstProxyResponse = await request
+        .post('/prerender-visit')
+        .send(body);
       assert.strictEqual(firstProxyResponse.status, 201, 'initial proxy ok');
       let firstTarget = firstProxyResponse.headers['x-boxel-prerender-target'];
       assert.ok(firstTarget, 'proxy response includes target header');
@@ -567,7 +819,7 @@ module(basename(__filename), function () {
 
       let otherTarget = firstTarget === serverUrlA ? serverUrlB : serverUrlA;
       let secondProxyResponse = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(body);
       assert.strictEqual(
         secondProxyResponse.status,
@@ -617,7 +869,7 @@ module(basename(__filename), function () {
         'https://realm.example/R2/1',
       );
       let proxyResponse = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(realm2RequestBody);
       assert.strictEqual(proxyResponse.status, 201, 'proxy ok');
       assert.notStrictEqual(
@@ -649,7 +901,9 @@ module(basename(__filename), function () {
         'https://realm.example/R',
         'https://realm.example/R/1',
       );
-      let firstProxyResponse = await request.post('/prerender-card').send(body);
+      let firstProxyResponse = await request
+        .post('/prerender-visit')
+        .send(body);
       assert.strictEqual(firstProxyResponse.status, 201, 'initial proxy ok');
 
       // Stop server A to make it unreachable
@@ -664,7 +918,7 @@ module(basename(__filename), function () {
         'https://realm.example/R2/1',
       );
       let proxyResponse = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(realm2RequestBody);
       assert.strictEqual(proxyResponse.status, 201, 'proxy ok');
       assert.notStrictEqual(
@@ -706,7 +960,7 @@ module(basename(__filename), function () {
         'https://realm.example/R2/1',
       );
       let proxyResponse = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(realm2RequestBody);
       assert.strictEqual(proxyResponse.status, 201, 'proxy ok');
       assert.notStrictEqual(
@@ -747,7 +1001,7 @@ module(basename(__filename), function () {
         'https://realm.example/retry',
         'https://realm.example/retry/1',
       );
-      let response = await request.post('/prerender-card').send(body);
+      let response = await request.post('/prerender-visit').send(body);
       assert.strictEqual(response.status, 201, 'proxy succeeds');
       assert.strictEqual(
         response.headers['x-boxel-prerender-target'],
@@ -769,6 +1023,9 @@ module(basename(__filename), function () {
             capacity: 2,
             url: serverUrlA,
             warmedAffinities: [realmAffinityKey(realm)],
+            affinityVacancy: {
+              [realmAffinityKey(realm)]: { idle: true, tabCount: 1 },
+            },
           },
         },
       });
@@ -780,14 +1037,14 @@ module(basename(__filename), function () {
       });
 
       let response = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(makeBody(realm, `${realm}/1`));
 
       assert.strictEqual(response.status, 201, 'proxy ok');
       assert.strictEqual(
         response.headers['x-boxel-prerender-target'],
         serverUrlA,
-        'manager prefers warmed server for realm',
+        'manager prefers warm+idle server for realm (warm+idle beats cold+idle)',
       );
     });
 
@@ -804,6 +1061,9 @@ module(basename(__filename), function () {
             capacity: 2,
             url: serverUrlA,
             warmedAffinities: [userAffinityKey(sharedValue)],
+            affinityVacancy: {
+              [userAffinityKey(sharedValue)]: { idle: true, tabCount: 1 },
+            },
           },
         },
       });
@@ -814,12 +1074,15 @@ module(basename(__filename), function () {
             capacity: 2,
             url: serverUrlB,
             warmedAffinities: [realmAffinityKey(sharedValue)],
+            affinityVacancy: {
+              [realmAffinityKey(sharedValue)]: { idle: true, tabCount: 1 },
+            },
           },
         },
       });
 
       let response = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(makeBody(sharedValue, `${sharedValue}/1`));
 
       assert.strictEqual(response.status, 201, 'proxy ok');
@@ -846,6 +1109,9 @@ module(basename(__filename), function () {
             capacity: 2,
             url: serverUrlA,
             warmedAffinities: [realmAffinityKey(realm)],
+            affinityVacancy: {
+              [realmAffinityKey(realm)]: { idle: true, tabCount: 1 },
+            },
           },
         },
       });
@@ -856,6 +1122,9 @@ module(basename(__filename), function () {
             capacity: 2,
             url: serverUrlB,
             warmedAffinities: [userAffinityKey(runAs)],
+            affinityVacancy: {
+              [userAffinityKey(runAs)]: { idle: true, tabCount: 1 },
+            },
           },
         },
       });
@@ -869,6 +1138,459 @@ module(basename(__filename), function () {
         response.headers['x-boxel-prerender-target'],
         serverUrlB,
         'command request prefers user-warmed server',
+      );
+    });
+
+    // ---- CS-10758 warm-vacancy-first routing ----
+
+    test('warm+idle beats cold+idle across servers', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/vacancy-warm-beats-cold';
+
+      // Server A: cold for this affinity, has capacity.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+      // Server B: warm + idle for this affinity.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlB,
+            affinityVacancy: {
+              [realmAffinityKey(realm)]: { idle: true, tabCount: 1 },
+            },
+          },
+        },
+      });
+
+      let response = await request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/1`));
+      assert.strictEqual(response.status, 201, 'proxy ok');
+      assert.strictEqual(
+        response.headers['x-boxel-prerender-target'],
+        serverUrlB,
+        'warm+idle B wins over cold+idle A',
+      );
+    });
+
+    test('cold+idle beats warm+busy', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/vacancy-cold-beats-busy';
+
+      // Server A: fresh, cold for this affinity, has capacity.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+      // Server B: warm for this affinity but every tab is busy.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlB,
+            affinityVacancy: {
+              [realmAffinityKey(realm)]: { idle: false, tabCount: 1 },
+            },
+          },
+        },
+      });
+
+      let response = await request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/1`));
+      assert.strictEqual(response.status, 201, 'proxy ok');
+      assert.strictEqual(
+        response.headers['x-boxel-prerender-target'],
+        serverUrlA,
+        'cold+idle A wins over warm+busy B — don’t queue behind a busy warm tab when an idle cold one is available',
+      );
+    });
+
+    test('warm+busy with spare capacity does not collapse into cold+idle', async function (assert) {
+      // Regression guard: in scoreCandidate the warm+busy branch must be
+      // evaluated before the hasCapacity(info) branch. A server whose tab
+      // for the requested affinity is busy but which still has overall
+      // capacity for other affinities otherwise registers as bucket 1
+      // (cold+idle), which would break the cold+idle > warm+busy invariant
+      // — we'd pick the warm+busy tab and queue behind it even though
+      // another server was genuinely cold+idle.
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/warm-busy-spare-capacity';
+
+      // Server A: warm for realm but the tab is busy. Capacity=4 with only
+      // the realm affinity claimed, so hasCapacity(info) is true — this is
+      // the bucket-ordering trap.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 4,
+            url: serverUrlA,
+            affinityVacancy: {
+              [realmAffinityKey(realm)]: { idle: false, tabCount: 1 },
+            },
+          },
+        },
+      });
+      // Server B: plain cold+idle.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 4, url: serverUrlB },
+        },
+      });
+
+      let response = await request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/1`));
+      assert.strictEqual(response.status, 201, 'proxy ok');
+      assert.strictEqual(
+        response.headers['x-boxel-prerender-target'],
+        serverUrlB,
+        'cold+idle B wins over warm+busy-with-capacity A (bucket classification order)',
+      );
+    });
+
+    test('warm+idle elsewhere beats warm+busy on an already-assigned server', async function (assert) {
+      // CS-10758: stickiness is soft. At multiplex=1 a previously-assigned
+      // server that is warm+busy should still lose to a warm+idle server
+      // somewhere else, because warm+idle beats warm+busy across the fleet.
+      process.env.PRERENDER_MULTIPLEX = '1';
+      let { app, registry, chooseServerForAffinity } =
+        buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/stickiness-soft';
+      let affinityKey = realmAffinityKey(realm);
+
+      // Server A: warm + busy for realm (tab rendering something else).
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            affinityVacancy: {
+              [affinityKey]: { idle: false, tabCount: 1 },
+            },
+          },
+        },
+      });
+      // Server B: warm + idle for realm.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlB,
+            affinityVacancy: {
+              [affinityKey]: { idle: true, tabCount: 1 },
+            },
+          },
+        },
+      });
+      // Seed A as the previously-assigned server for realm to simulate a
+      // prior successful route before the tab went busy.
+      registry.affinities.set(affinityKey, [serverUrlA!]);
+
+      let target = chooseServerForAffinity('realm', realm);
+      assert.strictEqual(
+        target,
+        serverUrlB,
+        'warm+idle B wins over assigned-but-busy A (stickiness is soft)',
+      );
+    });
+
+    test('warm+busy is chosen only when no idle tab exists anywhere', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/vacancy-warm-busy-last-resort';
+      let otherRealm = 'https://realm.example/vacancy-other-realm';
+
+      // Server A: saturated — warm+busy for another realm, at capacity.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 1,
+            url: serverUrlA,
+            warmedAffinities: [realmAffinityKey(otherRealm)],
+            affinityVacancy: {
+              [realmAffinityKey(otherRealm)]: { idle: false, tabCount: 1 },
+            },
+          },
+        },
+      });
+      // Pin the other-realm affinity on A so A is at capacity.
+      await request.post('/prerender-visit').send(makeBody(otherRealm, '1'));
+
+      // Server B: warm + busy for the *requested* realm, at capacity.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 1,
+            url: serverUrlB,
+            warmedAffinities: [realmAffinityKey(realm)],
+            affinityVacancy: {
+              [realmAffinityKey(realm)]: { idle: false, tabCount: 1 },
+            },
+          },
+        },
+      });
+      // Pin the target realm on B so B is also at capacity.
+      await request.post('/prerender-visit').send(makeBody(realm, '1'));
+
+      // Next visit for realm: no idle tab exists anywhere. B is warm+busy for
+      // realm, A is cold+busy (warm for other realm). B should win.
+      let response = await request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/2`));
+      assert.strictEqual(response.status, 201, 'proxy ok');
+      assert.strictEqual(
+        response.headers['x-boxel-prerender-target'],
+        serverUrlB,
+        'warm+busy B beats cold+busy A when nothing idle exists',
+      );
+    });
+
+    test('tie-break among warm+idle: fewer active affinities wins', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app, registry } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/tie-load';
+      let affinityKey = realmAffinityKey(realm);
+
+      // Both servers warm + idle for realm.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 4,
+            url: serverUrlA,
+            affinityVacancy: {
+              [affinityKey]: { idle: true, tabCount: 1 },
+            },
+          },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 4,
+            url: serverUrlB,
+            affinityVacancy: {
+              [affinityKey]: { idle: true, tabCount: 1 },
+            },
+          },
+        },
+      });
+
+      // Simulate A already hosting a couple of other affinities (heavier
+      // load) — B has none.
+      let aInfo = registry.servers.get(serverUrlA!)!;
+      aInfo.activeAffinities.add('realm:https://example/other1');
+      aInfo.activeAffinities.add('realm:https://example/other2');
+
+      let response = await request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/1`));
+      assert.strictEqual(response.status, 201, 'proxy ok');
+      assert.strictEqual(
+        response.headers['x-boxel-prerender-target'],
+        serverUrlB,
+        'tie among warm+idle broken by fewer active affinities',
+      );
+    });
+
+    test('replacement after affinity disposal routes to a remaining warm+idle server', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/replacement-warm';
+      let affinityKey = realmAffinityKey(realm);
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            affinityVacancy: {
+              [affinityKey]: { idle: true, tabCount: 1 },
+            },
+          },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlB,
+            affinityVacancy: {
+              [affinityKey]: { idle: true, tabCount: 1 },
+            },
+          },
+        },
+      });
+
+      // First visit lands on one of the two (either is warm+idle).
+      let first = await request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/1`));
+      let chosen = first.headers['x-boxel-prerender-target'];
+      assert.ok([serverUrlA, serverUrlB].includes(chosen), 'first routed');
+
+      // Dispose the affinity from the chosen server (simulate server-side
+      // eviction — the server would on its next heartbeat drop the affinity
+      // from affinityVacancy).
+      await request.delete(
+        `/prerender-servers/affinities/${encodeURIComponent(affinityKey)}?url=${encodeURIComponent(chosen)}`,
+      );
+      let otherUrl = chosen === serverUrlA ? serverUrlB : serverUrlA;
+      // Remove the evicted server's warm vacancy via a new heartbeat (the
+      // server would publish this after eviction completes).
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: chosen,
+            affinityVacancy: {},
+          },
+        },
+      });
+
+      let second = await request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/2`));
+      assert.strictEqual(
+        second.headers['x-boxel-prerender-target'],
+        otherUrl,
+        'post-eviction replacement routes to the other warm+idle server',
+      );
+    });
+
+    test('replacement falls back to cold+idle when no warm tab remains', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/replacement-cold';
+      let affinityKey = realmAffinityKey(realm);
+
+      // Server A starts warm+idle; server B is only cold+idle.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            affinityVacancy: {
+              [affinityKey]: { idle: true, tabCount: 1 },
+            },
+          },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlB },
+        },
+      });
+
+      let first = await request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/1`));
+      assert.strictEqual(
+        first.headers['x-boxel-prerender-target'],
+        serverUrlA,
+        'first routed to warm A',
+      );
+
+      // A evicts the affinity and reports no vacancy for it.
+      await request.delete(
+        `/prerender-servers/affinities/${encodeURIComponent(affinityKey)}?url=${encodeURIComponent(serverUrlA!)}`,
+      );
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            affinityVacancy: {},
+          },
+        },
+      });
+
+      let second = await request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/2`));
+      assert.ok(
+        [serverUrlA, serverUrlB].includes(
+          second.headers['x-boxel-prerender-target'],
+        ),
+        'falls back to a cold+idle server',
+      );
+    });
+
+    test('legacy server without affinityVacancy is treated as cold and loses to a warm+idle server', async function (assert) {
+      // During a rolling deploy, older servers send no `affinityVacancy`
+      // field. Their affinities register as cold, so they lose to any
+      // server publishing warm+idle vacancy — safe: first visit re-warms.
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/legacy-rollout';
+
+      // Legacy server A: reports warmedAffinities but no affinityVacancy.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            warmedAffinities: [realmAffinityKey(realm)],
+          },
+        },
+      });
+      // Modern server B: reports affinityVacancy warm+idle.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlB,
+            affinityVacancy: {
+              [realmAffinityKey(realm)]: { idle: true, tabCount: 1 },
+            },
+          },
+        },
+      });
+
+      let response = await request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/1`));
+      assert.strictEqual(
+        response.headers['x-boxel-prerender-target'],
+        serverUrlB,
+        'routing trusts affinityVacancy over legacy warmedAffinities',
       );
     });
 
@@ -959,7 +1681,7 @@ module(basename(__filename), function () {
       // initial assignment
       let realm1 = 'https://realm.example/one';
       let res1 = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(makeBody(realm1, `${realm1}/1`));
       assert.strictEqual(res1.status, 201, 'first prerender ok');
       assert.strictEqual(
@@ -976,7 +1698,7 @@ module(basename(__filename), function () {
       }
       let realm2 = 'https://realm.example/two';
       let res2 = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(makeBody(realm2, `${realm2}/1`));
       assert.strictEqual(res2.status, 503, 'no servers while draining');
       assert.strictEqual(
@@ -992,7 +1714,7 @@ module(basename(__filename), function () {
       }
       let realm3 = 'https://realm.example/three';
       let res3 = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(makeBody(realm3, `${realm3}/1`));
       assert.strictEqual(res3.status, 201, 'prerender ok after recovery');
       assert.true(
@@ -1075,7 +1797,7 @@ module(basename(__filename), function () {
 
       let realm = 'https://realm.example/draining';
       let res = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(makeBody(realm, `${realm}/1`));
 
       assert.strictEqual(
@@ -1101,7 +1823,7 @@ module(basename(__filename), function () {
       let request: SuperTest<Test> = supertest(app.callback());
 
       let res = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(
           makeBody(
             'https://realm.example/drain-manager',
@@ -1148,7 +1870,7 @@ module(basename(__filename), function () {
       });
 
       let resPromise = request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(
           makeBody(
             'https://realm.example/drain-midflight',
@@ -1188,7 +1910,7 @@ module(basename(__filename), function () {
       await mockPrerenderA?.stop();
 
       let res = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(
           makeBody(
             'https://realm.example/lost-server',
@@ -1238,7 +1960,7 @@ module(basename(__filename), function () {
       });
 
       let res = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(
           makeBody(
             'https://realm.example/server-error',
@@ -1269,7 +1991,9 @@ module(basename(__filename), function () {
       });
       let realm = 'https://realm.example/reset';
       let affinityKey = realmAffinityKey(realm);
-      await request.post('/prerender-card').send(makeBody(realm, `${realm}/1`));
+      await request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/1`));
       assert.true(
         registry.servers
           .get(serverUrlA!)
@@ -1308,12 +2032,12 @@ module(basename(__filename), function () {
       let realm2 = 'https://realm.example/new';
 
       let res1 = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(makeBody(realm1, `${realm1}1`));
       assert.strictEqual(res1.status, 201, 'first affinity assigned');
 
       let res2 = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(makeBody(realm2, `${realm2}/1`));
       assert.strictEqual(
         res2.status,
@@ -1381,7 +2105,7 @@ module(basename(__filename), function () {
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
       let res = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(
           makeBody(
             'https://realm.example/none',
@@ -1419,7 +2143,7 @@ module(basename(__filename), function () {
       });
 
       let res = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(
           makeBody(
             'https://realm.example/discovery',
@@ -1437,6 +2161,169 @@ module(basename(__filename), function () {
         res.headers['x-boxel-prerender-target'],
         serverUrlA,
         'request routed to newly registered server',
+      );
+    });
+
+    // ---- CS-10758 step 3: /release-batch broadcast ----
+
+    test('release-batch broadcasts to every server assigned to the affinity', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app, registry } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/release-broadcast';
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlB },
+        },
+      });
+
+      // Pin the affinity to both servers directly. Issuing two prerender-visits
+      // wouldn't work here: under vacancy-first routing (CS-10758 step 2), the
+      // second visit prefers the already-assigned server on an assignedPref
+      // tie-break and both requests stick to A. What we're exercising is the
+      // broadcast fanout once an affinity has been assigned to multiple
+      // servers, not the routing that got it there.
+      let affinityKey = realmAffinityKey(realm);
+      registry.affinities.set(affinityKey, [serverUrlA!, serverUrlB!]);
+      registry.servers.get(serverUrlA!)!.activeAffinities.add(affinityKey);
+      registry.servers.get(serverUrlB!)!.activeAffinities.add(affinityKey);
+
+      let res = await request.post('/release-batch').send({
+        data: {
+          type: 'release-batch-request',
+          attributes: {
+            batchId: 'job-42-abcd',
+            affinityType: 'realm',
+            affinityValue: realm,
+          },
+        },
+      });
+      assert.strictEqual(res.status, 204, 'broadcast returned 204');
+      let aCalls = mockPrerenderA?.releaseBatchCalls ?? [];
+      let bCalls = mockPrerenderB?.releaseBatchCalls ?? [];
+      assert.deepEqual(
+        aCalls,
+        [
+          {
+            batchId: 'job-42-abcd',
+            affinityType: 'realm',
+            affinityValue: realm,
+          },
+        ],
+        'server A received the release-batch',
+      );
+      assert.deepEqual(
+        bCalls,
+        [
+          {
+            batchId: 'job-42-abcd',
+            affinityType: 'realm',
+            affinityValue: realm,
+          },
+        ],
+        'server B received the release-batch',
+      );
+    });
+
+    test('release-batch skips servers not assigned to the affinity', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '1';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/release-scoped';
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlB },
+        },
+      });
+
+      // multiplex=1 so only one server gets the affinity
+      let firstVisit = await request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/1`));
+      let assignedServer = firstVisit.headers['x-boxel-prerender-target'];
+      let otherServer = assignedServer === serverUrlA ? serverUrlB : serverUrlA;
+
+      let res = await request.post('/release-batch').send({
+        data: {
+          type: 'release-batch-request',
+          attributes: {
+            batchId: 'job-42-abcd',
+            affinityType: 'realm',
+            affinityValue: realm,
+          },
+        },
+      });
+      assert.strictEqual(res.status, 204);
+
+      let assignedCalls =
+        assignedServer === serverUrlA
+          ? (mockPrerenderA?.releaseBatchCalls ?? [])
+          : (mockPrerenderB?.releaseBatchCalls ?? []);
+      let otherCalls =
+        otherServer === serverUrlA
+          ? (mockPrerenderA?.releaseBatchCalls ?? [])
+          : (mockPrerenderB?.releaseBatchCalls ?? []);
+      assert.strictEqual(
+        assignedCalls.length,
+        1,
+        'assigned server received the release-batch',
+      );
+      assert.strictEqual(
+        otherCalls.length,
+        0,
+        'unassigned server did NOT receive the release-batch',
+      );
+    });
+
+    test('release-batch rejects invalid request attributes', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      let missingBatchId = await request.post('/release-batch').send({
+        data: {
+          type: 'release-batch-request',
+          attributes: {
+            affinityType: 'realm',
+            affinityValue: 'https://realm.example/',
+          },
+        },
+      });
+      assert.strictEqual(
+        missingBatchId.status,
+        400,
+        'missing batchId is rejected',
+      );
+
+      let badType = await request.post('/release-batch').send({
+        data: {
+          type: 'release-batch-request',
+          attributes: {
+            batchId: 'job-1-abcd',
+            affinityType: 'bogus',
+            affinityValue: 'https://realm.example/',
+          },
+        },
+      });
+      assert.strictEqual(
+        badType.status,
+        400,
+        'unknown affinityType is rejected',
       );
     });
 
@@ -1463,7 +2350,7 @@ module(basename(__filename), function () {
       });
 
       let res = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .send(
           makeBody(
             'https://realm.example/draining',
@@ -1483,6 +2370,192 @@ module(basename(__filename), function () {
       );
       assert.strictEqual(hits, 0, 'does not proxy to prerender server');
     });
+
+    module('client-abort propagation (CS-10873)', function () {
+      // The manager's `proxyStart`/ctxt.req close hook aborts the
+      // upstream fetch when the client disconnects mid-flight.
+      // Exercise it by spinning up a real HTTP listener (supertest's
+      // in-memory transport can't simulate a socket close cleanly)
+      // and tearing down the client request while the mock prerender
+      // is deliberately hung.
+      test('client closing the socket aborts the upstream fetch', async function (assert) {
+        let { app } = buildPrerenderManagerApp();
+        let managerServer = createServer(app.callback());
+        await new Promise<void>((resolve) =>
+          managerServer.listen(0, () => resolve()),
+        );
+        let managerPort = (managerServer.address() as any).port;
+        try {
+          let realm = 'https://realm.example/abort-test';
+          let cardURL = `${realm}/1`;
+
+          // Tell the mock to hang on the request and report back
+          // whether its inbound TCP socket closes (which is what we
+          // get from undici when it cancels the fetch). We watch the
+          // socket rather than `ctxt.req` because Node 17+ auto-
+          // destroys IncomingMessage after the body is consumed —
+          // `ctxt.req.close` fires during normal flow and wouldn't
+          // distinguish "manager aborted us" from "body read done".
+          let upstreamHit = new Deferred<void>();
+          let upstreamSocketClosed = new Deferred<void>();
+          mockPrerenderA!.setResponder(async (ctxt) => {
+            upstreamHit.fulfill();
+            ctxt.req.socket?.on('close', () => upstreamSocketClosed.fulfill());
+            // Never respond — wait forever. The outer test cleanup
+            // will tear down the server and flush this handler.
+            await new Promise(() => {});
+          });
+
+          // Register the mock.
+          await new Promise<void>((resolve, reject) => {
+            let req = http.request(
+              {
+                hostname: '127.0.0.1',
+                port: managerPort,
+                path: '/prerender-servers',
+                method: 'POST',
+                headers: { 'Content-Type': 'application/vnd.api+json' },
+              },
+              (res) => {
+                res.resume();
+                res.on('end', () => resolve());
+              },
+            );
+            req.on('error', reject);
+            req.write(
+              JSON.stringify({
+                data: {
+                  type: 'prerender-server',
+                  attributes: { capacity: 2, url: serverUrlA },
+                },
+              }),
+            );
+            req.end();
+          });
+
+          // Fire the prerender-visit request via a raw http client
+          // so we can destroy the socket mid-flight (which is what a
+          // real worker-gave-up scenario looks like).
+          let clientReq = http.request({
+            hostname: '127.0.0.1',
+            port: managerPort,
+            path: '/prerender-visit',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/vnd.api+json' },
+          });
+          clientReq.on('error', () => {
+            // expected on destroy
+          });
+          clientReq.write(JSON.stringify(makeBody(realm, cardURL)));
+          clientReq.end();
+
+          // Wait until the mock has the request in hand, then kill
+          // the client side.
+          await upstreamHit.promise;
+          clientReq.destroy();
+
+          // Manager should have propagated the abort to the upstream.
+          // We wait (bounded) for the mock's inbound socket to close.
+          let closedInTime = await Promise.race([
+            upstreamSocketClosed.promise.then(() => true),
+            new Promise<boolean>((resolve) =>
+              setTimeout(() => resolve(false), 2000),
+            ),
+          ]);
+          assert.true(
+            closedInTime,
+            'manager aborted upstream fetch after client disconnect',
+          );
+        } finally {
+          await new Promise<void>((resolve) =>
+            managerServer.close(() => resolve()),
+          );
+        }
+      });
+
+      test('aborting before discovery completes does not route to any server', async function (assert) {
+        // When the registry is empty and discoveryWaitMs is high,
+        // the manager polls waiting for a server to register. A
+        // client abort during that wait must exit the poll loop
+        // without later falling through to a proxy attempt.
+        process.env.PRERENDER_SERVER_DISCOVERY_WAIT_MS = '5000';
+        process.env.PRERENDER_SERVER_DISCOVERY_POLL_MS = '25';
+        let { app } = buildPrerenderManagerApp();
+        let managerServer = createServer(app.callback());
+        await new Promise<void>((resolve) =>
+          managerServer.listen(0, () => resolve()),
+        );
+        let managerPort = (managerServer.address() as any).port;
+        try {
+          let proxiedHits = 0;
+          mockPrerenderA!.setResponder((ctxt) => {
+            proxiedHits++;
+            ctxt.status = 201;
+            ctxt.body = '{}';
+          });
+
+          let realm = 'https://realm.example/no-servers';
+          let clientReq = http.request({
+            hostname: '127.0.0.1',
+            port: managerPort,
+            path: '/prerender-visit',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/vnd.api+json' },
+          });
+          clientReq.on('error', () => {});
+          clientReq.write(JSON.stringify(makeBody(realm, `${realm}/1`)));
+          clientReq.end();
+
+          // Give the manager a tick to start the discovery wait,
+          // then kill the client before registering any server.
+          await new Promise((r) => setTimeout(r, 100));
+          clientReq.destroy();
+
+          // Register a server *after* the abort. If the manager were
+          // to continue the poll loop past the disconnect, it would
+          // proxy to this server once it appears.
+          await new Promise<void>((resolve, reject) => {
+            let req = http.request(
+              {
+                hostname: '127.0.0.1',
+                port: managerPort,
+                path: '/prerender-servers',
+                method: 'POST',
+                headers: { 'Content-Type': 'application/vnd.api+json' },
+              },
+              (res) => {
+                res.resume();
+                res.on('end', () => resolve());
+              },
+            );
+            req.on('error', reject);
+            req.write(
+              JSON.stringify({
+                data: {
+                  type: 'prerender-server',
+                  attributes: { capacity: 2, url: serverUrlA },
+                },
+              }),
+            );
+            req.end();
+          });
+
+          // Wait long enough that a not-cancelled poll would have
+          // picked up the new server and proxied.
+          await new Promise((r) => setTimeout(r, 300));
+
+          assert.strictEqual(
+            proxiedHits,
+            0,
+            'no upstream proxy after client abort during discovery wait',
+          );
+        } finally {
+          await new Promise<void>((resolve) =>
+            managerServer.close(() => resolve()),
+          );
+        }
+      });
+    });
   });
 });
 
@@ -1495,9 +2568,10 @@ function makeMockPrerender(): {
     responder: (
       ctxt: Koa.Context,
       body: any,
-      type: 'card' | 'module' | 'command',
+      type: 'visit' | 'module' | 'command',
     ) => Promise<void> | void,
   ) => void;
+  releaseBatchCalls: Array<Record<string, unknown>>;
 } {
   let app = new Koa();
   let router = new Router();
@@ -1508,7 +2582,7 @@ function makeMockPrerender(): {
   let responder: (
     ctxt: Koa.Context,
     body: any,
-    type: 'card' | 'module' | 'command',
+    type: 'visit' | 'module' | 'command',
   ) => Promise<void> | void = defaultResponder;
   async function readBody(ctxt: Koa.Context) {
     return await new Promise<string>((resolve) => {
@@ -1520,16 +2594,16 @@ function makeMockPrerender(): {
   function defaultResponder(
     ctxt: Koa.Context,
     body: any,
-    type: 'card' | 'module' | 'command',
+    type: 'visit' | 'module' | 'command',
   ) {
     ctxt.status = 201;
     ctxt.set('Content-Type', 'application/vnd.api+json');
-    if (type === 'card') {
+    if (type === 'visit') {
       ctxt.body = JSON.stringify({
         data: {
-          type: 'prerender-result',
+          type: 'prerender-visit-result',
           id: body?.data?.attributes?.url || 'x',
-          attributes: { ok: true },
+          attributes: { card: { ok: true } },
         },
         meta: {
           timing: { launchMs: 0, renderMs: 0, totalMs: 0 },
@@ -1592,10 +2666,10 @@ function makeMockPrerender(): {
       });
     }
   }
-  router.post('/prerender-card', async (ctxt) => {
+  router.post('/prerender-visit', async (ctxt) => {
     let raw = await readBody(ctxt);
     let body = raw ? JSON.parse(raw) : {};
-    await responder(ctxt, body, 'card');
+    await responder(ctxt, body, 'visit');
   });
   router.post('/prerender-module', async (ctxt) => {
     let raw = await readBody(ctxt);
@@ -1607,6 +2681,16 @@ function makeMockPrerender(): {
     let body = raw ? JSON.parse(raw) : {};
     await responder(ctxt, body, 'command');
   });
+  // Capture release-batch calls so tests can assert the manager
+  // broadcast reached this server (CS-10758 step 3).
+  let releaseBatchCalls: Array<Record<string, unknown>> = [];
+  router.post('/release-batch', async (ctxt) => {
+    let raw = await readBody(ctxt);
+    let body = raw ? JSON.parse(raw) : {};
+    releaseBatchCalls.push(body?.data?.attributes ?? {});
+    ctxt.status = 204;
+  });
+  (app as any).releaseBatchCalls = releaseBatchCalls;
   app.use(router.routes());
   let server = createServer(app.callback()).listen(0);
   let stopped = false;
@@ -1623,6 +2707,7 @@ function makeMockPrerender(): {
     setResponder: (r) => {
       responder = r;
     },
+    releaseBatchCalls,
   };
 }
 
@@ -1630,13 +2715,14 @@ function makeBody(realm: string, url: string) {
   let auth = makeAuth(realm);
   return {
     data: {
-      type: 'prerender-request',
+      type: 'prerender-visit-request',
       attributes: {
         affinityType: 'realm',
         affinityValue: realm,
         url,
         auth,
         realm,
+        renderOptions: { cardRender: true },
       },
     },
   };

@@ -28,6 +28,7 @@ import {
   isSpecCard,
   type Permissions,
   PermissionsContextName,
+  type RealmIdentifier,
 } from '@cardstack/runtime-common';
 
 import {
@@ -146,7 +147,13 @@ export default class PlaygroundPanel extends Component<Signature> {
     return moduleId;
   });
 
-  private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
+  private fieldFormats: Format[] = [
+    'embedded',
+    'fitted',
+    'atom',
+    'edit',
+    'markdown',
+  ];
   private fileDefFormats: Format[] = ['isolated', 'embedded', 'fitted', 'atom'];
   #creationError = false;
   #currentModuleId: string | undefined;
@@ -764,7 +771,7 @@ export default class PlaygroundPanel extends Component<Signature> {
               ],
             },
             adoptsFrom: specRef,
-            realmURL: this.currentRealm,
+            realmURL: this.currentRealm as RealmIdentifier,
           },
         },
       };
@@ -775,7 +782,7 @@ export default class PlaygroundPanel extends Component<Signature> {
           lid: localId,
           meta: {
             adoptsFrom: this.args.codeRef,
-            realmURL: this.currentRealm,
+            realmURL: this.currentRealm as RealmIdentifier,
           },
         },
       };
@@ -1149,7 +1156,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         bottom: var(--playground-padding);
         border: 1px solid var(--boxel-450);
         margin: 0 auto;
-        width: 380px;
+        width: 460px;
         max-width: 100%;
         justify-content: space-between;
 

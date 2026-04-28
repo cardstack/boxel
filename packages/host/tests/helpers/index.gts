@@ -6,7 +6,7 @@ import {
   visit,
   settled,
 } from '@ember/test-helpers';
-import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
+import { click, findAll, waitUntil, waitFor } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -18,6 +18,7 @@ import { validate as uuidValidate } from 'uuid';
 import {
   baseRealm,
   CachingDefinitionLookup,
+  cardDefComputedFields,
   ensureTrailingSlash,
   getCreatedTime,
   IndexWriter,
@@ -29,6 +30,7 @@ import {
   testHostModeRealmURL,
   testRealmInfo,
   testRealmURL,
+  testRRI,
   Worker,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
@@ -37,11 +39,16 @@ import {
   type Prerenderer,
   type RealmAction,
   type RealmAdapter,
+  ri,
+  rri,
   type RealmInfo,
   type RealmPermissions,
   type RenderError,
+  type RealmIdentifier,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
+import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import {
@@ -80,6 +87,7 @@ export {
   testHostModeRealmURL,
   testRealmURL,
   testRealmInfo,
+  testRRI,
   percySnapshot,
 };
 export { createJWT, testRealmSecretSeed } from './test-auth';
@@ -93,7 +101,15 @@ export { setupOperatorModeStateCleanup } from './operator-mode-state';
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
 
-export const testModuleRealm = 'http://localhost:4202/test/';
+export const testModuleRealm = ri('http://localhost:4202/test/');
+
+/**
+ * Build a `RealmResourceIdentifier` for a module in `testModuleRealm`.
+ * Shorter than `` rri(`${testModuleRealm}${path}`) ``.
+ */
+export function testModuleRRI(path: string): RealmResourceIdentifier {
+  return rri(`${testModuleRealm}${path}`);
+}
 
 export {
   catalogRealm,
@@ -104,6 +120,8 @@ export {
 } from '@cardstack/host/lib/utils';
 
 const { pgSchema } = ENV;
+
+export const cardDefFieldCount = cardDefComputedFields?.length + 1; // standard computeds + `cardInfo`
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 type ModuleHooks = {
@@ -1437,7 +1455,7 @@ export async function saveCard(
   id: string,
   loader: Loader,
   store?: CardStore,
-  realmURL?: string,
+  realmURL?: RealmIdentifier,
 ) {
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
   let doc = api.serializeCard(instance);
@@ -1989,4 +2007,50 @@ export async function verifyJSONWithUUIDInFolder(
       'file name shape not as expected when checking for [uuid].[extension]',
     );
   }
+}
+
+export async function addSkillToAiAssistant(
+  skillCardId: string,
+  roomId?: string,
+) {
+  let resolvedRoomId =
+    roomId ??
+    document.querySelector('[data-test-room]')?.getAttribute('data-test-room');
+
+  if (!resolvedRoomId) {
+    throw new Error(
+      `Expected an active AI assistant room before adding skill "${skillCardId}"`,
+    );
+  }
+
+  let command = new UpdateRoomSkillsCommand(
+    getService('command-service').commandContext,
+  );
+  await command.execute({
+    roomId: resolvedRoomId,
+    skillCardIdsToActivate: [skillCardId],
+  });
+
+  let matrixService = getService('matrix-service') as {
+    getRoomData(roomId: string): {
+      skillsConfig: {
+        enabledSkillCards?: Array<{ sourceUrl?: string }>;
+      };
+    } | null;
+  };
+
+  await waitUntil(
+    () =>
+      Boolean(
+        matrixService
+          .getRoomData(resolvedRoomId)
+          ?.skillsConfig.enabledSkillCards?.some(
+            (fileDef) => fileDef.sourceUrl === skillCardId,
+          ),
+      ),
+    {
+      timeout: 5000,
+      timeoutMessage: `Timed out waiting for room skill state for "${skillCardId}"`,
+    },
+  );
 }

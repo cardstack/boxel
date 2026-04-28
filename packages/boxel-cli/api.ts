@@ -5,6 +5,7 @@ export {
   type PullOptions,
   type PullResult,
   type ReadResult,
+  type ReadTranspiledResult,
   type WriteResult,
   type DeleteResult,
   type SearchResult,

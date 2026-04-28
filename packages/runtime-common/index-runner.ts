@@ -1,4 +1,8 @@
 import ignore, { type Ignore } from 'ignore';
+// Isomorphic UUID — works in both Node and the browser (host tests
+// instantiate IndexRunner inside a Chrome tab, so Node's built-in
+// `crypto.randomUUID` is not available).
+import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import { Memoize } from 'typescript-memoize';
 
@@ -23,6 +27,7 @@ import {
   type LocalPath,
   type Reader,
   type Stats,
+  type TimingDiagnostics,
 } from './index';
 import { moduleFrom } from './code-ref';
 import type { CacheScope, DefinitionLookup } from './definition-lookup';
@@ -31,7 +36,7 @@ import { isCardError } from './error';
 import type { IndexingProgressEvent } from './worker';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver';
 import { discoverInvalidations } from './index-runner/discover-invalidations';
-import { visitFileForIndexing } from './index-runner/visit-file';
+import { visitFileForIndexingFused } from './index-runner/visit-file';
 import { performCardIndexing } from './index-runner/card-indexer';
 import { performFileIndexing } from './index-runner/file-indexer';
 
@@ -71,6 +76,13 @@ export class IndexRunner {
     totalIndexEntries: 0,
   };
   #shouldClearCacheForNextRender = true;
+  // Identifier for this runner's indexing batch (CS-10758 step 3).
+  // Threaded into PrerenderVisitArgs and released from the fromScratch /
+  // incremental finally blocks. One runner = one batch: if fromScratch
+  // then incremental run on the same instance, they share this id (same
+  // warm loader ownership — intended). Populated in the constructor after
+  // jobInfo is known so the id is easy to correlate with a job in logs.
+  #batchId!: string;
 
   constructor({
     realmURL,
@@ -108,6 +120,7 @@ export class IndexRunner {
     this.#realmURL = realmURL;
     this.#ignoreData = ignoreData;
     this.#jobInfo = jobInfo ?? { jobId: -1, reservationId: -1 };
+    this.#batchId = `${this.#jobInfo.jobId}-${uuidv4().slice(0, 8)}`;
     this.#reportStatus = reportStatus;
     this.#onProgress = onProgress;
     this.#prerenderer = prerenderer;
@@ -207,6 +220,20 @@ export class IndexRunner {
         jobId: current.#jobInfo.jobId,
         stats: current.stats,
       });
+      // Release the batch's ownership of this realm's affinity on the
+      // prerender server. Best-effort: if the prerenderer doesn't
+      // implement releaseBatch (older/remote stub), skip silently.
+      try {
+        await current.#prerenderer.releaseBatch?.({
+          batchId: current.#batchId,
+          affinityType: 'realm',
+          affinityValue: current.realmURL.href,
+        });
+      } catch (e) {
+        current.#log.warn(
+          `${jobIdentity(current.#jobInfo)} failed to release prerender batch ${current.#batchId} for ${current.realmURL.href}: ${(e as Error)?.message}`,
+        );
+      }
     }
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} completed from scratch indexing in ${Date.now() - start}ms`,
@@ -313,6 +340,20 @@ export class IndexRunner {
         jobId: current.#jobInfo.jobId,
         stats: current.stats,
       });
+      // Release the batch's ownership of this realm's affinity on the
+      // prerender server. Best-effort: if the prerenderer doesn't
+      // implement releaseBatch (older/remote stub), skip silently.
+      try {
+        await current.#prerenderer.releaseBatch?.({
+          batchId: current.#batchId,
+          affinityType: 'realm',
+          affinityValue: current.realmURL.href,
+        });
+      } catch (e) {
+        current.#log.warn(
+          `${jobIdentity(current.#jobInfo)} failed to release prerender batch ${current.#batchId} for ${current.realmURL.href}: ${(e as Error)?.message}`,
+        );
+      }
     }
 
     current.#log.debug(
@@ -329,7 +370,23 @@ export class IndexRunner {
 
   private async tryToVisit(url: URL) {
     try {
-      await this.visitFile(url);
+      await visitFileForIndexingFused({
+        url,
+        realmURL: this.#realmURL,
+        ignoreMap: this.ignoreMap,
+        realmPaths: this.#realmPaths,
+        reader: this.#reader,
+        batch: this.batch,
+        jobInfo: this.#jobInfo,
+        auth: this.#auth,
+        batchId: this.#batchId,
+        prerenderer: this.#prerenderer,
+        consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+        logDebug: (message) => this.#log.debug(message),
+        logWarn: (message) => this.#log.warn(message),
+        indexCardWithResult: async (args) => await this.indexCard(args),
+        indexFileWithResults: async (args) => await this.indexFile(args),
+      });
     } catch (err: any) {
       if (isCardError(err) && err.status === 404) {
         this.#log.info(
@@ -444,22 +501,6 @@ export class IndexRunner {
     });
   }
 
-  private async visitFile(url: URL): Promise<void> {
-    await visitFileForIndexing({
-      url,
-      realmURL: this.#realmURL,
-      ignoreMap: this.ignoreMap,
-      realmPaths: this.#realmPaths,
-      reader: this.#reader,
-      batch: this.batch,
-      jobInfo: this.#jobInfo,
-      logDebug: (message) => this.#log.debug(message),
-      logWarn: (message) => this.#log.warn(message),
-      indexCard: async (args) => await this.indexCard(args),
-      indexFile: async (args) => await this.indexFile(args),
-    });
-  }
-
   private reportStatus(
     status: 'start' | 'finish',
     url: string,
@@ -481,11 +522,18 @@ export class IndexRunner {
     lastModified,
     resourceCreatedAt,
     resource,
+    renderResult,
+    timingDiagnostics,
   }: {
     path: LocalPath;
     lastModified: number;
     resourceCreatedAt: number;
     resource: LooseCardResource;
+    // Render result produced by the fused visit's cardRender pass.
+    renderResult: NonNullable<
+      Parameters<typeof performCardIndexing>[0]['precomputedRenderResult']
+    >;
+    timingDiagnostics?: TimingDiagnostics;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let instanceURL = new URL(
@@ -510,8 +558,8 @@ export class IndexRunner {
         realmURL: this.#realmURL,
         auth: this.#auth,
         jobInfo: this.#jobInfo,
-        prerenderer: this.#prerenderer,
-        consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+        precomputedRenderResult: renderResult,
+        timingDiagnostics,
         dependencyResolver: this.#dependencyResolver,
         updateEntry: async (entryURL, entry) =>
           await this.updateEntry(entryURL, entry),
@@ -528,11 +576,24 @@ export class IndexRunner {
     lastModified,
     resourceCreatedAt,
     hasModulePrerender,
+    extractResult,
+    renderResult,
+    timingDiagnostics,
   }: {
     path: LocalPath;
     lastModified: number;
     resourceCreatedAt: number;
     hasModulePrerender?: boolean;
+    // Extract/render results produced by the fused visit's fileExtract /
+    // fileRender passes. Either may be undefined if the visit chose not to
+    // run that pass (e.g. fileRender is skipped for module files).
+    extractResult?: Parameters<
+      typeof performFileIndexing
+    >[0]['precomputedExtractResult'];
+    renderResult?: Parameters<
+      typeof performFileIndexing
+    >[0]['precomputedRenderResult'];
+    timingDiagnostics?: TimingDiagnostics;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let result = await performFileIndexing({
@@ -544,8 +605,9 @@ export class IndexRunner {
       realmURL: this.#realmURL,
       auth: this.#auth,
       jobInfo: this.#jobInfo,
-      prerenderer: this.#prerenderer,
-      consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+      precomputedExtractResult: extractResult,
+      precomputedRenderResult: renderResult,
+      timingDiagnostics,
       dependencyResolver: this.#dependencyResolver,
       updateEntry: async (entryURL, entry) => {
         await this.batch.updateEntry(entryURL, entry);

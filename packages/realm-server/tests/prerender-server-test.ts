@@ -4,12 +4,16 @@ import supertest from 'supertest';
 import { basename } from 'path';
 
 import {
+  closeServer,
   setupPermissionedRealmCached,
   testCreatePrerenderAuth,
 } from './helpers';
-import { buildPrerenderApp } from '../prerender/prerender-app';
+import {
+  buildPrerenderApp,
+  createPrerenderHttpServer,
+} from '../prerender/prerender-app';
 import type { Prerenderer } from '../prerender';
-import { baseCardRef } from '@cardstack/runtime-common';
+import { baseCardRef, rri } from '@cardstack/runtime-common';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
@@ -44,7 +48,10 @@ module(basename(__filename), function () {
           data: {
             attributes: { name: 'Maple' },
             meta: {
-              adoptsFrom: { module: './pet', name: 'Pet' },
+              adoptsFrom: {
+                module: rri('./pet'),
+                name: 'Pet',
+              },
             },
           },
         },
@@ -135,55 +142,53 @@ module(basename(__filename), function () {
       };
       let auth = testCreatePrerenderAuth(testUserId, permissions);
       let res = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/json')
         .send({
           data: {
-            type: 'prerender-request',
+            type: 'prerender-visit-request',
             attributes: {
               url,
               auth,
               realm: realmURL.href,
               affinityType: 'realm',
               affinityValue: realmURL.href,
+              renderOptions: { cardRender: true },
             },
           },
         });
 
       assert.strictEqual(res.status, 201, 'HTTP 201');
-      assert.strictEqual(res.body.data.type, 'prerender-result', 'type ok');
+      assert.strictEqual(
+        res.body.data.type,
+        'prerender-visit-result',
+        'type ok',
+      );
       assert.strictEqual(res.body.data.id, url, 'id is url');
-      assert.deepEqual(
-        res.body.data.attributes.displayNames,
-        ['Pet', 'Card'],
-        'displayNames ok',
-      );
+      let card = res.body.data.attributes.card;
+      assert.deepEqual(card.displayNames, ['Pet', 'Card'], 'displayNames ok');
+      assert.strictEqual(card.searchDoc?.name, 'Maple', 'searchDoc.name ok');
       assert.strictEqual(
-        res.body.data.attributes.searchDoc?.name,
-        'Maple',
-        'searchDoc.name ok',
-      );
-      assert.strictEqual(
-        res.body.data.attributes.searchDoc?._cardType,
+        card.searchDoc?._cardType,
         'Pet',
         'searchDoc._cardType ok',
       );
       assert.ok(
-        /Maple/.test(res.body.data.attributes.isolatedHTML ?? ''),
+        /Maple/.test(card.isolatedHTML ?? ''),
         'isolatedHTML contains the instance title',
       );
       // spot check a few deps, as the whole list is overwhelming...
       assert.ok(
-        res.body.data.attributes.deps?.includes(baseCardRef.module),
+        card.deps?.includes(baseCardRef.module),
         `${baseCardRef.module} is a dep`,
       );
       assert.ok(
-        res.body.data.attributes.deps?.includes(`${realmURL.href}pet`),
+        card.deps?.includes(`${realmURL.href}pet`),
         `${realmURL.href}pet is a dep`,
       );
       assert.ok(
-        (res.body.data.attributes.deps as string[]).find((d) =>
+        (card.deps as string[]).find((d) =>
           d.match(
             /^https:\/\/cardstack.com\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
           ),
@@ -471,18 +476,19 @@ module(basename(__filename), function () {
         { [realmURL.href]: ['read', 'write', 'realm-owner'] };
       let auth = testCreatePrerenderAuth(testUserId, permissions);
       let res = await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/json')
         .send({
           data: {
-            type: 'prerender-request',
+            type: 'prerender-visit-request',
             attributes: {
               url: `${realmURL.href}drain`,
               auth,
               realm: realmURL.href,
               affinityType: 'realm',
               affinityValue: realmURL.href,
+              renderOptions: { cardRender: true },
             },
           },
         });
@@ -523,18 +529,19 @@ module(basename(__filename), function () {
         { [realmURL.href]: ['read', 'write', 'realm-owner'] };
       let auth = testCreatePrerenderAuth(testUserId, permissions);
       await request
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/json')
         .send({
           data: {
-            type: 'prerender-request',
+            type: 'prerender-visit-request',
             attributes: {
               url,
               auth,
               realm: realmURL.href,
               affinityType: 'realm',
               affinityValue: realmURL.href,
+              renderOptions: { cardRender: true },
             },
           },
         });
@@ -551,6 +558,46 @@ module(basename(__filename), function () {
       assert.true(
         prerenderer.getWarmAffinities().length >= beforeWarm.length,
         'warm affinity list does not shrink',
+      );
+    });
+
+    test('reports per-affinity vacancy for warm-vacancy-first routing', async function (assert) {
+      let url = `${realmURL.href}1`;
+      let permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> = {
+        [realmURL.href]: ['read', 'write', 'realm-owner'],
+      };
+      let auth = testCreatePrerenderAuth(testUserId, permissions);
+      // Warm the affinity with a visit.
+      await request
+        .post('/prerender-visit')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'prerender-visit-request',
+            attributes: {
+              url,
+              auth,
+              realm: realmURL.href,
+              affinityType: 'realm',
+              affinityValue: realmURL.href,
+              renderOptions: { cardRender: true },
+            },
+          },
+        });
+
+      let affinityKey = toAffinityKey({
+        affinityType: 'realm',
+        affinityValue: realmURL.href,
+      });
+      let snapshot = prerenderer.getVacancySnapshot();
+      let entry = snapshot[affinityKey];
+      assert.ok(entry, `vacancy snapshot includes ${affinityKey}`);
+      assert.true(entry.idle, 'affinity is idle after the visit completes');
+      assert.strictEqual(
+        entry.tabCount,
+        1,
+        'affinity owns exactly one tab after a single visit',
       );
     });
 
@@ -588,18 +635,19 @@ module(basename(__filename), function () {
       };
       let auth = testCreatePrerenderAuth(testUserId, permissions);
       let resPromise = localRequest
-        .post('/prerender-card')
+        .post('/prerender-visit')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/json')
         .send({
           data: {
-            type: 'prerender-request',
+            type: 'prerender-visit-request',
             attributes: {
               url: `${realmURL.href}drain-midflight`,
               auth,
               realm: realmURL.href,
               affinityType: 'realm',
               affinityValue: realmURL.href,
+              renderOptions: { cardRender: true },
             },
           },
         });
@@ -648,18 +696,19 @@ module(basename(__filename), function () {
           { [realmURL.href]: ['read', 'write', 'realm-owner'] };
         let auth = testCreatePrerenderAuth(testUserId, permissions);
         let res = await localRequest
-          .post('/prerender-card')
+          .post('/prerender-visit')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
           .send({
             data: {
-              type: 'prerender-request',
+              type: 'prerender-visit-request',
               attributes: {
                 url: `${realmURL.href}drain-unhandled`,
                 auth,
                 realm: realmURL.href,
                 affinityType: 'realm',
                 affinityValue: realmURL.href,
+                renderOptions: { cardRender: true },
               },
             },
           });
@@ -678,6 +727,73 @@ module(basename(__filename), function () {
         await built.prerenderer.stop();
       } finally {
         process.off('unhandledRejection', onUnhandled);
+      }
+    });
+  });
+
+  // Regression guard for CS-10813: default handlers would exit the qunit
+  // process before teardown hooks ran, leaving hardcoded test ports bound.
+  module('createPrerenderHttpServer fatal handler gating', function () {
+    test('fatalExitOnUncaught=false does not register process-wide fatal handlers', async function (assert) {
+      let baselineUncaught = process.listenerCount('uncaughtException');
+      let baselineRejection = process.listenerCount('unhandledRejection');
+      let server = createPrerenderHttpServer({
+        maxPages: 1,
+        fatalExitOnUncaught: false,
+      });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.once('error', reject);
+          server.listen(0, '127.0.0.1', () => resolve());
+        });
+        assert.strictEqual(
+          process.listenerCount('uncaughtException'),
+          baselineUncaught,
+          'no new uncaughtException listener registered',
+        );
+        assert.strictEqual(
+          process.listenerCount('unhandledRejection'),
+          baselineRejection,
+          'no new unhandledRejection listener registered',
+        );
+      } finally {
+        await closeServer(server);
+      }
+    });
+
+    test('fatalExitOnUncaught default registers process-wide fatal handlers', async function (assert) {
+      let baselineUncaught = process.listenerCount('uncaughtException');
+      let baselineRejection = process.listenerCount('unhandledRejection');
+      let server = createPrerenderHttpServer({ maxPages: 1 });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.once('error', reject);
+          server.listen(0, '127.0.0.1', () => resolve());
+        });
+        assert.strictEqual(
+          process.listenerCount('uncaughtException') - baselineUncaught,
+          1,
+          'one new uncaughtException listener registered',
+        );
+        assert.strictEqual(
+          process.listenerCount('unhandledRejection') - baselineRejection,
+          1,
+          'one new unhandledRejection listener registered',
+        );
+      } finally {
+        await closeServer(server);
+        // server.on('close') removes the handlers; confirm they're gone so a
+        // regression here doesn't leak handlers across tests.
+        assert.strictEqual(
+          process.listenerCount('uncaughtException'),
+          baselineUncaught,
+          'uncaughtException listener removed on close',
+        );
+        assert.strictEqual(
+          process.listenerCount('unhandledRejection'),
+          baselineRejection,
+          'unhandledRejection listener removed on close',
+        );
       }
     });
   });

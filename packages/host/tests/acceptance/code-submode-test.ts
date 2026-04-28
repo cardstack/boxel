@@ -19,6 +19,7 @@ import stringify from 'safe-stable-stringify';
 import {
   baseRealm,
   type LooseSingleCardDocument,
+  rri,
 } from '@cardstack/runtime-common';
 
 import type { Realm } from '@cardstack/runtime-common/realm';
@@ -725,7 +726,7 @@ module('Acceptance | code submode tests', function (_hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: '../person',
+                    module: rri('../person'),
                     name: 'Person',
                   },
                 },
@@ -1371,6 +1372,14 @@ module('Acceptance | code submode tests', function (_hooks) {
         )
         .exists();
 
+      await click('[data-test-format-chooser="markdown"]');
+      assert.dom('[data-test-format-chooser="markdown"]').hasClass('active');
+      assert
+        .dom(
+          '[data-test-code-mode-card-renderer-body] .field-component-card.markdown-format',
+        )
+        .exists();
+
       // Only preview is shown in the right column when viewing an instance, no schema editor
       assert.dom('[data-test-card-schema]').doesNotExist();
     });
@@ -1402,6 +1411,8 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-format-chooser="embedded"]').exists();
       assert.dom('[data-test-format-chooser="fitted"]').exists();
       assert.dom('[data-test-format-chooser="atom"]').exists();
+      assert.dom('[data-test-format-chooser="head"]').exists();
+      assert.dom('[data-test-format-chooser="markdown"]').exists();
     });
 
     test('clicking "metadata" format for a non-card file shows metadata panel with JSON-API content', async function (assert) {
@@ -2104,7 +2115,7 @@ module('Acceptance | code submode tests', function (_hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: '../person',
+                module: rri('../person'),
                 name: 'Person',
               },
             },
@@ -2178,7 +2189,7 @@ module('Acceptance | code submode tests', function (_hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: '../person',
+                module: rri('../person'),
                 name: 'Person',
               },
             },
@@ -2300,7 +2311,7 @@ module('Acceptance | code submode tests', function (_hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: '../person',
+                module: rri('../person'),
                 name: 'Person',
               },
             },
@@ -2325,7 +2336,7 @@ module('Acceptance | code submode tests', function (_hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: '../person',
+                module: rri('../person'),
                 name: 'Person',
               },
             },

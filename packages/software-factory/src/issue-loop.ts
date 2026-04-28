@@ -20,7 +20,7 @@ import type {
   ValidationStepResult,
 } from './factory-agent';
 
-import type { LoopAgent } from './factory-agent-types';
+import type { LoopAgent } from './factory-agent';
 import type { FactoryTool, ToolCallEntry } from './factory-tool-builder';
 import type { IssueStore } from './issue-scheduler';
 
@@ -107,6 +107,23 @@ export interface IssueLoopConfig {
    */
   createValidator: (issueId: string) => Validator;
   targetRealmUrl: string;
+  /**
+   * Local workspace directory mirroring the target realm. Passed to the
+   * loop so it can interleave sync calls with agent turns and validation.
+   */
+  workspaceDir: string;
+  /**
+   * Push the workspace to the realm (prefer-local). Invoked after each
+   * agent turn — before validation runs — and again after validation
+   * writes its artifact cards. Factored out of the loop so tests can
+   * stub it without spinning up a real CLI client.
+   *
+   * Returns `{ ok: true }` on success, or `{ ok: false, error }` when
+   * the sync reported errors. The loop uses this to refuse to mark an
+   * issue done if the agent's writes didn't actually reach the realm
+   * (e.g. atomic batch rejected by the realm server).
+   */
+  syncWorkspace: () => Promise<{ ok: boolean; error?: string }>;
   briefUrl?: string;
   /** Maximum inner-loop iterations per issue. Default: 8. */
   maxIterationsPerIssue?: number;
@@ -202,6 +219,7 @@ export async function runIssueLoop(
     issueStore,
     createValidator,
     targetRealmUrl,
+    syncWorkspace,
     briefUrl,
     maxIterationsPerIssue = DEFAULT_MAX_ITERATIONS_PER_ISSUE,
     maxOuterCycles = DEFAULT_MAX_OUTER_CYCLES,
@@ -255,11 +273,28 @@ export async function runIssueLoop(
       `Outer cycle ${outerCycles}: picked issue ${issueSummaryLabel(issue)} (status=${issue.status}, priority=${issue.priority})`,
     );
 
-    // Mark the issue as in_progress when the loop picks it up
+    // Mark the issue as in_progress when the loop picks it up. The update
+    // writes to the local workspace, so sync it to the realm immediately
+    // — otherwise a failing agent turn (e.g. missing API key) would leave
+    // the realm showing `backlog` while the workspace has `in_progress`,
+    // and observers querying the realm would see stale state.
     if (issue.status !== 'in_progress') {
       try {
         await issueStore.updateIssue(issue.id, { status: 'in_progress' });
-        issue = await scheduler.refreshIssueState(issue);
+        let pickupSync = await syncWorkspace();
+        if (!pickupSync.ok) {
+          // The status flip is local until sync lands. If the sync
+          // failed, the realm is still showing `backlog` and a
+          // refresh would mask the divergence — log and skip the
+          // refresh so the next iteration's sync surfaces the same
+          // error in agent context (where it can be reacted to)
+          // rather than burying it under a stale state.
+          log.warn(
+            `  in_progress flip didn't sync to realm — realm still shows ${issue.status}; sync error: ${pickupSync.error ?? 'unknown'}`,
+          );
+        } else {
+          issue = await scheduler.refreshIssueState(issue);
+        }
       } catch (err) {
         log.warn(
           `  Failed to set issue to in_progress: ${err instanceof Error ? err.message : String(err)}`,
@@ -303,34 +338,91 @@ export async function runIssueLoop(
 
       log.info(`  Agent returned ${result.toolCalls.length} tool call(s)`);
 
+      // Push the agent's workspace writes to the realm so the prerenderer-
+      // backed validators (eval / instantiate / test-step's QUnit run) see
+      // the latest source when they execute against the realm.
+      let preValidationSync = await syncWorkspace();
+
       // Validation — runs after every agent turn.
       // Pass the iteration number so all steps use it as the sequence
       // number in artifact filenames (parse_slug-1, lint_slug-1, etc.)
       validationResults = await validator.validate(targetRealmUrl, iteration);
-      validationContext =
+
+      // Push the validator's artifact cards (ParseResult / LintResult /
+      // EvalResult / InstantiateResult / TestRun) to the realm so they
+      // appear in the Boxel UI.
+      let postValidationSync = await syncWorkspace();
+
+      let syncFailed = !preValidationSync.ok || !postValidationSync.ok;
+      let syncError = preValidationSync.error ?? postValidationSync.error;
+
+      // If either sync failed, the agent's writes didn't land on the
+      // realm. Validators will have seen an empty/stale realm so a
+      // "passed" result is vacuous. Surface the sync error into the
+      // next iteration's context so the agent can react (retry,
+      // simplify, split the batch).
+      let validationSummary =
         validationResults && !validationResults.passed
           ? validator.formatForContext(validationResults)
           : undefined;
-      log.info(`  Validation: ${formatValidation(validationResults)}`);
+      if (syncFailed) {
+        let syncNotice = [
+          'Workspace sync to the realm FAILED — your file writes are still only on local disk.',
+          `Reason: ${syncError ?? '(unknown)'}`,
+          'Common causes: the realm server rejected the atomic batch (500),',
+          'a file has a syntax/index error, or an instance references a module',
+          "that isn't included in the same batch. Inspect your writes and try",
+          'again. Until the sync succeeds, the issue will not be marked done.',
+        ].join('\n');
+        validationContext = validationSummary
+          ? `${syncNotice}\n\n${validationSummary}`
+          : syncNotice;
+      } else {
+        validationContext = validationSummary;
+      }
+      log.info(
+        `  Validation: ${formatValidation(validationResults)}${
+          syncFailed ? ' (sync failed — ignoring validation pass/fail)' : ''
+        }`,
+      );
 
       // The loop owns issue status transitions. The agent signals
       // completion via signal_done; the loop promotes to "done" only
-      // when signal_done is called AND validation passes.
+      // when signal_done is called, validation passes, AND the sync
+      // succeeded. A failed sync means the realm doesn't have the
+      // agent's writes, so marking the issue done would claim
+      // completion for work that isn't actually delivered.
       let agentSignaledDone = result.toolCalls.some(
         (tc) => tc.tool === 'signal_done',
       );
 
-      if (agentSignaledDone && validationResults?.passed) {
+      if (agentSignaledDone && validationResults?.passed && !syncFailed) {
         try {
           await issueStore.updateIssue(issue.id, { status: 'done' });
+          // updateIssue writes the status flip to the local workspace.
+          // refreshIssueState below queries the realm's search index, so
+          // the flip has to reach the realm before the refresh — otherwise
+          // the loop reads stale `in_progress` and runs another inner
+          // iteration (or, with a low maxIterationsPerIssue, exits as
+          // max_iterations instead of done).
+          let doneSync = await syncWorkspace();
+          if (!doneSync.ok) {
+            log.warn(
+              `  Marked issue done locally but sync failed (${doneSync.error ?? 'unknown'}); refresh may still see prior status`,
+            );
+          }
           log.info(
-            `  Issue marked done (agent called signal_done, validation passed)`,
+            `  Issue marked done (agent called signal_done, validation passed, sync succeeded)`,
           );
         } catch (err) {
           log.warn(
             `  Failed to mark issue as done: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
+      } else if (agentSignaledDone && syncFailed) {
+        log.info(
+          `  Agent signaled done but workspace sync failed — work isn't on the realm yet, continuing iteration`,
+        );
       } else if (agentSignaledDone && !validationResults?.passed) {
         log.info(
           `  Agent signaled done but validation failed — continuing iteration`,

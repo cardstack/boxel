@@ -1,6 +1,8 @@
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
+import { readCard, writeCard } from './workspace-fs';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -21,6 +23,8 @@ export interface EvalResultAttributes {
 export interface EvalResultRealmOptions {
   targetRealmUrl: string;
   client: BoxelCLIClient;
+  /** Local workspace directory — EvalResult cards are written here. */
+  workspaceDir: string;
 }
 
 export interface CreateEvalResultOptions {
@@ -51,8 +55,8 @@ export async function createEvalResult(
     projectCardUrl: options.projectCardUrl,
   });
 
-  let result = await options.client.write(
-    options.targetRealmUrl,
+  let result = await writeCard(
+    options.workspaceDir,
     `${evalResultId}.json`,
     JSON.stringify(document, null, 2),
   );
@@ -72,15 +76,12 @@ export async function completeEvalResult(
   attrs: EvalResultAttributes,
   options: EvalResultRealmOptions & { projectCardUrl?: string },
 ): Promise<{ updated: boolean; error?: string }> {
-  let readResult = await options.client.read(
-    options.targetRealmUrl,
-    evalResultId,
-  );
+  let readResult = await readCard(options.workspaceDir, `${evalResultId}.json`);
 
   if (!readResult.ok || !readResult.document) {
     return {
       updated: false,
-      error: `Failed to read EvalResult: ${readResult.error}`,
+      error: `Failed to read EvalResult: ${readResult.error ?? 'not found'}`,
     };
   }
 
@@ -109,8 +110,8 @@ export async function completeEvalResult(
     };
   }
 
-  let writeResult = await options.client.write(
-    options.targetRealmUrl,
+  let writeResult = await writeCard(
+    options.workspaceDir,
     `${evalResultId}.json`,
     JSON.stringify(document, null, 2),
   );

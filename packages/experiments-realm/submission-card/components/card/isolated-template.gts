@@ -1,7 +1,11 @@
 import { on } from '@ember/modifier';
 
 import { Component, realmURL } from 'https://cardstack.com/base/card-api';
+import { codeRef } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common';
+
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
 
 import { eq, or } from '@cardstack/boxel-ui/helpers';
 import { BoxelButton } from '@cardstack/boxel-ui/components';
@@ -63,12 +67,11 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
   }
 
   get githubEventCardRef() {
-    return {
-      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-      module: new URL('../../../github-event/github-event', import.meta.url)
-        .href,
-      name: 'GithubEventCard' as const,
-    };
+    return codeRef(
+      here,
+      '../../../github-event/github-event',
+      'GithubEventCard',
+    );
   }
 
   get prReviewEventQuery(): Query | undefined {

@@ -10,15 +10,15 @@
 import type { BoxelCLIClient, LintResult } from '@cardstack/boxel-cli/api';
 
 import type { ValidationStepResult } from '../factory-agent';
-import { deriveIssueSlug } from '../factory-agent-types';
+import { deriveIssueSlug } from '../factory-agent';
 
-import { getNextValidationSequenceNumber } from '../realm-operations';
 import {
-  createLintResult,
-  completeLintResult,
-  type LintFileResultData,
-  type LintViolationData,
-} from '../lint-result-cards';
+  discoverLintableFiles,
+  lintRealmFiles,
+  type LintErrorViolation,
+} from '../lint-execution';
+import { getNextValidationSequenceNumber } from '../realm-operations';
+import { createLintResult, completeLintResult } from '../lint-result-cards';
 import { logger } from '../logger';
 
 import type { ValidationStepRunner } from './validation-pipeline';
@@ -33,6 +33,12 @@ export interface LintValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
   lintResultsModuleUrl: string;
+  /**
+   * Local workspace directory mirroring the target realm. Source files are
+   * read from here; LintResult cards are written here for the orchestrator
+   * to sync.
+   */
+  workspaceDir: string;
   issueId?: string;
   /** Injected for testing — defaults to client.listFiles. */
   fetchFilenames?: (
@@ -62,10 +68,8 @@ export interface LintValidationDetails {
   filesChecked: number;
   filesWithErrors: number;
   totalViolations: number;
-  violations: { rule: string; file: string; line: number; message: string }[];
+  violations: LintErrorViolation[];
 }
-
-const LINTABLE_EXTENSIONS = ['.gts', '.gjs', '.ts', '.js'];
 
 // ---------------------------------------------------------------------------
 // LintValidationStep
@@ -77,18 +81,6 @@ export class LintValidationStep implements ValidationStepRunner {
   private config: LintValidationStepConfig;
   private lastSequenceNumber = 0;
 
-  private fetchFilenamesFn: (
-    realmUrl: string,
-  ) => Promise<{ filenames: string[]; error?: string }>;
-  private lintFileFn: (
-    realmUrl: string,
-    source: string,
-    filename: string,
-  ) => Promise<LintResult>;
-  private readFileFn: (
-    realmUrl: string,
-    path: string,
-  ) => Promise<{ ok: boolean; content?: string; error?: string }>;
   private getNextSeqFn: (
     slug: string,
     targetRealmUrl: string,
@@ -96,25 +88,6 @@ export class LintValidationStep implements ValidationStepRunner {
 
   constructor(config: LintValidationStepConfig) {
     this.config = config;
-    this.fetchFilenamesFn =
-      config.fetchFilenames ??
-      ((realmUrl: string) => config.client.listFiles(realmUrl));
-    this.lintFileFn =
-      config.lintFileFn ??
-      ((realmUrl: string, source: string, filename: string) =>
-        config.client.lint(realmUrl, source, filename));
-    this.readFileFn =
-      config.readFileFn ??
-      (async (realmUrl: string, path: string) => {
-        let result = await config.client.read(realmUrl, path);
-        return {
-          ok: result.ok,
-          content:
-            result.content ??
-            (result.document ? JSON.stringify(result.document) : undefined),
-          error: result.error,
-        };
-      });
     this.getNextSeqFn =
       config.getNextSequenceNumber ??
       ((slug: string, targetRealmUrl: string) =>
@@ -135,7 +108,11 @@ export class LintValidationStep implements ValidationStepRunner {
     // Step 1: Discover lintable files
     let lintableFiles: string[];
     try {
-      lintableFiles = await this.discoverLintableFiles(targetRealmUrl);
+      lintableFiles = await discoverLintableFiles({
+        targetRealmUrl,
+        client: this.config.client,
+        fetchFilenames: this.config.fetchFilenames,
+      });
     } catch (err) {
       return {
         step: 'lint',
@@ -193,6 +170,7 @@ export class LintValidationStep implements ValidationStepRunner {
         {
           targetRealmUrl,
           client: this.config.client,
+          workspaceDir: this.config.workspaceDir,
           sequenceNumber: seq,
           issueURL,
         },
@@ -213,104 +191,22 @@ export class LintValidationStep implements ValidationStepRunner {
       lintResultId = `Validations/lint_${slug}-${seq}`;
     }
 
-    // Step 3: Lint each file
-    let startedAt = Date.now();
-    let allFileResults: LintFileResultData[] = [];
-    let allViolations: LintValidationDetails['violations'] = [];
+    // Step 3: Lint each file via the shared engine.
+    let {
+      fileResults: allFileResults,
+      errorViolations: allViolations,
+      durationMs,
+    } = await lintRealmFiles(
+      {
+        targetRealmUrl,
+        client: this.config.client,
+        workspaceDir: this.config.workspaceDir,
+        lintFileFn: this.config.lintFileFn,
+        readFileFn: this.config.readFileFn,
+      },
+      lintableFiles,
+    );
 
-    for (let file of lintableFiles) {
-      try {
-        let readResult = await this.readFileFn(targetRealmUrl, file);
-        if (!readResult.ok) {
-          let message = `Could not read ${file}: ${readResult.error ?? 'read failed'}`;
-          log.warn(message);
-          allFileResults.push({
-            file,
-            violations: [
-              {
-                rule: 'lint-error',
-                file,
-                line: 0,
-                column: 0,
-                message,
-                severity: 'error',
-              },
-            ],
-          });
-          allViolations.push({ rule: 'lint-error', file, line: 0, message });
-          continue;
-        }
-        if (readResult.content == null) {
-          let message = `Could not read ${file}: no content`;
-          log.warn(message);
-          allFileResults.push({
-            file,
-            violations: [
-              {
-                rule: 'lint-error',
-                file,
-                line: 0,
-                column: 0,
-                message,
-                severity: 'error',
-              },
-            ],
-          });
-          allViolations.push({ rule: 'lint-error', file, line: 0, message });
-          continue;
-        }
-
-        let lintResponse = await this.lintFileFn(
-          targetRealmUrl,
-          readResult.content,
-          file,
-        );
-
-        let violations: LintViolationData[] = lintResponse.messages.map(
-          (msg) => ({
-            rule: msg.ruleId ?? 'unknown',
-            file,
-            line: msg.line,
-            column: msg.column,
-            message: msg.message,
-            severity:
-              msg.severity === 2 ? ('error' as const) : ('warning' as const),
-          }),
-        );
-
-        allFileResults.push({ file, violations });
-
-        for (let v of violations) {
-          if (v.severity === 'error') {
-            allViolations.push({
-              rule: v.rule ?? 'unknown',
-              file: v.file,
-              line: v.line,
-              message: v.message,
-            });
-          }
-        }
-      } catch (err) {
-        let message = `Lint failed: ${err instanceof Error ? err.message : String(err)}`;
-        log.warn(`Error linting ${file}: ${message}`);
-        allFileResults.push({
-          file,
-          violations: [
-            {
-              rule: 'lint-error',
-              file,
-              line: 0,
-              column: 0,
-              message,
-              severity: 'error',
-            },
-          ],
-        });
-        allViolations.push({ rule: 'lint-error', file, line: 0, message });
-      }
-    }
-
-    let durationMs = Date.now() - startedAt;
     let passed = allViolations.length === 0;
 
     // Step 4: Complete the LintResult card
@@ -325,6 +221,7 @@ export class LintValidationStep implements ValidationStepRunner {
         {
           targetRealmUrl,
           client: this.config.client,
+          workspaceDir: this.config.workspaceDir,
         },
       );
       if (!completeResult.updated) {
@@ -390,24 +287,5 @@ export class LintValidationStep implements ValidationStepRunner {
     }
 
     return lines.join('\n');
-  }
-
-  // -------------------------------------------------------------------------
-  // Private helpers
-  // -------------------------------------------------------------------------
-
-  private async discoverLintableFiles(
-    targetRealmUrl: string,
-  ): Promise<string[]> {
-    let result = await this.fetchFilenamesFn(targetRealmUrl);
-
-    if (result.error) {
-      log.warn(`Failed to fetch realm filenames: ${result.error}`);
-      throw new Error(result.error);
-    }
-
-    return result.filenames
-      .filter((f) => LINTABLE_EXTENSIONS.some((ext) => f.endsWith(ext)))
-      .sort((a, b) => a.localeCompare(b));
   }
 }

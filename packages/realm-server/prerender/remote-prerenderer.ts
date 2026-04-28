@@ -1,21 +1,21 @@
 import {
   type Prerenderer,
   type AffinityType,
-  type RenderResponse,
   type ModuleRenderResponse,
-  type FileExtractResponse,
-  type FileRenderResponse,
-  type FileRenderArgs,
+  type PrerenderVisitArgs,
+  type RenderVisitResponse,
   type RenderRouteOptions,
   type RunCommandResponse,
   logger,
 } from '@cardstack/runtime-common';
 import {
+  PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
   resolvePrerenderManagerRequestTimeoutMs,
 } from './prerender-constants';
+import { randomUUID } from 'crypto';
 
 const log = logger('remote-prerenderer');
 const jsonApiHeaders = {
@@ -75,17 +75,28 @@ export function createRemotePrerenderer(
         attributes,
       },
     };
+    // CS-10872: one correlation ID per logical client call, reused on
+    // retries so operators can follow the full manager/prerender-server
+    // log story for the same intent rather than hunting through N
+    // disconnected attempts.
+    let requestId = randomUUID();
+    let affinityTag = `${attributes.affinityType}:${attributes.affinityValue}`;
 
     let attempts = 0;
     let lastError: Error | undefined;
+    let attemptStart = Date.now();
     while (attempts < maxAttempts) {
       attempts++;
+      attemptStart = Date.now();
       try {
         const ac = new AbortController();
         const timer = setTimeout(() => ac.abort(), requestTimeoutMs);
         let response = await fetch(endpoint, {
           method: 'POST',
-          headers: jsonApiHeaders,
+          headers: {
+            ...jsonApiHeaders,
+            [PRERENDER_REQUEST_ID_HEADER]: requestId,
+          },
           body: JSON.stringify(body),
           signal: ac.signal,
         }).finally(() => {
@@ -133,8 +144,16 @@ export function createRemotePrerenderer(
         lastError = e;
         if (e?.name === 'AbortError') {
           // AbortError from request timeout—consider this a hard timeout, not a retryable deployment blip.
+          // CS-10872: include the correlation ID, attempt, affinity, and
+          // elapsed so operators can grep the manager/prerender-server
+          // logs for the same requestId to see where the time went
+          // (queue wait vs slow render).
+          let elapsedMs = Date.now() - attemptStart;
           throw new Error(
-            `Prerender request to ${endpoint.href} aborted after ${requestTimeoutMs}ms`,
+            `Prerender request to ${endpoint.href} aborted after ${requestTimeoutMs}ms ` +
+              `(requestId=${requestId}, attempt=${attempts}/${maxAttempts}, ` +
+              `affinity=${affinityTag}, elapsed=${elapsedMs}ms; ` +
+              `grep manager/prerender-server logs for requestId=${requestId} to locate the stall)`,
           );
         }
         // Node.js fetch() wraps network errors in TypeError with the
@@ -164,20 +183,6 @@ export function createRemotePrerenderer(
   }
 
   return {
-    async prerenderCard({ realm, url, auth, renderOptions }) {
-      return await requestWithRetry<RenderResponse>(
-        'prerender-card',
-        'prerender-request',
-        {
-          affinityType: 'realm',
-          affinityValue: realm,
-          realm,
-          url,
-          auth,
-          renderOptions: renderOptions ?? {},
-        },
-      );
-    },
     async prerenderModule({ realm, url, auth, renderOptions }) {
       return await requestWithRetry<ModuleRenderResponse>(
         'prerender-module',
@@ -192,40 +197,28 @@ export function createRemotePrerenderer(
         },
       );
     },
-    async prerenderFileExtract({ realm, url, auth, renderOptions }) {
-      return await requestWithRetry<FileExtractResponse>(
-        'prerender-file-extract',
-        'prerender-file-extract-request',
-        {
-          affinityType: 'realm',
-          affinityValue: realm,
-          realm,
-          url,
-          auth,
-          renderOptions: renderOptions ?? {},
-        },
-      );
-    },
-    async prerenderFileRender({
+    async prerenderVisit({
       realm,
       url,
       auth,
+      renderOptions,
       fileData,
       types,
-      renderOptions,
-    }: FileRenderArgs) {
-      return await requestWithRetry<FileRenderResponse>(
-        'prerender-file-render',
-        'prerender-file-render-request',
+      batchId,
+    }: PrerenderVisitArgs): Promise<RenderVisitResponse> {
+      return await requestWithRetry<RenderVisitResponse>(
+        'prerender-visit',
+        'prerender-visit-request',
         {
           affinityType: 'realm',
           affinityValue: realm,
           realm,
           url,
           auth,
-          fileData,
-          types,
           renderOptions: renderOptions ?? {},
+          ...(fileData ? { fileData } : {}),
+          ...(types ? { types } : {}),
+          ...(batchId ? { batchId } : {}),
         },
       );
     },
@@ -241,6 +234,51 @@ export function createRemotePrerenderer(
           commandInput,
         },
       );
+    },
+    // Release this batch's ownership of an affinity (CS-10758 step 3).
+    // Routed through the manager so the release fans out to every server
+    // currently assigned this affinity (any of which could hold local
+    // ownership from a prior visit). Best-effort: a network-level failure
+    // is logged but not rethrown — the owner expires implicitly on
+    // successor replacement or affinity disposal. Bounded by an abort
+    // timer so a hung manager can't block IndexRunner's `finally` and
+    // stall queue progress after useful indexing work is done.
+    async releaseBatch({ batchId, affinityType, affinityValue }) {
+      let endpoint = new URL('release-batch', prerenderURL);
+      let ac = new AbortController();
+      let timer = setTimeout(() => ac.abort(), requestTimeoutMs);
+      (timer as any).unref?.();
+      try {
+        let response = await fetch(endpoint, {
+          method: 'POST',
+          headers: jsonApiHeaders,
+          body: JSON.stringify({
+            data: {
+              type: 'release-batch-request',
+              attributes: { batchId, affinityType, affinityValue },
+            },
+          }),
+          signal: ac.signal,
+        });
+        if (!response.ok) {
+          log.warn(
+            `releaseBatch for ${affinityType}:${affinityValue} (batch ${batchId}) returned ${response.status}`,
+          );
+        }
+      } catch (e) {
+        if ((e as { name?: string })?.name === 'AbortError') {
+          log.warn(
+            `releaseBatch for ${affinityType}:${affinityValue} (batch ${batchId}) timed out after ${requestTimeoutMs}ms`,
+          );
+        } else {
+          log.warn(
+            `releaseBatch for ${affinityType}:${affinityValue} (batch ${batchId}) network error:`,
+            e,
+          );
+        }
+      } finally {
+        clearTimeout(timer);
+      }
     },
   };
 }

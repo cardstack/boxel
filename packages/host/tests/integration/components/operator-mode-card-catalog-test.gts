@@ -16,6 +16,7 @@ import { module, test } from 'qunit';
 import {
   baseRealm,
   type LooseSingleCardDocument,
+  rri,
 } from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -464,18 +465,25 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     assert.dom(`[data-test-stack-card-header]`).containsText(ctx.realmName);
 
-    await click(`[data-test-open-search-field]`);
-    typeIn(`[data-test-search-field]`, 'ma');
-    await waitUntil(() =>
-      (
-        document.querySelector('[data-test-search-label]') as HTMLElement
-      )?.innerText.includes('Searching…'),
-    );
-    assert.dom(`[data-test-search-label]`).containsText('Searching…');
-    await settled();
+    // Wait for realm indexing to populate the grid before searching.
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item="${testRealmURL}Author/mark"]`, {
+      timeout: 10000,
+    });
 
-    assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
-    // New design: realm name is in a section header; multiple realms can appear (Base + test realm)
+    await click(`[data-test-open-search-field]`);
+    // `fillIn` atomically sets the input value and triggers one `input` event,
+    // so the 300ms debounce fires exactly once. Previously we relied on
+    // `typeIn` + a `waitUntil` on the transient "Searching…" label — that
+    // window is ~300–500ms on local machines and occasionally shorter on CI,
+    // producing flaky timeouts that didn't reflect a real regression.
+    await fillIn(`[data-test-search-field]`, 'Mark');
+    await waitFor(`[data-test-search-result="${testRealmURL}Author/mark"]`, {
+      timeout: 10000,
+    });
+
+    // Search is now full-text on card markdown content; Author/mark has
+    // firstName "Mark" which appears in its rendered markdown.
     assert.dom(`.search-sheet-content`).containsText('Operator Mode Workspace');
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
@@ -483,11 +491,22 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     await click(`[data-test-search-sheet-cancel-button]`);
     await click(`[data-test-open-search-field]`);
-    await typeIn(`[data-test-search-field]`, 'Mark J');
-    await waitUntil(() =>
-      (
-        document.querySelector('[data-test-search-label]') as HTMLElement
-      )?.innerText.includes('1 result'),
+    await fillIn(`[data-test-search-field]`, 'Mark J');
+    // Wait for the specific result (Author/mark matches "Mark J" via its
+    // cardTitle "Mark Jackson") rather than polling the label's innerText;
+    // DOM-element waits aren't racy against the transient "Searching…" state.
+    await waitFor(`[data-test-search-result="${testRealmURL}Author/mark"]`, {
+      timeout: 15000,
+    });
+    await waitUntil(
+      () => {
+        let label = document.querySelector(
+          '[data-test-search-label]',
+        ) as HTMLElement | null;
+        let text = label?.innerText ?? '';
+        return text.length > 0 && !text.includes('Searching');
+      },
+      { timeout: 15000 },
     );
     assert
       .dom(`[data-test-search-label]`)
@@ -499,11 +518,24 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     assert.dom(`[data-test-search-sheet-search-result]`).doesNotExist();
 
     await focus(`[data-test-search-field]`);
-    typeIn(`[data-test-search-field]`, 'No Cards');
-    await waitUntil(() =>
-      (
-        document.querySelector('[data-test-search-label]') as HTMLElement
-      )?.innerText.includes('0 results'),
+    // Use a synthetic, UUID-like term guaranteed not to appear in any card's
+    // markdown or cardTitle. "No Cards" (the previous fixture) happens to be
+    // a substring of common instructional phrasing that appears in 30+ base
+    // realm skill/spec cards, so under the `matches` (markdown LIKE)
+    // semantics it's no longer a zero-result query.
+    await fillIn(
+      `[data-test-search-field]`,
+      'zzz-nonexistent-search-term-xyz-987',
+    );
+    await waitUntil(
+      () => {
+        let label = document.querySelector(
+          '[data-test-search-label]',
+        ) as HTMLElement | null;
+        let text = label?.innerText ?? '';
+        return text.length > 0 && !text.includes('Searching');
+      },
+      { timeout: 15000 },
     );
     assert
       .dom(`[data-test-search-label]`)
@@ -921,10 +953,17 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    // Wait for realm indexing to populate the grid before searching.
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item="${testRealmURL}Author/mark"]`, {
+      timeout: 10000,
+    });
     await click(`[data-test-open-search-field]`);
-    await fillIn(`[data-test-search-field]`, 'ma');
+    await fillIn(`[data-test-search-field]`, 'Mark');
+    await waitFor(`[data-test-search-result="${testRealmURL}Author/mark"]`, {
+      timeout: 10000,
+    });
     assert.dom(`[data-test-search-sheet-section-header]`).exists();
-    assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
       .exists();
@@ -940,8 +979,8 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await click(`[data-test-open-search-field]`);
-    // Use a query that returns multiple results in one realm (ma -> Pet/mango, Author/mark, etc.)
-    await fillIn(`[data-test-search-field]`, 'ma');
+    // Full-text matches on card markdown; Author/mark contains "Mark" in firstName.
+    await fillIn(`[data-test-search-field]`, 'Mark');
     await waitFor('[data-test-search-sheet-search-result]');
     const initialCount = document.querySelectorAll(
       '[data-test-search-sheet-search-result]',
@@ -1252,7 +1291,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: '../exploding-card.gts',
+              module: rri('../exploding-card.gts'),
               name: 'ExplodingCard',
             },
           },

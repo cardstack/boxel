@@ -1,5 +1,3 @@
-import { service } from '@ember/service';
-
 import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -14,15 +12,11 @@ import SetActiveLLMCommand from './set-active-llm';
 import SwitchSubmodeCommand from './switch-submode';
 import UpdateRoomSkillsCommand from './update-room-skills';
 
-import type StoreService from '../services/store';
-
 import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class ListingActionBuildCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingBuildInput
 > {
-  @service declare private store: StoreService;
-
   description = 'Catalog listing build command';
 
   async getInputType() {

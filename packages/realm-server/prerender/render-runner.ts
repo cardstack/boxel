@@ -5,16 +5,20 @@ import {
   type ModuleRenderResponse,
   type FileExtractResponse,
   type FileRenderResponse,
-  type FileRenderArgs,
   type RenderRouteOptions,
   type RunCommandResponse,
   type AffinityType,
+  type PrerenderQueue,
+  type RenderVisitResponse,
+  type PrerenderVisitArgs,
+  VISIT_PASS_ORDER,
   serializeRenderRouteOptions,
   logger,
 } from '@cardstack/runtime-common';
 import type { SerializedError } from '@cardstack/runtime-common/error';
 import type { ConsoleErrorEntry, PagePool } from './page-pool';
 import { toAffinityKey } from './affinity';
+import { throwIfAborted } from './prerender-cancel';
 import {
   captureResult,
   captureModule,
@@ -41,6 +45,33 @@ const log = logger('prerenderer');
 const reproduceLog = logger('prerenderer-reproduce');
 const commandRequestStorageKeyPrefix = 'boxel-command-request:';
 
+// Surfaces the per-stage wait breakdown from PagePool.getPage so
+// operators can tell "waited for the render semaphore" (saturation) apart
+// from "waited for the per-affinity file-admission cap" apart from
+// "waited for an affinity tab" (warm-tab serialization) apart from
+// "warmed a new tab". All four arrive tagged on every prerender response.
+export type LaunchWaits = {
+  semaphoreMs: number;
+  admissionMs: number;
+  tabQueueMs: number;
+  tabStartupMs: number;
+};
+
+export type Timings = {
+  launchMs: number;
+  renderMs: number;
+  waits: LaunchWaits;
+};
+
+type PoolInfo = {
+  pageId: string;
+  affinityType: AffinityType;
+  affinityValue: string;
+  reused: boolean;
+  evicted: boolean;
+  timedOut: boolean;
+};
+
 const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
   // this is a side effect of glimmer scoped styles moving a DOM node that
   // glimmer is tracking. when we go to teardown the component glimmer gets mad
@@ -48,6 +79,29 @@ const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
   // capture with a cleared store/loader cache will workaround this issue.
   [`Failed to execute 'removeChild' on 'Node'`, 'NotFoundError'],
 ];
+
+// Title shown on the SerializedError that wraps a captured console
+// or runtime-exception entry. Distinct labels make it obvious in the
+// error doc which CDP layer surfaced the signal:
+//
+//   • 'Uncaught exception' → Runtime.exceptionThrown (V8 layer; the
+//     primary signal for the whitepaper-class bug where unhandled-
+//     rejection / window.error never fire)
+//   • 'Console assert'     → console.assert(...) failure
+//   • 'Console error'      → console.error(...) or Chrome's late
+//     "Uncaught (in promise) ..." console tracker line
+function titleForConsoleErrorEntry(entry: ConsoleErrorEntry): string {
+  if (entry.source === 'exception') return 'Uncaught exception';
+  return entry.type === 'assert' ? 'Console assert' : 'Console error';
+}
+
+// Stack-trace header line. Same source-distinction logic as the
+// title above, formatted as `<HeaderName>: <message>` so the existing
+// error viewer renders these identically to native Node stacks.
+function stackHeaderForConsoleErrorEntry(entry: ConsoleErrorEntry): string {
+  if (entry.source === 'exception') return 'UncaughtException';
+  return entry.type === 'assert' ? 'AssertionError' : 'ConsoleError';
+}
 
 export class RenderRunner {
   #pagePool: PagePool;
@@ -63,7 +117,12 @@ export class RenderRunner {
     this.#boxelHostURL = options.boxelHostURL;
   }
 
-  async #getPageForAffinity(affinityKey: string, auth: string) {
+  async #getPageForAffinity(
+    affinityKey: string,
+    auth: string,
+    queue: PrerenderQueue,
+    signal?: AbortSignal,
+  ) {
     let lastAuth = this.#lastAuthByAffinity.get(affinityKey);
     if (lastAuth) {
       let lastKeys = this.#authKeys(lastAuth);
@@ -78,7 +137,9 @@ export class RenderRunner {
         this.#lastAuthByAffinity.delete(affinityKey);
       }
     }
-    let pageInfo = await this.#pagePool.getPage(affinityKey);
+    let pageInfo = await this.#pagePool.getPage(affinityKey, queue, {
+      signal,
+    });
     this.#lastAuthByAffinity.set(affinityKey, auth);
     return pageInfo;
   }
@@ -96,317 +157,6 @@ export class RenderRunner {
     }
   }
 
-  async prerenderCardAttempt({
-    affinityType,
-    affinityValue,
-    realm,
-    url,
-    auth,
-    opts,
-    renderOptions,
-  }: {
-    affinityType: AffinityType;
-    affinityValue: string;
-    realm: string;
-    url: string;
-    auth: string;
-    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
-    renderOptions?: RenderRouteOptions;
-  }): Promise<{
-    response: RenderResponse;
-    timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      affinityType: AffinityType;
-      affinityValue: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
-  }> {
-    this.#nonce++;
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
-    log.info(
-      `prerendering url ${url}, nonce=${this.#nonce} affinity=${affinityKey} realm=${realm}`,
-    );
-
-    const { page, reused, launchMs, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth);
-    const poolInfo = {
-      pageId: pageId ?? 'unknown',
-      affinityType,
-      affinityValue,
-      reused,
-      evicted: false,
-      timedOut: false,
-    };
-    this.#pagePool.resetConsoleErrors(pageId);
-    const markTimeout = (err?: RenderError) => {
-      if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
-        poolInfo.timedOut = true;
-      }
-    };
-    try {
-      await page.evaluate((sessionAuth) => {
-        localStorage.setItem('boxel-session', sessionAuth);
-      }, auth);
-
-      let renderStart = Date.now();
-      let error: RenderError | undefined;
-      let shortCircuit = false;
-      let options = renderOptions ?? {};
-      let serializedOptions = serializeRenderRouteOptions(options);
-      let optionsSegment = encodeURIComponent(serializedOptions);
-      const captureOptions: CaptureOptions = {
-        expectedId: url.replace(/\.json$/i, ''),
-        expectedNonce: String(this.#nonce),
-        simulateTimeoutMs: opts?.simulateTimeoutMs,
-        timeoutMs: opts?.timeoutMs,
-      };
-      let applyStepError = (stepError: RenderError, evicted: boolean) => {
-        error = error ?? stepError;
-        markTimeout(stepError);
-        if (evicted) {
-          poolInfo.evicted = true;
-          shortCircuit = true;
-        }
-        if (this.#isAuthError(error)) {
-          shortCircuit = true;
-        }
-      };
-      let handleDirectStepError = async (
-        step: string,
-        stepError: RenderError,
-      ) => {
-        let evicted = await this.#maybeEvict(affinityKey, step, stepError);
-        applyStepError(stepError, evicted);
-      };
-      let runTimedStep = async <T>(
-        step: string,
-        fn: () => Promise<T | RenderError>,
-      ): Promise<T | undefined> => {
-        if (shortCircuit) {
-          return;
-        }
-        let stepResult = await this.#step(affinityKey, step, () =>
-          withTimeout(page, fn, opts?.timeoutMs),
-        );
-        if (stepResult.ok) {
-          return stepResult.value as T;
-        }
-        applyStepError(stepResult.error, stepResult.evicted);
-        return;
-      };
-
-      // please leave the auth token in the debug log so that we can debug timed out prerenders
-      reproduceLog.debug(
-        `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0 with boxel-session = ${auth}`,
-      );
-
-      // We need to render the isolated HTML view first, as the template will pull linked fields.
-      log.debug(`isolated render start url=${url} realm=${realm}`);
-      let result = await withTimeout(
-        page,
-        async () => {
-          await transitionTo(
-            page,
-            'render.html',
-            url,
-            String(this.#nonce),
-            serializedOptions,
-            'isolated',
-            '0',
-          );
-          return await renderHTML(page, 'isolated', 0, captureOptions);
-        },
-        opts?.timeoutMs,
-      );
-      log.debug(
-        `isolated render completed url=${url} realm=${realm} isError=${isRenderError(
-          result,
-        )}`,
-      );
-      let isolatedHTML: string | null = null;
-      if (isRenderError(result)) {
-        // If isolated fails we cannot reliably render downstream formats for
-        // this card; continuing causes long timeout cascades (for example while
-        // indexing broken cards), so short-circuit immediately.
-        shortCircuit = true;
-        await handleDirectStepError('isolated render', result as RenderError);
-      } else {
-        isolatedHTML = result as string;
-      }
-
-      if (shortCircuit) {
-        let meta: PrerenderMeta = {
-          serialized: null,
-          searchDoc: null,
-          displayNames: null,
-          deps: null,
-          types: null,
-        };
-        let response: RenderResponse = {
-          ...meta,
-          ...(error ? { error } : {}),
-          iconHTML: null,
-          isolatedHTML,
-          headHTML: null,
-          atomHTML: null,
-          embeddedHTML: null,
-          fittedHTML: null,
-        };
-        response.error = this.#mergeConsoleErrors(pageId, response.error);
-        return {
-          response,
-          timings: { launchMs, renderMs: Date.now() - renderStart },
-          pool: poolInfo,
-        };
-      }
-
-      let emptyMeta: PrerenderMeta = {
-        serialized: null,
-        searchDoc: null,
-        displayNames: null,
-        deps: null,
-        types: null,
-      };
-      let meta = emptyMeta;
-      let metaForTypes = emptyMeta;
-      let headHTML: string | null = null,
-        atomHTML: string | null = null,
-        iconHTML: string | null = null,
-        embeddedHTML: Record<string, string> | null = null,
-        fittedHTML: Record<string, string> | null = null;
-
-      const formatSteps: Array<{
-        name: string;
-        cb: () => Promise<string | RenderError>;
-        assign: (value: string) => void;
-      }> = [
-        {
-          name: 'head render',
-          cb: () => renderHTML(page, 'head', 0, captureOptions),
-          assign: (value: string) => {
-            headHTML = value;
-          },
-        },
-        {
-          name: 'atom render',
-          cb: () => renderHTML(page, 'atom', 0, captureOptions),
-          assign: (value: string) => {
-            atomHTML = value;
-          },
-        },
-        {
-          name: 'icon render',
-          cb: () => renderIcon(page, captureOptions),
-          assign: (value: string) => {
-            iconHTML = value;
-          },
-        },
-      ];
-      for (let step of formatSteps) {
-        if (shortCircuit) {
-          break;
-        }
-        let stepValue = await runTimedStep<string>(step.name, step.cb);
-        if (stepValue !== undefined) {
-          step.assign(stepValue);
-        }
-      }
-
-      if (!shortCircuit) {
-        // Obtain type hierarchy for ancestor rendering. We capture final meta
-        // again at the end so searchDoc/deps reflect every format's loads.
-        let metaForTypesResult = await runTimedStep<PrerenderMeta>(
-          'render.meta (types)',
-          () => renderMeta(page, captureOptions),
-        );
-        if (metaForTypesResult !== undefined) {
-          metaForTypes = metaForTypesResult;
-        }
-      }
-
-      if (!shortCircuit && metaForTypes.types) {
-        // Render sequentially and short-circuit on unusable page/timeout
-        const steps: Array<{
-          name: string;
-          cb: () => Promise<string | Record<string, string> | RenderError>;
-          assign: (value: string | Record<string, string>) => void;
-        }> = [
-          {
-            name: 'fitted render',
-            cb: () =>
-              renderAncestors(
-                page,
-                'fitted',
-                metaForTypes.types!,
-                captureOptions,
-              ),
-            assign: (v: string | Record<string, string>) => {
-              fittedHTML = v as Record<string, string>;
-            },
-          },
-          {
-            name: 'embedded render',
-            cb: () =>
-              renderAncestors(
-                page,
-                'embedded',
-                metaForTypes.types!,
-                captureOptions,
-              ),
-            assign: (v: string | Record<string, string>) => {
-              embeddedHTML = v as Record<string, string>;
-            },
-          },
-        ];
-
-        for (let step of steps) {
-          if (shortCircuit) {
-            break;
-          }
-          let stepValue = await runTimedStep<string | Record<string, string>>(
-            step.name,
-            step.cb,
-          );
-          if (stepValue !== undefined) {
-            step.assign(stepValue);
-          }
-        }
-      }
-
-      if (!shortCircuit) {
-        let finalMetaResult = await runTimedStep<PrerenderMeta>(
-          'render.meta (final)',
-          () => renderMeta(page, captureOptions),
-        );
-        if (finalMetaResult !== undefined) {
-          meta = finalMetaResult;
-        }
-      }
-
-      let response: RenderResponse = {
-        ...(meta as PrerenderMeta),
-        ...(error ? { error } : {}),
-        iconHTML,
-        isolatedHTML,
-        headHTML,
-        atomHTML,
-        embeddedHTML,
-        fittedHTML,
-      };
-      response.error = this.#mergeConsoleErrors(pageId, response.error);
-      return {
-        response,
-        timings: { launchMs, renderMs: Date.now() - renderStart },
-        pool: poolInfo,
-      };
-    } finally {
-      release();
-    }
-  }
-
   async runCommandAttempt({
     affinityType,
     affinityValue,
@@ -414,6 +164,7 @@ export class RenderRunner {
     command,
     commandInput,
     opts,
+    signal,
   }: {
     affinityType: AffinityType;
     affinityValue: string;
@@ -421,17 +172,11 @@ export class RenderRunner {
     command: string;
     commandInput?: Record<string, unknown> | null;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    signal?: AbortSignal;
   }): Promise<{
     response: RunCommandResponse;
-    timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      affinityType: AffinityType;
-      affinityValue: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
+    timings: Timings;
+    pool: PoolInfo;
   }> {
     this.#nonce++;
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
@@ -439,9 +184,9 @@ export class RenderRunner {
       `running command ${command ?? '<unknown>'}, nonce=${this.#nonce} affinity=${affinityKey}`,
     );
 
-    const { page, reused, launchMs, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth);
-    const poolInfo = {
+    const { page, reused, launchMs, waits, pageId, release } =
+      await this.#getPageForAffinity(affinityKey, auth, 'command', signal);
+    const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
       affinityValue,
@@ -456,6 +201,13 @@ export class RenderRunner {
       }
     };
     try {
+      // Page acquired but untouched — a cancel in this window doesn't
+      // need eviction (the tab is still clean), so tag it `'queued'`.
+      // Once `page.evaluate` runs below, any further cancel becomes a
+      // `'rendering'` cancel and does trigger affinity disposal. The
+      // check lives inside the try so `finally { release() }` frees the
+      // tab slot if the caller aborted during the getPage handoff.
+      throwIfAborted(signal, 'queued');
       let renderStart = Date.now();
       let requestId = randomUUID();
       let nonce = String(this.#nonce);
@@ -555,7 +307,7 @@ export class RenderRunner {
         markTimeout(response.status);
         return {
           response,
-          timings: { launchMs, renderMs: Date.now() - renderStart },
+          timings: { launchMs, renderMs: Date.now() - renderStart, waits },
           pool: poolInfo,
         };
       }
@@ -588,7 +340,7 @@ export class RenderRunner {
 
       return {
         response,
-        timings: { launchMs, renderMs: Date.now() - renderStart },
+        timings: { launchMs, renderMs: Date.now() - renderStart, waits },
         pool: poolInfo,
       };
     } catch (e) {
@@ -599,7 +351,7 @@ export class RenderRunner {
       };
       return {
         response,
-        timings: { launchMs, renderMs: 0 },
+        timings: { launchMs, renderMs: 0, waits },
         pool: poolInfo,
       };
     } finally {
@@ -615,6 +367,8 @@ export class RenderRunner {
     auth,
     opts,
     renderOptions,
+    signal,
+    onTabAcquired,
   }: {
     affinityType: AffinityType;
     affinityValue: string;
@@ -623,17 +377,18 @@ export class RenderRunner {
     auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
+    signal?: AbortSignal;
+    // Fires after `getPageForAffinity` resolves — i.e. when this
+    // attempt stops waiting on the semaphore / tab queue and actually
+    // has a page. CS-10872 diagnostic hook; used by the Prerenderer
+    // to flip `affinitySnapshot.sameAffinityActivity[*].state` from
+    // `queued` to `running`, which is what makes the deadlock
+    // fingerprint meaningful.
+    onTabAcquired?: () => void;
   }): Promise<{
     response: ModuleRenderResponse;
-    timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      affinityType: AffinityType;
-      affinityValue: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
+    timings: Timings;
+    pool: PoolInfo;
   }> {
     this.#nonce++;
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
@@ -641,9 +396,10 @@ export class RenderRunner {
       `module prerendering url ${url}, nonce=${this.#nonce} affinity=${affinityKey} realm=${realm}`,
     );
 
-    const { page, reused, launchMs, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth);
-    const poolInfo = {
+    const { page, reused, launchMs, waits, pageId, release } =
+      await this.#getPageForAffinity(affinityKey, auth, 'module', signal);
+    onTabAcquired?.();
+    const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
       affinityValue,
@@ -658,6 +414,10 @@ export class RenderRunner {
       }
     };
     try {
+      // See runCommandAttempt: tag as 'queued' and keep the check
+      // inside the try so `finally { release() }` frees the tab slot
+      // if the caller aborted during the getPage handoff.
+      throwIfAborted(signal, 'queued');
       await page.evaluate((sessionAuth) => {
         localStorage.setItem('boxel-session', sessionAuth);
       }, auth);
@@ -766,7 +526,7 @@ export class RenderRunner {
       response.error = this.#mergeConsoleErrors(pageId, response.error);
       return {
         response,
-        timings: { launchMs, renderMs: Date.now() - renderStart },
+        timings: { launchMs, renderMs: Date.now() - renderStart, waits },
         pool: poolInfo,
       };
     } finally {
@@ -774,7 +534,11 @@ export class RenderRunner {
     }
   }
 
-  async prerenderFileExtractAttempt({
+  // Composite "visit" prerender — acquires one page and runs whichever of the
+  // fileExtract/cardRender/fileRender passes the caller requests, returning a
+  // union response. Passes execute in VISIT_PASS_ORDER and short-circuit when
+  // the page becomes unusable (eviction or auth failure).
+  async prerenderVisitAttempt({
     affinityType,
     affinityValue,
     realm,
@@ -782,210 +546,36 @@ export class RenderRunner {
     auth,
     opts,
     renderOptions,
-  }: {
-    affinityType: AffinityType;
-    affinityValue: string;
-    realm: string;
-    url: string;
-    auth: string;
-    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
-    renderOptions?: RenderRouteOptions;
-  }): Promise<{
-    response: FileExtractResponse;
-    timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      affinityType: AffinityType;
-      affinityValue: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
-  }> {
-    this.#nonce++;
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
-    log.info(
-      `file extract prerendering url ${url}, nonce=${this.#nonce} affinity=${affinityKey} realm=${realm}`,
-    );
-
-    const { page, reused, launchMs, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth);
-    const poolInfo = {
-      pageId: pageId ?? 'unknown',
-      affinityType,
-      affinityValue,
-      reused,
-      evicted: false,
-      timedOut: false,
-    };
-    this.#pagePool.resetConsoleErrors(pageId);
-    const markTimeout = (err?: RenderError) => {
-      if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
-        poolInfo.timedOut = true;
-      }
-    };
-    try {
-      await page.evaluate((sessionAuth) => {
-        localStorage.setItem('boxel-session', sessionAuth);
-      }, auth);
-
-      let renderStart = Date.now();
-      let options = renderOptions ?? {};
-      let serializedOptions = serializeRenderRouteOptions(options);
-      const captureOptions: CaptureOptions = {
-        expectedId: url,
-        expectedNonce: String(this.#nonce),
-        simulateTimeoutMs: opts?.simulateTimeoutMs,
-        timeoutMs: opts?.timeoutMs,
-      };
-
-      let capture = await withTimeout(
-        page,
-        async () => {
-          await transitionTo(
-            page,
-            'render.file-extract',
-            url,
-            String(this.#nonce),
-            serializedOptions,
-          );
-          return await captureFileExtract(page, captureOptions);
-        },
-        opts?.timeoutMs,
-      );
-
-      let response: FileExtractResponse;
-      if (isRenderError(capture)) {
-        let renderError = capture as RenderError;
-        markTimeout(renderError);
-        if (
-          await this.#maybeEvict(
-            affinityKey,
-            'file extract render',
-            renderError,
-          )
-        ) {
-          poolInfo.evicted = true;
-        }
-        response = {
-          id: url,
-          nonce: String(this.#nonce),
-          status: 'error',
-          searchDoc: null,
-          deps: renderError.error.deps ?? [],
-          error: renderError,
-        };
-      } else {
-        let fileCapture = capture as FileExtractCapture;
-        try {
-          response = JSON.parse(fileCapture.value) as FileExtractResponse;
-          if (response.status !== fileCapture.status) {
-            let renderError = buildInvalidFileExtractResponseError(
-              page,
-              `file extract status mismatch (${fileCapture.status} vs ${response.status})`,
-              { title: 'Invalid file extract response', evict: true },
-            );
-            markTimeout(renderError);
-            if (
-              await this.#maybeEvict(
-                affinityKey,
-                'file extract render',
-                renderError,
-              )
-            ) {
-              poolInfo.evicted = true;
-            }
-            response = {
-              id: url,
-              nonce: fileCapture.nonce ?? String(this.#nonce),
-              status: 'error',
-              searchDoc: null,
-              deps: renderError.error.deps ?? [],
-              error: {
-                type: 'file-error',
-                error: renderError.error,
-              },
-            };
-          }
-        } catch (_e) {
-          let renderError = buildInvalidFileExtractResponseError(
-            page,
-            `file extract returned invalid payload: ${fileCapture.value}`,
-            { title: 'Invalid file extract response' },
-          );
-          markTimeout(renderError);
-          if (
-            await this.#maybeEvict(
-              affinityKey,
-              'file extract render',
-              renderError,
-            )
-          ) {
-            poolInfo.evicted = true;
-          }
-          response = {
-            id: url,
-            nonce: fileCapture.nonce ?? String(this.#nonce),
-            status: 'error',
-            searchDoc: null,
-            deps: renderError.error.deps ?? [],
-            error: renderError,
-          };
-        }
-      }
-
-      response.error = this.#mergeConsoleErrors(pageId, response.error);
-      return {
-        response,
-        timings: { launchMs, renderMs: Date.now() - renderStart },
-        pool: poolInfo,
-      };
-    } finally {
-      release();
-    }
-  }
-
-  async prerenderFileRenderAttempt({
-    affinityType,
-    affinityValue,
-    realm,
-    url,
-    auth,
     fileData,
     types,
-    opts,
-    renderOptions,
-  }: {
-    affinityType: AffinityType;
-    affinityValue: string;
-    realm: string;
-    url: string;
-    auth: string;
-    fileData: FileRenderArgs['fileData'];
-    types: string[];
+    signal,
+    onTabAcquired,
+  }: PrerenderVisitArgs & {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
-    renderOptions?: RenderRouteOptions;
+    signal?: AbortSignal;
+    // See the matching param on `prerenderModuleAttempt`.
+    onTabAcquired?: () => void;
   }): Promise<{
-    response: FileRenderResponse;
-    timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      affinityType: AffinityType;
-      affinityValue: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
+    response: RenderVisitResponse;
+    timings: Timings;
+    pool: PoolInfo;
   }> {
-    this.#nonce++;
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let requested = {
+      fileExtract: Boolean(renderOptions?.fileExtract),
+      cardRender: Boolean(renderOptions?.cardRender),
+      fileRender: Boolean(renderOptions?.fileRender),
+    };
     log.info(
-      `file render prerendering url ${url}, nonce=${this.#nonce} affinity=${affinityKey} realm=${realm}`,
+      `visit prerender url=${url} affinity=${affinityKey} realm=${realm} passes=${VISIT_PASS_ORDER.filter(
+        (p) => requested[p],
+      ).join(',')}`,
     );
 
-    const { page, reused, launchMs, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth);
-    const poolInfo = {
+    const { page, reused, launchMs, waits, pageId, release } =
+      await this.#getPageForAffinity(affinityKey, auth, 'file', signal);
+    onTabAcquired?.();
+    const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
       affinityValue,
@@ -999,245 +589,714 @@ export class RenderRunner {
         poolInfo.timedOut = true;
       }
     };
+
+    let renderStart = Date.now();
+    let response: RenderVisitResponse = {};
+    let baseOptions: RenderRouteOptions = { ...(renderOptions ?? {}) };
+    let didStashFileRenderData = false;
+
     try {
+      // Page acquired but untouched — tag as 'queued'. The between-pass
+      // checks below use 'rendering' since by then page.evaluate has run.
+      // The check lives inside the try so `finally { release() }` frees
+      // the tab slot if the caller aborted during the getPage handoff.
+      throwIfAborted(signal, 'queued');
       await page.evaluate((sessionAuth) => {
         localStorage.setItem('boxel-session', sessionAuth);
       }, auth);
-
-      // Stash file data on globalThis for the render route to consume
-      await page.evaluate((data) => {
-        (globalThis as any).__boxelFileRenderData = data;
-      }, fileData);
-
-      let renderStart = Date.now();
-      let error: RenderError | undefined;
-      let shortCircuit = false;
-      let options: RenderRouteOptions = {
-        ...(renderOptions ?? {}),
-        fileRender: true,
-        fileDefCodeRef: fileData.fileDefCodeRef,
-      };
-      let serializedOptions = serializeRenderRouteOptions(options);
-      let optionsSegment = encodeURIComponent(serializedOptions);
-      // File render uses the full file URL (including extension) as the ID,
-      // unlike card render which strips .json. The render route's fileRender
-      // branch sets cardId to the raw url parameter, so expectedId must match.
-      const captureOptions: CaptureOptions = {
-        expectedId: url,
-        expectedNonce: String(this.#nonce),
-        simulateTimeoutMs: opts?.simulateTimeoutMs,
-        timeoutMs: opts?.timeoutMs,
-      };
-
-      log.debug(
-        `file render: visit ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0`,
-      );
-
-      // We render isolated first since it eagerly exercises linked field paths
-      // and surfaces fundamental render errors early.
-      let result = await withTimeout(
-        page,
-        async () => {
-          await transitionTo(
-            page,
-            'render.html',
-            url,
-            String(this.#nonce),
-            serializedOptions,
-            'isolated',
-            '0',
-          );
-          return await captureResult(page, 'innerHTML', captureOptions);
-        },
-        opts?.timeoutMs,
-      );
-      let isolatedHTML: string | null = null;
-      if (isRenderError(result)) {
-        error = result;
-        markTimeout(error);
-        let evicted = await this.#maybeEvict(
-          affinityKey,
-          'file isolated render',
-          result as RenderError,
-        );
-        if (evicted) {
-          poolInfo.evicted = true;
-          shortCircuit = true;
-        }
-        if (this.#isAuthError(error)) {
-          shortCircuit = true;
-        }
-      } else {
-        let capture = result as RenderCapture;
-        if (capture.status === 'ready') {
-          isolatedHTML = capture.value;
-        } else {
-          let capErr = this.#captureToError(capture);
-          if (!error && capErr) {
-            error = capErr;
-          }
-          markTimeout(capErr);
-          let evicted = await this.#maybeEvict(
-            affinityKey,
-            'file isolated render',
-            capErr,
-          );
-          if (evicted) {
-            poolInfo.evicted = true;
-            shortCircuit = true;
-          }
-          if (this.#isAuthError(error)) {
-            shortCircuit = true;
-          }
-        }
-      }
-
-      if (shortCircuit) {
-        let response: FileRenderResponse = {
-          ...(error ? { error } : {}),
-          iconHTML: null,
-          isolatedHTML,
-          headHTML: null,
-          atomHTML: null,
-          embeddedHTML: null,
-          fittedHTML: null,
-        };
-        response.error = this.#mergeConsoleErrors(pageId, response.error);
-        return {
-          response,
-          timings: { launchMs, renderMs: Date.now() - renderStart },
-          pool: poolInfo,
-        };
-      }
-
-      let headHTML: string | null = null,
-        atomHTML: string | null = null,
-        iconHTML: string | null = null,
-        embeddedHTML: Record<string, string> | null = null,
-        fittedHTML: Record<string, string> | null = null;
-
-      if (!shortCircuit) {
-        let headHTMLResult = await this.#step(
-          affinityKey,
-          'file head render',
-          () =>
-            withTimeout(
-              page,
-              () => renderHTML(page, 'head', 0, captureOptions),
-              opts?.timeoutMs,
-            ),
-        );
-        if (headHTMLResult.ok) {
-          headHTML = headHTMLResult.value as string;
-        } else {
-          error = error ?? headHTMLResult.error;
-          markTimeout(headHTMLResult.error);
-          if (headHTMLResult.evicted) {
-            poolInfo.evicted = true;
-            shortCircuit = true;
-          }
-          if (this.#isAuthError(error)) {
-            shortCircuit = true;
-          }
-        }
-      }
-
-      if (!shortCircuit) {
-        // Render remaining formats sequentially and stop if page becomes unusable.
-        let steps: Array<{
-          name: string;
-          cb: () => Promise<string | Record<string, string> | RenderError>;
-          assign: (value: string | Record<string, string>) => void;
-        }> = [];
-
-        if (types.length > 0) {
-          steps.push(
-            {
-              name: 'file fitted render',
-              cb: () => renderAncestors(page, 'fitted', types, captureOptions),
-              assign: (v: string | Record<string, string>) => {
-                fittedHTML = v as Record<string, string>;
-              },
-            },
-            {
-              name: 'file embedded render',
-              cb: () =>
-                renderAncestors(page, 'embedded', types, captureOptions),
-              assign: (v: string | Record<string, string>) => {
-                embeddedHTML = v as Record<string, string>;
-              },
-            },
-          );
-        }
-
-        steps.push(
-          {
-            name: 'file atom render',
-            cb: () => renderHTML(page, 'atom', 0, captureOptions),
-            assign: (v: string | Record<string, string>) => {
-              atomHTML = v as string;
-            },
-          },
-          {
-            name: 'file icon render',
-            cb: () => renderIcon(page, captureOptions),
-            assign: (v: string | Record<string, string>) => {
-              iconHTML = v as string;
-            },
-          },
-        );
-
-        for (let step of steps) {
-          if (shortCircuit) {
-            break;
-          }
-          let res = await this.#step(affinityKey, step.name, () =>
-            withTimeout(page, step.cb, opts?.timeoutMs),
-          );
-          if (res.ok) {
-            step.assign(res.value);
-          } else {
-            error = error ?? res.error;
-            markTimeout(res.error);
-            if (res.evicted) {
-              poolInfo.evicted = true;
-              shortCircuit = true;
-              break;
-            }
-            if (this.#isAuthError(error)) {
-              shortCircuit = true;
-              break;
-            }
-          }
-        }
-      }
-
-      let response: FileRenderResponse = {
-        ...(error ? { error } : {}),
-        iconHTML,
-        isolatedHTML,
-        headHTML,
-        atomHTML,
-        embeddedHTML,
-        fittedHTML,
-      };
-      response.error = this.#mergeConsoleErrors(pageId, response.error);
-      return {
-        response,
-        timings: { launchMs, renderMs: Date.now() - renderStart },
-        pool: poolInfo,
-      };
-    } finally {
-      // Clean up globalThis data
+      // defense-in-depth: clear any stale file render data left on globalThis
+      // from a prior visit before we start running passes.
       await page
         .evaluate(() => {
           delete (globalThis as any).__boxelFileRenderData;
         })
         .catch(() => {
-          /* best-effort cleanup */
+          /* best-effort */
         });
+
+      // Serialized options carry the pass flags into the route — the host
+      // render/module routes consume these to decide which mode to run. The
+      // first pass in the visit keeps any clearCache flag; subsequent passes
+      // must not attempt another loader reset, so we strip it after first use.
+      let clearCacheConsumed = false;
+      let optionsForPass = (
+        pass: 'fileExtract' | 'cardRender' | 'fileRender',
+      ) => {
+        let optionsForThisPass: RenderRouteOptions = {
+          ...baseOptions,
+          // Always set only the flag for the current pass so the host route
+          // picks the right branch in #buildModel regardless of what other
+          // passes are part of this visit.
+          fileExtract: pass === 'fileExtract' ? true : undefined,
+          fileRender: pass === 'fileRender' ? true : undefined,
+          cardRender: pass === 'cardRender' ? true : undefined,
+        };
+        if (!clearCacheConsumed && baseOptions.clearCache) {
+          optionsForThisPass.clearCache = true;
+          clearCacheConsumed = true;
+        } else {
+          delete optionsForThisPass.clearCache;
+        }
+        // Clean undefined keys so serializeRenderRouteOptions stays stable.
+        for (let k of Object.keys(
+          optionsForThisPass,
+        ) as (keyof RenderRouteOptions)[]) {
+          if (optionsForThisPass[k] === undefined) {
+            delete optionsForThisPass[k];
+          }
+        }
+        return optionsForThisPass;
+      };
+
+      // ── fileExtract pass ───────────────────────────────────────────────
+      if (requested.fileExtract) {
+        let extractOptions = optionsForPass('fileExtract');
+        let serializedOptions = serializeRenderRouteOptions(extractOptions);
+        let captureOptions: CaptureOptions = {
+          expectedId: url,
+          expectedNonce: String(++this.#nonce),
+          simulateTimeoutMs: opts?.simulateTimeoutMs,
+          timeoutMs: opts?.timeoutMs,
+        };
+        let capture = await withTimeout(
+          page,
+          async () => {
+            await transitionTo(
+              page,
+              'render.file-extract',
+              url,
+              captureOptions.expectedNonce!,
+              serializedOptions,
+            );
+            return await captureFileExtract(page, captureOptions);
+          },
+          opts?.timeoutMs,
+        );
+        let extractResponse: FileExtractResponse;
+        if (isRenderError(capture)) {
+          let renderError = capture as RenderError;
+          markTimeout(renderError);
+          if (
+            await this.#maybeEvict(
+              affinityKey,
+              'visit file extract',
+              renderError,
+            )
+          ) {
+            poolInfo.evicted = true;
+          }
+          extractResponse = {
+            id: url,
+            nonce: captureOptions.expectedNonce!,
+            status: 'error',
+            searchDoc: null,
+            deps: renderError.error.deps ?? [],
+            error: renderError,
+          };
+          if (poolInfo.evicted) {
+            response.fileExtract = extractResponse;
+            response.pageUnusableError = renderError;
+            return this.#finalizeVisit(
+              response,
+              pageId,
+              renderStart,
+              launchMs,
+              waits,
+              poolInfo,
+            );
+          }
+          if (this.#isAuthError(renderError)) {
+            // Auth failure means the caller isn't allowed — the page itself
+            // is still healthy. Record the per-pass error and short-circuit
+            // subsequent passes (they'd hit the same auth failure) without
+            // marking the page unusable.
+            response.fileExtract = extractResponse;
+            return this.#finalizeVisit(
+              response,
+              pageId,
+              renderStart,
+              launchMs,
+              waits,
+              poolInfo,
+            );
+          }
+        } else {
+          let fileCapture = capture as FileExtractCapture;
+          try {
+            extractResponse = JSON.parse(
+              fileCapture.value,
+            ) as FileExtractResponse;
+            if (extractResponse.status !== fileCapture.status) {
+              let renderError = buildInvalidFileExtractResponseError(
+                page,
+                `file extract status mismatch (${fileCapture.status} vs ${extractResponse.status})`,
+                { title: 'Invalid file extract response', evict: true },
+              );
+              markTimeout(renderError);
+              if (
+                await this.#maybeEvict(
+                  affinityKey,
+                  'visit file extract',
+                  renderError,
+                )
+              ) {
+                poolInfo.evicted = true;
+              }
+              extractResponse = {
+                id: url,
+                nonce: fileCapture.nonce ?? captureOptions.expectedNonce!,
+                status: 'error',
+                searchDoc: null,
+                deps: renderError.error.deps ?? [],
+                error: renderError,
+              };
+            }
+          } catch (_e) {
+            let renderError = buildInvalidFileExtractResponseError(
+              page,
+              `file extract returned invalid payload: ${fileCapture.value}`,
+              { title: 'Invalid file extract response' },
+            );
+            markTimeout(renderError);
+            if (
+              await this.#maybeEvict(
+                affinityKey,
+                'visit file extract',
+                renderError,
+              )
+            ) {
+              poolInfo.evicted = true;
+            }
+            extractResponse = {
+              id: url,
+              nonce: fileCapture.nonce ?? captureOptions.expectedNonce!,
+              status: 'error',
+              searchDoc: null,
+              deps: renderError.error.deps ?? [],
+              error: renderError,
+            };
+          }
+        }
+        extractResponse.error = this.#mergeConsoleErrors(
+          pageId,
+          extractResponse.error,
+        );
+        response.fileExtract = extractResponse;
+        if (poolInfo.evicted) {
+          response.pageUnusableError =
+            extractResponse.error ?? response.pageUnusableError;
+          return this.#finalizeVisit(
+            response,
+            pageId,
+            renderStart,
+            launchMs,
+            waits,
+            poolInfo,
+          );
+        }
+      }
+
+      // ── cardRender pass ────────────────────────────────────────────────
+      throwIfAborted(signal, 'rendering');
+      if (requested.cardRender) {
+        let cardOptions = optionsForPass('cardRender');
+        let serializedOptions = serializeRenderRouteOptions(cardOptions);
+        let optionsSegment = encodeURIComponent(serializedOptions);
+        let nonce = String(++this.#nonce);
+        let captureOptions: CaptureOptions = {
+          expectedId: url.replace(/\.json$/i, ''),
+          expectedNonce: nonce,
+          simulateTimeoutMs: opts?.simulateTimeoutMs,
+          timeoutMs: opts?.timeoutMs,
+        };
+        reproduceLog.debug(
+          `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${nonce}/${optionsSegment}/html/isolated/0 with boxel-session = ${auth}`,
+        );
+
+        let cardError: RenderError | undefined;
+        let cardShortCircuit = false;
+        let isolatedHTML: string | null = null;
+        let applyStepError = (stepError: RenderError, evicted: boolean) => {
+          cardError = cardError ?? stepError;
+          markTimeout(stepError);
+          if (evicted) {
+            poolInfo.evicted = true;
+            cardShortCircuit = true;
+          }
+          if (this.#isAuthError(cardError)) {
+            cardShortCircuit = true;
+          }
+        };
+        let runTimedStep = async <T>(
+          step: string,
+          fn: () => Promise<T | RenderError>,
+        ): Promise<T | undefined> => {
+          if (cardShortCircuit) {
+            return;
+          }
+          let stepResult = await this.#step(affinityKey, step, () =>
+            withTimeout(page, fn, opts?.timeoutMs),
+          );
+          if (stepResult.ok) {
+            return stepResult.value as T;
+          }
+          applyStepError(stepResult.error, stepResult.evicted);
+          return;
+        };
+
+        let isolatedResult = await withTimeout(
+          page,
+          async () => {
+            await transitionTo(
+              page,
+              'render.html',
+              url,
+              nonce,
+              serializedOptions,
+              'isolated',
+              '0',
+            );
+            return await renderHTML(page, 'isolated', 0, captureOptions);
+          },
+          opts?.timeoutMs,
+        );
+        if (isRenderError(isolatedResult)) {
+          cardShortCircuit = true;
+          let renderError = isolatedResult as RenderError;
+          let evicted = await this.#maybeEvict(
+            affinityKey,
+            'visit card isolated render',
+            renderError,
+          );
+          applyStepError(renderError, evicted);
+        } else {
+          isolatedHTML = isolatedResult as string;
+        }
+
+        let emptyMeta: PrerenderMeta = {
+          serialized: null,
+          searchDoc: null,
+          displayNames: null,
+          deps: null,
+          types: null,
+        };
+        let meta: PrerenderMeta = emptyMeta;
+        let metaForTypes: PrerenderMeta = emptyMeta;
+        let headHTML: string | null = null;
+        let atomHTML: string | null = null;
+        let iconHTML: string | null = null;
+        let embeddedHTML: Record<string, string> | null = null;
+        let fittedHTML: Record<string, string> | null = null;
+        let markdown: string | null = null;
+
+        if (!cardShortCircuit) {
+          const formatSteps = [
+            {
+              name: 'visit card head render',
+              cb: () => renderHTML(page, 'head', 0, captureOptions),
+              assign: (v: string) => {
+                headHTML = v;
+              },
+            },
+            {
+              name: 'visit card atom render',
+              cb: () => renderHTML(page, 'atom', 0, captureOptions),
+              assign: (v: string) => {
+                atomHTML = v;
+              },
+            },
+            {
+              name: 'visit card icon render',
+              cb: () => renderIcon(page, captureOptions),
+              assign: (v: string) => {
+                iconHTML = v;
+              },
+            },
+            {
+              name: 'visit card markdown render',
+              cb: () => renderHTML(page, 'markdown', 0, captureOptions),
+              assign: (v: string) => {
+                markdown = v;
+              },
+            },
+          ];
+          for (let step of formatSteps) {
+            if (cardShortCircuit) break;
+            let v = await runTimedStep<string>(step.name, step.cb);
+            if (v !== undefined) step.assign(v);
+          }
+        }
+
+        if (!cardShortCircuit) {
+          let metaForTypesResult = await runTimedStep<PrerenderMeta>(
+            'visit card render.meta (types)',
+            () => renderMeta(page, captureOptions),
+          );
+          if (metaForTypesResult !== undefined) {
+            metaForTypes = metaForTypesResult;
+          }
+        }
+
+        if (!cardShortCircuit && metaForTypes.types) {
+          const ancestorSteps = [
+            {
+              name: 'visit card fitted render',
+              cb: () =>
+                renderAncestors(
+                  page,
+                  'fitted',
+                  metaForTypes.types!,
+                  captureOptions,
+                ),
+              assign: (v: Record<string, string>) => {
+                fittedHTML = v;
+              },
+            },
+            {
+              name: 'visit card embedded render',
+              cb: () =>
+                renderAncestors(
+                  page,
+                  'embedded',
+                  metaForTypes.types!,
+                  captureOptions,
+                ),
+              assign: (v: Record<string, string>) => {
+                embeddedHTML = v;
+              },
+            },
+          ];
+          for (let step of ancestorSteps) {
+            if (cardShortCircuit) break;
+            let v = await runTimedStep<Record<string, string>>(
+              step.name,
+              step.cb,
+            );
+            if (v !== undefined) step.assign(v);
+          }
+        }
+
+        if (!cardShortCircuit) {
+          let finalMetaResult = await runTimedStep<PrerenderMeta>(
+            'visit card render.meta (final)',
+            () => renderMeta(page, captureOptions),
+          );
+          if (finalMetaResult !== undefined) {
+            meta = finalMetaResult;
+          }
+        }
+
+        let cardResponse: RenderResponse = {
+          ...(meta as PrerenderMeta),
+          ...(cardError ? { error: cardError } : {}),
+          iconHTML,
+          isolatedHTML,
+          headHTML,
+          atomHTML,
+          embeddedHTML,
+          fittedHTML,
+          markdown,
+        };
+        cardResponse.error = this.#mergeConsoleErrors(
+          pageId,
+          cardResponse.error,
+        );
+        response.card = cardResponse;
+        if (poolInfo.evicted) {
+          response.pageUnusableError =
+            cardResponse.error ?? response.pageUnusableError;
+          return this.#finalizeVisit(
+            response,
+            pageId,
+            renderStart,
+            launchMs,
+            waits,
+            poolInfo,
+          );
+        }
+      }
+
+      // ── fileRender pass ────────────────────────────────────────────────
+      throwIfAborted(signal, 'rendering');
+      if (requested.fileRender) {
+        // If fileExtract ran earlier in this visit and produced a resource,
+        // use it to populate fileData/types so the caller doesn't need to
+        // thread extract output back through a second round-trip.
+        let effectiveFileData =
+          fileData ??
+          (response.fileExtract?.resource && baseOptions.fileDefCodeRef
+            ? {
+                resource: response.fileExtract.resource,
+                fileDefCodeRef: baseOptions.fileDefCodeRef,
+              }
+            : undefined);
+        let effectiveTypes = types ?? response.fileExtract?.types ?? undefined;
+        if (!effectiveFileData) {
+          // Without fileData we can't populate the host route's model. This is
+          // a caller error — mark the sub-response accordingly rather than
+          // throwing so the other passes' results remain usable.
+          response.fileRender = {
+            isolatedHTML: null,
+            headHTML: null,
+            atomHTML: null,
+            embeddedHTML: null,
+            fittedHTML: null,
+            iconHTML: null,
+            markdown: null,
+            error: {
+              type: 'file-error',
+              error: {
+                message:
+                  'prerenderVisit requested fileRender pass without fileData (and fileExtract did not supply a resource)',
+                status: 500,
+                additionalErrors: null,
+              },
+            },
+          };
+        } else {
+          let fileOptions: RenderRouteOptions = {
+            ...optionsForPass('fileRender'),
+            fileDefCodeRef: effectiveFileData.fileDefCodeRef,
+          };
+          let serializedOptions = serializeRenderRouteOptions(fileOptions);
+          let nonce = String(++this.#nonce);
+          let captureOptions: CaptureOptions = {
+            expectedId: url,
+            expectedNonce: nonce,
+            simulateTimeoutMs: opts?.simulateTimeoutMs,
+            timeoutMs: opts?.timeoutMs,
+          };
+
+          // stash file data for the render route model hook to consume
+          await page.evaluate((data) => {
+            (globalThis as any).__boxelFileRenderData = data;
+          }, effectiveFileData);
+          didStashFileRenderData = true;
+
+          let fileError: RenderError | undefined;
+          let fileShortCircuit = false;
+          let isolatedHTML: string | null = null;
+          let headHTML: string | null = null;
+          let atomHTML: string | null = null;
+          let iconHTML: string | null = null;
+          let embeddedHTML: Record<string, string> | null = null;
+          let fittedHTML: Record<string, string> | null = null;
+          let markdown: string | null = null;
+
+          let applyStepError = (stepError: RenderError, evicted: boolean) => {
+            fileError = fileError ?? stepError;
+            markTimeout(stepError);
+            if (evicted) {
+              poolInfo.evicted = true;
+              fileShortCircuit = true;
+            }
+            if (this.#isAuthError(fileError)) {
+              fileShortCircuit = true;
+            }
+          };
+
+          let isolatedResult = await withTimeout(
+            page,
+            async () => {
+              await transitionTo(
+                page,
+                'render.html',
+                url,
+                nonce,
+                serializedOptions,
+                'isolated',
+                '0',
+              );
+              return await captureResult(page, 'innerHTML', captureOptions);
+            },
+            opts?.timeoutMs,
+          );
+          if (isRenderError(isolatedResult)) {
+            let renderError = isolatedResult as RenderError;
+            let evicted = await this.#maybeEvict(
+              affinityKey,
+              'visit file isolated render',
+              renderError,
+            );
+            applyStepError(renderError, evicted);
+          } else {
+            let capture = isolatedResult as RenderCapture;
+            if (capture.status === 'ready') {
+              isolatedHTML = capture.value;
+            } else {
+              let capErr = this.#captureToError(capture);
+              let evicted = await this.#maybeEvict(
+                affinityKey,
+                'visit file isolated render',
+                capErr,
+              );
+              if (capErr) {
+                applyStepError(capErr, evicted);
+              }
+            }
+          }
+
+          if (!fileShortCircuit) {
+            let headHTMLResult = await this.#step(
+              affinityKey,
+              'visit file head render',
+              () =>
+                withTimeout(
+                  page,
+                  () => renderHTML(page, 'head', 0, captureOptions),
+                  opts?.timeoutMs,
+                ),
+            );
+            if (headHTMLResult.ok) {
+              headHTML = headHTMLResult.value as string;
+            } else {
+              applyStepError(headHTMLResult.error, headHTMLResult.evicted);
+            }
+          }
+
+          if (!fileShortCircuit) {
+            let steps: Array<{
+              name: string;
+              cb: () => Promise<string | Record<string, string> | RenderError>;
+              assign: (value: string | Record<string, string>) => void;
+            }> = [];
+
+            if (effectiveTypes && effectiveTypes.length > 0) {
+              steps.push(
+                {
+                  name: 'visit file fitted render',
+                  cb: () =>
+                    renderAncestors(
+                      page,
+                      'fitted',
+                      effectiveTypes!,
+                      captureOptions,
+                    ),
+                  assign: (v) => {
+                    fittedHTML = v as Record<string, string>;
+                  },
+                },
+                {
+                  name: 'visit file embedded render',
+                  cb: () =>
+                    renderAncestors(
+                      page,
+                      'embedded',
+                      effectiveTypes!,
+                      captureOptions,
+                    ),
+                  assign: (v) => {
+                    embeddedHTML = v as Record<string, string>;
+                  },
+                },
+              );
+            }
+
+            steps.push(
+              {
+                name: 'visit file atom render',
+                cb: () => renderHTML(page, 'atom', 0, captureOptions),
+                assign: (v) => {
+                  atomHTML = v as string;
+                },
+              },
+              {
+                name: 'visit file icon render',
+                cb: () => renderIcon(page, captureOptions),
+                assign: (v) => {
+                  iconHTML = v as string;
+                },
+              },
+              {
+                name: 'visit file markdown render',
+                cb: () => renderHTML(page, 'markdown', 0, captureOptions),
+                assign: (v) => {
+                  markdown = v as string;
+                },
+              },
+            );
+
+            for (let step of steps) {
+              if (fileShortCircuit) break;
+              let res = await this.#step(affinityKey, step.name, () =>
+                withTimeout(page, step.cb, opts?.timeoutMs),
+              );
+              if (res.ok) {
+                step.assign(res.value);
+              } else {
+                applyStepError(res.error, res.evicted);
+                if (fileShortCircuit) break;
+              }
+            }
+          }
+
+          let fileResponse: FileRenderResponse = {
+            ...(fileError ? { error: fileError } : {}),
+            iconHTML,
+            isolatedHTML,
+            headHTML,
+            atomHTML,
+            embeddedHTML,
+            fittedHTML,
+            markdown,
+          };
+          fileResponse.error = this.#mergeConsoleErrors(
+            pageId,
+            fileResponse.error,
+          );
+          response.fileRender = fileResponse;
+          if (poolInfo.evicted) {
+            response.pageUnusableError =
+              fileResponse.error ?? response.pageUnusableError;
+          }
+        }
+      }
+
+      return this.#finalizeVisit(
+        response,
+        pageId,
+        renderStart,
+        launchMs,
+        waits,
+        poolInfo,
+      );
+    } finally {
+      if (didStashFileRenderData) {
+        await page
+          .evaluate(() => {
+            delete (globalThis as any).__boxelFileRenderData;
+          })
+          .catch(() => {
+            /* best-effort cleanup */
+          });
+      }
       release();
     }
+  }
+
+  #finalizeVisit(
+    response: RenderVisitResponse,
+    pageId: string,
+    renderStart: number,
+    launchMs: number,
+    waits: LaunchWaits,
+    poolInfo: PoolInfo,
+  ): {
+    response: RenderVisitResponse;
+    timings: Timings;
+    pool: PoolInfo;
+  } {
+    if (response.pageUnusableError) {
+      response.pageUnusableError = this.#mergeConsoleErrors(
+        pageId,
+        response.pageUnusableError,
+      );
+    }
+    return {
+      response,
+      timings: { launchMs, renderMs: Date.now() - renderStart, waits },
+      pool: poolInfo,
+    };
   }
 
   shouldRetryWithClearCache(
@@ -1352,10 +1411,44 @@ export class RenderRunner {
   ): SerializedError[] {
     return consoleErrors.map((entry) => ({
       status: 500,
-      title: entry.type === 'assert' ? 'Console assert' : 'Console error',
+      title: titleForConsoleErrorEntry(entry),
       message: this.#formatConsoleError(entry),
+      stack: this.#formatConsoleErrorStack(entry),
       additionalErrors: null,
     }));
+  }
+
+  // Assembles a Node-style stack string (header line +
+  // `    at <url>:<line>:<col>` frames) from whatever frames CDP
+  // attached to the entry. Used for both console-error and
+  // runtime-exception sources — the header line distinguishes them.
+  // For the runtime-exception source this is the actionable lead
+  // back at the offending template / getter / helper.
+  #formatConsoleErrorStack(entry: ConsoleErrorEntry): string | undefined {
+    let frames = entry.stackFrames;
+    if (!Array.isArray(frames) || frames.length === 0) {
+      return undefined;
+    }
+    let lines: string[] = [];
+    for (let frame of frames) {
+      if (!frame?.url) {
+        continue;
+      }
+      let segments: number[] = [];
+      if (typeof frame.lineNumber === 'number') {
+        segments.push(frame.lineNumber + 1);
+      }
+      if (typeof frame.columnNumber === 'number') {
+        segments.push(frame.columnNumber + 1);
+      }
+      let suffix = segments.length ? `:${segments.join(':')}` : '';
+      lines.push(`    at ${frame.url}${suffix}`);
+    }
+    if (lines.length === 0) {
+      return undefined;
+    }
+    let header = stackHeaderForConsoleErrorEntry(entry);
+    return [`${header}: ${entry.text}`, ...lines].join('\n');
   }
 
   #formatConsoleError(entry: ConsoleErrorEntry): string {
@@ -1446,9 +1539,14 @@ export class RenderRunner {
       step,
     );
     try {
+      // CS-10817 step 6: the tab is dead but the realm's cache/auth
+      // in the BrowserContext is still valid — keep it as an orphan
+      // so the next visit for this affinity spawns a fresh page in
+      // the warm context and skips the cold module-source waterfall.
       await this.#pagePool.disposeAffinity(affinityKey, {
         awaitIdle: false,
         retainConsoleErrors: true,
+        retainSharedContext: true,
       });
     } catch (e) {
       log.warn(`Error disposing affinity %s on %s:`, affinityKey, reason, e);

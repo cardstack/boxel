@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import type { SchedulableIssue } from '../src/factory-agent-types';
+import type { SchedulableIssue } from '../src/factory-agent';
 
 import { IssueScheduler, type IssueStore } from '../src/issue-scheduler';
 

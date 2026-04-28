@@ -97,6 +97,7 @@ export default class Overlays extends Component<OverlaySignature> {
       .base-overlay {
         width: 100%;
         height: 100%;
+        pointer-events: none;
       }
     </style>
   </template>

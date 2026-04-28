@@ -5,6 +5,7 @@ import { expect, test } from './fixtures';
 import { EvalValidationStep } from '../src/validators/eval-step';
 import type { EvalValidationDetails } from '../src/validators/eval-step';
 import { buildTestClient } from './helpers/test-client';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -76,14 +77,23 @@ test.describe('eval-validation e2e', () => {
       });
       expect(indexed).toBe(true);
 
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let step = new EvalValidationStep({
         client,
         realmServerUrl,
         evalResultsModuleUrl,
+        workspaceDir: workspace.dir,
         issueId: 'Issues/eval-e2e',
       });
 
       let result = await step.run(realmUrl);
+
+      // Push the EvalResult artifact card to the realm so the
+      // client.read assertion below finds it.
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // Must pass — valid modules with correct imports
       expect(result.step).toBe('evaluate');
@@ -103,7 +113,7 @@ test.describe('eval-validation e2e', () => {
       expect(cardRead.ok).toBe(true);
 
       let attrs = (
-        cardRead.document as unknown as {
+        JSON.parse(cardRead.content!) as {
           data?: { attributes?: Record<string, unknown> };
         }
       )?.data?.attributes;
@@ -149,14 +159,21 @@ test.describe('eval-validation e2e', () => {
       });
       expect(indexed).toBe(true);
 
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let step = new EvalValidationStep({
         client,
         realmServerUrl,
         evalResultsModuleUrl,
+        workspaceDir: workspace.dir,
         issueId: 'Issues/eval-fail-e2e',
       });
 
       let result = await step.run(realmUrl);
+
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // Must fail — broken-module.gts imports from a non-existent module
       expect(result.step).toBe('evaluate');
@@ -182,7 +199,7 @@ test.describe('eval-validation e2e', () => {
       expect(cardRead.ok).toBe(true);
 
       let attrs = (
-        cardRead.document as unknown as {
+        JSON.parse(cardRead.content!) as {
           data?: { attributes?: Record<string, unknown> };
         }
       )?.data?.attributes;
@@ -208,14 +225,21 @@ test.describe('eval-validation e2e', () => {
     });
 
     try {
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let step = new EvalValidationStep({
         client,
         realmServerUrl,
         evalResultsModuleUrl,
+        workspaceDir: workspace.dir,
         issueId: 'Issues/eval-exclude-e2e',
       });
 
       let result = await step.run(realmUrl);
+
+      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      workspace.cleanup();
 
       // The fixture realm has hello.gts and hello.test.gts
       // Only hello.gts (and home.gts) should be evaluated, not hello.test.gts

@@ -3,7 +3,11 @@ import type { CardDef, FieldsTypeFor, Format } from '../card-api';
 import { FieldContainer, Header } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { startCase } from 'lodash';
-import { getFieldIcon, getField } from '@cardstack/runtime-common';
+import {
+  getFieldIcon,
+  getField,
+  cardDefComputedFields,
+} from '@cardstack/runtime-common';
 import CardInfoTemplates from './card-info';
 
 export default class DefaultCardDefTemplate extends GlimmerComponent<{
@@ -13,22 +17,18 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
     format: Format;
   };
 }> {
-  private specialFields: string[] = [
-    'cardTitle',
-    'cardDescription',
-    'cardThumbnailURL',
-  ];
+  private standardComputedFields = cardDefComputedFields;
   private excludedFields: string[] = [
     'id',
     'cardInfo',
-    ...this.specialFields,
+    ...this.standardComputedFields,
     'theme',
   ];
 
-  // Logic: If special field (cardTitle, cardDescription, cardThumbnailURL) is NOT computed,
+  // Logic: If standardComputedFields is NOT computed due to user override,
   // then display its edit format alongside other top-level fields.
-  private get specialDisplayFieldNames(): string[] | undefined {
-    let fieldNames = this.specialFields.filter((fieldName) => {
+  private get cardInfoFieldDisplayNames(): string[] | undefined {
+    let fieldNames = this.standardComputedFields.filter((fieldName) => {
       const field = getField(this.args.model.constructor, fieldName);
       return field?.computeVia == undefined;
     });
@@ -39,7 +39,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
   // Fields to display in between the cardInfo header and notes footer
   private get displayFields(): FieldsTypeFor<CardDef> | undefined {
     let excludedFields = this.excludedFields.filter(
-      (name) => !this.specialDisplayFieldNames?.includes(name),
+      (name) => !this.cardInfoFieldDisplayNames?.includes(name),
     );
     let fields = Object.entries(this.args.fields).filter(
       ([key]) => !excludedFields.includes(key),

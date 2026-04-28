@@ -6,6 +6,11 @@ import {
   fetchAllRealmsWithOwners,
   systemInitiatedPriority,
 } from '../index';
+import {
+  type QueueCoalesceContext,
+  type QueueCoalesceDecision,
+  registerQueueJobDefinition,
+} from '../queue';
 
 import { enqueueReindexRealmJob } from '../jobs/reindex-realm';
 
@@ -19,6 +24,57 @@ interface FullReindexArgs {
 }
 
 export { fullReindex };
+
+function isObjectLike(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getRealmUrls(args: unknown): string[] {
+  if (!isObjectLike(args)) {
+    return [];
+  }
+  let urls = args.realmUrls;
+  if (!Array.isArray(urls)) {
+    return [];
+  }
+  return urls.filter((url): url is string => typeof url === 'string');
+}
+
+function chooseFullReindexCoalesceDecision(
+  context: QueueCoalesceContext,
+): QueueCoalesceDecision {
+  let { incoming, candidates } = context;
+  let twin = candidates.find(
+    (candidate) => candidate.jobType === incoming.jobType,
+  );
+  if (!twin) {
+    return { type: 'insert' };
+  }
+  // Post-deployment hooks fire on every realm-server instance. Two concurrent
+  // enqueues converge into one full-reindex with the union of realmUrls so we
+  // don't double the per-deploy reindex cost.
+  let merged = [
+    ...new Set([...getRealmUrls(twin.args), ...getRealmUrls(incoming.args)]),
+  ];
+  return {
+    type: 'join',
+    jobId: twin.id,
+    update: {
+      priority: Math.max(twin.priority, incoming.priority),
+      timeout: Math.max(twin.timeout, incoming.timeout),
+      args: {
+        ...(isObjectLike(twin.args) ? twin.args : {}),
+        ...(isObjectLike(incoming.args) ? incoming.args : {}),
+        realmUrls: merged,
+      },
+    },
+  };
+}
+
+registerQueueJobDefinition({
+  jobType: 'full-reindex',
+  coalesce: chooseFullReindexCoalesceDecision,
+});
 
 const fullReindex: Task<FullReindexArgs, void> = ({
   reportStatus,

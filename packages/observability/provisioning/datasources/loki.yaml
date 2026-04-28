@@ -1,0 +1,25 @@
+# Loki data source for Grafana, applied via Grafana's built-in file
+# provisioning system (read at startup from /etc/grafana/provisioning/datasources).
+#
+# Per-env URL is substituted by Grafana itself at startup using ${LOKI_URL}.
+# See https://grafana.com/docs/grafana/latest/administration/provisioning/#using-environment-variables
+#
+# uid is hard-coded to "loki" so dashboards can reference the data source by
+# uid in committed JSON without per-env overrides.
+#
+# editable: false makes the data source read-only in the UI — UI edits get
+# rejected, enforcing "config as code" discipline.
+
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: ${LOKI_URL}
+    isDefault: false
+    editable: false
+    jsonData:
+      timeout: 60
+      maxLines: 1000

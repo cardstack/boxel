@@ -66,6 +66,7 @@ export type Filter =
   | InFilter
   | ContainsFilter
   | RangeFilter
+  | MatchesFilter
   | CardTypeFilter;
 
 export interface TypedFilter {
@@ -151,6 +152,16 @@ export interface ContainsFilter extends TypedFilter {
   contains: { [fieldName: string]: JSONValue };
 }
 
+/**
+ * Full-text matches filter. The `matches` value is currently restricted to a
+ * plain query string; the key is reserved so it can later be widened to an
+ * object form (e.g. `{ query: string; fields?: string[]; operator?: 'and' | 'or' }`)
+ * without breaking existing callers that pass a bare string.
+ */
+export interface MatchesFilter extends TypedFilter {
+  matches: string;
+}
+
 export function isCardTypeFilter(filter: Filter): filter is CardTypeFilter {
   return (filter as CardTypeFilter).type !== undefined;
 }
@@ -171,6 +182,9 @@ export function isAnyFilter(filter: Filter): filter is AnyFilter {
 }
 export function isInFilter(filter: Filter): filter is InFilter {
   return (filter as InFilter).in !== undefined;
+}
+export function isMatchesFilter(filter: Filter): filter is MatchesFilter {
+  return (filter as MatchesFilter).matches !== undefined;
 }
 
 export function buildQueryParamValue(query: Query): string {
@@ -403,6 +417,8 @@ function assertFilter(
     assertContainsFilter(filter, pointer);
   } else if ('range' in filter) {
     assertRangeFilter(filter, pointer);
+  } else if ('matches' in filter) {
+    assertMatchesFilter(filter, pointer);
   } else {
     throw new InvalidQueryError(
       `${pointer.join('/') || '/'}: cannot determine the type of filter`,
@@ -626,6 +642,28 @@ function assertRangeFilter(
       }
     });
   });
+}
+
+function assertMatchesFilter(
+  filter: any,
+  pointer: string[],
+): asserts filter is MatchesFilter {
+  if (typeof filter !== 'object' || filter == null) {
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: filter must be an object`,
+    );
+  }
+  let matchesPointer = pointer.concat('matches');
+  if (!('matches' in filter)) {
+    throw new InvalidQueryError(
+      `${matchesPointer.join('/') || '/'}: MatchesFilter must have matches property`,
+    );
+  }
+  if (typeof filter.matches !== 'string') {
+    throw new InvalidQueryError(
+      `${matchesPointer.join('/') || '/'}: matches must be a string`,
+    );
+  }
 }
 
 export function assertKey(key: string, pointer: string[]) {

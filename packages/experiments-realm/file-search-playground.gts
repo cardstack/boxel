@@ -10,18 +10,20 @@ import StringField from 'https://cardstack.com/base/string';
 import enumField from 'https://cardstack.com/base/enum';
 import { FileDef } from 'https://cardstack.com/base/file-api';
 
+import { rri } from '@cardstack/runtime-common';
+
 const fileSearchQuery = {
   filter: {
     every: [
       {
         type: {
-          module: 'https://cardstack.com/base/card-api',
+          module: rri('https://cardstack.com/base/card-api'),
           name: 'FileDef',
         },
       },
       {
         on: {
-          module: 'https://cardstack.com/base/card-api',
+          module: rri('https://cardstack.com/base/card-api'),
           name: 'FileDef',
         },
         contains: {
@@ -39,7 +41,7 @@ const fileSearchQuery = {
   page: {
     size: '$this.pageSize',
   },
-  realm: '$thisRealm',
+  realm: '$REALM',
 };
 
 export class FileSearchPlayground extends CardDef {
@@ -120,7 +122,7 @@ export class FileSearchPlayground extends CardDef {
         <section class='summary'>
           <h3>Active query snapshot</h3>
           <ul>
-            <li>realm: $thisRealm</li>
+            <li>realm: $REALM</li>
             <li>filter: type=FileDef, contains(name: "{{this.filterDisplay}}")</li>
             <li>sort: name {{this.directionLabel}}</li>
             <li>page.size: {{@model.pageSize}}</li>

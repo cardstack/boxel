@@ -5,7 +5,7 @@
   "description": "CLI tools for Boxel workspace management",
   "main": "./dist/index.js",
   "bin": {
-    "boxel": "./dist/index.js"
+    "boxel": "./bin/boxel.js"
   },
   "files": [
     "dist/**/*",
@@ -32,12 +32,15 @@
     "commander": "^13.1.0",
     "dotenv": "^16.4.7",
     "ignore": "catalog:",
+    "jsonwebtoken": "catalog:",
     "p-limit": "^7.3.0"
   },
   "devDependencies": {
     "@cardstack/local-types": "workspace:*",
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
+    "content-tag": "catalog:",
+    "@types/jsonwebtoken": "catalog:",
     "@types/node": "catalog:",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
@@ -48,13 +51,12 @@
     "eslint-plugin-prettier": "catalog:",
     "prettier": "catalog:",
     "ts-node": "^10.9.1",
-    "tsx": "^4.0.0",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
   },
   "scripts": {
-    "build": "pnpm clean && tsx scripts/build.ts",
+    "build": "pnpm clean && NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build.ts",
     "clean": "rm -rf dist/*",
     "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/index.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
@@ -73,6 +75,10 @@
     "publish:dry": "npm publish --dry-run"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true,
+    "bin": {
+      "boxel": "./dist/index.js"
+    }
   }
 }

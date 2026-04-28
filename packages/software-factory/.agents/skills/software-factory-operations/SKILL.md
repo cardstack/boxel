@@ -21,6 +21,7 @@ The agent has these tools during the execution loop. Use them by name — they a
 ### Reading and Searching
 
 - `read_file({ path, realm? })` — Read a file from the target realm. Use before modifying anything.
+- `fetch_transpiled_module({ path, realm? })` — Fetch the compiled JavaScript output of a `.gts` module. Use when an eval/instantiate error reports a line/column — those numbers reference the transpiled output, not your source.
 - `search_realm({ query, realm? })` — Search for cards using a structured query object (filter, sort, page). Use to check for existing cards, find duplicates, inspect project state.
 
 ### Writing Files
@@ -55,6 +56,16 @@ run_command({
 
 Returns `{ status: "ready", result: "<serialized JsonCard with schema>" }`. Parse `result` as JSON to get the schema with `attributes` and `relationships` properties.
 
+### Self-Validation (optional, no side effects)
+
+All five tools are safe to call repeatedly mid-turn; none of them write a realm artifact. The orchestrator still runs the full validation pipeline (which persists the durable `TestRun` / `LintResult` / `ParseResult` / `EvalResult` / `InstantiateResult` cards) after `signal_done`, so calling any of these is optional.
+
+- `run_lint({ path? })` — Run ESLint + Prettier (with `@cardstack/boxel` rules) and return an in-memory `RunLintResult` with `status`, `filesChecked`, `filesWithErrors`, `errorCount`, `warningCount`, `durationMs`, `lintableFiles`, and per-violation `{ rule, file, line, column, message, severity }`. Without `path`, lints every `.gts` / `.gjs` / `.ts` / `.js` file in the target realm. With `path` (realm-relative file path), lints **only that one file** — prefer this right after writing or editing a single file.
+- `run_tests()` — Run the realm's QUnit suite and receive an in-memory result object `{ status, passedCount, failedCount, skippedCount, durationMs, testFiles, failures, errorMessage? }`. Use it when you want feedback before signalling done.
+- `run_parse({ path? })` — Parse and type-check files in the target realm and return an in-memory `RunParseResult` with `status`, `filesChecked`, `filesWithErrors`, `errorCount`, `durationMs`, `parseableFiles`, and per-error `{ file, line, column, message }`. Without `path`, runs glint (ember-tsc) over every `.gts` / `.gjs` / `.ts` file in the realm AND validates every `.json` file listed as a Spec `linkedExample` (same discovery as the parse validation step). With `path` (realm-relative file path), parses **only that one file** — `.gts` / `.gjs` / `.ts` runs through glint; `.json` is parsed and checked for card document structure. The extension is required; `parseableFiles` entries are always returned in the `.json` / `.gts` / `.gjs` / `.ts` form, so you can feed any of them straight back into `path`. Prefer the single-file form right after writing or editing one file.
+- `run_evaluate({ path? })` — Evaluate ESM modules (`.gts` / `.gjs` / `.ts` / `.js`) in the target realm via the prerenderer sandbox and return a `RunEvaluateResult` (status, module counts, per-failure `{ path, error, stackTrace? }`). Without `path`, evaluates every non-test evaluable module. With `path`, evaluates only that single realm-relative file — handy for a quick self-check right after writing one module. Test files (`*.test.*`) are rejected — the test runner validates those. When a failure reports a line/column, those numbers refer to the transpiled module — pair with `fetch_transpiled_module` to locate the offending source construct, then fix the `.gts` source (never copy transpiled patterns back into source).
+- `run_instantiate({ path? })` — Instantiate card example instances in the target realm via the prerenderer sandbox and return a `RunInstantiateResult` (status, instance counts, per-failure `{ path, cardName, error, stackTrace? }`). Without `path`, searches the realm for Spec cards and instantiates every `linkedExample` on every card/app Spec; specs with no `linkedExamples` still get a bare instantiation to exercise the card class. With `path`, instantiates only that single realm-relative `.json` example file — its `meta.adoptsFrom` supplies the module + card name, and spec discovery is skipped entirely so you can self-check one instance in isolation. The `path` argument must end in `.json`. `instanceFiles` only contains real `.json` example paths (bare-instantiation fallbacks are filtered out) so any entry can be fed straight back into `path`. If a bare instantiation fails, its failure entry has `path: ''` and a populated `cardName` — identify the spec by `cardName` and do NOT pass the empty path back into `path`. When a failure reports a line/column, those numbers refer to the transpiled module — pair with `fetch_transpiled_module` to locate the offending source construct, then fix the `.gts` source (never copy transpiled patterns back into source).
+
 ### Control Flow
 
 - `signal_done()` — Signal that the current issue is complete. Call this only after all implementation and test files have been written.
@@ -71,9 +82,10 @@ Returns `{ status: "ready", result: "<serialized JsonCard with schema>" }`. Pars
 3. **Write `.test.gts` test files** co-located with card definitions via `write_file` to the target realm. Every issue must have at least one test file. **Write tests immediately after the card definition, before any instances or catalog specs.**
 4. **Write card instances** (`.json`) via `write_file` to the target realm.
 5. **Write a Catalog Spec card** (`Spec/<card-name>.json`) for each top-level card defined in the brief. Link sample instances via `linkedExamples`.
-6. **Call `signal_done()`** when all implementation and test files are written. The orchestrator runs the validation pipeline (including test execution) automatically after this.
-7. **If tests fail**, the orchestrator feeds failure details back. Use `read_file` to inspect current state, then `write_file` to fix implementation or test files. Call `signal_done()` again.
-8. **Record progress** via `add_comment` — append notes, blocked reasons, or context to the issue. Never modify the issue description.
+6. **(Optional) Call `run_tests()`** to self-validate before signalling done. This returns test results in-memory without writing any realm artifacts. Iterating on your own work with `run_tests` is faster than round-tripping through the orchestrator pipeline.
+7. **Call `signal_done()`** when all implementation and test files are written. The orchestrator runs the full validation pipeline (which persists a `TestRun` card, among other artifacts) automatically after this.
+8. **If tests fail**, the orchestrator feeds failure details back. Use `read_file` to inspect current state, then `write_file` to fix implementation or test files. Call `signal_done()` again.
+9. **Record progress** via `add_comment` — append notes, blocked reasons, or context to the issue. Never modify the issue description.
 
 ## Target Realm Artifact Structure
 
@@ -95,6 +107,59 @@ target-realm/
 └── Knowledge Articles/
     └── article-name.json            # KnowledgeArticle card
 ```
+
+## Debugging Runtime Evaluation Errors
+
+Eval-step and instantiate-step validation failures surface line/column
+references that point to the **transpiled** JavaScript output, not the
+`.gts` source you wrote. The realm compiles `.gts` to JS before execution
+and runtime errors reference the compiled output.
+
+When a validation error contains text like
+`(error occurred in '/.../sticky-note.gts' @ line 66 : column 32)`, the
+line number is for the transpiled module. Call
+`fetch_transpiled_module({ path: 'sticky-note.gts' })` and read the
+reported line to see what compiled construct raised the error — then
+reason back to the `.gts` source construct that produced it.
+
+For example, `" is not a valid character within attribute names: (error occurred in '/.../sticky-note.gts' @ line 66 : column 32)`
+typically points inside a `precompileTemplate(...)` block in the
+transpiled output. The actual fault in the source is often in a CSS
+comment or a template expression — line 66 in your `.gts` source is
+unrelated. Reading the transpiled line is what connects the error back
+to the source.
+
+### The transpiled output is for DEBUGGING ONLY — never for implementation
+
+**Scope of this tool:** `fetch_transpiled_module` is only for
+investigating **runtime errors in `.gts` modules you have already
+written** — when an eval or instantiate validation failure points to
+a line/column in the transpiled output and you need to map that
+coordinate back to your source. It is not for learning how to write
+cards, not for understanding Boxel patterns, and not a general
+reference.
+
+- **Do not copy patterns, imports, or shapes from the transpiled
+  output into your `.gts` source.** The transpiler emits artifacts
+  like `setComponentTemplate(...)`, `precompileTemplate(...)`, wire-format
+  template arrays, base64 CSS imports (`./file.gts.CiAg...`), and other
+  compiler internals. None of those belong in source code.
+- **Do not write `.gts` that "looks like" the compiled JS.** Always
+  write clean, idiomatic Ember / `<template>`-tag / CardDef / FieldDef
+  source. If you find yourself tempted to hand-write a
+  `setComponentTemplate(...)` call or a wire-format template, stop —
+  you're modeling the wrong layer.
+- **Always edit the `.gts` source, never the transpiled output.** The
+  realm regenerates the transpiled JS on every write, so any edit
+  there is silently discarded.
+- **When in doubt, favor idiomatic card development practices.** The
+  `boxel-development` skill and existing cards in the target realm are
+  the right references — not what the compiler happens to emit.
+
+Use `fetch_transpiled_module` the way a developer uses a source map:
+to translate a runtime line number back to a source construct in the
+code **you wrote**, then close the transpiled view and fix the source
+idiomatically.
 
 ## Writing QUnit Card Tests
 

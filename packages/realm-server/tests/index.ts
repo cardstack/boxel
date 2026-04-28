@@ -47,7 +47,37 @@ if (testModules) {
 }
 
 // Cleanup here ensures lingering servers/prerenderers/queues don't keep the
-// Node event loop alive after tests finish.
+// Node event loop alive after tests finish — and equivalently, don't leave
+// hardcoded test ports (4444-4471, etc.) bound after a test is aborted by
+// Ctrl+C or an abnormal exit (but not SIGKILL, which bypasses handlers).
+async function runTrackedCleanup(): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const helpers = require('./helpers') as {
+    closeTrackedServers?: () => Promise<void>;
+    stopTrackedPrerenderers?: () => Promise<void>;
+    destroyTrackedQueueRunners?: () => Promise<void>;
+    destroyTrackedQueuePublishers?: () => Promise<void>;
+    closeTrackedDbAdapters?: () => Promise<void>;
+  };
+  await helpers.stopTrackedPrerenderers?.();
+  await helpers.closeTrackedServers?.();
+  await helpers.destroyTrackedQueueRunners?.();
+  await helpers.destroyTrackedQueuePublishers?.();
+  await helpers.closeTrackedDbAdapters?.();
+}
+
+for (let signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+  process.once(signal, () => {
+    runTrackedCleanup()
+      .catch((error) => console.error(`Cleanup on ${signal} failed:`, error))
+      .finally(() => {
+        // Re-raise the signal with default disposition so the exit code
+        // reflects it (SIGINT → 130, SIGTERM → 143).
+        process.kill(process.pid, signal);
+      });
+  });
+}
+
 QUnit.done(() => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const helpers = require('./helpers') as {
@@ -144,15 +174,22 @@ import './permissions/permission-checker-test';
 import './prerendering-test';
 import './prerender-server-test';
 import './prerender-manager-test';
+import './prerender-affinity-activity-test';
+import './prerender-batch-ownership-test';
+import './prerender-cancellation-test';
+import './runtime-exception-capture-test';
+import './prerender-diagnostics-persistence-test';
 import './prerender-proxy-test';
 import './queue-test';
 import './run-command-task-test';
 import './realm-endpoints-test';
 import './realm-endpoints/dependencies-test';
+import './realm-registry-backfill-test';
 import './realm-endpoints/directory-test';
 import './realm-endpoints/info-test';
 import './realm-endpoints/invalidate-urls-test';
 import './realm-endpoints/lint-test';
+import './realm-endpoints/markdown-test';
 import './realm-endpoints/mtimes-test';
 import './realm-endpoints/permissions-test';
 import './realm-endpoints/cancel-indexing-job-test';
@@ -192,12 +229,17 @@ import './get-boxel-claimed-domain-test';
 import './claim-boxel-domain-test';
 import './card-reference-resolver-test';
 import './bfm-card-references-test';
+import './loader-retry-test';
+import './package-shim-handler-test';
 import './command-parsing-utils-test';
+import './query-matches-filter-test';
+import './matches-filter-integration-test';
 import './delete-boxel-claimed-domain-test';
 import './realm-auth-test';
 import './queries-test';
 import './remote-prerenderer-test';
 import './runtime-dependency-tracker-test';
+import './markdown-fallback-server-isolation-test';
 import './sanitize-head-html-test';
 import './node-realm-test';
 import './session-room-queries-test';

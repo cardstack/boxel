@@ -3,8 +3,11 @@ import { Command } from 'commander';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { profileCommand } from './commands/profile';
+import { registerReadTranspiledCommand } from './commands/read-transpiled';
 import { registerRealmCommand } from './commands/realm/index';
+import { registerFileCommand } from './commands/file/index';
 import { registerRunCommand } from './commands/run-command';
+import { registerSearchCommand } from './commands/search';
 
 const pkg = JSON.parse(
   readFileSync(resolve(__dirname, '../package.json'), 'utf-8'),
@@ -25,11 +28,36 @@ program
   .option('-u, --user <matrixId>', 'Matrix user ID (e.g., @user:boxel.ai)')
   .option('-p, --password <password>', 'Password (for add command)')
   .option('-n, --name <displayName>', 'Display name (for add command)')
+  .option(
+    '-m, --matrix-url <url>',
+    'Matrix server URL (for add command with non-standard domains)',
+  )
+  .option(
+    '-r, --realm-server-url <url>',
+    'Realm server URL (for add command with non-standard domains)',
+  )
+  .addHelpText(
+    'after',
+    `
+Environment variables (for 'add'):
+  BOXEL_PASSWORD       Password; preferred over -p to avoid shell history.
+  BOXEL_ENVIRONMENT    An env-mode slug (e.g. a branch name), interpreted
+                       like scripts/env-slug.sh: URLs are derived as
+                       http://matrix.<slug>.localhost and
+                       http://realm-server.<slug>.localhost/. Overridden
+                       by --matrix-url / --realm-server-url if provided.`,
+  )
   .action(
     async (
       subcommand?: string,
       arg?: string,
-      options?: { user?: string; password?: string; name?: string },
+      options?: {
+        user?: string;
+        password?: string;
+        name?: string;
+        matrixUrl?: string;
+        realmServerUrl?: string;
+      },
     ) => {
       if (options?.password) {
         console.warn(
@@ -41,7 +69,10 @@ program
     },
   );
 
+registerFileCommand(program);
 registerRealmCommand(program);
 registerRunCommand(program);
+registerSearchCommand(program);
+registerReadTranspiledCommand(program);
 
 program.parse();

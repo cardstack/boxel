@@ -8,10 +8,10 @@ import {
   CheckpointManager,
   type CheckpointChange,
 } from '../../lib/checkpoint-manager';
-import {
-  getProfileManager,
-  type ProfileManager,
-} from '../../lib/profile-manager';
+import type { ProfileManager } from '../../lib/profile-manager';
+import type { RealmAuthenticator } from '../../lib/realm-authenticator';
+import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
+import { resolveRealmSecretSeed } from '../../lib/prompt';
 import {
   type SyncManifest,
   computeFileHash,
@@ -46,12 +46,17 @@ interface BiSyncOptions extends SyncOptions {
 
 class RealmSyncer extends RealmSyncBase {
   hasError = false;
+  pushedFiles: string[] = [];
+  pulledFiles: string[] = [];
+  remoteDeletedFiles: string[] = [];
+  localDeletedFiles: string[] = [];
+  skippedConflicts: string[] = [];
 
   constructor(
     private syncOptions: BiSyncOptions,
-    profileManager: ProfileManager,
+    authenticator: RealmAuthenticator,
   ) {
-    super(syncOptions, profileManager);
+    super(syncOptions, authenticator);
   }
 
   private get conflictStrategy(): ConflictStrategy | null {
@@ -74,7 +79,7 @@ class RealmSyncer extends RealmSyncBase {
       console.error('Failed to access realm:', error);
       throw new Error(
         'Cannot proceed with sync: Authentication or access failed. ' +
-          'Please check your Matrix credentials and realm permissions.',
+          'Please check your credentials and realm permissions.',
       );
     }
     console.log('Realm access verified');
@@ -194,7 +199,6 @@ class RealmSyncer extends RealmSyncBase {
     }
 
     // Resolve conflicts
-    const skippedConflicts: string[] = [];
     for (const c of conflicts) {
       const resolved = resolveConflict(
         c,
@@ -219,7 +223,7 @@ class RealmSyncer extends RealmSyncBase {
           // deleted on both sides
           break;
         default:
-          skippedConflicts.push(c.relativePath);
+          this.skippedConflicts.push(c.relativePath);
           break;
       }
     }
@@ -238,11 +242,11 @@ class RealmSyncer extends RealmSyncBase {
       console.log(
         `  ${FG_RED}↓ Delete local:${RESET} ${toPullDelete.length} file(s)`,
       );
-    if (skippedConflicts.length > 0) {
+    if (this.skippedConflicts.length > 0) {
       console.log(
-        `  ${FG_YELLOW}⚠ Conflicts skipped:${RESET} ${skippedConflicts.length} file(s)`,
+        `  ${FG_YELLOW}⚠ Conflicts skipped:${RESET} ${this.skippedConflicts.length} file(s)`,
       );
-      for (const p of skippedConflicts) {
+      for (const p of this.skippedConflicts) {
         console.log(`    ${p}`);
       }
       console.log(
@@ -260,7 +264,7 @@ class RealmSyncer extends RealmSyncBase {
       if (
         !this.options.dryRun &&
         !effectiveManifest &&
-        skippedConflicts.length === 0
+        this.skippedConflicts.length === 0
       ) {
         // First sync with no changes needed - still write manifest
         await this.writeManifest(localHashes, remoteMtimes);
@@ -269,11 +273,6 @@ class RealmSyncer extends RealmSyncBase {
     }
 
     // Phase 5: Execute operations (order: pulls, pushes, remote deletes, local deletes)
-    const pulledFiles: string[] = [];
-    const pushedFiles: string[] = [];
-    const remoteDeletedFiles: string[] = [];
-    const localDeletedFiles: string[] = [];
-
     // Downloads (pulls)
     if (toPull.length > 0) {
       console.log(`\nPulling ${toPull.length} file(s)...`);
@@ -292,7 +291,7 @@ class RealmSyncer extends RealmSyncBase {
           }),
         ),
       );
-      pulledFiles.push(...results.filter((f): f is string => f !== null));
+      this.pulledFiles.push(...results.filter((f): f is string => f !== null));
     }
 
     // Uploads (pushes) via atomic
@@ -322,7 +321,7 @@ class RealmSyncer extends RealmSyncBase {
           console.error(`  ${entry.path}: ${entry.title}`);
         }
       } else {
-        pushedFiles.push(...result.succeeded);
+        this.pushedFiles.push(...result.succeeded);
       }
     }
 
@@ -343,7 +342,7 @@ class RealmSyncer extends RealmSyncBase {
           }),
         ),
       );
-      remoteDeletedFiles.push(
+      this.remoteDeletedFiles.push(
         ...deleteResults.filter((f): f is string => f !== null),
       );
     }
@@ -367,7 +366,7 @@ class RealmSyncer extends RealmSyncBase {
           }
         }),
       );
-      localDeletedFiles.push(
+      this.localDeletedFiles.push(
         ...localDeleteResults.filter((f): f is string => f !== null),
       );
     }
@@ -388,24 +387,24 @@ class RealmSyncer extends RealmSyncBase {
         updatedHashes.set(rel, hash);
       }
       // Recompute hashes for pushed files (content may have been normalized)
-      for (const rel of pushedFiles) {
+      for (const rel of this.pushedFiles) {
         const absPath = localFiles.get(rel);
         if (absPath) {
           updatedHashes.set(rel, await computeFileHash(absPath));
         }
       }
       // Add hashes for pulled files (newly downloaded)
-      for (const rel of pulledFiles) {
+      for (const rel of this.pulledFiles) {
         const absPath = path.join(this.options.localDir, rel);
         updatedHashes.set(rel, await computeFileHash(absPath));
       }
       // Remove files that were actually deleted (propagated deletions only)
-      for (const rel of remoteDeletedFiles) updatedHashes.delete(rel);
-      for (const rel of localDeletedFiles) updatedHashes.delete(rel);
+      for (const rel of this.remoteDeletedFiles) updatedHashes.delete(rel);
+      for (const rel of this.localDeletedFiles) updatedHashes.delete(rel);
 
       // Refresh remote mtimes after pushes
       let freshMtimes = remoteMtimes;
-      if (pushedFiles.length > 0 || remoteDeletedFiles.length > 0) {
+      if (this.pushedFiles.length > 0 || this.remoteDeletedFiles.length > 0) {
         try {
           freshMtimes = await this.getRemoteMtimes();
         } catch {
@@ -419,19 +418,19 @@ class RealmSyncer extends RealmSyncBase {
     // Phase 7: Checkpoint
     if (!this.options.dryRun) {
       const allChanges: CheckpointChange[] = [
-        ...pushedFiles.map((f) => ({
+        ...this.pushedFiles.map((f) => ({
           file: f,
           status: 'modified' as const,
         })),
-        ...pulledFiles.map((f) => ({
+        ...this.pulledFiles.map((f) => ({
           file: f,
           status: 'modified' as const,
         })),
-        ...remoteDeletedFiles.map((f) => ({
+        ...this.remoteDeletedFiles.map((f) => ({
           file: f,
           status: 'deleted' as const,
         })),
-        ...localDeletedFiles.map((f) => ({
+        ...this.localDeletedFiles.map((f) => ({
           file: f,
           status: 'deleted' as const,
         })),
@@ -491,6 +490,28 @@ export interface SyncCommandOptions {
   delete?: boolean;
   dryRun?: boolean;
   profileManager?: ProfileManager;
+  /**
+   * Pre-resolved realm secret seed for administrative access. When set, the
+   * CLI mints a JWT locally and skips Matrix login + /_server-session +
+   * /_realm-auth. The `--realm-secret-seed` CLI flag is resolved via
+   * `resolveRealmSecretSeed` (env var or interactive prompt) before being
+   * passed here.
+   */
+  realmSecretSeed?: string;
+  /**
+   * @internal Test hook: supply an already-constructed authenticator.
+   */
+  authenticator?: RealmAuthenticator;
+}
+
+export interface SyncResult {
+  pushed: string[];
+  pulled: string[];
+  remoteDeleted: string[];
+  localDeleted: string[];
+  skippedConflicts: string[];
+  hasError: boolean;
+  error?: string;
 }
 
 export function registerSyncCommand(realm: Command): void {
@@ -509,6 +530,10 @@ export function registerSyncCommand(realm: Command): void {
     .option('--prefer-newest', 'Resolve conflicts by keeping newest version')
     .option('--delete', 'Sync deletions both ways')
     .option('--dry-run', 'Preview without making changes')
+    .option(
+      '--realm-secret-seed',
+      'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+    )
     .action(
       async (
         localDir: string,
@@ -519,47 +544,83 @@ export function registerSyncCommand(realm: Command): void {
           preferNewest?: boolean;
           delete?: boolean;
           dryRun?: boolean;
+          realmSecretSeed?: boolean;
         },
       ) => {
-        await syncCommand(localDir, realmUrl, options);
+        const realmSecretSeed = await resolveRealmSecretSeed(
+          options.realmSecretSeed === true,
+        );
+        let result = await sync(localDir, realmUrl, {
+          preferLocal: options.preferLocal,
+          preferRemote: options.preferRemote,
+          preferNewest: options.preferNewest,
+          delete: options.delete,
+          dryRun: options.dryRun,
+          realmSecretSeed,
+        });
+        let hasPartialResults =
+          (Array.isArray(result.pushed) && result.pushed.length > 0) ||
+          (Array.isArray(result.pulled) && result.pulled.length > 0) ||
+          (Array.isArray(result.remoteDeleted) &&
+            result.remoteDeleted.length > 0) ||
+          (Array.isArray(result.localDeleted) &&
+            result.localDeleted.length > 0);
+        if (result.error) {
+          console.error(`Error: ${result.error}`);
+          process.exit(hasPartialResults ? 2 : 1);
+        }
+        console.log('Sync completed successfully');
       },
     );
 }
 
-export async function syncCommand(
+/**
+ * Programmatic bidirectional sync. Returns a structured result instead
+ * of exiting the process, so callers (BoxelCLIClient, factory, tests)
+ * can branch on outcomes. The CLI command registration above wraps this
+ * and translates results into exit codes.
+ */
+export async function sync(
   localDir: string,
   realmUrl: string,
   options: SyncCommandOptions,
-): Promise<void> {
-  let pm = options.profileManager ?? getProfileManager();
-  let active = pm.getActiveProfile();
-  if (!active) {
-    console.error(
-      'Error: no active profile. Run `boxel profile add` to create one.',
-    );
-    process.exit(1);
+): Promise<SyncResult> {
+  let authenticator: RealmAuthenticator;
+  if (options.authenticator) {
+    authenticator = options.authenticator;
+  } else {
+    const resolution = resolveRealmAuthenticator({
+      realmUrl,
+      realmSecretSeed: options.realmSecretSeed,
+      profileManager: options.profileManager,
+    });
+    if (!resolution.ok) {
+      return emptyResult({ error: resolution.error });
+    }
+    authenticator = resolution.authenticator;
   }
 
-  // Validate mutually exclusive strategies
   const strategies = [
     options.preferLocal,
     options.preferRemote,
     options.preferNewest,
   ].filter(Boolean);
   if (strategies.length > 1) {
-    console.error(
-      'Error: only one conflict strategy can be specified (--prefer-local, --prefer-remote, or --prefer-newest)',
-    );
-    process.exit(1);
+    return emptyResult({
+      error:
+        'Only one conflict strategy can be specified (--prefer-local, --prefer-remote, or --prefer-newest).',
+    });
   }
 
   if (!(await pathExists(localDir))) {
-    console.error(`Local directory does not exist: ${localDir}`);
-    process.exit(1);
+    return emptyResult({
+      error: `Local directory does not exist: ${localDir}`,
+    });
   }
 
+  let syncer: RealmSyncer | undefined;
   try {
-    const syncer = new RealmSyncer(
+    syncer = new RealmSyncer(
       {
         realmUrl,
         localDir,
@@ -569,19 +630,51 @@ export async function syncCommand(
         deleteSync: options.delete,
         dryRun: options.dryRun,
       },
-      pm,
+      authenticator,
     );
-
     await syncer.sync();
-
-    if (syncer.hasError) {
-      console.log('Sync did not complete successfully. View logs for details');
-      process.exit(2);
-    } else {
-      console.log('Sync completed successfully');
-    }
   } catch (error) {
-    console.error('Sync failed:', error);
-    process.exit(1);
+    return {
+      pushed: syncer?.pushedFiles.slice().sort() ?? [],
+      pulled: syncer?.pulledFiles.slice().sort() ?? [],
+      remoteDeleted: syncer?.remoteDeletedFiles.slice().sort() ?? [],
+      localDeleted: syncer?.localDeletedFiles.slice().sort() ?? [],
+      skippedConflicts: syncer?.skippedConflicts.slice().sort() ?? [],
+      hasError: true,
+      error: `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
   }
+
+  return {
+    pushed: syncer.pushedFiles.slice().sort(),
+    pulled: syncer.pulledFiles.slice().sort(),
+    remoteDeleted: syncer.remoteDeletedFiles.slice().sort(),
+    localDeleted: syncer.localDeletedFiles.slice().sort(),
+    skippedConflicts: syncer.skippedConflicts.slice().sort(),
+    hasError: syncer.hasError,
+    error: syncer.hasError ? buildSyncErrorMessage(syncer) : undefined,
+  };
+}
+
+function buildSyncErrorMessage(syncer: RealmSyncer): string {
+  let summary = [
+    `${syncer.pushedFiles.length} pushed`,
+    `${syncer.pulledFiles.length} pulled`,
+    `${syncer.remoteDeletedFiles.length} remote deleted`,
+    `${syncer.localDeletedFiles.length} local deleted`,
+    `${syncer.skippedConflicts.length} conflicts skipped`,
+  ].join(', ');
+
+  return `Sync completed with errors. ${summary}.`;
+}
+function emptyResult(partial: Pick<SyncResult, 'error'>): SyncResult {
+  return {
+    pushed: [],
+    pulled: [],
+    remoteDeleted: [],
+    localDeleted: [],
+    skippedConflicts: [],
+    hasError: true,
+    ...partial,
+  };
 }

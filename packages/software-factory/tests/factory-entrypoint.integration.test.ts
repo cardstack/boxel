@@ -81,7 +81,7 @@ function createTempProfileHome(options: {
 }
 
 module('factory-entrypoint integration', function () {
-  test('factory:go package script prints a structured JSON summary', async function (assert) {
+  test('factory:go --debug prints a structured JSON summary', async function (assert) {
     let canonicalTargetRealmUrl: string;
     let targetRealmUrl: string;
     let createdCardPaths = new Set<string>();
@@ -180,9 +180,59 @@ module('factory-entrypoint integration', function () {
         request.url === '/hassan/personal/_search' &&
         request.method === 'QUERY'
       ) {
-        // Issue store search — return empty results so the loop exits immediately
+        // Issue store search — return empty so the loop exits cleanly
+        // and reports 'all_issues_done'.
         response.writeHead(200, { 'content-type': SupportedMimeType.CardJson });
         response.end(JSON.stringify({ data: [] }));
+      } else if (
+        request.url === '/hassan/personal/_mtimes' &&
+        request.method === 'GET'
+      ) {
+        // Used by client.pull / client.sync to list remote state. The
+        // factory pulls on startup and syncs the seed — an empty manifest
+        // is enough for the pull path, and sync treats every local file
+        // as a push.
+        response.writeHead(200, { 'content-type': SupportedMimeType.JSONAPI });
+        response.end(JSON.stringify({ data: { attributes: { mtimes: {} } } }));
+      } else if (
+        request.url === '/hassan/personal/_atomic' &&
+        request.method === 'POST'
+      ) {
+        // Used by client.sync to atomically push card writes. Parse the
+        // atomic operations payload to register every pushed path so
+        // subsequent GETs (the post-seed `waitForFile` poll) resolve.
+        // The sync client requires:
+        //   - HTTP 201 (not 200) as the success status,
+        //   - each result's `data.id` matching the operation's href
+        //     (full URL), so sync can map results back to local paths.
+        let body = '';
+        request.on('data', (chunk) => (body += chunk.toString()));
+        request.on('end', () => {
+          let results: { data: { id: string; type: string } }[] = [];
+          try {
+            let parsed = JSON.parse(body) as {
+              'atomic:operations'?: { op: string; href?: string }[];
+            };
+            for (let op of parsed['atomic:operations'] ?? []) {
+              if (op.op === 'add' || op.op === 'update') {
+                let href = op.href ?? '';
+                let path = href
+                  .replace(/^https?:\/\/[^/]+\/hassan\/personal\//, '')
+                  .replace(/^\.\/?/, '')
+                  .replace(/\.json$/, '');
+                createdCardPaths.add(path);
+                results.push({ data: { id: href, type: 'source' } });
+              }
+            }
+          } catch {
+            // ignore — sync will surface the parse failure
+          }
+          response.writeHead(201, {
+            'content-type': SupportedMimeType.JSONAPI,
+          });
+          response.end(JSON.stringify({ 'atomic:results': results }));
+        });
+        return;
       } else if (
         request.url === '/hassan/personal/_readiness-check' &&
         request.method === 'GET'
@@ -279,6 +329,7 @@ module('factory-entrypoint integration', function () {
           targetRealmUrl,
           '--realm-server-url',
           `${origin}/`,
+          '--debug',
         ],
         {
           cwd: packageRoot,

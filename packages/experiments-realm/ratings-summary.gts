@@ -201,6 +201,25 @@ export class RatingsSummary extends FieldDef {
     </template>
   };
 
+  static markdown = class Markdown extends Component<typeof this> {
+    get stars(): string {
+      let rating = this.args.model.average ?? 0;
+      let full = Math.floor(rating);
+      let half = rating % 1 >= 0.5 ? 1 : 0;
+      let empty = 5 - full - half;
+      return '★'.repeat(full) + (half ? '⯨' : '') + '☆'.repeat(empty);
+    }
+    get label(): string {
+      let rating = this.args.model.average;
+      if (!rating) return '☆☆☆☆☆ No rating';
+      let count = this.args.model.count;
+      let out = `${this.stars} ${rating}/5`;
+      if (count) out += ` (${count} reviews)`;
+      return out;
+    }
+    <template>{{this.label}}</template>
+  };
+
   static atom = class Atom extends Component<typeof this> {
     <template>
       {{#if @model.average}}

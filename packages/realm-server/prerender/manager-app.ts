@@ -4,19 +4,33 @@ import { logger } from '@cardstack/runtime-common';
 import { fetchRequestFromContext, fullRequestURL } from '../middleware';
 import { format } from 'date-fns';
 import {
+  PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
   resolvePrerenderServerProxyTimeoutMs,
+  sanitizePrerenderRequestId,
 } from './prerender-constants';
+import { randomUUID } from 'crypto';
 import { fromAffinityKey, toAffinityKey } from './affinity';
 import type { AffinityType } from '@cardstack/runtime-common';
+
+// Per-affinity vacancy reported by a prerender server in its heartbeat.
+// Consumed by warm-vacancy-first routing (CS-10758): `idle: true` means
+// every tab for this affinity has an empty render queue; `tabCount`
+// tracks the affinity's claimed tabs.
+export type AffinityVacancy = { idle: boolean; tabCount: number };
 
 type ServerInfo = {
   url: string;
   capacity: number;
   activeAffinities: Set<string>;
   warmedAffinities: Set<string>;
+  // Populated from the `affinityVacancy` field of the server's heartbeat.
+  // Older servers that predate CS-10758 won't include this field; in that
+  // case the Map stays empty and callers should fall back to inferring
+  // warmth from `warmedAffinities` without vacancy information.
+  affinityVacancy: Map<string, AffinityVacancy>;
   status: 'active' | 'draining';
   registeredAt: number;
   lastSeenAt: number;
@@ -204,17 +218,22 @@ export function buildPrerenderManagerApp(options?: {
     capacity,
     status,
     warmedAffinities,
+    affinityVacancy,
   }: {
     url: string;
     capacity?: number;
     status?: 'active' | 'draining';
     warmedAffinities?: string[];
+    affinityVacancy?: Record<string, AffinityVacancy>;
   }) {
     log.debug(
       `received heartbeat from ${url} status=${status} capacity=${capacity} warmedAffinities=${warmedAffinities ? warmedAffinities.join() : 'none'}`,
     );
     let existing = registry.servers.get(url);
     let changed = false;
+    let vacancyMap = affinityVacancy
+      ? new Map<string, AffinityVacancy>(Object.entries(affinityVacancy))
+      : undefined;
     if (existing) {
       let warmSet = new Set(warmedAffinities ?? []);
       existing.lastSeenAt = now();
@@ -234,6 +253,11 @@ export function buildPrerenderManagerApp(options?: {
         existing.warmedAffinities = warmSet;
         changed = true;
       }
+      // Always refresh vacancy — treat a missing `affinityVacancy` attribute
+      // on this heartbeat as an explicit empty snapshot so a rollback to a
+      // legacy server (or a server that temporarily stops reporting) can't
+      // leave stale data cached in the registry.
+      existing.affinityVacancy = vacancyMap ?? new Map();
       if (warmSet.size === 0) {
         // server restarted; clear tracked active affinities and mappings
         for (let affinityKey of [...existing.activeAffinities]) {
@@ -280,6 +304,7 @@ export function buildPrerenderManagerApp(options?: {
       capacity: capacity || 4,
       activeAffinities: new Set(),
       warmedAffinities: new Set(warmedAffinities ?? []),
+      affinityVacancy: vacancyMap ?? new Map(),
       status: status ?? 'active',
       registeredAt: now(),
       lastSeenAt: now(),
@@ -347,6 +372,7 @@ export function buildPrerenderManagerApp(options?: {
           lastSeenAt: formatTimestampWithTimezone(serverInfo.lastSeenAt),
           status: serverInfo.status,
           warmedAffinities: Array.from(serverInfo.warmedAffinities.values()),
+          affinityVacancy: Object.fromEntries(serverInfo.affinityVacancy),
           affinities,
         },
       });
@@ -390,6 +416,39 @@ export function buildPrerenderManagerApp(options?: {
           (v: unknown): v is string => Boolean(v && typeof v === 'string'),
         );
       }
+      let affinityVacancy: Record<string, AffinityVacancy> | undefined;
+      if (
+        attrs.affinityVacancy &&
+        typeof attrs.affinityVacancy === 'object' &&
+        !Array.isArray(attrs.affinityVacancy)
+      ) {
+        // Null-prototype target + explicit forbidden-key guard so an
+        // untrusted heartbeat payload can't pollute Object.prototype via
+        // keys like `__proto__` / `constructor` / `prototype`.
+        let parsed: Record<string, AffinityVacancy> = Object.create(null);
+        for (let [key, value] of Object.entries(attrs.affinityVacancy)) {
+          if (
+            key === '__proto__' ||
+            key === 'constructor' ||
+            key === 'prototype'
+          ) {
+            continue;
+          }
+          if (
+            value &&
+            typeof value === 'object' &&
+            typeof (value as AffinityVacancy).idle === 'boolean' &&
+            Number.isInteger((value as AffinityVacancy).tabCount) &&
+            (value as AffinityVacancy).tabCount >= 0
+          ) {
+            parsed[key] = {
+              idle: (value as AffinityVacancy).idle,
+              tabCount: (value as AffinityVacancy).tabCount,
+            };
+          }
+        }
+        affinityVacancy = parsed;
+      }
       if (!url) {
         log.warn('Heartbeat rejected: prerender server URL not provided');
         ctxt.status = 400;
@@ -400,7 +459,13 @@ export function buildPrerenderManagerApp(options?: {
       }
       url = normalizeURL(url);
 
-      recordHeartbeat({ url, capacity, status, warmedAffinities });
+      recordHeartbeat({
+        url,
+        capacity,
+        status,
+        warmedAffinities,
+        affinityVacancy,
+      });
       ctxt.status = 204;
       ctxt.set('X-Prerender-Server-Id', url);
     } catch (e) {
@@ -485,37 +550,108 @@ export function buildPrerenderManagerApp(options?: {
     },
   );
 
-  function leastRecentlyUsedServerWithCapacity(
+  // Score a usable, non-excluded server for the requested affinity. Lower
+  // score wins.
+  //
+  // CS-10758 priority chart — the primary scoring dimension is the
+  // warm-vacancy bucket, evaluated per requested affinity:
+  //
+  //   ┌────────┬────────────────┬──────────────────────────────────────────┐
+  //   │ bucket │ state          │ meaning                                  │
+  //   ├────────┼────────────────┼──────────────────────────────────────────┤
+  //   │   0    │ warm + idle    │ ideal — a warm tab ready to serve now    │
+  //   │   1    │ cold + idle    │ pay a cold load once; subsequent reuse   │
+  //   │   2    │ warm + busy    │ queue behind existing tab — last resort  │
+  //   │   —    │ cold + busy    │ dropped; caller falls through to         │
+  //   │        │                │ pressure-mode eviction below             │
+  //   └────────┴────────────────┴──────────────────────────────────────────┘
+  //
+  // A lower bucket always wins over a higher one, regardless of other
+  // signals: warm+idle beats cold+idle, cold+idle beats warm+busy. So a
+  // warm+idle server *elsewhere* wins over a warm+busy server that's
+  // currently assigned — stickiness does not override bucket priority.
+  //
+  // Ties *within* a bucket break by, in order:
+  //   1. assignedPref — server already in the affinity's assigned list
+  //      wins (soft stickiness; keeps continuity when all else is equal)
+  //   2. load         — fewer active affinities wins (spread load)
+  //   3. age          — oldest lastAssignedAt wins (coarse round-robin
+  //                     across equally-loaded servers)
+  //
+  // Warmth is read from the per-server `affinityVacancy` map that the
+  // prerender heartbeat populates (added in CS-10758 step 1). Servers that
+  // predate that change send no `affinityVacancy`, so their map stays empty
+  // and every affinity on them registers as cold — safe during a rolling
+  // deploy: worst case the first visit to a legacy server re-warms its tab.
+  type Candidate = {
+    url: string;
+    info: ServerInfo;
+    bucket: 0 | 1 | 2;
+    assignedPref: 0 | 1;
+    load: number;
+    age: number;
+  };
+
+  function scoreCandidate(
+    url: string,
+    info: ServerInfo,
     affinityKey: string,
-    options?: {
-      exclude?: Iterable<string>;
-    },
+    assignedSet: Set<string>,
+  ): Candidate | undefined {
+    let vacancy = info.affinityVacancy.get(affinityKey);
+    let warm = !!vacancy && vacancy.tabCount >= 1;
+    let idle = vacancy?.idle === true;
+    let bucket: 0 | 1 | 2;
+    // Order matters: a warm-but-busy tab for the requested affinity must
+    // classify as bucket 2 even when the server still has overall capacity
+    // for other affinities. Checking `hasCapacity` first would collapse
+    // warm+busy-with-capacity into bucket 1 alongside cold+idle and break
+    // the cold+idle > warm+busy invariant that keeps us from queueing behind
+    // a busy warm tab when an idle cold one is available elsewhere.
+    if (warm && idle) {
+      bucket = 0;
+    } else if (warm && !idle) {
+      bucket = 2;
+    } else if (hasCapacity(info)) {
+      bucket = 1;
+    } else {
+      return undefined; // cold + busy
+    }
+    return {
+      url,
+      info,
+      bucket,
+      assignedPref: assignedSet.has(url) ? 0 : 1,
+      load: info.activeAffinities.size,
+      age: info.lastAssignedAt,
+    };
+  }
+
+  function pickByVacancy(
+    affinityKey: string,
+    excludeSet: Set<string>,
+    assigned: readonly string[],
   ): string | undefined {
-    let excludeSet = new Set(options?.exclude ? [...options.exclude] : []);
-    let bestWarm: { url: string; info: ServerInfo } | undefined;
-    let best: { url: string; info: ServerInfo } | undefined;
+    let assignedSet = new Set(assigned);
+    let best: Candidate | undefined;
     for (let [url, info] of registry.servers) {
-      if (excludeSet.has(url)) {
-        continue;
-      }
-      if (!isServerUsable(info) || !hasCapacity(info)) {
-        continue;
-      }
-      if (info.warmedAffinities.has(affinityKey)) {
-        if (!bestWarm || info.lastAssignedAt < bestWarm.info.lastAssignedAt) {
-          bestWarm = { url, info };
-        }
-        continue;
-      }
-      if (!best) {
-        best = { url, info };
-        continue;
-      }
-      if (info.lastAssignedAt < best.info.lastAssignedAt) {
-        best = { url, info };
+      if (excludeSet.has(url)) continue;
+      if (!isServerUsable(info)) continue;
+      let candidate = scoreCandidate(url, info, affinityKey, assignedSet);
+      if (!candidate) continue;
+      if (!best || isBetter(candidate, best)) {
+        best = candidate;
       }
     }
-    return bestWarm?.url ?? best?.url;
+    return best?.url;
+  }
+
+  function isBetter(a: Candidate, b: Candidate): boolean {
+    if (a.bucket !== b.bucket) return a.bucket < b.bucket;
+    if (a.assignedPref !== b.assignedPref)
+      return a.assignedPref < b.assignedPref;
+    if (a.load !== b.load) return a.load < b.load;
+    return a.age < b.age;
   }
 
   // helper: choose server for affinity
@@ -530,63 +666,15 @@ export function buildPrerenderManagerApp(options?: {
     let assigned = (registry.affinities.get(affinityKey) || []).filter(
       (url) => !exclude.has(url),
     );
-    // If we have room to add another server for this affinity, try to expand the
-    // assignment set before choosing among existing ones.
-    if (assigned.length < multiplex) {
-      let candidate = leastRecentlyUsedServerWithCapacity(affinityKey, {
-        exclude: new Set([...assigned, ...exclude]),
-      });
-      if (candidate) {
-        assigned.push(candidate);
-        if (assigned.length > multiplex) {
-          assigned.splice(0, assigned.length - multiplex);
-        }
-        registry.affinities.set(affinityKey, assigned);
-        let info = registry.servers.get(candidate);
-        if (info) {
-          info.activeAffinities.add(affinityKey);
-          info.lastAssignedAt = now();
-        }
-        return candidate;
-      }
-    }
-    if (assigned.length > 0) {
-      // prefer warmed entries in assigned set
-      let warmed = assigned.find((url) => {
-        let info = registry.servers.get(url);
-        return info && isServerUsable(info) && hasCapacity(info);
-      });
-      let warmedPreferred = assigned.find((url) => {
-        let info = registry.servers.get(url);
-        return (
-          info &&
-          isServerUsable(info) &&
-          hasCapacity(info) &&
-          info.warmedAffinities.has(affinityKey)
-        );
-      });
-      let next = warmedPreferred ?? warmed;
-      if (next) {
-        assigned = assigned.filter((url) => url !== next);
-        assigned.push(next);
-        if (assigned.length > multiplex) {
-          assigned.splice(0, assigned.length - multiplex);
-        }
-        registry.affinities.set(affinityKey, assigned);
-        let info = registry.servers.get(next);
-        if (info) {
-          info.lastAssignedAt = now();
-          info.activeAffinities.add(affinityKey);
-        }
-        return next;
-      }
-    }
-    // pick server with available capacity, prefer warmed
-    let candidate = leastRecentlyUsedServerWithCapacity(affinityKey, {
-      exclude,
-    });
+    // Full-fleet scan by vacancy priority. Stickiness to already-assigned
+    // servers is a tie-breaker within a priority bucket, not a hard gate —
+    // a warm+idle server elsewhere still beats a warm+busy assigned server,
+    // even at multiplex=1. The multiplex cap is enforced by trimming the
+    // assigned list after the pick, which may quietly shift assignment to
+    // the better-scoring server.
+    let candidate = pickByVacancy(affinityKey, exclude, assigned);
     if (candidate) {
-      let list = registry.affinities.get(affinityKey) || [];
+      let list = [...assigned];
       if (!list.includes(candidate)) list.push(candidate);
       if (list.length > multiplex) list = list.slice(-multiplex);
       registry.affinities.set(affinityKey, list);
@@ -721,6 +809,48 @@ export function buildPrerenderManagerApp(options?: {
     pathSuffix: string,
     label: string,
   ) {
+    // CS-10872: honor caller-supplied correlation ID; mint one if
+    // absent (direct curl, test harnesses). Echo on every subsequent
+    // log line so a single grep surfaces the full proxy story.
+    // CS-10872: sanitize the inbound id so it can't carry
+    // arbitrarily long / unusual payloads into log lines or
+    // response headers. Fall back to a fresh UUID when invalid.
+    let requestId =
+      sanitizePrerenderRequestId(ctxt.get(PRERENDER_REQUEST_ID_HEADER)) ??
+      randomUUID();
+    ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
+    let proxyStart = now();
+    // Propagate client-disconnect into the upstream fetch so the
+    // prerender server can cancel whatever it was doing and free
+    // the tab for another request. Without this, a worker that
+    // aborts at 150 s leaves the prerender server rendering for
+    // another ~15-20 s and discards the result — ~2x render budget
+    // per timeout under saturation. `currentAc` is the attempt's
+    // live AbortController, set at the top of each retry iteration
+    // so the close listener aborts the right one.
+    let clientAborted = false;
+    let currentAc: AbortController | undefined;
+    let clientAbortAffinity: string | undefined;
+    let clientAbortTarget: string | undefined;
+    const onClientClose = () => {
+      // ServerResponse 'close' fires after the response is flushed on
+      // normal completion (writableEnded=true) OR when the connection
+      // is torn down prematurely (writableEnded=false). We want the
+      // latter. Note: we listen on `ctxt.res`, NOT `ctxt.req` — Node
+      // 17+ auto-destroys IncomingMessage after the body is consumed,
+      // firing `req.close` long before the response is sent, which
+      // would false-trigger this handler on every normal request.
+      if (ctxt.res.writableEnded) return;
+      if (clientAborted) return;
+      clientAborted = true;
+      log.info(
+        `client-aborted after ${now() - proxyStart}ms requestId=${requestId} ` +
+          `affinity=${clientAbortAffinity ?? '<unknown>'} ` +
+          `target=${clientAbortTarget ?? '<unassigned>'}`,
+      );
+      currentAc?.abort();
+    };
+    ctxt.res.on('close', onClientClose);
     try {
       if (options?.isDraining?.()) {
         ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
@@ -788,9 +918,11 @@ export function buildPrerenderManagerApp(options?: {
         return;
       }
       let affinityKey = toAffinityKey({ affinityType, affinityValue });
+      clientAbortAffinity = affinityKey;
       if (registry.servers.size === 0 && discoveryWaitMs > 0) {
         let start = now();
         while (registry.servers.size === 0 && now() - start < discoveryWaitMs) {
+          if (clientAborted) return;
           await delay(discoveryPollMs);
         }
       }
@@ -802,6 +934,10 @@ export function buildPrerenderManagerApp(options?: {
       }
       let attempts = new Set<string>();
       while (attempts.size < registry.servers.size) {
+        // Short-circuit the retry loop on client abort — the
+        // caller gave up, so don't waste another server's render
+        // budget on a retry no one is waiting for.
+        if (clientAborted) return;
         let target = chooseServerForAffinity(affinityType, affinityValue, {
           exclude: attempts,
         });
@@ -819,12 +955,25 @@ export function buildPrerenderManagerApp(options?: {
         attempts.add(target);
 
         const targetURL = `${normalizeURL(target)}/${pathSuffix}`;
+        clientAbortTarget = target;
         let logTarget = attrs.url ?? attrs.command ?? '<unknown>';
+        let queueMs = now() - proxyStart;
         log.info(
-          `proxying ${label} prerender request for ${logTarget} to ${targetURL}`,
+          `proxying ${label} prerender request for ${logTarget} to ${targetURL} requestId=${requestId} affinity=${affinityKey} attempt=${attempts.size} queueMs=${queueMs}`,
         );
         let abortedDueToDrain = false;
         const ac = new AbortController();
+        // Expose this attempt's controller so the ctxt.res 'close'
+        // listener can abort the current upstream fetch
+        // immediately when the client disconnects. If the client
+        // already disconnected before we got here, abort pre-flight
+        // so the upstream server can drop the request as cheaply
+        // as possible.
+        currentAc = ac;
+        if (clientAborted) {
+          ac.abort();
+          return;
+        }
         const timer = setTimeout(() => ac.abort(), proxyTimeoutMs).unref?.();
         const drainPoll =
           options?.isDraining && proxyTimeoutMs > 50
@@ -843,19 +992,36 @@ export function buildPrerenderManagerApp(options?: {
           headers: {
             'Content-Type': 'application/vnd.api+json',
             Accept: ctxt.get('Accept') || 'application/vnd.api+json',
+            [PRERENDER_REQUEST_ID_HEADER]: requestId,
           },
           body: raw,
           signal: ac.signal,
         }).catch((e) => {
+          if (e?.name === 'AbortError' && clientAborted) {
+            // Client gave up — not our fault, not the upstream's
+            // fault. Don't prune, don't mark drain. The outer
+            // `if (clientAborted) return;` below will short-circuit
+            // and the client's HTTP connection is already dead so
+            // nothing we write here matters.
+            return null as any;
+          }
           if (e?.name === 'AbortError' && options?.isDraining?.()) {
             abortedDueToDrain = true;
           } else {
-            log.warn('Upstream error:', e);
+            log.warn(
+              `Upstream error requestId=${requestId} target=${targetURL}:`,
+              e,
+            );
           }
           return null as any;
         });
         clearTimeout(timer as any);
         if (drainPoll) clearInterval(drainPoll as any);
+        // If the client aborted at any point during this attempt,
+        // stop here — we've already told the upstream to bail via
+        // `currentAc.abort()` and the response socket is already
+        // closed.
+        if (clientAborted) return;
 
         let draining =
           abortedDueToDrain ||
@@ -930,33 +1096,148 @@ export function buildPrerenderManagerApp(options?: {
         }
         ctxt.set('x-boxel-prerender-target', target);
         ctxt.set('x-boxel-prerender-affinity', affinityKey);
+        // Re-echo after res.headers iteration so the manager's ID
+        // wins over any header passthrough from the prerender-server.
+        ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
         const buf = Buffer.from(await res.arrayBuffer());
         ctxt.body = buf;
+        let proxyMs = now() - proxyStart;
+        log.info(
+          `proxied ${label} requestId=${requestId} affinity=${affinityKey} target=${target} status=${res.status} proxyMs=${proxyMs}`,
+        );
         return;
       }
     } catch (e) {
-      log.error(`Error in /${pathSuffix} proxy:`, e);
+      log.error(`Error in /${pathSuffix} proxy requestId=${requestId}:`, e);
       ctxt.status = 500;
       ctxt.body = { errors: [{ status: 500, message: 'Proxy error' }] };
+    } finally {
+      // Always detach the close listener; otherwise a later route
+      // on this same socket (keep-alive) would dispatch stale
+      // aborts.
+      ctxt.res.off('close', onClientClose);
     }
   }
 
   // proxy prerender endpoints
-  router.post('/prerender-card', (ctxt) =>
-    proxyPrerenderRequest(ctxt, 'prerender-card', 'card'),
-  );
   router.post('/prerender-module', (ctxt) =>
     proxyPrerenderRequest(ctxt, 'prerender-module', 'module'),
   );
-  router.post('/prerender-file-extract', (ctxt) =>
-    proxyPrerenderRequest(ctxt, 'prerender-file-extract', 'file-extract'),
-  );
-  router.post('/prerender-file-render', (ctxt) =>
-    proxyPrerenderRequest(ctxt, 'prerender-file-render', 'file-render'),
+  router.post('/prerender-visit', (ctxt) =>
+    proxyPrerenderRequest(ctxt, 'prerender-visit', 'visit'),
   );
   router.post('/run-command', (ctxt) =>
     proxyPrerenderRequest(ctxt, 'run-command', 'command'),
   );
+
+  // Broadcast a release-batch to every server currently assigned to the
+  // requested affinity (CS-10758 step 3). Any assigned server could hold
+  // local ownership from an earlier visit; the indexer doesn't track
+  // which server owned what, so fanout is the robust choice. A server
+  // that doesn't own the batch no-ops the request. Non-assigned servers
+  // are skipped — they can't possibly have ownership for this affinity.
+  router.post('/release-batch', async (ctxt) => {
+    try {
+      let request = await fetchRequestFromContext(ctxt);
+      let raw = await request.text();
+      let body: any;
+      try {
+        body = raw ? JSON.parse(raw) : {};
+      } catch (e) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [{ status: 400, message: 'Invalid JSON body' }],
+        };
+        return;
+      }
+      let attrs = body?.data?.attributes ?? {};
+      let batchId = attrs.batchId;
+      let affinityType = attrs.affinityType;
+      let affinityValue = attrs.affinityValue;
+      if (
+        typeof batchId !== 'string' ||
+        batchId.trim().length === 0 ||
+        (affinityType !== 'realm' && affinityType !== 'user') ||
+        typeof affinityValue !== 'string' ||
+        affinityValue.trim().length === 0
+      ) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [
+            {
+              status: 400,
+              message:
+                'Missing or invalid attributes: batchId, affinityType, affinityValue',
+            },
+          ],
+        };
+        return;
+      }
+      let affinityKey = toAffinityKey({
+        affinityType: affinityType as AffinityType,
+        affinityValue,
+      });
+      let targets = [...(registry.affinities.get(affinityKey) ?? [])];
+      log.info(
+        `broadcasting release-batch for ${affinityKey} (batch ${batchId}) to ${targets.length} assigned server(s)`,
+      );
+      // Fire the releases in parallel; don't fail the response on any
+      // single server's error — the ownership either clears or it
+      // doesn't, either outcome is safe.
+      await Promise.all(
+        targets.map(async (target) => {
+          let targetURL = `${normalizeURL(target)}/release-batch`;
+          // Each target gets its own abort — a single stuck upstream
+          // must not block the broadcast from resolving. The indexer's
+          // IndexRunner.finally awaits this broadcast, so an unbounded
+          // fetch here would leave indexing jobs hung after useful work
+          // is done. Use the same timeout family the proxy route uses
+          // (resolvePrerenderServerProxyTimeoutMs, default 150s) so the
+          // upper bound on a release-batch matches the upper bound on a
+          // regular prerender request.
+          let ac = new AbortController();
+          let timer = setTimeout(() => ac.abort(), proxyTimeoutMs);
+          (timer as any).unref?.();
+          try {
+            let res = await fetch(targetURL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/vnd.api+json',
+                Accept: 'application/vnd.api+json',
+              },
+              body: raw,
+              signal: ac.signal,
+            });
+            if (!res.ok) {
+              log.warn(
+                `release-batch on ${target} for ${affinityKey} returned ${res.status}`,
+              );
+            }
+          } catch (err) {
+            if ((err as { name?: string })?.name === 'AbortError') {
+              log.warn(
+                `release-batch on ${target} for ${affinityKey} timed out after ${proxyTimeoutMs}ms`,
+              );
+            } else {
+              log.warn(
+                `release-batch on ${target} for ${affinityKey} network error:`,
+                err,
+              );
+            }
+          } finally {
+            clearTimeout(timer);
+          }
+        }),
+      );
+      ctxt.status = 204;
+    } catch (err: any) {
+      log.error('Unhandled error in /release-batch broadcast:', err);
+      ctxt.status = 500;
+      ctxt.body = {
+        errors: [{ status: 500, message: err?.message ?? 'Unknown error' }],
+      };
+    }
+  });
 
   let verboseManagerLogs =
     process.env.PRERENDER_MANAGER_VERBOSE_LOGS === 'true';

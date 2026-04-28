@@ -98,6 +98,7 @@ let isCard: (typeof CardAPIModule)['isCard'];
 let linksTo: (typeof CardAPIModule)['linksTo'];
 let linksToMany: (typeof CardAPIModule)['linksToMany'];
 let MaybeBase64Field: (typeof CardAPIModule)['MaybeBase64Field'];
+let CSSField: (typeof CardAPIModule)['CSSField'];
 let createFromSerialized: (typeof CardAPIModule)['createFromSerialized'];
 let updateFromSerialized: (typeof CardAPIModule)['updateFromSerialized'];
 let serializeCard: (typeof CardAPIModule)['serializeCard'];
@@ -114,6 +115,7 @@ let getFieldDescription: (typeof CardAPIModule)['getFieldDescription'];
 let ReadOnlyField: (typeof CardAPIModule)['ReadOnlyField'];
 let instanceOf: (typeof CardAPIModule)['instanceOf'];
 let CardInfoField: (typeof CardAPIModule)['CardInfoField'];
+let Theme: (typeof CardAPIModule)['Theme'];
 let enumField: (typeof EnumModule)['default'];
 let enumOptions: (typeof EnumModule)['enumOptions'];
 let enumValues: (typeof EnumModule)['enumValues'];
@@ -240,10 +242,12 @@ async function initialize() {
     flushLogs,
     queryableValue,
     MaybeBase64Field,
+    CSSField,
     getFieldDescription,
     ReadOnlyField,
     instanceOf,
     CardInfoField,
+    Theme,
   } = cardAPI);
 
   enumField = (await loader.import<typeof EnumModule>(`${baseRealm.url}enum`))
@@ -292,6 +296,7 @@ export {
   linksTo,
   linksToMany,
   MaybeBase64Field,
+  CSSField,
   createFromSerialized,
   updateFromSerialized,
   serializeCard,
@@ -309,6 +314,7 @@ export {
   Skill,
   instanceOf,
   CardInfoField,
+  Theme,
   enumField,
   enumOptions,
   enumValues,

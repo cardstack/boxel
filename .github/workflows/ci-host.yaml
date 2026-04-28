@@ -20,10 +20,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  checks: write
-  contents: write
+  contents: read
   id-token: write
-  pull-requests: write
+  pull-requests: read
 
 jobs:
   check-percy:
@@ -335,6 +334,11 @@ jobs:
       cancel-in-progress: true
     needs: host-test
     runs-on: ubuntu-latest
+    permissions:
+      # checks/pull-requests: needed by publish-unit-test-result-action to post
+      # the junit summary back to the PR / commit.
+      checks: write
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -372,28 +376,110 @@ jobs:
           junit_files: host.xml
           check_name: Host Test Results
 
+  host-memory-baseline:
+    name: Host Memory Baseline
+    if: ${{ !cancelled() && (needs.host-test.result == 'success' || needs.host-test.result == 'failure') }}
+    concurrency:
+      group: host-memory-baseline-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    needs: host-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+
       - name: Download memory reports
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        if: ${{ !cancelled() }}
         with:
           path: all-memory-reports
           pattern: memory-report-*
           merge-multiple: true
 
       - name: Check memory baseline
-        if: ${{ !cancelled() }}
         run: node packages/host/scripts/check-memory-baseline.mjs all-memory-reports packages/host/memory-baseline.json
 
+  host-memory-baseline-update:
+    name: Update Host Memory Baseline
+    # Intentionally scoped to push-to-main only so the job only runs in a
+    # context where the PR workflow file cannot be modified by an untrusted
+    # branch — this is the one job that holds `contents: write`.
+    #
+    # We refresh the baseline whenever host-test completes (success OR failure),
+    # not only on full green. An unrelated shard flake otherwise freezes the
+    # baseline indefinitely, which then blocks downstream PRs on drift that has
+    # nothing to do with their diffs. Modules missing from the current reports
+    # (because a shard failed to upload) keep their prior baseline values —
+    # the merge is handled in update-memory-baseline.mjs.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled() && (needs.host-test.result == 'success' || needs.host-test.result == 'failure') }}
+    concurrency:
+      group: host-memory-baseline-update-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    needs: host-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # Need history past the triggering SHA so the staleness check below
+          # can inspect commits between the workflow's SHA and origin/main.
+          fetch-depth: 0
+      - uses: ./.github/actions/init
+
+      - name: Download memory reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: all-memory-reports
+          pattern: memory-report-*
+          merge-multiple: true
+
       - name: Update memory baseline
-        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.host-test.result == 'success' }}
+        # Retry from the latest main: another PR may merge to main while host
+        # CI is running (~15+ min), causing `git push` to be rejected. On each
+        # retry we fetch and hard-reset to the freshest tip-of-main, then
+        # re-run the merge-aware script so prior-baseline preservation stays
+        # correct.
+        #
+        # Staleness guard: if a non-baseline commit landed on main since this
+        # workflow was triggered, skip — that newer push triggered its own CI
+        # run which will publish a baseline derived from its own code. We
+        # ignore intervening `[skip ci]` baseline-update commits from this
+        # same job because those don't represent newer code, just concurrent
+        # baseline updates that the merge-aware script handles correctly.
         run: |
-          node packages/host/scripts/update-memory-baseline.mjs all-memory-reports packages/host/memory-baseline.json
-          if git diff --quiet packages/host/memory-baseline.json; then
-            echo "Baseline unchanged — nothing to commit."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          WORKFLOW_SHA="${{ github.sha }}"
+
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+
+            if [ "$(git rev-parse origin/main)" != "$WORKFLOW_SHA" ] && \
+               git log --format="%s" "$WORKFLOW_SHA..origin/main" | grep -qv "Update host test memory baseline"; then
+              echo "main has advanced past $WORKFLOW_SHA with non-baseline commits — skipping (a newer CI run will publish the baseline)."
+              exit 0
+            fi
+
+            git reset --hard origin/main
+
+            node packages/host/scripts/update-memory-baseline.mjs all-memory-reports packages/host/memory-baseline.json
+            if git diff --quiet packages/host/memory-baseline.json; then
+              echo "Baseline unchanged — nothing to commit."
+              exit 0
+            fi
             git add packages/host/memory-baseline.json
             git commit -m "Update host test memory baseline [skip ci]"
-            git push
-          fi
+
+            if git push; then
+              exit 0
+            fi
+            echo "Push rejected on attempt $attempt — retrying after $((attempt * 5))s"
+            sleep $((attempt * 5))
+          done
+          echo "Failed to push memory baseline after 5 attempts"
+          exit 1

@@ -234,7 +234,7 @@ export function getBoxComponent(
     }
     let css = isThemeCard(cardDef)
       ? cardDef.cssVariables
-      : cardDef?.cardInfo?.theme?.cssVariables;
+      : cardDef?.cardTheme?.cssVariables;
     return sanitizeHtmlSafe(extractCssVariables(css));
   }
 
@@ -242,7 +242,7 @@ export function getBoxComponent(
     if (isThemeCard(cardDef)) {
       return Boolean(cardDef?.cssVariables?.trim());
     }
-    return cardDef?.cardInfo?.theme != null;
+    return cardDef?.cardTheme != null;
   }
 
   function getCssImports(card?: CardDef) {
@@ -254,7 +254,7 @@ export function getBoxComponent(
         return card.cssImports;
       }
     }
-    return card?.cardInfo?.theme?.cssImports;
+    return card?.cardTheme?.cssImports;
   }
 
   let component = class FieldComponent extends Component<BoxComponentSignature> {
@@ -318,6 +318,8 @@ export function getBoxComponent(
                             fieldName=field.name
                           }}
                           style={{getThemeStyles card}}
+                          data-boxel-card-id={{card.id}}
+                          data-boxel-card-format={{effectiveFormats.cardDef}}
                           data-test-card={{card.id}}
                           data-test-card-format={{effectiveFormats.cardDef}}
                           data-test-field-component-card
@@ -541,6 +543,11 @@ function defaultFieldFormats(containingFormat: Format): FieldFormats {
       return { fieldDef: 'atom', cardDef: 'atom' };
     case 'head':
       return { fieldDef: 'head', cardDef: 'head' };
+    case 'markdown':
+      // Recurse in the same format: `<@fields.x />` inside a markdown template
+      // should delegate to the child's markdown template, not embedded/fitted
+      // HTML, so the composed output is uniformly markdown text.
+      return { fieldDef: 'markdown', cardDef: 'markdown' };
     default:
       return { fieldDef: 'embedded', cardDef: 'fitted' };
   }

@@ -1,12 +1,15 @@
-# Catalog Realm
+# Cardstack Catalog
 
-The Catalog Realm is a specialized realm in the Boxel system that hosts the catalog content. The catalog content is maintained in a separate repository ([boxel-catalog](https://github.com/cardstack/boxel-catalog)) to enable independent versioning and deployment.
+The **Cardstack Catalog** is the official catalog realm — the source of truth for catalog content and the destination for community submissions. The content is maintained in a separate repository ([boxel-catalog](https://github.com/cardstack/boxel-catalog)) for independent versioning and deployment.
 
 ## Architecture
 
 - **Catalog Source**: Content is stored in the [boxel-catalog](https://github.com/cardstack/boxel-catalog) repository
 - **Local Development**: Catalog content is cloned into `packages/catalog/contents/` for local editing
 - **Deployment Pipeline**: Changes flow from local development → boxel-catalog repo → staging → production
+- **URL**: Served at `/catalog/` in every environment (localhost, staging, production)
+
+For the legacy monorepo catalog (served at `/legacy-catalog/`), see [packages/catalog-realm](../catalog-realm/).
 
 ## Setup
 

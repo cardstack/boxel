@@ -138,6 +138,14 @@ When `readFile` returns a parsed `document` (as the realm API does for `.json` f
 
 **Performance:** The tsconfig content is cached in memory (it never changes between runs). The `node_modules` symlink avoids copying hundreds of megabytes of dependencies.
 
+**Shared engine.** The discovery, glint invocation, and per-file parse loop live in `src/parse-execution.ts` (`discoverParseableGtsFiles` + `discoverJsonExampleFiles` + `parseRealmFiles`, plus the glint runner and JSON validators). Both the validation pipeline's `ParseValidationStep` (which owns `ParseResult` artifact lifecycle) and the in-memory `run_parse` agent tool (see below) consume the same engine, so parse coverage stays identical.
+
+### In-Memory `run_parse` Agent Tool (CS-10778)
+
+The agent also has a `run_parse` tool exposed on the factory tool set. It runs the same discovery + glint / JSON engine as the validation step and returns a flat, JSON-friendly `RunParseResult` (`status`, `filesChecked`, `filesWithErrors`, `errorCount`, `durationMs`, `parseableFiles`, `errors[{ file, line, column, message }]`). Unlike `ParseValidationStep`, it **does not create a `ParseResult` card** — no realm artifact is written, so it's safe to call repeatedly for mid-turn self-validation before `signal_done`. The orchestrator's post-`signal_done` parse validation still writes the durable `ParseResult`.
+
+The tool accepts an optional `path` argument. When omitted, every `.gts` / `.gjs` / `.ts` file in the realm is type-checked AND every `.json` file listed as a Spec `linkedExample` is validated (matching the validation step's behavior). When supplied, the tool skips discovery and parses only that one realm-relative file — `.gts` / `.gjs` / `.ts` runs through glint; `.json` is parsed and checked for card document structure. Paths with non-parseable extensions (`.md`, etc.) short-circuit to `status: 'error'` without calling the realm.
+
 The `ParseResult` card definition (`realm/parse-result.gts`) and CRUD (`src/parse-result-cards.ts`) follow the same patterns as `LintResult` and `EvalResult` — fitted/embedded/isolated templates, a running state, `ParseFileResult` field def with nested `ParseError` entries, and links to Issue/Project.
 
 ### Lint Step Details (CS-10714)
@@ -150,6 +158,14 @@ The lint validation step (`src/validators/lint-step.ts`) uses the realm's existi
 4. Collect `messages` from the response where `severity === 2` (errors)
 
 The `LintResult` card definition (`realm/lint-result.gts`) mirrors the `TestRun` card structure with fitted/embedded/isolated templates, a running state, and links to Issue/Project. Card CRUD is in `src/lint-result-cards.ts`.
+
+**Shared engine.** The per-file discovery and lint loop live in `src/lint-execution.ts` (`discoverLintableFiles` + `lintRealmFiles`). Both the validation pipeline's `LintValidationStep` (which owns `LintResult` artifact lifecycle) and the in-memory `run_lint` agent tool (see below) consume the same engine, so rule coverage and read/lint semantics stay identical.
+
+### In-Memory `run_lint` Agent Tool (CS-10776)
+
+The agent also has a `run_lint` tool exposed on the factory tool set. It runs the same discovery + `_lint` engine as the validation step and returns a flat, JSON-friendly `RunLintResult` (`status`, `filesChecked`, `filesWithErrors`, `errorCount`, `warningCount`, `durationMs`, `lintableFiles`, `violations[{ rule, file, line, column, message, severity }]`). Unlike `LintValidationStep`, it **does not create a `LintResult` card** — no realm artifact is written, so it's safe to call repeatedly for mid-turn self-validation before `signal_done`. The orchestrator's post-`signal_done` lint validation still writes the durable `LintResult`.
+
+The tool accepts an optional `path` argument. When omitted, every lintable file in the realm is linted (matching the validation step's behavior). When supplied, the tool skips discovery and lints only that one realm-relative file — handy for a fast self-check right after writing or editing a single file. Paths with non-lintable extensions (`.json`, etc.) short-circuit to `status: 'error'` without calling the realm.
 
 ### Eval Step Details (CS-10715)
 
@@ -176,6 +192,14 @@ The instantiate validation step (`src/validators/instantiate-step.ts`) verifies 
 **Missing specs is a failure when card modules exist.** During bootstrap (no `.gts` modules, no Specs), the step passes vacuously with no artifact created. But when non-test `.gts` card modules exist and no Spec cards are found, the step fails with an actionable error: "Each entrypoint card needs a Catalog Spec with linkedExamples for instantiation validation." This ensures the agent creates Specs as part of each implementation issue. The `InstantiateResult` artifact is only created when there are Specs to validate — no empty artifacts are written for bootstrap issues.
 
 The host command uses `store.__dangerousCreateFromSerialized(...)` — a public method we added to `StoreService` that calls `card-api.createFromSerialized` directly. We initially tried the public API (`store.add(doc, { doNotPersist: true })`) but discovered that `store.add()` relaxes serialization errors: `Field.validate()` failures during deserialization are caught internally and logged as console warnings rather than thrown. This is correct behavior for the UI (a broken card should degrade gracefully), but the factory needs those validation errors to propagate as thrown exceptions so they can be reported to the agent as actionable failures. The `__dangerous` prefix signals that callers should not use this method for normal store operations — it bypasses persistence, identity mapping, and auto-saving. Auth token routing follows the same pattern as the eval step. The `InstantiateResult` card definition (`realm/instantiate-result.gts`) and CRUD (`src/instantiate-result-cards.ts`) follow the same patterns as `EvalResult`.
+
+### Transpiled-Source Debugging for Runtime Errors (CS-10806)
+
+Eval and instantiate validation errors carry line/column references that point to **transpiled** module output, not the `.gts` source the agent wrote. The realm server compiles `.gts` to JS before executing modules in the prerenderer sandbox, and the runtime error frames reference the compiled output. For example, a CSS-comment bug in the source often surfaces as `" is not a valid character within attribute names: (error occurred in '/.../sticky-note.gts' @ line 66 : column 32)` — line 66 points inside a `precompileTemplate(...)` block in the transpiled module, not line 66 of the source.
+
+The agent has a `fetch_transpiled_module` factory tool that GETs the module URL with `Accept: */*` (compared to `read_file` which uses `application/vnd.card+source` for the raw `.gts`). The underlying call is `BoxelCLIClient.readTranspiled(realmUrl, path)` in `packages/boxel-cli` — it returns the compiled JS as text, and the realm accepts the path with or without the `.gts` extension. The `software-factory-operations` skill teaches the agent to recognize line/column references in eval/instantiate failures and reach for this tool when debugging. The agent still edits the `.gts` source — the transpiled output is regenerated on every write.
+
+**Rationale:** This path was chosen over source-map correlation or rewriting prerenderer error messages in the validation pipeline. Keeping the validation steps untouched and pushing the debugging affordance to the agent's toolbelt + skill is simpler, scoped to the agent's workflow, and avoids coupling the validator to transpiler internals.
 
 ### Handling Failures
 
@@ -214,7 +238,7 @@ If the brief describes only one entry-point card, there will be one implementati
 
 Each implementation issue must carry `project` and `relatedKnowledge` relationships pointing to the Project and KnowledgeArticle cards created during bootstrap. This is how `ContextBuilder.buildForIssue()` loads project scope and brief context for the agent when working on these issues.
 
-The agent does **not** need to create "run tests" issues. Test execution happens automatically as part of the validation phase after every inner-loop iteration.
+The agent does **not** need to create "run tests" issues. Test execution happens automatically as part of the validation phase after every inner-loop iteration. The agent may also call the `run_tests` tool mid-turn for in-memory self-validation (see "run_tests Tool: In-Memory Validation" below) — that call is optional and never replaces the orchestrator's post-turn pipeline.
 
 ### Validation Behavior for Bootstrap Issues
 
@@ -519,9 +543,33 @@ When the loop outcome is `all_issues_done`, the orchestrator automatically sets 
 
 The `update_issue`, `update_project`, and `create_knowledge` tools perform a **read-patch-write** cycle: they read the existing card source, merge the agent-provided attributes on top, and write back the merged document. This preserves attributes the agent didn't include in its update call. Earlier versions used a full-document write via `buildCardDocument()` which would clobber existing attributes — this was identified as a critical bug during e2e testing (bootstrap-seed issue was reduced to just `status` and `updatedAt` after an update).
 
-### run_tests Tool Removed from Agent
+### run_tests Tool: In-Memory Validation (CS-10777)
 
-The `run_tests` tool is **not exposed** to the agent. The validation pipeline runs tests automatically after every agent turn (after `signal_done`). Giving the agent the tool caused it to waste iterations running tests manually, sometimes before writing test files, and creating duplicate TestRun instances. The system prompt and skills inform the agent that the orchestrator handles test execution.
+The `run_tests` tool **is exposed** to the agent, but as an **in-memory** validator rather than a realm-writing one. This is the first member of the `CS-10775` in-memory validation tool family (with in-memory `lint`, `parse`, and `evaluate` counterparts coming as sibling issues).
+
+Behavior:
+
+- The tool discovers `*.test.gts` files in the target realm, drives QUnit via Playwright/Chromium (through the shared `runQunitInBrowser()` engine), and returns a flat `RunTestsResult` object — `{ status, passedCount, failedCount, skippedCount, durationMs, testFiles, failures, errorMessage? }`.
+- It does **not** create a `TestRun` card or any other realm artifact. The orchestrator's post-`signal_done` validation pipeline still writes the durable `TestRun` artifact.
+- It takes no arguments — it always runs the full `*.test.gts` set in the target realm.
+
+Rationale for reintroduction: the original `run_tests` tool was removed because it ran through `executeTestRunFromRealm()`, which meant the agent could create duplicate `TestRun` instances and confuse sequence-number ordering. The in-memory variant sidesteps that problem entirely — no card is ever written — so letting the agent call it mid-turn to check its own work is safe. The pipeline remains the source of truth for the persistent `TestRun` artifact.
+
+### run_evaluate: In-Memory Self-Validation (CS-10779)
+
+The `run_evaluate` tool lets the agent evaluate one (or every non-test) ESM module in the target realm via the prerenderer sandbox and get back a flat `RunEvaluateResult` (`status`, `modulesChecked`, `modulesWithErrors`, `durationMs`, `evaluableFiles`, `failures: { path, error, stackTrace? }[]`). Unlike the pipeline's `EvalValidationStep`, it does NOT write an `EvalResult` card — so the agent can call it mid-turn as many times as it likes without creating realm artifacts. The orchestrator still runs the full validation pipeline (which writes the durable `EvalResult` card) after `signal_done`, so calling this tool is optional.
+
+Discovery (all non-test `.gts` / `.gjs` / `.ts` / `.js` files, alphabetical) and per-module evaluation now live in the shared `src/eval-execution.ts` engine, used by both `EvalValidationStep` (card-writing path) and `runEvaluateInMemory` (tool path). The `path` parameter accepts a single realm-relative file; non-evaluable extensions and test files (`*.test.*`) short-circuit to `status: 'error'` without calling the realm.
+
+Failure line/column numbers still reference the transpiled module — the tool description points the agent at `fetch_transpiled_module` for debugging while making explicit that transpiled output is read-only scratch and must never be copied into source.
+
+### run_instantiate: In-Memory Self-Validation (CS-10823)
+
+The `run_instantiate` tool lets the agent instantiate example card instances in the target realm via the prerenderer sandbox and get back a flat `RunInstantiateResult` (`status`, `instancesChecked`, `instancesWithErrors`, `durationMs`, `instanceFiles`, `failures: { path, cardName, error, stackTrace? }[]`). Unlike the pipeline's `InstantiateValidationStep`, it does NOT write an `InstantiateResult` card — so the agent can call it mid-turn as many times as it likes without creating realm artifacts. The orchestrator still runs the full validation pipeline (which writes the durable `InstantiateResult` card) after `signal_done`, so calling this tool is optional.
+
+Discovery (every Spec card in the realm, every `linkedExample` on every card/app Spec — same spec-based discovery the validation step uses) and per-instance instantiation now live in the shared `src/instantiate-execution.ts` engine, used by both `InstantiateValidationStep` (card-writing path) and `runInstantiateInMemory` (tool path). Spec-discovered example paths are normalized to `.json`-suffixed realm-relative form (Boxel relationship `self` links are extensionless) so the tool's `instanceFiles` list has the same shape whether the tool was called with or without `path`. The `path` parameter accepts a single realm-relative `.json` file and skips spec discovery entirely — the example's `meta.adoptsFrom` supplies the module + card name. Non-`.json` paths short-circuit to `status: 'error'` without calling the realm.
+
+Failure line/column numbers still reference the transpiled module — the tool description points the agent at `fetch_transpiled_module` for debugging while making explicit that transpiled output is read-only scratch and must never be copied into source.
 
 The `run_command` tool description explicitly states it is for Boxel host commands only (format: `@cardstack/boxel-host/commands/<name>/default`), not shell commands or scripts.
 
@@ -597,14 +645,15 @@ The `LoopAgent` and `runFactoryLoop` signatures don't change — the signal mech
 The boxel-cli integration work is tracked in a dedicated Linear project: **"Incorporate Boxel CLI to Monorepo"**. Key tickets include:
 
 - **CS-10519** — Import boxel-cli into monorepo as `packages/boxel-cli`
-- **CS-10520** — Factory as boxel-cli subcommands; migrate realm-operations; retire file I/O tools
+- **CS-10520** — Factory as boxel-cli subcommands; migrate realm-operations; retire all thin-wrapper factory tools whose sole job is to proxy a single boxel-cli command or client method (see "Wrapper-Tool Retirement" below for the inclusive list and the wrapper-vs-compound distinction). Compound domain tools and factory-only control-flow tools stay.
 - **CS-10642** — boxel-cli owns full auth lifecycle (realm server tokens, per-realm tokens, auto-acquisition)
 - **CS-10613** — Skill alignment: deduplicate, establish consistent homes, create `boxel-api` skill
 - **CS-10670** — boxel-cli publishes tool definitions for factory consumption (tool delegation)
 - **CS-10666** — Create `boxel-api` skill (federated search, realm creation, auth model)
 - **CS-10667** — Create `boxel-command` skill (host commands via prerenderer)
-- **CS-10593** — Claude Code native LLM support (ClaudeCodeFactoryAgent)
-- **CS-10594** — Codex CLI native support
+- **CS-10518** — `--agent claude | codex | openrouter[=<model>]` selection (landed). Default is `claude`. No env vars; no host-environment auto-detection.
+- **CS-10593** — Claude Code native LLM support (`ClaudeCodeFactoryAgent`, built on `@anthropic-ai/claude-agent-sdk`). Tools register as in-process callbacks via `createSdkMcpServer` + `tool(name, desc, zodShape, execute)`; JSON-Schema → Zod conversion is confined to `factory-tool-schema-adapter.ts`. **Landed.**
+- **CS-10594** — Codex CLI native support (stub only as of CS-10518; `--agent codex` currently throws "not yet implemented"). Future implementation uses `@openai/codex-sdk` + an in-process MCP stdio server bridging `FactoryTool[]`, `codex exec --json`, and an ephemeral `CODEX_HOME`. See the CS-10594 Linear comment for the full design.
 
 ### Architectural Principle: boxel-cli Owns the Entire Boxel API Surface
 
@@ -775,9 +824,37 @@ The `ToolRegistry` in phase 2 includes all three categories:
 let allManifests = [...SCRIPT_TOOLS, ...BOXEL_CLI_TOOLS, ...REALM_API_TOOLS];
 ```
 
-`BOXEL_CLI_TOOLS` (`boxel-sync`, `boxel-push`, `boxel-pull`, `boxel-status`, `boxel-create`, `boxel-history`) become available to the agent. The factory-level wrapper tools (`write_file`, `read_file`, `search_realm`) can be retired or kept as convenience aliases that delegate to the filesystem + sync.
+`BOXEL_CLI_TOOLS` (`boxel-sync`, `boxel-push`, `boxel-pull`, `boxel-status`, `boxel-create`, `boxel-history`) become available to the agent. The factory-level wrapper tools are retired per the "Wrapper-Tool Retirement" rule below — they don't stay as convenience aliases.
+
+#### Wrapper-Tool Retirement (the intended outcome of CS-10520)
+
+The goal of CS-10520 is to eliminate every factory tool that exists solely to proxy a single boxel-cli operation. When the agent has (a) a synced local workspace for file I/O and (b) boxel-cli commands for everything that can't be a filesystem op, there is no remaining reason to maintain a parallel set of factory tools that wrap the same calls.
+
+**Retired — thin 1:1 wrappers over a boxel-cli command or client method:**
+
+| Factory tool                                  | Replacement                                                          |
+| --------------------------------------------- | -------------------------------------------------------------------- |
+| `read_file`                                   | Local filesystem read on the synced workspace                        |
+| `write_file`                                  | Local filesystem write + `boxel sync`                                |
+| `search_realm`                                | `boxel search` (federated) or `client.search` for index queries      |
+| `run_command`                                 | `boxel run-command` (already a CLI)                                  |
+| `fetch_transpiled_module`                     | `boxel read-transpiled` (CS-10806)                                   |
+| `realm-read` / `realm-write` / `realm-delete` | Native file I/O on the workspace; CLI commands for non-target realms |
+
+**Kept — compound tools with factory-owned domain logic on top of the CLI:**
+
+- `update_issue`, `update_project`, `create_knowledge`, `create_catalog_spec`, `add_comment` — these do read-patch-write merging, schema enforcement, `adoptsFrom` wiring, and other Boxel-card-specific semantics. Not 1:1 with any CLI call. Long-term these may migrate into boxel-cli as higher-level card commands (e.g., `boxel card-merge`), but the compound logic has to move with them — they don't retire in this wave.
+
+**Kept — factory-only control flow, no CLI equivalent exists:**
+
+- `signal_done`, `request_clarification` — control signals back to the ralph loop; no realm I/O.
+- `run_tests` — Playwright orchestration across realm server + host app + Synapse; factory-specific.
+
+The test for whether a tool retires is: _would replacing it with a skill that says "use `boxel <cmd>` / native file I/O" leave behind any logic the factory uniquely owns?_ If no, retire. If yes, keep (or migrate that logic into boxel-cli first).
 
 ### Target-Realm I/O Migrates to Local Filesystem
+
+**Status:** 🟡 in review — CS-10882 (PR #4492). The notes below describe the design as planned; the implementation in the open PR matched the plan with a few divergences captured in [_Implementation notes_](#implementation-notes-cs-10882) at the end of this section. This section will flip to "✅ landed" once the PR merges.
 
 CS-10642 landed the auth-lifecycle migration: the factory no longer manages JWTs and calls the realm through `BoxelCLIClient` instead of raw fetch. It did **not** change _where_ target-realm reads and writes go — they still round-trip over HTTP via `client.read` / `client.write` / `client.delete`. That is the next step.
 
@@ -839,6 +916,19 @@ After target-realm I/O moves to the filesystem, `realm-operations.ts` shrinks fu
 
 - Replacing `client.search` with a local FS index walk. The realm's indexed search (filter by type, sort by sequenceNumber, etc.) has no equivalent in pure file operations. A local query engine is future work.
 - Replacing `client.runCommand` / `client.lint`. These are server-side host command invocations, not file I/O.
+
+#### Implementation notes (CS-10882)
+
+A few practical points where the shipped work diverged from the plan above:
+
+- **Workspace primitives, not raw `fs`.** Call sites now use `readCard` / `writeCard` / `deleteCard` / `readCardById` / `workspaceFileExists` / `ensureWorkspaceDir` / `resetWorkspaceDir` / `resolveWorkspaceDir` from a new `src/workspace-fs.ts` module instead of calling `fs.promises` directly. The result shapes mirror `BoxelCLIClient` (`{ ok, status, document?, content?, error? }`) so call sites swap cleanly. Every primitive routes its `path` argument through a shared safety guard that rejects absolute paths, `..` traversal, percent-encoded escapes, and any value that resolves outside the workspace dir — defense in depth, so an agent-supplied path can't escape even if a calling tool forgets to validate.
+- **`realm-read` / `realm-write` / `realm-delete` are scoped, not retired.** Step 4's plan was to retire these tools. CS-10882 instead leaves them registered and adds a target-realm rejection in the executor: an agent that hands them a `realm-url` matching the factory's target realm gets a `ToolSafetyError`, but the same tools remain usable for non-target realms (scratch realms, external catalogs, etc.). Full retirement is deferred to a follow-up.
+- **`SyncResult` returns structured outcome, not void.** `syncWorkspace()` callbacks now return `{ ok, error? }`. The loop refuses to mark an issue done when the post-agent or post-validator sync failed — vacuously-passing validators (no files reached the realm to validate) no longer flip an issue to `done`. The sync error is also injected into the next iteration's context so the agent can react.
+- **Initial post-seed sync throws on per-file errors.** Plan said "warning"; in practice a silent warn left the loop running with zero issues and exiting clean (`outcome=all_issues_done`). The entrypoint-level sync now throws.
+- **Workspace auto-resets on freshly-created realms.** The deterministic `os.tmpdir()/boxel-factory-workspaces/<slug>` cache breaks when a realm is recreated between runs (local has stale state, remote has only `index.json`). The entrypoint detects `targetRealm.createdRealm` and wipes the workspace before pulling. Slug now preserves protocol so `http://host/realm/` and `https://host/realm/` map to distinct dirs.
+- **stdout redirect, applied broadly.** `client.pull` / `client.sync` write progress via both `console.log` and `process.stdout.write` (`\r` tickers). A new `redirect-stdout.ts` patches both for the duration of any sync call so progress lands on stderr — the factory's `--debug` JSON summary on stdout stays clean.
+- **Cross-package fix to the realm server's `_atomic` handler.** While end-to-end testing CS-10882 we discovered that an atomic batch containing both a module (`foo.gts`) and an instance that adopts from it (`FooCard/instance.json`) returned `500 FilterRefersToNonexistentTypeError`. Cause: `_batchWrite` iterated files in arrival order and called `fileSerialization` on each instance _before_ flushing the module→index. Two-line fix: sort modules ahead of instances inside the loop, and run the index flush before serialization. Plus a regression test in `packages/realm-server/tests/atomic-endpoints-test.ts`. Also added the missing `console.error` in the atomic catch so future failures aren't silent.
+- **Cross-package fix to boxel-cli's sync planner.** Realm `_mtimes` returns paths URL-encoded (`Knowledge%20Articles/foo.json`); local listings use the decoded form. The diff treated the two as different files and a second sync would "Pull: 1" the remote copy, leaving the workspace with a duplicate. Symmetric bug in the atomic-upload response handler keyed `hrefToRelative` by the unencoded href but the realm echoes back the encoded id. Both fixed via `decodeURIComponent` at the boundary, with a regression test in `client-sync.test.ts`.
 
 #### Skill Re-enablement and Alignment (CS-10613)
 

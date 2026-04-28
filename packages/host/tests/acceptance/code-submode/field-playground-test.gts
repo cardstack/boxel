@@ -514,7 +514,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       });
       assert
         .dom('[data-test-playground-format-chooser] button')
-        .exists({ count: 4 });
+        .exists({ count: 5 });
       assert.dom('[data-test-format-chooser="isolated"]').doesNotExist();
       assert.dom('[data-test-format-chooser="embedded"]').hasClass('active');
       assert
@@ -540,6 +540,12 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       await selectFormat('fitted');
       assertFieldExists(assert, 'fitted');
       assert.dom('[data-test-fitted-comment]').containsText('by Marco');
+
+      await selectFormat('markdown');
+      assert.dom('[data-test-format-chooser="markdown"]').hasClass('active');
+      assert
+        .dom('[data-test-markdown-preview]')
+        .exists('markdown preview container renders');
     });
 
     test('can not preview non-exports or primitives', async function (assert) {

@@ -20,13 +20,14 @@ import {
 } from './constants';
 import { CardError } from './error';
 import { cardIdToURL } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './card-reference-resolver';
 import type { LooseCardResource, FileMetaResource } from './index';
 import { trimExecutableExtension } from './index';
 import { resolveCardReference } from './card-reference-resolver';
 import type { RuntimeDependencyTrackingContext } from './dependency-tracker';
 
 export type ResolvedCodeRef = {
-  module: string;
+  module: RealmResourceIdentifier;
   name: string;
 };
 
@@ -49,13 +50,12 @@ let localIdentities = new WeakMap<
   | { type: 'fieldOf'; card: typeof BaseDef; field: string }
 >();
 
-export function isResolvedCodeRef(ref?: CodeRef | {}): ref is ResolvedCodeRef {
-  if (ref && 'module' in ref && 'name' in ref) {
-    return true;
-  } else {
-    return false;
-  }
-}
+// Pure shape predicates live in `card-document-shape.ts` so callers that
+// only need to recognize a CodeRef don't pull the transitive runtime
+// chain rooted in this file. Re-exported here for backward compat; the
+// local imports let the remainder of this file call them directly.
+import { isResolvedCodeRef, isCodeRef } from './card-document-shape';
+export { isResolvedCodeRef, isCodeRef };
 
 export function assertIsResolvedCodeRef(
   ref: unknown,
@@ -64,32 +64,6 @@ export function assertIsResolvedCodeRef(
   if (!isResolvedCodeRef(ref as CodeRef | {})) {
     throw new Error(message);
   }
-}
-
-export function isCodeRef(ref: any): ref is CodeRef {
-  if (!ref || typeof ref !== 'object') {
-    return false;
-  }
-  if (!('type' in ref)) {
-    if (!('module' in ref) || !('name' in ref)) {
-      return false;
-    }
-    return typeof ref.module === 'string' && typeof ref.name === 'string';
-  } else if (ref.type === 'ancestorOf') {
-    if (!('card' in ref)) {
-      return false;
-    }
-    return isCodeRef(ref.card);
-  } else if (ref.type === 'fieldOf') {
-    if (!('card' in ref) || !('field' in ref)) {
-      return false;
-    }
-    if (typeof ref.card !== 'object' || typeof ref.field !== 'string') {
-      return false;
-    }
-    return isCodeRef(ref.card);
-  }
-  return false;
 }
 
 export function isBaseDef(cardOrField: any): cardOrField is typeof BaseDef {
@@ -171,7 +145,7 @@ export function codeRefWithAbsoluteURL(
       if (opts?.trimExecutableExtension) {
         moduleURL = trimExecutableExtension(moduleURL);
       }
-      return { ...ref, module: moduleURL.href };
+      return { ...ref, module: moduleURL.href as RealmResourceIdentifier };
     } catch {
       return { ...ref };
     }
@@ -246,8 +220,11 @@ export function identifyCard(
   let ref = Loader.identify(card);
   if (ref) {
     return maybeRelativeURL
-      ? { ...ref, module: maybeRelativeURL(ref.module) }
-      : ref;
+      ? {
+          ...ref,
+          module: maybeRelativeURL(ref.module) as RealmResourceIdentifier,
+        }
+      : (ref as ResolvedCodeRef);
   }
 
   let local = localIdentities.get(card);
@@ -482,8 +459,8 @@ function isRelativePath(moduleId: unknown): moduleId is string {
 }
 
 type VisitModuleDep = (
-  moduleURL: string,
-  setModuleURL: (newURL: string) => void,
+  moduleURL: RealmResourceIdentifier,
+  setModuleURL: (newURL: RealmResourceIdentifier) => void,
 ) => void;
 
 function visitCodeRef(codeRef: CodeRef, visit: VisitModuleDep): void {

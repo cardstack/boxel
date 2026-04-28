@@ -1,20 +1,26 @@
 /**
- * Eval validation step — evaluates .gts modules in the target realm
- * via the prerenderer sandbox to ensure they load without runtime errors.
+ * Eval validation step — evaluates non-test ESM modules in the target
+ * realm via the prerenderer sandbox to ensure they load without runtime
+ * errors.
  *
- * For each non-test `.gts` file discovered in the realm, invokes the
- * `evaluate-module` host command via `_run-command`. The host command
- * calls `/_prerender-module` which runs evaluation in headless Chrome.
+ * Discovery and per-module evaluation are delegated to the shared
+ * `eval-execution` engine; this step owns the `EvalResult` card artifact
+ * lifecycle (create → complete) and sequence-number bookkeeping.
  *
- * Files matching `*.test.gts` are excluded — test files are the
- * responsibility of the test validation step.
+ * Files matching `*.test.{gts,gjs,ts,js}` are excluded — test files are
+ * the responsibility of the test validation step.
  */
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
-import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import type { ValidationStepResult } from '../factory-agent';
-import { deriveIssueSlug } from '../factory-agent-types';
+import { deriveIssueSlug } from '../factory-agent';
+import {
+  discoverEvaluableFiles,
+  evaluateRealmModules,
+  type EvalModuleResult,
+  type EvalModuleRecord,
+} from '../eval-execution';
 import { getNextValidationSequenceNumber } from '../realm-operations';
 import {
   createEvalResult,
@@ -31,16 +37,19 @@ let log = logger('eval-validation-step');
 // Types
 // ---------------------------------------------------------------------------
 
-export interface EvalModuleResult {
-  passed: boolean;
-  error?: string;
-  stackTrace?: string;
-}
+// Re-exported for consumers that imported EvalModuleResult from this module.
+export type { EvalModuleResult };
 
 export interface EvalValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
   evalResultsModuleUrl: string;
+  /**
+   * Local workspace directory mirroring the target realm. EvalResult
+   * cards are written here for the orchestrator to sync. (Eval itself
+   * reads modules via the prerenderer, which fetches them from the realm.)
+   */
+  workspaceDir: string;
   issueId?: string;
   /** Injected for testing — defaults to client.listFiles. */
   fetchFilenames?: (
@@ -66,9 +75,6 @@ export interface EvalValidationDetails {
   modules: { path: string; error: string; stackTrace?: string }[];
 }
 
-const EVALUATE_MODULE_COMMAND =
-  '@cardstack/boxel-host/commands/evaluate-module/default';
-
 // ---------------------------------------------------------------------------
 // EvalValidationStep
 // ---------------------------------------------------------------------------
@@ -79,13 +85,6 @@ export class EvalValidationStep implements ValidationStepRunner {
   private config: EvalValidationStepConfig;
   private lastSequenceNumber = 0;
 
-  private fetchFilenamesFn: (
-    realmUrl: string,
-  ) => Promise<{ filenames: string[]; error?: string }>;
-  private evaluateModuleFn: (
-    moduleUrl: string,
-    realmUrl: string,
-  ) => Promise<EvalModuleResult>;
   private getNextSeqFn: (
     slug: string,
     targetRealmUrl: string,
@@ -93,13 +92,6 @@ export class EvalValidationStep implements ValidationStepRunner {
 
   constructor(config: EvalValidationStepConfig) {
     this.config = config;
-    this.fetchFilenamesFn =
-      config.fetchFilenames ??
-      ((realmUrl: string) => config.client.listFiles(realmUrl));
-    this.evaluateModuleFn =
-      config.evaluateModuleFn ??
-      ((moduleUrl: string, realmUrl: string) =>
-        this.defaultEvaluateModule(moduleUrl, realmUrl));
     this.getNextSeqFn =
       config.getNextSequenceNumber ??
       ((slug: string, targetRealmUrl: string) =>
@@ -117,10 +109,14 @@ export class EvalValidationStep implements ValidationStepRunner {
     targetRealmUrl: string,
     iteration?: number,
   ): Promise<ValidationStepResult> {
-    // Step 1: Discover evaluable files
+    // Step 1: Discover evaluable files (shared engine)
     let evaluableFiles: string[];
     try {
-      evaluableFiles = await this.discoverEvaluableFiles(targetRealmUrl);
+      evaluableFiles = await discoverEvaluableFiles({
+        targetRealmUrl,
+        client: this.config.client,
+        fetchFilenames: this.config.fetchFilenames,
+      });
     } catch (err) {
       return {
         step: 'evaluate',
@@ -134,7 +130,7 @@ export class EvalValidationStep implements ValidationStepRunner {
     }
 
     if (evaluableFiles.length === 0) {
-      log.info('No evaluable .gts files found — nothing to validate');
+      log.info('No evaluable modules found — nothing to validate');
       return { step: 'evaluate', passed: true, files: [], errors: [] };
     }
 
@@ -175,6 +171,7 @@ export class EvalValidationStep implements ValidationStepRunner {
         {
           targetRealmUrl,
           client: this.config.client,
+          workspaceDir: this.config.workspaceDir,
           sequenceNumber: seq,
           issueURL,
         },
@@ -195,62 +192,39 @@ export class EvalValidationStep implements ValidationStepRunner {
       evalResultId = `Validations/eval_${slug}-${seq}`;
     }
 
-    // Step 3: Evaluate each module via sandbox (_run-command → host command)
-    let startedAt = Date.now();
-    let allModuleResults: EvalModuleErrorData[] = [];
-    let failedModules: EvalValidationDetails['modules'] = [];
+    // Step 3: Evaluate each module via the shared engine
+    let {
+      moduleResults: allModuleResults,
+      failedModules,
+      durationMs,
+    } = await evaluateRealmModules(
+      {
+        targetRealmUrl,
+        client: this.config.client,
+        realmServerUrl: this.config.realmServerUrl,
+        evaluateModuleFn: this.config.evaluateModuleFn,
+      },
+      evaluableFiles,
+    );
 
-    for (let file of evaluableFiles) {
-      let moduleUrl = new URL(
-        file.replace(/\.gts$/, ''),
-        ensureTrailingSlash(targetRealmUrl),
-      ).href;
-
-      try {
-        let result = await this.evaluateModuleFn(moduleUrl, targetRealmUrl);
-
-        allModuleResults.push({
-          path: file,
-          error: result.error ?? '',
-          stackTrace: result.stackTrace,
-        });
-
-        if (!result.passed) {
-          failedModules.push({
-            path: file,
-            error: result.error ?? 'Module evaluation failed',
-            stackTrace: result.stackTrace,
-          });
-        }
-      } catch (err) {
-        let message = `Eval failed: ${err instanceof Error ? err.message : String(err)}`;
-        log.warn(`Error evaluating ${file}: ${message}`);
-        allModuleResults.push({
-          path: file,
-          error: message,
-        });
-        failedModules.push({
-          path: file,
-          error: message,
-        });
-      }
-    }
-
-    let durationMs = Date.now() - startedAt;
     let passed = failedModules.length === 0;
 
     // Step 4: Complete the EvalResult card
     if (artifactCreated) {
+      let moduleResultsForCard: EvalModuleErrorData[] = allModuleResults.map(
+        (m) => ({ path: m.path, error: m.error, stackTrace: m.stackTrace }),
+      );
       let completeResult = await completeEvalResult(
         evalResultId,
         {
           status: passed ? 'passed' : 'failed',
           durationMs,
-          moduleResults: allModuleResults,
+          moduleResults: moduleResultsForCard,
         },
         {
           targetRealmUrl,
           client: this.config.client,
+          workspaceDir: this.config.workspaceDir,
         },
       );
       if (!completeResult.updated) {
@@ -265,10 +239,14 @@ export class EvalValidationStep implements ValidationStepRunner {
       evalResultId,
       modulesChecked: allModuleResults.length,
       modulesWithErrors: failedModules.length,
-      modules: failedModules,
+      modules: failedModules.map((m: EvalModuleRecord) => ({
+        path: m.path,
+        error: m.error,
+        stackTrace: m.stackTrace,
+      })),
     };
 
-    let errors = failedModules.map((m) => ({
+    let errors = failedModules.map((m: EvalModuleRecord) => ({
       file: m.path,
       message: `${m.path}: ${m.error}`,
     }));
@@ -311,82 +289,5 @@ export class EvalValidationStep implements ValidationStepRunner {
     }
 
     return lines.join('\n');
-  }
-
-  // -------------------------------------------------------------------------
-  // Private helpers
-  // -------------------------------------------------------------------------
-
-  private async discoverEvaluableFiles(
-    targetRealmUrl: string,
-  ): Promise<string[]> {
-    let result = await this.fetchFilenamesFn(targetRealmUrl);
-
-    if (result.error) {
-      log.warn(`Failed to fetch realm filenames: ${result.error}`);
-      throw new Error(result.error);
-    }
-
-    return result.filenames
-      .filter((f) => f.endsWith('.gts') && !f.endsWith('.test.gts'))
-      .sort((a, b) => a.localeCompare(b));
-  }
-
-  /**
-   * Default evaluateModuleFn: calls the evaluate-module host command
-   * via `_run-command` on the realm server.
-   */
-  private async defaultEvaluateModule(
-    moduleUrl: string,
-    realmUrl: string,
-  ): Promise<EvalModuleResult> {
-    let response = await this.config.client.runCommand(
-      this.config.realmServerUrl,
-      realmUrl,
-      EVALUATE_MODULE_COMMAND,
-      { moduleUrl, realmUrl },
-    );
-
-    log.info(
-      `run-command response for ${moduleUrl}: status=${response.status}, error=${response.error}, result=${response.result?.slice(0, 300)}`,
-    );
-
-    if (response.status !== 'ready') {
-      return {
-        passed: false,
-        error:
-          response.error ?? `run-command returned ${response.status} status`,
-      };
-    }
-
-    // Parse the cardResultString to extract EvaluateModuleResult fields
-    if (response.result) {
-      try {
-        let cardDoc = JSON.parse(response.result);
-        let attrs = cardDoc?.data?.attributes ?? cardDoc;
-        if (attrs.passed === false) {
-          return {
-            passed: false,
-            error: attrs.error ?? 'Module evaluation failed',
-            stackTrace: attrs.stackTrace,
-          };
-        }
-        return { passed: true };
-      } catch {
-        log.warn(
-          `Failed to parse run-command result for ${moduleUrl}: ${response.result?.slice(0, 200)}`,
-        );
-        return {
-          passed: false,
-          error:
-            'run-command returned an unparsable result — treating as failure',
-        };
-      }
-    }
-
-    return {
-      passed: false,
-      error: 'run-command did not return a result — treating as failure',
-    };
   }
 }
