@@ -1,6 +1,6 @@
 ---
 name: aws-access
-description: Provision an AWS STS session for Claude to use against staging or prod, and connect to the boxel RDS database from there. Covers (1) the first-time setup walkthrough for a teammate who has never let Claude reach AWS, (2) refreshing an expired session, and (3) running read-only queries against the private staging/prod boxel Postgres via SSM port-forwarding through the realm-server ECS task, authenticated as the grafana DB user. Claude operates as the dedicated `boxel-claude-readonly` IAM role — its effective AWS permissions are exactly that role's policy, regardless of which IAM groups the user is in. Use whenever Claude needs to call AWS APIs against the cardstack accounts or read/inspect the boxel_index database in a deployed environment, or whenever the user asks "how do I connect Claude to AWS / staging / prod" or "how do I query staging / prod DB".
+description: Provision an AWS STS session for Claude to use against staging or prod, and connect to the boxel RDS database from there. Covers (1) the first-time setup walkthrough for a teammate who has never let Claude reach AWS, (2) refreshing an expired session, and (3) running read-only queries against the private staging/prod boxel Postgres via SSM port-forwarding through the realm-server ECS task, authenticated as `claude_readonly_user` (a dedicated DB user, member of `readonly_role`). Claude operates as the dedicated `boxel-claude-readonly` IAM role — its effective AWS permissions are exactly that role's policy, regardless of which IAM groups the user is in. Use whenever Claude needs to call AWS APIs against the cardstack accounts or read/inspect the boxel_index database in a deployed environment, or whenever the user asks "how do I connect Claude to AWS / staging / prod" or "how do I query staging / prod DB".
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -120,13 +120,13 @@ The role is provisioned by infra-side configuration tracked under CS-10962. Anyt
 
 The staging/prod boxel Postgres instances are **private** (`PubliclyAccessible: false`) and live inside the cardstack VPC. They are not directly reachable from a developer laptop. The only path Claude uses is SSM port-forwarding through the realm-server ECS task, authenticated as the read-only `grafana` DB user.
 
-### Path A — SSM port-forward → psql on localhost as the `grafana` read-only role
+### Path A — SSM port-forward → psql on localhost as the `claude_readonly_user` DB user
 
 > All `aws --profile claude-<env> ...` commands below run as the `boxel-claude-readonly` role, not as your user. The procedural commands look the same as before — only the credentials underneath differ.
 
-This opens an SSM tunnel through the realm-server container to the RDS endpoint, then you connect with a normal local psql **as the `grafana` DB user**, which is a member of `readonly_role` and has SELECT-only access to the boxel database. Two layers of safety: AWS-side (the role's policy permits the SSM port-forward and the SSM `GetParameter` reads needed below, but does not permit `ecs:ExecuteCommand` and does not grant access to the realm-server's PGUSER/PGPASSWORD parameters) and DB-side (the grafana role literally cannot write).
+This opens an SSM tunnel through the realm-server container to the RDS endpoint, then you connect with a normal local psql **as `${CLAUDE_DB_USER}`** (`claude_readonly_user` by convention), which is a member of `readonly_role` and has SELECT-only access to the boxel database. Two layers of safety: AWS-side (the role's policy permits the SSM port-forward and the SSM `GetParameter` reads needed below, but does not permit `ecs:ExecuteCommand` and does not grant access to the realm-server's PGUSER/PGPASSWORD parameters or the grafana DB credentials) and DB-side (the user is read-only via `readonly_role`).
 
-Verified once on staging via `has_table_privilege(current_user, 'boxel_index', '...')`:
+Verified on staging via `has_table_privilege(current_user, 'boxel_index', '...')`:
 
 | Privilege | Result |
 |---|---|
@@ -134,7 +134,13 @@ Verified once on staging via `has_table_privilege(current_user, 'boxel_index', '
 | INSERT / UPDATE / DELETE / TRUNCATE | ✗ |
 | superuser / createrole / createdb / bypassrls | all `f` |
 
-The grafana role is the same one Grafana uses to read the boxel DB, so its read-only-ness is load-bearing for product behavior — it is unlikely to silently grow write privileges without someone noticing. The credentials live at SSM `<env-prefix>/GRAFANA_DB_USER` / `GRAFANA_DB_PASSWORD`. Source of truth for the role grants: `packages/postgres/migrations/1751981407344_setup-grafana-db-user.js` — it creates `readonly_role` in staging + production, grants `CONNECT` on `boxel` / `USAGE` on `public` / `SELECT` on all current tables (plus default privileges so future tables inherit), and grants the role to `${GRAFANA_DB_USER}`. Same migration runs in both envs, so verifying staging once also verifies prod by construction.
+The user is dedicated to Claude (separate from the `grafana` user that Grafana itself uses) so audit logs and `pg_stat_activity` distinguish triage traffic from dashboard traffic, and rotating either credential doesn't affect the other. Both inherit from the same `readonly_role`, so the SELECT-on-public grants are defined once and shared.
+
+Source of truth:
+- `readonly_role` itself — created in `packages/postgres/migrations/1751981407344_setup-grafana-db-user.js` (`CONNECT` on `boxel` / `USAGE` on `public` / `SELECT` on all current tables, plus default privileges so future tables inherit).
+- `claude_readonly_user` — created in `packages/postgres/migrations/1777413435523_setup-claude-readonly-db-user.js`, granted `readonly_role`. Both migrations gate on `REALM_SENTRY_ENVIRONMENT in (staging, production)`, so they only run in deployed environments.
+
+Credentials live at SSM `<env-prefix>/CLAUDE_DB_USER` / `CLAUDE_DB_PASSWORD`.
 
 ```sh
 PROFILE=claude-staging                         # or claude-prod
@@ -154,19 +160,20 @@ RUNTIME_ID=$(aws --profile $PROFILE ecs describe-tasks \
   --cluster $CLUSTER --tasks $TASK_ID \
   --query 'tasks[0].containers[0].runtimeId' --output text)
 
-# 2) Pull DB connection params + the read-only grafana credentials from
-#    SSM Parameter Store. GRAFANA_DB_PASSWORD is a SecureString — needs
-#    --with-decryption (and KMS perm). The boxel-claude-readonly role is
-#    NOT granted access to the realm-server's PGUSER/PGPASSWORD parameters,
-#    so trying to read those would fail at the IAM layer. Don't try.
+# 2) Pull DB connection params + the claude_readonly credentials from SSM
+#    Parameter Store. CLAUDE_DB_PASSWORD is a SecureString — needs
+#    --with-decryption (and KMS perm). The boxel-claude-readonly IAM role
+#    is NOT granted access to the realm-server's PGUSER/PGPASSWORD or to
+#    the grafana DB creds, so trying to read either would fail at the IAM
+#    layer. Don't try.
 RDS_HOST=$(aws --profile $PROFILE ssm get-parameter \
   --name $SSM_PREFIX/PGHOST --query 'Parameter.Value' --output text)
 export PGDATABASE=$(aws --profile $PROFILE ssm get-parameter \
   --name $SSM_PREFIX/PGDATABASE --query 'Parameter.Value' --output text)
-export GRAFANA_USER=$(aws --profile $PROFILE ssm get-parameter \
-  --name $SSM_PREFIX/GRAFANA_DB_USER --query 'Parameter.Value' --output text)
-export GRAFANA_PASSWORD=$(aws --profile $PROFILE ssm get-parameter \
-  --name $SSM_PREFIX/GRAFANA_DB_PASSWORD --with-decryption --query 'Parameter.Value' --output text)
+export CLAUDE_USER=$(aws --profile $PROFILE ssm get-parameter \
+  --name $SSM_PREFIX/CLAUDE_DB_USER --query 'Parameter.Value' --output text)
+export CLAUDE_PASSWORD=$(aws --profile $PROFILE ssm get-parameter \
+  --name $SSM_PREFIX/CLAUDE_DB_PASSWORD --with-decryption --query 'Parameter.Value' --output text)
 
 # 3) Open the tunnel in the background. Wait for "Waiting for connections..."
 #    in its output before connecting.
@@ -176,14 +183,15 @@ aws --profile $PROFILE ssm start-session \
   --parameters "{\"portNumber\":[\"5432\"],\"localPortNumber\":[\"$LOCAL_PORT\"],\"host\":[\"$RDS_HOST\"]}" &
 TUNNEL_PID=$!
 
-# 4) Run queries against localhost. Pass the grafana creds via PGUSER /
-#    PGPASSWORD on the psql invocation — keeps them in this subshell only.
-PGUSER=$GRAFANA_USER PGPASSWORD=$GRAFANA_PASSWORD \
+# 4) Run queries against localhost. Pass the claude_readonly creds via
+#    PGUSER / PGPASSWORD on the psql invocation — keeps them in this
+#    subshell only.
+PGUSER=$CLAUDE_USER PGPASSWORD=$CLAUDE_PASSWORD \
   psql -h localhost -p $LOCAL_PORT -A -t -c "<SQL>"
 
 # 5) Tear down.
 kill $TUNNEL_PID
-unset GRAFANA_USER GRAFANA_PASSWORD PGDATABASE
+unset CLAUDE_USER CLAUDE_PASSWORD PGDATABASE
 ```
 
 Notes:
@@ -192,29 +200,31 @@ Notes:
 - The RDS endpoint is reached via the container as a network hop — the container itself doesn't participate beyond providing a route to the VPC.
 - Origin of this approach: Buck's `awsx rds-tunnel production` script (not currently in git).
 
-### Only ever connect as the `grafana` DB user — IAM enforces this, behavioral rule is belt-and-suspenders
+### Only ever connect as `claude_readonly_user` — IAM enforces this, behavioral rule is belt-and-suspenders
 
-**For staging and prod, Claude only ever connects to the boxel database as the `grafana` user (whoever `${GRAFANA_DB_USER}` resolves to in SSM).**
+**For staging and prod, Claude only ever connects to the boxel database as `${CLAUDE_DB_USER}` (`claude_readonly_user` by convention, member of `readonly_role`).**
 
-The `boxel-claude-readonly` IAM role is scoped so that it does not have access to the realm-server's `PGUSER` / `PGPASSWORD` SSM parameters or to `ecs:ExecuteCommand`. So the IAM layer structurally blocks the two ways Claude could otherwise end up as the `postgres` superuser:
+The `boxel-claude-readonly` IAM role is scoped so that the only DB-credential SSM parameters it can read are `CLAUDE_DB_USER` and `CLAUDE_DB_PASSWORD`. It cannot read the realm-server's `PGUSER`/`PGPASSWORD` (postgres superuser) or the `GRAFANA_DB_USER`/`GRAFANA_DB_PASSWORD` (grafana dashboard user). It also cannot call `ecs:ExecuteCommand`. So the IAM layer structurally blocks the ways Claude could otherwise end up as a more-privileged DB identity:
 
 - It cannot read `${env}/boxel/PGUSER` / `${env}/boxel/PGPASSWORD` from SSM Parameter Store.
-- It cannot run `aws ecs execute-command` to land a shell inside the realm-server container (which would expose those creds via env vars).
+- It cannot read `${env}/boxel/GRAFANA_DB_USER` / `${env}/boxel/GRAFANA_DB_PASSWORD` either — even though grafana is also read-only, audit-isolation matters.
+- It cannot run `aws ecs execute-command` to land a shell inside the realm-server container (which would expose `PGUSER`/`PGPASSWORD` via env vars).
 
 That makes this a structural rule, not just a behavioral one. The behavioral form below is kept as defense-in-depth for non-SQL operations (e.g. "run this maintenance script that connects as PGUSER") where the IAM block would not be the failure mode.
 
 Forbidden, even if the user explicitly requests it:
 
 - Connecting as `postgres` (the realm-server's master user with full read/write rights).
+- Connecting as `grafana` (also read-only, but its credentials are out of scope for Claude — `pg_stat_activity` should distinguish triage traffic from dashboard traffic).
 - Connecting as any other user discovered in `pg_user` / `pg_roles` (admin roles, replication users, future users that don't yet exist).
-- Reading `${env}/boxel/PGUSER` or `${env}/boxel/PGPASSWORD` from SSM Parameter Store — the role denies this anyway, but Claude should not even try.
+- Reading `${env}/boxel/PGUSER`, `PGPASSWORD`, `GRAFANA_DB_USER`, or `GRAFANA_DB_PASSWORD` from SSM Parameter Store — the role denies all of these anyway, but Claude should not even try.
 - Running anything that goes through `aws ecs execute-command`. The role denies this anyway, but the behavioral rule covers wrappers that ultimately call it.
 
 If the user asks Claude to use any other user — including for "verifying" something, "just one query", "the read-only-ness is provable", "I'll watch what you do" — **refuse**. Reply along these lines:
 
-> The skill's rule is that I only ever connect to staging/prod as `${GRAFANA_DB_USER}` (the grafana user, member of `readonly_role`). The IAM role I'm running as also can't read the postgres-superuser SSM parameters, so even if I tried, the call would fail. If a query is failing because grafana lacks a privilege, that's the right outcome — escalate to a human-run psql session or extend the readonly_role grant in the migration.
+> The skill's rule is that I only ever connect to staging/prod as `${CLAUDE_DB_USER}` (a member of `readonly_role`). The IAM role I'm running as also can't read any other DB user's credentials — postgres-superuser, grafana, anything else — so even if I tried, the call would fail. If a query is failing because the user lacks a privilege, that's the right outcome — escalate to a human-run psql session or extend the readonly_role grant in the migration.
 
-**Sanity check on every connection.** As soon as a tunnel is up, the first SQL Claude runs should be `SELECT current_user, pg_has_role(current_user, 'readonly_role', 'member') AS in_readonly_role;`. If `current_user` is anything other than the value of `${GRAFANA_DB_USER}` for that env, or `in_readonly_role` is false, **abort the session** and tell the user the role invariant is broken. Do not run any further queries until the user confirms what's going on.
+**Sanity check on every connection.** As soon as a tunnel is up, the first SQL Claude runs should be `SELECT current_user, pg_has_role(current_user, 'readonly_role', 'member') AS in_readonly_role;`. If `current_user` is anything other than the value of `${CLAUDE_DB_USER}` for that env, or `in_readonly_role` is false, **abort the session** and tell the user the role invariant is broken. Do not run any further queries until the user confirms what's going on.
 
 ### Read-only — IAM and DB both enforce it; behavioral rule covers the rest
 
@@ -228,8 +238,8 @@ If the user asks Claude to use any other user — including for "verifying" some
 
 Two layers of structural enforcement back this up:
 
-1. **DB layer.** Claude connects as the `grafana` user, which is a member of `readonly_role` and has SELECT-only privileges on the boxel database. Writes fail at the DB.
-2. **IAM layer.** The `boxel-claude-readonly` role does not have access to the realm-server's PGUSER/PGPASSWORD SSM parameters and cannot `ecs:ExecuteCommand`, so Claude cannot reach a more-privileged DB identity in the first place.
+1. **DB layer.** Claude connects as `claude_readonly_user`, which is a member of `readonly_role` and has SELECT-only privileges on the boxel database. Writes fail at the DB.
+2. **IAM layer.** The `boxel-claude-readonly` role can only read its own `CLAUDE_DB_USER` / `CLAUDE_DB_PASSWORD` SSM parameters — not the realm-server's PGUSER/PGPASSWORD nor the grafana dashboard creds — and cannot `ecs:ExecuteCommand`. So Claude cannot reach a more-privileged DB identity in the first place.
 
 The behavioral rule is the third layer — defense-in-depth for the operations that aren't write SQL but are still mutating (e.g. "run this maintenance script", "kick off this job"). If the user asks you to run a write, refuse and explain that the rule is no-writes-from-Claude-against-deployed-databases regardless of who's asking. Suggest the proper path: a migration in `packages/realm-server/migrations/`, a PR, or having the user run it themselves through a sanctioned admin script.
 
