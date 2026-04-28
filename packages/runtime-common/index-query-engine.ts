@@ -984,7 +984,7 @@ export class IndexQueryEngine {
       ];
     }
     let query = fieldQuery(key, onRef, false, 'filter');
-    let v = fieldValue(key, [textSafeParam(value)], onRef, 'filter');
+    let v = fieldValue(key, [param(value)], onRef, 'filter');
     return [
       fieldArity({
         type: onRef,
@@ -1016,7 +1016,7 @@ export class IndexQueryEngine {
         if (i > 0) {
           inList.push(',');
         }
-        inList.push(fieldValue(key, [textSafeParam(v)], onRef, 'filter'));
+        inList.push(fieldValue(key, [param(v)], onRef, 'filter'));
       });
       conditions.push([
         fieldArity({
@@ -1305,6 +1305,14 @@ export class IndexQueryEngine {
             `Do not know how to handle field value: ${stringify(value)}`,
           );
         }
+        // The jsonb ->> operator returns text, so filter values compared
+        // against it must be text-compatible. In PGLite, boolean params keep
+        // their native JS type (unlike node-pg which stringifies everything
+        // in the wire protocol), causing "text = boolean" type errors.
+        // Stringify booleans for the PG path only.
+        if (typeof queryValue === 'boolean') {
+          return [param({ pg: String(queryValue), sqlite: queryValue })];
+        }
         return [param(queryValue)];
       },
     );
@@ -1478,18 +1486,6 @@ function tableFromOpts(opts: WIPOptions | undefined) {
 // char itself) with a backslash before binding.
 function escapeSqliteLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (c) => `\\${c}`);
-}
-
-// Field filter values are compared against the text result of the jsonb ->>
-// operator. In PGLite, boolean bind parameters keep their JS type, which
-// causes "Invalid input for string type" because there is no `text = boolean`
-// operator. The node-pg wire protocol avoids this by serializing all params
-// as text strings. We replicate that for booleans here so both adapters work.
-function textSafeParam(value: JSONTypes.Value): Param {
-  if (typeof value === 'boolean') {
-    return param({ pg: String(value), sqlite: value });
-  }
-  return param(value);
 }
 
 function assertNever(value: never) {
