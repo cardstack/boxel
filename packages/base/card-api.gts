@@ -156,6 +156,7 @@ import {
   getFieldDescription,
   getFieldOverrides,
   getFields,
+  getRealmURLString,
   getter,
   isArrayOfCardOrField,
   isCard,
@@ -297,6 +298,12 @@ interface Options {
 
 interface RelationshipOptions extends Options {
   query?: QueryWithInterpolations;
+  // When true, the linked card must live in the same realm as the
+  // containing card. Validated by LinksTo.validate at deserialize and
+  // setField time; throws a `field validation error: …` on mismatch.
+  // The check is skipped when the parent or child realm is unknown
+  // (e.g. synthetic in-memory construction without realm meta).
+  sameRealm?: boolean;
 }
 
 export interface CardContext<T extends CardDef = CardDef> {
@@ -330,6 +337,7 @@ export interface FieldConstructor<T> {
   isPolymorphic?: true;
   name: string;
   queryDefinition?: QueryWithInterpolations;
+  sameRealm?: boolean;
 }
 
 type CardChangeSubscriber = (
@@ -1129,6 +1137,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly isPolymorphic: undefined | true;
   readonly configuration?: ConfigurationInput<any>;
   readonly queryDefinition?: QueryWithInterpolations;
+  readonly sameRealm: boolean | undefined;
   constructor({
     cardThunk,
     declaredCardThunk,
@@ -1137,6 +1146,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     isUsed,
     isPolymorphic,
     queryDefinition,
+    sameRealm,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.declaredCardThunk = declaredCardThunk ?? cardThunk;
@@ -1145,6 +1155,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
     this.queryDefinition = queryDefinition;
+    this.sameRealm = sameRealm;
   }
 
   get card(): CardT {
@@ -1408,6 +1419,15 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
         throw new Error(
           `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
+      }
+      if (this.sameRealm) {
+        let parentRealm = getRealmURLString(_instance);
+        let childRealm = getRealmURLString(value);
+        if (parentRealm && childRealm && parentRealm !== childRealm) {
+          throw new Error(
+            `field validation error: linksTo field '${this.name}' must reference a card in the same realm (${parentRealm}) but got one in ${childRealm}`,
+          );
+        }
       }
     }
     return value;
@@ -2125,7 +2145,7 @@ export function linksTo<CardT extends LinkableDefConstructor>(
 ): BaseInstanceType<CardT> {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
-      let { computeVia, isUsed, query } = options ?? {};
+      let { computeVia, isUsed, query, sameRealm } = options ?? {};
       let fieldCardThunk = cardThunk(cardOrThunk);
       if (query) {
         validateRelationshipQuery(ownerPrototype, fieldName, query);
@@ -2137,6 +2157,7 @@ export function linksTo<CardT extends LinkableDefConstructor>(
         name: fieldName,
         isUsed,
         queryDefinition: query,
+        sameRealm,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);

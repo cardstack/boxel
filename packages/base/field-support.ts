@@ -483,7 +483,9 @@ export function setRealmContextOnField(
   instance[realmContext] = realmURLString;
 }
 
-function getRealmURLString(realmOrInstance: string | BaseDef | undefined) {
+export function getRealmURLString(
+  realmOrInstance: string | BaseDef | undefined,
+) {
   if (!realmOrInstance) {
     return undefined;
   }
