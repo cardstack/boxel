@@ -46,9 +46,12 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - { index: 1, total: 3 }
-          - { index: 2, total: 3 }
-          - { index: 3, total: 3 }
+          - index: 1
+            total: 3
+          - index: 2
+            total: 3
+          - index: 3
+            total: 3
     concurrency:
       group: ci-software-factory-shard-${{ matrix.shard.index }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
