@@ -3,6 +3,7 @@ import { basename } from 'path';
 import supertest from 'supertest';
 import type { SuperTest, Test } from 'supertest';
 import type { Realm } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import {
   DEFAULT_PERMISSIONS,
   SupportedMimeType,
@@ -61,7 +62,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             },
             meta: {
               adoptsFrom: {
-                module: './source-card',
+                module: rri('./source-card'),
                 name: 'SourceCard',
               },
             },
@@ -134,7 +135,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './broken-card.gts',
+                    module: rri('./broken-card.gts'),
                     name: 'BrokenCard',
                   },
                 },
@@ -268,7 +269,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './source-card',
+                      module: rri('./source-card'),
                       name: 'SourceCard',
                     },
                   },
@@ -412,7 +413,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                     },
                     meta: {
                       adoptsFrom: {
-                        module: './source-card',
+                        module: rri('./source-card'),
                         name: 'SourceCard',
                       },
                     },
@@ -528,7 +529,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                     },
                     meta: {
                       adoptsFrom: {
-                        module: './source-card',
+                        module: rri('./source-card'),
                         name: 'SourceCard',
                       },
                     },
@@ -641,7 +642,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './source-card',
+                      module: rri('./source-card'),
                       name: 'SourceCard',
                     },
                   },
@@ -763,7 +764,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './source-card',
+                      module: rri('./source-card'),
                       name: 'SourceCard',
                     },
                   },

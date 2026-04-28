@@ -12,6 +12,7 @@ import type {
   LooseSingleCardDocument,
   Relationship,
 } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 
 import { buildCardDocument } from './darkfactory-schemas';
 import {
@@ -603,7 +604,7 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
           attributes,
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/spec',
+              module: rri('https://cardstack.com/base/spec'),
               name: 'Spec',
             },
           },

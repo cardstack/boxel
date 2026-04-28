@@ -39,6 +39,7 @@ import {
   isRealmIndexCard,
   type ResolvedCodeRef,
   type CardErrorJSONAPI,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import OpenCreateListingModalCommand from '@cardstack/host/commands/open-create-listing-modal';
@@ -483,7 +484,7 @@ export default class DetailPanel extends Component<Signature> {
       module: `${this.operatorModeStateService.state.codePath!.href.replace(
         /\.[^.]+$/,
         '',
-      )}`,
+      )}` as RealmResourceIdentifier,
     };
   }
 

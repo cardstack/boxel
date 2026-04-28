@@ -14,6 +14,8 @@ import {
 import {
   isRegisteredPrefix,
   unresolveCardReference,
+  type RealmResourceIdentifier,
+  type RealmIdentifier,
 } from './card-reference-resolver';
 import { getCreatedTime, ensureFileCreatedAt } from './file-meta';
 import {
@@ -260,13 +262,13 @@ export class Batch {
       entry.pristine_doc = entry.pristine_doc
         ? {
             ...entry.pristine_doc,
-            id: copyURL(entry.pristine_doc.id!), // these will always have an ID
+            id: copyURL(entry.pristine_doc.id!) as RealmResourceIdentifier, // these will always have an ID
           }
         : entry.pristine_doc;
       if (entry.type === 'instance' && entry.pristine_doc) {
         entry.pristine_doc.meta = {
           ...entry.pristine_doc.meta,
-          realmURL: this.realmURL.href,
+          realmURL: this.realmURL.href as RealmIdentifier,
         };
       }
       entry.fitted_html = entry.fitted_html

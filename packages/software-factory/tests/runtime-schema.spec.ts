@@ -13,9 +13,11 @@
 import { test } from './fixtures';
 import { expect } from '@playwright/test';
 
+import { rri } from '@cardstack/runtime-common/card-reference-resolver';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+
 import { fetchCardTypeSchema } from '../src/darkfactory-schemas';
 import { sourceRealmURLFor } from '../src/harness/shared';
-import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { buildTestClient } from './helpers/test-client';
 
 const GET_CARD_TYPE_SCHEMA_COMMAND =
@@ -85,7 +87,10 @@ test('fetches Issue schema with enum fields', async ({ realm }) => {
       client,
       realmServerUrl,
       sourceRealmUrl,
-      { module: `${sourceRealmUrl}darkfactory`, name: 'Issue' },
+      {
+        module: rri(`${sourceRealmUrl}darkfactory`),
+        name: 'Issue',
+      },
     );
 
     expect(schema).toBeDefined();
@@ -121,7 +126,10 @@ test('fetches KnowledgeArticle schema', async ({ realm }) => {
       client,
       realmServerUrl,
       sourceRealmUrl,
-      { module: `${sourceRealmUrl}darkfactory`, name: 'KnowledgeArticle' },
+      {
+        module: rri(`${sourceRealmUrl}darkfactory`),
+        name: 'KnowledgeArticle',
+      },
     );
 
     expect(schema).toBeDefined();

@@ -9,7 +9,7 @@ import type {
   QueueRunner,
   Realm,
 } from '@cardstack/runtime-common';
-import { baseCardRef } from '@cardstack/runtime-common';
+import { baseCardRef, rri } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import type { PgAdapter } from '@cardstack/postgres';
 import { stringify } from 'qs';
@@ -46,7 +46,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
+              module: rri('https://cardstack.com/base/card-api'),
               name: 'CardDef',
             },
           },
@@ -62,7 +62,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
+              module: rri('https://cardstack.com/base/card-api'),
               name: 'CardDef',
             },
           },

@@ -16,7 +16,12 @@ import stringify from 'safe-stable-stringify';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
-import { Deferred, baseRealm, skillCardRef } from '@cardstack/runtime-common';
+import {
+  Deferred,
+  baseRealm,
+  skillCardRef,
+  rri,
+} from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_ACTIVE_LLM,
@@ -1995,7 +2000,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.deepEqual(
       contextSent.codeMode!.selectedCodeRef,
       {
-        module: 'http://test-realm/test/plant',
+        module: rri('http://test-realm/test/plant'),
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',
@@ -2008,7 +2013,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.deepEqual(
       contextSent.codeMode!.inheritanceChain![0].codeRef,
       {
-        module: 'http://test-realm/test/plant',
+        module: rri('http://test-realm/test/plant'),
         name: 'Plant',
       },
       'First item in inheritanceChain is the Plant card',
@@ -2155,7 +2160,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.deepEqual(
       contextSent.codeMode!.selectedCodeRef,
       {
-        module: 'http://test-realm/test/plant',
+        module: rri('http://test-realm/test/plant'),
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',
@@ -2226,7 +2231,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.deepEqual(
       contextSent.codeMode!.selectedCodeRef,
       {
-        module: 'http://test-realm/test/plant',
+        module: rri('http://test-realm/test/plant'),
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',

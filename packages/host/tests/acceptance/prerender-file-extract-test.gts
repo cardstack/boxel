@@ -8,6 +8,7 @@ import {
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import type RenderFileExtractRoute from '@cardstack/host/routes/render/file-extract';
@@ -48,7 +49,7 @@ module('Acceptance | prerender | file-extract', function (hooks) {
     moduleName: string,
     name: string,
   ): ResolvedCodeRef => ({
-    module: new URL(moduleName, testRealmURL).href,
+    module: new URL(moduleName, testRealmURL).href as RealmResourceIdentifier,
     name,
   });
 

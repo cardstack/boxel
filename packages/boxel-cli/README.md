@@ -33,6 +33,29 @@ boxel --help
 boxel --version
 ```
 
+### Environment variables
+
+These are read by `boxel profile add`:
+
+- `BOXEL_PASSWORD` — password for non-interactive profile creation. Preferred over `-p/--password`, which exposes the password in shell history and process listings.
+- `BOXEL_ENVIRONMENT` — env-mode slug (typically a branch name) for per-branch local dev. Interpreted like `scripts/env-slug.sh`: the value is slugified (lowercased, `/` → `-`, other chars stripped) and URLs are derived as `http://matrix.<slug>.localhost` and `http://realm-server.<slug>.localhost/`. Overridden by `--matrix-url` / `--realm-server-url` if those flags are provided. Values that slugify to empty (e.g. `!!!`) exit with an error.
+
+Example — create a profile for a branch running in env mode:
+
+```bash
+BOXEL_PASSWORD=… BOXEL_ENVIRONMENT=cs-10998-my-branch \
+  boxel profile add -u @alice:cs-10998-my-branch.localhost
+```
+
+Example — create a profile against a custom realm server:
+
+```bash
+BOXEL_PASSWORD=… boxel profile add \
+  -u @alice:my.server \
+  --matrix-url https://matrix.my.server \
+  --realm-server-url https://realms.my.server/
+```
+
 ## Development
 
 ### Building

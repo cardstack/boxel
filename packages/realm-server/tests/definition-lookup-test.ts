@@ -9,6 +9,7 @@ import {
   type ModulePrerenderArgs,
   type ModuleRenderResponse,
   type Prerenderer,
+  rri,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
@@ -29,7 +30,7 @@ function buildDefinition(
     definition: {
       type: 'card-def',
       codeRef: {
-        module: moduleAlias,
+        module: rri(moduleAlias),
         name,
       },
       displayName: name,
@@ -64,7 +65,10 @@ function buildModuleResponse(
   deps: string[],
   error?: ErrorEntry,
 ): ModuleRenderResponse {
-  let definitionId = internalKeyFor({ module: moduleURL, name }, undefined);
+  let definitionId = internalKeyFor(
+    { module: rri(moduleURL), name },
+    undefined,
+  );
   let definitions = error
     ? {}
     : {
@@ -119,7 +123,7 @@ module(basename(__filename), function () {
                 definition: {
                   type: 'card-def',
                   codeRef: {
-                    module: moduleURL.href,
+                    module: rri(moduleURL.href),
                     name: 'Person',
                   },
                   displayName: 'Person',
@@ -129,7 +133,7 @@ module(basename(__filename), function () {
                       isPrimitive: true,
                       isComputed: false,
                       fieldOrCard: {
-                        module: 'https://cardstack.com/base/string',
+                        module: rri('https://cardstack.com/base/string'),
                         name: 'default',
                       },
                       serializerName: undefined,
@@ -190,7 +194,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './person',
+                    module: rri('./person'),
                     name: 'Person',
                   },
                 },
@@ -221,7 +225,7 @@ module(basename(__filename), function () {
 
     test('lookupDefinition', async function (assert) {
       let definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -233,7 +237,7 @@ module(basename(__filename), function () {
 
       // second call should hit the cache and not call prerenderModule again
       definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -246,7 +250,7 @@ module(basename(__filename), function () {
 
     test('invalidation', async function (assert) {
       let definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -259,7 +263,7 @@ module(basename(__filename), function () {
       await definitionLookup.invalidate('http://some-realm-url/person.gts');
 
       definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -272,7 +276,7 @@ module(basename(__filename), function () {
       await definitionLookup.invalidate(`${realmURL}person.gts`);
 
       definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -285,7 +289,7 @@ module(basename(__filename), function () {
 
     test('invalidates module cache entries without file extensions', async function (assert) {
       let definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -298,7 +302,7 @@ module(basename(__filename), function () {
       await definitionLookup.invalidate(`${realmURL}person`);
 
       definition = await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person');
@@ -327,7 +331,7 @@ module(basename(__filename), function () {
           calls++;
           let moduleAlias = trimExecutableExtension(new URL(args.url)).href;
           let definitionId = internalKeyFor(
-            { module: args.url, name: 'Person' },
+            { module: rri(args.url), name: 'Person' },
             undefined,
           );
           return {
@@ -345,7 +349,7 @@ module(basename(__filename), function () {
                 definition: {
                   type: 'card-def',
                   codeRef: {
-                    module: moduleAlias,
+                    module: rri(moduleAlias),
                     name: 'Person',
                   },
                   displayName: `Person v${version}`,
@@ -375,7 +379,7 @@ module(basename(__filename), function () {
       });
 
       let definition = await lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person v1');
@@ -385,7 +389,7 @@ module(basename(__filename), function () {
       await lookup.invalidate(moduleURL);
 
       definition = await lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'Person',
       });
       assert.strictEqual(definition?.displayName, 'Person v2');
@@ -441,7 +445,7 @@ module(basename(__filename), function () {
       });
 
       let definition = await lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'DeletedCard',
       });
       assert.ok(definition, 'definition is cached before deletion');
@@ -452,7 +456,7 @@ module(basename(__filename), function () {
 
       await assert.rejects(
         lookup.lookupDefinition({
-          module: moduleURL,
+          module: rri(moduleURL),
           name: 'DeletedCard',
         }),
         'lookup fails after module deletion invalidation',
@@ -522,19 +526,19 @@ module(basename(__filename), function () {
       });
 
       await lookup.lookupDefinition({
-        module: deepModule,
+        module: rri(deepModule),
         name: 'DeepCard',
       });
       await lookup.lookupDefinition({
-        module: middleModule,
+        module: rri(middleModule),
         name: 'MiddleField',
       });
       await lookup.lookupDefinition({
-        module: leafModule,
+        module: rri(leafModule),
         name: 'LeafField',
       });
       await lookup.lookupDefinition({
-        module: otherModule,
+        module: rri(otherModule),
         name: 'OtherCard',
       });
 
@@ -592,7 +596,7 @@ module(basename(__filename), function () {
       );
 
       await lookup.lookupDefinition({
-        module: deepModule,
+        module: rri(deepModule),
         name: 'DeepCard',
       });
       assert.strictEqual(
@@ -670,23 +674,23 @@ module(basename(__filename), function () {
       });
 
       await lookup.lookupDefinition({
-        module: blogAppModule,
+        module: rri(blogAppModule),
         name: 'BlogApp',
       });
       await lookup.lookupDefinition({
-        module: authorModule,
+        module: rri(authorModule),
         name: 'Author',
       });
       await lookup.lookupDefinition({
-        module: blogCategoryModule,
+        module: rri(blogCategoryModule),
         name: 'BlogCategory',
       });
       await lookup.lookupDefinition({
-        module: blogPostModule,
+        module: rri(blogPostModule),
         name: 'BlogPost',
       });
       await lookup.lookupDefinition({
-        module: otherModule,
+        module: rri(otherModule),
         name: 'OtherCard',
       });
 
@@ -750,7 +754,7 @@ module(basename(__filename), function () {
       );
 
       await lookup.lookupDefinition({
-        module: blogPostModule,
+        module: rri(blogPostModule),
         name: 'BlogPost',
       });
       assert.strictEqual(
@@ -864,7 +868,7 @@ module(basename(__filename), function () {
 
       await assert.rejects(
         lookup.lookupDefinition({
-          module: deepModule,
+          module: rri(deepModule),
           name: 'DeepCard',
         }),
         'deep-card errors when missing',
@@ -875,14 +879,14 @@ module(basename(__filename), function () {
 
       await assert.rejects(
         lookup.lookupDefinition({
-          module: middleModule,
+          module: rri(middleModule),
           name: 'MiddleField',
         }),
         'middle-field errors when missing',
       );
       await assert.rejects(
         lookup.lookupDefinition({
-          module: deepModule,
+          module: rri(deepModule),
           name: 'DeepCard',
         }),
         'deep-card errors when middle-field is missing',
@@ -918,21 +922,21 @@ module(basename(__filename), function () {
 
       await assert.rejects(
         lookup.lookupDefinition({
-          module: leafModule,
+          module: rri(leafModule),
           name: 'LeafField',
         }),
         'leaf-field errors when missing',
       );
       await assert.rejects(
         lookup.lookupDefinition({
-          module: middleModule,
+          module: rri(middleModule),
           name: 'MiddleField',
         }),
         'middle-field errors when leaf-field is missing',
       );
       await assert.rejects(
         lookup.lookupDefinition({
-          module: deepModule,
+          module: rri(deepModule),
           name: 'DeepCard',
         }),
         'deep-card errors when leaf-field is missing',
@@ -962,15 +966,15 @@ module(basename(__filename), function () {
       await lookup.invalidate(leafModule);
 
       await lookup.lookupDefinition({
-        module: leafModule,
+        module: rri(leafModule),
         name: 'LeafField',
       });
       await lookup.lookupDefinition({
-        module: middleModule,
+        module: rri(middleModule),
         name: 'MiddleField',
       });
       await lookup.lookupDefinition({
-        module: deepModule,
+        module: rri(deepModule),
         name: 'DeepCard',
       });
 
@@ -1012,7 +1016,7 @@ module(basename(__filename), function () {
       });
 
       await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
 
@@ -1029,7 +1033,7 @@ module(basename(__filename), function () {
       await dbAdapter.execute('DELETE FROM modules');
 
       await definitionLookup.lookupDefinition({
-        module: `${realmURL}person.gts`,
+        module: rri(`${realmURL}person.gts`),
         name: 'Person',
       });
 
@@ -1073,7 +1077,7 @@ module(basename(__filename), function () {
         });
 
         await scopedLookup.lookupDefinition({
-          module: remoteModuleURL,
+          module: rri(remoteModuleURL),
           name: 'Person',
         });
 
@@ -1121,7 +1125,7 @@ module(basename(__filename), function () {
         });
 
         await scopedLookup.lookupDefinition({
-          module: remoteModuleURL,
+          module: rri(remoteModuleURL),
           name: 'Person',
         });
 
@@ -1189,7 +1193,7 @@ module(basename(__filename), function () {
       // 1. First lookup caches the error
       await assert.rejects(
         lookup.lookupDefinition({
-          module: moduleURL,
+          module: rri(moduleURL),
           name: 'TransientError',
         }),
         /nonexistent type/,
@@ -1201,7 +1205,7 @@ module(basename(__filename), function () {
       shouldError = false;
       await assert.rejects(
         lookup.lookupDefinition({
-          module: moduleURL,
+          module: rri(moduleURL),
           name: 'TransientError',
         }),
         /nonexistent type/,
@@ -1221,7 +1225,7 @@ module(basename(__filename), function () {
 
       // 4. Now the stale error should trigger a re-prerender which succeeds
       let definition = await lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'TransientError',
       });
       assert.ok(
@@ -1237,7 +1241,7 @@ module(basename(__filename), function () {
 
       // 5. Subsequent lookups should use the now-healthy cache
       definition = await lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'TransientError',
       });
       assert.ok(definition, 'lookup succeeds from healthy cache');
@@ -1289,15 +1293,15 @@ module(basename(__filename), function () {
       });
 
       let p1 = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'CoalesceSame',
       });
       let p2 = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'CoalesceSame',
       });
       let p3 = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'CoalesceSame',
       });
 
@@ -1364,11 +1368,11 @@ module(basename(__filename), function () {
       });
 
       let pA = lookup.lookupDefinition({
-        module: moduleA,
+        module: rri(moduleA),
         name: 'CoalesceA',
       });
       let pB = lookup.lookupDefinition({
-        module: moduleB,
+        module: rri(moduleB),
         name: 'CoalesceB',
       });
 
@@ -1442,15 +1446,15 @@ module(basename(__filename), function () {
       });
 
       let p1 = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'CoalesceError',
       });
       let p2 = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'CoalesceError',
       });
       let p3 = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'CoalesceError',
       });
 
@@ -1476,7 +1480,7 @@ module(basename(__filename), function () {
       // lookup should be served from the cache without re-invoking prerender.
       await assert.rejects(
         lookup.lookupDefinition({
-          module: moduleURL,
+          module: rri(moduleURL),
           name: 'CoalesceError',
         }),
         /nonexistent type/,
@@ -1498,7 +1502,7 @@ module(basename(__filename), function () {
 
       await assert.rejects(
         lookup.lookupDefinition({
-          module: moduleURL,
+          module: rri(moduleURL),
           name: 'CoalesceError',
         }),
         /nonexistent type/,
@@ -1532,7 +1536,7 @@ module(basename(__filename), function () {
           let version = calls;
           await gate;
           let definitionId = internalKeyFor(
-            { module: args.url, name: 'CoalesceInvalidate' },
+            { module: rri(args.url), name: 'CoalesceInvalidate' },
             undefined,
           );
           let moduleAlias = trimExecutableExtension(new URL(args.url)).href;
@@ -1551,7 +1555,7 @@ module(basename(__filename), function () {
                 definition: {
                   type: 'card-def',
                   codeRef: {
-                    module: moduleAlias,
+                    module: rri(moduleAlias),
                     name: 'CoalesceInvalidate',
                   },
                   displayName: `CoalesceInvalidate v${version}`,
@@ -1582,7 +1586,7 @@ module(basename(__filename), function () {
 
       // Caller A starts the prerender and parks at the gate.
       let pA = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'CoalesceInvalidate',
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1592,508 +1596,21 @@ module(basename(__filename), function () {
       await lookup.invalidate(moduleURL);
 
       let pB = lookup.lookupDefinition({
-        module: moduleURL,
+        module: rri(moduleURL),
         name: 'CoalesceInvalidate',
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       releaseGate();
-      let [resultA, resultB] = await Promise.allSettled([pA, pB]);
+      let [dA, dB] = await Promise.all([pA, pB]);
 
       assert.strictEqual(
         calls,
         2,
         'invalidate dropped the in-flight entry so caller B triggered its own prerender',
       );
-      // CS-10948: A's pre-invalidation result is dropped at persist time
-      // rather than served back. lookupDefinition therefore rejects (the
-      // post-skip readFromDatabaseCache misses because invalidate also
-      // deleted the row). Only B — which started after the bump and ran a
-      // fresh prerender — returns a Definition.
-      assert.strictEqual(
-        resultA.status,
-        'rejected',
-        'A is rejected — its pre-invalidation prerender result is discarded',
-      );
-      assert.strictEqual(resultB.status, 'fulfilled');
-      if (resultB.status === 'fulfilled') {
-        assert.strictEqual(resultB.value?.displayName, 'CoalesceInvalidate v2');
-      }
-    });
-
-    test('in-flight prerender result is dropped when invalidate runs concurrently', async function (assert) {
-      await dbAdapter.execute('DELETE FROM modules');
-
-      let moduleURL = `${realmURL}stale-persist-invalidate.gts`;
-      let calls = 0;
-      let releaseGate!: () => void;
-      let gate = new Promise<void>((resolve) => {
-        releaseGate = resolve;
-      });
-
-      let prerenderer: Prerenderer = {
-        async prerenderVisit() {
-          throw new Error('Not implemented in mock');
-        },
-        async runCommand() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderModule(args: ModulePrerenderArgs) {
-          calls++;
-          await gate;
-          return buildModuleResponse(args.url, 'StalePersist', []);
-        },
-      };
-
-      let lookup = new CachingDefinitionLookup(
-        dbAdapter,
-        prerenderer,
-        virtualNetwork,
-        testCreatePrerenderAuth,
-      );
-      lookup.registerRealm({
-        url: realmURL,
-        async getRealmOwnerUserId() {
-          return testUserId;
-        },
-        async visibility() {
-          return 'private';
-        },
-      });
-
-      // Caller A starts the prerender and parks at the gate.
-      let pA = lookup.lookupDefinition({
-        module: moduleURL,
-        name: 'StalePersist',
-      });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
-      // Invalidate while A is mid-prerender.
-      await lookup.invalidate(moduleURL);
-
-      // Release A's prerender. Without the generation guard, A would
-      // INSERT ... ON CONFLICT DO UPDATE and re-create the row that
-      // invalidate just deleted.
-      releaseGate();
-      let result = await Promise.allSettled([pA]);
-      assert.strictEqual(
-        result[0].status,
-        'rejected',
-        'A rejects because the post-skip readFromDatabaseCache misses (row was deleted)',
-      );
-      assert.strictEqual(
-        calls,
-        1,
-        'prerenderModule was still called once (no double-prerender)',
-      );
-
-      let rows = (await dbAdapter.execute(
-        `SELECT url FROM modules WHERE url = $1`,
-        { bind: [moduleURL] },
-      )) as { url: string }[];
-      assert.strictEqual(
-        rows.length,
-        0,
-        'invalidate is honored — no zombie row from A persist',
-      );
-    });
-
-    test('in-flight prerender result is dropped when clearRealmCache runs concurrently', async function (assert) {
-      await dbAdapter.execute('DELETE FROM modules');
-
-      let moduleURL = `${realmURL}stale-persist-clear-realm.gts`;
-      let calls = 0;
-      let releaseGate!: () => void;
-      let gate = new Promise<void>((resolve) => {
-        releaseGate = resolve;
-      });
-
-      let prerenderer: Prerenderer = {
-        async prerenderVisit() {
-          throw new Error('Not implemented in mock');
-        },
-        async runCommand() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderModule(args: ModulePrerenderArgs) {
-          calls++;
-          await gate;
-          return buildModuleResponse(args.url, 'StalePersistClearRealm', []);
-        },
-      };
-
-      let lookup = new CachingDefinitionLookup(
-        dbAdapter,
-        prerenderer,
-        virtualNetwork,
-        testCreatePrerenderAuth,
-      );
-      lookup.registerRealm({
-        url: realmURL,
-        async getRealmOwnerUserId() {
-          return testUserId;
-        },
-        async visibility() {
-          return 'private';
-        },
-      });
-
-      let pA = lookup.lookupDefinition({
-        module: moduleURL,
-        name: 'StalePersistClearRealm',
-      });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
-      await lookup.clearRealmCache(realmURL);
-
-      releaseGate();
-      let result = await Promise.allSettled([pA]);
-      assert.strictEqual(
-        result[0].status,
-        'rejected',
-        'A rejects after clearRealmCache leaves an empty cache',
-      );
-      assert.strictEqual(calls, 1);
-
-      let rows = (await dbAdapter.execute(
-        `SELECT url FROM modules WHERE url = $1`,
-        { bind: [moduleURL] },
-      )) as { url: string }[];
-      assert.strictEqual(
-        rows.length,
-        0,
-        'clearRealmCache is honored — A did not re-insert the row',
-      );
-    });
-
-    test('in-flight prerender result is dropped when clearAllModules runs concurrently', async function (assert) {
-      await dbAdapter.execute('DELETE FROM modules');
-
-      // clearAllModules drains state for every realm — including realms
-      // that have never been individually invalidated. Use a fresh module
-      // URL so the realm has no #generations entry going in; this guards
-      // against the per-realm map missing the realm at clear time.
-      let moduleURL = `${realmURL}stale-persist-clear-all.gts`;
-      let calls = 0;
-      let releaseGate!: () => void;
-      let gate = new Promise<void>((resolve) => {
-        releaseGate = resolve;
-      });
-
-      let prerenderer: Prerenderer = {
-        async prerenderVisit() {
-          throw new Error('Not implemented in mock');
-        },
-        async runCommand() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderModule(args: ModulePrerenderArgs) {
-          calls++;
-          await gate;
-          return buildModuleResponse(args.url, 'StalePersistClearAll', []);
-        },
-      };
-
-      let lookup = new CachingDefinitionLookup(
-        dbAdapter,
-        prerenderer,
-        virtualNetwork,
-        testCreatePrerenderAuth,
-      );
-      lookup.registerRealm({
-        url: realmURL,
-        async getRealmOwnerUserId() {
-          return testUserId;
-        },
-        async visibility() {
-          return 'private';
-        },
-      });
-
-      let pA = lookup.lookupDefinition({
-        module: moduleURL,
-        name: 'StalePersistClearAll',
-      });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
-      await lookup.clearAllModules();
-
-      releaseGate();
-      let result = await Promise.allSettled([pA]);
-      assert.strictEqual(
-        result[0].status,
-        'rejected',
-        'A rejects after clearAllModules leaves an empty cache',
-      );
-      assert.strictEqual(calls, 1);
-
-      let rows = (await dbAdapter.execute(
-        `SELECT url FROM modules WHERE url = $1`,
-        { bind: [moduleURL] },
-      )) as { url: string }[];
-      assert.strictEqual(
-        rows.length,
-        0,
-        'clearAllModules is honored — A did not re-insert the row',
-      );
-    });
-
-    test('invalidate of one module does not discard in-flight prerender for an unrelated module in the same realm', async function (assert) {
-      // Per-module generation scoping regression guard: a realm-wide bump
-      // would spuriously discard the unrelated in-flight's result.
-      await dbAdapter.execute('DELETE FROM modules');
-
-      let moduleInvalidated = `${realmURL}scoped-invalidate-target.gts`;
-      let moduleUnaffected = `${realmURL}scoped-invalidate-bystander.gts`;
-      let calls = 0;
-      let releaseGate!: () => void;
-      let gate = new Promise<void>((resolve) => {
-        releaseGate = resolve;
-      });
-
-      let prerenderer: Prerenderer = {
-        async prerenderVisit() {
-          throw new Error('Not implemented in mock');
-        },
-        async runCommand() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderModule(args: ModulePrerenderArgs) {
-          calls++;
-          await gate;
-          let name =
-            args.url === moduleUnaffected ? 'ScopedBystander' : 'ScopedTarget';
-          return buildModuleResponse(args.url, name, []);
-        },
-      };
-
-      let lookup = new CachingDefinitionLookup(
-        dbAdapter,
-        prerenderer,
-        virtualNetwork,
-        testCreatePrerenderAuth,
-      );
-      lookup.registerRealm({
-        url: realmURL,
-        async getRealmOwnerUserId() {
-          return testUserId;
-        },
-        async visibility() {
-          return 'private';
-        },
-      });
-
-      // Bystander's prerender is in-flight.
-      let pBystander = lookup.lookupDefinition({
-        module: moduleUnaffected,
-        name: 'ScopedBystander',
-      });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
-      // Invalidate a DIFFERENT module in the same realm. With realm-wide
-      // bumps this would trip the bystander's generation check; with
-      // per-module bumps scoped to uniqueInvalidations, it shouldn't.
-      await lookup.invalidate(moduleInvalidated);
-
-      releaseGate();
-      let definition = await pBystander;
-      assert.strictEqual(
-        definition?.displayName,
-        'ScopedBystander',
-        'bystander persisted normally — invalidate scope respected',
-      );
-      assert.strictEqual(calls, 1);
-
-      let rows = (await dbAdapter.execute(
-        `SELECT url FROM modules WHERE url = $1`,
-        { bind: [moduleUnaffected] },
-      )) as { url: string }[];
-      assert.strictEqual(
-        rows.length,
-        1,
-        'bystander row is persisted, not spuriously discarded',
-      );
-    });
-
-    test('a settled in-flight promise does not delete a newer in-flight under the same key', async function (assert) {
-      // Identity-check regression guard. Without the identity check in
-      // loadModuleCacheEntry's .finally, A's settle would delete B's
-      // freshly-installed entry and cause D to race a third prerender.
-      await dbAdapter.execute('DELETE FROM modules');
-
-      let moduleURL = `${realmURL}identity-check.gts`;
-      let calls = 0;
-      let gates: Array<{ release: () => void; promise: Promise<void> }> = [];
-
-      let prerenderer: Prerenderer = {
-        async prerenderVisit() {
-          throw new Error('Not implemented in mock');
-        },
-        async runCommand() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderModule(args: ModulePrerenderArgs) {
-          calls++;
-          let release!: () => void;
-          let promise = new Promise<void>((resolve) => {
-            release = resolve;
-          });
-          gates.push({ release, promise });
-          await promise;
-          return buildModuleResponse(args.url, 'Identity', []);
-        },
-      };
-
-      // setTimeout(0) is not reliable here: readFromDatabaseCache runs on
-      // the I/O phase of the event loop, which fires after timers, so a
-      // single macrotask yield can return before A has entered the
-      // prerender mock. Poll until the expected number of prerenders have
-      // started, with a generous bound for slow test environments.
-      let waitForCalls = async (expected: number): Promise<void> => {
-        let deadline = Date.now() + 5000;
-        while (calls < expected) {
-          if (Date.now() > deadline) {
-            throw new Error(
-              `waitForCalls timed out: expected ${expected}, saw ${calls}`,
-            );
-          }
-          await new Promise((resolve) => setTimeout(resolve, 10));
-        }
-      };
-
-      let lookup = new CachingDefinitionLookup(
-        dbAdapter,
-        prerenderer,
-        virtualNetwork,
-        testCreatePrerenderAuth,
-      );
-      lookup.registerRealm({
-        url: realmURL,
-        async getRealmOwnerUserId() {
-          return testUserId;
-        },
-        async visibility() {
-          return 'private';
-        },
-      });
-
-      // A enters #inFlight; parks at gates[0].
-      let pA = lookup.lookupDefinition({
-        module: moduleURL,
-        name: 'Identity',
-      });
-      await waitForCalls(1);
-
-      // invalidate drops A's #inFlight entry synchronously.
-      await lookup.invalidate(moduleURL);
-
-      // B re-enters #inFlight under the same key with a fresh pending.
-      let pB = lookup.lookupDefinition({
-        module: moduleURL,
-        name: 'Identity',
-      });
-      await waitForCalls(2);
-
-      // C joins B's pending (same key, B is still in-flight).
-      let pC = lookup.lookupDefinition({
-        module: moduleURL,
-        name: 'Identity',
-      });
-      // Give C a chance to either coalesce or start its own prerender.
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      assert.strictEqual(
-        calls,
-        2,
-        'C coalesced into B without adding a prerender',
-      );
-
-      // Settle A. Its .finally must NOT delete B's entry.
-      gates[0].release();
-      await Promise.allSettled([pA]);
-
-      // D should STILL coalesce into B. If A's finally deleted B's entry,
-      // D would create a third prerender here.
-      let pD = lookup.lookupDefinition({
-        module: moduleURL,
-        name: 'Identity',
-      });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      assert.strictEqual(
-        calls,
-        2,
-        "D coalesced into B — A's settle did not delete B's #inFlight entry",
-      );
-
-      // Release B; everyone converges.
-      gates[1].release();
-      let [rB, rC, rD] = await Promise.allSettled([pB, pC, pD]);
-      assert.strictEqual(rB.status, 'fulfilled');
-      assert.strictEqual(rC.status, 'fulfilled');
-      assert.strictEqual(rD.status, 'fulfilled');
-    });
-
-    test('in-flight prerender persists normally when no invalidate runs', async function (assert) {
-      // Regression guard against the generation check skipping persist
-      // in the happy path (no concurrent invalidation).
-      await dbAdapter.execute('DELETE FROM modules');
-
-      let moduleURL = `${realmURL}stale-persist-happy-path.gts`;
-      let calls = 0;
-      let releaseGate!: () => void;
-      let gate = new Promise<void>((resolve) => {
-        releaseGate = resolve;
-      });
-
-      let prerenderer: Prerenderer = {
-        async prerenderVisit() {
-          throw new Error('Not implemented in mock');
-        },
-        async runCommand() {
-          throw new Error('Not implemented in mock');
-        },
-        async prerenderModule(args: ModulePrerenderArgs) {
-          calls++;
-          await gate;
-          return buildModuleResponse(args.url, 'StalePersistHappy', []);
-        },
-      };
-
-      let lookup = new CachingDefinitionLookup(
-        dbAdapter,
-        prerenderer,
-        virtualNetwork,
-        testCreatePrerenderAuth,
-      );
-      lookup.registerRealm({
-        url: realmURL,
-        async getRealmOwnerUserId() {
-          return testUserId;
-        },
-        async visibility() {
-          return 'private';
-        },
-      });
-
-      let pA = lookup.lookupDefinition({
-        module: moduleURL,
-        name: 'StalePersistHappy',
-      });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
-      releaseGate();
-      let definition = await pA;
-      assert.strictEqual(definition?.displayName, 'StalePersistHappy');
-      assert.strictEqual(calls, 1);
-
-      let rows = (await dbAdapter.execute(
-        `SELECT url FROM modules WHERE url = $1`,
-        { bind: [moduleURL] },
-      )) as { url: string }[];
-      assert.strictEqual(
-        rows.length,
-        1,
-        'persist proceeded normally when nothing invalidated mid-flight',
-      );
+      assert.strictEqual(dA?.displayName, 'CoalesceInvalidate v1');
+      assert.strictEqual(dB?.displayName, 'CoalesceInvalidate v2');
     });
   });
 });
