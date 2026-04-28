@@ -162,6 +162,12 @@ export interface ValidationPipelineConfig {
   evalResultsModuleUrl: string;
   instantiateResultsModuleUrl: string;
   parseResultsModuleUrl: string;
+  /**
+   * Local workspace directory mirroring the target realm. Validator steps
+   * read source cards and write artifact cards (ParseResult, LintResult,
+   * EvalResult, InstantiateResult, TestRun) against this directory.
+   */
+  workspaceDir: string;
   issueId?: string;
   /** Injected for testing — passed through to TestValidationStep, LintValidationStep, EvalValidationStep, and ParseValidationStep. */
   fetchFilenames?: TestValidationStepConfig['fetchFilenames'];
@@ -181,6 +187,7 @@ export function createDefaultPipeline(
     client: config.client,
     realmServerUrl: config.realmServerUrl,
     parseResultsModuleUrl: config.parseResultsModuleUrl,
+    workspaceDir: config.workspaceDir,
     issueId: config.issueId,
     fetchFilenames: config.fetchFilenames,
     searchSpecsFn: config.parseSearchSpecsFn,
@@ -191,6 +198,7 @@ export function createDefaultPipeline(
     realmServerUrl: config.realmServerUrl,
     hostAppUrl: config.hostAppUrl,
     testResultsModuleUrl: config.testResultsModuleUrl,
+    workspaceDir: config.workspaceDir,
     issueId: config.issueId,
     fetchFilenames: config.fetchFilenames,
   };
@@ -199,6 +207,7 @@ export function createDefaultPipeline(
     client: config.client,
     realmServerUrl: config.realmServerUrl,
     lintResultsModuleUrl: config.lintResultsModuleUrl,
+    workspaceDir: config.workspaceDir,
     issueId: config.issueId,
     fetchFilenames: config.fetchFilenames,
   };
@@ -207,6 +216,7 @@ export function createDefaultPipeline(
     client: config.client,
     realmServerUrl: config.realmServerUrl,
     evalResultsModuleUrl: config.evalResultsModuleUrl,
+    workspaceDir: config.workspaceDir,
     issueId: config.issueId,
     fetchFilenames: config.fetchFilenames,
   };
@@ -215,6 +225,7 @@ export function createDefaultPipeline(
     client: config.client,
     realmServerUrl: config.realmServerUrl,
     instantiateResultsModuleUrl: config.instantiateResultsModuleUrl,
+    workspaceDir: config.workspaceDir,
     issueId: config.issueId,
     searchSpecsFn: config.searchSpecsFn,
     fetchFilenames: config.fetchFilenames,
