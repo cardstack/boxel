@@ -22,6 +22,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import GetCardCommand from '@cardstack/boxel-host/commands/get-card';
+import ReadBinaryFileCommand from '@cardstack/boxel-host/commands/read-binary-file';
 import ReadSourceCommand from '@cardstack/boxel-host/commands/read-source';
 import SerializeCardCommand from '@cardstack/boxel-host/commands/serialize-card';
 
@@ -87,6 +88,7 @@ export default class CollectSubmissionFilesCommand extends Command<
   ): Promise<FileWithContent[]> {
     let realmUrl = new RealmPaths(new URL(listingRealm)).url;
     let getCardCommand = new GetCardCommand(this.commandContext);
+    let readBinaryFileCommand = new ReadBinaryFileCommand(this.commandContext);
     let readSourceCommand = new ReadSourceCommand(this.commandContext);
 
     const listing = (await getCardCommand.execute({
@@ -220,6 +222,18 @@ export default class CollectSubmissionFilesCommand extends Command<
           path,
           content: rewriteReferences(source.content, path),
         });
+
+        // Resolve thumbnail URL against listing.id before rewriteReferences turns it relative.
+        let rawThumbnailUrl = extractThumbnailUrl(source.content);
+        if (rawThumbnailUrl) {
+          let thumbnailUrl = new URL(rawThumbnailUrl, `${listing.id}.json`).href;
+          let thumbnailPath = toRepoRelativePath(thumbnailUrl, '');
+          if (!seenPaths.has(thumbnailPath)) {
+            seenPaths.add(thumbnailPath);
+            let binary = await readBinaryFileCommand.execute({ url: thumbnailUrl });
+            filesWithContent.push({ path: thumbnailPath, content: binary.base64Content ?? '' });
+          }
+        }
       }
     }
 
@@ -328,6 +342,17 @@ export default class CollectSubmissionFilesCommand extends Command<
     }
 
     return [...instancesById.values()];
+  }
+}
+
+function extractThumbnailUrl(listingJsonContent: string): string | null {
+  try {
+    let doc = JSON.parse(listingJsonContent) as Record<string, any>;
+    let thumbnailRel = doc?.data?.relationships?.['cardInfo.cardThumbnail'];
+    let url = thumbnailRel?.links?.self;
+    return typeof url === 'string' && url.trim() ? url.trim() : null;
+  } catch {
+    return null;
   }
 }
 

@@ -7,6 +7,25 @@ import {
 
 export const BASE_FILE_DEF_CODE_REF = baseFileRef;
 
+export const BINARY_FILE_EXTENSIONS = new Set([
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.avif',
+  '.ico',
+  '.bmp',
+  '.tiff',
+  '.tif',
+  '.woff',
+  '.woff2',
+  '.ttf',
+  '.otf',
+  '.eot',
+  '.pdf',
+]);
+
 function baseModule(name: string): RealmResourceIdentifier {
   return `${baseRealm.url}${name}` as RealmResourceIdentifier;
 }
