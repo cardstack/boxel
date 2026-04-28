@@ -24,6 +24,19 @@ function fakeRealm(url: string): Realm {
   return {
     url,
     paths: { local: () => '' },
+    start: async () => {},
+    unsubscribe() {},
+    handle: null,
+  } as unknown as Realm;
+}
+
+function fakeRealmWithFailingStart(url: string): Realm {
+  return {
+    url,
+    paths: { local: () => '' },
+    start: async () => {
+      throw new Error(`simulated start failure for ${url}`);
+    },
     unsubscribe() {},
     handle: null,
   } as unknown as Realm;
@@ -95,12 +108,11 @@ module(basename(__filename), function () {
         realms = [];
         reconciler = new RealmRegistryReconciler({
           dbAdapter,
-          mountFromRow: async (row) => {
+          prepareRealmFromRow: (row) => {
             mountCalls.push(row.url);
-            if (mountFailures.has(row.url)) {
-              throw new Error(`simulated mount failure for ${row.url}`);
-            }
-            const r = fakeRealm(row.url);
+            const r = mountFailures.has(row.url)
+              ? fakeRealmWithFailingStart(row.url)
+              : fakeRealm(row.url);
             realms.push(r);
             return r;
           },
@@ -222,8 +234,9 @@ module(basename(__filename), function () {
       });
       await server.start();
 
-      // mountFromRow publishes immediately, then awaits a deferred that
-      // we resolve only AFTER a self-fetch has completed.
+      // prepareRealmFromRow publishes immediately. The fake realm's
+      // start() awaits a deferred we resolve only AFTER a self-fetch
+      // has completed.
       let releaseStart: (() => void) | undefined;
       let startPromise = new Promise<void>((r) => {
         releaseStart = r;
@@ -231,13 +244,20 @@ module(basename(__filename), function () {
       let publishedUrls: string[] = [];
       let dlReconciler = new RealmRegistryReconciler({
         dbAdapter,
-        mountFromRow: async (row) => {
-          let r = fakeRealm(row.url);
-          // Publish to the array (matching main.ts's Phase 3 mountFromRow
-          // ordering) BEFORE awaiting "realm.start()".
+        prepareRealmFromRow: (row) => {
+          let r: Realm = {
+            url: row.url,
+            paths: { local: () => '' },
+            start: async () => {
+              await startPromise;
+            },
+            unsubscribe() {},
+            handle: null,
+          } as unknown as Realm;
+          // Publish to the array (matching main.ts's Phase 3 ordering)
+          // BEFORE realm.start() is awaited by ensureMounted.
           publishedUrls.push(row.url);
           realms.push(r);
-          await startPromise;
           return r;
         },
         unmount: async () => {},
@@ -289,7 +309,7 @@ module(basename(__filename), function () {
       mountFailures.add(url);
       await assert.rejects(
         server.testingOnlyFindOrMountRealm(new URL(`${url}card.json`)),
-        /simulated mount failure/,
+        /simulated start failure/,
         'mount failure throws — caller (HTTP middleware) responds 5xx',
       );
       assert.strictEqual(reconciler.mounted.size, 0, 'no realm mounted');

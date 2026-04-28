@@ -15,6 +15,7 @@ import {
 function makeFakeRealm(url: string): Realm {
   return {
     url,
+    start: async () => {},
     unsubscribe() {},
     handle: null,
   } as unknown as Realm;
@@ -64,7 +65,7 @@ module(basename(__filename), function () {
         unmountCalls = [];
         reconciler = new RealmRegistryReconciler({
           dbAdapter,
-          mountFromRow: async (row) => {
+          prepareRealmFromRow: (row) => {
             mountCalls.push(row.url);
             return makeFakeRealm(row.url);
           },
@@ -229,16 +230,26 @@ module(basename(__filename), function () {
       assert.strictEqual(reconciler.mounted.size, 0, 'mounted map cleared');
     });
 
-    test('ensureMounted serializes concurrent callers for the same URL', async function (assert) {
-      let resolveMount: ((r: Realm) => void) | undefined;
-      let mountInvocations = 0;
+    test('ensureMounted dedupes concurrent callers for the same URL', async function (assert) {
+      let resolveStart: (() => void) | undefined;
+      const startPromise = new Promise<void>((r) => {
+        resolveStart = r;
+      });
+      let prepareInvocations = 0;
+      const slowStartingRealm = (url: string): Realm =>
+        ({
+          url,
+          start: async () => {
+            await startPromise;
+          },
+          unsubscribe() {},
+          handle: null,
+        }) as unknown as Realm;
       const localReconciler = new RealmRegistryReconciler({
         dbAdapter,
-        mountFromRow: async (row) => {
-          mountInvocations += 1;
-          return await new Promise<Realm>((r) => {
-            resolveMount = r;
-          }).then(() => makeFakeRealm(row.url));
+        prepareRealmFromRow: (row) => {
+          prepareInvocations += 1;
+          return slowStartingRealm(row.url);
         },
         unmount: async () => {},
       });
@@ -256,12 +267,12 @@ module(basename(__filename), function () {
       const p1 = localReconciler.ensureMounted(row);
       const p2 = localReconciler.ensureMounted(row);
       assert.strictEqual(
-        mountInvocations,
+        prepareInvocations,
         1,
-        'only one mount invocation in flight',
+        'only one prepareRealmFromRow invocation — second caller dedupes via mounted',
       );
 
-      resolveMount!(makeFakeRealm(row.url));
+      resolveStart!();
       const [r1, r2] = await Promise.all([p1, p2]);
       assert.strictEqual(
         r1,
@@ -269,23 +280,29 @@ module(basename(__filename), function () {
         'both callers receive the same Realm instance',
       );
       assert.strictEqual(
-        mountInvocations,
+        prepareInvocations,
         1,
-        'still only one mount invocation after settle',
+        'still only one prepare invocation after settle',
       );
     });
 
-    test('ensureMounted clears pendingMounts so a retry after failure fires a fresh mount', async function (assert) {
+    test('ensureMounted clears mounted+pendingMounts so a retry after start() failure fires a fresh mount', async function (assert) {
       let attempt = 0;
+      const flakyRealm = (url: string): Realm =>
+        ({
+          url,
+          start: async () => {
+            attempt += 1;
+            if (attempt === 1) {
+              throw new Error('transient start failure');
+            }
+          },
+          unsubscribe() {},
+          handle: null,
+        }) as unknown as Realm;
       const localReconciler = new RealmRegistryReconciler({
         dbAdapter,
-        mountFromRow: async (row) => {
-          attempt += 1;
-          if (attempt === 1) {
-            throw new Error('transient failure');
-          }
-          return makeFakeRealm(row.url);
-        },
+        prepareRealmFromRow: (row) => flakyRealm(row.url),
         unmount: async () => {},
       });
 
@@ -302,7 +319,7 @@ module(basename(__filename), function () {
 
       await assert.rejects(
         localReconciler.ensureMounted(row),
-        /transient failure/,
+        /transient start failure/,
       );
       assert.strictEqual(
         localReconciler.pendingMounts.size,
@@ -312,15 +329,15 @@ module(basename(__filename), function () {
 
       const realm = await localReconciler.ensureMounted(row);
       assert.ok(realm, 'retry succeeded');
-      assert.strictEqual(attempt, 2, 'mountFromRow invoked a second time');
+      assert.strictEqual(attempt, 2, 'realm.start() invoked a second time');
     });
 
     test('reconcile failure in one pinned row does not prevent mounting the others', async function (assert) {
       const localReconciler = new RealmRegistryReconciler({
         dbAdapter,
-        mountFromRow: async (row) => {
+        prepareRealmFromRow: (row) => {
           if (row.url.includes('bad')) {
-            throw new Error('mount blew up');
+            throw new Error('prepare blew up');
           }
           return makeFakeRealm(row.url);
         },

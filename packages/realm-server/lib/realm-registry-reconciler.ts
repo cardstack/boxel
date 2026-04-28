@@ -23,13 +23,17 @@ export interface RealmRegistryRow {
 
 export interface ReconcilerDeps {
   dbAdapter: PgAdapter;
-  // Construct a Realm from a registry row and mount it into the virtual
-  // network. Returns the mounted Realm. The reconciler owns the `mounted`
-  // map; the factory is just the adapter between a registry row and a
-  // constructed+mounted Realm instance.
-  mountFromRow: (row: RealmRegistryRow) => Promise<Realm>;
-  // Inverse of mountFromRow: unmount + clean up a Realm that the registry
-  // no longer lists. Called when a row is deleted.
+  // Synchronous: construct a Realm from a registry row and publish it
+  // (push into the shared realms[] array, mount onto the VirtualNetwork).
+  // Returns the constructed Realm. The reconciler is responsible for
+  // calling realm.start() afterwards. Splitting prepare from start lets
+  // the eager pinned-mount loop publish every realm to virtualNetwork
+  // before any of them awaits the (potentially multi-minute) fullIndex,
+  // so worker self-fetches and request-path lookups for an in-flight
+  // realm always resolve via the published-but-not-started realm.
+  prepareRealmFromRow: (row: RealmRegistryRow) => Realm;
+  // Inverse of prepareRealmFromRow: unmount + clean up a Realm that the
+  // registry no longer lists. Called when a row is deleted.
   unmount: (realm: Realm) => Promise<void>;
   // Optional for tests — poll interval in ms (default 30s).
   pollIntervalMs?: number;
@@ -164,16 +168,26 @@ export class RealmRegistryReconciler {
     // the reconciler's first pass and on every subsequent pass that
     // detects a new pinned row.
     //
-    // Mounts run via Promise.all rather than a serial for-await loop.
-    // mountFromRow is responsible for synchronously publishing the realm
-    // into realms[] + virtualNetwork BEFORE awaiting realm.start(); kicking
-    // every ensureMounted off in parallel guarantees that all pinned realms
-    // are reachable in virtualNetwork before any of their start()s
-    // resolve. The OLD serial loop left intermediate realms unreachable
-    // (404) for the duration of an earlier realm's slow fullIndex —
-    // bootstrap fullIndex on a fresh DB is on the order of minutes, so
-    // any realm later in the loop was effectively offline that whole time.
-    let mountWaits: Promise<unknown>[] = [];
+    // Two-phase mount, matching Phase 2's loadRealms() shape: prepare
+    // (synchronous publish to realms[] + virtualNetwork) for ALL pinned
+    // rows first, then sequentially await realm.start() on each.
+    //
+    // Why two phases: realm.start() awaits a fullIndex on a fresh DB,
+    // which can take minutes per realm. If we awaited start() inside
+    // the prepare loop, every realm later in the iteration would be
+    // unreachable in virtualNetwork for the entire duration of earlier
+    // realms' indexing — requests to /skills/_readiness-check would
+    // 404 while /base/ is still indexing. Publishing all realms up
+    // front means every URL routes through the realm immediately;
+    // requests block on the realm's #startedUp gate (e.g.,
+    // readinessCheck awaits #startedUp.promise) but don't 404.
+    //
+    // Why sequential start() rather than Promise.all: indexing has
+    // cross-realm dependencies and parallel fullIndex jobs queue up
+    // through a single worker process anyway, so parallelism here
+    // doesn't reduce wall-clock time but does increase memory and
+    // contention. Sequential matches Phase 2's tested behavior.
+    let toStart: Realm[] = [];
     for (const [url, row] of nextKnown) {
       if (!row.pinned) {
         continue;
@@ -181,15 +195,41 @@ export class RealmRegistryReconciler {
       if (this.mounted.has(url)) {
         continue;
       }
-      mountWaits.push(
-        this.ensureMounted(row).catch((err: unknown) => {
-          log.warn(
-            `failed to mount pinned ${url} during reconcile: ${String(err)}; leaving for next pass`,
-          );
-        }),
-      );
+      try {
+        const realm = this.#deps.prepareRealmFromRow(row);
+        this.mounted.set(url, realm);
+        this.#reconcilerOwned.add(url);
+        toStart.push(realm);
+      } catch (err: unknown) {
+        log.warn(
+          `failed to prepare pinned ${url} during reconcile: ${String(err)}; leaving for next pass`,
+        );
+      }
     }
-    await Promise.all(mountWaits);
+    for (const realm of toStart) {
+      const start = Date.now();
+      try {
+        await realm.start();
+        log.info(
+          `mount ok url=%s pinned=true duration_ms=%d`,
+          realm.url,
+          Date.now() - start,
+        );
+      } catch (err: unknown) {
+        log.warn(
+          `failed to start pinned ${realm.url}: ${String(err)}; unwinding so the next reconcile pass can retry from scratch`,
+        );
+        this.mounted.delete(realm.url);
+        this.#reconcilerOwned.delete(realm.url);
+        try {
+          await this.#deps.unmount(realm);
+        } catch (unwindErr: unknown) {
+          log.warn(
+            `failed to unwind pinned start failure for ${realm.url}: ${String(unwindErr)}`,
+          );
+        }
+      }
+    }
 
     // Unmount removals. Only touch realms the reconciler mounted itself
     // (#reconcilerOwned); legacy-registered mounts are preserved. In a
@@ -261,11 +301,14 @@ export class RealmRegistryReconciler {
     };
   }
 
-  // Mount-on-demand primitive. Used by reconcile() for pinned rows and by
-  // lookupOrMount() (request-path) for non-pinned rows on first request.
-  // Per-URL serialization: concurrent callers for the same URL share one
-  // in-flight mount. Cleared from pendingMounts on settle so a retry after
-  // failure gets a fresh attempt.
+  // Mount-on-demand primitive. Used by lookupOrMount() (request-path)
+  // for non-pinned rows on first request.
+  //
+  // Publishes the realm synchronously (so concurrent request handlers
+  // resolve via realms[] / mounted) and then awaits realm.start().
+  // Per-URL serialization: concurrent callers for the same URL share
+  // one in-flight start. Cleared from pendingMounts on settle so a
+  // retry after failure gets a fresh attempt.
   //
   // Emits a structured `mount` log line on every settled call: success
   // duration, failure duration + reason, kind, pinned flag. Phase 3
@@ -282,13 +325,30 @@ export class RealmRegistryReconciler {
       return inflight;
     }
     const start = Date.now();
+    let realm: Realm;
+    try {
+      realm = this.#deps.prepareRealmFromRow(row);
+    } catch (err: unknown) {
+      log.warn(
+        `mount fail url=%s kind=%s pinned=%s duration_ms=%d reason=%s`,
+        row.url,
+        row.kind,
+        row.pinned,
+        Date.now() - start,
+        err instanceof Error ? err.message : String(err),
+      );
+      throw err;
+    }
+    // Publish into mounted/reconcilerOwned synchronously so that a
+    // concurrent request handler awaiting in-flight mounts via
+    // lookupOrMount() can resolve via the existing-mount fast path
+    // (and so the unmount phase of a future reconcile() is allowed to
+    // tear this realm down when the row disappears).
+    this.mounted.set(row.url, realm);
+    this.#reconcilerOwned.add(row.url);
     const promise = (async () => {
       try {
-        const realm = await this.#deps.mountFromRow(row);
-        this.mounted.set(row.url, realm);
-        // Mark as reconciler-owned so the unmount phase of a future
-        // reconcile() is allowed to tear it down when the row disappears.
-        this.#reconcilerOwned.add(row.url);
+        await realm.start();
         log.info(
           `mount ok url=%s kind=%s pinned=%s duration_ms=%d`,
           row.url,
@@ -306,6 +366,24 @@ export class RealmRegistryReconciler {
           Date.now() - start,
           err instanceof Error ? err.message : String(err),
         );
+        // Clean up the optimistic mounted/reconcilerOwned entries we
+        // set before starting, so the next ensureMounted call for this
+        // URL fires a fresh prepare+start instead of returning the
+        // failed half-constructed realm. Also call deps.unmount() to
+        // unwind the realms[]/virtualNetwork publish that
+        // prepareRealmFromRow did, otherwise findOrMountRealm's
+        // realms[] fast-path would keep returning a realm whose
+        // #startedUp never resolves and request handlers would block
+        // forever.
+        this.mounted.delete(row.url);
+        this.#reconcilerOwned.delete(row.url);
+        try {
+          await this.#deps.unmount(realm);
+        } catch (unwindErr: unknown) {
+          log.warn(
+            `failed to unwind start failure for ${row.url}: ${String(unwindErr)}`,
+          );
+        }
         throw err;
       } finally {
         this.pendingMounts.delete(row.url);

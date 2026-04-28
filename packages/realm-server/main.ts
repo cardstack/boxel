@@ -377,7 +377,7 @@ const getIndexHTML = async () => {
   // has finished its first reconcile pass.
   reconciler = new RealmRegistryReconciler({
     dbAdapter,
-    mountFromRow: async (row: RealmRegistryRow) => {
+    prepareRealmFromRow: (row: RealmRegistryRow) => {
       let diskPath: string;
       if (row.kind === 'bootstrap') {
         diskPath = row.disk_id;
@@ -414,31 +414,15 @@ const getIndexHTML = async () => {
             : {}),
         },
       );
-      // Publish to realms[] + virtualNetwork BEFORE awaiting start(). Phase
-      // 3 boot path needs this ordering: start() awaits a from-scratch-index
-      // job, the worker (separate process) HTTP-fetches `<realm>/_mtimes`
-      // from this realm-server, and the request handler must be able to
-      // resolve the realm. Without the publish-first ordering, that lookup
-      // re-enters reconciler.ensureMounted() for the same URL and gets the
-      // in-flight promise, deadlocking against the start() we're awaiting.
-      // If start() throws, unwind the publish so the next reconcile pass
-      // can retry from scratch.
+      // Publish synchronously into realms[] + virtualNetwork. The
+      // reconciler awaits realm.start() separately — by the time start()
+      // begins (which awaits a multi-minute fullIndex on a fresh DB),
+      // the realm is already reachable on the request path. This keeps
+      // worker self-fetches (e.g., `<realm>/_mtimes`) and concurrent
+      // request handlers from re-entering ensureMounted() on an
+      // in-flight mount.
       realms.push(reconciledRealm);
       virtualNetwork.mount(reconciledRealm.handle);
-      try {
-        await reconciledRealm.start();
-      } catch (err) {
-        const idx = realms.indexOf(reconciledRealm);
-        if (idx >= 0) {
-          realms.splice(idx, 1);
-        }
-        try {
-          virtualNetwork.unmount(reconciledRealm.handle);
-        } catch {
-          // best-effort unwind
-        }
-        throw err;
-      }
       return reconciledRealm;
     },
     unmount: async (realm) => {

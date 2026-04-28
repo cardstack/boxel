@@ -273,7 +273,7 @@ export function makeTestReconciler(
 ): RealmRegistryReconciler {
   let reconciler = new RealmRegistryReconciler({
     dbAdapter,
-    mountFromRow: async (row: RealmRegistryRow) => {
+    prepareRealmFromRow: (row: RealmRegistryRow) => {
       throw new Error(
         `test reconciler cannot construct realms; URL not pre-mounted: ${row.url}`,
       );
