@@ -565,13 +565,16 @@ const getIndexHTML = async () => {
   let actualPort =
     (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
   log.info(`Realm server listening on port ${actualPort} is serving realms:`);
-  let additionalMappings = hrefs.slice(paths.length);
-  for (let [index, { url }] of realms.entries()) {
-    log.info(`    ${url} => ${hrefs[index][1]}, serving path ${paths[index]}`);
+  // Phase 3: realms[] is populated by the reconciler in realm_registry
+  // row order, not in CLI --path order, so hrefs[index] / paths[index]
+  // no longer correspond. Log just the realm URLs; URL mappings are
+  // logged separately below.
+  for (let { url } of realms) {
+    log.info(`    ${url}`);
   }
-  if (additionalMappings.length) {
-    log.info('Additional URL mappings:');
-    for (let [from, to] of additionalMappings) {
+  if (hrefs.length) {
+    log.info('CLI URL mappings:');
+    for (let [from, to] of hrefs) {
       log.info(`    ${from} => ${to}`);
     }
   }
