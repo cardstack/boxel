@@ -1597,7 +1597,16 @@ export class PagePool {
     entry: ConsoleErrorEntry,
     exceptionId: number,
   ): void {
-    this.#recordThrownException(pageId, exceptionId, entry);
+    // Force `source: 'exception'` so the seam can't be silently
+    // misused with a `source: 'console'` entry — that would serialize
+    // through render-runner as a "Console error", not the
+    // "Uncaught exception (revoked by late .catch)" we're trying to
+    // pin down. Clone so we don't mutate the caller's object.
+    let seededEntry: ConsoleErrorEntry = {
+      ...entry,
+      source: 'exception',
+    };
+    this.#recordThrownException(pageId, exceptionId, seededEntry);
     this.#recordRevokedException(pageId, exceptionId);
   }
 
