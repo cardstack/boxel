@@ -264,17 +264,20 @@ module('factory-tool-executor integration > realm-api requests', function () {
 
       assert.strictEqual(result.exitCode, 0);
       assert.strictEqual(captured!.method, 'QUERY');
-      assert.strictEqual(captured!.url, '/user/target/_search');
+      assert.strictEqual(captured!.url, '/_federated-search');
       assert.strictEqual(
         captured!.headers.authorization,
-        'Bearer realm-jwt-for-user',
+        'Bearer realm-server-jwt',
       );
       assert.strictEqual(captured!.headers.accept, SupportedMimeType.CardJson);
       assert.strictEqual(
         captured!.headers['content-type'],
         SupportedMimeType.JSON,
       );
-      assert.strictEqual(captured!.body, query);
+      assert.deepEqual(JSON.parse(captured!.body), {
+        realms: [realmUrl],
+        ...JSON.parse(query),
+      });
     } finally {
       cleanup();
       await stopServer(server);
