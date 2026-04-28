@@ -1540,6 +1540,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
   readonly isPolymorphic: undefined | true;
   readonly configuration?: ConfigurationInput<any>;
   readonly queryDefinition?: QueryWithInterpolations;
+  readonly sameRealm: boolean | undefined;
   constructor({
     cardThunk,
     declaredCardThunk,
@@ -1548,6 +1549,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     isUsed,
     isPolymorphic,
     queryDefinition,
+    sameRealm,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.declaredCardThunk = declaredCardThunk ?? cardThunk;
@@ -1556,6 +1558,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
     this.queryDefinition = queryDefinition;
+    this.sameRealm = sameRealm;
   }
 
   get card(): FieldT {
@@ -1999,6 +2002,19 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           `field validation error: the linksToMany field '${this.name}' cannot reference a FileDef without an id`,
         );
       }
+      if (
+        this.sameRealm &&
+        !isNotLoadedValue(value) &&
+        value != null
+      ) {
+        let parentRealm = getRealmURLString(instance);
+        let childRealm = getRealmURLString(value);
+        if (parentRealm && childRealm && parentRealm !== childRealm) {
+          throw new Error(
+            `field validation error: linksToMany field '${this.name}' must reference a card in the same realm (${parentRealm}) but got one in ${childRealm}`,
+          );
+        }
+      }
     }
 
     return new WatchedArray((oldValue, value) => {
@@ -2172,7 +2188,7 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
 ): BaseInstanceType<CardT>[] {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
-      let { computeVia, isUsed, query } = options ?? {};
+      let { computeVia, isUsed, query, sameRealm } = options ?? {};
       let fieldCardThunk = cardThunk(cardOrThunk);
       if (query) {
         validateRelationshipQuery(ownerPrototype, fieldName, query);
@@ -2184,6 +2200,7 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
         name: fieldName,
         isUsed,
         queryDefinition: query,
+        sameRealm,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
