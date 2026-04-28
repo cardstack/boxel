@@ -74,6 +74,14 @@ docker compose up -d
 In Grafana, run a LogQL query like `{env="local"}` against the Loki data
 source to see lines from any other container running on the host.
 
+> **Note**: the local Alloy pipeline drops Docker log entries older than
+> 24 hours before they reach Loki. Loki itself is configured to accept
+> historical entries (`reject_old_samples: false` in `loki/config.yaml`),
+> but Alloy's `stage.drop { older_than = "24h" }` filter prevents the
+> initial backfill of long-lived containers (e.g. a `boxel-pg` that's
+> been up for months) from flooding Loki on first attach. Edit
+> `alloy/config.alloy` and restart the stack if you want a wider window.
+
 ## Loki label schema
 
 The label set is **load-bearing**: dashboards written in LogQL select on

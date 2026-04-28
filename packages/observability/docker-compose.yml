@@ -73,10 +73,15 @@ services:
       - --server.http.listen-addr=0.0.0.0:12345
     ports:
       # Alloy's own UI / debug endpoints — handy for verifying targets are
-      # being discovered (http://localhost:12345/graph). Optional.
-      - "12345:12345"
+      # being discovered (http://localhost:12345/graph). Bound to localhost
+      # so the debug UI isn't reachable from the LAN.
+      - "127.0.0.1:12345:12345"
     volumes:
       - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # WARNING: mounting the Docker socket gives this container effective
+      # control of the host's Docker daemon (any container, exec'd as root).
+      # Acceptable for local dev only — never replicate this pattern in
+      # staging/production.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       loki:

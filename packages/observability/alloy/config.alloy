@@ -19,13 +19,14 @@ discovery.docker "containers" {
 discovery.relabel "containers" {
 	targets = discovery.docker.containers.targets
 
-	// Drop the observability stack's own containers — querying their logs
-	// in Grafana creates runaway noise and a Grafana → Loki feedback loop.
-	// Matches any container name that contains grafana / loki / alloy
-	// (compose names look like "/<project>-<service>-<replica>").
+	// Drop the observability stack's own Compose services — querying their
+	// logs in Grafana creates runaway noise and a Grafana → Loki feedback
+	// loop. Match the exact Compose service label so unrelated containers
+	// whose names merely contain grafana / loki / alloy (e.g. "loki-migrator")
+	// aren't dropped accidentally.
 	rule {
-		source_labels = ["__meta_docker_container_name"]
-		regex         = ".*(grafana|loki|alloy).*"
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		regex         = "^(grafana|loki|alloy)$"
 		action        = "drop"
 	}
 
@@ -36,9 +37,13 @@ discovery.relabel "containers" {
 		target_label  = "service"
 	}
 
-	// Optional realm label, opt-in via Docker label `boxel.realm`.
+	// Optional realm label — only set when the container exposes
+	// `boxel.realm`. Without the (.+) match, the rule would always set the
+	// label (to an empty string), so queries like `realm!=""` would behave
+	// differently from "realm absent".
 	rule {
 		source_labels = ["__meta_docker_container_label_boxel_realm"]
+		regex         = "(.+)"
 		target_label  = "realm"
 	}
 
