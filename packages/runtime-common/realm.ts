@@ -4494,9 +4494,6 @@ export class Realm {
       publishable: null,
       lastPublishedAt,
     };
-    if (!realmConfig) {
-      return realmInfo;
-    }
 
     if (realmConfig) {
       try {
