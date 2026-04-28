@@ -721,7 +721,7 @@ module(basename(__filename), function () {
 
         assert.strictEqual(
           firstPublishResponse.status,
-          201,
+          202,
           'First publish succeeds',
         );
 
@@ -1227,7 +1227,7 @@ module(basename(__filename), function () {
 
         assert.strictEqual(
           republishAfterUnpublishResponse.status,
-          201,
+          202,
           'Republish after unpublish succeeds',
         );
         assert.notEqual(
