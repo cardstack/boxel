@@ -28,9 +28,9 @@ const KanbanGhost: TemplateOnlyComponent<Signature> = <template>
       color: var(--_kanban-card-fg);
       background: var(--_kanban-card-bg);
       box-shadow:
-        0 24px 60px rgba(0, 0, 0, 0.28),
-        0 8px 20px rgba(0, 0, 0, 0.12),
-        0 2px 6px rgba(0, 0, 0, 0.06);
+        0 24px 60px color-mix(in oklch, black 28%, transparent),
+        0 8px 20px color-mix(in oklch, black 12%, transparent),
+        0 2px 6px color-mix(in oklch, black 6%, transparent);
       opacity: 0.97;
       transform: rotate(-2.5deg) scale(1.03);
     }
@@ -44,8 +44,8 @@ const KanbanGhost: TemplateOnlyComponent<Signature> = <template>
         box-shadow 180ms ease-out;
       transform: rotate(0deg) scale(1);
       box-shadow:
-        0 1px 2px rgba(0, 0, 0, 0.06),
-        0 0 0 1px rgba(0, 0, 0, 0.04);
+        0 1px 2px color-mix(in oklch, black 6%, transparent),
+        0 0 0 1px color-mix(in oklch, black 4%, transparent);
     }
   </style>
 </template>;

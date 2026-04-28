@@ -149,9 +149,9 @@ export class KanbanPlane extends Component<{
       const lastEl = this.containerElement.querySelector(
         `[data-card-index="${colCards[colCards.length - 1]?.index}"]`,
       ) as HTMLElement | null;
-      if (lastEl) {
+      if (lastEl?.parentElement) {
         const rect = lastEl.getBoundingClientRect();
-        const parentRect = lastEl.parentElement!.getBoundingClientRect();
+        const parentRect = lastEl.parentElement.getBoundingClientRect();
         const cs = getComputedStyle(lastEl);
         const matrix = new DOMMatrix(cs.transform);
         return sanitizeHtmlSafe(
@@ -162,9 +162,9 @@ export class KanbanPlane extends Component<{
       const beforeEl = this.containerElement.querySelector(
         `[data-card-index="${colCards[insertIdx]?.index}"]`,
       ) as HTMLElement | null;
-      if (beforeEl) {
+      if (beforeEl?.parentElement) {
         const rect = beforeEl.getBoundingClientRect();
-        const parentRect = beforeEl.parentElement!.getBoundingClientRect();
+        const parentRect = beforeEl.parentElement.getBoundingClientRect();
         const cs = getComputedStyle(beforeEl);
         const matrix = new DOMMatrix(cs.transform);
         return sanitizeHtmlSafe(

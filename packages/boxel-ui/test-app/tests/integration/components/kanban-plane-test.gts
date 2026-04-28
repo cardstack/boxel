@@ -56,7 +56,6 @@ module('Integration | Component | kanban-plane', function (hooks) {
           @columns={{columns}}
           @placements={{placements}}
           @manager={{manager}}
-          @interactive={{true}}
           @hideEmpty={{true}}
         >
           <:card as |placement|>
@@ -72,7 +71,7 @@ module('Integration | Component | kanban-plane', function (hooks) {
     assert.dom('[data-kanban-column]').exists({ count: 1 });
     assert.dom('.col-name').hasText('Doing');
     assert.dom('.column.is-over-wip').exists();
-    assert.dom('.col-wip.over').hasText('max 1');
+    assert.dom('.col-wip.over').hasText('Max 1');
     assert.dom('[data-card-index]').exists({ count: 2 });
     assert.dom('[data-kanban-column="0"]').doesNotExist();
     assert.dom('[data-kanban-column="2"]').doesNotExist();
@@ -104,7 +103,6 @@ module('Integration | Component | kanban-plane', function (hooks) {
           @columns={{columns}}
           @placements={{placements}}
           @manager={{manager}}
-          @interactive={{true}}
           @hideEmpty={{false}}
         >
           <:card as |placement|>

@@ -47,17 +47,18 @@ export default class FittedCardContainer extends Component<Signature> {
   }
 
   get containerStyle() {
-    let style = this.args.style?.toString().trim();
+    let style = this.args.style?.toString().trim().replace(/;\s*$/, '') ?? '';
     let formatSpec = this.formatSpec;
 
     if (!formatSpec) {
-      return sanitizeHtmlSafe(style);
+      return sanitizeHtmlSafe(style || undefined);
     }
 
+    const prefix = style ? `${style}; ` : '';
     if (this.args.fullWidth) {
-      style = `${style ? `${style}; ` : ''}width: 100%; height: ${formatSpec.height}px;`;
+      style = `${prefix}width: 100%; height: ${formatSpec.height}px;`;
     } else {
-      style = `${style ? `${style}; ` : ''}width: ${formatSpec.width}px; height: ${formatSpec.height}px;`;
+      style = `${prefix}width: ${formatSpec.width}px; height: ${formatSpec.height}px;`;
     }
 
     return sanitizeHtmlSafe(style);

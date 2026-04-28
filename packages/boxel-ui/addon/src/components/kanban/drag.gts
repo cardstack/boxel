@@ -15,6 +15,8 @@ const HOLD_DELAY_MS = 180;
 
 // ── Types ────────────────────────────────────────────────────────────── //
 
+type BodyStyle = CSSStyleDeclaration & { webkitUserSelect: string };
+
 export type KanbanInteractionMode = 'idle' | 'pending' | 'drag';
 
 export interface KanbanDragManagerOptions {
@@ -106,7 +108,7 @@ export class KanbanDragManager {
     this.interactionMode = 'pending';
 
     document.body.style.userSelect = 'none';
-    (document.body.style as any).webkitUserSelect = 'none';
+    (document.body.style as BodyStyle).webkitUserSelect = 'none';
 
     this.holdTimer = setTimeout(() => {
       if (this.interactionMode === 'pending') {
@@ -168,7 +170,7 @@ export class KanbanDragManager {
       this.dragIndex = null;
       this.snapshotPlacements = null;
       document.body.style.userSelect = '';
-      (document.body.style as any).webkitUserSelect = '';
+      (document.body.style as BodyStyle).webkitUserSelect = '';
       if (tappedIndex !== null) this.onOpenFn?.(tappedIndex);
       return;
     }
@@ -225,6 +227,15 @@ export class KanbanDragManager {
     this.selectedIndex = index;
     this.onSelectFn?.(index);
   };
+
+  destroy(): void {
+    if (this.holdTimer) {
+      clearTimeout(this.holdTimer);
+      this.holdTimer = null;
+    }
+    document.body.style.userSelect = '';
+    (document.body.style as BodyStyle).webkitUserSelect = '';
+  }
 
   // ── Private ────────────────────────────────────────────────────────
 
@@ -341,6 +352,6 @@ export class KanbanDragManager {
       this.holdTimer = null;
     }
     document.body.style.userSelect = '';
-    (document.body.style as any).webkitUserSelect = '';
+    (document.body.style as BodyStyle).webkitUserSelect = '';
   }
 }
