@@ -1,10 +1,10 @@
 import Modifier from 'ember-modifier';
 
 export class CaptureElement extends Modifier<{
-  Element: HTMLElement;
   Args: {
     Positional: [(el: HTMLElement) => void];
   };
+  Element: HTMLElement;
 }> {
   modify(el: HTMLElement, [callback]: [(el: HTMLElement) => void]) {
     callback(el);
@@ -12,10 +12,10 @@ export class CaptureElement extends Modifier<{
 }
 
 export class BindPointerDown extends Modifier<{
-  Element: HTMLElement;
   Args: {
     Positional: [(event: PointerEvent) => void];
   };
+  Element: HTMLElement;
 }> {
   #element: HTMLElement | null = null;
   #handler: ((event: PointerEvent) => void) | null = null;

@@ -18,18 +18,6 @@ import DndKanbanBoard, {
   type DndItem,
   DndColumn,
 } from './components/drag-and-drop/index.gts';
-import {
-  KanbanPlane,
-  KanbanDragManager,
-  type KanbanPlacement,
-  type KanbanColumnConfig,
-  type InsertionPoint,
-  autoPlaceKanban,
-  cardsInColumn,
-  columnCount as kanbanColumnCount,
-  resolveInsertion,
-  findInsertionFromPointer,
-} from './components/kanban/index.gts';
 import BoxelDropdown, {
   type DropdownAPI as BoxelDropdownAPI,
 } from './components/dropdown/index.gts';
@@ -50,6 +38,18 @@ import BoxelInput, {
   InputValidationStates as BoxelInputValidationStates,
 } from './components/input/index.gts';
 import BoxelInputGroup from './components/input-group/index.gts';
+import {
+  type InsertionPoint,
+  type KanbanColumnConfig,
+  type KanbanPlacement,
+  autoPlaceKanban,
+  cardsInColumn,
+  columnCount as kanbanColumnCount,
+  findInsertionFromPointer,
+  KanbanDragManager,
+  KanbanPlane,
+  resolveInsertion,
+} from './components/kanban/index.gts';
 import Label from './components/label/index.gts';
 import LoadingIndicator from './components/loading-indicator/index.gts';
 import Menu from './components/menu/index.gts';
@@ -96,6 +96,7 @@ export {
   AccordionItem,
   AddButton,
   Alert,
+  autoPlaceKanban,
   Avatar,
   BasicFitted,
   BoxelButton,
@@ -117,6 +118,7 @@ export {
   Button,
   CardContainer,
   CardHeader,
+  cardsInColumn,
   CircleSpinner,
   ColorPalette,
   ColorPicker,
@@ -127,21 +129,18 @@ export {
   DndItem,
   DndKanbanBoard,
   EmailInput,
-  KanbanDragManager,
-  KanbanPlane,
-  autoPlaceKanban,
-  cardsInColumn,
-  findInsertionFromPointer,
-  kanbanColumnCount,
-  resolveInsertion,
   EntityDisplayWithIcon,
   EntityDisplayWithThumbnail,
   FieldContainer,
   FilterList,
+  findInsertionFromPointer,
   FittedCardContainer,
   GridContainer,
   Header,
   IconButton,
+  kanbanColumnCount,
+  KanbanDragManager,
+  KanbanPlane,
   Label,
   LoadingIndicator,
   Menu,
@@ -158,6 +157,7 @@ export {
   ResizablePanel,
   ResizablePanelGroup,
   ResizeHandle,
+  resolveInsertion,
   SkeletonPlaceholder,
   SortDropdown,
   Swatch,

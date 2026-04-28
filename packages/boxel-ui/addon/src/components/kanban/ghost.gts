@@ -1,11 +1,11 @@
+import { cn } from '@cardstack/boxel-ui/helpers';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { SafeString } from '@ember/template';
-import { cn } from '@cardstack/boxel-ui/helpers';
 
 interface Signature {
   Args: {
-    style: SafeString;
     isSettling: boolean;
+    style: SafeString;
   };
   Blocks: {
     default: [];

@@ -3,8 +3,9 @@
 // ── Types ────────────────────────────────────────────────────────────── //
 
 export interface KanbanPlacement {
-  index: number; // card index in linksToMany
-  column: number; // which lane (0-based)
+  // card index in linksToMany
+  column: number;
+  index: number; // which lane (0-based)
   sortOrder: number; // position within column (1, 2, 3...)
 }
 
@@ -15,12 +16,12 @@ export interface InsertionPoint {
 }
 
 export interface KanbanColumnConfig {
+  collapsed: boolean | null;
+  color: string | null;
   key: string | null;
   label: string | null;
-  color: string | null;
-  wipLimit: number | null;
-  collapsed: boolean | null;
   sortOrder: number | null;
+  wipLimit: number | null;
 }
 
 // ── Column Queries ───────────────────────────────────────────────────── //
@@ -57,7 +58,9 @@ export function resolveInsertion(
 ): KanbanPlacement[] {
   const result = placements.map((p) => ({ ...p }));
   const dragCard = result.find((p) => p.index === dragIndex);
-  if (!dragCard) return result;
+  if (!dragCard) {
+    return result;
+  }
 
   const sourceColumn = dragCard.column;
   const targetColumn = insertion.column;
@@ -73,7 +76,9 @@ export function resolveInsertion(
     const idx = targetCards.findIndex(
       (p) => p.index === insertion.insertBeforeIndex,
     );
-    if (idx !== -1) insertAt = idx;
+    if (idx !== -1) {
+      insertAt = idx;
+    }
   }
 
   for (let i = 0; i < targetCards.length; i++) {
@@ -124,7 +129,9 @@ export function findInsertionFromPointer(
     }
   }
 
-  if (targetColumn === null) return null;
+  if (targetColumn === null) {
+    return null;
+  }
 
   const columnCards = cardsInColumn(targetColumn, placements).filter(
     (p) => p.index !== dragIndex,
@@ -139,7 +146,9 @@ export function findInsertionFromPointer(
     const cardEl = container.querySelector(
       `[data-card-index="${entry.index}"]`,
     ) as HTMLElement | null;
-    if (!cardEl) continue;
+    if (!cardEl) {
+      continue;
+    }
 
     const rect = cardEl.getBoundingClientRect();
     const midY = rect.top + rect.height / 2;

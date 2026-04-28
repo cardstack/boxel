@@ -1,10 +1,12 @@
 // KanbanDragManager — Drag interaction for Kanban boards.
 // Uses insertion model: cards insert BETWEEN other cards.
 
+import { scheduleOnce } from '@ember/runloop';
 import { tracked } from '@glimmer/tracking';
+
 import {
-  type KanbanPlacement,
   type InsertionPoint,
+  type KanbanPlacement,
   findInsertionFromPointer,
   resolveInsertion,
 } from './engine.ts';
@@ -20,12 +22,12 @@ type BodyStyle = CSSStyleDeclaration & { webkitUserSelect: string };
 export type KanbanInteractionMode = 'idle' | 'pending' | 'drag';
 
 export interface KanbanDragManagerOptions {
-  placements: () => KanbanPlacement[];
   columnCount: () => number;
   containerElement: () => HTMLElement | null;
   onChange: (placements: KanbanPlacement[]) => void;
-  onSelect?: (index: number | null) => void;
   onOpen?: (index: number) => void;
+  onSelect?: (index: number | null) => void;
+  placements: () => KanbanPlacement[];
 }
 
 // ── KanbanDragManager ────────────────────────────────────────────────── //
@@ -102,6 +104,8 @@ export class KanbanDragManager {
     this.activePointerId = e.pointerId;
     this.startClientX = e.clientX;
     this.startClientY = e.clientY;
+    this.pointerClientX = e.clientX;
+    this.pointerClientY = e.clientY;
     this.dragIndex = hitIndex;
     this.selectedIndex = hitIndex;
     this.onSelectFn?.(hitIndex);
@@ -117,6 +121,18 @@ export class KanbanDragManager {
     }, HOLD_DELAY_MS);
 
     container.setPointerCapture(e.pointerId);
+  };
+
+  onPointerCancel = (event: Event): void => {
+    const e = event as PointerEvent;
+    if (e.pointerId !== this.activePointerId) return;
+    this.abortPointerInteraction();
+  };
+
+  onLostPointerCapture = (event: Event): void => {
+    const e = event as PointerEvent;
+    if (e.pointerId !== this.activePointerId) return;
+    this.abortPointerInteraction();
   };
 
   onPointerMove = (event: Event): void => {
@@ -200,9 +216,7 @@ export class KanbanDragManager {
         this.onChangeFn(newPlacements);
       }
 
-      requestAnimationFrame(() => {
-        this.resetSession();
-      });
+      scheduleOnce('afterRender', this, this.resetSession);
     }, 200);
   };
 
@@ -320,6 +334,10 @@ export class KanbanDragManager {
     if (this.snapshotPlacements) {
       this.onChangeFn(this.snapshotPlacements);
     }
+    this.abortPointerInteraction();
+  }
+
+  private abortPointerInteraction(): void {
     const container = this.containerFn();
     if (container && this.activePointerId !== null) {
       try {
