@@ -3,10 +3,6 @@ name: Preview Deployment Comment
 on:
   workflow_call:
     inputs:
-      pr-number:
-        description: Pull request number to comment on
-        required: true
-        type: number
       head-sha:
         description: Commit SHA that produced the preview
         required: true
@@ -14,8 +10,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
 
 jobs:
   publish-preview-comment:
@@ -65,10 +59,17 @@ jobs:
             fi
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
-      - name: Post preview links comment
+      - name: Write preview slot file
         if: steps.gather.outputs.empty != 'true'
-        uses: marocchino/sticky-pull-request-comment@5060d4700a91de252c87eeddd2da026382d9298a # 2.9.4
+        env:
+          MESSAGE: ${{ steps.gather.outputs.message }}
+        run: |
+          mkdir -p slot
+          printf '%s\n' "$MESSAGE" > slot/slot.md
+      - name: Upload preview slot
+        if: steps.gather.outputs.empty != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          header: preview-deployments
-          number: ${{ inputs.pr-number }}
-          message: ${{ steps.gather.outputs.message }}
+          name: pr-comment-slot-preview
+          path: slot/
+          retention-days: 7

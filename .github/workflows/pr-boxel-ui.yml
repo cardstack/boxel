@@ -72,6 +72,5 @@ jobs:
     if: ${{ !cancelled() && needs.deploy-ui-preview-staging.result == 'success' }}
     uses: ./.github/workflows/preview-comment.yml
     with:
-      pr-number: ${{ github.event.pull_request.number }}
       head-sha: ${{ github.event.pull_request.head.sha }}
     secrets: inherit
