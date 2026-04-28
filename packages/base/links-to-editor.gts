@@ -189,6 +189,11 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         },
         createNewCard: this.args.createCard,
         consumingRealm: this.realmURL,
+        // For sameRealm-constrained fields, preselect the consuming
+        // realm in the picker so the user's first results are valid
+        // candidates. The schema-level validate is still the hard
+        // fence — picker scoping is just UX nudging.
+        preselectConsumingRealm: this.args.field.sameRealm,
       },
     );
     if (cardId) {

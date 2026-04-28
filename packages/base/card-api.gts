@@ -527,6 +527,11 @@ export interface Field<
   // explicitly being used.
   isUsed?: true;
   isPolymorphic?: true;
+  // Set on relationship fields (linksTo / linksToMany) when the linked
+  // card must live in the same realm as the containing card. Surfaced
+  // here so editors (e.g. LinksToEditor) can preselect the realm
+  // filter in the card chooser.
+  sameRealm?: boolean;
   serialize(
     value: any,
     doc: JSONAPISingleResourceDocument,
