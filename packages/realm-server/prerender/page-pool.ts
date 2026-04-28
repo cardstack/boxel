@@ -138,14 +138,13 @@ export type ConsoleErrorEntry = {
   type: ReturnType<ConsoleMessage['type']>;
   text: string;
   location?: ConsoleErrorLocation;
-  // Captured CDP stack frames from the originating site. Today only
-  // the `source: 'exception'` path populates this — V8's
-  // `stackTrace.callFrames` attached to a `Runtime.exceptionThrown`
-  // event flow through verbatim. The field is intentionally on the
-  // shared shape so the console-error path can also wire up
-  // `ConsoleMessage.stackTrace()` later without changing the
-  // serialisation contract; absence here just means render-runner
-  // emits a SerializedError with no `stack` field for that entry.
+  // Captured CDP stack frames from the originating site. Populated by
+  // both the `source: 'console'` path (via `ConsoleMessage.stackTrace()`
+  // — Chrome attaches frames to `console.error` and "Uncaught (in
+  // promise)" log lines, which is the desync-detector's only lead
+  // back at the offending template / getter / helper) and by the
+  // `source: 'exception'` path (V8's `stackTrace.callFrames` from a
+  // `Runtime.exceptionThrown` event).
   stackFrames?: ConsoleErrorLocation[];
   // Discriminates 'console' (page.on('console')) vs 'exception'
   // (Runtime.exceptionThrown over CDP). The two share storage and
@@ -1600,10 +1599,30 @@ export class PagePool {
           formatted,
         );
         if (type === 'error' || type === 'assert') {
+          // Puppeteer's ConsoleMessage.stackTrace() returns the CDP-reported
+          // call stack at the point the message was emitted. Chrome
+          // populates this for "Uncaught (in promise) ..." logs even when
+          // no JS-level error event fires, so it's our best lead for the
+          // desync class of failures.
+          let pptrStackTrace = message.stackTrace?.();
+          let stackFrames: ConsoleErrorLocation[] | undefined =
+            Array.isArray(pptrStackTrace) && pptrStackTrace.length > 0
+              ? pptrStackTrace
+                  .filter((frame) => !!frame?.url)
+                  .map((frame) => ({
+                    url: frame.url,
+                    lineNumber: frame.lineNumber,
+                    columnNumber: frame.columnNumber,
+                  }))
+              : undefined;
+          if (stackFrames && stackFrames.length === 0) {
+            stackFrames = undefined;
+          }
           this.#recordConsoleError(pageId, {
             type,
             text: formatted,
             location: locationData,
+            stackFrames,
           });
         }
       } catch (e) {
@@ -1626,7 +1645,13 @@ export class PagePool {
     if (bucket.size >= CONSOLE_ERROR_LIMIT) {
       return;
     }
-    let location = entry.location;
+    // Dedup key falls back to the top stack frame when the message has
+    // no location of its own. Browser-internal "Uncaught (in promise)
+    // ..." logs typically have no `message.location()`, so two distinct
+    // throws with the same exception text but different originating sites
+    // would otherwise collapse into one entry — and we'd lose the stack
+    // frames that are the only debugging signal for the desync class.
+    let location = entry.location ?? entry.stackFrames?.[0];
     let key = [
       entry.type,
       entry.text,
