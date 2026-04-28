@@ -929,13 +929,11 @@ export class IndexQueryEngine {
       filter.matches.trim() === ''
         ? ['FALSE']
         : [
-            dbExpression([
-                `to_tsvector('english', coalesce(i.markdown, ''))`,
-                '@@',
-                `websearch_to_tsquery('english',`,
-                param(filter.matches),
-                `)`,
-              ]),
+            `to_tsvector('english', coalesce(i.markdown, ''))`,
+            '@@',
+            `websearch_to_tsquery('english',`,
+            param(filter.matches),
+            `)`,
           ];
     return every([
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
