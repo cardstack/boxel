@@ -7,6 +7,7 @@ import { registerPullCommand } from './pull';
 import { registerPushCommand } from './push';
 import { registerSyncCommand } from './sync';
 import { registerWaitForReadyCommand } from './wait-for-ready';
+import { registerWatchCommand } from './watch';
 
 export function registerRealmCommand(program: Command): void {
   let realm = program
@@ -21,4 +22,5 @@ export function registerRealmCommand(program: Command): void {
   registerPushCommand(realm);
   registerSyncCommand(realm);
   registerWaitForReadyCommand(realm);
+  registerWatchCommand(realm);
 }
