@@ -162,7 +162,7 @@ export async function loadCardDef(
   ref: CodeRef,
   opts: {
     loader: Loader;
-    relativeTo?: URL;
+    relativeTo?: RealmResourceIdentifier | URL;
     dependencyTrackingContext?: RuntimeDependencyTrackingContext;
   },
 ): Promise<typeof BaseDef> {

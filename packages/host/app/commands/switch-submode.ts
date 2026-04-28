@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { cardIdToURL } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -69,11 +69,11 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
               ? lastId
               : lastId + '.json'
             : null);
-        let codeUrl = codePath ? cardIdToURL(codePath) : null;
+        let codeRRI = codePath ? rri(codePath) : null;
         let currentSubmode = this.operatorModeStateService.state.submode;
-        let finalCodeUrl = codeUrl;
+        let finalCodePath = codeRRI;
         if (
-          codeUrl &&
+          codeRRI &&
           input.createFile &&
           currentSubmode === Submodes.Interact
         ) {
@@ -81,22 +81,21 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
             this.commandContext,
           );
           let writeResult = await writeTextFileCommand.execute({
-            path: codeUrl.href,
+            path: codeRRI,
             content: '',
             useNonConflictingFilename: true,
           });
-          if (writeResult.fileUrl !== codeUrl.href) {
-            let newCodeUrl = new URL(writeResult.fileUrl);
-            finalCodeUrl = newCodeUrl;
+          if (writeResult.fileUrl !== codeRRI) {
+            finalCodePath = rri(writeResult.fileUrl);
 
             let commandModule = await this.loadCommandModule();
             const { SwitchSubmodeResult } = commandModule;
             resultCard = new SwitchSubmodeResult({
-              codePath: newCodeUrl.href,
+              codePath: finalCodePath,
             });
           }
         }
-        await this.operatorModeStateService.updateCodePath(finalCodeUrl);
+        await this.operatorModeStateService.updateCodePath(finalCodePath);
         break;
       }
       default:

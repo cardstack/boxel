@@ -286,7 +286,7 @@ export default class StoreService extends Service implements StoreInterface {
         }
       }
     } else {
-      this.subscribeToRealm(cardIdToURL(id));
+      this.subscribeToRealm(rri(id));
       // intentionally not awaiting this. we keep track of the promise in
       // this.newReferencePromises
       this.wireUpNewReference(id, readType);
@@ -2013,7 +2013,7 @@ export default class StoreService extends Service implements StoreInterface {
         }
         if (isNew) {
           api.setId(instance, json.data.id!);
-          this.subscribeToRealm(cardIdToURL(instance.id));
+          this.subscribeToRealm(rri(instance.id));
           this.operatorModeStateService.handleCardIdAssignment(
             instance[localIdSymbol],
           );
@@ -2091,7 +2091,7 @@ export default class StoreService extends Service implements StoreInterface {
     });
   }
 
-  private subscribeToRealm(url: URL) {
+  private subscribeToRealm(url: RealmResourceIdentifier | URL) {
     if (this.hostModeService.isActive) {
       return;
     }
@@ -2099,7 +2099,7 @@ export default class StoreService extends Service implements StoreInterface {
     let realmURL = this.realm.realmOf(url);
     if (!realmURL) {
       console.warn(
-        `could not determine realm for card ${url.href} when trying to subscribe to realm`,
+        `could not determine realm for card ${url instanceof URL ? url.href : url} when trying to subscribe to realm`,
       );
       return;
     }

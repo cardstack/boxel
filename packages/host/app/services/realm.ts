@@ -935,10 +935,7 @@ export default class RealmService extends Service {
   realmOf(input: RealmResourceIdentifier | URL): URL | undefined {
     for (const realm of this.realms.keys()) {
       let realmURL = new URL(realm);
-      let paths = new RealmPaths(realmURL);
-      let inside =
-        input instanceof URL ? paths.inRealm(input) : paths.inRealmRRI(input);
-      if (inside) {
+      if (new RealmPaths(realmURL).inRealm(input)) {
         return new URL(realmURL);
       }
     }

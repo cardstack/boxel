@@ -22,7 +22,7 @@ import {
   Deferred,
   loadCardDef,
   internalKeyFor,
-  cardIdToURL,
+  rri,
   trimExecutableExtension,
   isCardError,
   isCardDef,
@@ -202,7 +202,7 @@ export async function buildModuleModel(
   context: ModuleModelContext,
 ): Promise<Model> {
   let parsedOptions = renderOptions ?? {};
-  let moduleURL = trimExecutableExtension(cardIdToURL(id));
+  let moduleURL = trimExecutableExtension(rri(id));
   registerBoxelTransitionTo(context.router, context.owner);
 
   if (parsedOptions.clearCache) {
@@ -287,7 +287,7 @@ export async function buildModuleModel(
         // however the deps will only be the shimmed file
         lastModified = 0;
         createdAt = 0;
-        deps = [moduleURL.href];
+        deps = [moduleURL];
       } else {
         let consumes = (
           await context.loaderService.loader.getConsumedModules(id)

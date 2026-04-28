@@ -22,7 +22,6 @@ import {
 import { bool, cssVar } from '@cardstack/boxel-ui/helpers';
 
 import {
-  cardIdToURL,
   chooseCard,
   loadCardDef,
   identifyCard,
@@ -188,7 +187,7 @@ export default class EditFieldModal extends Component<Signature> {
       if (spec && isCardInstance<Spec>(spec)) {
         this.fieldCard = await loadCardDef(spec.ref, {
           loader: this.loaderService.loader,
-          relativeTo: cardIdToURL(specId),
+          relativeTo: rri(specId),
         });
 
         this.isFieldDef = spec.isField;

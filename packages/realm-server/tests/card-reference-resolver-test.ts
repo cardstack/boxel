@@ -427,18 +427,18 @@ module(basename(__filename), function () {
         assert.strictEqual(paths.realmId, 'http://localhost:4201/base/');
       });
 
-      test('inRealmRRI matches resource in realm', function (assert) {
+      test('inRealm with RRI matches resource in realm', function (assert) {
         assert.true(
-          paths.inRealmRRI(rri('http://localhost:4201/base/card-api')),
+          paths.inRealm(rri('http://localhost:4201/base/card-api')),
         );
       });
 
-      test('inRealmRRI matches realm root without trailing slash', function (assert) {
-        assert.true(paths.inRealmRRI(rri('http://localhost:4201/base')));
+      test('inRealm with RRI matches realm root without trailing slash', function (assert) {
+        assert.true(paths.inRealm(rri('http://localhost:4201/base')));
       });
 
-      test('inRealmRRI rejects resource outside realm', function (assert) {
-        assert.false(paths.inRealmRRI(rri('http://localhost:4201/other/card')));
+      test('inRealm with RRI rejects resource outside realm', function (assert) {
+        assert.false(paths.inRealm(rri('http://localhost:4201/other/card')));
       });
 
       test('local from RRI strips realm prefix', function (assert) {
@@ -504,16 +504,16 @@ module(basename(__filename), function () {
         assert.strictEqual(paths.url, '@cardstack/base/');
       });
 
-      test('inRealmRRI matches scoped resource', function (assert) {
-        assert.true(paths.inRealmRRI(rri('@cardstack/base/card-api')));
+      test('inRealm with RRI matches scoped resource', function (assert) {
+        assert.true(paths.inRealm(rri('@cardstack/base/card-api')));
       });
 
-      test('inRealmRRI matches realm root without trailing slash', function (assert) {
-        assert.true(paths.inRealmRRI(rri('@cardstack/base')));
+      test('inRealm with RRI matches realm root without trailing slash', function (assert) {
+        assert.true(paths.inRealm(rri('@cardstack/base')));
       });
 
-      test('inRealmRRI rejects resource in different scope', function (assert) {
-        assert.false(paths.inRealmRRI(rri('@cardstack/catalog/card')));
+      test('inRealm with RRI rejects resource in different scope', function (assert) {
+        assert.false(paths.inRealm(rri('@cardstack/catalog/card')));
       });
 
       test('local from RRI strips scoped prefix', function (assert) {
