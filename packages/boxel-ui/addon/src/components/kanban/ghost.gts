@@ -23,10 +23,10 @@ const KanbanGhost: TemplateOnlyComponent<Signature> = <template>
       position: fixed;
       z-index: 9;
       pointer-events: none;
-      border-radius: 0.5rem;
+      border-radius: var(--_kanban-radius, 0.5rem);
       overflow: hidden;
-      background: var(--card, var(--boxel-light));
-      color: var(--card-foreground, var(--boxel-dark));
+      color: var(--_kanban-card-fg);
+      background: var(--_kanban-card-bg);
       box-shadow:
         0 24px 60px rgba(0, 0, 0, 0.28),
         0 8px 20px rgba(0, 0, 0, 0.12),

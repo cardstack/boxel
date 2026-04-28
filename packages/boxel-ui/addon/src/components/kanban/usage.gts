@@ -14,7 +14,6 @@ import CardContainer from '../card-container/index.gts';
 import Switch from '../switch/index.gts';
 import type { ViewItem } from '../view-selector/index.gts';
 import ViewSelector from '../view-selector/index.gts';
-import { KanbanColumnHeader } from './column-header.gts';
 import { KanbanDragManager } from './drag.gts';
 import {
   type KanbanColumnConfig,
@@ -99,7 +98,7 @@ export default class KanbanUsage extends Component {
   @tracked hideEmpty = false;
   @tracked selectedIndex: number | null = null;
   @tracked openedIndex: number | null = null;
-  @tracked cardSizeView = 'grid';
+  @tracked cardSizeView = 'tile';
   @tracked cardSize: FittedFormatId = 'regular-tile';
 
   manager = new KanbanDragManager({
@@ -194,12 +193,12 @@ export default class KanbanUsage extends Component {
         <div class='kanban-usage'>
           <div class='kanban-usage-toolbar'>
             <label class='kanban-toggle'>
+              <span class='kanban-toggle-label'>Hide empty columns</span>
               <Switch
                 @label='Hide empty columns'
                 @isEnabled={{this.hideEmpty}}
                 @onChange={{this.toggleHideEmpty}}
               />
-              <span class='kanban-toggle-label'>Hide empty columns</span>
             </label>
             <ViewSelector
               class='kanban-size-picker'
@@ -226,7 +225,6 @@ export default class KanbanUsage extends Component {
               @columns={{this.columns}}
               @placements={{this.placements}}
               @manager={{this.manager}}
-              @interactive={{true}}
               @cardSize={{this.cardSize}}
               @hideEmpty={{this.hideEmpty}}
               @onAddCard={{this.addCard}}
@@ -235,7 +233,7 @@ export default class KanbanUsage extends Component {
                 {{#let (get this.cards placement.index) as |card|}}
                   <CardContainer class='demo-card'>
                     <div class='demo-card-kind'>{{card.kind}}</div>
-                    <div class='demo-card-title'>{{card.title}}</div>
+                    <h3>{{card.title}}</h3>
                   </CardContainer>
                 {{/let}}
               </:card>
@@ -243,7 +241,7 @@ export default class KanbanUsage extends Component {
                 {{#let (get this.cards dragIndex) as |card|}}
                   <CardContainer class='demo-card demo-card--ghost'>
                     <div class='demo-card-kind'>{{card.kind}}</div>
-                    <div class='demo-card-title'>{{card.title}}</div>
+                    <h3>{{card.title}}</h3>
                   </CardContainer>
                 {{/let}}
               </:ghost>
@@ -252,28 +250,22 @@ export default class KanbanUsage extends Component {
         </div>
       </:example>
       <:api as |Args|>
-        <Args.Array
+        <Args.Object
           @name='columns'
           @description='Column definitions including key, label, color, WIP limit, collapse state, and sort order.'
           @required={{true}}
-          @items={{this.columns}}
+          @value={{this.columns}}
         />
-        <Args.Array
+        <Args.Object
           @name='placements'
           @description='Card placement records that map each card index to a column and sort order.'
           @required={{true}}
-          @items={{this.placements}}
+          @value={{this.placements}}
         />
         <Args.Object
           @name='manager'
           @description='A KanbanDragManager instance that owns drag, selection, and open behavior.'
           @required={{true}}
-        />
-        <Args.Bool
-          @name='interactive'
-          @description='Enables interactive keyboard and pointer behavior for drag and selection.'
-          @value={{true}}
-          @defaultValue={{true}}
         />
         <Args.String
           @name='cardSize'
@@ -304,48 +296,6 @@ export default class KanbanUsage extends Component {
       </:api>
     </FreestyleUsage>
 
-    <FreestyleUsage @name='Kanban Column Header'>
-      <:description>
-        Use
-        <code>KanbanColumnHeader</code>
-        when you need the standalone lane header outside the full plane, for
-        previews or custom layouts.
-      </:description>
-      <:example>
-        <div class='header-demo'>
-          <KanbanColumnHeader
-            @column={{this.secondColumn}}
-            @cardCount={{3}}
-            @isOverWip={{true}}
-            @isTarget={{false}}
-          />
-        </div>
-      </:example>
-      <:api as |Args|>
-        <Args.Object
-          @name='column'
-          @description='Single KanbanColumnConfig object used to render label, color, and WIP information.'
-          @required={{true}}
-        />
-        <Args.Number
-          @name='cardCount'
-          @description='Number of cards currently shown in the lane.'
-          @required={{true}}
-          @value={{3}}
-        />
-        <Args.Bool
-          @name='isOverWip'
-          @description='Highlights the WIP badge when the current count exceeds the configured limit.'
-          @value={{true}}
-        />
-        <Args.Bool
-          @name='isTarget'
-          @description='Applies target styling while a drag insertion is hovering over the lane.'
-          @value={{false}}
-        />
-      </:api>
-    </FreestyleUsage>
-
     <style scoped>
       .kanban-usage {
         display: grid;
@@ -358,6 +308,7 @@ export default class KanbanUsage extends Component {
         flex-wrap: wrap;
       }
       .kanban-size-picker {
+        margin-left: 1rem;
         display: inline-flex;
         --boxel-view-option-group-column-gap: var(--boxel-sp-xs);
       }
@@ -367,8 +318,7 @@ export default class KanbanUsage extends Component {
         gap: var(--boxel-sp-xs);
       }
       .kanban-toggle-label {
-        font-size: 0.8125rem;
-        color: var(--foreground, var(--boxel-dark));
+        font-weight: 500;
       }
       .kanban-meta {
         font-size: 0.8125rem;
@@ -381,7 +331,7 @@ export default class KanbanUsage extends Component {
         overflow: hidden;
         background: linear-gradient(
           180deg,
-          var(--boxel-050, #f8fafc),
+          var(--boxel-50, #f8fafc),
           var(--boxel-100, #f1f5f9)
         );
       }
@@ -399,25 +349,6 @@ export default class KanbanUsage extends Component {
         letter-spacing: 0.05em;
         text-transform: uppercase;
         color: var(--muted-foreground, var(--boxel-500));
-      }
-      .demo-card-title {
-        font-size: 0.875rem;
-        font-weight: 600;
-        line-height: 1.4;
-        color: var(--foreground, var(--boxel-dark));
-      }
-      .demo-card--ghost {
-        background: color-mix(
-          in oklch,
-          var(--boxel-light, white) 92%,
-          var(--boxel-dark, black)
-        );
-      }
-      .header-demo {
-        width: 18rem;
-        border: 1px solid var(--border, var(--boxel-border-color));
-        border-radius: 0.75rem;
-        background: var(--sidebar, var(--boxel-100));
       }
     </style>
   </template>

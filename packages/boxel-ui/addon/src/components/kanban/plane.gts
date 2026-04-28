@@ -1,5 +1,4 @@
 // KanbanPlane — Vertical columns with insertion-based drag.
-
 import {
   cn,
   eq,
@@ -30,7 +29,6 @@ export class KanbanPlane extends Component<{
     cardSize?: FittedFormatId;
     columns: KanbanColumnConfig[];
     hideEmpty?: boolean;
-    interactive: boolean;
     manager: KanbanDragManager;
     onAddCard?: (columnKey: string | null) => void;
     placements: KanbanPlacement[];
@@ -197,7 +195,7 @@ export class KanbanPlane extends Component<{
 
   <template>
     <div
-      class='board {{if this.isDragging "is-dragging"}}'
+      class={{cn 'board' is-dragging=this.isDragging}}
       {{CaptureElement this.captureRef}}
       {{BindPointerDown this.manager.onPointerDown}}
       {{on 'pointermove' this.manager.onPointerMove}}
@@ -263,15 +261,67 @@ export class KanbanPlane extends Component<{
     <style scoped>
       /* ── Board ──────────────────────────────────────────────────── */
       .board {
+        --_kanban-bg: var(
+          --boxel-kanban-bg,
+          var(--background, var(--boxel-100))
+        );
+        --_kanban-fg: var(
+          --boxel-kanban-fg,
+          var(--foreground, var(--boxel-700))
+        );
+        --_kanban-card-bg: var(
+          --boxel-kanban-card-bg,
+          var(--card, var(--boxel-light))
+        );
+        --_kanban-card-fg: var(
+          --boxel-kanban-card-fg,
+          var(--card-foreground, var(--boxel-dark))
+        );
+        --_kanban-col-bg: var(
+          --boxel-kanban-col-bg,
+          var(--sidebar, var(--boxel-200))
+        );
+        --_kanban-col-fg: var(
+          --boxel-kanban-col-fg,
+          var(--sidebar-foreground, var(--boxel-dark))
+        );
+        --_kanban-ring: var(
+          --boxel-kanban-ring,
+          var(--ring, var(--boxel-highlight))
+        );
+        --_kanban-destructive: var(
+          --boxel-kanban-destructive,
+          var(--destructive, var(--boxel-danger))
+        );
+        --_kanban-destructive-fg: var(
+          --boxel-kanban-destructive-fg,
+          var(--destructive-foreground, var(--boxel-light-100))
+        );
+        --_kanban-primary: var(
+          --boxel-kanban-primary,
+          var(--primary, var(--boxel-highlight))
+        );
+        --_kanban-primary-fg: var(
+          --boxel-kanban-primary-fg,
+          var(--primary-foreground, var(--boxel-dark))
+        );
+        --_kanban-radius: var(
+          --boxel-kanban-radius,
+          var(--radius, var(--boxel-border-radius-sm))
+        );
+        --_kanban-muted-opacity: var(--boxel-kanban-muted-opacity, 0.7);
+
         display: flex;
         gap: 0.5rem;
         height: 100%;
         padding: 0.75rem;
         overflow-x: auto;
         outline: none;
+        background-color: var(--_kanban-bg);
+        color: var(--_kanban-fg);
       }
       .board:focus-visible {
-        box-shadow: inset 0 0 0 2px var(--ring, var(--boxel-highlight));
+        box-shadow: inset 0 0 0 2px var(--_kanban-ring);
       }
       .board.is-dragging {
         user-select: none;
@@ -284,13 +334,16 @@ export class KanbanPlane extends Component<{
         display: flex;
         flex-direction: column;
         height: 100%;
-        border-radius: 0.5rem;
-        background: var(--sidebar, var(--boxel-100));
-        color: var(--sidebar-foreground, var(--boxel-700));
+        border-radius: var(--_kanban-radius);
+        background: var(--_kanban-col-bg);
+        color: var(--_kanban-col-fg);
       }
       .column.is-over-wip {
-        color: var(--destructive, var(--boxel-red));
-        background: color-mix(in oklch, currentColor 12%, transparent);
+        background: color-mix(
+          in oklch,
+          var(--_kanban-destructive) 12%,
+          var(--_kanban-bg)
+        );
       }
 
       /* ── Column Body ────────────────────────────────────────────── */
@@ -309,18 +362,14 @@ export class KanbanPlane extends Component<{
         position: absolute;
         left: 0.5rem;
         right: 0.5rem;
-        border-radius: 0.5rem;
+        border-radius: var(--_kanban-radius);
         background: color-mix(
           in oklch,
-          var(--accent, var(--boxel-dark-green)) 8%,
-          transparent
+          var(--_kanban-primary) 8%,
+          var(--_kanban-bg)
         );
-        border: 2px dashed
-          color-mix(
-            in oklch,
-            var(--accent, var(--boxel-dark-green)) 35%,
-            transparent
-          );
+        border: 2px dashed var(--_kanban-primary);
+        color: var(--_kanban-primary-foreground);
         z-index: 0;
         pointer-events: none;
         transition: top 120ms ease-out;
@@ -332,9 +381,9 @@ export class KanbanPlane extends Component<{
         align-items: center;
         justify-content: center;
         padding: 2rem 1rem;
-        color: var(--muted-foreground, var(--boxel-450));
         font-size: 0.8125rem;
         font-style: italic;
+        opacity: var(--_kanban-muted-opacity);
       }
     </style>
   </template>

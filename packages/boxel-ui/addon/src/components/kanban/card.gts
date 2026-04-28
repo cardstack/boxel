@@ -40,11 +40,13 @@ const KanbanCard: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     .card {
       flex-shrink: 0;
-      border-radius: var(--boxel-border-radius);
+      border-radius: var(--_kanban-radius, 0.5rem);
       overflow: hidden;
+      color: var(--_kanban-card-fg);
+      background: var(--_kanban-card-bg);
       box-shadow:
-        0 1px 2px rgba(0, 0, 0, 0.06),
-        0 0 0 1px rgba(0, 0, 0, 0.04);
+        0 1px 2px color-mix(in oklab, var(--_kanban-card-fg) 6%, transparent),
+        0 0 0 1px color-mix(in oklab, var(--_kanban-card-fg) 4%, transparent);
       cursor: grab;
       transition: box-shadow 120ms ease-out;
     }
@@ -55,13 +57,13 @@ const KanbanCard: TemplateOnlyComponent<Signature> = <template>
     }
     .card:hover {
       box-shadow:
-        0 2px 8px rgba(0, 0, 0, 0.08),
-        0 0 0 1px rgba(0, 0, 0, 0.06);
+        0 2px 8px color-mix(in oklab, var(--_kanban-card-fg) 8%, transparent),
+        0 0 0 1px color-mix(in oklab, var(--_kanban-card-fg) 6%, transparent);
     }
     .card.selected {
       box-shadow:
-        0 0 0 2px var(--ring, var(--boxel-highlight)),
-        0 1px 2px rgba(0, 0, 0, 0.06);
+        0 0 0 2px var(--_kanban-ring),
+        0 1px 2px color-mix(in oklab, var(--_kanban-card-fg) 6%, transparent);
     }
     .card.dragging {
       opacity: 0;
@@ -69,6 +71,11 @@ const KanbanCard: TemplateOnlyComponent<Signature> = <template>
       min-height: 0;
       overflow: hidden;
       margin: -0.1875rem 0;
+    }
+    :deep(.boxel-card-container) {
+      background: inherit;
+      color: inherit;
+      border-radius: inherit;
     }
   </style>
 </template>;

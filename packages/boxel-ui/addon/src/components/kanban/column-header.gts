@@ -30,7 +30,7 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
     <div class='col-header-right'>
       {{#if @column.wipLimit}}
         <span class={{cn 'col-wip' over=@isOverWip}}>
-          max
+          Max
           {{@column.wipLimit}}
         </span>
       {{/if}}
@@ -59,13 +59,9 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
       flex-shrink: 0;
     }
     .col-header.is-target {
-      background: color-mix(
-        in oklch,
-        var(--accent, var(--boxel-highlight)) 8%,
-        transparent
-      );
-      color: var(--accent-foreground, var(--boxel-dark));
-      border-radius: 0.5rem 0.5rem 0 0;
+      background-color: var(--_kanban-primary);
+      color: var(--_kanban-primary-foreground);
+      border-radius: var(--_kanban-radius) var(--_kanban-radius) 0 0;
     }
     .col-header-left {
       display: flex;
@@ -84,12 +80,11 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
     .col-name {
       font-size: 0.8125rem;
       font-weight: 600;
-      letter-spacing: -0.01em;
     }
     .col-count {
       font-size: 0.75rem;
       font-weight: 500;
-      color: var(--muted-foreground, var(--boxel-450));
+      opacity: var(--_kanban-muted-opacity);
     }
     .col-header-right {
       display: flex;
@@ -98,15 +93,16 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
     }
     .col-wip {
       font-size: 0.625rem;
-      color: var(--muted-foreground);
       font-family: var(--font-mono, var(--boxel-monospace-font-family));
+      opacity: var(--_kanban-muted-opacity);
     }
     .col-wip.over {
-      color: var(--destructive, var(--boxel-red));
-      font-weight: 600;
+      color: var(--destructive, var(--boxel-danger));
+      font-weight: 700;
+      opacity: 1;
     }
     .col-add-btn {
-      opacity: 0.6;
+      opacity: var(--_kanban-muted-opacity);
     }
     .col-add-btn:hover {
       opacity: 1;
