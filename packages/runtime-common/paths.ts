@@ -35,28 +35,42 @@ export class RealmPaths {
     }
   }
 
-  local(url: URL, opts: LocalOptions = {}): LocalPath {
-    this.assertURLBased('local');
-    if (!this.inRealm(url)) {
-      let error = new Error(`realm ${this.url} does not contain ${url.href}`);
+  local(
+    input: RealmResourceIdentifier | URL,
+    opts: LocalOptions = {},
+  ): LocalPath {
+    if (input instanceof URL) {
+      this.assertURLBased('local');
+      if (!this.inRealm(input)) {
+        let error = new Error(
+          `realm ${this.url} does not contain ${input.href}`,
+        );
+        (error as any).status = 404;
+        throw error;
+      }
+
+      if (opts.preserveQuerystring !== true) {
+        // strip query params
+        input = new URL(decodeURI(input.pathname), input);
+      }
+
+      // this will always remove a leading slash because our constructor ensures
+      // this.#realm has a trailing slash.
+      let local = decodeURI(input.href).slice(this.url.length);
+
+      // this will remove any trailing slashes
+      local = local.replace(/\/+$/, '');
+
+      // the LocalPath has no leading nor trailing slashes
+      return local;
+    }
+    if (!this.inRealmRRI(input)) {
+      let error = new Error(`realm ${this.url} does not contain ${input}`);
       (error as any).status = 404;
       throw error;
     }
-
-    if (opts.preserveQuerystring !== true) {
-      // strip query params
-      url = new URL(decodeURI(url.pathname), url);
-    }
-
-    // this will always remove a leading slash because our constructor ensures
-    // this.#realm has a trailing slash.
-    let local = decodeURI(url.href).slice(this.url.length);
-
-    // this will remove any trailing slashes
-    local = local.replace(/\/+$/, '');
-
-    // the LocalPath has no leading nor trailing slashes
-    return local;
+    let local = decodeURI(input).slice(this.url.length);
+    return local.replace(/\/+$/, '');
   }
 
   fileURL(local: LocalPath): URL {
@@ -102,16 +116,6 @@ export class RealmPaths {
     return (
       decoded.startsWith(this.url) || decoded === this.url.replace(/\/$/, '')
     );
-  }
-
-  localFromRRI(rri: RealmResourceIdentifier): LocalPath {
-    if (!this.inRealmRRI(rri)) {
-      let error = new Error(`realm ${this.url} does not contain ${rri}`);
-      (error as any).status = 404;
-      throw error;
-    }
-    let local = decodeURI(rri).slice(this.url.length);
-    return local.replace(/\/+$/, '');
   }
 
   fileRRI(local: LocalPath): RealmResourceIdentifier {

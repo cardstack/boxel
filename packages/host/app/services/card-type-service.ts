@@ -11,7 +11,8 @@ import {
   getAncestor,
   SupportedMimeType,
   isResolvedCodeRef,
-  cardIdToURL,
+  rri,
+  type RealmResourceIdentifier,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
@@ -119,11 +120,10 @@ export default class CardTypeService extends Service {
     if (cached) {
       return cached;
     }
-    let moduleIdentifier = moduleFrom(ref);
-    let moduleURL = cardIdToURL(moduleIdentifier);
+    let moduleIdentifier = rri(moduleFrom(ref));
     let moduleInfo =
-      this.moduleInfoCache.get(moduleURL.href) ??
-      (await this.fetchModuleInfo(moduleURL));
+      this.moduleInfoCache.get(moduleIdentifier) ??
+      (await this.fetchModuleInfo(moduleIdentifier));
 
     let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
     let { id: _remove, ...fields } = api.getFields(card, {
@@ -161,21 +161,24 @@ export default class CardTypeService extends Service {
     return type;
   }
 
-  private async fetchModuleInfo(url: URL): Promise<ModuleInfo> {
+  private async fetchModuleInfo(
+    url: RealmResourceIdentifier | URL,
+  ): Promise<ModuleInfo> {
+    let urlString = url instanceof URL ? url.href : url;
     let response = await this.network.authedFetch(url, {
       headers: { Accept: SupportedMimeType.CardSource },
     });
 
     if (!response.ok) {
       throw new Error(
-        `Could not get file ${url.href}, status ${response.status}: ${
+        `Could not get file ${urlString}, status ${response.status}: ${
           response.statusText
         } - ${await response.text()}`,
       );
     }
     let realmURL = response.headers.get('x-boxel-realm-url');
     if (realmURL === null) {
-      throw new Error(`Could not get realm url for ${url.href}`);
+      throw new Error(`Could not get realm url for ${urlString}`);
     }
     let realmInfo = await this.cardService.getRealmInfoByRealmURL(
       new URL(realmURL),
@@ -184,7 +187,7 @@ export default class CardTypeService extends Service {
       realmInfo,
       extension: '.' + new URL(response.url).pathname.split('.').pop() || '',
     };
-    this.moduleInfoCache.set(url.href, moduleInfo);
+    this.moduleInfoCache.set(urlString, moduleInfo);
     return moduleInfo;
   }
 }

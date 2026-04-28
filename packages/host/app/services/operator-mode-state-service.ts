@@ -335,7 +335,7 @@ export default class OperatorModeStateService extends Service {
       this.trimItemsFromStack(item);
     }
     let realmPaths = new RealmPaths(new URL(cardRealmUrl));
-    let cardPath = realmPaths.local(cardIdToURL(`${cardId}.json`));
+    let cardPath = realmPaths.local(rri(`${cardId}.json`));
     this.recentFilesService.removeRecentFile(cardPath);
     this.recentCardsService.remove(cardId);
   }
