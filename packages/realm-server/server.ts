@@ -19,7 +19,6 @@ import {
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
   RealmPaths,
   fetchSessionRoom,
-  userInitiatedPriority,
   hasExtension,
   executableExtensions,
 } from '@cardstack/runtime-common';
@@ -35,7 +34,6 @@ import {
 } from './middleware';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
 import convertAuthHeaderQueryParam from './middleware/convert-auth-header-qp';
-import { NodeAdapter } from './node-realm';
 import { resolve, join } from 'path';
 import merge from 'lodash/merge';
 
@@ -89,7 +87,6 @@ export class RealmServer {
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
-  private enableFileWatcher: boolean;
   private cardSizeLimitBytes: number;
   private fileSizeLimitBytes: number;
   private domainsForPublishedRealms:
@@ -118,7 +115,6 @@ export class RealmServer {
     getIndexHTML,
     matrixRegistrationSecret,
     getRegistrationSecret,
-    enableFileWatcher,
     domainsForPublishedRealms,
     prerenderer,
   }: {
@@ -174,7 +170,6 @@ export class RealmServer {
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
-    this.enableFileWatcher = enableFileWatcher ?? false;
     this.domainsForPublishedRealms = domainsForPublishedRealms;
     // Pass-by-reference: handlers and the reconciler both mutate this
     // array. Copying it would create two divergent views of mounted
@@ -240,7 +235,6 @@ export class RealmServer {
           assetsURL: this.assetsURL,
           realmsRootPath: this.realmsRootPath,
           getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
-          createAndMountRealm: this.createAndMountRealm,
           domainsForPublishedRealms: this.domainsForPublishedRealms,
           prerenderer: this.prerenderer,
           reconciler: this.reconciler,
@@ -938,20 +932,20 @@ export class RealmServer {
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-  }): Promise<{ realm: Realm; info: Partial<RealmInfo> }> => {
-    let realmAtServerRoot = this.realms.find((r) => {
-      let realmUrl = new URL(r.url);
-
-      return (
-        realmUrl.href.replace(/\/$/, '') === realmUrl.origin &&
-        realmUrl.hostname === this.serverURL.hostname
-      );
-    });
-
-    if (realmAtServerRoot) {
+  }): Promise<{ url: string; info: Partial<RealmInfo> }> => {
+    // Server-root collision check uses the registry as the source of
+    // truth — every realm on this server has a realm_registry row, so
+    // the realms[] array isn't needed here. (Phase 3 PR 2: handlers
+    // don't read or mutate realms[].)
+    let serverRootUrl = this.serverURL.origin + '/';
+    let serverRootRows = (await query(this.dbAdapter, [
+      `SELECT url FROM realm_registry WHERE url =`,
+      param(serverRootUrl),
+    ])) as { url: string }[];
+    if (serverRootRows.length > 0) {
       throw errorWithStatus(
         400,
-        `Cannot create a realm: a realm is already mounted at the origin of this server: ${realmAtServerRoot.url}`,
+        `Cannot create a realm: a realm is already registered at the origin of this server: ${serverRootRows[0].url}`,
       );
     }
     if (!endpoint.match(/^[a-z0-9-]+$/)) {
@@ -970,8 +964,11 @@ export class RealmServer {
       this.serverURL,
     ).href;
 
-    let existingRealmURLs = this.realms.map((r) => r.url);
-    if (existingRealmURLs.includes(url)) {
+    let existingRows = (await query(this.dbAdapter, [
+      `SELECT url FROM realm_registry WHERE url =`,
+      param(url),
+    ])) as { url: string }[];
+    if (existingRows.length > 0) {
       throw errorWithStatus(
         400,
         `realm '${url}' already exists on this server`,
@@ -992,10 +989,7 @@ export class RealmServer {
     // same URL (concurrent createRealm for the same endpoint, or a
     // concurrent publish/unpublish/delete). This is almost never a real
     // concurrency concern — the endpoint was already checked above for
-    // collision. realm.write() and /_atomic are NOT yet wired into
-    // withRealmWriteLock (that requires moving the lock primitive into
-    // runtime-common or threading it through the Realm constructor — a
-    // deferred follow-up tracked alongside CS-10898).
+    // collision.
     await withRealmWriteLock(this.dbAdapter, url, async () => {
       await insertPermissions(this.dbAdapter, new URL(url), {
         [ownerUserId]: DEFAULT_PERMISSIONS,
@@ -1014,8 +1008,9 @@ export class RealmServer {
         },
       });
 
-      // Phase 1 dual-write: register the source realm in realm_registry after
-      // its on-disk representation is in place. Logs and continues on failure.
+      // Register the source realm in realm_registry. The INSERT emits
+      // NOTIFY realm_registry; the reconciler on every instance picks
+      // up the row, and the realm is lazy-mounted on first request.
       await mirrorSourceRealmToRegistry(this.dbAdapter, {
         url,
         diskId: `${ownerUsername}/${endpoint}`,
@@ -1023,69 +1018,18 @@ export class RealmServer {
       });
     });
 
-    let realm = this.createAndMountRealm(
-      realmPath,
-      url,
-      undefined,
-      undefined,
-      userInitiatedPriority,
-    );
+    // virtualNetwork URL mapping was historically bridged here so a
+    // virtual realm URL (e.g. cardstack.com/base/) routed to the
+    // physical localhost URL. For dynamically-created realms via
+    // /_create-realm, the URL is already a physical
+    // serverURL-rooted URL (no remap needed), but preserve the
+    // detection-and-add for any environment that maps it.
     let actualRealmURL = this.virtualNetwork.mapURL(url, 'virtual-to-real');
     if (actualRealmURL && actualRealmURL.href !== url) {
       this.virtualNetwork.addURLMapping(new URL(url), actualRealmURL);
     }
 
-    return {
-      realm,
-      info,
-    };
-  };
-
-  private createAndMountRealm = (
-    path: string,
-    url: string,
-    copiedFromRealm?: URL,
-    enableFileWatcher?: boolean,
-    fromScratchIndexPriority?: number,
-  ) => {
-    let adapter = new NodeAdapter(
-      resolve(path),
-      enableFileWatcher ?? this.enableFileWatcher,
-    );
-    const realmOptions: {
-      copiedFromRealm?: URL;
-      fromScratchIndexPriority?: number;
-    } = {};
-    if (copiedFromRealm) {
-      realmOptions.copiedFromRealm = copiedFromRealm;
-    }
-    if (fromScratchIndexPriority !== undefined) {
-      realmOptions.fromScratchIndexPriority = fromScratchIndexPriority;
-    }
-    let realm = new Realm(
-      {
-        url,
-        adapter,
-        secretSeed: this.realmSecretSeed,
-        virtualNetwork: this.virtualNetwork,
-        dbAdapter: this.dbAdapter,
-        queue: this.queue,
-        matrixClient: this.matrixClient,
-        realmServerURL: this.serverURL.href,
-        definitionLookup: this.definitionLookup,
-        cardSizeLimitBytes: this.cardSizeLimitBytes,
-        fileSizeLimitBytes: this.fileSizeLimitBytes,
-      },
-      Object.keys(realmOptions).length ? realmOptions : undefined,
-    );
-    this.realms.push(realm);
-    this.virtualNetwork.mount(realm.handle);
-    // Tell the reconciler this realm is already mounted on this process so a
-    // subsequent reconcile() pass that sees the row doesn't double-mount it
-    // via mountFromRow. Phase 3 PR 1: handlers still own this push/mount;
-    // Phase 3 PR 2 will hand the lifecycle to the reconciler entirely.
-    this.reconciler.registerExistingMounts([realm]);
-    return realm;
+    return { url, info };
   };
 
   private sendEvent = async (

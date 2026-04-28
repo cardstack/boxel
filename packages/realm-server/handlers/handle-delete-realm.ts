@@ -12,7 +12,6 @@ import {
   type PublishedRealmTable,
   update,
 } from '@cardstack/runtime-common';
-import { pathExistsSync, removeSync } from 'fs-extra';
 import { join } from 'path';
 import * as Sentry from '@sentry/node';
 import {
@@ -27,8 +26,8 @@ import {
 import type { CreateRoutesArgs } from '../routes';
 import type { RealmServerTokenClaim } from '../utils/jwt';
 import {
-  destroyMountedRealm,
   removeRealmDatabaseArtifacts,
+  removeRealmFiles,
 } from './realm-destruction-utils';
 import {
   deleteFromRegistryByUrl,
@@ -45,9 +44,7 @@ interface DeleteRealmJSON {
 
 export default function handleDeleteRealm({
   dbAdapter,
-  realms,
   realmsRootPath,
-  virtualNetwork,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -93,13 +90,20 @@ export default function handleDeleteRealm({
     let realmURL = parsedRealmURL.href;
 
     try {
-      let sourceRealm = realms.find(
-        (realm) => ensureTrailingSlash(realm.url) === realmURL,
-      );
-      if (!sourceRealm) {
+      // Phase 3 PR 2: source-realm existence and disk location come from
+      // realm_registry, not from realms[]. The handler is stateless — it
+      // doesn't read or mutate realms[]/virtualNetwork. The reconciler
+      // does the unmount on every instance after the registry DELETE +
+      // NOTIFY.
+      let sourceRow = (await query(dbAdapter, [
+        `SELECT disk_id FROM realm_registry WHERE url =`,
+        param(realmURL),
+      ])) as { disk_id: string }[];
+      if (sourceRow.length === 0) {
         await sendResponseForNotFound(ctxt, `Realm not found: ${realmURL}`);
         return;
       }
+      let sourceRealmPath = join(realmsRootPath, sourceRow[0].disk_id);
 
       let publishedRealmMatch = (await query(dbAdapter, [
         `SELECT id FROM published_realms WHERE published_realm_url =`,
@@ -135,14 +139,6 @@ export default function handleDeleteRealm({
         return;
       }
 
-      if (!sourceRealm.dir) {
-        await sendResponseForNotFound(
-          ctxt,
-          `Realm files not found on disk for ${realmURL}`,
-        );
-        return;
-      }
-
       // Serialize concurrent writers for this source realm. Lock is on the
       // source URL — a concurrent unpublish of one of the associated
       // published realms uses a different lock key (its own published URL),
@@ -156,31 +152,15 @@ export default function handleDeleteRealm({
         ])) as Pick<PublishedRealmTable, 'id' | 'published_realm_url'>[];
 
         for (let publishedRealm of publishedRealms) {
-          let mountedPublishedRealm = realms.find(
-            (realm) =>
-              ensureTrailingSlash(realm.url) ===
-              ensureTrailingSlash(publishedRealm.published_realm_url),
-          );
           let publishedRealmPath = join(
             realmsRootPath,
             PUBLISHED_DIRECTORY_NAME,
             publishedRealm.id,
           );
-          if (mountedPublishedRealm) {
-            destroyMountedRealm({
-              realm: mountedPublishedRealm,
-              realmPath: publishedRealmPath,
-              realms,
-              virtualNetwork,
-            });
-          } else {
-            try {
-              if (pathExistsSync(publishedRealmPath)) {
-                removeSync(publishedRealmPath);
-              }
-            } catch (error) {
-              Sentry.captureException(error);
-            }
+          try {
+            removeRealmFiles(publishedRealmPath);
+          } catch (error) {
+            Sentry.captureException(error);
           }
           await removeRealmPermissions(
             dbAdapter,
@@ -197,9 +177,10 @@ export default function handleDeleteRealm({
           param(realmURL),
         ]);
 
-        // Phase 1 dual-write: remove the source realm's registry row plus
-        // every published row sourced from it. Both helpers log and continue
-        // on failure; drift self-heals on next boot.
+        // Removes the source realm's registry row plus every published
+        // row sourced from it; both DELETEs emit NOTIFY realm_registry
+        // so the reconciler unmounts the affected realms on every
+        // instance.
         await deletePublishedFromRegistryBySource(dbAdapter, realmURL);
         await deleteFromRegistryByUrl(dbAdapter, realmURL);
 
@@ -217,15 +198,7 @@ export default function handleDeleteRealm({
           ` AND removed_at IS NULL`,
         ]);
 
-        destroyMountedRealm({
-          realm: sourceRealm,
-          // Non-null assertion: we early-returned above if sourceRealm.dir was
-          // undefined. TS narrowing doesn't propagate into this async closure,
-          // so we reassert.
-          realmPath: sourceRealm.dir!,
-          realms,
-          virtualNetwork,
-        });
+        removeRealmFiles(sourceRealmPath);
         await removeRealmPermissions(dbAdapter, parsedRealmURL);
         await removeRealmDatabaseArtifacts({
           dbAdapter,

@@ -6,13 +6,8 @@ import {
   setContextResponse,
 } from '../middleware';
 import type Koa from 'koa';
-import type { Realm, RealmInfo } from '@cardstack/runtime-common';
-import {
-  createResponse,
-  DEFAULT_PERMISSIONS,
-  logger,
-  SupportedMimeType,
-} from '@cardstack/runtime-common';
+import type { RealmInfo } from '@cardstack/runtime-common';
+import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 import type { CreateRoutesArgs } from '../routes';
 
@@ -66,21 +61,17 @@ export default function handleCreateRealmRequest({
       return;
     }
 
-    let realm: Realm | undefined;
+    let url: string | undefined;
     let info: Partial<RealmInfo> | undefined;
     let start = Date.now();
-    let indexStart: number | undefined;
     try {
       let result = await createRealm({
         ownerUserId,
         ...json.data.attributes,
       });
-      realm = result.realm;
+      url = result.url;
       info = result.info;
-      log.debug(`created new realm ${realm.url} in ${Date.now() - start} ms`);
-      log.debug(`indexing new realm ${realm.url}`);
-      indexStart = Date.now();
-      await realm.start();
+      log.debug(`created new realm ${url} in ${Date.now() - start} ms`);
     } catch (e: any) {
       if ('status' in e && e.status === 400) {
         await sendResponseForBadRequest(ctxt, e.message);
@@ -93,14 +84,6 @@ export default function handleCreateRealmRequest({
       }
       return;
     } finally {
-      if (realm != null && indexStart != null) {
-        log.debug(
-          `indexing of new realm ${realm.url} ended in ${
-            Date.now() - indexStart
-          } ms`,
-        );
-      }
-
       let creationTimeMs = Date.now() - start;
       if (creationTimeMs > 30_000) {
         let msg = `it took a long time, ${creationTimeMs} ms, to create realm for ${ownerUserId}, ${JSON.stringify(
@@ -111,31 +94,34 @@ export default function handleCreateRealmRequest({
       }
     }
 
-    let response = createResponse({
-      body: JSON.stringify(
+    // Phase 3 PR 2: handler is stateless. createRealm wrote the realm
+    // directory + dual-wrote realm_registry + emitted NOTIFY. The
+    // reconciler on every instance picks up the row and lazy-mounts on
+    // first request. status:'pending' tells the client to poll
+    // /<url>/_readiness-check before treating the realm as ready.
+    let response = new Response(
+      JSON.stringify(
         {
           data: {
             type: 'realm',
-            id: realm.url,
-            attributes: { ...json.data.attributes, ...info },
+            id: url,
+            attributes: {
+              ...json.data.attributes,
+              ...info,
+              status: 'pending',
+            },
           },
         },
         null,
         2,
       ),
-      init: {
-        status: 201,
+      {
+        status: 202,
         headers: {
           'content-type': SupportedMimeType.JSONAPI,
         },
       },
-      requestContext: {
-        realm,
-        permissions: {
-          [ownerUserId]: DEFAULT_PERMISSIONS,
-        },
-      },
-    });
+    );
     await setContextResponse(ctxt, response);
     return;
   };

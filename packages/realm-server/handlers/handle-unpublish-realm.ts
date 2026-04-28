@@ -3,7 +3,6 @@ import {
   query,
   SupportedMimeType,
   logger,
-  createResponse,
   param,
   removeRealmPermissions,
   type PublishedRealmTable,
@@ -22,7 +21,7 @@ import {
 } from '../middleware';
 import type { CreateRoutesArgs } from '../routes';
 import type { RealmServerTokenClaim } from '../utils/jwt';
-import { removeMountedRealm } from './realm-destruction-utils';
+import { removeRealmFiles } from './realm-destruction-utils';
 import { deleteFromRegistryByUrl } from '../lib/realm-registry-writes';
 import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
@@ -30,8 +29,6 @@ const log = logger('handle-unpublish');
 
 export default function handleUnpublishRealm({
   dbAdapter,
-  virtualNetwork,
-  realms,
   realmsRootPath,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
@@ -102,43 +99,32 @@ export default function handleUnpublishRealm({
         return;
       }
 
-      let existingPublishedRealm = realms.find(
-        (r) => r.url === publishedRealmURL,
-      );
-      if (!existingPublishedRealm) {
-        throw new Error(
-          `No realm instance found for published realm ${publishedRealmURL}`,
-        );
-      }
-
       let publishedRealmPath = join(
         realmsRootPath,
         PUBLISHED_DIRECTORY_NAME,
         publishedRealmInfo.id,
       );
-      // Serialize concurrent writers for this realm URL (publish/unpublish/
-      // realm.write). Lock released on callback exit.
+      // Phase 3 PR 2: handler is stateless. Serialize concurrent writers
+      // for this realm URL via the per-URL advisory lock, then do FS +
+      // DB only — no realms[]/virtualNetwork mutation here. The
+      // deleteFromRegistryByUrl emits NOTIFY realm_registry; the
+      // reconciler on every instance (origin included) reacts by
+      // unmounting the realm.
       await withRealmWriteLock(dbAdapter, publishedRealmURL, async () => {
-        await removeMountedRealm({
-          realm: existingPublishedRealm,
-          realmPath: publishedRealmPath,
-          realms,
-          virtualNetwork,
-        });
+        removeRealmFiles(publishedRealmPath);
 
         await query(dbAdapter, [
           `DELETE FROM published_realms WHERE published_realm_url =`,
           param(publishedRealmURL),
         ]);
 
-        // Phase 1 dual-write: mirror the delete into realm_registry.
         await deleteFromRegistryByUrl(dbAdapter, publishedRealmURL);
 
         await removeRealmPermissions(dbAdapter, new URL(publishedRealmURL));
       });
 
-      let response = createResponse({
-        body: JSON.stringify(
+      let response = new Response(
+        JSON.stringify(
           {
             data: {
               type: 'unpublished_realm',
@@ -153,29 +139,13 @@ export default function handleUnpublishRealm({
           null,
           2,
         ),
-        init: {
+        {
           status: 200,
           headers: {
             'content-type': SupportedMimeType.JSONAPI,
           },
         },
-        requestContext: existingPublishedRealm
-          ? {
-              realm: existingPublishedRealm,
-              permissions: {
-                [ownerUserId]: ['read'],
-              },
-            }
-          : {
-              realm:
-                realms.find(
-                  (r) => r.url === publishedRealmInfo.source_realm_url,
-                ) || realms[0],
-              permissions: {
-                [ownerUserId]: ['read'],
-              },
-            },
-      });
+      );
       await setContextResponse(ctxt, response);
       return;
     } catch (error: any) {
