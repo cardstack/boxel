@@ -1,6 +1,6 @@
 ---
 name: aws-access
-description: Provision an AWS STS session for Claude to use against staging or prod, and connect to the boxel RDS database from there. Covers (1) the first-time setup walkthrough for a teammate who has never let Claude reach AWS, (2) refreshing an expired session, and (3) running read-only queries against the private staging/prod boxel Postgres via SSM port-forwarding through the realm-server ECS task, authenticated as `claude_readonly_user` (a dedicated DB user, member of `readonly_role`). Claude operates as the dedicated `boxel-claude-readonly` IAM role — its effective AWS permissions are exactly that role's policy, regardless of which IAM groups the user is in. Use whenever Claude needs to call AWS APIs against the cardstack accounts or read/inspect the boxel_index database in a deployed environment, or whenever the user asks "how do I connect Claude to AWS / staging / prod" or "how do I query staging / prod DB".
+description: Provision an AWS STS session for Claude to use against staging or prod, and reach the deployed environment's data plane from there. Covers (1) the first-time setup walkthrough for a teammate who has never let Claude reach AWS, (2) refreshing an expired session, (3) running read-only queries against the private staging/prod boxel Postgres via SSM port-forwarding through the realm-server ECS task, authenticated as `claude_readonly_user` (a dedicated DB user, member of `readonly_role`), (4) browsing the realm-server's EFS filesystem read-only via a dedicated `boxel-claude-fs-readonly` Fargate task (Caddy file-server, port-forwarded over SSM), and (5) tailing CloudWatch logs for the four boxel ECS services. Claude operates as the dedicated `boxel-claude-readonly` IAM role — its effective AWS permissions are exactly that role's policy, regardless of which IAM groups the user is in. Use whenever Claude needs to call AWS APIs against the cardstack accounts, read/inspect the boxel_index database, browse `/persistent/` files, or read service logs in a deployed environment, or whenever the user asks "how do I connect Claude to AWS / staging / prod" or any of the deployed-env triage questions ("why is this realm indexing slowly", "show me the realm-server logs from last night", "is this file actually on disk in staging").
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -247,6 +247,88 @@ When constructing a query, the cheapest sanity check is: does the SQL begin with
 ### What's actually in the database
 
 The `indexing-diagnostics` skill is the right entry point for `boxel_index` / `boxel_index_working` / `error_doc` exploration — it documents the schema, the `timing_diagnostics` JSONB shape, and the canonical query patterns. This skill only covers *getting connected*; the queries themselves live there.
+
+## Browsing the EFS filesystem (read-only)
+
+The realm-server's persistent storage lives on EFS, mounted into the realm-server container at `/persistent`. A separate small Fargate task (`boxel-claude-fs-readonly`) mounts that same EFS read-only via a dedicated access point and exposes it on its container's port 80 via a Caddy file-server with directory listings. Claude reaches it via SSM port-forwarding.
+
+**Three layers of read-only enforcement** so a write is genuinely impossible:
+
+1. ECS task definition mounts the volume with `readOnly: true` — kernel-level RO mount.
+2. The fs-explorer task's IAM role has `elasticfilesystem:ClientMount` only — **not** `ClientWrite` or `ClientRootAccess`.
+3. Caddy `file-server` has no write endpoints.
+
+### Filesystem layout
+
+```
+/persistent/
+├── base/                     ← @cardstack/base realm
+├── catalog/                  ← @cardstack/catalog realm
+├── legacy-catalog/           ← legacy catalog realm
+├── skills/                   ← @cardstack/skills realm
+├── boxel-homepage/           ← homepage realm
+├── experiments/              ← experiments realm
+├── openrouter/               ← @cardstack/openrouter realm
+├── software-factory/         ← software-factory realm
+├── submissions/              ← submission realm
+└── realms/                   ← user realms root (--realmsRootPath)
+    └── <username>/
+        └── <realm-name>/     ← e.g. realms/buck/mar10/
+```
+
+Public/system realms are direct children of `/persistent`; user-owned private realms live under `/persistent/realms/<username>/<realm-name>/`. Server.ts walks `realmsRootPath` (`/persistent/realms`) for two-level discovery (username → realm).
+
+### Connecting
+
+Same SSM port-forward pattern as the RDS tunnel, just targeting the fs-explorer task on port 80 and using `localhost` as the remote host (the tunnel forwards from your local port through the SSM agent in the container to the container's localhost, which is where Caddy listens).
+
+```sh
+PROFILE=claude-staging                                     # or claude-prod
+CLUSTER=staging                                            # or production
+SERVICE=boxel-claude-fs-readonly-staging                   # or -production
+LOCAL_PORT=58080                                           # any free local port
+
+# 1) Find the fs-explorer task and its container runtime ID.
+TASK_ARN=$(aws --profile $PROFILE ecs list-tasks \
+  --cluster $CLUSTER --service-name $SERVICE \
+  --query 'taskArns[0]' --output text)
+TASK_ID=${TASK_ARN##*/}
+RUNTIME_ID=$(aws --profile $PROFILE ecs describe-tasks \
+  --cluster $CLUSTER --tasks $TASK_ID \
+  --query 'tasks[0].containers[0].runtimeId' --output text)
+
+# 2) Open the tunnel — forward localhost:58080 to localhost:80 inside
+#    the container (where Caddy listens).
+aws --profile $PROFILE ssm start-session \
+  --target "ecs:${CLUSTER}_${TASK_ID}_${RUNTIME_ID}" \
+  --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters "{\"portNumber\":[\"80\"],\"localPortNumber\":[\"$LOCAL_PORT\"],\"host\":[\"localhost\"]}" &
+TUNNEL_PID=$!
+# wait for "Waiting for connections..."
+
+# 3) Browse. Caddy's autoindex returns HTML directory listings; serving
+#    raw bytes for files. Both `curl` and a browser work.
+curl -s http://localhost:$LOCAL_PORT/                      # public-realm root listing
+curl -s http://localhost:$LOCAL_PORT/realms/               # user-realms root
+curl -s http://localhost:$LOCAL_PORT/realms/buck/mar10/    # one user realm's contents
+curl -s http://localhost:$LOCAL_PORT/base/index.json       # specific file
+
+# 4) Tear down.
+kill $TUNNEL_PID
+```
+
+### When this is useful
+
+- Confirming a `.gts` or `.json` file actually exists at a particular path before chasing why indexing skipped it.
+- Looking at `index.json` / `cards-grid.json` for a realm.
+- Verifying file mtimes / sizes for a realm where the user reports "X is missing".
+- Cross-referencing what the indexer saw against what actually landed on disk.
+
+### What it can't do
+
+- **No writes, no rsync up.** This is a viewer, not an editor. Repairs go through the realm API or a deploy.
+- **No process state.** Logs go to CloudWatch (above), not the filesystem.
+- **No DB.** Realm metadata in `boxel_index` is a separate path (the RDS section above).
 
 ## Reading CloudWatch logs
 
