@@ -4677,7 +4677,26 @@ export class Realm {
             message: `Existing realm config card data is not a JSON object`,
           });
         }
-        cardDoc!.data.attributes = cardDoc!.data.attributes ?? {};
+        let adoptsFrom = (cardDoc!.data as any).meta?.adoptsFrom;
+        if (
+          !isPlainObject(adoptsFrom) ||
+          adoptsFrom.module !==
+            'https://cardstack.com/base/realm-config' ||
+          adoptsFrom.name !== 'RealmConfig'
+        ) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config card does not adopt from RealmConfig`,
+          });
+        }
+        let existingAttrs = cardDoc!.data.attributes;
+        if (existingAttrs != null && !isPlainObject(existingAttrs)) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config card attributes is not a JSON object`,
+          });
+        }
+        cardDoc!.data.attributes = existingAttrs ?? {};
       }
       // `name` is exposed on the public RealmInfo shape but stored on the
       // RealmConfig card under cardInfo.name (the standard CardDef slot
