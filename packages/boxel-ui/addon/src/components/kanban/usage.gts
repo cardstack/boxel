@@ -14,7 +14,6 @@ import CardContainer from '../card-container/index.gts';
 import Switch from '../switch/index.gts';
 import type { ViewItem } from '../view-selector/index.gts';
 import ViewSelector from '../view-selector/index.gts';
-import { KanbanDragManager } from './drag.gts';
 import {
   type KanbanColumnConfig,
   type KanbanPlacement,
@@ -145,17 +144,6 @@ export default class KanbanUsage extends Component {
     this.hideEmpty = !this.hideEmpty;
   }
 
-  @action isColumnVisible(columnIndex: number): boolean {
-    let column = this.columns[columnIndex];
-    if (!column || column.collapsed) {
-      return false;
-    }
-    if (!this.hideEmpty) {
-      return true;
-    }
-    return cardsInColumn(columnIndex, this.placements).length > 0;
-  }
-
   @action addCard(columnKey: string | null): void {
     let nextIndex = this.cards.length;
     let columnIndex = this.columns.findIndex(
@@ -192,10 +180,9 @@ export default class KanbanUsage extends Component {
           and drop, and an optional add-card affordance in each lane.
         </p>
         <p>
-          Pass a
-          <code>KanbanDragManager</code>
-          to coordinate pointer interactions and render your own card and ghost
-          content through yielded blocks.
+          It owns its drag manager internally while yielding card and ghost
+          blocks so callers can customize rendering without taking over the
+          interaction layer.
         </p>
       </:description>
       <:example>
@@ -230,41 +217,33 @@ export default class KanbanUsage extends Component {
           </div>
 
           <div class='kanban-plane-demo'>
-            <KanbanDragManager
+            <KanbanPlane
+              @columns={{this.columns}}
               @placements={{this.placements}}
-              @columnCount={{this.columns.length}}
-              @isColumnVisible={{this.isColumnVisible}}
               @onChange={{this.handlePlacementsChange}}
               @onSelect={{this.handleSelect}}
               @onOpen={{this.handleOpen}}
-              as |manager|
+              @cardSize={{this.cardSize}}
+              @hideEmpty={{this.hideEmpty}}
+              @onAddCard={{this.addCard}}
             >
-              <KanbanPlane
-                @columns={{this.columns}}
-                @placements={{this.placements}}
-                @manager={{manager}}
-                @cardSize={{this.cardSize}}
-                @hideEmpty={{this.hideEmpty}}
-                @onAddCard={{this.addCard}}
-              >
-                <:card as |placement|>
-                  {{#let (get this.cards placement.index) as |card|}}
-                    <CardContainer class='demo-card'>
-                      <div class='demo-card-kind'>{{card.kind}}</div>
-                      <h3>{{card.title}}</h3>
-                    </CardContainer>
-                  {{/let}}
-                </:card>
-                <:ghost as |dragIndex|>
-                  {{#let (get this.cards dragIndex) as |card|}}
-                    <CardContainer class='demo-card demo-card--ghost'>
-                      <div class='demo-card-kind'>{{card.kind}}</div>
-                      <h3>{{card.title}}</h3>
-                    </CardContainer>
-                  {{/let}}
-                </:ghost>
-              </KanbanPlane>
-            </KanbanDragManager>
+              <:card as |placement|>
+                {{#let (get this.cards placement.index) as |card|}}
+                  <CardContainer class='demo-card'>
+                    <div class='demo-card-kind'>{{card.kind}}</div>
+                    <h3>{{card.title}}</h3>
+                  </CardContainer>
+                {{/let}}
+              </:card>
+              <:ghost as |dragIndex|>
+                {{#let (get this.cards dragIndex) as |card|}}
+                  <CardContainer class='demo-card demo-card--ghost'>
+                    <div class='demo-card-kind'>{{card.kind}}</div>
+                    <h3>{{card.title}}</h3>
+                  </CardContainer>
+                {{/let}}
+              </:ghost>
+            </KanbanPlane>
           </div>
         </div>
       </:example>
@@ -281,11 +260,6 @@ export default class KanbanUsage extends Component {
           @required={{true}}
           @value={{this.placements}}
         />
-        <Args.Object
-          @name='manager'
-          @description='A KanbanDragManager instance that owns drag, selection, and open behavior.'
-          @required={{true}}
-        />
         <Args.String
           @name='cardSize'
           @description='Fitted card size id used for the card wrapper and for column sizing within the kanban plane.'
@@ -299,6 +273,18 @@ export default class KanbanUsage extends Component {
           @description='When true, collapsed columns and empty visible columns are omitted from the plane.'
           @value={{this.hideEmpty}}
           @onInput={{fn (mut this.hideEmpty)}}
+        />
+        <Args.Action
+          @name='onChange'
+          @description='Invoked with updated placements when the internally owned drag manager commits a move.'
+        />
+        <Args.Action
+          @name='onOpen'
+          @description='Invoked with a card index when the internally owned drag manager treats a pointer interaction as open.'
+        />
+        <Args.Action
+          @name='onSelect'
+          @description='Invoked with the selected card index, or null when selection clears, for the internally owned drag manager.'
         />
         <Args.Action
           @name='onAddCard'

@@ -2,7 +2,6 @@ import { module, test } from 'qunit';
 import { click, render } from '@ember/test-helpers';
 import { setupRenderingTest } from 'test-app/tests/helpers';
 import {
-  KanbanDragManager,
   KanbanPlane,
   type KanbanColumnConfig,
   type KanbanPlacement,
@@ -43,23 +42,11 @@ module('Integration | Component | kanban-plane', function (hooks) {
         sortOrder: 2,
       },
     ];
-    const manager = new KanbanDragManager(this.owner, {
-      placements: () => placements,
-      columnCount: () => columns.length,
-      isColumnVisible: (index: number) => {
-        let column = columns[index];
-        return !!column && !column.collapsed && placements.some((p) => p.column === index);
-      },
-      containerElement: () => null,
-      onChange: () => {},
-    });
-
     await render(
       <template>
         <KanbanPlane
           @columns={{columns}}
           @placements={{placements}}
-          @manager={{manager}}
           @hideEmpty={{true}}
         >
           <:card as |placement|>
@@ -94,19 +81,11 @@ module('Integration | Component | kanban-plane', function (hooks) {
         sortOrder: 0,
       },
     ];
-    const manager = new KanbanDragManager(this.owner, {
-      placements: () => placements,
-      columnCount: () => columns.length,
-      containerElement: () => null,
-      onChange: () => {},
-    });
-
     await render(
       <template>
         <KanbanPlane
           @columns={{columns}}
           @placements={{placements}}
-          @manager={{manager}}
           @hideEmpty={{false}}
         >
           <:card as |placement|>
@@ -143,19 +122,11 @@ module('Integration | Component | kanban-plane', function (hooks) {
         sortOrder: 1,
       },
     ];
-    const manager = new KanbanDragManager(this.owner, {
-      placements: () => placements,
-      columnCount: () => columns.length,
-      containerElement: () => null,
-      onChange: () => {},
-    });
-
     await render(
       <template>
         <KanbanPlane
           @columns={{columns}}
           @placements={{placements}}
-          @manager={{manager}}
           @hideEmpty={{true}}
         >
           <:card as |placement|>
@@ -188,19 +159,11 @@ module('Integration | Component | kanban-plane', function (hooks) {
     const onAddCard = (key: string | null) => {
       addedColumnKey = key;
     };
-    const manager = new KanbanDragManager(this.owner, {
-      placements: () => placements,
-      columnCount: () => columns.length,
-      containerElement: () => null,
-      onChange: () => {},
-    });
-
     await render(
       <template>
         <KanbanPlane
           @columns={{columns}}
           @placements={{placements}}
-          @manager={{manager}}
           @hideEmpty={{false}}
           @onAddCard={{onAddCard}}
         >
