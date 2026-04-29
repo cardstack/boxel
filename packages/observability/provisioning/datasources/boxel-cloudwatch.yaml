@@ -18,5 +18,9 @@ datasources:
     isDefault: false
     editable: false
     jsonData:
-      authType: ec2_iam_role
+      # `default` makes the AWS SDK use its default credential chain, which
+      # on ECS picks up the task role. AMG's `ec2_iam_role` value is a
+      # legacy alias that newer Grafana refuses (see staging health check:
+      # "trying to use non-allowed auth method ec2_iam_role").
+      authType: default
       defaultRegion: us-east-1
