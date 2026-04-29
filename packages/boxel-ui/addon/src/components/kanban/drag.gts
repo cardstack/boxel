@@ -3,6 +3,7 @@
 
 import { scheduleOnce } from '@ember/runloop';
 import { tracked } from '@glimmer/tracking';
+import { restartableTask, timeout } from 'ember-concurrency';
 
 import {
   type InsertionPoint,
@@ -77,7 +78,12 @@ export class KanbanDragManager {
   private startClientX = 0;
   private startClientY = 0;
   private dragIndex: number | null = null;
-  private holdTimer: ReturnType<typeof setTimeout> | null = null;
+  private holdTask = restartableTask(async (container: HTMLElement) => {
+    await timeout(HOLD_DELAY_MS);
+    if (this.interactionMode === 'pending') {
+      this.activateDrag(container);
+    }
+  });
   private settleTimer: ReturnType<typeof setTimeout> | null = null;
   private snapshotPlacements: KanbanPlacement[] | null = null;
   private suppressLostPointerCapture = false;
@@ -141,11 +147,7 @@ export class KanbanDragManager {
     document.body.style.userSelect = 'none';
     (document.body.style as BodyStyle).webkitUserSelect = 'none';
 
-    this.holdTimer = setTimeout(() => {
-      if (this.interactionMode === 'pending') {
-        this.activateDrag(container);
-      }
-    }, HOLD_DELAY_MS);
+    void this.holdTask.perform(container);
 
     container.setPointerCapture(e.pointerId);
   };
@@ -206,10 +208,7 @@ export class KanbanDragManager {
     if (container) this.releasePointerCapture(container, e.pointerId);
 
     if (this.interactionMode === 'pending') {
-      if (this.holdTimer) {
-        clearTimeout(this.holdTimer);
-        this.holdTimer = null;
-      }
+      this.holdTask.cancelAll();
       const tappedIndex = this.dragIndex;
       this.interactionMode = 'idle';
       this.activePointerId = null;
@@ -334,10 +333,7 @@ export class KanbanDragManager {
   };
 
   destroy(): void {
-    if (this.holdTimer) {
-      clearTimeout(this.holdTimer);
-      this.holdTimer = null;
-    }
+    this.holdTask.cancelAll();
     if (this.settleTimer) {
       clearTimeout(this.settleTimer);
       this.settleTimer = null;
@@ -349,10 +345,7 @@ export class KanbanDragManager {
   // ── Private ────────────────────────────────────────────────────────
 
   private activateDrag(container: HTMLElement): void {
-    if (this.holdTimer) {
-      clearTimeout(this.holdTimer);
-      this.holdTimer = null;
-    }
+    this.holdTask.cancelAll();
     this.interactionMode = 'drag';
     this.activeDragIndex = this.dragIndex;
     this.snapshotPlacements = this.placementsFn().map((p) => ({ ...p }));
@@ -667,10 +660,7 @@ export class KanbanDragManager {
     this.dragIndex = null;
     this.snapshotPlacements = null;
     this.interactionMode = 'idle';
-    if (this.holdTimer) {
-      clearTimeout(this.holdTimer);
-      this.holdTimer = null;
-    }
+    this.holdTask.cancelAll();
     if (this.settleTimer) {
       clearTimeout(this.settleTimer);
       this.settleTimer = null;
