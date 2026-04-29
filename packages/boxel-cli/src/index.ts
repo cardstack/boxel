@@ -16,6 +16,11 @@ const pkg = JSON.parse(
 
 const program = new Command();
 
+// `--quiet` is implemented by intercepting `console.log/info/debug`.
+// New commands: write decorative output (status, confirmations, colored
+// lines) with `console.log` — it's silenced for free under `--quiet`.
+// For programmatic output (`--json` payloads, raw file bytes), use
+// `cliLog.output(...)`. Full guidance: see `lib/cli-log.ts`.
 program
   .name('boxel')
   .description('CLI tools for Boxel workspace management')
