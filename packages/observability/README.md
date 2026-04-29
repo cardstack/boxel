@@ -114,11 +114,23 @@ docker run --label boxel.realm=test_realm --name my-realm-worker ...
 ### Locally
 
 Loki listens on `http://localhost:3100`. Either query in Grafana
-(http://localhost:3001 → Explore → Loki) or curl it directly:
+(http://localhost:3001 → Explore → Loki), inspect metadata with curl,
+or fetch log lines directly from the CLI:
 
 ```sh
+# Metadata discovery
 curl -sS 'http://localhost:3100/loki/api/v1/labels' | jq
 curl -sS 'http://localhost:3100/loki/api/v1/label/service/values' | jq
+
+# Fetch lines for one service over the last 15 minutes
+END=$(date -u +%s)
+START=$((END - 15 * 60))
+curl -sS -G 'http://localhost:3100/loki/api/v1/query_range' \
+  --data-urlencode 'query={service="my-realm-worker"}' \
+  --data-urlencode "start=${START}000000000" \
+  --data-urlencode "end=${END}000000000" \
+  --data-urlencode 'limit=100' \
+  --data-urlencode 'direction=backward' | jq
 ```
 
 ### Staging or production
@@ -150,11 +162,17 @@ These run identically against local, staging, and production — only the
 URL/token plumbing differs. Replace `<env>` with `local`, `staging`, or
 `production`.
 
+A LogQL selector by itself doesn't carry a time window — that comes
+from the client (Grafana Explore's range picker, `tail-logs.sh
+--since`, or `start`/`end` on the `query_range` HTTP API). The `[1d]`,
+`[5m]` etc. inside `count_over_time(... [N])` are the *aggregation*
+window, not the query window.
+
 ```logql
-# All lines from the realm-server in the last hour
+# All lines from the realm-server in the selected time range
 {env="<env>", service="realm-server"}
 
-# Errors in any service in the last 15m
+# Errors in any service in the selected time range
 {env="<env>"} |~ "(?i)error|exception|fatal"
 
 # Lines for one realm across all services
@@ -166,10 +184,11 @@ URL/token plumbing differs. Replace `<env>` with `local`, `staging`, or
 # Logs around a specific job id (LogQL line-filter, not regex)
 {env="<env>", service="worker"} |= "job_id=42"
 
-# Error rate over the last day, sliced by service
+# Error rate sliced by service — the [1d] is the aggregation window,
+# the query time range still comes from the client
 sum by (service) (count_over_time({env="<env>"} |~ "ERROR" [1d]))
 
-# Slowest indexer batches in the last hour (matches a known log shape)
+# Slowest indexer batches (matches a known log shape)
 {env="<env>", service="realm-server"} |~ "indexer.*duration_ms=[0-9]{4,}"
 
 # Drop noisy keep-alive lines, keep the rest
