@@ -231,6 +231,10 @@ type CachedSourceFileEntry = {
   ref: FileRef;
   defaultHeaders: Record<string, string>;
   canonicalPath: LocalPath;
+  // md5 of the materialized body, computed once on cache populate. Used
+  // as the ETag base so two writes within the same unix second still
+  // produce distinct ETags — see `buildEtag` for the rationale.
+  contentHash: string | undefined;
 };
 
 type CachedSourceRedirectEntry = {
@@ -265,15 +269,24 @@ type ModuleLoadResult =
       headers: Record<string, string>;
     };
 
+// ETag base prefers a content fingerprint (md5 of the file body) over
+// `lastModified` because the unix-second timestamp collides for two
+// writes that land in the same second — and `cachedFetch` (loader →
+// cached-fetch) will then serve a stale 304-cached body. We compute the
+// content hash on the cache-miss path of the source endpoint, where the
+// content is already being materialized into memory, and stash it on the
+// cache entry so subsequent serves reuse it. Adapters that don't yet
+// surface a content fingerprint fall back to `lastModified` and keep the
+// pre-existing behavior.
 function buildEtag(
-  lastModified: number | undefined,
+  base: string | number | undefined,
   variant?: string,
 ): string | undefined {
-  if (lastModified == null) {
+  if (base == null) {
     return undefined;
   }
-  let base = String(lastModified);
-  return variant ? `${base}:${variant}` : base;
+  let baseStr = String(base);
+  return variant ? `${baseStr}:${variant}` : baseStr;
 }
 
 function computeContentHash(content: string | Uint8Array): string {
@@ -289,6 +302,21 @@ function computeContentHash(content: string | Uint8Array): string {
       throw new Error('Failed to compute content hash');
     }
   }
+}
+
+// Cheap helper for the source endpoint: returns md5 of the body when the
+// ref has already been materialized to a string or Uint8Array. Returns
+// undefined for stream refs (the caller falls back to lastModified).
+function contentHashFromMaterializedRef(ref: FileRef): string | undefined {
+  let { content } = ref;
+  if (typeof content === 'string' || content instanceof Uint8Array) {
+    try {
+      return computeContentHash(content);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
 }
 
 function computeContentSize(content: string | Uint8Array): number {
@@ -2125,6 +2153,11 @@ export class Realm {
     options?: {
       defaultHeaders?: Record<string, string>;
       etagVariant?: string;
+      // Optional content-derived fingerprint (e.g. md5 of body bytes).
+      // Takes precedence over `ref.lastModified` for the ETag — see
+      // `buildEtag`. Callers that have the materialized body already
+      // (the source endpoint cache-miss path) compute this for free.
+      etagBase?: string;
     },
   ): Promise<ResponseWithNodeStream> {
     let contentType = options?.defaultHeaders?.['content-type'];
@@ -2141,7 +2174,10 @@ export class Realm {
     let cacheControl = contentType?.startsWith('image/')
       ? `${cacheVisibility}, max-age=60, must-revalidate`
       : `${cacheVisibility}, max-age=0`;
-    let etag = buildEtag(ref.lastModified, options?.etagVariant);
+    let etag = buildEtag(
+      options?.etagBase ?? ref.lastModified,
+      options?.etagVariant,
+    );
     let lastModified = formatRFC7231(ref.lastModified * 1000);
     if (etag && request.headers.get('if-none-match') === etag) {
       return createResponse({
@@ -2399,6 +2435,7 @@ export class Realm {
                 [CACHE_HEADER]: CACHE_HIT_VALUE,
               },
               etagVariant: SOURCE_ETAG_VARIANT,
+              etagBase: cached.contentHash,
             },
           );
         } finally {
@@ -2466,15 +2503,21 @@ export class Realm {
         });
       } else {
         let cachedRef = await this.materializeFileRef(handle);
+        // Compute the content fingerprint while we have the body in
+        // memory — `cachedRef.content` is already a string/Uint8Array
+        // post-materialization, so this is a single md5 with no extra I/O.
+        let contentHash = contentHashFromMaterializedRef(cachedRef);
         this.#sourceCache.set(localName, {
           type: 'file',
           ref: cachedRef,
           defaultHeaders,
           canonicalPath: handle.path,
+          contentHash,
         });
         return await this.serveLocalFile(request, cachedRef, requestContext, {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
+          etagBase: contentHash,
         });
       }
     } finally {
