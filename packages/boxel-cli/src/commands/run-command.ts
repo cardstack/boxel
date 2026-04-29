@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import { getProfileManager, type ProfileManager } from '../lib/profile-manager';
 import { FG_GREEN, FG_RED, FG_CYAN, DIM, RESET } from '../lib/colors';
+import { cliLog } from '../lib/cli-log';
 
 export interface RunCommandResult {
   status: 'ready' | 'error' | 'unusable';
@@ -150,17 +151,17 @@ export function registerRunCommand(program: Command): void {
       }
 
       if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
+        cliLog.output(JSON.stringify(result, null, 2));
       } else {
-        console.log(
+        cliLog.output(
           `${DIM}Status:${RESET} ${statusColor(result.status)}${result.status}${RESET}`,
         );
         if (result.result) {
-          console.log(`${DIM}Result:${RESET}`);
+          cliLog.output(`${DIM}Result:${RESET}`);
           try {
-            console.log(JSON.stringify(JSON.parse(result.result), null, 2));
+            cliLog.output(JSON.stringify(JSON.parse(result.result), null, 2));
           } catch {
-            console.log(result.result);
+            cliLog.output(result.result);
           }
         }
         if (result.error) {

@@ -395,7 +395,18 @@ export class ToolExecutor {
 
     let cliArgs = buildBoxelCliArgs(toolName, subcommand, toolArgs);
 
-    return this.spawnProcess(toolName, 'npx', ['boxel', ...cliArgs], 'text');
+    // Always pass `--quiet` so chatty per-step progress logs from
+    // boxel-cli (e.g. "Starting sync between …", "Downloaded: index.json",
+    // "Sync completed", "Checkpoint created: …") don't surface in the
+    // factory's tool output or in CI logs. Errors, warnings, and the
+    // command's actual result payload (JSON, file content, etc.) are
+    // still emitted — see packages/boxel-cli/src/lib/cli-log.ts.
+    return this.spawnProcess(
+      toolName,
+      'npx',
+      ['boxel', '--quiet', ...cliArgs],
+      'text',
+    );
   }
 
   private async executeRealmApi(

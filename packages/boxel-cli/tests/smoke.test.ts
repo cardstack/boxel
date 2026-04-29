@@ -21,6 +21,89 @@ describe('boxel-cli', () => {
     });
     expect(output.trim()).toMatch(/^\d+\.\d+\.\d+$/);
   });
+
+  it('exposes a global --quiet flag in --help', () => {
+    const output = execFileSync(process.execPath, [cliEntry, '--help'], {
+      encoding: 'utf8',
+    });
+    expect(output).toMatch(/-q, --quiet/);
+  });
+
+  it('silences info-level logs but keeps errors when --quiet is passed', () => {
+    // Run a command that's guaranteed to fail at the "no active profile"
+    // step so we don't need a realm server. Without --quiet, the realm
+    // sync command would normally log progress lines to stdout. With
+    // --quiet, info logs are silenced; errors still print to stderr.
+    //
+    // This is the load-bearing test for the SF integration path:
+    // boxel-cli is launched with `--quiet` from the factory tool
+    // executor, and we want to confirm that:
+    //   1. info/log lines are stripped from stdout
+    //   2. error lines (and the non-zero exit code) are preserved
+    let tmpHome = fs.mkdtempSync(join(os.tmpdir(), 'boxel-cli-quiet-'));
+    let tmpLocal = fs.mkdtempSync(join(os.tmpdir(), 'boxel-quiet-local-'));
+    try {
+      let stdout = '';
+      let stderr = '';
+      let exitCode = 0;
+      try {
+        execFileSync(
+          process.execPath,
+          [
+            cliEntry,
+            '--quiet',
+            'realm',
+            'sync',
+            tmpLocal,
+            // A guaranteed-bad realm URL — exercise is the quiet path,
+            // not the sync path; we only care about what reaches stdout.
+            'http://127.0.0.1:1/nope/',
+          ],
+          {
+            encoding: 'utf8',
+            env: {
+              ...process.env,
+              HOME: tmpHome,
+              // Strip BOXEL_* so a developer's shell doesn't perturb
+              // the result.
+              ...Object.fromEntries(
+                Object.entries(process.env)
+                  .filter(([k]) => k.startsWith('BOXEL_'))
+                  .map(([k]) => [k, '']),
+              ),
+            },
+            stdio: ['ignore', 'pipe', 'pipe'],
+          },
+        );
+      } catch (err) {
+        // Non-zero exit is expected here — the command can't authenticate.
+        let e = err as { status?: number; stdout?: string; stderr?: string };
+        exitCode = e.status ?? 0;
+        stdout = e.stdout ?? '';
+        stderr = e.stderr ?? '';
+      }
+
+      // The "Starting sync between …" / "Sync completed" / "Found N
+      // local files" progress lines are exactly the kind of chatty
+      // output the issue wants suppressed. Even though the command
+      // fails before it gets that far in this test, verify that NO
+      // info-style line ("Starting", "Found", "Pulling", "Pushing",
+      // "Sync completed", "Checkpoint created") leaked to stdout.
+      expect(exitCode).not.toBe(0);
+      expect(stdout).not.toMatch(/Starting sync/);
+      expect(stdout).not.toMatch(/Sync completed/);
+      expect(stdout).not.toMatch(/Checkpoint created/);
+      expect(stdout).not.toMatch(/Found \d+ local files/);
+
+      // Errors should still surface (in stderr or as a structured
+      // result) so that the operator/automation can react.
+      let combined = stdout + stderr;
+      expect(combined).not.toBe('');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      fs.rmSync(tmpLocal, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('boxel profile add (non-interactive)', () => {

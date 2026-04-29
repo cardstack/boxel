@@ -8,6 +8,7 @@ import {
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { FG_GREEN, FG_RED, DIM, RESET } from '../../lib/colors';
+import { cliLog } from '../../lib/cli-log';
 
 export interface WriteResult {
   ok: boolean;
@@ -135,9 +136,9 @@ export function registerWriteCommand(parent: Command): void {
       }
 
       if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
+        cliLog.output(JSON.stringify(result, null, 2));
       } else if (result.ok) {
-        console.log(
+        cliLog.output(
           `${FG_GREEN}Written:${RESET} ${filePath} ${DIM}→${RESET} ${opts.realm}`,
         );
       } else {

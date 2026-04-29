@@ -8,6 +8,7 @@ import { registerRealmCommand } from './commands/realm/index';
 import { registerFileCommand } from './commands/file/index';
 import { registerRunCommand } from './commands/run-command';
 import { registerSearchCommand } from './commands/search';
+import { setQuiet } from './lib/cli-log';
 
 const pkg = JSON.parse(
   readFileSync(resolve(__dirname, '../package.json'), 'utf-8'),
@@ -18,7 +19,30 @@ const program = new Command();
 program
   .name('boxel')
   .description('CLI tools for Boxel workspace management')
-  .version(pkg.version);
+  .version(pkg.version)
+  .option(
+    '-q, --quiet',
+    'Suppress informational progress logs (info/log/debug). Errors and warnings, plus command result payloads (JSON, file contents), are still emitted. Use this when invoking the CLI from automation (e.g. the software factory test harness) to keep stdout focused on the result.',
+  )
+  // Toggle quiet mode as soon as the global option is parsed, so that any
+  // module-level setup happening inside command actions sees the right
+  // state. Commander invokes this hook before any subcommand action.
+  .hook('preAction', (thisCommand) => {
+    let opts = thisCommand.optsWithGlobals?.() ?? thisCommand.opts();
+    if (opts.quiet) {
+      setQuiet(true);
+    }
+  });
+
+// Pre-parse: also flip quiet mode based on a raw scan of argv. Commander's
+// `preAction` hook runs after argument parsing but before the command
+// action — that's enough for command-action `console.log` calls. However,
+// any code that runs at *import* time inside a command file would still
+// see quiet=false. Doing this raw scan up front guarantees module-load
+// console output is also silenced when the caller asked for it.
+if (process.argv.includes('--quiet') || process.argv.includes('-q')) {
+  setQuiet(true);
+}
 
 program
   .command('profile')

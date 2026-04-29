@@ -6,6 +6,7 @@ import {
 } from '../../lib/profile-manager';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { FG_GREEN, FG_RED, RESET } from '../../lib/colors';
+import { cliLog } from '../../lib/cli-log';
 
 export interface CancelIndexingCommandOptions {
   profileManager?: ProfileManager;
@@ -95,7 +96,7 @@ export function registerCancelIndexingCommand(realm: Command): void {
       });
 
       if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
+        cliLog.output(JSON.stringify(result, null, 2));
         if (!result.ok) {
           process.exit(1);
         }

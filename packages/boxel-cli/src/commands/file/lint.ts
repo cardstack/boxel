@@ -8,6 +8,7 @@ import {
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { FG_GREEN, FG_RED, FG_YELLOW, DIM, RESET } from '../../lib/colors';
+import { cliLog } from '../../lib/cli-log';
 import { write } from './write';
 
 export interface LintMessage {
@@ -172,7 +173,7 @@ export function registerLintCommand(parent: Command): void {
       }
 
       if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
+        cliLog.output(JSON.stringify(result, null, 2));
         if (!result.ok) {
           process.exit(1);
         }
@@ -188,7 +189,7 @@ export function registerLintCommand(parent: Command): void {
       if (opts.fix && result.fixed && result.output) {
         if (opts.file) {
           writeFileSync(opts.file, result.output, 'utf-8');
-          console.log(`${FG_GREEN}Fixed:${RESET} ${opts.file}`);
+          cliLog.output(`${FG_GREEN}Fixed:${RESET} ${opts.file}`);
         } else {
           let writeResult = await write(opts.realm, filePath, result.output, {
             profileManager: pm,
@@ -199,7 +200,7 @@ export function registerLintCommand(parent: Command): void {
             );
             process.exit(1);
           }
-          console.log(
+          cliLog.output(
             `${FG_GREEN}Fixed:${RESET} ${filePath} ${DIM}→${RESET} ${opts.realm}`,
           );
         }
@@ -210,7 +211,7 @@ export function registerLintCommand(parent: Command): void {
       let warnings = messages.filter((m) => m.severity === 1);
 
       if (messages.length === 0) {
-        console.log(`${DIM}No lint issues found.${RESET}`);
+        cliLog.output(`${DIM}No lint issues found.${RESET}`);
         return;
       }
 
@@ -218,12 +219,12 @@ export function registerLintCommand(parent: Command): void {
         let color = msg.severity === 2 ? FG_RED : FG_YELLOW;
         let level = msg.severity === 2 ? 'error' : 'warning';
         let rule = msg.ruleId ? ` (${msg.ruleId})` : '';
-        console.log(
+        cliLog.output(
           `${color}${level}${RESET} ${msg.line}:${msg.column} ${msg.message}${DIM}${rule}${RESET}`,
         );
       }
 
-      console.log(
+      cliLog.output(
         `\n${DIM}${errors.length} error(s), ${warnings.length} warning(s)${RESET}`,
       );
 
