@@ -65,7 +65,7 @@ if [[ "$env_name" != "local" ]]; then
   )
   for v in "${required_env_vars[@]}"; do
     [[ -n "${!v:-}" ]] \
-      || { echo "error: ${v} not set; expected the apply workflow (or grafanactl-env.sh) to source it from SSM for env=${env_name}" >&2; exit 1; }
+      || { echo "error: ${v} not set; CI fetches it from SSM in observability-apply-${env_name}.yml — for a local hosted run, export it manually first (see apply-datasources.sh header for the SSM path)" >&2; exit 1; }
   done
 fi
 

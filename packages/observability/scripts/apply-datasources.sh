@@ -11,16 +11,33 @@
 # Usage:
 #   ./scripts/apply-datasources.sh --env <local|staging|production>
 #
-# Required env vars (staging / production only):
-#   GRAFANA_TOKEN — service-account token (sourced by grafanactl-env.sh)
-#   LOKI_URL      — internal Loki NLB URL (e.g. http://<nlb>:3100), pulled
-#                   from SSM /<env>/loki/internal_url at apply time
+# Required env vars (staging / production only). The CI apply workflow
+# (.github/workflows/observability-apply-{staging,production}.yml) fetches
+# these from SSM and exports them to $GITHUB_ENV. For a local hosted run,
+# export them manually first.
+#
+#   GRAFANA_TOKEN          — service-account token (SecureString, also
+#                            populated by grafanactl-env.sh)
+#   LOKI_URL               — internal Loki NLB URL, e.g. http://<nlb>:3100
+#                            (from /<env>/loki/internal_url, CS-10968)
+#   BOXEL_DB_HOST          — boxel RDS endpoint
+#                            (from /<env>/boxel-grafana/db_host, CS-10978)
+#   BOXEL_DB_NAME          — Postgres database name
+#                            (from /<env>/boxel/PGDATABASE)
+#   BOXEL_DB_USER          — Postgres user
+#                            (from /<env>/boxel/GRAFANA_DB_USER)
+#   BOXEL_DB_PASSWORD      — Postgres password (SecureString)
+#                            (from /<env>/boxel/GRAFANA_DB_PASSWORD)
+#   SYNAPSE_PROMETHEUS_URL — Synapse AMP workspace URL
+#                            (from /<env>/boxel-grafana/prometheus_url)
 #
 # What it pushes:
 #   - Each `.yaml` in `provisioning/datasources/` is read as the standard
 #     Grafana provisioning shape (`apiVersion: 1` + `datasources: [...]`).
 #   - For each datasource entry, env-var references like `${LOKI_URL}`
-#     are substituted from the current shell environment.
+#     are substituted from the current shell environment. `secureJsonData`
+#     (passwords, API keys) flows through unchanged — Grafana's HTTP API
+#     accepts the file-provisioning shape on POST/PUT.
 #   - The result is upserted: PUT `/api/datasources/uid/<uid>` if it
 #     exists, POST `/api/datasources` otherwise.
 #
@@ -29,9 +46,6 @@
 #     HTTP-API equivalent. Hosted data sources created here remain
 #     UI-editable; re-running this script overwrites any UI edits, so
 #     git stays the source of truth in practice.
-#   - `secureJsonData` (passwords, API keys) is not yet supported here —
-#     Loki doesn't need any (auth is at the ALB layer). Add SSM-backed
-#     secret resolution when Postgres / Prometheus migrate over.
 set -eo pipefail
 
 usage_error() { echo "error: $1" >&2; exit 2; }
@@ -129,10 +143,11 @@ files=(provisioning/datasources/*.yaml)
 
 echo "apply-datasources: env=${env_name} server=${grafana_server} files=${#files[@]}" >&2
 
-# Validate that every ${VAR} the YAML references is actually set before we
-# call envsubst. envsubst substitutes unset variables with empty strings,
-# so a typo in a placeholder name would silently push e.g. `url: ""` to
-# Grafana. Pre-checking the raw payload catches that loudly.
+# Validate that every ${VAR} the YAML references is set to a non-empty
+# value before we call envsubst. envsubst substitutes unset / empty vars
+# with empty strings, so a typo in a placeholder name OR an empty SSM
+# value would silently push e.g. `url: ""` / `password: ""` to Grafana.
+# Catching it here lines up with the stricter preflight in apply.sh.
 assert_placeholders_resolved() {
   local raw="$1" file="$2"
   local refs ref name
@@ -140,7 +155,7 @@ assert_placeholders_resolved() {
   while IFS= read -r ref; do
     [[ -z "$ref" ]] && continue
     name="${ref#\$\{}"; name="${name%\}}"
-    [[ -n "${!name+x}" ]] || fail "${file}: \${${name}} referenced but not set in environment"
+    [[ -n "${!name:-}" ]] || fail "${file}: \${${name}} referenced but not set (or empty) in environment"
   done <<<"$refs"
 }
 
