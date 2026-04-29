@@ -291,6 +291,12 @@ catalogs:
     '@vscode/vsce':
       specifier: ^3.1.0
       version: 3.7.1
+    acorn:
+      specifier: ^8.16.0
+      version: 8.16.0
+    acorn-walk:
+      specifier: ^8.3.4
+      version: 8.3.4
     ajv:
       specifier: ^8.17.1
       version: 8.17.1
@@ -519,6 +525,9 @@ catalogs:
     loglevel:
       specifier: ^1.8.1
       version: 1.9.2
+    magic-string:
+      specifier: 0.25.9
+      version: 0.25.9
     marked:
       specifier: ^12.0.1
       version: 12.0.2
@@ -2887,6 +2896,12 @@ importers:
       '@types/uuid':
         specifier: 'catalog:'
         version: 9.0.8
+      acorn:
+        specifier: 'catalog:'
+        version: 8.16.0
+      acorn-walk:
+        specifier: 'catalog:'
+        version: 8.3.4
       awesome-phonenumber:
         specifier: 'catalog:'
         version: 7.6.0
@@ -2953,6 +2968,9 @@ importers:
       loglevel:
         specifier: 'catalog:'
         version: 1.9.2
+      magic-string:
+        specifier: 'catalog:'
+        version: 0.25.9(patch_hash=32dda55b40f0bc860d0a8e93bee54d8005c34ed7ac5faed23ce9f5e5f57eea39)
       marked:
         specifier: 'catalog:'
         version: 12.0.2
@@ -19869,7 +19887,7 @@ snapshots:
 
   acorn-walk@8.3.4:
     dependencies:
-      acorn: 8.15.0
+      acorn: 8.16.0
 
   acorn@8.15.0: {}
 
@@ -29154,7 +29172,7 @@ snapshots:
   terser@5.44.1:
     dependencies:
       '@jridgewell/source-map': 0.3.11
-      acorn: 8.15.0
+      acorn: 8.16.0
       commander: 2.20.3
       source-map-support: 0.5.21
 

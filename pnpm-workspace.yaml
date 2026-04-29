@@ -106,6 +106,8 @@ catalog:
   "@typescript-eslint/parser": ^7.18.0
   "@universal-ember/test-support": ^0.5.1
   "@vscode/vsce": ^3.1.0
+  acorn: ^8.16.0
+  acorn-walk: ^8.3.4
   ajv: ^8.17.1
   archiver: ^7.0.0
   awesome-phonenumber: ^7.2.0
