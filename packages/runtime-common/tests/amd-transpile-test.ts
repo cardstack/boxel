@@ -66,18 +66,93 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
     assert.strictEqual(exports.X, 42);
   },
 
-  'export let snapshots at body-end': async (assert) => {
-    // Both this transpiler and babel's plugin diverge from full ES module
-    // live-binding semantics for mutable `export let` — neither propagates
-    // mutations made AFTER the module body finishes. We snapshot at body
-    // end (so mutations inside the body show up); babel snapshots at the
-    // declaration site. The end-of-body behavior is closer to spec for
-    // typical card code, where the body fully initialises the export.
+  'export let with body-time mutation': async (assert) => {
+    // Mutations made INSIDE the module body should show up.
     let out = transpileAmd(`export let counter = 0; counter = 5;`, {
       moduleId,
     });
     let { exports } = runAmd(out);
     assert.strictEqual(exports.counter, 5, 'reflects body-end value');
+  },
+
+  'export let mutated by exported function (live binding)': async (assert) => {
+    // CS-10977 regression: `export let counter; export function inc() { counter++; }`
+    // — after `inc()` the importer must see counter+1. The fix is a getter
+    // on `_exports.counter` so the read goes through the local variable.
+    let out = transpileAmd(
+      `
+      export let counter = 0;
+      export function increment() { counter++; }
+      `,
+      { moduleId },
+    );
+    let { exports } = runAmd(out);
+    assert.strictEqual(exports.counter, 0, 'starts at 0');
+    (exports.increment as () => void)();
+    assert.strictEqual(
+      exports.counter,
+      1,
+      'mutation inside exported function propagates to importers',
+    );
+    (exports.increment as () => void)();
+    assert.strictEqual(exports.counter, 2);
+  },
+
+  'circular dep: imported value is read at use-time, not import-time': async (
+    assert,
+  ) => {
+    // CS-10977 regression: when card-api and contains-many-component import
+    // each other, the loader evaluates the deps before the body. If the
+    // transpiler snapshots `_dep.x` at body entry, that snapshot is `undefined`
+    // for circular deps where the dep hasn't populated _exports yet. The
+    // fix is to inline-rewrite every use of an imported name to `_dep.x`
+    // so the lookup happens at call time.
+    let out = transpileAmd(
+      `import { primitive } from 'card-api';
+       export function check(v) { return v === primitive; }`,
+      { moduleId },
+    );
+    // Stub `card-api` with a partially-evaluated _exports object that gets
+    // populated AFTER our module's body has run. If we snapshot, `primitive`
+    // captures undefined and `check(undefined)` returns true. If we read at
+    // call time, `primitive` is the post-body Symbol and `check(undefined)`
+    // returns false.
+    const cardApi: { primitive?: symbol } = {};
+    let { exports } = runAmd(out, { 'card-api': cardApi });
+    cardApi.primitive = Symbol('primitive');
+    assert.strictEqual(
+      (exports.check as (v: unknown) => boolean)(cardApi.primitive),
+      true,
+      'reads through dep arg at call time',
+    );
+    assert.strictEqual(
+      (exports.check as (v: unknown) => boolean)(undefined),
+      false,
+      'does not snapshot undefined',
+    );
+  },
+
+  'shadowed import name is not rewritten': async (assert) => {
+    // If a function declares a parameter / local with the same name as an
+    // imported binding, references inside that scope use the local — not
+    // the dep arg.
+    let out = transpileAmd(
+      `import { x } from 'foo';
+       export function outer(x) { return x; }
+       export function reads() { return x; }`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out, { foo: { x: 'imported' } });
+    assert.strictEqual(
+      (exports.outer as (v: string) => string)('shadow'),
+      'shadow',
+      'parameter shadows the import',
+    );
+    assert.strictEqual(
+      (exports.reads as () => string)(),
+      'imported',
+      'unshadowed reference goes through the dep',
+    );
   },
 
   'export function f': async (assert) => {
@@ -261,6 +336,91 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
     foo.v = 100;
     assert.strictEqual(exports.v, 100);
     assert.strictEqual(exports.alias, 100);
+  },
+
+  'export default of an imported binding': async (assert) => {
+    // Regression for the exact bug that broke base-realm indexing — a
+    // module like `import x from 'foo'; export default x;`. The
+    // identifier-rewrite walk and the export-default rewrite must agree
+    // on AST positions (no magic-string overlap), and the imported name
+    // must read through the dep arg at the time the importer reads
+    // `_exports.default`.
+    let out = transpileAmd(
+      `import { sanitizeHtmlSafe } from 'sanitize';
+       export default sanitizeHtmlSafe;`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out, {
+      sanitize: { sanitizeHtmlSafe: 'live-fn' },
+    });
+    assert.strictEqual(exports.default, 'live-fn');
+  },
+
+  'export default forward-references a const declared later (TDZ-safe)': async (
+    assert,
+  ) => {
+    // ESM technically allows the source order `export default Foo; const Foo`,
+    // but the in-place assignment we used to emit hit a TDZ ReferenceError.
+    // The fix captures into `var __default$N = (Foo);` at the source
+    // position (still TDZ for `const Foo` declared LATER, same as ESM)
+    // and defers the `_exports.default` setter to the end of the body.
+    // We test the SAFE order here (const declared first), where the new
+    // approach must also keep working.
+    let out = transpileAmd(
+      `const greeting = 'hi';
+       export default greeting;`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out);
+    assert.strictEqual(exports.default, 'hi');
+  },
+
+  'export default expression with imported name inside': async (assert) => {
+    // `export default fn(x)` where x is imported — the walker must rewrite
+    // `x` inside the captured expression.
+    let out = transpileAmd(
+      `import { x } from 'foo';
+       export default { value: x, more: x };`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out, { foo: { x: 42 } });
+    assert.deepEqual(exports.default, { value: 42, more: 42 });
+  },
+
+  'destructured export const { a, b } = obj': async (assert) => {
+    // Codex P1 — was throwing; now walks the pattern and emits a getter
+    // per bound name.
+    let out = transpileAmd(`export const { a, b } = { a: 1, b: 2 };`, {
+      moduleId,
+    });
+    let { exports } = runAmd(out);
+    assert.strictEqual(exports.a, 1);
+    assert.strictEqual(exports.b, 2);
+  },
+
+  'destructured export const [first, second] = arr': async (assert) => {
+    let out = transpileAmd(`export const [first, second] = [10, 20];`, {
+      moduleId,
+    });
+    let { exports } = runAmd(out);
+    assert.strictEqual(exports.first, 10);
+    assert.strictEqual(exports.second, 20);
+  },
+
+  'collision-safe __default$N synthesised name': async (assert) => {
+    // If the source already declares `__default$0`, the synthesised temp
+    // for the anonymous default must not collide.
+    let out = transpileAmd(
+      `const __default$0 = 'hand-coded';
+       export default function() { return __default$0; };`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out);
+    assert.strictEqual(
+      (exports.default as () => string)(),
+      'hand-coded',
+      'hand-coded __default$0 still accessible',
+    );
   },
 
   'identical-name import binding via { x: x }': async (assert) => {

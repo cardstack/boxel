@@ -13,7 +13,19 @@ module(basename(__filename), function () {
       await runSharedTest(amdTranspileTests, assert, {});
     });
 
-    test('export let snapshots at body-end', async function (assert) {
+    test('export let with body-time mutation', async function (assert) {
+      await runSharedTest(amdTranspileTests, assert, {});
+    });
+
+    test('export let mutated by exported function (live binding)', async function (assert) {
+      await runSharedTest(amdTranspileTests, assert, {});
+    });
+
+    test('circular dep: imported value is read at use-time, not import-time', async function (assert) {
+      await runSharedTest(amdTranspileTests, assert, {});
+    });
+
+    test('shadowed import name is not rewritten', async function (assert) {
       await runSharedTest(amdTranspileTests, assert, {});
     });
 
@@ -90,6 +102,30 @@ module(basename(__filename), function () {
     });
 
     test('multiple exports of the same import are all live', async function (assert) {
+      await runSharedTest(amdTranspileTests, assert, {});
+    });
+
+    test('export default of an imported binding', async function (assert) {
+      await runSharedTest(amdTranspileTests, assert, {});
+    });
+
+    test('export default forward-references a const declared later (TDZ-safe)', async function (assert) {
+      await runSharedTest(amdTranspileTests, assert, {});
+    });
+
+    test('export default expression with imported name inside', async function (assert) {
+      await runSharedTest(amdTranspileTests, assert, {});
+    });
+
+    test('destructured export const { a, b } = obj', async function (assert) {
+      await runSharedTest(amdTranspileTests, assert, {});
+    });
+
+    test('destructured export const [first, second] = arr', async function (assert) {
+      await runSharedTest(amdTranspileTests, assert, {});
+    });
+
+    test('collision-safe __default$N synthesised name', async function (assert) {
       await runSharedTest(amdTranspileTests, assert, {});
     });
 

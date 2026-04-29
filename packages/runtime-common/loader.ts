@@ -867,7 +867,9 @@ export class Loader {
     };
 
     try {
-      eval(src); // + "\n//# sourceURL=" + moduleIdentifier);
+      // Append `sourceURL` so stack traces from inside the eval-ed AMD
+      // module name the original module URL instead of `<anonymous>`.
+      eval(src + '\n//# sourceURL=' + moduleIdentifier);
     } catch (exception) {
       this.setModule(moduleIdentifier, {
         state: 'broken',
