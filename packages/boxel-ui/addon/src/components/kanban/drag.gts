@@ -1,6 +1,7 @@
 // KanbanDragManager — Drag interaction for Kanban boards.
 // Uses insertion model: cards insert BETWEEN other cards.
 
+import { type Timer, cancel, scheduleOnce } from '@ember/runloop';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 
@@ -70,6 +71,8 @@ export class KanbanDragManager {
   @tracked settleHeight = 0;
   @tracked announcement = '';
   @tracked kbGrabIndex: number | null = null;
+  @tracked insertionBoxOffset: { height: number; yOffset: number } | null =
+    null;
 
   // ── Non-tracked ────────────────────────────────────────────────────
   private activePointerId: number | null = null;
@@ -87,6 +90,7 @@ export class KanbanDragManager {
     this.focusCard(index);
   });
   private settleTimer: ReturnType<typeof setTimeout> | null = null;
+  private rafTimer: Timer | null = null;
   private snapshotPlacements: KanbanPlacement[] | null = null;
   private suppressLostPointerCapture = false;
 
@@ -103,6 +107,10 @@ export class KanbanDragManager {
     if (this.settleTimer) {
       clearTimeout(this.settleTimer);
       this.settleTimer = null;
+    }
+    if (this.rafTimer !== null) {
+      cancel(this.rafTimer);
+      this.rafTimer = null;
     }
     document.body.style.userSelect = '';
     (document.body.style as BodyStyle).webkitUserSelect = '';
@@ -254,6 +262,7 @@ export class KanbanDragManager {
       return;
     }
 
+    // Update coordinates immediately so the ghost tracks the pointer every frame.
     this.pointerClientX = e.clientX;
     this.pointerClientY = e.clientY;
 
@@ -270,23 +279,18 @@ export class KanbanDragManager {
             container,
             this.dragIndex!,
           );
+          this.updateInsertionBox();
         }
       }
       return;
     }
 
-    const container = this.containerRef;
-    if (!container || this.dragIndex === null) {
+    // Throttle the expensive querySelectorAll / getBoundingClientRect work to
+    // one Ember queue flush. pointerClientX/Y above are already updated.
+    if (this.rafTimer !== null) {
       return;
     }
-
-    const point = this.getCurrentInsertion(
-      e.clientX,
-      e.clientY,
-      container,
-      this.dragIndex,
-    );
-    this.insertion = point;
+    this.rafTimer = scheduleOnce('afterRender', this, this.processMoveFrame);
   };
 
   onPointerUp = (event: Event): void => {
@@ -341,15 +345,19 @@ export class KanbanDragManager {
       this.insertion = finalInsertion;
     }
 
+    // Snapshot placements at drop time so the settle timer's resolveInsertion
+    // call is unaffected by any parent update that arrives during the 200 ms
+    // settle window (e.g. a live-sync push).
+    const placementsAtDrop = this.args.placements;
+
     // No-op drop: card released at its original position — skip settle entirely.
     if (finalInsertion !== null && pendingDragIndex !== null) {
-      const placements = this.args.placements;
       const next = resolveInsertion(
         pendingDragIndex,
         finalInsertion,
-        placements,
+        placementsAtDrop,
       );
-      if (placementsEqual(placements, next)) {
+      if (placementsEqual(placementsAtDrop, next)) {
         this.resetSession();
         return;
       }
@@ -365,11 +373,10 @@ export class KanbanDragManager {
     this.settleTimer = setTimeout(() => {
       this.settleTimer = null;
       if (finalInsertion && pendingDragIndex !== null) {
-        const placements = this.args.placements;
         const newPlacements = resolveInsertion(
           pendingDragIndex,
           finalInsertion,
-          placements,
+          placementsAtDrop,
         );
         this.args.onChange(newPlacements);
         this.announcement = 'Card moved.';
@@ -469,6 +476,78 @@ export class KanbanDragManager {
       this.dragGhostHeight = rect.height;
       this.dragOffsetX = this.pointerClientX - rect.left;
       this.dragOffsetY = this.pointerClientY - rect.top;
+    }
+  }
+
+  private updateInsertionBox(): void {
+    const container = this.containerRef;
+    const ins = this.insertion;
+    if (!container || !ins) {
+      this.insertionBoxOffset = null;
+      return;
+    }
+
+    const { column, position } = ins;
+    const colCards = this.args.placements
+      .filter((p) => p.column === column && p.index !== this.activeDragIndex)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+
+    const colEl = container.querySelector(
+      `[data-kanban-column="${column}"]`,
+    ) as HTMLElement | null;
+    const bodyEl = colEl?.querySelector(
+      '[data-kanban-col-body]',
+    ) as HTMLElement | null;
+    if (!bodyEl) {
+      this.insertionBoxOffset = null;
+      return;
+    }
+
+    let height = this.dragGhostHeight;
+    if (height <= 0) {
+      const dragEl = container.querySelector(
+        `[data-card-index="${this.activeDragIndex}"]`,
+      ) as HTMLElement | null;
+      height = dragEl?.getBoundingClientRect().height ?? 40;
+    }
+
+    if (colCards.length === 0) {
+      this.insertionBoxOffset = { yOffset: 0, height };
+      return;
+    }
+
+    const bodyRect = bodyEl.getBoundingClientRect();
+    const gap = parseFloat(getComputedStyle(bodyEl).gap) || 0;
+    const insertIdx = Math.min(position - 1, colCards.length);
+
+    if (insertIdx >= colCards.length) {
+      const lastEl = container.querySelector(
+        `[data-card-index="${colCards[colCards.length - 1]?.index}"]`,
+      ) as HTMLElement | null;
+      if (lastEl) {
+        const rect = lastEl.getBoundingClientRect();
+        const matrix = new DOMMatrix(getComputedStyle(lastEl).transform);
+        this.insertionBoxOffset = {
+          yOffset: rect.bottom - matrix.m42 - bodyRect.top + gap / 2,
+          height,
+        };
+      } else {
+        this.insertionBoxOffset = null;
+      }
+    } else {
+      const beforeEl = container.querySelector(
+        `[data-card-index="${colCards[insertIdx]?.index}"]`,
+      ) as HTMLElement | null;
+      if (beforeEl) {
+        const rect = beforeEl.getBoundingClientRect();
+        const matrix = new DOMMatrix(getComputedStyle(beforeEl).transform);
+        this.insertionBoxOffset = {
+          yOffset: rect.top - matrix.m42 - bodyRect.top - gap / 2,
+          height,
+        };
+      } else {
+        this.insertionBoxOffset = null;
+      }
     }
   }
 
@@ -607,6 +686,7 @@ export class KanbanDragManager {
     this.selectedIndex = index;
     this.snapshotPlacements = placements.map((p) => ({ ...p }));
     this.insertion = this.slotToInsertion(placement.column, slot, colCards);
+    this.updateInsertionBox();
     this.args.onSelect?.(index);
     this.announcement =
       'Grabbed. Use arrow keys to move, Space or Enter to drop, Escape to cancel.';
@@ -660,6 +740,7 @@ export class KanbanDragManager {
       );
       const newSlot = Math.min(currentSlot, newColCards.length);
       this.insertion = this.slotToInsertion(newColumn, newSlot, newColCards);
+      this.updateInsertionBox();
       this.announcement = `Column ${newColumn + 1}. Position ${newSlot + 1} of ${newColCards.length + 1}.`;
       return;
     }
@@ -676,6 +757,7 @@ export class KanbanDragManager {
       return;
     }
     this.insertion = this.slotToInsertion(column, newSlot, colCards);
+    this.updateInsertionBox();
     this.announcement = `Position ${newSlot + 1} of ${colCards.length + 1}.`;
   }
 
@@ -814,6 +896,24 @@ export class KanbanDragManager {
     };
   }
 
+  private processMoveFrame(): void {
+    this.rafTimer = null;
+    if (this.interactionMode !== 'drag' || this.dragIndex === null) {
+      return;
+    }
+    const container = this.containerRef;
+    if (!container) {
+      return;
+    }
+    this.insertion = this.getCurrentInsertion(
+      this.pointerClientX,
+      this.pointerClientY,
+      container,
+      this.dragIndex,
+    );
+    this.updateInsertionBox();
+  }
+
   private isColumnVisible(column: number): boolean {
     return this.args.isColumnVisible(column);
   }
@@ -842,7 +942,9 @@ export class KanbanDragManager {
     try {
       container.releasePointerCapture(pointerId);
     } catch (_) {
-      this.suppressLostPointerCapture = false;
+      // Capture was already lost; lostpointercapture has already fired or will
+      // not fire again, so the suppress flag should stay true to avoid a
+      // double-abort if it fires late.
     }
   }
 
@@ -852,6 +954,7 @@ export class KanbanDragManager {
     this.activeDragIndex = null;
     this.kbGrabIndex = null;
     this.insertion = null;
+    this.insertionBoxOffset = null;
     this.isSettling = false;
     this.settleX = 0;
     this.settleY = 0;
@@ -869,6 +972,10 @@ export class KanbanDragManager {
     if (this.settleTimer) {
       clearTimeout(this.settleTimer);
       this.settleTimer = null;
+    }
+    if (this.rafTimer !== null) {
+      cancel(this.rafTimer);
+      this.rafTimer = null;
     }
     document.body.style.userSelect = '';
     (document.body.style as BodyStyle).webkitUserSelect = '';
