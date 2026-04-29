@@ -360,21 +360,13 @@ async function cloneTestDBFromTemplate(
     );
   }
 
+  // Defensive: drop a same-named DB before creating. prepareTestDB() now
+  // produces unique names, but a stray DB from a crashed prior run or a
+  // shared cluster could otherwise resurface as "database already exists".
+  await dropDatabase(database);
   let client = new PgClient(pgAdminConnectionConfig());
   try {
     await client.connect();
-    // Defensive: drop a same-named DB before creating. prepareTestDB() now
-    // produces unique names, but a stray DB from a crashed prior run or a
-    // shared cluster could otherwise resurface as "database already exists".
-    await client.query(
-      `SELECT pg_terminate_backend(pid)
-         FROM pg_stat_activity
-        WHERE datname = $1 AND pid <> pg_backend_pid()`,
-      [database],
-    );
-    await client.query(
-      `DROP DATABASE IF EXISTS ${quotePgIdentifier(database)}`,
-    );
     await client.query(
       `CREATE DATABASE ${quotePgIdentifier(database)} TEMPLATE ${quotePgIdentifier(
         templateDatabaseName,
@@ -694,28 +686,46 @@ export function setupDB(
   };
 
   const runAfterHook = async () => {
-    // Clear refs as we go so a partial-setup beforeEach (e.g. the
-    // create-DB step throws after the previous test already closed
-    // its adapter) can't cascade into "Called end on pool more than
-    // once" when the next afterEach runs against stale closure state.
-    if (publisher) {
-      let p = publisher;
-      publisher = undefined;
+    // Snapshot and clear closure refs up front so that, regardless of
+    // how cleanup goes, the next test's beforeEach starts from a clean
+    // slate. A partial-setup beforeEach (e.g. the create-DB step throws
+    // after the previous test already closed its adapter) used to
+    // cascade into "Called end on pool more than once" when the next
+    // afterEach ran against stale closure state.
+    let p = publisher;
+    let r = runner;
+    let a = dbAdapter;
+    publisher = undefined;
+    runner = undefined;
+    dbAdapter = undefined;
+
+    // Each resource's cleanup is independent — a failure in one must
+    // not skip the others. Matches the best-effort pattern used by
+    // closeTrackedDbAdapters / destroyTrackedQueuePublishers / etc.
+    if (p) {
       trackedQueuePublishers.delete(p);
-      await p.destroy();
+      try {
+        await p.destroy();
+      } catch {
+        // best-effort cleanup
+      }
     }
-    if (runner) {
-      let r = runner;
-      runner = undefined;
+    if (r) {
       trackedQueueRunners.delete(r);
-      await r.destroy();
+      try {
+        await r.destroy();
+      } catch {
+        // best-effort cleanup
+      }
     }
-    if (dbAdapter) {
-      let a = dbAdapter;
-      dbAdapter = undefined;
+    if (a) {
       trackedDbAdapters.delete(a);
       if (!a.isClosed) {
-        await a.close();
+        try {
+          await a.close();
+        } catch {
+          // best-effort cleanup
+        }
       }
     }
   };
