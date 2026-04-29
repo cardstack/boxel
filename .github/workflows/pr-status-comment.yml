@@ -1,35 +1,29 @@
 name: PR Status Comment
 
-# Aggregates per-workflow "slot" artifacts (named pr-comment-slot-*) into a
-# single sticky PR comment with header `pr-status`. Producing workflows upload
-# a `slot/slot.md` artifact; this workflow rebuilds the whole comment from
-# whatever slots currently exist for the PR's head SHA.
-#
-# Note: workflow_run runs in the context of the default branch, so edits to
-# this file only take effect after they land on main.
+# Reusable: invoked by each workflow that uploads a `pr-comment-slot-*`
+# artifact. Rebuilds the unified sticky comment (header `pr-status`) from
+# whatever slots currently exist for the given head SHA. Cross-workflow
+# concurrency is enforced at the job level so calls from different parent
+# workflows serialize for the same branch and don't clobber each other.
 
 on:
-  workflow_run:
-    workflows:
-      - Preview Host
-      - CI [boxel-ui]
-      - CI Host
-      - CI
-    types:
-      - completed
-
-permissions:
-  contents: read
-  issues: write
-  pull-requests: write
-  actions: read
+  workflow_call:
+    inputs:
+      head-sha:
+        description: Commit SHA to aggregate slot artifacts for
+        required: true
+        type: string
 
 jobs:
   update-comment:
-    if: github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      actions: read
     concurrency:
-      group: pr-status-comment-${{ github.event.workflow_run.head_branch }}
+      group: pr-status-comment-${{ github.head_ref || inputs.head-sha }}
       cancel-in-progress: false
     steps:
       - name: Resolve PR and check freshness
@@ -37,38 +31,37 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          SHA: ${{ github.event.workflow_run.head_sha }}
-          PR_FROM_EVENT: ${{ github.event.workflow_run.pull_requests[0].number }}
+          SHA: ${{ inputs.head-sha }}
         run: |
           set -euo pipefail
-          pr="$PR_FROM_EVENT"
-          if [ -z "$pr" ] || [ "$pr" = "null" ]; then
-            echo "No PR in event payload; skipping."
+          pr=$(gh api "/repos/$REPO/commits/$SHA/pulls" --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then
+            echo "No PR for $SHA, skipping."
             echo "skip=true" >>"$GITHUB_OUTPUT"
             exit 0
           fi
           latest=$(gh api "/repos/$REPO/pulls/$pr" --jq '.head.sha')
           if [ "$latest" != "$SHA" ]; then
-            echo "PR #$pr head is now $latest, event SHA $SHA is stale; skipping."
+            echo "PR #$pr head is now $latest; event SHA $SHA stale; skipping."
             echo "skip=true" >>"$GITHUB_OUTPUT"
             exit 0
           fi
           echo "number=$pr" >>"$GITHUB_OUTPUT"
-          echo "sha=$SHA"   >>"$GITHUB_OUTPUT"
 
       - name: Collect slot artifacts for this commit
         if: steps.pr.outputs.skip != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          SHA: ${{ steps.pr.outputs.sha }}
+          SHA: ${{ inputs.head-sha }}
         run: |
           set -euo pipefail
           mkdir -p slots
 
-          # Most recent runs first; first download per slot name wins.
+          # No status filter: the calling workflow run is still in_progress.
+          # Most recent runs are returned first; first download per slot wins.
           gh api -X GET "/repos/$REPO/actions/runs" \
-            -f head_sha="$SHA" -f status=completed --paginate \
+            -f head_sha="$SHA" --paginate \
             --jq '.workflow_runs[].id' > runs.txt
 
           while read -r run_id; do
@@ -92,7 +85,7 @@ jobs:
         run: |
           set -euo pipefail
           : > comment.md
-          # Fixed slot order. Add new slot names here as we migrate emitters.
+          # Fixed slot order. Add new slot names here as we add emitters.
           for slot in preview host-tests realm-tests; do
             f="slots/pr-comment-slot-$slot/slot.md"
             if [ -s "$f" ]; then

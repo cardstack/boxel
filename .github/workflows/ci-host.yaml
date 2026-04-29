@@ -398,6 +398,16 @@ jobs:
           path: slot/
           retention-days: 7
 
+  post-pr-status:
+    name: Update PR status comment
+    needs:
+      - host-merge-reports-and-publish
+    if: ${{ !cancelled() && needs.host-merge-reports-and-publish.result == 'success' }}
+    uses: ./.github/workflows/pr-status-comment.yml
+    with:
+      head-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+    secrets: inherit
+
   host-memory-baseline:
     name: Host Memory Baseline
     if: ${{ !cancelled() && (needs.host-test.result == 'success' || needs.host-test.result == 'failure') }}

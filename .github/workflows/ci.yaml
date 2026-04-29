@@ -688,6 +688,16 @@ jobs:
           path: slot/
           retention-days: 7
 
+  post-pr-status:
+    name: Update PR status comment
+    needs:
+      - realm-server-merge-reports
+    if: ${{ !cancelled() && needs.realm-server-merge-reports.result == 'success' }}
+    uses: ./.github/workflows/pr-status-comment.yml
+    with:
+      head-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+    secrets: inherit
+
   vscode-boxel-tools-package:
     name: Boxel Tools VS Code Extension package
     needs: [change-check, test-web-assets]

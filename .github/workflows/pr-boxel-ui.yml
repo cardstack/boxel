@@ -74,3 +74,13 @@ jobs:
     with:
       head-sha: ${{ github.event.pull_request.head.sha }}
     secrets: inherit
+
+  post-pr-status:
+    name: Update PR status comment
+    needs:
+      - post-preview-comment
+    if: ${{ !cancelled() && needs.post-preview-comment.result == 'success' }}
+    uses: ./.github/workflows/pr-status-comment.yml
+    with:
+      head-sha: ${{ github.event.pull_request.head.sha }}
+    secrets: inherit
