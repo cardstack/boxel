@@ -151,14 +151,18 @@ LOCAL_PORT=55432                               # any free local port
 
 # 1) Find the running task and its container runtime ID. SSM port-forwarding
 #    targets ECS by `cluster_<task-id>_<runtime-id>`, where runtime-id is
-#    the Docker container ID — describe-tasks exposes it as containers[0].runtimeId.
+#    the Docker container ID. Filter the describe-tasks query by container
+#    name — `containers[0]` is brittle because the realm-server task has
+#    a firelens log-routing sidecar and AWS does not guarantee the array
+#    order in DescribeTasks output.
 TASK_ARN=$(aws --profile $PROFILE ecs list-tasks \
   --cluster $CLUSTER --service-name $SERVICE \
   --query 'taskArns[0]' --output text)
 TASK_ID=${TASK_ARN##*/}
 RUNTIME_ID=$(aws --profile $PROFILE ecs describe-tasks \
   --cluster $CLUSTER --tasks $TASK_ID \
-  --query 'tasks[0].containers[0].runtimeId' --output text)
+  --query 'tasks[0].containers[?name==`boxel-realm-server`].runtimeId | [0]' \
+  --output text)
 
 # 2) Pull DB connection params + the claude_readonly credentials from SSM
 #    Parameter Store. CLAUDE_DB_PASSWORD is a SecureString — needs
@@ -288,14 +292,17 @@ CLUSTER=staging                                            # or production
 SERVICE=boxel-claude-fs-readonly-staging                   # or -production
 LOCAL_PORT=58080                                           # any free local port
 
-# 1) Find the fs-explorer task and its container runtime ID.
+# 1) Find the fs-explorer task and its container runtime ID. Filter by
+#    container name to be robust against any future sidecar additions —
+#    AWS doesn't guarantee containers[] order in DescribeTasks output.
 TASK_ARN=$(aws --profile $PROFILE ecs list-tasks \
   --cluster $CLUSTER --service-name $SERVICE \
   --query 'taskArns[0]' --output text)
 TASK_ID=${TASK_ARN##*/}
 RUNTIME_ID=$(aws --profile $PROFILE ecs describe-tasks \
   --cluster $CLUSTER --tasks $TASK_ID \
-  --query 'tasks[0].containers[0].runtimeId' --output text)
+  --query 'tasks[0].containers[?name==`fs-explorer`].runtimeId | [0]' \
+  --output text)
 
 # 2) Open the tunnel — forward localhost:58080 to localhost:80 inside
 #    the container (where Caddy listens).
