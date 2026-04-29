@@ -56,7 +56,11 @@ module('Unit | kanban-engine | cardsInColumn', function () {
       [1, 2, 3],
       'sorted by sortOrder ascending',
     );
-    assert.deepEqual(cardsInColumn(99, placements), [], 'missing column returns []');
+    assert.deepEqual(
+      cardsInColumn(99, placements),
+      [],
+      'missing column returns []',
+    );
   });
 });
 
@@ -73,7 +77,11 @@ module('Unit | kanban-engine | columnCount', function () {
     ];
     assert.strictEqual(columnCount(0, placements), 2);
     assert.strictEqual(columnCount(1, placements), 1);
-    assert.strictEqual(columnCount(99, placements), 0, 'missing column returns 0');
+    assert.strictEqual(
+      columnCount(99, placements),
+      0,
+      'missing column returns 0',
+    );
   });
 });
 
@@ -90,8 +98,14 @@ module('Unit | kanban-engine | resolveInsertion', function () {
         { index: 1, column: 0, sortOrder: 2 },
       ],
     );
-    assert.strictEqual(result.find((p: KanbanPlacement) => p.index === 0)!.column, 1);
-    assert.strictEqual(result.find((p: KanbanPlacement) => p.index === 0)!.sortOrder, 1);
+    assert.strictEqual(
+      result.find((p: KanbanPlacement) => p.index === 0)!.column,
+      1,
+    );
+    assert.strictEqual(
+      result.find((p: KanbanPlacement) => p.index === 0)!.sortOrder,
+      1,
+    );
     assert.strictEqual(
       result.find((p: KanbanPlacement) => p.index === 1)!.sortOrder,
       1,
@@ -108,7 +122,10 @@ module('Unit | kanban-engine | resolveInsertion', function () {
         { index: 2, column: 1, sortOrder: 2 },
       ],
     );
-    assert.strictEqual(result.find((p: KanbanPlacement) => p.index === 0)!.sortOrder, 3);
+    assert.strictEqual(
+      result.find((p: KanbanPlacement) => p.index === 0)!.sortOrder,
+      3,
+    );
 
     // insert before a specific card, pushing others down
     result = resolveInsertion(
@@ -120,9 +137,18 @@ module('Unit | kanban-engine | resolveInsertion', function () {
         { index: 2, column: 1, sortOrder: 2 },
       ],
     );
-    assert.strictEqual(result.find((p: KanbanPlacement) => p.index === 0)!.sortOrder, 1);
-    assert.strictEqual(result.find((p: KanbanPlacement) => p.index === 1)!.sortOrder, 2);
-    assert.strictEqual(result.find((p: KanbanPlacement) => p.index === 2)!.sortOrder, 3);
+    assert.strictEqual(
+      result.find((p: KanbanPlacement) => p.index === 0)!.sortOrder,
+      1,
+    );
+    assert.strictEqual(
+      result.find((p: KanbanPlacement) => p.index === 1)!.sortOrder,
+      2,
+    );
+    assert.strictEqual(
+      result.find((p: KanbanPlacement) => p.index === 2)!.sortOrder,
+      3,
+    );
   });
 
   test('reorders within the same column — front, end, and middle', function (assert) {
@@ -139,17 +165,35 @@ module('Unit | kanban-engine | resolveInsertion', function () {
         .map((p) => p.index);
 
     assert.deepEqual(
-      orderOf(resolveInsertion(3, { column: 0, insertBeforeIndex: 0, position: 1 }, base.map((p) => ({ ...p })))),
+      orderOf(
+        resolveInsertion(
+          3,
+          { column: 0, insertBeforeIndex: 0, position: 1 },
+          base.map((p) => ({ ...p })),
+        ),
+      ),
       [3, 0, 1, 2],
       'move to front',
     );
     assert.deepEqual(
-      orderOf(resolveInsertion(0, { column: 0, insertBeforeIndex: -1, position: 4 }, base.map((p) => ({ ...p })))),
+      orderOf(
+        resolveInsertion(
+          0,
+          { column: 0, insertBeforeIndex: -1, position: 4 },
+          base.map((p) => ({ ...p })),
+        ),
+      ),
       [1, 2, 3, 0],
       'move to end',
     );
     assert.deepEqual(
-      orderOf(resolveInsertion(3, { column: 0, insertBeforeIndex: 1, position: 2 }, base.map((p) => ({ ...p })))),
+      orderOf(
+        resolveInsertion(
+          3,
+          { column: 0, insertBeforeIndex: 1, position: 2 },
+          base.map((p) => ({ ...p })),
+        ),
+      ),
       [0, 3, 1, 2],
       'move to middle',
     );
@@ -187,7 +231,9 @@ module('Unit | kanban-engine | resolveInsertion', function () {
     );
     const col0 = placements
       .filter((p: KanbanPlacement) => p.column === 0)
-      .sort((a: KanbanPlacement, b: KanbanPlacement) => a.sortOrder - b.sortOrder);
+      .sort(
+        (a: KanbanPlacement, b: KanbanPlacement) => a.sortOrder - b.sortOrder,
+      );
     assert.deepEqual(
       col0.map((p: KanbanPlacement) => p.sortOrder),
       [1, 2, 3],
@@ -213,9 +259,18 @@ module('Unit | kanban-engine | resolveInsertion', function () {
     );
     const col2 = result
       .filter((p: KanbanPlacement) => p.column === 2)
-      .sort((a: KanbanPlacement, b: KanbanPlacement) => a.sortOrder - b.sortOrder);
-    assert.deepEqual(col2.map((p: KanbanPlacement) => p.index), [2, 3]);
-    assert.deepEqual(col2.map((p: KanbanPlacement) => p.sortOrder), [1, 2], 'bystander unchanged');
+      .sort(
+        (a: KanbanPlacement, b: KanbanPlacement) => a.sortOrder - b.sortOrder,
+      );
+    assert.deepEqual(
+      col2.map((p: KanbanPlacement) => p.index),
+      [2, 3],
+    );
+    assert.deepEqual(
+      col2.map((p: KanbanPlacement) => p.sortOrder),
+      [1, 2],
+      'bystander unchanged',
+    );
   });
 
   test('returns unchanged array when dragIndex is not found', function (assert) {
@@ -242,7 +297,9 @@ module('Unit | kanban-engine | resolveInsertion', function () {
     );
     const order = result
       .filter((p: KanbanPlacement) => p.column === 0)
-      .sort((a: KanbanPlacement, b: KanbanPlacement) => a.sortOrder - b.sortOrder)
+      .sort(
+        (a: KanbanPlacement, b: KanbanPlacement) => a.sortOrder - b.sortOrder,
+      )
       .map((p: KanbanPlacement) => p.index);
     assert.deepEqual(order, [0, 1]);
   });
@@ -402,7 +459,11 @@ module('Unit | kanban-engine | autoPlaceKanban', function () {
     const result = autoPlaceKanban(6, 3);
     assert.strictEqual(result.length, 6);
     for (const p of result) {
-      assert.strictEqual(p.column, p.index % 3, `card ${p.index} in correct column`);
+      assert.strictEqual(
+        p.column,
+        p.index % 3,
+        `card ${p.index} in correct column`,
+      );
       assert.strictEqual(
         p.sortOrder,
         Math.floor(p.index / 3) + 1,
@@ -411,10 +472,15 @@ module('Unit | kanban-engine | autoPlaceKanban', function () {
     }
 
     const single = autoPlaceKanban(3, 1);
-    assert.true(single.every((p: KanbanPlacement) => p.column === 0), 'all in single column');
+    assert.true(
+      single.every((p: KanbanPlacement) => p.column === 0),
+      'all in single column',
+    );
     assert.deepEqual(
       single
-        .sort((a: KanbanPlacement, b: KanbanPlacement) => a.sortOrder - b.sortOrder)
+        .sort(
+          (a: KanbanPlacement, b: KanbanPlacement) => a.sortOrder - b.sortOrder,
+        )
         .map((p: KanbanPlacement) => p.sortOrder),
       [1, 2, 3],
     );
@@ -422,6 +488,10 @@ module('Unit | kanban-engine | autoPlaceKanban', function () {
     const indices = autoPlaceKanban(5, 2)
       .map((p: KanbanPlacement) => p.index)
       .sort((a: number, b: number) => a - b);
-    assert.deepEqual(indices, [0, 1, 2, 3, 4], 'unique indexes matching input position');
+    assert.deepEqual(
+      indices,
+      [0, 1, 2, 3, 4],
+      'unique indexes matching input position',
+    );
   });
 });

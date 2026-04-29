@@ -1,4 +1,5 @@
 import { module, test } from 'qunit';
+import { settled } from '@ember/test-helpers';
 import {
   KanbanDragManager,
   type KanbanPlacement,
@@ -580,7 +581,10 @@ module('Unit | kanban-drag-manager', function (hooks) {
       const mgr = makeKbManager();
       const card0 = mc.querySelector('[data-card-index="0"]')!;
 
-      const { event: spaceEvent, prevented: spacePrevent } = keyEvent(' ', card0);
+      const { event: spaceEvent, prevented: spacePrevent } = keyEvent(
+        ' ',
+        card0,
+      );
       mgr.onKeyDown(spaceEvent);
       assert.true(spacePrevent());
       assert.strictEqual(mgr.interactionMode, 'kb-drag');
@@ -741,10 +745,15 @@ module('Unit | kanban-drag-manager', function (hooks) {
       const mgr = makeKbManager({ onSelect: (i) => (lastSelected = i) });
 
       // no selection → ArrowDown selects first card
-      const { event: downNoSel, prevented: downNoSelPrev } = keyEvent('ArrowDown');
+      const { event: downNoSel, prevented: downNoSelPrev } =
+        keyEvent('ArrowDown');
       mgr.onKeyDown(downNoSel);
       assert.true(downNoSelPrev(), 'ArrowDown prevents default');
-      assert.strictEqual(mgr.interactionMode, 'idle', 'navigation does not change interactionMode');
+      assert.strictEqual(
+        mgr.interactionMode,
+        'idle',
+        'navigation does not change interactionMode',
+      );
       assert.strictEqual(mgr.selectedIndex, 0, 'selects first card');
 
       // ArrowDown moves to next card in column
@@ -760,7 +769,8 @@ module('Unit | kanban-drag-manager', function (hooks) {
       assert.strictEqual(mgr.selectedIndex, 0, 'stays at top');
 
       // ArrowRight moves to adjacent column
-      const { event: rightEvent, prevented: rightPrev } = keyEvent('ArrowRight');
+      const { event: rightEvent, prevented: rightPrev } =
+        keyEvent('ArrowRight');
       mgr.onKeyDown(rightEvent);
       assert.true(rightPrev(), 'ArrowRight prevents default');
       assert.strictEqual(mgr.selectedIndex, 1, 'card1 is in col 1');
@@ -834,6 +844,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
       clientY: 20,
     } as unknown as PointerEvent);
 
+    await settled();
     assert.strictEqual(manager.insertion, null);
     assert.strictEqual(manager.interactionMode, 'drag');
 
@@ -841,7 +852,10 @@ module('Unit | kanban-drag-manager', function (hooks) {
 
     await delay(350);
 
-    assert.false(changed, 'onChange must not fire when dropped outside the board');
+    assert.false(
+      changed,
+      'onChange must not fire when dropped outside the board',
+    );
     assert.strictEqual(manager.interactionMode, 'idle');
   });
 
@@ -869,22 +883,52 @@ module('Unit | kanban-drag-manager', function (hooks) {
       return mgr;
     }
 
-    const card = container.querySelector('[data-card-index="0"]') as HTMLElement;
+    const card = container.querySelector(
+      '[data-card-index="0"]',
+    ) as HTMLElement;
 
     // off-screen X
     let mgr = makeManager();
-    mgr.onPointerDown({ button: 0, pointerId: 7, clientX: 20, clientY: 20, target: card } as unknown as PointerEvent);
-    mgr.onPointerMove({ pointerId: 7, clientX: 260, clientY: 30 } as unknown as PointerEvent);
-    mgr.onPointerUp({ pointerId: 7, clientX: 9999, clientY: 30 } as unknown as PointerEvent);
+    mgr.onPointerDown({
+      button: 0,
+      pointerId: 7,
+      clientX: 20,
+      clientY: 20,
+      target: card,
+    } as unknown as PointerEvent);
+    mgr.onPointerMove({
+      pointerId: 7,
+      clientX: 260,
+      clientY: 30,
+    } as unknown as PointerEvent);
+    mgr.onPointerUp({
+      pointerId: 7,
+      clientX: 9999,
+      clientY: 30,
+    } as unknown as PointerEvent);
     await delay(350);
     assert.deepEqual(changedPlacements, expected, 'commits with off-screen X');
     assert.strictEqual(mgr.interactionMode, 'idle');
 
     // off-screen Y
     mgr = makeManager();
-    mgr.onPointerDown({ button: 0, pointerId: 8, clientX: 20, clientY: 20, target: card } as unknown as PointerEvent);
-    mgr.onPointerMove({ pointerId: 8, clientX: 260, clientY: 30 } as unknown as PointerEvent);
-    mgr.onPointerUp({ pointerId: 8, clientX: 260, clientY: 9999 } as unknown as PointerEvent);
+    mgr.onPointerDown({
+      button: 0,
+      pointerId: 8,
+      clientX: 20,
+      clientY: 20,
+      target: card,
+    } as unknown as PointerEvent);
+    mgr.onPointerMove({
+      pointerId: 8,
+      clientX: 260,
+      clientY: 30,
+    } as unknown as PointerEvent);
+    mgr.onPointerUp({
+      pointerId: 8,
+      clientX: 260,
+      clientY: 9999,
+    } as unknown as PointerEvent);
     await delay(350);
     assert.deepEqual(changedPlacements, expected, 'commits with off-screen Y');
     assert.strictEqual(mgr.interactionMode, 'idle');
