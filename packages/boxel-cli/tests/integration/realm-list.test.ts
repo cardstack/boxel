@@ -15,15 +15,36 @@ import {
 
 let profileManager: ProfileManager;
 let cleanupProfile: () => void;
-let realmUrl: string;
+
+const visibleUrl = `${TEST_REALM_SERVER_URL}/visible/`;
+const hiddenUrl = `${TEST_REALM_SERVER_URL}/hidden/`;
+const pendingUrl = `${TEST_REALM_SERVER_URL}/pending/`;
 
 beforeAll(async () => {
-  await startTestRealmServer();
-  realmUrl = `${TEST_REALM_SERVER_URL}/test/`;
+  await startTestRealmServer({
+    realms: [
+      {
+        realmURL: new URL(visibleUrl),
+        permissions: { '*': ['read', 'write'] },
+      },
+      {
+        realmURL: new URL(hiddenUrl),
+        permissions: { '*': ['read', 'write'] },
+      },
+      {
+        realmURL: new URL(pendingUrl),
+        permissions: { '*': ['read', 'write'] },
+      },
+    ],
+  });
   let testProfile = createTestProfileDir();
   profileManager = testProfile.profileManager;
   cleanupProfile = testProfile.cleanup;
   await setupTestProfile(profileManager);
+
+  // Seed only `visibleUrl` into the user's app.boxel.realms account data so
+  // the suite starts with a mixed visible/hidden state.
+  await profileManager.addToUserRealms(visibleUrl);
 });
 
 afterAll(async () => {
@@ -32,48 +53,45 @@ afterAll(async () => {
 });
 
 describe('realm list (integration)', () => {
-  it('returns the test realm in --all-accessible mode', async () => {
+  it('--all-accessible returns every realm with the correct hidden flag', async () => {
     let result = await listRealms({
       allAccessible: true,
       profileManager,
     });
     expect(result.error).toBeUndefined();
-    let urls = result.realms.map((r) => r.url);
-    expect(urls).toContain(realmUrl);
+    let byUrl = new Map(result.realms.map((r) => [r.url, r]));
+    expect(byUrl.get(visibleUrl)).toEqual({ url: visibleUrl, hidden: false });
+    expect(byUrl.get(hiddenUrl)).toEqual({ url: hiddenUrl, hidden: true });
+    expect(byUrl.get(pendingUrl)).toEqual({ url: pendingUrl, hidden: true });
   });
 
-  it('marks the realm as hidden when not in the user UI realm list', async () => {
-    let result = await listRealms({
-      allAccessible: true,
-      profileManager,
-    });
-    let entry = result.realms.find((r) => r.url === realmUrl);
-    expect(entry).toBeDefined();
-    expect(entry!.hidden).toBe(true);
+  it('default mode lists only the realm in account data', async () => {
+    let result = await listRealms({ profileManager });
+    expect(result.error).toBeUndefined();
+    expect(result.realms).toEqual([{ url: visibleUrl, hidden: false }]);
   });
 
-  it('--hidden filters to hidden-only realms', async () => {
+  it('--hidden lists only realms missing from account data', async () => {
     let result = await listRealms({ hidden: true, profileManager });
     expect(result.error).toBeUndefined();
-    expect(result.realms.length).toBeGreaterThan(0);
+    let urls = result.realms.map((r) => r.url).sort();
+    expect(urls).toEqual([hiddenUrl, pendingUrl].sort());
     expect(result.realms.every((r) => r.hidden)).toBe(true);
-    expect(result.realms.map((r) => r.url)).toContain(realmUrl);
+    expect(urls).not.toContain(visibleUrl);
   });
 
-  it('default mode excludes hidden realms', async () => {
-    let result = await listRealms({ profileManager });
-    expect(result.error).toBeUndefined();
-    expect(result.realms.every((r) => !r.hidden)).toBe(true);
-    expect(result.realms.map((r) => r.url)).not.toContain(realmUrl);
-  });
+  it('addToUserRealms moves a realm from hidden to visible', async () => {
+    await profileManager.addToUserRealms(pendingUrl);
 
-  it('default mode includes the realm after addToUserRealms', async () => {
-    await profileManager.addToUserRealms(realmUrl);
-    let result = await listRealms({ profileManager });
-    expect(result.error).toBeUndefined();
-    let entry = result.realms.find((r) => r.url === realmUrl);
-    expect(entry).toBeDefined();
-    expect(entry!.hidden).toBe(false);
+    let visible = await listRealms({ profileManager });
+    expect(visible.error).toBeUndefined();
+    let visibleUrls = visible.realms.map((r) => r.url).sort();
+    expect(visibleUrls).toEqual([visibleUrl, pendingUrl].sort());
+    expect(visible.realms.every((r) => !r.hidden)).toBe(true);
+
+    let hidden = await listRealms({ hidden: true, profileManager });
+    expect(hidden.error).toBeUndefined();
+    expect(hidden.realms).toEqual([{ url: hiddenUrl, hidden: true }]);
   });
 
   it('returns an error when no active profile', async () => {
