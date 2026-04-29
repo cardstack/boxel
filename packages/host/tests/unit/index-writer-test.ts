@@ -939,6 +939,145 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  test('error_doc within budget is persisted unchanged', async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [],
+    );
+    let inputError = {
+      message: 'small parent error',
+      status: 500,
+      title: 'Render error',
+      stack: 'Error: small\n    at thing (/x.js:1:1)',
+      additionalErrors: [
+        {
+          status: 500,
+          message: 'inner err',
+          stack: 'Error: inner\n    at inner (/y.js:1:1)',
+          additionalErrors: [
+            {
+              status: 500,
+              message: 'inner inner — preserved end-to-end',
+              additionalErrors: null,
+            },
+          ],
+        },
+      ],
+    };
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'instance-error',
+      error: { ...inputError },
+    });
+    await batch.done();
+
+    let [{ error_doc: errorDoc }] = (await adapter.execute(
+      "SELECT error_doc FROM boxel_index WHERE has_error = TRUE AND type = 'instance'",
+      { coerceTypes },
+    )) as Pick<BoxelIndexTable, 'error_doc'>[];
+
+    assert.ok(errorDoc, 'error_doc was persisted');
+    assert.strictEqual(
+      errorDoc!.message,
+      inputError.message,
+      'message preserved verbatim',
+    );
+    assert.strictEqual(
+      errorDoc!.stack,
+      inputError.stack,
+      'top-level stack preserved verbatim',
+    );
+    assert.strictEqual(
+      errorDoc!.additionalErrors!.length,
+      1,
+      'additionalErrors length preserved',
+    );
+    let kept = errorDoc!.additionalErrors![0];
+    assert.strictEqual(
+      kept.message,
+      'inner err',
+      'inherited message preserved',
+    );
+    assert.ok(
+      Array.isArray(kept.additionalErrors),
+      'nested additionalErrors retained for in-budget docs',
+    );
+    assert.strictEqual(
+      kept.additionalErrors![0].message,
+      'inner inner — preserved end-to-end',
+      'second-level nesting preserved verbatim',
+    );
+  });
+
+  test('oversized error_doc is shed progressively until it fits', async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [],
+    );
+    // Deliberately pathological: 50 entries × ~1 MiB stacks (≈50 MiB)
+    // plus an inflated top-level stack. Step 1 of the clamp is enough
+    // to bring this back under 8 MiB; later steps must NOT run.
+    let entries = Array.from({ length: 50 }, (_, i) => ({
+      status: 500,
+      message: `dep err ${i}`,
+      stack: 'x'.repeat(1024 * 1024),
+      additionalErrors: [
+        {
+          status: 500,
+          message: 'inherited nested',
+          additionalErrors: null,
+        },
+      ],
+    }));
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'instance-error',
+      error: {
+        message: 'parent',
+        status: 500,
+        stack: 'short',
+        additionalErrors: entries,
+      },
+    });
+    await batch.done();
+
+    let [{ error_doc: errorDoc }] = (await adapter.execute(
+      "SELECT error_doc FROM boxel_index WHERE has_error = TRUE AND type = 'instance'",
+      { coerceTypes },
+    )) as Pick<BoxelIndexTable, 'error_doc'>[];
+
+    assert.ok(errorDoc, 'error_doc was persisted');
+    assert.ok(
+      JSON.stringify(errorDoc).length <= 8 * 1024 * 1024,
+      'persisted error_doc fits the 8 MiB budget',
+    );
+    assert.strictEqual(
+      errorDoc!.message,
+      'parent',
+      'top-level message untouched',
+    );
+    assert.strictEqual(
+      errorDoc!.additionalErrors!.length,
+      50,
+      'entry count preserved (no late-stage capping)',
+    );
+    assert.strictEqual(
+      errorDoc!.additionalErrors![0].message,
+      'dep err 0',
+      'per-entry message untouched',
+    );
+    assert.ok(
+      Array.isArray(errorDoc!.additionalErrors![0].additionalErrors),
+      'nested additionalErrors retained (step 4 did not run)',
+    );
+    assert.ok(
+      errorDoc!.additionalErrors![0].stack.length < 1024 * 1024,
+      'per-entry stacks were trimmed (step 1 ran)',
+    );
+  });
+
   test('can get an error doc', async function (assert) {
     await setupIndex(adapter, [
       {

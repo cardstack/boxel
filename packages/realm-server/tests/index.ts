@@ -178,6 +178,7 @@ import './prerender-affinity-activity-test';
 import './prerender-batch-ownership-test';
 import './prerender-cancellation-test';
 import './runtime-exception-capture-test';
+import './clamp-serialized-error-test';
 import './prerender-diagnostics-persistence-test';
 import './prerender-proxy-test';
 import './queue-test';
