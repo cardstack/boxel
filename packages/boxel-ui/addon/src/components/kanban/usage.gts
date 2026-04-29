@@ -145,6 +145,17 @@ export default class KanbanUsage extends Component {
     this.hideEmpty = !this.hideEmpty;
   }
 
+  @action isColumnVisible(columnIndex: number): boolean {
+    let column = this.columns[columnIndex];
+    if (!column || column.collapsed) {
+      return false;
+    }
+    if (!this.hideEmpty) {
+      return true;
+    }
+    return cardsInColumn(columnIndex, this.placements).length > 0;
+  }
+
   @action addCard(columnKey: string | null): void {
     let nextIndex = this.cards.length;
     let columnIndex = this.columns.findIndex(
@@ -222,6 +233,7 @@ export default class KanbanUsage extends Component {
             <KanbanDragManager
               @placements={{this.placements}}
               @columnCount={{this.columns.length}}
+              @isColumnVisible={{this.isColumnVisible}}
               @onChange={{this.handlePlacementsChange}}
               @onSelect={{this.handleSelect}}
               @onOpen={{this.handleOpen}}

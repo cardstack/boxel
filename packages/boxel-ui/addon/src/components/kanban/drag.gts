@@ -39,6 +39,7 @@ export type KanbanInteractionMode = 'idle' | 'pending' | 'drag' | 'kb-drag';
 export interface KanbanDragManagerSignature {
   Args: {
     columnCount: number;
+    isColumnVisible?: (column: number) => boolean;
     onChange: (placements: KanbanPlacement[]) => void;
     onOpen?: (index: number) => void;
     onSelect?: (index: number | null) => void;
@@ -199,6 +200,14 @@ export class KanbanDragManager extends Component<KanbanDragManagerSignature> {
         const container = this.containerRef;
         if (container) {
           this.activateDrag(container);
+          this.insertion = findInsertionFromPointer(
+            e.clientX,
+            e.clientY,
+            container,
+            this.args.placements,
+            this.dragIndex!,
+            this.args.columnCount,
+          );
         }
       }
       return;
@@ -493,11 +502,16 @@ export class KanbanDragManager extends Component<KanbanDragManagerSignature> {
     const totalColumns = this.args.columnCount;
 
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      const newColumn =
-        e.key === 'ArrowLeft'
-          ? Math.max(0, column - 1)
-          : Math.min(totalColumns - 1, column + 1);
-      if (newColumn === column) {
+      const delta = e.key === 'ArrowLeft' ? -1 : 1;
+      let newColumn = column + delta;
+      while (
+        newColumn >= 0 &&
+        newColumn < totalColumns &&
+        !this.isColumnVisible(newColumn)
+      ) {
+        newColumn += delta;
+      }
+      if (newColumn < 0 || newColumn >= totalColumns || newColumn === column) {
         return;
       }
       const currentColCards = cardsInColumn(column, placements).filter(
@@ -562,25 +576,28 @@ export class KanbanDragManager extends Component<KanbanDragManagerSignature> {
 
   private navigateFocus(direction: 'up' | 'down' | 'left' | 'right'): void {
     const placements = this.args.placements;
-    if (placements.length === 0) {
+    const visiblePlacements = placements.filter((p) =>
+      this.isColumnVisible(p.column),
+    );
+    if (visiblePlacements.length === 0) {
       return;
     }
 
     const currentIndex = this.selectedIndex;
     const current =
       currentIndex !== null
-        ? placements.find((p) => p.index === currentIndex)
+        ? visiblePlacements.find((p) => p.index === currentIndex)
         : null;
 
     const colCards = (col: number) =>
-      placements
+      visiblePlacements
         .filter((p) => p.column === col)
         .sort((a, b) => a.sortOrder - b.sortOrder);
 
     let targetCard: KanbanPlacement | undefined;
 
     if (!current) {
-      targetCard = placements
+      targetCard = visiblePlacements
         .slice()
         .sort((a, b) => a.column - b.column || a.sortOrder - b.sortOrder)[0];
     } else if (direction === 'up') {
@@ -596,6 +613,10 @@ export class KanbanDragManager extends Component<KanbanDragManagerSignature> {
       const totalCols = this.args.columnCount;
       let col = current.column + delta;
       while (col >= 0 && col < totalCols) {
+        if (!this.isColumnVisible(col)) {
+          col += delta;
+          continue;
+        }
         const cards = colCards(col);
         if (cards.length > 0) {
           targetCard = cards[Math.min(current.sortOrder - 1, cards.length - 1)];
@@ -651,6 +672,10 @@ export class KanbanDragManager extends Component<KanbanDragManagerSignature> {
       insertBeforeIndex: beforeCard.index,
       position: beforeCard.sortOrder,
     };
+  }
+
+  private isColumnVisible(column: number): boolean {
+    return this.args.isColumnVisible?.(column) ?? true;
   }
 
   private cancelDrag(): void {

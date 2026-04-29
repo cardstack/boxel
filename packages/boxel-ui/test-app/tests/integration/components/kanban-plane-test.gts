@@ -46,6 +46,10 @@ module('Integration | Component | kanban-plane', function (hooks) {
     const manager = new KanbanDragManager(this.owner, {
       placements: () => placements,
       columnCount: () => columns.length,
+      isColumnVisible: (index: number) => {
+        let column = columns[index];
+        return !!column && !column.collapsed && placements.some((p) => p.column === index);
+      },
       containerElement: () => null,
       onChange: () => {},
     });

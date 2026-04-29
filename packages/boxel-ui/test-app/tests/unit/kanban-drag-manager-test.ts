@@ -170,7 +170,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     assert.verifySteps([]);
   });
 
-  test('moving beyond threshold activates drag and dropping emits updated placements', async function (assert) {
+  test('moving beyond threshold activates drag and dropping emits updated placements on the first move', async function (assert) {
     let changedPlacements: KanbanPlacement[] | undefined;
 
     let manager = new KanbanDragManager({
@@ -195,11 +195,6 @@ module('Unit | kanban-drag-manager', function (hooks) {
       clientX: 20,
       clientY: 20,
       target: card,
-    } as unknown as PointerEvent);
-    manager.onPointerMove({
-      pointerId: 2,
-      clientX: 260,
-      clientY: 30,
     } as unknown as PointerEvent);
     manager.onPointerMove({
       pointerId: 2,
@@ -509,6 +504,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
 
     function makeKbManager(
       opts: {
+        isColumnVisible?: (column: number) => boolean;
         onChange?: (p: KanbanPlacement[]) => void;
         onSelect?: (i: number | null) => void;
       } = {},
@@ -516,6 +512,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
       const mgr = new KanbanDragManager({
         placements: () => mp,
         columnCount: () => 2,
+        isColumnVisible: opts.isColumnVisible,
         containerElement: () => mc,
         onChange: opts.onChange ?? (() => {}),
         onSelect: opts.onSelect,
@@ -635,6 +632,28 @@ module('Unit | kanban-drag-manager', function (hooks) {
       assert.strictEqual(mgr.insertion?.column, 0);
     });
 
+    test('keyboard drag skips hidden columns', function (assert) {
+      mp = [
+        { index: 0, column: 0, sortOrder: 1 },
+        { index: 1, column: 1, sortOrder: 1 },
+        { index: 2, column: 2, sortOrder: 1 },
+      ];
+      const mgr = new KanbanDragManager({
+        placements: () => mp,
+        columnCount: () => 3,
+        isColumnVisible: (column: number) => column !== 1,
+        containerElement: () => mc,
+        onChange: () => {},
+      });
+      mgr.registerContainer(mc);
+
+      const card0 = mc.querySelector('[data-card-index="0"]')!;
+      mgr.onKeyDown(keyEvent(' ', card0).event);
+      mgr.onKeyDown(keyEvent('ArrowRight').event);
+
+      assert.strictEqual(mgr.insertion?.column, 2);
+    });
+
     test('Space in kb-drag commits the drop and fires onChange', function (assert) {
       let changed: KanbanPlacement[] | undefined;
       const mgr = makeKbManager({ onChange: (p) => (changed = p) });
@@ -736,6 +755,27 @@ module('Unit | kanban-drag-manager', function (hooks) {
       mgr.onKeyDown(keyEvent('ArrowLeft').event);
       // col 0 has card0 at sortOrder 1 — same row position
       assert.strictEqual(mgr.selectedIndex, 0);
+    });
+
+    test('idle keyboard navigation skips hidden columns', function (assert) {
+      mp = [
+        { index: 0, column: 0, sortOrder: 1 },
+        { index: 1, column: 1, sortOrder: 1 },
+        { index: 2, column: 2, sortOrder: 1 },
+      ];
+      const mgr = new KanbanDragManager({
+        placements: () => mp,
+        columnCount: () => 3,
+        isColumnVisible: (column: number) => column !== 1,
+        containerElement: () => mc,
+        onChange: () => {},
+      });
+      mgr.registerContainer(mc);
+
+      mgr.select(0);
+      mgr.onKeyDown(keyEvent('ArrowRight').event);
+
+      assert.strictEqual(mgr.selectedIndex, 2);
     });
 
     test('arrow keys in idle mode always prevent default', function (assert) {
