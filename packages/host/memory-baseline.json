@@ -85,13 +85,13 @@
       "delta_mb": 92.6
     },
     "Acceptance | host submode": {
-      "delta_mb": -11.9
+      "delta_mb": 165.3
     },
     "Acceptance | interact submode | create-file tests": {
       "delta_mb": 2
     },
     "Acceptance | interact submode creation & permissions": {
-      "delta_mb": 10.9
+      "delta_mb": 83.4
     },
     "Acceptance | interact submode tests": {
       "delta_mb": 214.5
@@ -211,7 +211,7 @@
       "delta_mb": 17
     },
     "Integration | card-delete": {
-      "delta_mb": -8.9
+      "delta_mb": 64
     },
     "Integration | CardDef-FieldDef relationships test": {
       "delta_mb": 9.9
