@@ -67,10 +67,12 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Source GRAFANA_TOKEN from SSM
+      - name: Source GRAFANA_TOKEN and LOKI_URL from SSM
         # Mirrors what packages/observability/scripts/grafanactl-env.sh does
         # locally. Inline here so the workflow doesn't depend on bash from
         # the repo working dir before checkout-related env vars are stable.
+        # LOKI_URL is read by apply-datasources.sh and substituted into the
+        # provisioning/datasources/loki.yaml at push time.
         run: |
           GRAFANA_TOKEN="$(aws ssm get-parameter \
             --name /staging/grafana/grafanactl_token \
@@ -81,6 +83,12 @@ jobs:
           # downstream tool echoes it. Then export to subsequent steps.
           echo "::add-mask::$GRAFANA_TOKEN"
           echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
+
+          LOKI_URL="$(aws ssm get-parameter \
+            --name /staging/loki/internal_url \
+            --query 'Parameter.Value' \
+            --output text)"
+          echo "LOKI_URL=$LOKI_URL" >> "$GITHUB_ENV"
 
       - name: Apply
         # apply.sh sources its own grafanactl-env.sh helper, which for

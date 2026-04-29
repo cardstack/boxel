@@ -53,3 +53,7 @@ grafanactl \
   resources push \
   --path ./grafanactl/resources \
   "${forwarded_args[@]}"
+
+# Data sources — grafanactl doesn't manage them, so push via HTTP API.
+# Local skips this (docker-compose handles file provisioning).
+./scripts/apply-datasources.sh --env "$env_name"
