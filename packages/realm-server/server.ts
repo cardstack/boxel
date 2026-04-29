@@ -969,11 +969,26 @@ export class RealmServer {
     backgroundURL?: string;
     iconURL?: string;
   }): Promise<{ url: string; info: Partial<RealmInfo> }> => {
-    // Server-root collision check uses the registry as the source of
-    // truth — every realm on this server has a realm_registry row, so
-    // the realms[] array isn't needed here. (Phase 3 PR 2: handlers
-    // don't read or mutate realms[].)
+    // Server-root collision check. Read realms[] AND realm_registry —
+    // every production realm has a registry row, but test fixtures
+    // construct CLI-style realms via runTestRealmServer that don't
+    // mirror to the registry. Either source matching the origin is a
+    // collision. (Phase 3 PR 2: handlers don't *mutate* realms[]; read
+    // is fine.)
     let serverRootUrl = this.serverURL.origin + '/';
+    let realmAtServerRoot = this.realms.find((r) => {
+      let realmUrl = new URL(r.url);
+      return (
+        realmUrl.href.replace(/\/$/, '') === realmUrl.origin &&
+        realmUrl.hostname === this.serverURL.hostname
+      );
+    });
+    if (realmAtServerRoot) {
+      throw errorWithStatus(
+        400,
+        `Cannot create a realm: a realm is already mounted at the origin of this server: ${realmAtServerRoot.url}`,
+      );
+    }
     let serverRootRows = (await query(this.dbAdapter, [
       `SELECT url FROM realm_registry WHERE url =`,
       param(serverRootUrl),
@@ -981,7 +996,7 @@ export class RealmServer {
     if (serverRootRows.length > 0) {
       throw errorWithStatus(
         400,
-        `Cannot create a realm: a realm is already registered at the origin of this server: ${serverRootRows[0].url}`,
+        `Cannot create a realm: a realm is already mounted at the origin of this server: ${serverRootRows[0].url}`,
       );
     }
     if (!endpoint.match(/^[a-z0-9-]+$/)) {

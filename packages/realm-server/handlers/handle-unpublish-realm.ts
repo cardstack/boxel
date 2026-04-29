@@ -21,7 +21,10 @@ import {
 } from '../middleware';
 import type { CreateRoutesArgs } from '../routes';
 import type { RealmServerTokenClaim } from '../utils/jwt';
-import { removeRealmFiles } from './realm-destruction-utils';
+import {
+  collectAllFilePaths,
+  removeRealmFiles,
+} from './realm-destruction-utils';
 import { deleteFromRegistryByUrl } from '../lib/realm-registry-writes';
 import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
@@ -30,6 +33,7 @@ const log = logger('handle-unpublish');
 export default function handleUnpublishRealm({
   dbAdapter,
   realmsRootPath,
+  reconciler,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -104,13 +108,28 @@ export default function handleUnpublishRealm({
         PUBLISHED_DIRECTORY_NAME,
         publishedRealmInfo.id,
       );
-      // Phase 3 PR 2: handler is stateless. Serialize concurrent writers
-      // for this realm URL via the per-URL advisory lock, then do FS +
-      // DB only — no realms[]/virtualNetwork mutation here. The
-      // deleteFromRegistryByUrl emits NOTIFY realm_registry; the
-      // reconciler on every instance (origin included) reacts by
-      // unmounting the realm.
+
+      // Mount the published realm on this instance (no-op if already
+      // mounted) so we have a Realm instance to drive the tombstone
+      // path before deleting files. Phase 3 sibling-instance behavior
+      // is unchanged: those instances see deleteFromRegistryByUrl's
+      // NOTIFY realm_registry and unmount via the reconciler.
+      let publishedRealm = await reconciler.lookupOrMount(publishedRealmURL);
+
+      // Serialize concurrent writers for this realm URL via the per-
+      // URL advisory lock, then drive tombstones via realm.deleteAll
+      // (bumps realm_version + marks every boxel_index entry as
+      // deleted, matching the legacy unpublish behavior), then do FS
+      // + DB cleanup. realms[] / virtualNetwork mutation stays in the
+      // reconciler's hands — it reacts to the registry DELETE +
+      // NOTIFY below.
       await withRealmWriteLock(dbAdapter, publishedRealmURL, async () => {
+        if (publishedRealm) {
+          let allFilePaths = collectAllFilePaths(publishedRealmPath);
+          if (allFilePaths.length > 0) {
+            await publishedRealm.deleteAll(allFilePaths);
+          }
+        }
         removeRealmFiles(publishedRealmPath);
 
         await query(dbAdapter, [

@@ -4,7 +4,44 @@ import {
   param,
   query,
 } from '@cardstack/runtime-common';
-import { pathExistsSync, removeSync } from 'fs-extra';
+import { pathExistsSync, readdirSync, removeSync } from 'fs-extra';
+import { join, relative } from 'path';
+
+// Walk a realm's on-disk directory and return every file's path relative
+// to the realm root. Used by the unpublish handler to drive tombstone
+// inserts via Realm.deleteAll() before the directory is removed.
+export function collectAllFilePaths(realmPath: string): string[] {
+  let allPaths: string[] = [];
+
+  function traverseDirectory(currentPath: string, basePath: string) {
+    if (!pathExistsSync(currentPath)) {
+      return;
+    }
+
+    let entries;
+    try {
+      entries = readdirSync(currentPath, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (let entry of entries) {
+      let fullPath = join(currentPath, entry.name);
+
+      if (entry.isDirectory()) {
+        traverseDirectory(fullPath, basePath);
+      } else {
+        let relativePath = relative(basePath, fullPath).replace(/\\/g, '/');
+        if (relativePath) {
+          allPaths.push(relativePath);
+        }
+      }
+    }
+  }
+
+  traverseDirectory(realmPath, realmPath);
+  return allPaths;
+}
 
 // Phase 3 PR 2: handlers stop touching mount state. This util is a
 // pure FS removal — `rm -rf` against the realm directory. The realm-
