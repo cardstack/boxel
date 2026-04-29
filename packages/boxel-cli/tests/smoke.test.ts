@@ -29,79 +29,76 @@ describe('boxel-cli', () => {
     expect(output).toMatch(/-q, --quiet/);
   });
 
-  it('silences info-level logs but keeps errors when --quiet is passed', () => {
-    // Run a command that's guaranteed to fail at the "no active profile"
-    // step so we don't need a realm server. Without --quiet, the realm
-    // sync command would normally log progress lines to stdout. With
-    // --quiet, info logs are silenced; errors still print to stderr.
-    //
-    // This is the load-bearing test for the SF integration path:
-    // boxel-cli is launched with `--quiet` from the factory tool
-    // executor, and we want to confirm that:
-    //   1. info/log lines are stripped from stdout
-    //   2. error lines (and the non-zero exit code) are preserved
+  it('silences chatty console.log output in a real command path under --quiet', () => {
+    // End-to-end: run a command that, on success, emits a `console.log`
+    // line ("✓ Profile created: …" — see profile.ts). With `--quiet`
+    // that line must be silenced, and the command's side-effect (the
+    // profile.json file) must still happen. This proves the interceptor
+    // is wired through the full CLI startup path, not just the unit
+    // tests in cli-log.test.ts.
     let tmpHome = fs.mkdtempSync(join(os.tmpdir(), 'boxel-cli-quiet-'));
-    let tmpLocal = fs.mkdtempSync(join(os.tmpdir(), 'boxel-quiet-local-'));
     try {
-      let stdout = '';
-      let stderr = '';
-      let exitCode = 0;
-      try {
-        execFileSync(
-          process.execPath,
-          [
-            cliEntry,
-            '--quiet',
-            'realm',
-            'sync',
-            tmpLocal,
-            // A guaranteed-bad realm URL — exercise is the quiet path,
-            // not the sync path; we only care about what reaches stdout.
-            'http://127.0.0.1:1/nope/',
-          ],
-          {
-            encoding: 'utf8',
-            env: {
-              ...process.env,
-              HOME: tmpHome,
-              // Strip BOXEL_* so a developer's shell doesn't perturb
-              // the result.
-              ...Object.fromEntries(
-                Object.entries(process.env)
-                  .filter(([k]) => k.startsWith('BOXEL_'))
-                  .map(([k]) => [k, '']),
+      let stdout = execFileSync(
+        process.execPath,
+        [cliEntry, '--quiet', 'profile', 'add', '-u', '@alice:stack.cards'],
+        {
+          encoding: 'utf8',
+          env: {
+            // Strip BOXEL_* from inherited env so a developer's shell
+            // can't perturb the result.
+            ...Object.fromEntries(
+              Object.entries(process.env).filter(
+                ([k]) => !k.startsWith('BOXEL_'),
               ),
-            },
-            stdio: ['ignore', 'pipe', 'pipe'],
+            ),
+            HOME: tmpHome,
+            BOXEL_PASSWORD: 'hunter2',
           },
-        );
-      } catch (err) {
-        // Non-zero exit is expected here — the command can't authenticate.
-        let e = err as { status?: number; stdout?: string; stderr?: string };
-        exitCode = e.status ?? 0;
-        stdout = e.stdout ?? '';
-        stderr = e.stderr ?? '';
-      }
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
 
-      // The "Starting sync between …" / "Sync completed" / "Found N
-      // local files" progress lines are exactly the kind of chatty
-      // output the issue wants suppressed. Even though the command
-      // fails before it gets that far in this test, verify that NO
-      // info-style line ("Starting", "Found", "Pulling", "Pushing",
-      // "Sync completed", "Checkpoint created") leaked to stdout.
-      expect(exitCode).not.toBe(0);
-      expect(stdout).not.toMatch(/Starting sync/);
-      expect(stdout).not.toMatch(/Sync completed/);
-      expect(stdout).not.toMatch(/Checkpoint created/);
-      expect(stdout).not.toMatch(/Found \d+ local files/);
+      // The success message ("✓ Profile created: …") goes through
+      // console.log; under --quiet the interceptor must swallow it.
+      expect(stdout).toBe('');
 
-      // Errors should still surface (in stderr or as a structured
-      // result) so that the operator/automation can react.
-      let combined = stdout + stderr;
-      expect(combined).not.toBe('');
+      // Side-effect must still have happened.
+      expect(fs.existsSync(join(tmpHome, '.boxel-cli', 'profiles.json'))).toBe(
+        true,
+      );
     } finally {
       fs.rmSync(tmpHome, { recursive: true, force: true });
-      fs.rmSync(tmpLocal, { recursive: true, force: true });
+    }
+  });
+
+  it('emits the same console.log output normally without --quiet', () => {
+    // Negative control for the test above: without --quiet, the same
+    // command emits the success line to stdout. Without this, the
+    // --quiet test could trivially pass against a build that printed
+    // nothing in either mode.
+    let tmpHome = fs.mkdtempSync(join(os.tmpdir(), 'boxel-cli-noisy-'));
+    try {
+      let stdout = execFileSync(
+        process.execPath,
+        [cliEntry, 'profile', 'add', '-u', '@alice:stack.cards'],
+        {
+          encoding: 'utf8',
+          env: {
+            ...Object.fromEntries(
+              Object.entries(process.env).filter(
+                ([k]) => !k.startsWith('BOXEL_'),
+              ),
+            ),
+            HOME: tmpHome,
+            BOXEL_PASSWORD: 'hunter2',
+          },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+
+      expect(stdout).toMatch(/Profile created/);
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
     }
   });
 });

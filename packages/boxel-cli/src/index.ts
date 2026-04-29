@@ -34,13 +34,11 @@ program
     }
   });
 
-// Pre-parse: also flip quiet mode based on a raw scan of argv. Commander's
-// `preAction` hook runs after argument parsing but before the command
-// action — that's enough for command-action `console.log` calls. However,
-// any code that runs at *import* time inside a command file would still
-// see quiet=false. Doing this raw scan up front guarantees module-load
-// console output is also silenced when the caller asked for it.
-if (process.argv.includes('--quiet') || process.argv.includes('-q')) {
+// Belt-and-suspenders: also flip quiet mode based on a raw scan of argv,
+// so any code that runs between Commander's option parsing and the
+// `preAction` hook sees the right state. We scan for the long form only;
+// `-q` could legitimately be the value of another option in the future.
+if (process.argv.includes('--quiet')) {
   setQuiet(true);
 }
 

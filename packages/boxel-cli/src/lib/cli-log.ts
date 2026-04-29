@@ -26,10 +26,9 @@
 let quiet = false;
 
 /**
- * Original references to the console methods we intercept. We keep them
- * here so `cliLog.info()` (which is called by code that has explicitly
- * routed itself through this module) can still write its message even
- * when other console.log calls are silenced.
+ * Original references to the console methods we intercept. Captured at
+ * module load so `setQuiet(false)` can put them back if quiet mode is
+ * toggled off (the unit tests rely on this).
  */
 const originalConsoleLog = console.log.bind(console);
 const originalConsoleInfo = console.info.bind(console);
