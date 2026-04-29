@@ -20,6 +20,7 @@ import { buildFactoryTools } from '../src/factory-tool-builder';
 import { fetchCardTypeSchema } from '../src/darkfactory-schemas';
 import {
   baseRealmURLFor,
+  buildServerToken,
   DEFAULT_REALM_OWNER,
   sourceRealmURLFor,
 } from '../src/harness/shared';
@@ -603,11 +604,14 @@ test.describe('realm-search on a private realm', () => {
         '@stranger:localhost',
         [],
       );
+      let unauthorizedRealmServerToken = buildServerToken(
+        '@stranger:localhost',
+      );
       let unauthorizedSetup = buildTestClient({
         realmUrl: realm.realmURL.href,
         realmToken: `Bearer ${unauthorizedToken}`,
         realmServerUrl: realm.realmServerURL.href,
-        realmServerToken: `Bearer ${realm.serverToken}`,
+        realmServerToken: `Bearer ${unauthorizedRealmServerToken}`,
       });
 
       try {

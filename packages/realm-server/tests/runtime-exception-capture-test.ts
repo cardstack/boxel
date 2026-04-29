@@ -2,6 +2,10 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import { EventEmitter } from 'events';
 import { attachRuntimeExceptionCapture } from '../prerender/runtime-exception-capture';
+import {
+  titleForConsoleErrorEntry,
+  stackHeaderForConsoleErrorEntry,
+} from '../prerender/render-runner';
 import type { ConsoleErrorEntry } from '../prerender/page-pool';
 
 // Verifies the V8-layer uncaught-exception capture wired up in
@@ -13,15 +17,20 @@ import type { ConsoleErrorEntry } from '../prerender/page-pool';
 //
 // The interesting behaviors:
 //
-//   1. On `Runtime.exceptionThrown`, we record an entry under a
-//      stable key (`exception:${exceptionId}`) so a follow-up
-//      `Runtime.exceptionRevoked` can find and remove it.
+//   1. On `Runtime.exceptionThrown`, the recorder is called with the
+//      exceptionId so a follow-up `Runtime.exceptionRevoked` can
+//      find and tag the matching entry.
 //
-//   2. On `Runtime.exceptionRevoked`, we remove the previously-
-//      recorded entry. This is the seam that catches RSVP /
-//      Backburner late-`.catch` cases — V8 reports the throw at
-//      Layer 1 but later retracts the "uncaught" status, so we
-//      drop the entry to avoid surfacing transient noise.
+//   2. On `Runtime.exceptionRevoked`, the recorder is called with
+//      the same exceptionId. The recorder's job is to **tag** the
+//      previously-recorded entry as revoked (NOT delete it). The
+//      whitepaper-class render bug fits the "thrown then revoked"
+//      pattern (RSVP / Backburner attaches a late `.catch` that
+//      retracts V8's uncaught status), and an earlier iteration of
+//      this module dropped these entries as "transient noise" — but
+//      that was actively discarding the actionable stack. Now we
+//      keep the entry; render-runner tags the title with
+//      "(revoked by late .catch)" so the lifecycle is visible.
 //
 //   3. Stack frames from `exceptionDetails.stackTrace.callFrames`
 //      flow into the `ConsoleErrorEntry.stackFrames` array so the
@@ -31,7 +40,7 @@ import type { ConsoleErrorEntry } from '../prerender/page-pool';
 //   4. When the recorder reports it's at storage limit (`add`
 //      returns false), we don't track the exceptionId — so a later
 //      revocation for that exceptionId is a no-op rather than
-//      removing some other entry by accident.
+//      tagging some other entry by accident.
 
 class FakeCDPClient extends EventEmitter {
   sentMethods: string[] = [];
@@ -72,9 +81,15 @@ function makeRecorder(opts: { atLimit?: boolean } = {}) {
       entriesByExceptionId.set(exceptionId, entry);
       return true;
     },
+    // Mirrors the production recorder's behavior: keep the entry
+    // and tag it as revoked, rather than deleting it. Tests that
+    // care about the lifecycle assert on `entry.revoked === true`.
     recordRevoked(exceptionId: number): void {
       calls.push({ type: 'revoked', exceptionId });
-      entriesByExceptionId.delete(exceptionId);
+      let existing = entriesByExceptionId.get(exceptionId);
+      if (existing) {
+        existing.revoked = true;
+      }
     },
   };
 }
@@ -191,7 +206,7 @@ module(basename(__filename), function () {
     );
   });
 
-  test('removes the entry on Runtime.exceptionRevoked', async function (assert) {
+  test('tags the entry as revoked on Runtime.exceptionRevoked (does NOT delete)', async function (assert) {
     let client = new FakeCDPClient();
     let page = new FakePage(client);
     let recorder = makeRecorder();
@@ -210,19 +225,28 @@ module(basename(__filename), function () {
         text: 'TypeError: late-catch',
       }),
     );
-    assert.true(
-      recorder.entriesByExceptionId.has(42),
-      'entry recorded after exceptionThrown',
-    );
+    let initialEntry = recorder.entriesByExceptionId.get(42);
+    assert.ok(initialEntry, 'entry recorded after exceptionThrown');
+    assert.notOk(initialEntry?.revoked, 'entry is not yet flagged as revoked');
 
     client.emit('Runtime.exceptionRevoked', {
       reason: 'Handler added to rejected promise',
       exceptionId: 42,
     });
 
-    assert.false(
-      recorder.entriesByExceptionId.has(42),
-      'entry removed after exceptionRevoked — RSVP late-catch case dropped cleanly',
+    // Critical: the entry STAYS in the bucket. Earlier behavior
+    // was to delete it, which discarded the actionable stack for
+    // the whitepaper-class render bug (RSVP attached a late
+    // `.catch` → V8 retracted the uncaught status → we dropped
+    // the only signal the operator had).
+    let afterRevoke = recorder.entriesByExceptionId.get(42);
+    assert.ok(
+      afterRevoke,
+      'entry survives revoke — `additionalErrors` will still surface it',
+    );
+    assert.true(
+      afterRevoke?.revoked,
+      'entry is tagged revoked so render-runner can mark the title',
     );
     assert.strictEqual(
       recorder.calls.length,
@@ -257,7 +281,7 @@ module(basename(__filename), function () {
     // forwards every CDP event to the recorder and lets the recorder
     // decide what to do. So a revoke for an exceptionId we never saw
     // a throw for still reaches the recorder; the recorder's own
-    // bookkeeping (no entry under that id → nothing to remove) is
+    // bookkeeping (no entry under that id → nothing to tag) is
     // what makes it a no-op end-to-end.
     client.emit('Runtime.exceptionRevoked', {
       reason: 'Handler added to rejected promise',
@@ -281,7 +305,7 @@ module(basename(__filename), function () {
     );
     assert.false(
       recorder.entriesByExceptionId.has(999),
-      'recorder state stays empty when there was nothing to remove',
+      'recorder state stays empty when there was nothing to tag',
     );
   });
 
@@ -577,6 +601,74 @@ module(basename(__filename), function () {
       recorder.calls.length,
       0,
       'no recorder activity when CDP attach failed',
+    );
+  });
+
+  // The render-runner-side serialization is the other half of the
+  // keep-revoked contract: once the recorder tags an entry with
+  // `revoked: true`, the title and stack-header functions need to
+  // surface that lifecycle so operators looking at the error doc
+  // can tell a thrown-then-revoked exception apart from a plain
+  // uncaught one. These functions are otherwise only exercised
+  // through the full prerender pipeline, which we can't reliably
+  // hit in a unit-style fixture (Ember's runloop catches synthetic
+  // throws before V8 sees them as uncaught).
+  test('titleForConsoleErrorEntry distinguishes revoked exceptions', function (assert) {
+    assert.strictEqual(
+      titleForConsoleErrorEntry({
+        type: 'error',
+        text: 'TypeError: boom',
+        source: 'exception',
+      }),
+      'Uncaught exception',
+      'plain uncaught exception',
+    );
+    assert.strictEqual(
+      titleForConsoleErrorEntry({
+        type: 'error',
+        text: 'TypeError: boom',
+        source: 'exception',
+        revoked: true,
+      }),
+      'Uncaught exception (revoked by late .catch)',
+      'revoked exception keeps the entry but marks the lifecycle',
+    );
+    assert.strictEqual(
+      titleForConsoleErrorEntry({
+        type: 'error',
+        text: 'console.error message',
+        source: 'console',
+      }),
+      'Console error',
+      'console-source error is unrelated to the revoked branch',
+    );
+  });
+
+  test('stackHeaderForConsoleErrorEntry distinguishes revoked exceptions', function (assert) {
+    assert.strictEqual(
+      stackHeaderForConsoleErrorEntry({
+        type: 'error',
+        text: 'TypeError: boom',
+        source: 'exception',
+      }),
+      'UncaughtException',
+    );
+    assert.strictEqual(
+      stackHeaderForConsoleErrorEntry({
+        type: 'error',
+        text: 'TypeError: boom',
+        source: 'exception',
+        revoked: true,
+      }),
+      'UncaughtExceptionRevoked',
+    );
+    assert.strictEqual(
+      stackHeaderForConsoleErrorEntry({
+        type: 'assert',
+        text: 'assertion failed',
+        source: 'console',
+      }),
+      'AssertionError',
     );
   });
 });

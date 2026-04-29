@@ -350,10 +350,12 @@ module('timeline handler', () => {
         {
           path: `${folder}/experiments/MyListing/listing.json`,
           content: '{"data":{"type":"card"}}',
+          isBinary: false,
         },
         {
           path: `${folder}/experiments/MyListing/readme.md`,
           content: '# My Listing',
+          isBinary: false,
         },
       ],
       'commit payload wraps parsed files in room-<base64> folder',
