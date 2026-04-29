@@ -45,6 +45,7 @@ scripts/
   apply.sh             # ./scripts/apply.sh --env <local|staging|production>
   pull.sh              # ./scripts/pull.sh  --env <name> --path <dir>
   check.sh             # ./scripts/check.sh --env <name>  (connectivity smoke test)
+  tail-logs.sh         # ./scripts/tail-logs.sh --env <name> --service <task family>
   render-config.sh     # internal — renders grafanactl config.yaml per-invocation
   grafanactl-env.sh    # sourceable; exports GRAFANA_TOKEN from SSM for staging/prod
 templates/
@@ -180,20 +181,42 @@ to avoid escaping `"` and `$` inside the query.
 
 ### `tail-logs.sh`
 
-A laptop-side wrapper around `logcli` with the auth + URL plumbing
-pre-baked is planned in [CS-10920](https://linear.app/cardstack/issue/CS-10920).
-Until that lands, the curl shape above is the equivalent.
-
-Sketch of the planned interface:
+`scripts/tail-logs.sh` wraps the curl shape above with auth + URL +
+LogQL selector building pre-baked. Local mode hits the localhost Loki
+without auth; staging / production fetch the bearer token and public
+URL from SSM.
 
 ```sh
-./scripts/tail-logs.sh --env staging --service realm-server --since 15m
-./scripts/tail-logs.sh --env staging --service worker --worker-id abc123 --filter "job_id=42"
-./scripts/tail-logs.sh --env production --service synapse --since 1h --confirm
+# Local — no auth, expects docker compose up from this directory
+./scripts/tail-logs.sh --env local --service realm-server
+
+# Tail staging worker errors
+./scripts/tail-logs.sh --env staging --service worker --regex '(?i)error|exception'
+
+# Drill to one job id
+./scripts/tail-logs.sh --env staging --service worker --filter 'job_id=42' --since 1h --no-follow
+
+# Production requires --confirm
+./scripts/tail-logs.sh --env production --service synapse --since 30m --no-follow --confirm
 ```
 
-(`--confirm` will be required for production to keep accidental prod
-queries out of the default flow.)
+| Flag | Default | Notes |
+|------|---------|-------|
+| `--env` | (required) | `local`, `staging`, `production` |
+| `--service` | (required) | `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse` (or any local container name) |
+| `--realm` | unset | Restrict to a single realm. |
+| `--worker-id` | unset | Per-Fargate-task id; workers only. |
+| `--filter` | unset | LogQL line-filter (`\|=`); literal substring. |
+| `--regex` | unset | LogQL line-regex (`\|~`). Mutually exclusive with `--filter`. |
+| `--since` | `15m` | `30s`, `15m`, `1h`, `2d` — pattern `^\d+[smhd]$`. |
+| `--limit` | `200` | Max lines per batch. |
+| `--follow` / `--no-follow` | follow | Default polls every 5 s until ctrl-C. |
+| `--json` | text | Raw Loki response per batch (pipe to jq). |
+| `--confirm` | n/a | Required for `--env production`. |
+
+The same script powers the `tail-logs` Claude agent skill at
+`.claude/skills/tail-logs/SKILL.md` — agents call the script with
+`--no-follow` for diagnostics.
 
 ## Loki vs CloudWatch Logs Insights
 
@@ -257,8 +280,9 @@ CI will run `apply.sh --env staging` on merge to main once Phase 4 (CS-10932) la
 | CS-10916  | 2.5   | landed      | Alloy log scraper for local              |
 | CS-10919  | 2.5   | landed      | Loki on ECS (staging + production)       |
 | CS-10917  | 2.5   | landed      | FireLens dual-ship (5 task families × 2 envs) |
-| CS-10920  | 2.5   | not started | `tail-logs.sh` + Claude agent skill      |
-| CS-10921  | 2.5   | this PR     | Loki + tail-logs README                  |
+| CS-10920  | 2.5   | this PR     | `tail-logs.sh` + Claude agent skill      |
+| CS-10921  | 2.5   | landed      | Loki + tail-logs README                  |
+| CS-10968  | 2.5   | not started | Hosted Grafana → Loki data source wiring |
 | CS-10922  | 3     | landed      | AMG export and reformat                  |
 | CS-10932  | 4     | landed      | CI: apply to staging on merge            |
 | CS-10933  | 4     | not started | CI: post diff comment on PRs             |
