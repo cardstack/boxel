@@ -86,23 +86,145 @@ source to see lines from any other container running on the host.
 
 The label set is **load-bearing**: dashboards written in LogQL select on
 these labels, so the local scraper, staging FireLens, and production
-FireLens must all emit the same shape. Pick the schema once, here.
+FireLens must all emit the same shape. Pick the schema once, here. If
+you change it, change it everywhere — `alloy/config.alloy` (local) and
+`cardstack/infra:modules/aws/ecs/firelens/templates/extra.conf.tftpl`
+(staging + production).
 
-| Label     | Source (local)                              | Source (staging / production)             |
-| --------- | ------------------------------------------- | ----------------------------------------- |
-| `env`     | constant `local` (set in `alloy/config.alloy`) | constant `staging` / `production` (FireLens record_modifier) |
-| `service` | Docker container name, leading `/` stripped | ECS task family, e.g. `realm-server`, `worker`, `synapse` |
-| `realm`   | opt-in via Docker label `boxel.realm=<name>` | realm name from worker/realm-server task env |
+| Label       | Local source                                          | Staging / production source                                        | When set                          |
+| ----------- | ----------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------- |
+| `env`       | constant `local` (Alloy relabel rule)                 | constant `staging` / `production` (Fluent Bit static `Labels`)     | always                            |
+| `service`   | Docker container name, leading `/` stripped           | ECS task family — `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse` | always |
+| `realm`     | opt-in via Docker label `boxel.realm=<name>`          | task env when the task pins a single realm (omitted on multi-realm workloads) | when meaningful |
+| `worker_id` | not set locally                                       | per-Fargate-task `ecs_task_id` injected by FireLens (worker only)  | worker tasks only                 |
 
-The local scraper drops `grafana`, `loki`, and `alloy`'s own log streams
-to keep `{env="local"}` queries clean and avoid a Grafana → Loki feedback
-loop.
+The local Alloy scraper drops the observability stack's own Compose
+services (`grafana`, `loki`, `alloy`) so `{env="local"}` queries don't
+echo through a Grafana → Loki feedback loop.
 
-To tag a custom local container so dashboards pick it up by realm:
+To tag a custom local container so its lines pick up the `realm` label:
 
 ```sh
 docker run --label boxel.realm=test_realm --name my-realm-worker ...
 ```
+
+## Querying Loki
+
+### Locally
+
+Loki listens on `http://localhost:3100`. Either query in Grafana
+(http://localhost:3001 → Explore → Loki) or curl it directly:
+
+```sh
+curl -sS 'http://localhost:3100/loki/api/v1/labels' | jq
+curl -sS 'http://localhost:3100/loki/api/v1/label/service/values' | jq
+```
+
+### Staging or production
+
+The hosted Loki sits behind the Grafana ALB at the `/loki*` path, gated
+by a bearer token written to SSM. Two pieces of `${ENV}` plumbing:
+
+```sh
+ENV=staging   # or production
+TOKEN=$(aws ssm get-parameter --name /$ENV/loki/auth_token --with-decryption --query 'Parameter.Value' --output text)
+BASE=$(aws ssm get-parameter --name /$ENV/loki/public_url --query 'Parameter.Value' --output text)
+# BASE is e.g. https://grafana-staging.stack.cards/loki
+```
+
+> **URL gotcha**: the ALB rule path (`/loki*`) and Loki's own API
+> namespace (`/loki/api/v1/...`) happen to share the literal `/loki`
+> segment. The right call shape is `$BASE/api/v1/labels`, which resolves
+> to `https://.../loki/api/v1/labels` — Loki's native endpoint. Do not
+> double the segment (`$BASE/loki/api/v1/labels` 404s).
+
+```sh
+curl -sS -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/labels" | jq
+curl -sS -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/label/service/values" | jq
+```
+
+### LogQL cookbook
+
+These run identically against local, staging, and production — only the
+URL/token plumbing differs. Replace `<env>` with `local`, `staging`, or
+`production`.
+
+```logql
+# All lines from the realm-server in the last hour
+{env="<env>", service="realm-server"}
+
+# Errors in any service in the last 15m
+{env="<env>"} |~ "(?i)error|exception|fatal"
+
+# Lines for one realm across all services
+{env="<env>", realm="example_realm"}
+
+# Per-worker tail
+{env="<env>", service="worker", worker_id="abc123def456"}
+
+# Logs around a specific job id (LogQL line-filter, not regex)
+{env="<env>", service="worker"} |= "job_id=42"
+
+# Error rate over the last day, sliced by service
+sum by (service) (count_over_time({env="<env>"} |~ "ERROR" [1d]))
+
+# Slowest indexer batches in the last hour (matches a known log shape)
+{env="<env>", service="realm-server"} |~ "indexer.*duration_ms=[0-9]{4,}"
+
+# Drop noisy keep-alive lines, keep the rest
+{env="<env>", service="prerender"} != "GET /health"
+```
+
+Quoting: LogQL is JSON-y. Single-quote the whole expression in shell
+to avoid escaping `"` and `$` inside the query.
+
+### `tail-logs.sh`
+
+A laptop-side wrapper around `logcli` with the auth + URL plumbing
+pre-baked is planned in [CS-10920](https://linear.app/cardstack/issue/CS-10920).
+Until that lands, the curl shape above is the equivalent.
+
+Sketch of the planned interface:
+
+```sh
+./scripts/tail-logs.sh --env staging --service realm-server --since 15m
+./scripts/tail-logs.sh --env staging --service worker --worker-id abc123 --filter "job_id=42"
+./scripts/tail-logs.sh --env production --service synapse --since 1h --confirm
+```
+
+(`--confirm` will be required for production to keep accidental prod
+queries out of the default flow.)
+
+## Loki vs CloudWatch Logs Insights
+
+Through the Phase 7 migration bake, every staging / production task
+that ships to Loki **also** ships the same lines to CloudWatch — see
+`cardstack/infra:modules/aws/ecs/firelens/templates/extra.conf.tftpl`,
+the FireLens config emits two `[OUTPUT]` blocks per task. Pick which
+backend to query based on what you're doing:
+
+| Use case                                                          | Query target | Why                                                                                                                       |
+| ----------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Reproducing a dashboard panel locally                             | Loki         | Dashboards under `grafanactl/resources/dashboards/` use LogQL — same syntax, same labels, same answer.                    |
+| Tailing live activity from a laptop                               | Loki         | `tail-logs.sh` (CS-10920) / `logcli` keep the same labels and a uniform shell.                                            |
+| Cross-service queries (e.g. "all errors in staging in the last hour") | Loki     | One label plane (`env=staging`) covers everything. CloudWatch needs a Logs Insights query per log group.                  |
+| Long-window forensics (>30 days)                                  | CloudWatch   | CloudWatch retention is set per-log-group on the existing infra; Loki's S3 lifecycle expires chunks at 180 days.          |
+| AMG-era saved query / runbook you remember                        | CloudWatch   | The CloudWatch shape didn't change — paste the old Logs Insights query and it still works through Phase 7.                |
+| AWS-side troubleshooting (ECS Agent, FireLens itself)             | CloudWatch   | Loki only sees the application's stdout. ECS-internal events are CloudWatch only.                                         |
+
+The dual-ship goes away (CloudWatch-only drop) in a follow-up ticket
+once Loki has been load-bearing for a full release cycle.
+
+## Hosted vs local Loki
+
+| Trait                  | Local                                | Staging / production                                            |
+| ---------------------- | ------------------------------------ | --------------------------------------------------------------- |
+| Storage                | filesystem, named volume `loki_data` | S3 bucket `boxel-loki-chunks-<env>`                             |
+| Persistence            | survives `docker compose restart`; lost on `down -v` | indefinite, governed by S3 lifecycle                            |
+| Retention              | none enforced (devs prune manually)  | transition to IA at 30 d, expire at 180 d (S3 lifecycle)        |
+| `reject_old_samples`   | `false` (so backfills work)          | `true` (default, ~7d window)                                    |
+| Auth                   | none                                 | bearer token at the Grafana ALB (`/loki*` path rule); SG-only on internal NLB |
+| Reachable from         | localhost only                       | Grafana ECS tasks + FireLens log_router sidecars; laptops via the public path |
 
 ## Staging / production workflow
 
@@ -131,12 +253,16 @@ CI will run `apply.sh --env staging` on merge to main once Phase 4 (CS-10932) la
 | CS-10914  | 2     | landed      | Package skeleton                         |
 | CS-10912  | 2     | landed      | Local `docker-compose.yml` for Grafana   |
 | CS-10913  | 2     | landed      | grafanactl `local`/`staging`/`prod` ctxs |
-| CS-10918  | 2.5   | landed      | Loki container + data source             |
-| CS-10916  | 2.5   | this PR     | Alloy log scraper for local              |
+| CS-10918  | 2.5   | landed      | Loki container + data source (local)     |
+| CS-10916  | 2.5   | landed      | Alloy log scraper for local              |
+| CS-10919  | 2.5   | landed      | Loki on ECS (staging + production)       |
+| CS-10917  | 2.5   | landed      | FireLens dual-ship (5 task families × 2 envs) |
+| CS-10920  | 2.5   | not started | `tail-logs.sh` + Claude agent skill      |
+| CS-10921  | 2.5   | this PR     | Loki + tail-logs README                  |
 | CS-10922  | 3     | landed      | AMG export and reformat                  |
-| CS-10932  | 4     | not started | CI: apply to staging on merge            |
+| CS-10932  | 4     | landed      | CI: apply to staging on merge            |
 | CS-10933  | 4     | not started | CI: post diff comment on PRs             |
-| CS-10936  | 5     | not started | CI: apply to production                  |
+| CS-10936  | 5     | landed      | CI: apply to production                  |
 
 ## Vendored content
 
@@ -144,7 +270,8 @@ CI will run `apply.sh --env staging` on merge to main once Phase 4 (CS-10932) la
 
 ## Known cleanups (deferred)
 
-- **Staging/production Loki ECS deployment.** Currently no Loki running in staging or production. Staging/production Grafana provisioning expects `${LOKI_URL}` to be set on the ECS task; that's an infra ticket.
+- **Hosted Grafana → Loki data source wiring.** The staging / production ECS Grafana tasks don't yet have `LOKI_URL` set or `provisioning/datasources/loki.yaml` mounted, so Grafana → Explore → Loki returns "no data source" against the hosted environments even though Loki itself is up. Direct curl / `logcli` against `/<env>/loki/public_url` works today.
 - **`provisioning/` delivery to staging/production ECS.** The provisioning files (data sources + alert rules) need to land on the ECS Grafana container — image bake, S3-init, or EFS mount. Decide and ship as a separate infra ticket.
 - **Secret env-var wiring for data sources.** `provisioning/datasources/*.json` omits `secureJsonData` (passwords, API keys). The staging/production ECS Grafana task needs those env vars set from SSM (`GRAFANA_DB_PASSWORD` etc.) and the provisioning files updated to reference them via `${ENV_VAR}`.
+- **Drop the dual-ship to CloudWatch** once Loki has been load-bearing for a release cycle. Until then both backends receive identical lines through the FireLens config in `cardstack/infra:modules/aws/ecs/firelens/templates/extra.conf.tftpl`.
 - **CODEOWNERS.** No file in the repo today — if the team wants observability-specific reviewer requirements, file a separate ticket.
