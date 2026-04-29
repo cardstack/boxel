@@ -418,6 +418,63 @@ module(basename(__filename), function () {
         );
       });
 
+      test('can clear card-owned URL fields by patching null', async function (assert) {
+        let auth = `Bearer ${createJWT(testRealm, 'user', [
+          'read',
+          'write',
+          'realm-owner',
+        ])}`;
+
+        // First set non-null values so we have something to clear.
+        let setResponse = await request
+          .patch('/_config')
+          .set('Accept', SupportedMimeType.JSON)
+          .set('Authorization', auth)
+          .send({
+            data: {
+              type: 'realm-config',
+              attributes: {
+                backgroundURL: 'http://example.com/bg.jpg',
+                iconURL: 'http://example.com/icon.png',
+              },
+            },
+          });
+        assert.strictEqual(setResponse.status, 200, 'set HTTP 200 status');
+        assert.strictEqual(
+          setResponse.body.data.attributes.backgroundURL,
+          'http://example.com/bg.jpg',
+          'backgroundURL set in overlay',
+        );
+        assert.strictEqual(
+          setResponse.body.data.attributes.iconURL,
+          'http://example.com/icon.png',
+          'iconURL set in overlay',
+        );
+
+        // Now clear them.
+        let clearResponse = await request
+          .patch('/_config')
+          .set('Accept', SupportedMimeType.JSON)
+          .set('Authorization', auth)
+          .send({
+            data: {
+              type: 'realm-config',
+              attributes: { backgroundURL: null, iconURL: null },
+            },
+          });
+        assert.strictEqual(clearResponse.status, 200, 'clear HTTP 200 status');
+        assert.strictEqual(
+          clearResponse.body.data.attributes.backgroundURL,
+          null,
+          'backgroundURL is null after patching null',
+        );
+        assert.strictEqual(
+          clearResponse.body.data.attributes.iconURL,
+          null,
+          'iconURL is null after patching null',
+        );
+      });
+
       test('allows any property except showAsCatalog', async function (assert) {
         let response = await request
           .patch('/_config')
