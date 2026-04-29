@@ -315,6 +315,6 @@ CI will run `apply.sh --env staging` on merge to main once Phase 4 (CS-10932) la
 
 ## Known cleanups (deferred)
 
-- **Secret env-var wiring for data sources.** `apply-datasources.sh` doesn't yet support `secureJsonData` (passwords, API keys). Loki doesn't need any (auth at the ALB layer). When Postgres / Prometheus / CloudWatch migrate over from the AMG-era `boxel-dashboard/` Terraform, the script needs SSM-backed secret resolution.
+- **Decommission the AMG-era `boxel-dashboard/` Terraform** in `cardstack/infra` once a full release cycle has gone by on the new flow. Tracked as CS-10942. After it lands, `configs/boxel-grafana-data-sources/` (in cardstack/infra) becomes the sole owner of the per-env data the boxel CI workflow reads.
 - **Drop the dual-ship to CloudWatch** once Loki has been load-bearing for a release cycle. Until then both backends receive identical lines through the FireLens config in `cardstack/infra:modules/aws/ecs/firelens/templates/extra.conf.tftpl`.
 - **CODEOWNERS.** No file in the repo today — if the team wants observability-specific reviewer requirements, file a separate ticket.
