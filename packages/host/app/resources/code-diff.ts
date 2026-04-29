@@ -4,8 +4,6 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
-import { rri } from '@cardstack/runtime-common';
-
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
 
@@ -98,7 +96,7 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
       return;
     }
     try {
-      let result = await this.cardService.getSource(rri(fileUrl));
+      let result = await this.cardService.getSource(new URL(fileUrl));
       if (result.status === 404) {
         this.originalCode = ''; // We are creating a new file, so we don't have the original code
       } else {
