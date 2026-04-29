@@ -550,9 +550,16 @@ interface IndexingStatus {
 async function queryIndexingStatus(
   workerManagerPort: number,
 ): Promise<IndexingStatus | undefined> {
+  // Bound the fetch so a hung connection (the worker-manager hasn't bound
+  // yet, or is wedged) can't pin `polling = true` in the progress reporter
+  // and freeze it. The reporter retries every 2s, so 1.5s is comfortably
+  // under one polling interval.
+  let abort = new AbortController();
+  let timeout = setTimeout(() => abort.abort(), 1500);
   try {
     let response = await fetch(
       `http://localhost:${workerManagerPort}/_indexing-status`,
+      { signal: abort.signal },
     );
     if (!response.ok) {
       return undefined;
@@ -560,6 +567,8 @@ async function queryIndexingStatus(
     return (await response.json()) as IndexingStatus;
   } catch {
     return undefined;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

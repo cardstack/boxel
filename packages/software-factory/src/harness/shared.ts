@@ -332,7 +332,16 @@ export type PortReservation = {
 
 export async function findAndHoldAvailablePort(): Promise<PortReservation> {
   return await new Promise<PortReservation>((resolveOuter, rejectOuter) => {
-    let server = createNetServer();
+    // Immediately destroy any incoming connection. The holder exists only
+    // to keep the kernel from handing the port to a sibling allocator;
+    // accepting traffic would let an unsuspecting HTTP client (e.g. the
+    // indexing-progress poller) connect to a socket with no HTTP server
+    // behind it and hang waiting for a response that never comes.
+    // Destroying on connect surfaces as ECONNRESET on the client side,
+    // which fetch reports as a TypeError — the poller's catch handler
+    // treats that as a transient failure and tries again on the next
+    // tick.
+    let server = createNetServer((socket) => socket.destroy());
     let onError = (error: NodeJS.ErrnoException) => {
       server.close();
       rejectOuter(error);

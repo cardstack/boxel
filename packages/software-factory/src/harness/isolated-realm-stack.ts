@@ -75,7 +75,12 @@ async function resolvePortReservation(
 ): Promise<ResolvedPortReservation> {
   if (passed == null || passed === 0) {
     let reservation = await findAndHoldAvailablePort();
-    return { port: reservation.port, releaseHolder: reservation.release };
+    // Wrap so a future PortReservation implementation that binds `this`
+    // inside `release()` still gets called with its own receiver.
+    return {
+      port: reservation.port,
+      releaseHolder: () => reservation.release(),
+    };
   }
   if (typeof passed === 'number') {
     // Caller supplied an explicit port number. They are responsible for
@@ -83,7 +88,7 @@ async function resolvePortReservation(
     return { port: passed, releaseHolder: async () => {} };
   }
   // Caller supplied a PortReservation — we own releasing it at spawn time.
-  return { port: passed.port, releaseHolder: passed.release };
+  return { port: passed.port, releaseHolder: () => passed.release() };
 }
 
 async function readIncomingRequestBody(

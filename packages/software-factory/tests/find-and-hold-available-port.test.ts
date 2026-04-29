@@ -87,6 +87,39 @@ module('findAndHoldAvailablePort', function () {
     }
   });
 
+  test('held port immediately rejects HTTP clients instead of hanging', async function (assert) {
+    // Regression test for codex-flagged P1: the indexing-progress poller
+    // does `fetch(http://localhost:<port>/_indexing-status)` against the
+    // worker-manager port. If the holder were a passive net.Server, fetch
+    // would connect, send headers, and hang forever waiting for a
+    // response. The holder must destroy the socket on connect so fetch
+    // fails fast and the poller retries on its next interval.
+    let reservation = await findAndHoldAvailablePort();
+    try {
+      let abort = new AbortController();
+      let timer = setTimeout(() => abort.abort(), 2000);
+      let result = await fetch(`http://localhost:${reservation.port}/`, {
+        signal: abort.signal,
+      })
+        .then(() => ({ ok: true }) as const)
+        .catch((err: Error) => ({ ok: false, name: err.name }) as const);
+      clearTimeout(timer);
+      assert.false(
+        result.ok,
+        'fetch against held port must fail rather than hang',
+      );
+      if (!result.ok) {
+        assert.notStrictEqual(
+          result.name,
+          'AbortError',
+          `fetch errored quickly (got ${result.name}); a hung connection would have been aborted`,
+        );
+      }
+    } finally {
+      await reservation.release();
+    }
+  });
+
   test('successive findAndHoldAvailablePort + release cycles never produce a duplicate-while-held port', async function (assert) {
     // The exact race that caused the cache:prepare EADDRINUSE: caller A
     // takes a port and holds it, caller B takes a *different* port (must
