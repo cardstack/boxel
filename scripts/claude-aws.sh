@@ -33,6 +33,13 @@
 #   --source-profile <name>   override / set the source AWS profile to use
 #                             for this env (cached for next time)
 #
+# Reset:
+#   claude-aws --reset        wipes ~/.config/claude-aws/config so the
+#                             interactive source-profile prompt fires
+#                             from scratch on the next run. Useful if
+#                             you typed the wrong profile name. Takes
+#                             no other arguments.
+#
 # On first run for a given env, the script prompts for the source AWS
 # profile (since teammates pick their own profile names) and caches the
 # choice in ~/.config/claude-aws/config.
@@ -69,6 +76,7 @@ ROLE_DURATION_SECONDS=43200
 
 usage() {
     echo "Usage: $0 <staging|prod> <MFA_TOKEN> [--source-profile <name>]" >&2
+    echo "   or: $0 --reset       (wipe cached source-profile choices)" >&2
     echo "Example: $0 staging 123456" >&2
     exit 1
 }
@@ -78,6 +86,7 @@ usage() {
 ENV_NAME=""
 MFA_TOKEN=""
 SOURCE_PROFILE_OVERRIDE=""
+RESET=0
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -88,6 +97,13 @@ while [ "$#" -gt 0 ]; do
                 usage
             fi
             shift 2
+            ;;
+        --reset)
+            # Wipe ~/.config/claude-aws/config — forgets all cached
+            # source-profile choices. Useful when you typed the wrong
+            # profile name and want the prompt back from a clean slate.
+            RESET=1
+            shift
             ;;
         -h|--help)
             usage
@@ -105,6 +121,20 @@ while [ "$#" -gt 0 ]; do
             ;;
     esac
 done
+
+if [ "$RESET" -eq 1 ]; then
+    if [ -n "$ENV_NAME" ] || [ -n "$MFA_TOKEN" ] || [ -n "$SOURCE_PROFILE_OVERRIDE" ]; then
+        echo "--reset takes no other arguments" >&2
+        usage
+    fi
+    if [ -f "$CONFIG_FILE" ]; then
+        rm -f "$CONFIG_FILE"
+        echo "Cleared $CONFIG_FILE" >&2
+    else
+        echo "Nothing to clear (no $CONFIG_FILE)" >&2
+    fi
+    exit 0
+fi
 
 if [ -z "$ENV_NAME" ] || [ -z "$MFA_TOKEN" ]; then
     usage
