@@ -660,11 +660,33 @@ jobs:
           path: realm-server.xml
           retention-days: 30
       - name: Publish test results
+        id: publish-tests
         uses: EnricoMi/publish-unit-test-result-action@170bf24d20d201b842d7a52403b73ed297e6645b # 2.18.0
         if: ${{ !cancelled() }}
         with:
           junit_files: realm-server.xml
           check_name: Realm Server Test Results
+          comment_mode: "off"
+          json_file: test-results.json
+
+      - name: Build realm-tests slot
+        if: ${{ !cancelled() && hashFiles('test-results.json') != '' }}
+        run: |
+          set -euo pipefail
+          mkdir -p slot
+          {
+            echo "### Realm Server Test Results"
+            echo
+            jq -r '.summary' test-results.json
+          } > slot/slot.md
+
+      - name: Upload realm-tests slot
+        if: ${{ !cancelled() && hashFiles('slot/slot.md') != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pr-comment-slot-realm-tests
+          path: slot/
+          retention-days: 7
 
   vscode-boxel-tools-package:
     name: Boxel Tools VS Code Extension package
