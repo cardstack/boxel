@@ -13,11 +13,28 @@ mkdir -p "$SUBMISSION_REALM_PATH"
 if [ ! -f "$SUBMISSION_REALM_PATH/.realm.json" ]; then
   cat > "$SUBMISSION_REALM_PATH/.realm.json" << 'EOF'
 {
-  "name": "Submissions",
-  "backgroundURL": "https://boxel-images.boxel.ai/background-images/background-for-catalog-82x.jpg",
-  "iconURL": "https://boxel-images.boxel.ai/icons/Letter-s.png",
   "showAsCatalog": false,
   "publishable": false
+}
+EOF
+fi
+if [ ! -f "$SUBMISSION_REALM_PATH/realm.json" ]; then
+  cat > "$SUBMISSION_REALM_PATH/realm.json" << 'EOF'
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": { "name": "Submissions" },
+      "backgroundURL": "https://boxel-images.boxel.ai/background-images/background-for-catalog-82x.jpg",
+      "iconURL": "https://boxel-images.boxel.ai/icons/Letter-s.png"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/realm-config",
+        "name": "RealmConfig"
+      }
+    }
+  }
 }
 EOF
 fi

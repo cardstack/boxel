@@ -122,6 +122,8 @@ module(basename(__filename), function () {
         '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-captions" viewBox="0 0 24 24"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4m4 0h2M7 11h2m4 0h4"></path></svg>';
       let chessIconHTML =
         '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-rectangle-ellipsis" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="2"></rect><path d="M12 12h.01M17 12h.01M7 12h.01"></path></svg>';
+      let fileSettingsIconHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="icon icon-tabler icons-tabler-outline icon-tabler-file-settings" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z"></path><path d="M10 14a2 2 0 1 0 4 0 2 2 0 1 0-4 0M12 10.5V12M12 16v1.5M15.031 12.25l-1.299.75M10.268 15l-1.3.75M15 15.803l-1.285-.773M10.285 12.97 9 12.197M14 3v4a1 1 0 0 0 1 1h4"></path><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2"></path></svg>';
       let sortCardTypeSummaries = (summaries: any[]) =>
         [...summaries].sort((a, b) => {
           let aName = a.attributes.displayName;
@@ -194,6 +196,15 @@ module(basename(__filename), function () {
             displayName: 'Person',
             total: 4,
             iconHTML,
+          },
+        },
+        {
+          type: 'card-type-summary',
+          id: 'https://cardstack.com/base/realm-config/RealmConfig',
+          attributes: {
+            displayName: 'Realm Config',
+            total: 1,
+            iconHTML: fileSettingsIconHTML,
           },
         },
         {

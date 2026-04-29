@@ -233,7 +233,8 @@ export const realmLog = logger('software-factory:harness:realm');
  * the isolated realm stack. Only core card definitions are needed for tests.
  * Prefix a pattern with ! to exclude. Last matching pattern wins.
  */
-export const SOURCE_REALM_GLOB = '*.gts .realm.json !document.gts !wiki.gts';
+export const SOURCE_REALM_GLOB =
+  '*.gts .realm.json realm.json !document.gts !wiki.gts';
 
 export function matchesSourceRealmGlob(relativePath: string): boolean {
   let filename = relativePath.split('/').pop() ?? relativePath;
