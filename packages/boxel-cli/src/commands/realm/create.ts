@@ -9,7 +9,6 @@ import {
   type ProfileManager,
 } from '../../lib/profile-manager';
 import { FG_GREEN, FG_CYAN, RESET } from '../../lib/colors';
-import { cliLog } from '../../lib/cli-log';
 
 const REALM_NAME_PATTERN = /^[a-z0-9-]+$/;
 
@@ -219,7 +218,7 @@ async function executeCreateRealmCommand(
   try {
     let result = await createRealm(realmName, displayName, options);
     let verb = result.created ? 'created' : 'already exists';
-    cliLog.output(
+    console.log(
       `${FG_GREEN}Realm ${verb}:${RESET} ${FG_CYAN}${result.realmUrl}${RESET}`,
     );
   } catch (e: unknown) {

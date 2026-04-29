@@ -153,11 +153,11 @@ export function registerRunCommand(program: Command): void {
       if (opts.json) {
         cliLog.output(JSON.stringify(result, null, 2));
       } else {
-        cliLog.output(
+        console.log(
           `${DIM}Status:${RESET} ${statusColor(result.status)}${result.status}${RESET}`,
         );
         if (result.result) {
-          cliLog.output(`${DIM}Result:${RESET}`);
+          console.log(`${DIM}Result:${RESET}`);
           try {
             cliLog.output(JSON.stringify(JSON.parse(result.result), null, 2));
           } catch {

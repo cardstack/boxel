@@ -113,9 +113,9 @@ export function registerListCommand(file: Command): void {
         process.exit(1);
       } else {
         for (let filename of result.filenames) {
-          cliLog.output(`${DIM}${filename}${RESET}`);
+          console.log(`${DIM}${filename}${RESET}`);
         }
-        cliLog.output(`\n${DIM}${result.filenames.length} file(s)${RESET}`);
+        console.log(`\n${DIM}${result.filenames.length} file(s)${RESET}`);
       }
     });
 }

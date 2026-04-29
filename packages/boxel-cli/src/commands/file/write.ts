@@ -138,7 +138,7 @@ export function registerWriteCommand(parent: Command): void {
       if (opts.json) {
         cliLog.output(JSON.stringify(result, null, 2));
       } else if (result.ok) {
-        cliLog.output(
+        console.log(
           `${FG_GREEN}Written:${RESET} ${filePath} ${DIM}→${RESET} ${opts.realm}`,
         );
       } else {

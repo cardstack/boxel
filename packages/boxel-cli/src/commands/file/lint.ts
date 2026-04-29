@@ -189,7 +189,7 @@ export function registerLintCommand(parent: Command): void {
       if (opts.fix && result.fixed && result.output) {
         if (opts.file) {
           writeFileSync(opts.file, result.output, 'utf-8');
-          cliLog.output(`${FG_GREEN}Fixed:${RESET} ${opts.file}`);
+          console.log(`${FG_GREEN}Fixed:${RESET} ${opts.file}`);
         } else {
           let writeResult = await write(opts.realm, filePath, result.output, {
             profileManager: pm,
@@ -200,7 +200,7 @@ export function registerLintCommand(parent: Command): void {
             );
             process.exit(1);
           }
-          cliLog.output(
+          console.log(
             `${FG_GREEN}Fixed:${RESET} ${filePath} ${DIM}→${RESET} ${opts.realm}`,
           );
         }
@@ -211,7 +211,7 @@ export function registerLintCommand(parent: Command): void {
       let warnings = messages.filter((m) => m.severity === 1);
 
       if (messages.length === 0) {
-        cliLog.output(`${DIM}No lint issues found.${RESET}`);
+        console.log(`${DIM}No lint issues found.${RESET}`);
         return;
       }
 
@@ -219,12 +219,12 @@ export function registerLintCommand(parent: Command): void {
         let color = msg.severity === 2 ? FG_RED : FG_YELLOW;
         let level = msg.severity === 2 ? 'error' : 'warning';
         let rule = msg.ruleId ? ` (${msg.ruleId})` : '';
-        cliLog.output(
+        console.log(
           `${color}${level}${RESET} ${msg.line}:${msg.column} ${msg.message}${DIM}${rule}${RESET}`,
         );
       }
 
-      cliLog.output(
+      console.log(
         `\n${DIM}${errors.length} error(s), ${warnings.length} warning(s)${RESET}`,
       );
 

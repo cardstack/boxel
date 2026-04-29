@@ -98,7 +98,7 @@ export function registerDeleteCommand(parent: Command): void {
       if (opts.json) {
         cliLog.output(JSON.stringify(result, null, 2));
       } else if (result.ok) {
-        cliLog.output(`${DIM}Deleted:${RESET} ${filePath}`);
+        console.log(`${DIM}Deleted:${RESET} ${filePath}`);
       } else {
         console.error(`${FG_RED}Error:${RESET} ${result.error}`);
       }
