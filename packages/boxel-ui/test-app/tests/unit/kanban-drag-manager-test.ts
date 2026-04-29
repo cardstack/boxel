@@ -507,10 +507,12 @@ module('Unit | kanban-drag-manager', function (hooks) {
       mp = board.placements;
     });
 
-    function makeKbManager(opts: {
-      onChange?: (p: KanbanPlacement[]) => void;
-      onSelect?: (i: number | null) => void;
-    } = {}) {
+    function makeKbManager(
+      opts: {
+        onChange?: (p: KanbanPlacement[]) => void;
+        onSelect?: (i: number | null) => void;
+      } = {},
+    ) {
       const mgr = new KanbanDragManager({
         placements: () => mp,
         columnCount: () => 2,
@@ -670,7 +672,10 @@ module('Unit | kanban-drag-manager', function (hooks) {
       mgr.onKeyDown(keyEvent(' ', card0).event);
       mgr.onKeyDown(keyEvent(' ').event);
       assert.false(changed);
-      assert.strictEqual(mgr.announcement, 'Card returned to original position.');
+      assert.strictEqual(
+        mgr.announcement,
+        'Card returned to original position.',
+      );
       assert.strictEqual(mgr.interactionMode, 'idle');
     });
 
