@@ -28,9 +28,10 @@ class StubRealmService extends RealmService {
       info: testRealmInfo,
     };
   }
-  realmOf = (url: URL): URL | undefined => {
+  realmOf = (input: URL | string): URL | undefined => {
+    let str = input instanceof URL ? input.href : input;
     for (const [prefix, realmUrl] of realmOfURLMap) {
-      if (url.href.startsWith(prefix)) {
+      if (str.startsWith(prefix)) {
         return realmUrl;
       }
     }

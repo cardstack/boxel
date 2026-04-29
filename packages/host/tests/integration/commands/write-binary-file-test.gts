@@ -34,8 +34,9 @@ class StubRealmService extends RealmService {
     };
   }
 
-  realmOf(url: URL) {
-    if (url.href.startsWith(testRealmURL)) {
+  realmOf(input: URL | string) {
+    let str = input instanceof URL ? input.href : input;
+    if (str.startsWith(testRealmURL)) {
       return new URL(testRealmURL);
     }
     return undefined;

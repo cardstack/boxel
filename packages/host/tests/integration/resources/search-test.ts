@@ -35,7 +35,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 import type { CardDocFiles } from '../../helpers';
 
 class StubRealmService extends RealmService {
-  realmOf(_url: URL) {
+  realmOf(_input: URL | string) {
     return new URL(testRealmURL);
   }
 }
