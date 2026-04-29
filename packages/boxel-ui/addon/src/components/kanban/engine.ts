@@ -14,6 +14,13 @@ export interface InsertionPoint {
   position: number; // sort position for shift calculations
 }
 
+export interface DragRect {
+  bottom: number;
+  left: number;
+  right: number;
+  top: number;
+}
+
 export interface KanbanColumnConfig {
   collapsed: boolean | null;
   color: string | null;
@@ -104,34 +111,13 @@ export function resolveInsertion(
 
 // ── Insertion Point from Pointer ─────────────────────────────────────── //
 
-/**
- * Find which column the pointer is over and where between cards
- * the insertion should happen. Uses DOM measurement exclusively.
- */
-export function findInsertionFromPointer(
-  clientX: number,
+function resolveInsertionInColumn(
+  targetColumn: number,
   clientY: number,
   container: HTMLElement,
   placements: KanbanPlacement[],
   dragIndex: number,
-  _columnCount: number,
 ): InsertionPoint | null {
-  const columnEls = container.querySelectorAll('[data-kanban-column]');
-  let targetColumn: number | null = null;
-
-  for (let i = 0; i < columnEls.length; i++) {
-    const el = columnEls[i] as HTMLElement;
-    const rect = el.getBoundingClientRect();
-    if (clientX >= rect.left && clientX <= rect.right) {
-      targetColumn = parseInt(el.getAttribute('data-kanban-column')!, 10);
-      break;
-    }
-  }
-
-  if (targetColumn === null) {
-    return null;
-  }
-
   const columnCards = cardsInColumn(targetColumn, placements).filter(
     (p) => p.index !== dragIndex,
   );
@@ -167,6 +153,80 @@ export function findInsertionFromPointer(
     insertBeforeIndex: -1,
     position: (lastCard?.sortOrder ?? 0) + 1,
   };
+}
+
+/**
+ * Find which column the pointer is over and where between cards
+ * the insertion should happen. Uses DOM measurement exclusively.
+ */
+export function findInsertionFromPointer(
+  clientX: number,
+  clientY: number,
+  container: HTMLElement,
+  placements: KanbanPlacement[],
+  dragIndex: number,
+  _columnCount: number,
+): InsertionPoint | null {
+  const columnEls = container.querySelectorAll('[data-kanban-column]');
+  let targetColumn: number | null = null;
+
+  for (let i = 0; i < columnEls.length; i++) {
+    const el = columnEls[i] as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    if (clientX >= rect.left && clientX <= rect.right) {
+      targetColumn = parseInt(el.getAttribute('data-kanban-column')!, 10);
+      break;
+    }
+  }
+
+  if (targetColumn === null) {
+    return null;
+  }
+
+  return resolveInsertionInColumn(
+    targetColumn,
+    clientY,
+    container,
+    placements,
+    dragIndex,
+  );
+}
+
+export function findInsertionFromDragRect(
+  dragRect: DragRect,
+  container: HTMLElement,
+  placements: KanbanPlacement[],
+  dragIndex: number,
+  _columnCount: number,
+): InsertionPoint | null {
+  const columnEls = container.querySelectorAll('[data-kanban-column]');
+  let targetColumn: number | null = null;
+  let bestOverlap = 0;
+
+  for (let i = 0; i < columnEls.length; i++) {
+    const el = columnEls[i] as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    const overlap =
+      Math.min(dragRect.right, rect.right) - Math.max(dragRect.left, rect.left);
+
+    if (overlap > bestOverlap) {
+      bestOverlap = overlap;
+      targetColumn = parseInt(el.getAttribute('data-kanban-column')!, 10);
+    }
+  }
+
+  if (targetColumn === null || bestOverlap <= 0) {
+    return null;
+  }
+
+  const centerY = (dragRect.top + dragRect.bottom) / 2;
+  return resolveInsertionInColumn(
+    targetColumn,
+    centerY,
+    container,
+    placements,
+    dragIndex,
+  );
 }
 
 // ── Auto-Place ───────────────────────────────────────────────────────── //

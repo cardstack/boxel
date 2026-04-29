@@ -5,9 +5,11 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 
 import {
+  type DragRect,
   type InsertionPoint,
   type KanbanPlacement,
   cardsInColumn,
+  findInsertionFromDragRect,
   findInsertionFromPointer,
   resolveInsertion,
 } from './engine.ts';
@@ -119,6 +121,70 @@ export class KanbanDragManager {
     this.containerRef = el;
   };
 
+  private getDragRect(clientX: number, clientY: number): DragRect | null {
+    if (this.dragGhostWidth <= 0 || this.dragGhostHeight <= 0) {
+      return null;
+    }
+
+    const left = clientX - this.dragOffsetX;
+    const top = clientY - this.dragOffsetY;
+    return {
+      left,
+      top,
+      right: left + this.dragGhostWidth,
+      bottom: top + this.dragGhostHeight,
+    };
+  }
+
+  private getCurrentInsertion(
+    clientX: number,
+    clientY: number,
+    container: HTMLElement,
+    dragIndex: number,
+  ): InsertionPoint | null {
+    const dragRect = this.getDragRect(clientX, clientY);
+    if (!dragRect) {
+      return null;
+    }
+
+    const centerY = (dragRect.top + dragRect.bottom) / 2;
+    if (this.getColumnAtClientX(clientX, container) !== null) {
+      return findInsertionFromPointer(
+        clientX,
+        centerY,
+        container,
+        this.args.placements,
+        dragIndex,
+        this.args.columnCount,
+      );
+    }
+
+    return findInsertionFromDragRect(
+      dragRect,
+      container,
+      this.args.placements,
+      dragIndex,
+      this.args.columnCount,
+    );
+  }
+
+  private getColumnAtClientX(
+    clientX: number,
+    container: HTMLElement,
+  ): number | null {
+    const columnEls = container.querySelectorAll('[data-kanban-column]');
+
+    for (let i = 0; i < columnEls.length; i++) {
+      const el = columnEls[i] as HTMLElement;
+      const rect = el.getBoundingClientRect();
+      if (clientX >= rect.left && clientX <= rect.right) {
+        return parseInt(el.getAttribute('data-kanban-column')!, 10);
+      }
+    }
+
+    return null;
+  }
+
   // ── Pointer Handlers ───────────────────────────────────────────────
 
   onPointerDown = (e: PointerEvent): void => {
@@ -199,13 +265,11 @@ export class KanbanDragManager {
         const container = this.containerRef;
         if (container) {
           this.activateDrag(container);
-          this.insertion = findInsertionFromPointer(
+          this.insertion = this.getCurrentInsertion(
             e.clientX,
             e.clientY,
             container,
-            this.args.placements,
             this.dragIndex!,
-            this.args.columnCount,
           );
         }
       }
@@ -217,14 +281,11 @@ export class KanbanDragManager {
       return;
     }
 
-    const placements = this.args.placements;
-    const point = findInsertionFromPointer(
+    const point = this.getCurrentInsertion(
       e.clientX,
       e.clientY,
       container,
-      placements,
       this.dragIndex,
-      this.args.columnCount,
     );
     this.insertion = point;
   };
@@ -262,13 +323,31 @@ export class KanbanDragManager {
 
     const pendingInsertion = this.insertion;
     const pendingDragIndex = this.dragIndex;
+    let finalInsertion = pendingInsertion;
+
+    if (container && pendingDragIndex !== null) {
+      const finalClientX = Number.isFinite(e.clientX)
+        ? e.clientX
+        : this.pointerClientX;
+      const finalClientY = Number.isFinite(e.clientY)
+        ? e.clientY
+        : this.pointerClientY;
+      const currentInsertion = this.getCurrentInsertion(
+        finalClientX,
+        finalClientY,
+        container,
+        pendingDragIndex,
+      );
+      finalInsertion = currentInsertion ?? pendingInsertion;
+      this.insertion = finalInsertion;
+    }
 
     // No-op drop: card released at its original position — skip settle entirely.
-    if (pendingInsertion !== null && pendingDragIndex !== null) {
+    if (finalInsertion !== null && pendingDragIndex !== null) {
       const placements = this.args.placements;
       const next = resolveInsertion(
         pendingDragIndex,
-        pendingInsertion,
+        finalInsertion,
         placements,
       );
       if (placementsEqual(placements, next)) {
@@ -277,7 +356,7 @@ export class KanbanDragManager {
       }
     }
 
-    if (container && pendingInsertion) {
+    if (container && finalInsertion) {
       this.measureSettlePosition(container);
     }
 
@@ -285,11 +364,11 @@ export class KanbanDragManager {
 
     this.settleTimer = setTimeout(() => {
       this.settleTimer = null;
-      if (pendingInsertion && pendingDragIndex !== null) {
+      if (finalInsertion && pendingDragIndex !== null) {
         const placements = this.args.placements;
         const newPlacements = resolveInsertion(
           pendingDragIndex,
-          pendingInsertion,
+          finalInsertion,
           placements,
         );
         this.args.onChange(newPlacements);
