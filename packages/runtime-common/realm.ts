@@ -4541,11 +4541,15 @@ export class Realm {
         if (typeof cardInfo.name === 'string') {
           realmInfo.name = cardInfo.name;
         }
-        if (typeof attrs.backgroundURL === 'string') {
-          realmInfo.backgroundURL = attrs.backgroundURL;
+        if ('backgroundURL' in attrs) {
+          realmInfo.backgroundURL =
+            typeof attrs.backgroundURL === 'string'
+              ? attrs.backgroundURL
+              : null;
         }
-        if (typeof attrs.iconURL === 'string') {
-          realmInfo.iconURL = attrs.iconURL;
+        if ('iconURL' in attrs) {
+          realmInfo.iconURL =
+            typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
         }
       }
     } catch (e) {
