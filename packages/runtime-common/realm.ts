@@ -1198,7 +1198,9 @@ export class Realm {
 
     if (addedFiles.length > 0 || updatedFiles.length > 0) {
       if (
-        [...addedFiles, ...updatedFiles].some((f) => f.endsWith('realm.json'))
+        [...addedFiles, ...updatedFiles].some(
+          (f) => f === '.realm.json' || f === 'realm.json',
+        )
       ) {
         this.#cachedRealmInfo = null;
       }
