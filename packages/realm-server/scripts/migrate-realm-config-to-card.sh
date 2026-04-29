@@ -18,7 +18,7 @@ fi
 
 search_dir="$1"
 
-find "$search_dir" -type f -name ".realm.json" | while read sidecar_file; do
+find "$search_dir" -type f -name ".realm.json" -print0 | while IFS= read -r -d '' sidecar_file; do
   realm_dir=$(dirname "$sidecar_file")
   card_file="$realm_dir/realm.json"
 
