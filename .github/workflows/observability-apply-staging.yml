@@ -33,12 +33,13 @@ jobs:
 
     env:
       AWS_REGION: us-east-1
-      # Dedicated, narrowly-scoped role created in cardstack/infra#665
-      # (configs/boxel-observability-apply/staging). Has exactly one
-      # permission: ssm:GetParameter on /staging/grafana/grafanactl_token.
-      # If the role doesn't exist yet (infra PR not applied), the
-      # configure-aws-credentials step below will fail with "InvalidIdentityToken"
-      # or similar — apply the infra config first.
+      # Dedicated, narrowly-scoped role at configs/boxel-observability-apply/staging
+      # in cardstack/infra. Permissions are ssm:GetParameter on:
+      #   /staging/grafana/grafanactl_token  (added in cardstack/infra#665)
+      #   /staging/loki/internal_url         (added in cardstack/infra#674, CS-10968)
+      # If the role doesn't exist or is missing one of those grants, the
+      # configure-aws-credentials step below will succeed but the SSM
+      # fetch step will fail with AccessDenied — apply the infra config first.
       AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
       # Server URL deliberately NOT set here. The committed
       # packages/observability/grafanactl/config.yaml is the single source of
@@ -67,10 +68,12 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Source GRAFANA_TOKEN from SSM
+      - name: Source GRAFANA_TOKEN and LOKI_URL from SSM
         # Mirrors what packages/observability/scripts/grafanactl-env.sh does
         # locally. Inline here so the workflow doesn't depend on bash from
         # the repo working dir before checkout-related env vars are stable.
+        # LOKI_URL is read by apply-datasources.sh and substituted into the
+        # provisioning/datasources/loki.yaml at push time.
         run: |
           GRAFANA_TOKEN="$(aws ssm get-parameter \
             --name /staging/grafana/grafanactl_token \
@@ -81,6 +84,12 @@ jobs:
           # downstream tool echoes it. Then export to subsequent steps.
           echo "::add-mask::$GRAFANA_TOKEN"
           echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
+
+          LOKI_URL="$(aws ssm get-parameter \
+            --name /staging/loki/internal_url \
+            --query 'Parameter.Value' \
+            --output text)"
+          echo "LOKI_URL=$LOKI_URL" >> "$GITHUB_ENV"
 
       - name: Apply
         # apply.sh sources its own grafanactl-env.sh helper, which for

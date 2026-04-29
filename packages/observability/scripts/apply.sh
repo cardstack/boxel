@@ -44,6 +44,20 @@ cd "$(dirname "$0")/.."
 # shellcheck source=./grafanactl-env.sh
 source ./scripts/grafanactl-env.sh "$env_name"
 
+# Pre-flight prereqs for hosted envs BEFORE grafanactl pushes anything.
+# Otherwise a missing LOKI_URL or absent yq would surface only after
+# dashboards/folders had already been re-pushed, leaving a partial apply.
+if [[ "$env_name" != "local" ]]; then
+  for cmd in yq jq curl envsubst; do
+    command -v "$cmd" >/dev/null \
+      || { echo "error: missing dependency: ${cmd}" >&2; exit 1; }
+  done
+  [[ -n "${GRAFANA_TOKEN:-}" ]] \
+    || { echo "error: GRAFANA_TOKEN not set after sourcing grafanactl-env.sh" >&2; exit 1; }
+  [[ -n "${LOKI_URL:-}" ]] \
+    || { echo "error: LOKI_URL not set; expected /${env_name}/loki/internal_url to be sourced into the environment" >&2; exit 1; }
+fi
+
 cfg="$(./scripts/render-config.sh "$env_name")"
 trap 'rm -f "$cfg"' EXIT
 
@@ -53,3 +67,7 @@ grafanactl \
   resources push \
   --path ./grafanactl/resources \
   "${forwarded_args[@]}"
+
+# Data sources — grafanactl doesn't manage them, so push via HTTP API.
+# Local skips this (docker-compose handles file provisioning).
+./scripts/apply-datasources.sh --env "$env_name"
