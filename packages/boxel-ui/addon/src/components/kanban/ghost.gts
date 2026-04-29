@@ -29,8 +29,8 @@ const KanbanGhost: TemplateOnlyComponent<Signature> = <template>
       position: fixed;
       left: 0;
       top: 0;
-      z-index: 9;
-      will-change: transform;
+      z-index: var(--boxel-kanban-ghost-z-index, 9);
+      will-change: translate;
       pointer-events: none;
       border-radius: var(--_kanban-radius, 0.5rem);
       overflow: hidden;

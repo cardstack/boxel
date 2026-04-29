@@ -34,7 +34,6 @@ const KanbanCard: TemplateOnlyComponent<Signature> = <template>
     @style={{@shiftStyle}}
     role='listitem'
     tabindex={{if @isRover '0' '-1'}}
-    aria-current={{if @isSelected 'true'}}
     data-card-index={{@placement.index}}
     ...attributes
   >

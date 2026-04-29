@@ -246,7 +246,7 @@ export class KanbanPlaneInner extends Component<{
               @onAddCard={{if @onAddCard (fn @onAddCard column.key)}}
             />
 
-            <div class='col-body' role='list'>
+            <div class='col-body' role='list' data-kanban-col-body>
               {{#if (this.showInsertionBox colIdx)}}
                 <div
                   class='insertion-box'

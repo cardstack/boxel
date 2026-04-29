@@ -69,7 +69,7 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
     }
     .col-header.is-target {
       background-color: var(--_kanban-primary);
-      color: var(--_kanban-primary-foreground);
+      color: var(--_kanban-primary-fg);
       border-radius: var(--_kanban-radius) var(--_kanban-radius) 0 0;
     }
     .col-header-left {

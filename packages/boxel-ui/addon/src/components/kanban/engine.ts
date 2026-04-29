@@ -165,7 +165,6 @@ export function findInsertionFromPointer(
   container: HTMLElement,
   placements: KanbanPlacement[],
   dragIndex: number,
-  _columnCount: number,
 ): InsertionPoint | null {
   const columnEls = container.querySelectorAll('[data-kanban-column]');
   let targetColumn: number | null = null;
@@ -197,7 +196,6 @@ export function findInsertionFromDragRect(
   container: HTMLElement,
   placements: KanbanPlacement[],
   dragIndex: number,
-  _columnCount: number,
 ): InsertionPoint | null {
   const columnEls = container.querySelectorAll('[data-kanban-column]');
   let targetColumn: number | null = null;

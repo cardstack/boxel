@@ -16,6 +16,7 @@ import {
 
 // ── Constants ────────────────────────────────────────────────────────── //
 const DRAG_THRESHOLD_PX = 4;
+const SETTLE_DURATION_MS = 200;
 
 function placementsEqual(a: KanbanPlacement[], b: KanbanPlacement[]): boolean {
   if (a.length !== b.length) {
@@ -155,7 +156,6 @@ export class KanbanDragManager {
         container,
         this.args.placements,
         dragIndex,
-        this.args.columnCount,
       );
     }
 
@@ -164,7 +164,6 @@ export class KanbanDragManager {
       container,
       this.args.placements,
       dragIndex,
-      this.args.columnCount,
     );
   }
 
@@ -378,7 +377,7 @@ export class KanbanDragManager {
       }
 
       this.resetSession();
-    }, 200);
+    }, SETTLE_DURATION_MS);
   };
 
   // ── Keyboard ───────────────────────────────────────────────────────
@@ -483,7 +482,7 @@ export class KanbanDragManager {
       return;
     }
 
-    const bodyEl = colEl.querySelector('.col-body') as HTMLElement | null;
+    const bodyEl = colEl.querySelector('[data-kanban-col-body]') as HTMLElement | null;
     if (!bodyEl) {
       return;
     }

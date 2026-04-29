@@ -402,7 +402,7 @@ module('Unit | kanban-engine | findInsertionFromPointer', function (hooks) {
     ];
 
     assert.strictEqual(
-      findInsertionFromPointer(500, 50, container, placements, 0, 2),
+      findInsertionFromPointer(500, 50, container, placements, 0),
       null,
     );
   });
@@ -429,7 +429,7 @@ module('Unit | kanban-engine | findInsertionFromPointer', function (hooks) {
     ];
 
     assert.deepEqual(
-      findInsertionFromPointer(260, 40, container, placements, 1, 2),
+      findInsertionFromPointer(260, 40, container, placements, 1),
       { column: 1, insertBeforeIndex: -1, position: 1 },
     );
   });
@@ -444,7 +444,7 @@ module('Unit | kanban-engine | findInsertionFromPointer', function (hooks) {
     ];
 
     assert.deepEqual(
-      findInsertionFromPointer(50, 20, container, placements, 2, 2),
+      findInsertionFromPointer(50, 20, container, placements, 2),
       { column: 0, insertBeforeIndex: 0, position: 1 },
     );
   });
@@ -459,7 +459,7 @@ module('Unit | kanban-engine | findInsertionFromPointer', function (hooks) {
     ];
 
     assert.deepEqual(
-      findInsertionFromPointer(50, 300, container, placements, 2, 2),
+      findInsertionFromPointer(50, 300, container, placements, 2),
       { column: 0, insertBeforeIndex: -1, position: 3 },
     );
   });
@@ -474,7 +474,7 @@ module('Unit | kanban-engine | findInsertionFromPointer', function (hooks) {
     ];
 
     assert.deepEqual(
-      findInsertionFromPointer(260, 40, container, placements, 2, 2),
+      findInsertionFromPointer(260, 40, container, placements, 2),
       { column: 1, insertBeforeIndex: -1, position: 1 },
     );
   });
