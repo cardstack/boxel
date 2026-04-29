@@ -1,0 +1,4 @@
+#!/bin/sh
+#MISE description="Provision an AWS STS session for Claude to use against staging or prod"
+
+exec ./scripts/claude-aws.sh "$@"
