@@ -241,16 +241,14 @@ function findTool(tools: FactoryTool[], name: string): FactoryTool {
 
 module('factory-tool-builder > tool building', function () {
   test('builds factory-level tools plus registered tools', function (assert) {
-    let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
     let config = makeConfig();
-    let tools = buildFactoryTools(config, executor, registry);
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
 
     let toolNames = tools.map((t) => t.name);
 
     assert.true(toolNames.includes('write_file'));
     assert.true(toolNames.includes('read_file'));
-    assert.true(toolNames.includes('search_realm'));
     assert.true(toolNames.includes('update_issue'));
     assert.true(toolNames.includes('add_comment'));
     assert.true(toolNames.includes('create_knowledge'));
@@ -258,8 +256,13 @@ module('factory-tool-builder > tool building', function () {
     assert.true(toolNames.includes('request_clarification'));
     // Script tools from registry
     assert.true(toolNames.includes('search-realm'));
-    // Realm-api tools from registry
-    assert.true(toolNames.includes('realm-read'));
+    // Realm-api tools come directly from boxel-cli's getToolDefinitions and
+    // are spread into the agent's tool list, wrapped with enforceRealmSafety.
+    assert.true(toolNames.includes('realm_read_file'));
+    assert.true(toolNames.includes('realm_search'));
+    assert.true(toolNames.includes('create_realm'));
+    assert.true(toolNames.includes('run_command'));
+    assert.true(toolNames.includes('read_transpiled'));
   });
 
   test('each tool has name, description, parameters, and execute', function (assert) {
@@ -449,17 +452,17 @@ module('factory-tool-builder > path-arg validation', function () {
     assert.strictEqual(requests.length, 0);
   });
 
-  test('fetch_transpiled_module({}) throws', async function (assert) {
+  test('read_transpiled({}) throws', async function (assert) {
     let { fetch: mockFetch } = createMockFetch(200, {});
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
     let config = makeConfig({ fetch: mockFetch });
     let tools = buildFactoryTools(config, executor, registry);
-    let fetchTool = findTool(tools, 'fetch_transpiled_module');
+    let fetchTool = findTool(tools, 'read_transpiled');
 
     await expectPathError(
       () => fetchTool.execute({}),
-      'fetch_transpiled_module',
+      'read_transpiled',
       assert,
     );
   });
@@ -635,19 +638,26 @@ module('factory-tool-builder > realm targeting', function () {
     assert.strictEqual(written.data.attributes.articleTitle, 'Guide');
   });
 
-  test('search_realm targets target realm', async function (assert) {
+  test('realm_search calls client.search with the supplied realm-url', async function (assert) {
     let { fetch: mockFetch, requests } = createMockFetch(200, { data: [] });
-    let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
     let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let searchTool = findTool(tools, 'search_realm');
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let searchTool = findTool(tools, 'realm_search');
 
     await searchTool.execute({
+      'realm-url': TARGET_REALM,
       query: { filter: { type: { name: 'Issue' } } },
     });
 
-    assert.true(requests[0].url.startsWith(TARGET_REALM));
+    // The mock client hits the per-realm `_search` endpoint (the wire shape
+    // of the production federated-search path is covered separately by
+    // `factory-tool-executor.integration.test.ts > boxel-cli tool wire shape`).
+    assert.strictEqual(requests.length, 1, 'one search request emitted');
+    assert.true(
+      requests[0].url.startsWith(TARGET_REALM),
+      `request url should start with target realm, got ${requests[0].url}`,
+    );
   });
 });
 

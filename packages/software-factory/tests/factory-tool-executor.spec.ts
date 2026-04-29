@@ -14,9 +14,47 @@ import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 import { test } from './fixtures';
 import { expect } from '@playwright/test';
 
-import { ToolExecutor, ToolNotFoundError } from '../src/factory-tool-executor';
+import {
+  ToolExecutor,
+  ToolNotFoundError,
+  type RealmSafetyConfig,
+} from '../src/factory-tool-executor';
 import { ToolRegistry } from '../src/factory-tool-registry';
-import { buildFactoryTools } from '../src/factory-tool-builder';
+
+import {
+  adaptBoxelTool,
+  buildFactoryTools,
+  type FactoryTool,
+} from '../src/factory-tool-builder';
+import {
+  getToolDefinitions,
+  type BoxelCLIClient,
+} from '@cardstack/boxel-cli/api';
+
+/**
+ * Build a single boxel-cli FactoryTool wrapped with `enforceRealmSafety`,
+ * matching what `buildFactoryTools` does at runtime. Used by the realm-*
+ * Playwright tests — those tools live in boxel-cli's getToolDefinitions
+ * and never go through the executor's dispatch.
+ */
+function buildBoxelFactoryTool(
+  toolName: string,
+  client: BoxelCLIClient,
+  safety: RealmSafetyConfig,
+  realmServerUrl: string,
+): FactoryTool {
+  let tools = getToolDefinitions(client, {
+    targetRealmUrl: safety.targetRealmUrl,
+    realmServerUrl,
+  });
+  let boxelTool = tools.find((t) => t.name === toolName);
+  if (!boxelTool) {
+    throw new Error(
+      `boxel-cli tool "${toolName}" not found in getToolDefinitions`,
+    );
+  }
+  return adaptBoxelTool(boxelTool, safety);
+}
 import { fetchCardTypeSchema } from '../src/darkfactory-schemas';
 import {
   baseRealmURLFor,
@@ -27,7 +65,7 @@ import {
 import { buildTestClient } from './helpers/test-client';
 import { createTestWorkspace } from './helpers/workspace-fixture';
 
-test('realm-search returns results from the test realm', async ({ realm }) => {
+test('realm_search returns results from the test realm', async ({ realm }) => {
   let { client, cleanup } = buildTestClient({
     realmUrl: realm.realmURL.href,
     realmToken: `Bearer ${realm.ownerBearerToken}`,
@@ -36,15 +74,17 @@ test('realm-search returns results from the test realm', async ({ realm }) => {
   });
 
   try {
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(registry, {
-      packageRoot: process.cwd(),
-      targetRealmUrl: realm.realmURL.href,
-      allowedRealmPrefixes: [realm.realmURL.origin + '/'],
+    let realmSearch = buildBoxelFactoryTool(
+      'realm_search',
       client,
-    });
+      {
+        targetRealmUrl: realm.realmURL.href,
+        allowedRealmPrefixes: [realm.realmURL.origin + '/'],
+      },
+      realm.realmServerURL.href,
+    );
 
-    let result = await executor.execute('realm-search', {
+    let output = (await realmSearch.execute({
       'realm-url': realm.realmURL.href,
       query: JSON.stringify({
         filter: {
@@ -55,10 +95,9 @@ test('realm-search returns results from the test realm', async ({ realm }) => {
         },
         page: { size: 1 },
       }),
-    });
+    })) as { data?: unknown[]; error?: string };
 
-    expect(result.exitCode).toBe(0);
-    let output = result.output as { data?: unknown[] };
+    expect(output.error).toBeUndefined();
     expect(Array.isArray(output.data)).toBe(true);
   } finally {
     cleanup();
@@ -95,9 +134,6 @@ test('unregistered tool is rejected without reaching the server', async ({
 // Factory tool (card write) tests against live realm
 // ---------------------------------------------------------------------------
 
-import type { FactoryTool } from '../src/factory-tool-builder';
-import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
-
 type CardWriteResult = { ok: boolean; error?: string };
 type CardReadResult = { ok: boolean; document?: Record<string, unknown> };
 
@@ -114,6 +150,7 @@ async function buildToolsForRealm(
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
     targetRealmUrl: realm.realmURL.href,
+    realmServerUrl: realm.realmServerURL.href,
     allowedRealmPrefixes: [realm.realmURL.origin + '/'],
     client,
   });
@@ -433,12 +470,12 @@ test('create_catalog_spec writes and reads back a Spec card', async ({
 });
 
 // ---------------------------------------------------------------------------
-// realm-search with pre-seeded fixture data
+// realm_search with pre-seeded fixture data
 // The darkfactory-adopter fixture has Project and Issue cards with
 // distinct types — we search for each and verify the filter works.
 // ---------------------------------------------------------------------------
 
-test.describe('realm-search with seeded fixture data', () => {
+test.describe('realm_search with seeded fixture data', () => {
   // Uses default darkfactory-adopter fixture (shared mode for speed)
 
   test('search by type returns matching cards and excludes non-matching types', async ({
@@ -455,17 +492,16 @@ test.describe('realm-search with seeded fixture data', () => {
       // The darkfactory-adopter fixture type module uses a placeholder URL
       // that gets remapped at runtime. Discover the live module URL by
       // reading a known card and extracting its adoptsFrom module.
-      let registry = new ToolRegistry();
-      let executor = new ToolExecutor(registry, {
-        packageRoot: process.cwd(),
-        targetRealmUrl: realm.realmURL.href,
-        allowedRealmPrefixes: [realm.realmURL.origin + '/'],
+      let realmSearch = buildBoxelFactoryTool(
+        'realm_search',
         client,
-      });
+        {
+          targetRealmUrl: realm.realmURL.href,
+          allowedRealmPrefixes: [realm.realmURL.origin + '/'],
+        },
+        realm.realmServerURL.href,
+      );
 
-      // Discover the darkfactory module URL by reading a known card's
-      // adoptsFrom via the BoxelCLIClient — this is setup for the
-      // realm-search assertions below.
       let projectRead = await client.read(
         realm.realmURL.href,
         'project-demo.json',
@@ -477,22 +513,19 @@ test.describe('realm-search with seeded fixture data', () => {
       let darkfactoryModule = projectDoc.data.meta.adoptsFrom.module;
 
       // Search for Project cards — should find at least project-demo
-      let projectResult = await executor.execute('realm-search', {
+      let projectOutput = (await realmSearch.execute({
         'realm-url': realm.realmURL.href,
         query: JSON.stringify({
           filter: {
             type: { module: darkfactoryModule, name: 'Project' },
           },
         }),
-      });
+      })) as { data?: { id: string }[]; error?: string };
 
       expect(
-        projectResult.exitCode,
-        `project search failed: ${JSON.stringify(projectResult.output)}`,
-      ).toBe(0);
-      let projectOutput = projectResult.output as {
-        data?: { id: string }[];
-      };
+        projectOutput.error,
+        `project search failed: ${JSON.stringify(projectOutput)}`,
+      ).toBeUndefined();
       expect(
         (projectOutput.data?.length ?? 0) > 0,
         'should find at least one Project card',
@@ -500,18 +533,15 @@ test.describe('realm-search with seeded fixture data', () => {
       let projectIds = (projectOutput.data ?? []).map((d) => d.id);
 
       // Verify no Issue cards leak into the Project results
-      let issueResult = await executor.execute('realm-search', {
+      let issueOutput = (await realmSearch.execute({
         'realm-url': realm.realmURL.href,
         query: JSON.stringify({
           filter: {
             type: { module: darkfactoryModule, name: 'Issue' },
           },
         }),
-      });
-      expect(issueResult.exitCode).toBe(0);
-      let issueOutput = issueResult.output as {
-        data?: { id: string }[];
-      };
+      })) as { data?: { id: string }[]; error?: string };
+      expect(issueOutput.error).toBeUndefined();
       let issueIds = (issueOutput.data ?? []).map((d) => d.id);
 
       // Project and Issue result sets must be disjoint
@@ -528,10 +558,10 @@ test.describe('realm-search with seeded fixture data', () => {
 });
 
 // ---------------------------------------------------------------------------
-// realm-search on a private realm: verifies auth is enforced
+// realm_search on a private realm: verifies auth is enforced
 // ---------------------------------------------------------------------------
 
-test.describe('realm-search on a private realm', () => {
+test.describe('realm_search on a private realm', () => {
   test.use({ realmServerMode: 'isolated' });
   test.use({
     realmPermissions: {
@@ -551,17 +581,7 @@ test.describe('realm-search on a private realm', () => {
     });
 
     try {
-      let registry = new ToolRegistry();
-
-      // Discover the live module URL from the fixture data
-      let ownerExecutor = new ToolExecutor(registry, {
-        packageRoot: process.cwd(),
-        targetRealmUrl: realm.realmURL.href,
-        allowedRealmPrefixes: [realm.realmURL.origin + '/'],
-        client: ownerSetup.client,
-      });
-
-      // Discover the module URL via the client for the search assertions below.
+      // Discover the live module URL from the fixture data via the client.
       let projectRead = await ownerSetup.client.read(
         realm.realmURL.href,
         'project-demo.json',
@@ -582,16 +602,25 @@ test.describe('realm-search on a private realm', () => {
       });
 
       // Authenticated search with owner token — should succeed
-      let authedResult = await ownerExecutor.execute('realm-search', {
+      let ownerSearch = buildBoxelFactoryTool(
+        'realm_search',
+        ownerSetup.client,
+        {
+          targetRealmUrl: realm.realmURL.href,
+          allowedRealmPrefixes: [realm.realmURL.origin + '/'],
+        },
+        realm.realmServerURL.href,
+      );
+
+      let authedOutput = (await ownerSearch.execute({
         'realm-url': realm.realmURL.href,
         query: searchQuery,
-      });
+      })) as { data?: unknown[]; error?: string };
 
       expect(
-        authedResult.exitCode,
-        `authenticated search failed: ${JSON.stringify(authedResult.output)}`,
-      ).toBe(0);
-      let authedOutput = authedResult.output as { data?: unknown[] };
+        authedOutput.error,
+        `authenticated search failed: ${JSON.stringify(authedOutput)}`,
+      ).toBeUndefined();
       expect(
         (authedOutput.data?.length ?? 0) > 0,
         'authenticated search should return results',
@@ -615,25 +644,22 @@ test.describe('realm-search on a private realm', () => {
       });
 
       try {
-        let unauthorizedExecutor = new ToolExecutor(registry, {
-          packageRoot: process.cwd(),
-          targetRealmUrl: realm.realmURL.href,
-          allowedRealmPrefixes: [realm.realmURL.origin + '/'],
-          client: unauthorizedSetup.client,
-        });
-
-        let unauthorizedResult = await unauthorizedExecutor.execute(
-          'realm-search',
+        let unauthorizedSearch = buildBoxelFactoryTool(
+          'realm_search',
+          unauthorizedSetup.client,
           {
-            'realm-url': realm.realmURL.href,
-            query: searchQuery,
+            targetRealmUrl: realm.realmURL.href,
+            allowedRealmPrefixes: [realm.realmURL.origin + '/'],
           },
+          realm.realmServerURL.href,
         );
 
-        expect(unauthorizedResult.exitCode).toBe(1);
-        let unauthorizedOutput = unauthorizedResult.output as {
-          status?: number;
-        };
+        let unauthorizedOutput = (await unauthorizedSearch.execute({
+          'realm-url': realm.realmURL.href,
+          query: searchQuery,
+        })) as { data?: unknown[]; error?: string; status?: number };
+
+        expect(unauthorizedOutput.error).toBeDefined();
         expect(unauthorizedOutput.status).toBe(403);
       } finally {
         unauthorizedSetup.cleanup();

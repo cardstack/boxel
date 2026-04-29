@@ -426,7 +426,7 @@ export async function rewriteClonedRealmServerUrls(
         // Without this, lookupDefinition misses every cached module on the
         // first request after clone and pays a full prerender (~45s for a
         // module with deep transitive imports), which can blow past the
-        // 60s realm-search tool timeout.
+        // 60s realm_search tool timeout.
         await client.query(
           `UPDATE modules
            SET url = replace(url, $1, $2),

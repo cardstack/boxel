@@ -13,7 +13,7 @@ state before making changes — do not guess.
 - For each top-level card defined in the brief, create a Catalog Spec card
   in the target realm's Spec/ folder (adoptsFrom https://cardstack.com/base/spec#Spec)
   and at least one sample card instance linked via linkedExamples.
-- Use search_realm and read_file to inspect existing cards before creating files.
+- Use realm_search and read_file to inspect existing cards before creating files. realm_search takes an explicit `realm-url` argument — pass the target realm URL when searching the realm you're implementing against.
 - If you cannot proceed, call request_clarification with a description of what
   is blocked.
 - When all implementation and test files have been written, call signal_done.

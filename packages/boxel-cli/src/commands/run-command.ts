@@ -1,5 +1,10 @@
 import type { Command } from 'commander';
-import { getProfileManager, type ProfileManager } from '../lib/profile-manager';
+import {
+  getProfileManager,
+  NO_ACTIVE_PROFILE_ERROR,
+  type ProfileManager,
+} from '../lib/profile-manager';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { FG_GREEN, FG_RED, FG_CYAN, DIM, RESET } from '../lib/colors';
 import { cliLog } from '../lib/cli-log';
 
@@ -13,6 +18,8 @@ export interface RunCommandOptions {
   input?: Record<string, unknown>;
   json?: boolean;
   profileManager?: ProfileManager;
+  /** Override the realm server URL. Defaults to the active profile's. */
+  realmServerUrl?: string;
 }
 
 interface RunCommandCliOptions {
@@ -27,15 +34,18 @@ export async function runCommand(
   options?: RunCommandOptions,
 ): Promise<RunCommandResult> {
   let pm = options?.profileManager ?? getProfileManager();
-  let active = pm.getActiveProfile();
-  if (!active) {
-    throw new Error(
-      'No active profile. Run `boxel profile add` to create one.',
-    );
+  let realmServerUrl = options?.realmServerUrl;
+  if (!realmServerUrl) {
+    let active = pm.getActiveProfile();
+    if (!active) {
+      return {
+        status: 'error',
+        error: NO_ACTIVE_PROFILE_ERROR,
+      };
+    }
+    realmServerUrl = active.profile.realmServerUrl;
   }
-
-  let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
-  let url = `${realmServerUrl}/_run-command`;
+  let url = `${ensureTrailingSlash(realmServerUrl)}_run-command`;
 
   let body = {
     data: {
@@ -140,15 +150,7 @@ export function registerRunCommand(program: Command): void {
         }
       }
 
-      let result: RunCommandResult;
-      try {
-        result = await runCommand(commandSpecifier, opts.realm, { input });
-      } catch (err) {
-        console.error(
-          `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
-        );
-        process.exit(1);
-      }
+      let result = await runCommand(commandSpecifier, opts.realm, { input });
 
       if (opts.json) {
         cliLog.output(JSON.stringify(result, null, 2));

@@ -20,11 +20,16 @@ import {
 } from '../commands/read-transpiled';
 import { write as coreWrite, type WriteResult } from '../commands/file/write';
 import {
+  runCommand as coreRunCommand,
+  type RunCommandResult,
+} from '../commands/run-command';
+import {
   cancelIndexing as coreCancelIndexing,
   type CancelIndexingResult,
 } from '../commands/realm/cancel-indexing';
 import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { pull as realmPull } from '../commands/realm/pull';
+import { push as realmPush, type PushResult } from '../commands/realm/push';
 import { sync as realmSync, type SyncResult } from '../commands/realm/sync';
 import { waitForReady as coreWaitForReady } from '../commands/realm/wait-for-ready';
 import { getProfileManager, type ProfileManager } from './profile-manager';
@@ -35,6 +40,7 @@ export type {
   ListFilesResult,
   ReadTranspiledResult,
   SyncResult,
+  PushResult,
   SearchResult,
   SearchCommandOptions,
 };
@@ -73,6 +79,15 @@ export interface PullResult {
   error?: string;
 }
 
+export interface PushOptions {
+  /** Delete remote files that don't exist locally (default: false). */
+  delete?: boolean;
+  /** Preview without making changes. */
+  dryRun?: boolean;
+  /** Upload all files, even if unchanged (default: false). */
+  force?: boolean;
+}
+
 export interface SyncOptions {
   /** Resolve conflicts by keeping the local version. */
   preferLocal?: boolean;
@@ -88,13 +103,7 @@ export interface SyncOptions {
 
 export type { DeleteResult };
 export type { WriteResult };
-
-export interface RunCommandResult {
-  status: 'ready' | 'error' | 'unusable';
-  /** Serialized command result (JSON string), or null. */
-  result?: string | null;
-  error?: string | null;
-}
+export type { RunCommandResult };
 
 export type { LintMessage, LintResult };
 
@@ -233,57 +242,11 @@ export class BoxelCLIClient {
     command: string,
     commandInput?: Record<string, unknown>,
   ): Promise<RunCommandResult> {
-    let url = `${ensureTrailingSlash(realmServerUrl)}_run-command`;
-    let body = {
-      data: {
-        type: 'run-command',
-        attributes: {
-          realmURL: realmUrl,
-          command,
-          commandInput: commandInput ?? null,
-        },
-      },
-    };
-
-    let response: Response;
-    try {
-      response = await this.pm.authedRealmServerFetch(url, {
-        method: 'POST',
-        headers: {
-          Accept: MIME.JSONAPI,
-          'Content-Type': MIME.JSONAPI,
-        },
-        body: JSON.stringify(body),
-      });
-    } catch (err) {
-      return {
-        status: 'error',
-        error: `run-command fetch failed: ${err instanceof Error ? err.message : String(err)}`,
-      };
-    }
-
-    if (!response.ok) {
-      return {
-        status: 'error',
-        error: `run-command HTTP ${response.status}: ${await response.text().catch(() => '(no body)')}`,
-      };
-    }
-
-    let json = (await response.json()) as {
-      data?: {
-        attributes?: {
-          status?: string;
-          cardResultString?: string | null;
-          error?: string | null;
-        };
-      };
-    };
-    let attrs = json.data?.attributes;
-    return {
-      status: (attrs?.status as RunCommandResult['status']) ?? 'error',
-      result: attrs?.cardResultString ?? null,
-      error: attrs?.error ?? null,
-    };
+    return coreRunCommand(command, realmUrl, {
+      realmServerUrl,
+      input: commandInput,
+      profileManager: this.pm,
+    });
   }
 
   /**
@@ -426,6 +389,24 @@ export class BoxelCLIClient {
   ): Promise<PullResult> {
     return realmPull(realmUrl, localDir, {
       delete: options?.delete,
+      profileManager: this.pm,
+    });
+  }
+
+  /**
+   * One-way upload from a local workspace to a realm. Thin wrapper
+   * around the `realm push` command's programmatic `push()` function so
+   * the CLI and programmatic API share one implementation.
+   */
+  async push(
+    realmUrl: string,
+    localDir: string,
+    options?: PushOptions,
+  ): Promise<PushResult> {
+    return realmPush(localDir, realmUrl, {
+      delete: options?.delete,
+      dryRun: options?.dryRun,
+      force: options?.force,
       profileManager: this.pm,
     });
   }

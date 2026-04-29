@@ -7,7 +7,11 @@
  * (realm protection, per-realm JWT auth, logging).
  */
 
-import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import type {
+  BoxelCLIClient,
+  BoxelToolDefinition,
+} from '@cardstack/boxel-cli/api';
+import { getToolDefinitions } from '@cardstack/boxel-cli/api';
 import type {
   LooseSingleCardDocument,
   Relationship,
@@ -20,7 +24,12 @@ import {
   type RunEvaluateInMemoryOptions,
   type RunEvaluateResult,
 } from './eval-execution';
-import type { ToolExecutor } from './factory-tool-executor';
+import {
+  buildRealmSafetyConfig,
+  enforceRealmSafety,
+  type RealmSafetyConfig,
+  type ToolExecutor,
+} from './factory-tool-executor';
 import type { ToolRegistry } from './factory-tool-registry';
 import {
   runInstantiateInMemory,
@@ -142,12 +151,13 @@ export function buildFactoryTools(
   toolExecutor: ToolExecutor,
   toolRegistry: ToolRegistry,
 ): FactoryTool[] {
+  // Workspace-fs tools (target-realm I/O via the local workspace) plus
+  // factory-domain orchestration tools. Anything that's a thin wrapper
+  // around `BoxelCLIClient.*` lives in boxel-cli's getToolDefinitions
+  // and is merged in below.
   let tools: FactoryTool[] = [
     buildWriteFileTool(config),
     buildReadFileTool(config),
-    buildFetchTranspiledModuleTool(config),
-    buildSearchRealmTool(config),
-    buildRunCommandTool(config),
     buildRunLintTool(config),
     buildRunTestsTool(config),
     buildRunEvaluateTool(config),
@@ -156,6 +166,23 @@ export function buildFactoryTools(
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
+
+  // Adopt every boxel-cli tool from getToolDefinitions and wrap each one
+  // with `enforceRealmSafety` so the agent can't bypass the target-realm
+  // guard or hit the source realm by mis-passing a `realm-url`. boxel-cli
+  // is the single source of truth for the wire shape — descriptions,
+  // schemas, and execute live there.
+  let safety = buildRealmSafetyConfig({
+    targetRealmUrl: config.targetRealmUrl,
+    realmServerUrl: config.realmServerUrl,
+  });
+  let boxelTools = getToolDefinitions(config.client, {
+    targetRealmUrl: config.targetRealmUrl,
+    realmServerUrl: config.realmServerUrl,
+  });
+  for (let boxelTool of boxelTools) {
+    tools.push(adaptBoxelTool(boxelTool, safety));
+  }
 
   // add_comment doesn't need runtime schemas — it reads/patches directly.
   tools.push(buildAddCommentTool(config));
@@ -182,10 +209,12 @@ export function buildFactoryTools(
     }
   }
 
-  // Add registered script/realm-api tools as FactoryTool wrappers.
-  // Realm-api tools get the config so they can resolve per-realm JWTs.
+  // Add registered script tools as FactoryTool wrappers. The executor
+  // applies enforceRealmSafety inside its dispatch path; realm-api tools
+  // are NOT registered here — they're already adopted from boxel-cli's
+  // getToolDefinitions above.
   for (let manifest of toolRegistry.getManifests()) {
-    if (manifest.category === 'script' || manifest.category === 'realm-api') {
+    if (manifest.category === 'script') {
       tools.push(buildRegisteredTool(manifest, toolExecutor, config));
     }
   }
@@ -283,62 +312,25 @@ function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
   };
 }
 
-function buildFetchTranspiledModuleTool(
-  config: ToolBuilderConfig,
+/**
+ * Wrap a `BoxelToolDefinition` from boxel-cli's `getToolDefinitions(...)`
+ * as a `FactoryTool` the agent can call. boxel-cli owns the wire shape
+ * (name, description, parameters, execute); the factory adds a
+ * `enforceRealmSafety` guard at the seam so the agent can't bypass the
+ * target-realm protection or hit the source realm by mis-passing a
+ * `realm-url`.
+ */
+export function adaptBoxelTool(
+  tool: BoxelToolDefinition,
+  safety: RealmSafetyConfig,
 ): FactoryTool {
   return {
-    name: 'fetch_transpiled_module',
-    description:
-      "Debugging tool ONLY for investigating runtime errors in .gts modules you've written. Use when an eval or instantiate validation error reports a line/column number — those line numbers refer to the transpiled output, not your .gts source, so fetching the transpiled output is how you locate the offending source construct. Never use the transpiled output as a reference for how to write code. Do NOT copy its patterns (setComponentTemplate, precompileTemplate, wire-format templates, base64 CSS imports) into source — always write idiomatic Ember / <template>-tag / CardDef source. Editing: only edit the .gts source (the transpiled output is regenerated on the next write). Auth: per-realm JWT.",
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description:
-            'Realm-relative module path. The .gts extension is optional — the realm accepts either form.',
-        },
-        realm: {
-          type: 'string',
-          enum: ['target'],
-          description: 'Which realm to read from (default: target)',
-        },
-      },
-      required: ['path'],
-    },
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters,
     execute: async (args) => {
-      let path = requireStringArg(args, 'path', 'fetch_transpiled_module');
-      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
-      return config.client.readTranspiled(realmUrl, path);
-    },
-  };
-}
-
-function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
-  return {
-    name: 'search_realm',
-    description:
-      'Search for cards in a realm using a structured query. Auth: per-realm JWT.',
-    parameters: {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'object',
-          description: 'Search query object (filter, sort, page)',
-        },
-        realm: {
-          type: 'string',
-          enum: ['target'],
-          description: 'Which realm to search (default: target)',
-        },
-      },
-      required: ['query'],
-    },
-    execute: async (args) => {
-      let query = args.query as Record<string, unknown>;
-      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
-      let result = await config.client.search(realmUrl, query);
-      return result.ok ? { data: result.data } : { error: result.error };
+      enforceRealmSafety(tool.name, args, safety);
+      return tool.execute(args);
     },
   };
 }
@@ -695,7 +687,7 @@ function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
       'orchestrator still runs the full validation pipeline (which writes ' +
       'an EvalResult card) automatically after signal_done, so calling ' +
       'this is optional. When a failure reports a line/column, those ' +
-      'numbers refer to the transpiled module — use `fetch_transpiled_module` ' +
+      'numbers refer to the transpiled module — use `read_transpiled` ' +
       'to locate the offending source construct, then fix the .gts source ' +
       '(never copy transpiled patterns back into source). Auth: realm ' +
       'server token.',
@@ -795,7 +787,7 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
       'still runs the full validation pipeline (which writes an ' +
       'InstantiateResult card) automatically after signal_done, so calling ' +
       'this is optional. When a failure reports a line/column, those numbers ' +
-      'refer to the transpiled module — use `fetch_transpiled_module` to ' +
+      'refer to the transpiled module — use `read_transpiled` to ' +
       'locate the offending source construct, then fix the .gts source ' +
       '(never copy transpiled patterns back into source). Auth: realm server ' +
       'token.',
@@ -862,41 +854,6 @@ function buildRequestClarificationTool(): FactoryTool {
   };
 }
 
-function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
-  return {
-    name: 'run_command',
-    description:
-      'Execute a Boxel host command on the realm server via the prerenderer. ' +
-      'This runs Boxel host commands ONLY — not shell commands, scripts, or Node.js. ' +
-      'Commands must be Boxel host command specifiers in the format ' +
-      '"@cardstack/boxel-host/commands/<name>/default". ' +
-      'Auth: realm server token.',
-    parameters: {
-      type: 'object',
-      properties: {
-        command: {
-          type: 'string',
-          description:
-            'Boxel host command specifier — must be in the format "@cardstack/boxel-host/commands/<name>/default"',
-        },
-        commandInput: {
-          type: 'object',
-          description: 'Optional input for the command',
-        },
-      },
-      required: ['command'],
-    },
-    execute: async (args) => {
-      return config.client.runCommand(
-        config.realmServerUrl,
-        config.targetRealmUrl,
-        args.command as string,
-        args.commandInput as Record<string, unknown> | undefined,
-      );
-    },
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Registered tool wrappers (script + realm-api)
 // ---------------------------------------------------------------------------
@@ -941,15 +898,4 @@ function buildRegisteredTool(
       return toolExecutor.execute(manifest.name, args);
     },
   };
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function resolveRealmUrl(
-  config: ToolBuilderConfig,
-  _realm: string | undefined,
-): string {
-  return config.targetRealmUrl;
 }

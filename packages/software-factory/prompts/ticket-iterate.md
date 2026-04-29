@@ -55,7 +55,7 @@ Fix the validation failures shown above. You have the same tools available. You 
 
 - Use read_file to inspect the current state of your implementation
 - Use write_file to update implementation or test files
-- Use search_realm to check what cards exist
+- Use realm_search (with the target realm URL as `realm-url`) to check what cards exist
 - If a lint violation is in your code, fix the code to pass lint
 - If the test expectation is wrong, fix the test
 - If the implementation is wrong, fix the implementation

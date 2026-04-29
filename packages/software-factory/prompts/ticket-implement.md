@@ -56,7 +56,7 @@ You previously invoked the following tools. Use these results to inform your imp
 
 Implement this issue in this order:
 
-1. Use search_realm and read_file to inspect existing realm state
+1. Use realm_search (pass the target realm URL as `realm-url`) and read_file to inspect existing realm state
 2. Use write_file to create or update card definitions (.gts) in the target realm
 3. Use write_file to create QUnit test files (.test.gts) co-located with card definitions — write tests BEFORE any sample instances or catalog specs. **Wrap every test in a QUnit `module(...)` block named after the card or feature under test** (e.g., `module('StickyNote', function (hooks) { ... test(...) ... })`). The TestRun card groups results by module name, so tests left at the top level all collapse into a single "default" bucket and become hard to read.
 4. Create at least one sample card instance (.json) in the target realm

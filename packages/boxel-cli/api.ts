@@ -20,6 +20,13 @@ export {
 } from './src/lib/boxel-cli-client';
 
 export {
+  getToolDefinitions,
+  requireStringArg,
+  type BoxelToolDefinition,
+  type BoxelToolConfig,
+} from './src/lib/tool-definitions';
+
+export {
   resetProfileManager,
   setProfileManager,
 } from './src/lib/profile-manager';

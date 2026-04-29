@@ -1,9 +1,7 @@
 import { module, test } from 'qunit';
 
 import {
-  BOXEL_CLI_TOOLS,
   getDefaultToolRegistry,
-  REALM_API_TOOLS,
   SCRIPT_TOOLS,
   ToolRegistry,
   type ToolManifest,
@@ -14,14 +12,16 @@ import {
 // ---------------------------------------------------------------------------
 
 module('factory-tool-registry > ToolRegistry construction', function () {
-  test('default registry includes all built-in tools', function (assert) {
+  test('default registry includes only script tools (realm-api tools live in boxel-cli getToolDefinitions, not the registry)', function (assert) {
     let registry = new ToolRegistry();
-    let expectedCount =
-      SCRIPT_TOOLS.length + BOXEL_CLI_TOOLS.length + REALM_API_TOOLS.length;
     assert.strictEqual(
       registry.size,
-      expectedCount,
-      `registry has ${expectedCount} tools`,
+      SCRIPT_TOOLS.length,
+      `default registry has ${SCRIPT_TOOLS.length} tools`,
+    );
+    assert.false(
+      registry.has('realm_read_file'),
+      'realm-* tools are not registered',
     );
   });
 
@@ -118,8 +118,7 @@ module('factory-tool-registry > has', function () {
   test('returns true for registered tool', function (assert) {
     let registry = new ToolRegistry();
     assert.true(registry.has('search-realm'));
-    assert.true(registry.has('boxel-sync'));
-    assert.true(registry.has('realm-search'));
+    assert.true(registry.has('run-realm-tests'));
   });
 
   test('returns false for unregistered tool', function (assert) {
@@ -156,12 +155,12 @@ module('factory-tool-registry > validateArgs', function () {
     assert.true(errors[0].includes('Unknown tool'));
   });
 
-  test('multiple missing required args produce multiple errors', function (assert) {
+  test('returns error for unknown tool with empty args', function (assert) {
     let registry = new ToolRegistry();
-    let errors = registry.validateArgs('realm-write', {});
+    let errors = registry.validateArgs('not-a-tool', {});
     assert.true(
-      errors.length >= 3,
-      `expected at least 3 errors, got ${errors.length}`,
+      errors.length >= 1,
+      `expected at least 1 error, got ${errors.length}`,
     );
   });
 
@@ -197,26 +196,6 @@ module('factory-tool-registry > built-in manifests', function () {
         tool.category,
         'script',
         `${tool.name} has category "script"`,
-      );
-    }
-  });
-
-  test('all boxel-cli tools have correct category', function (assert) {
-    for (let tool of BOXEL_CLI_TOOLS) {
-      assert.strictEqual(
-        tool.category,
-        'boxel-cli',
-        `${tool.name} has category "boxel-cli"`,
-      );
-    }
-  });
-
-  test('all realm-api tools have correct category', function (assert) {
-    for (let tool of REALM_API_TOOLS) {
-      assert.strictEqual(
-        tool.category,
-        'realm-api',
-        `${tool.name} has category "realm-api"`,
       );
     }
   });
@@ -267,26 +246,13 @@ module('factory-tool-registry > built-in manifests', function () {
     assert.true(registry.has('run-realm-tests'));
   });
 
-  test('expected boxel-cli tools are registered', function (assert) {
+  test('realm-api tools are NOT in the registry (they live in boxel-cli getToolDefinitions)', function (assert) {
     let registry = new ToolRegistry();
-    assert.true(registry.has('boxel-sync'));
-    assert.true(registry.has('boxel-push'));
-    assert.true(registry.has('boxel-pull'));
-    assert.true(registry.has('boxel-status'));
-    assert.true(registry.has('boxel-create'));
-    assert.true(registry.has('boxel-history'));
-  });
-
-  test('expected realm-api tools are registered', function (assert) {
-    let registry = new ToolRegistry();
-    // realm-read/realm-write/realm-delete are scoped to non-target realms
-    // by the executor's safety check; target-realm I/O goes through the
-    // workspace.
-    assert.true(registry.has('realm-read'));
-    assert.true(registry.has('realm-write'));
-    assert.true(registry.has('realm-delete'));
-    assert.true(registry.has('realm-search'));
-    assert.true(registry.has('realm-create'));
+    assert.false(registry.has('realm_read_file'));
+    assert.false(registry.has('realm_write_file'));
+    assert.false(registry.has('realm_delete_file'));
+    assert.false(registry.has('realm_search'));
+    assert.false(registry.has('create_realm'));
   });
 });
 

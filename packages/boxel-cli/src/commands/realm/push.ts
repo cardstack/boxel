@@ -27,6 +27,7 @@ interface PushOptions extends SyncOptions {
 
 class RealmPusher extends RealmSyncBase {
   hasError = false;
+  uploadedFiles: string[] = [];
 
   constructor(
     private pushOptions: PushOptions,
@@ -220,6 +221,7 @@ class RealmPusher extends RealmSyncBase {
         for (const { rel, hash } of uploaded) {
           newManifest.files[rel] = hash;
         }
+        this.uploadedFiles.push(...result.succeeded);
       }
     }
 
@@ -362,11 +364,16 @@ export function registerPushCommand(realm: Command): void {
     );
 }
 
-export async function pushCommand(
+export interface PushResult {
+  files: string[];
+  error?: string;
+}
+
+export async function push(
   localDir: string,
   realmUrl: string,
   options: PushCommandOptions,
-): Promise<void> {
+): Promise<PushResult> {
   let authenticator: RealmAuthenticator;
   if (options.authenticator) {
     authenticator = options.authenticator;
@@ -377,15 +384,16 @@ export async function pushCommand(
       profileManager: options.profileManager,
     });
     if (!resolution.ok) {
-      console.error(`Error: ${resolution.error}`);
-      process.exit(1);
+      return { files: [], error: resolution.error };
     }
     authenticator = resolution.authenticator;
   }
 
   if (!(await pathExists(localDir))) {
-    console.error(`Local directory does not exist: ${localDir}`);
-    process.exit(1);
+    return {
+      files: [],
+      error: `Local directory does not exist: ${localDir}`,
+    };
   }
 
   try {
@@ -403,13 +411,31 @@ export async function pushCommand(
     await pusher.sync();
 
     if (pusher.hasError) {
-      console.log('Push did not complete successfully. View logs for details');
-      process.exit(2);
-    } else {
-      console.log('Push completed successfully');
+      return {
+        files: pusher.uploadedFiles.sort(),
+        error:
+          'Push completed with errors. Some files may not have been uploaded.',
+      };
     }
+
+    return { files: pusher.uploadedFiles.sort() };
   } catch (error) {
-    console.error('Push failed:', error);
-    process.exit(1);
+    return {
+      files: [],
+      error: `Push failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
   }
+}
+
+export async function pushCommand(
+  localDir: string,
+  realmUrl: string,
+  options: PushCommandOptions,
+): Promise<void> {
+  const result = await push(localDir, realmUrl, options);
+  if (result.error) {
+    console.error(`Error: ${result.error}`);
+    process.exit(result.files.length > 0 ? 2 : 1);
+  }
+  console.log('Push completed successfully');
 }

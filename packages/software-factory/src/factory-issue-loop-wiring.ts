@@ -36,12 +36,8 @@ import {
   type FactoryTool,
   type ToolBuilderConfig,
 } from './factory-tool-builder';
-import { ToolExecutor } from './factory-tool-executor';
-import {
-  ToolRegistry,
-  SCRIPT_TOOLS,
-  REALM_API_TOOLS,
-} from './factory-tool-registry';
+import { ToolExecutor, buildRealmSafetyConfig } from './factory-tool-executor';
+import { ToolRegistry, SCRIPT_TOOLS } from './factory-tool-registry';
 import {
   runIssueLoop,
   createDefaultPipeline,
@@ -131,11 +127,15 @@ export async function runFactoryIssueLoop(
     issueLoader,
   });
 
-  // 3. Tool infrastructure
-  let toolRegistry = new ToolRegistry([...SCRIPT_TOOLS, ...REALM_API_TOOLS]);
+  // 3. Tool infrastructure — the registry only owns subprocess-dispatched
+  // tools (script + boxel-cli command wrappers). Realm-api tools come from
+  // boxel-cli's getToolDefinitions and are spread into the agent's
+  // FactoryTool[] in factory-tool-builder, wrapped with enforceRealmSafety.
+  let toolRegistry = new ToolRegistry([...SCRIPT_TOOLS]);
   let toolExecutor = new ToolExecutor(toolRegistry, {
     packageRoot: PACKAGE_ROOT,
-    targetRealmUrl,
+    ...buildRealmSafetyConfig({ targetRealmUrl, realmServerUrl }),
+    realmServerUrl,
     client,
     debug: config.debug,
   });

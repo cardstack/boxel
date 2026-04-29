@@ -1,11 +1,43 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { module, test } from 'qunit';
 
+import { getToolDefinitions } from '@cardstack/boxel-cli/api';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import { ToolExecutor } from '../src/factory-tool-executor';
+import { adaptBoxelTool, type FactoryTool } from '../src/factory-tool-builder';
+import {
+  ToolExecutor,
+  type RealmSafetyConfig,
+} from '../src/factory-tool-executor';
 import { ToolRegistry } from '../src/factory-tool-registry';
 import { buildTestClient } from './helpers/test-client';
+
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
+/**
+ * Build a single boxel-cli FactoryTool wrapped with `enforceRealmSafety`,
+ * matching what `buildFactoryTools` does at runtime. Used by the
+ * realm-api integration tests that exercise wire shape through the
+ * agent-facing FactoryTool path.
+ */
+function buildBoxelFactoryTool(
+  toolName: string,
+  client: BoxelCLIClient,
+  safety: RealmSafetyConfig,
+  realmServerUrl: string,
+): FactoryTool {
+  let tools = getToolDefinitions(client, {
+    targetRealmUrl: safety.targetRealmUrl,
+    realmServerUrl,
+  });
+  let boxelTool = tools.find((t) => t.name === toolName);
+  if (!boxelTool) {
+    throw new Error(
+      `boxel-cli tool "${toolName}" not found in getToolDefinitions`,
+    );
+  }
+  return adaptBoxelTool(boxelTool, safety);
+}
 
 // ---------------------------------------------------------------------------
 // Test server helpers
@@ -73,217 +105,211 @@ function stopServer(server: Server): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Integration tests: realm-api tools against a real HTTP server
+// Integration tests: boxel-cli tool wire shape against a real HTTP server
 // ---------------------------------------------------------------------------
+// Each test asserts the exact HTTP request the boxel-cli tool emits when the
+// factory invokes it via getToolDefinitions(). A regression like "we forgot
+// to send the Bearer token" or "we sent JSON instead of card-source" would
+// fail one of these tests with a clear diff.
 
-module('factory-tool-executor integration > realm-api requests', function () {
-  // realm-read/realm-write/realm-delete are restricted to non-target
-  // realms (target-realm I/O goes through the workspace). Each test sets
-  // `targetRealmUrl` to a distinct path and whitelists a scratch realm
-  // via `allowedRealmPrefixes` so the tool's HTTP behavior can still be
-  // verified.
-  test('realm-read sends correct GET with Authorization and Accept headers', async function (assert) {
-    let captured: CapturedRequest | undefined;
+// Wire-shape coverage for realm-* tools comes from the
+// `boxel-cli tool wire shape` module below (which exercises
+// getToolDefinitions directly). Safety-guard coverage on top of that
+// path lives in factory-tool-executor.test.ts via the buildBoxelFactoryTool
+// helper. The previous `realm-api requests` module routed through
+// `executor.execute('realm-*', …)` — that dispatch path no longer exists.
+module(
+  'factory-tool-executor integration > boxel-cli tool wire shape',
+  function () {
+    test('realm_read_file sends GET with realm JWT and card-source Accept', async function (assert) {
+      let captured: CapturedRequest | undefined;
+      let { server, origin } = await startTestServer((req, respond) => {
+        captured = req;
+        respond(200, 'export class A {}', {
+          'Content-Type': SupportedMimeType.CardSource,
+        });
+      });
 
-    let { server, origin } = await startTestServer((req, respond) => {
-      captured = req;
-      respond(200, { data: { id: 'Card/hello', type: 'card' } });
+      let realmUrl = `${origin}/user/target/`;
+      let realmServerUrl = `${origin}/`;
+      let { client, cleanup } = buildTestClient({
+        realmUrl,
+        realmToken: 'Bearer realm-jwt-for-user',
+        realmServerUrl,
+        realmServerToken: 'Bearer realm-server-jwt',
+      });
+
+      try {
+        let tools = getToolDefinitions(client, {
+          targetRealmUrl: realmUrl,
+          realmServerUrl,
+        });
+        let realmRead = tools.find((t) => t.name === 'realm_read_file')!;
+
+        await realmRead.execute({
+          'realm-url': realmUrl,
+          path: 'Card/hello.gts',
+        });
+
+        assert.ok(captured, 'request reached the server');
+        assert.strictEqual(captured!.method, 'GET');
+        assert.strictEqual(captured!.url, '/user/target/Card/hello.gts');
+        assert.strictEqual(
+          captured!.headers.authorization,
+          'Bearer realm-jwt-for-user',
+        );
+        assert.strictEqual(
+          captured!.headers.accept,
+          SupportedMimeType.CardSource,
+        );
+        assert.strictEqual(captured!.body, '');
+      } finally {
+        cleanup();
+        await stopServer(server);
+      }
     });
 
-    let scratchRealmUrl = `${origin}/user/scratch/`;
-    let targetRealmUrl = `${origin}/user/target/`;
-    let { client, cleanup } = buildTestClient({
-      realmUrl: scratchRealmUrl,
-      realmToken: 'Bearer realm-jwt-for-user',
-      realmServerUrl: `${origin}/`,
-      realmServerToken: 'Bearer realm-server-jwt',
+    test('realm_write_file sends POST with content body and card-source headers', async function (assert) {
+      let captured: CapturedRequest | undefined;
+      let { server, origin } = await startTestServer((req, respond) => {
+        captured = req;
+        respond(200, { ok: true });
+      });
+
+      let realmUrl = `${origin}/user/target/`;
+      let realmServerUrl = `${origin}/`;
+      let { client, cleanup } = buildTestClient({
+        realmUrl,
+        realmToken: 'Bearer realm-jwt-for-user',
+        realmServerUrl,
+        realmServerToken: 'Bearer realm-server-jwt',
+      });
+
+      try {
+        let tools = getToolDefinitions(client, {
+          targetRealmUrl: realmUrl,
+          realmServerUrl,
+        });
+        let realmWrite = tools.find((t) => t.name === 'realm_write_file')!;
+        let content = 'export class MyCard extends CardDef {}';
+
+        await realmWrite.execute({
+          'realm-url': realmUrl,
+          path: 'CardDef/my-card.gts',
+          content,
+        });
+
+        assert.ok(captured, 'request reached the server');
+        assert.strictEqual(captured!.method, 'POST');
+        assert.strictEqual(captured!.url, '/user/target/CardDef/my-card.gts');
+        assert.strictEqual(
+          captured!.headers.authorization,
+          'Bearer realm-jwt-for-user',
+        );
+        assert.strictEqual(
+          captured!.headers['content-type'],
+          SupportedMimeType.CardSource,
+        );
+        assert.strictEqual(captured!.body, content);
+      } finally {
+        cleanup();
+        await stopServer(server);
+      }
     });
 
-    try {
-      let registry = new ToolRegistry();
-      let executor = new ToolExecutor(registry, {
-        packageRoot: '/fake',
-        targetRealmUrl,
-        allowedRealmPrefixes: [`${origin}/user/scratch/`],
-        client,
+    test('realm_delete_file sends DELETE with realm JWT', async function (assert) {
+      let captured: CapturedRequest | undefined;
+      let { server, origin } = await startTestServer((req, respond) => {
+        captured = req;
+        respond(200, { ok: true });
       });
 
-      let result = await executor.execute('realm-read', {
-        'realm-url': scratchRealmUrl,
-        path: 'Card/hello.gts',
+      let realmUrl = `${origin}/user/target/`;
+      let realmServerUrl = `${origin}/`;
+      let { client, cleanup } = buildTestClient({
+        realmUrl,
+        realmToken: 'Bearer realm-jwt-for-user',
+        realmServerUrl,
+        realmServerToken: 'Bearer realm-server-jwt',
       });
 
-      assert.strictEqual(result.exitCode, 0, 'exitCode is 0');
-      assert.strictEqual(captured!.method, 'GET');
-      assert.strictEqual(captured!.url, '/user/scratch/Card/hello.gts');
-      assert.strictEqual(
-        captured!.headers.authorization,
-        'Bearer realm-jwt-for-user',
-      );
-      assert.strictEqual(
-        captured!.headers.accept,
-        SupportedMimeType.CardSource,
-      );
-    } finally {
-      cleanup();
-      await stopServer(server);
-    }
-  });
+      try {
+        let tools = getToolDefinitions(client, {
+          targetRealmUrl: realmUrl,
+          realmServerUrl,
+        });
+        let realmDelete = tools.find((t) => t.name === 'realm_delete_file')!;
 
-  test('realm-write sends correct POST with content and headers', async function (assert) {
-    let captured: CapturedRequest | undefined;
+        await realmDelete.execute({
+          'realm-url': realmUrl,
+          path: 'Card/old.json',
+        });
 
-    let { server, origin } = await startTestServer((req, respond) => {
-      captured = req;
-      respond(200, { ok: true });
+        assert.ok(captured, 'request reached the server');
+        assert.strictEqual(captured!.method, 'DELETE');
+        assert.strictEqual(captured!.url, '/user/target/Card/old.json');
+        assert.strictEqual(
+          captured!.headers.authorization,
+          'Bearer realm-jwt-for-user',
+        );
+        assert.strictEqual(captured!.body, '');
+      } finally {
+        cleanup();
+        await stopServer(server);
+      }
     });
 
-    let scratchRealmUrl = `${origin}/user/scratch/`;
-    let targetRealmUrl = `${origin}/user/target/`;
-    let { client, cleanup } = buildTestClient({
-      realmUrl: scratchRealmUrl,
-      realmToken: 'Bearer realm-jwt-for-user',
-      realmServerUrl: `${origin}/`,
-      realmServerToken: 'Bearer realm-server-jwt',
+    test('realm_search sends QUERY to _federated-search with server JWT and realms array', async function (assert) {
+      let captured: CapturedRequest | undefined;
+      let { server, origin } = await startTestServer((req, respond) => {
+        captured = req;
+        respond(200, { data: [] });
+      });
+
+      let realmUrl = `${origin}/user/target/`;
+      let realmServerUrl = `${origin}/`;
+      let { client, cleanup } = buildTestClient({
+        realmUrl,
+        realmToken: 'Bearer realm-jwt-for-user',
+        realmServerUrl,
+        realmServerToken: 'Bearer realm-server-jwt',
+      });
+
+      try {
+        let tools = getToolDefinitions(client, {
+          targetRealmUrl: realmUrl,
+          realmServerUrl,
+        });
+        let realmSearch = tools.find((t) => t.name === 'realm_search')!;
+        let query = { filter: { type: { name: 'Issue' } } };
+
+        await realmSearch.execute({ 'realm-url': realmUrl, query });
+
+        assert.ok(captured, 'request reached the server');
+        assert.strictEqual(captured!.method, 'QUERY');
+        assert.strictEqual(captured!.url, '/_federated-search');
+        assert.strictEqual(
+          captured!.headers.authorization,
+          'Bearer realm-server-jwt',
+        );
+        assert.strictEqual(
+          captured!.headers['content-type'],
+          'application/json',
+        );
+
+        let parsed = JSON.parse(captured!.body) as {
+          realms: string[];
+          filter: unknown;
+        };
+        assert.deepEqual(parsed.realms, [realmUrl], 'body.realms = [realmUrl]');
+        assert.deepEqual(parsed.filter, query.filter, 'query merged into body');
+      } finally {
+        cleanup();
+        await stopServer(server);
+      }
     });
-
-    try {
-      let registry = new ToolRegistry();
-      let executor = new ToolExecutor(registry, {
-        packageRoot: '/fake',
-        targetRealmUrl,
-        allowedRealmPrefixes: [`${origin}/user/scratch/`],
-        client,
-      });
-
-      let result = await executor.execute('realm-write', {
-        'realm-url': scratchRealmUrl,
-        path: 'CardDef/my-card.gts',
-        content: 'export class MyCard extends CardDef {}',
-      });
-
-      assert.strictEqual(result.exitCode, 0);
-      assert.strictEqual(captured!.method, 'POST');
-      assert.strictEqual(captured!.url, '/user/scratch/CardDef/my-card.gts');
-      assert.strictEqual(
-        captured!.headers.authorization,
-        'Bearer realm-jwt-for-user',
-      );
-      assert.strictEqual(
-        captured!.headers['content-type'],
-        SupportedMimeType.CardSource,
-      );
-      assert.strictEqual(
-        captured!.body,
-        'export class MyCard extends CardDef {}',
-      );
-    } finally {
-      cleanup();
-      await stopServer(server);
-    }
-  });
-
-  test('realm-delete sends correct DELETE with Authorization header', async function (assert) {
-    let captured: CapturedRequest | undefined;
-
-    let { server, origin } = await startTestServer((req, respond) => {
-      captured = req;
-      respond(204, null);
-    });
-
-    let scratchRealmUrl = `${origin}/user/scratch/`;
-    let targetRealmUrl = `${origin}/user/target/`;
-    let { client, cleanup } = buildTestClient({
-      realmUrl: scratchRealmUrl,
-      realmToken: 'Bearer realm-jwt-for-user',
-      realmServerUrl: `${origin}/`,
-      realmServerToken: 'Bearer realm-server-jwt',
-    });
-
-    try {
-      let registry = new ToolRegistry();
-      let executor = new ToolExecutor(registry, {
-        packageRoot: '/fake',
-        targetRealmUrl,
-        allowedRealmPrefixes: [`${origin}/user/scratch/`],
-        client,
-      });
-
-      let result = await executor.execute('realm-delete', {
-        'realm-url': scratchRealmUrl,
-        path: 'Card/old-card.json',
-      });
-
-      assert.strictEqual(result.exitCode, 0);
-      assert.strictEqual(captured!.method, 'DELETE');
-      assert.strictEqual(captured!.url, '/user/scratch/Card/old-card.json');
-      assert.strictEqual(
-        captured!.headers.authorization,
-        'Bearer realm-jwt-for-user',
-      );
-    } finally {
-      cleanup();
-      await stopServer(server);
-    }
-  });
-
-  test('realm-search sends correct QUERY to _federated-search with JSON body', async function (assert) {
-    let captured: CapturedRequest | undefined;
-
-    let { server, origin } = await startTestServer((req, respond) => {
-      captured = req;
-      respond(200, { data: [] });
-    });
-
-    let realmUrl = `${origin}/user/target/`;
-    let { client, cleanup } = buildTestClient({
-      realmUrl,
-      realmToken: 'Bearer realm-jwt-for-user',
-      realmServerUrl: `${origin}/`,
-      realmServerToken: 'Bearer realm-server-jwt',
-    });
-
-    try {
-      let registry = new ToolRegistry();
-      let executor = new ToolExecutor(registry, {
-        packageRoot: '/fake',
-        targetRealmUrl: realmUrl,
-        client,
-      });
-
-      let query = JSON.stringify({
-        filter: {
-          type: { module: 'https://example.test/issue', name: 'Issue' },
-        },
-      });
-
-      let result = await executor.execute('realm-search', {
-        'realm-url': realmUrl,
-        query,
-      });
-
-      assert.strictEqual(result.exitCode, 0);
-      assert.strictEqual(captured!.method, 'QUERY');
-      assert.strictEqual(captured!.url, '/_federated-search');
-      assert.strictEqual(
-        captured!.headers.authorization,
-        'Bearer realm-server-jwt',
-      );
-      assert.strictEqual(captured!.headers.accept, SupportedMimeType.CardJson);
-      assert.strictEqual(
-        captured!.headers['content-type'],
-        SupportedMimeType.JSON,
-      );
-      assert.deepEqual(JSON.parse(captured!.body), {
-        realms: [realmUrl],
-        ...JSON.parse(query),
-      });
-    } finally {
-      cleanup();
-      await stopServer(server);
-    }
-  });
-});
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Integration tests: safety constraints prevent requests from reaching server
@@ -392,15 +418,17 @@ module('factory-tool-executor integration > safety constraints', function () {
     });
 
     try {
-      let registry = new ToolRegistry();
-      let executor = new ToolExecutor(registry, {
-        packageRoot: '/fake',
-        targetRealmUrl: `${origin}/user/target/`,
+      let realmRead = buildBoxelFactoryTool(
+        'realm_read_file',
         client,
-      });
+        {
+          targetRealmUrl: `${origin}/user/target/`,
+        },
+        `${origin}/`,
+      );
 
       try {
-        await executor.execute('realm-read', {
+        await realmRead.execute({
           'realm-url': 'https://evil.example.test/hacker/realm/',
           path: 'secrets.json',
         });

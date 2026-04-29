@@ -258,7 +258,7 @@ async function main(): Promise<void> {
 
   // Unknown realm targeting (realm-api)
   try {
-    await executor.execute('realm-read', {
+    await executor.execute('realm_read_file', {
       'realm-url': 'https://evil.example.test/hacker/realm/',
       path: 'secrets.json',
     });
@@ -296,29 +296,29 @@ async function main(): Promise<void> {
     client: mockClient,
   });
 
-  let readResult = await mockExecutor.execute('realm-read', {
+  let readResult = await mockExecutor.execute('realm_read_file', {
     'realm-url': 'https://realms.example.test/user/target/',
     path: 'CardDef/hello.gts',
   });
-  check('realm-read exitCode=0', readResult.exitCode === 0);
-  check('realm-read has output', readResult.output !== undefined);
+  check('realm_read_file exitCode=0', readResult.exitCode === 0);
+  check('realm_read_file has output', readResult.output !== undefined);
   check(
-    `realm-read duration ${readResult.durationMs}ms`,
+    `realm_read_file duration ${readResult.durationMs}ms`,
     readResult.durationMs >= 0,
   );
 
-  let searchResult = await mockExecutor.execute('realm-search', {
+  let searchResult = await mockExecutor.execute('realm_search', {
     'realm-url': 'https://realms.example.test/user/target/',
     query: JSON.stringify({ filter: { type: { name: 'Issue' } } }),
   });
-  check('realm-search exitCode=0', searchResult.exitCode === 0);
+  check('realm_search exitCode=0', searchResult.exitCode === 0);
 
-  let writeResult = await mockExecutor.execute('realm-write', {
+  let writeResult = await mockExecutor.execute('realm_write_file', {
     'realm-url': 'https://realms.example.test/user/target/',
     path: 'CardDef/new.gts',
     content: 'export class NewCard {}',
   });
-  check('realm-write exitCode=0', writeResult.exitCode === 0);
+  check('realm_write_file exitCode=0', writeResult.exitCode === 0);
 
   check(`mock fetch called ${mockCallCount} times`, mockCallCount === 3);
 
@@ -387,7 +387,7 @@ async function main(): Promise<void> {
   check('includes registered script tools', toolNames.includes('search-realm'));
   check(
     'includes registered realm-api tools',
-    toolNames.includes('realm-read'),
+    toolNames.includes('realm_read_file'),
   );
 
   // Test write_file with .gts (module source)

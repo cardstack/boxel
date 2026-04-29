@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import type { ToolResult } from './factory-agent';
 import type { ToolRegistry } from './factory-tool-registry';
+import { sourceRealmURLFor } from './harness/shared';
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
@@ -13,15 +14,15 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 const DEFAULT_TIMEOUT_MS = 60_000;
 
 /**
- * Tools that perform HTTP-direct card I/O. The executor rejects these
- * when they target the factory's target realm — target-realm I/O must
- * go through the workspace (via `write_file` / `read_file`) so local
- * state stays in sync with the realm between iterations.
+ * Tools that perform HTTP-direct card I/O. The safety guard rejects these
+ * when they target the factory's target realm — target-realm I/O must go
+ * through the workspace (via `write_file` / `read_file`) so local state
+ * stays in sync with the realm between iterations.
  */
 const TARGET_REALM_BYPASS_TOOLS = new Set([
-  'realm-read',
-  'realm-write',
-  'realm-delete',
+  'realm_read_file',
+  'realm_write_file',
+  'realm_delete_file',
 ]);
 
 /**
@@ -33,31 +34,56 @@ const SCRIPT_FILE_MAP: Record<string, string> = {
   'run-realm-tests': 'run-realm-tests.ts',
 };
 
-/**
- * Map from boxel-cli tool name to the `npx boxel` subcommand.
- */
-const BOXEL_CLI_COMMAND_MAP: Record<string, string> = {
-  'boxel-sync': 'sync',
-  'boxel-push': 'push',
-  'boxel-pull': 'pull',
-  'boxel-status': 'status',
-  'boxel-create': 'create',
-  'boxel-history': 'history',
-};
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface ToolExecutorConfig {
-  /** Absolute path to the software-factory package root. */
-  packageRoot: string;
-  /** Target realm URL — tools may only target this realm. */
+/**
+ * Realm-targeting safety configuration. Used both by the executor (for
+ * subprocess-dispatched script tools) and by the boxel-cli tool adopter in
+ * factory-tool-builder (for tools spread directly into the agent's
+ * FactoryTool[]).
+ */
+export interface RealmSafetyConfig {
+  /** Target realm URL — `realm-url` args may target this realm only when the
+   * tool is NOT in TARGET_REALM_BYPASS_TOOLS. */
   targetRealmUrl: string;
+  /** Optional source realm URL — tools must NEVER target this realm. */
+  sourceRealmUrl?: string;
   /** Additional scratch realm URL prefixes that are allowed. */
   allowedRealmPrefixes?: string[];
-  /** Source realm URL — tools must NEVER target this realm. */
-  sourceRealmUrl?: string;
+}
+
+/**
+ * Derive the production safety config from the realm server URL. Source realm
+ * is always `<realmServerUrl>/software-factory/` (the factory's own realm —
+ * agent must never target it); allowed prefixes default to the realm server
+ * itself, letting `realm_*` tools target any realm hosted there modulo the
+ * source-realm rejection that fires first.
+ *
+ * Tests, smoke, and scenario harnesses construct `RealmSafetyConfig` directly
+ * with their own values; this helper is for the live factory loop.
+ */
+export function buildRealmSafetyConfig(opts: {
+  targetRealmUrl: string;
+  realmServerUrl: string;
+}): RealmSafetyConfig {
+  return {
+    targetRealmUrl: opts.targetRealmUrl,
+    sourceRealmUrl: sourceRealmURLFor(new URL(opts.realmServerUrl)).href,
+    allowedRealmPrefixes: [opts.realmServerUrl],
+  };
+}
+
+export interface ToolExecutorConfig extends RealmSafetyConfig {
+  /** Absolute path to the software-factory package root. */
+  packageRoot: string;
+  /**
+   * Realm server URL (host of the target realm). Reserved for callers
+   * that want to thread it through alongside the executor; the executor
+   * itself never reads it.
+   */
+  realmServerUrl?: string;
   /** Boxel CLI client — owns all realm auth and API calls. */
   client: BoxelCLIClient;
   /** Per-invocation timeout in ms (default: 60 000). */
@@ -74,7 +100,7 @@ export interface ToolExecutorConfig {
 
 export interface ToolExecutionLogEntry {
   tool: string;
-  category: 'script' | 'boxel-cli' | 'realm-api';
+  category: 'script';
   args: Record<string, unknown>;
   exitCode: number;
   durationMs: number;
@@ -107,7 +133,170 @@ export class ToolNotFoundError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// ToolExecutor
+// Standalone safety guard — exported so callers outside the executor
+// (notably factory-tool-builder's adoption of boxel-cli tools) can apply
+// the same checks before dispatching to a BoxelToolDefinition.execute.
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply realm-targeting safety checks to a tool invocation. Throws
+ * `ToolSafetyError` if any check fails:
+ *
+ *   - Source realm rejection: `realm` / `realm-url` / `realm-server-url`
+ *     / `local-dir` / `path` args matching the configured source realm.
+ *   - TARGET_REALM_BYPASS_TOOLS check: realm_read_file / realm_write_file /
+ *     realm_delete_file with `realm-url` matching the target realm.
+ *   - Allowed-target validation: realm-url args must match the target
+ *     realm exactly or one of the allowed scratch prefixes.
+ *   - realm-server-url: must point to a server origin hosting an allowed
+ *     realm.
+ *   - Destructive ops: extra realm-target check for realm_delete_file.
+ */
+export function enforceRealmSafety(
+  toolName: string,
+  toolArgs: Record<string, unknown>,
+  config: RealmSafetyConfig,
+): void {
+  // Source realm protection (when configured)
+  let sourceUrl = config.sourceRealmUrl;
+  if (sourceUrl) {
+    let normalizedSource = ensureTrailingSlash(sourceUrl);
+    let realmArgNames = [
+      'realm',
+      'realm-url',
+      'realm-server-url',
+      'local-dir',
+      'path',
+    ];
+    for (let argName of realmArgNames) {
+      let value = toolArgs[argName];
+      if (typeof value === 'string' && looksLikeUrl(value)) {
+        let normalizedValue = ensureTrailingSlash(value);
+        if (normalizedValue === normalizedSource) {
+          throw new ToolSafetyError(
+            `Tool "${toolName}" cannot target the source realm: ${sourceUrl}`,
+          );
+        }
+      }
+    }
+  }
+
+  // Allowed-target validation for all URL args across all tool categories.
+  // Prevents SSRF and token exfiltration via the propagated Authorization header.
+  let urlArgNames = ['realm', 'realm-url'];
+  for (let argName of urlArgNames) {
+    let value = toolArgs[argName];
+    if (typeof value === 'string' && looksLikeUrl(value)) {
+      validateRealmTarget(toolName, value, config);
+    }
+  }
+
+  // realm-server-url must match one of the allowed realm origins.
+  let serverUrl = toolArgs['realm-server-url'];
+  if (typeof serverUrl === 'string' && looksLikeUrl(serverUrl)) {
+    validateRealmServerTarget(toolName, serverUrl, config);
+  }
+
+  // Extra validation for destructive operations.
+  validateDestructiveOps(toolName, toolArgs, config);
+}
+
+function validateRealmTarget(
+  toolName: string,
+  realmUrl: string,
+  config: RealmSafetyConfig,
+): void {
+  let normalized = ensureTrailingSlash(realmUrl);
+  let target = ensureTrailingSlash(config.targetRealmUrl);
+
+  // The HTTP-direct card I/O tools (realm_read_file / realm_write_file / realm_delete_file)
+  // must NOT target the factory's target realm — those edits would bypass
+  // the local workspace and diverge from the sync flow. Use write_file /
+  // read_file (workspace-backed) for target-realm I/O.
+  if (TARGET_REALM_BYPASS_TOOLS.has(toolName) && normalized === target) {
+    throw new ToolSafetyError(
+      `Tool "${toolName}" cannot target the target realm (${realmUrl}). ` +
+        `Use write_file / read_file instead — they operate on the local ` +
+        `workspace and sync to the realm between iterations. This tool is ` +
+        `reserved for scratch / non-target realms.`,
+    );
+  }
+
+  // Exact realm matches (with trailing slash normalization). For the
+  // target-bypass tools the target is excluded from the exact-allowed set —
+  // the rejection above fires first for target hits.
+  let exactAllowed = TARGET_REALM_BYPASS_TOOLS.has(toolName) ? [] : [target];
+
+  // Prefix matches (no trailing slash — these are URL path prefixes).
+  let prefixAllowed = config.allowedRealmPrefixes ?? [];
+
+  let isAllowed =
+    exactAllowed.some((exact) => normalized === exact) ||
+    prefixAllowed.some((prefix) => normalized.startsWith(prefix));
+
+  if (!isAllowed) {
+    throw new ToolSafetyError(
+      `Tool "${toolName}" targets realm "${realmUrl}" which is not in the allowed list. ` +
+        `Allowed: ${[...exactAllowed, ...prefixAllowed].join(', ')}`,
+    );
+  }
+}
+
+function validateRealmServerTarget(
+  toolName: string,
+  serverUrl: string,
+  config: RealmSafetyConfig,
+): void {
+  let normalizedServer: string;
+  try {
+    normalizedServer = new URL(serverUrl).origin;
+  } catch {
+    throw new ToolSafetyError(
+      `Tool "${toolName}" has invalid realm-server-url: "${serverUrl}"`,
+    );
+  }
+
+  let allowedOrigins = new Set<string>();
+  try {
+    allowedOrigins.add(new URL(config.targetRealmUrl).origin);
+  } catch {
+    // skip invalid
+  }
+  for (let prefix of config.allowedRealmPrefixes ?? []) {
+    try {
+      allowedOrigins.add(new URL(prefix).origin);
+    } catch {
+      // skip invalid
+    }
+  }
+
+  if (!allowedOrigins.has(normalizedServer)) {
+    throw new ToolSafetyError(
+      `Tool "${toolName}" targets server "${serverUrl}" which is not in the allowed origins. ` +
+        `Allowed: ${[...allowedOrigins].join(', ')}`,
+    );
+  }
+}
+
+function validateDestructiveOps(
+  toolName: string,
+  toolArgs: Record<string, unknown>,
+  config: RealmSafetyConfig,
+): void {
+  // Extra validation for destructive realm operations
+  if (toolName === 'realm_delete_file') {
+    let realmUrl = toolArgs['realm-url'];
+    if (typeof realmUrl === 'string') {
+      validateRealmTarget(toolName, realmUrl, config);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ToolExecutor — dispatches subprocess-backed script tools. Realm-api
+// tools (read/write/delete/search/sync/push/pull/etc.) live in boxel-cli's
+// getToolDefinitions and are wrapped with `enforceRealmSafety` directly in
+// factory-tool-builder without going through the executor.
 // ---------------------------------------------------------------------------
 
 export class ToolExecutor {
@@ -122,13 +311,11 @@ export class ToolExecutor {
   }
 
   /**
-   * Execute a tool by name with the given arguments and return the result.
-   *
-   * The executor:
+   * Execute a registered subprocess-backed script tool by name. The executor:
    * 1. Validates the tool name against the registry
    * 2. Validates arguments against the manifest
-   * 3. Enforces safety constraints (no source realm targeting)
-   * 4. Dispatches to the appropriate sub-executor
+   * 3. Enforces realm-targeting safety constraints
+   * 4. Spawns the script subprocess (npx ts-node ...)
    * 5. Captures output as a ToolResult
    */
   async execute(
@@ -144,7 +331,7 @@ export class ToolExecutor {
       throw new ToolNotFoundError(toolName);
     }
 
-    // Validate required args
+    // Validate required args.
     let argErrors = this.registry.validateArgs(toolName, toolArgs);
     if (argErrors.length > 0) {
       throw new Error(
@@ -152,40 +339,31 @@ export class ToolExecutor {
       );
     }
 
-    // Safety: reject source realm targeting
-    this.enforceRealmSafety(toolName, toolArgs);
+    // Realm-targeting safety.
+    enforceRealmSafety(toolName, toolArgs, this.config);
 
     let start = Date.now();
     let result: ToolResult;
 
     try {
-      switch (manifest.category) {
-        case 'script':
-          result = await this.executeScript(toolName, toolArgs);
-          break;
-        case 'boxel-cli':
-          result = await this.executeBoxelCli(toolName, toolArgs);
-          break;
-        case 'realm-api':
-          result = await this.executeRealmApi(toolName, toolArgs);
-          break;
-        default:
-          throw new Error(`Unknown tool category: ${manifest.category}`);
+      if (manifest.category !== 'script') {
+        throw new Error(`Unknown tool category: ${manifest.category}`);
       }
+      result = await this.executeScript(toolName, toolArgs);
     } catch (error) {
       let durationMs = Date.now() - start;
       let errorMessage = error instanceof Error ? error.message : String(error);
 
       this.logExecution({
         tool: toolName,
-        category: manifest.category,
+        category: 'script',
         args: toolArgs,
         exitCode: 1,
         durationMs,
         error: errorMessage,
       });
 
-      // Re-throw safety and timeout errors as-is
+      // Re-throw safety and timeout errors as-is.
       if (
         error instanceof ToolSafetyError ||
         error instanceof ToolTimeoutError ||
@@ -204,165 +382,13 @@ export class ToolExecutor {
 
     this.logExecution({
       tool: toolName,
-      category: manifest.category,
+      category: 'script',
       args: toolArgs,
       exitCode: result.exitCode,
       durationMs: result.durationMs,
     });
 
     return result;
-  }
-
-  // -------------------------------------------------------------------------
-  // Safety
-  // -------------------------------------------------------------------------
-
-  private enforceRealmSafety(
-    toolName: string,
-    toolArgs: Record<string, unknown>,
-  ): void {
-    // Source realm protection (when configured)
-    let sourceUrl = this.config.sourceRealmUrl;
-    if (sourceUrl) {
-      let normalizedSource = ensureTrailingSlash(sourceUrl);
-
-      let realmArgNames = [
-        'realm',
-        'realm-url',
-        'realm-server-url',
-        'local-dir',
-        'path',
-      ];
-
-      for (let argName of realmArgNames) {
-        let value = toolArgs[argName];
-        if (typeof value === 'string' && looksLikeUrl(value)) {
-          let normalizedValue = ensureTrailingSlash(value);
-          if (normalizedValue === normalizedSource) {
-            throw new ToolSafetyError(
-              `Tool "${toolName}" cannot target the source realm: ${sourceUrl}`,
-            );
-          }
-        }
-      }
-    }
-
-    // Allowed-target validation for all URL args across all tool categories.
-    // Prevents SSRF and token exfiltration via the propagated Authorization header.
-    let urlArgNames = ['realm', 'realm-url'];
-    for (let argName of urlArgNames) {
-      let value = toolArgs[argName];
-      if (typeof value === 'string' && looksLikeUrl(value)) {
-        this.validateRealmTarget(toolName, value);
-      }
-    }
-
-    // realm-server-url must match one of the allowed realm origins
-    let serverUrl = toolArgs['realm-server-url'];
-    if (typeof serverUrl === 'string' && looksLikeUrl(serverUrl)) {
-      this.validateRealmServerTarget(toolName, serverUrl);
-    }
-
-    // Extra validation for destructive operations
-    this.validateDestructiveOps(toolName, toolArgs);
-  }
-
-  private validateRealmTarget(toolName: string, realmUrl: string): void {
-    let normalized = ensureTrailingSlash(realmUrl);
-    let target = ensureTrailingSlash(this.config.targetRealmUrl);
-
-    // The HTTP-direct card I/O tools (realm-read / realm-write / realm-delete)
-    // must NOT target the factory's target realm — those edits would bypass
-    // the local workspace and diverge from the sync flow. The agent uses
-    // write_file / read_file (workspace-backed) for target-realm I/O and
-    // keeps these HTTP-direct tools for scratch / non-target realms.
-    if (TARGET_REALM_BYPASS_TOOLS.has(toolName) && normalized === target) {
-      throw new ToolSafetyError(
-        `Tool "${toolName}" cannot target the target realm (${realmUrl}). ` +
-          `Use write_file / read_file instead — they operate on the local ` +
-          `workspace and sync to the realm between iterations. This tool is ` +
-          `reserved for scratch / non-target realms.`,
-      );
-    }
-
-    // Exact realm matches (with trailing slash normalization). For the
-    // target-bypass tools the target is explicitly excluded from the
-    // exact-allowed set — the rejection above fires first for target hits.
-    let exactAllowed = TARGET_REALM_BYPASS_TOOLS.has(toolName) ? [] : [target];
-
-    // Prefix matches (no trailing slash — these are URL path prefixes)
-    let prefixAllowed = this.config.allowedRealmPrefixes ?? [];
-
-    let isAllowed =
-      exactAllowed.some((exact) => normalized === exact) ||
-      prefixAllowed.some((prefix) => normalized.startsWith(prefix));
-
-    if (!isAllowed) {
-      throw new ToolSafetyError(
-        `Tool "${toolName}" targets realm "${realmUrl}" which is not in the allowed list. ` +
-          `Allowed: ${[...exactAllowed, ...prefixAllowed].join(', ')}`,
-      );
-    }
-  }
-
-  /**
-   * Validate that a realm-server-url arg points to a server that hosts
-   * one of the allowed realms (origin match against target/test/prefixes).
-   */
-  private validateRealmServerTarget(toolName: string, serverUrl: string): void {
-    let normalizedServer: string;
-    try {
-      normalizedServer = new URL(serverUrl).origin;
-    } catch {
-      throw new ToolSafetyError(
-        `Tool "${toolName}" has invalid realm-server-url: "${serverUrl}"`,
-      );
-    }
-
-    let allowedOrigins = new Set<string>();
-    try {
-      allowedOrigins.add(new URL(this.config.targetRealmUrl).origin);
-    } catch {
-      // skip invalid
-    }
-    for (let prefix of this.config.allowedRealmPrefixes ?? []) {
-      try {
-        allowedOrigins.add(new URL(prefix).origin);
-      } catch {
-        // skip invalid
-      }
-    }
-
-    if (!allowedOrigins.has(normalizedServer)) {
-      throw new ToolSafetyError(
-        `Tool "${toolName}" targets server "${serverUrl}" which is not in the allowed origins. ` +
-          `Allowed: ${[...allowedOrigins].join(', ')}`,
-      );
-    }
-  }
-
-  private validateDestructiveOps(
-    toolName: string,
-    toolArgs: Record<string, unknown>,
-  ): void {
-    // Extra validation for destructive realm operations
-    if (toolName === 'realm-delete') {
-      let realmUrl = toolArgs['realm-url'];
-      if (typeof realmUrl === 'string') {
-        this.validateRealmTarget(toolName, realmUrl);
-      }
-    }
-
-    // boxel-push with --delete
-    if (toolName === 'boxel-push' && toolArgs['delete']) {
-      let realmUrl = toolArgs['realm-url'];
-      if (typeof realmUrl === 'string' && looksLikeUrl(realmUrl)) {
-        this.validateRealmTarget(toolName, realmUrl);
-      }
-    }
-
-    // realm-create is allowed but logged — the orchestrator trusts the agent
-    // chose it deliberately within the allowed realm set.
   }
 
   // -------------------------------------------------------------------------
@@ -388,172 +414,6 @@ export class ToolExecutor {
       ['ts-node', '--transpileOnly', scriptPath, ...cliArgs],
       'json',
     );
-  }
-
-  private async executeBoxelCli(
-    toolName: string,
-    toolArgs: Record<string, unknown>,
-  ): Promise<ToolResult> {
-    let subcommand = BOXEL_CLI_COMMAND_MAP[toolName];
-    if (!subcommand) {
-      throw new Error(`No boxel-cli command mapped for tool "${toolName}"`);
-    }
-
-    let cliArgs = buildBoxelCliArgs(toolName, subcommand, toolArgs);
-    let invocation = composeBoxelCliInvocation(cliArgs, {
-      debug: this.config.debug,
-    });
-
-    return this.spawnProcess(toolName, 'npx', invocation, 'text');
-  }
-
-  private async executeRealmApi(
-    toolName: string,
-    toolArgs: Record<string, unknown>,
-  ): Promise<ToolResult> {
-    return this.withTimeout(
-      toolName,
-      this.executeRealmApiInner(toolName, toolArgs),
-    );
-  }
-
-  /**
-   * Race an operation against `this.timeoutMs` and throw `ToolTimeoutError`
-   * if the timeout wins. `BoxelCLIClient` methods don't accept an
-   * AbortSignal (auth + retry live inside ProfileManager), so we enforce
-   * the timeout at the executor boundary — the in-flight request becomes
-   * best-effort and is reaped by the GC.
-   */
-  private async withTimeout<T>(toolName: string, op: Promise<T>): Promise<T> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let timeoutPromise = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        reject(new ToolTimeoutError(toolName, this.timeoutMs));
-      }, this.timeoutMs);
-    });
-    try {
-      return await Promise.race([op, timeoutPromise]);
-    } finally {
-      if (timer) {
-        clearTimeout(timer);
-      }
-    }
-  }
-
-  private async executeRealmApiInner(
-    toolName: string,
-    toolArgs: Record<string, unknown>,
-  ): Promise<ToolResult> {
-    let client = this.config.client;
-    let start = Date.now();
-
-    let output: unknown;
-    let ok: boolean;
-
-    switch (toolName) {
-      case 'realm-read': {
-        let result = await client.read(
-          String(toolArgs['realm-url']),
-          String(toolArgs['path']),
-        );
-        ok = result.ok;
-        output = ok ? JSON.parse(result.content!) : { error: result.error };
-        break;
-      }
-
-      case 'realm-write': {
-        let result = await client.write(
-          String(toolArgs['realm-url']),
-          String(toolArgs['path']),
-          String(toolArgs['content']),
-        );
-        ok = result.ok;
-        output = ok ? result : { error: result.error };
-        break;
-      }
-
-      case 'realm-delete': {
-        let result = await client.delete(
-          String(toolArgs['realm-url']),
-          String(toolArgs['path']),
-        );
-        ok = result.ok;
-        output = ok ? result : { error: result.error };
-        break;
-      }
-
-      case 'realm-search': {
-        let rawQuery = toolArgs['query'];
-        if (typeof rawQuery !== 'string') {
-          ok = false;
-          output = {
-            error:
-              "Invalid 'query' argument for realm-search: expected a JSON string.",
-          };
-          break;
-        }
-        let query: Record<string, unknown>;
-        try {
-          query = JSON.parse(rawQuery);
-        } catch {
-          ok = false;
-          output = {
-            error:
-              "Invalid JSON for 'query' in realm-search: expected valid JSON.",
-          };
-          break;
-        }
-        let result = await client.search(String(toolArgs['realm-url']), query);
-        ok = result.ok;
-        output = result.ok
-          ? { data: result.data }
-          : { error: result.error, status: result.status };
-        break;
-      }
-
-      case 'realm-create': {
-        let displayName = String(toolArgs['name']);
-        let realmName = String(toolArgs['endpoint']);
-        let requestedServerUrl = ensureTrailingSlash(
-          String(toolArgs['realm-server-url']),
-        );
-        try {
-          let active = client.getActiveProfile();
-          if (
-            active &&
-            ensureTrailingSlash(active.realmServerUrl) !== requestedServerUrl
-          ) {
-            throw new Error(
-              `realm-create cannot target "${requestedServerUrl}": active Boxel profile realm server is "${ensureTrailingSlash(active.realmServerUrl)}".`,
-            );
-          }
-          let result = await client.createRealm({
-            realmName,
-            displayName,
-            iconURL: toolArgs['iconURL'] as string | undefined,
-            backgroundURL: toolArgs['backgroundURL'] as string | undefined,
-          });
-          ok = true;
-          output = { data: { id: result.realmUrl } };
-        } catch (error) {
-          ok = false;
-          output = {
-            error: error instanceof Error ? error.message : String(error),
-          };
-        }
-        break;
-      }
-
-      default:
-        throw new Error(`Unknown realm-api tool: "${toolName}"`);
-    }
-
-    return {
-      tool: toolName,
-      exitCode: ok ? 0 : 1,
-      output,
-      durationMs: Date.now() - start,
-    };
   }
 
   // -------------------------------------------------------------------------
@@ -646,27 +506,6 @@ export class ToolExecutor {
 // Helpers: CLI arg building
 // ---------------------------------------------------------------------------
 
-/**
- * Compose the full `npx boxel ...` argument vector for an `executeBoxelCli`
- * call. Prepends `--quiet` to silence boxel-cli's chatty per-step progress
- * logs ("Starting sync …", "Downloaded: …", "Checkpoint created: …") so they
- * don't surface in the factory's tool output or CI logs. Errors, warnings,
- * and the command's actual result payload still come through — see
- * `packages/boxel-cli/src/lib/cli-log.ts`.
- *
- * When `debug` is true (factory itself is running with `--debug`), `--quiet`
- * is omitted so the full boxel-cli logs surface for debugging.
- */
-export function composeBoxelCliInvocation(
-  cliArgs: string[],
-  options: { debug?: boolean } = {},
-): string[] {
-  if (options.debug) {
-    return ['boxel', ...cliArgs];
-  }
-  return ['boxel', '--quiet', ...cliArgs];
-}
-
 function buildCliArgs(toolArgs: Record<string, unknown>): string[] {
   let args: string[] = [];
 
@@ -691,108 +530,6 @@ function buildCliArgs(toolArgs: Record<string, unknown>): string[] {
   return args;
 }
 
-function buildBoxelCliArgs(
-  _toolName: string,
-  subcommand: string,
-  toolArgs: Record<string, unknown>,
-): string[] {
-  let args: string[] = [subcommand];
-
-  // Certain tools use positional args rather than flags
-  switch (subcommand) {
-    case 'sync': {
-      let path = toolArgs['path'];
-      if (typeof path === 'string') {
-        args.push(path);
-      }
-      if (typeof toolArgs['prefer'] === 'string') {
-        args.push(`--prefer-${toolArgs['prefer']}`);
-      }
-      if (toolArgs['dry-run']) {
-        args.push('--dry-run');
-      }
-      break;
-    }
-    case 'push': {
-      let localDir = toolArgs['local-dir'];
-      let realmUrl = toolArgs['realm-url'];
-      if (typeof localDir === 'string') {
-        args.push(localDir);
-      }
-      if (typeof realmUrl === 'string') {
-        args.push(realmUrl);
-      }
-      if (toolArgs['delete']) {
-        args.push('--delete');
-      }
-      if (toolArgs['dry-run']) {
-        args.push('--dry-run');
-      }
-      break;
-    }
-    case 'pull': {
-      let realmUrl = toolArgs['realm-url'];
-      let localDir = toolArgs['local-dir'];
-      if (typeof realmUrl === 'string') {
-        args.push(realmUrl);
-      }
-      if (typeof localDir === 'string') {
-        args.push(localDir);
-      }
-      if (toolArgs['delete']) {
-        args.push('--delete');
-      }
-      if (toolArgs['dry-run']) {
-        args.push('--dry-run');
-      }
-      break;
-    }
-    case 'status': {
-      let path = toolArgs['path'];
-      if (typeof path === 'string') {
-        args.push(path);
-      }
-      if (toolArgs['all']) {
-        args.push('--all');
-      }
-      if (toolArgs['pull']) {
-        args.push('--pull');
-      }
-      break;
-    }
-    case 'create': {
-      let endpoint = toolArgs['endpoint'];
-      let name = toolArgs['name'];
-      if (typeof endpoint === 'string') {
-        args.push(endpoint);
-      }
-      if (typeof name === 'string') {
-        args.push(name);
-      }
-      break;
-    }
-    case 'history': {
-      let path = toolArgs['path'];
-      if (typeof path === 'string') {
-        args.push(path);
-      }
-      if (typeof toolArgs['message'] === 'string') {
-        args.push('-m', toolArgs['message']);
-      }
-      break;
-    }
-    default:
-      // Fall through to generic flag building
-      args.push(...buildCliArgs(toolArgs));
-  }
-
-  return args;
-}
-
-// ---------------------------------------------------------------------------
-// Utilities
-// ---------------------------------------------------------------------------
-
 function looksLikeUrl(value: string): boolean {
-  return value.startsWith('http://') || value.startsWith('https://');
+  return /^https?:\/\//i.test(value);
 }
