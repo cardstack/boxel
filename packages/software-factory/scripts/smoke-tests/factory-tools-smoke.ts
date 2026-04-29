@@ -7,6 +7,14 @@
  *
  * Usage:
  *   pnpm smoke:tools
+ *
+ * TODO(CS-10883 follow-up): this script still exercises retired tools
+ * (read_file, write_file, search_realm, fetch_transpiled_module,
+ * update_*, create_*, add_comment, realm-read/write/delete) and will
+ * fail at runtime against the current registry. Rewrite to cover the
+ * surviving surface (search_realms + run_* + signal_done +
+ * request_clarification + realm-search + realm-create) once the new
+ * architecture has settled.
  */
 
 // This should be first
@@ -355,8 +363,6 @@ async function main(): Promise<void> {
   let factoryTools = buildFactoryTools(
     {
       targetRealmUrl: 'https://realms.example.test/user/target/',
-      darkfactoryModuleUrl:
-        'https://realms.example.test/software-factory/darkfactory',
       realmServerUrl: 'https://realms.example.test/',
       client: toolBuilderClient,
       // Smoke test doesn't exercise fs I/O — any real path is fine.
@@ -369,7 +375,21 @@ async function main(): Promise<void> {
   let toolNames = factoryTools.map((t) => t.name);
   log.info(`  Built ${factoryTools.length} tools:`);
   log.info(
-    `    factory: ${toolNames.filter((n) => ['write_file', 'read_file', 'search_realm', 'run_command', 'signal_done', 'request_clarification', 'update_project', 'update_issue', 'create_knowledge'].includes(n)).join(', ')}`,
+    `    factory: ${toolNames
+      .filter((n) =>
+        [
+          'search_realms',
+          'run_command',
+          'run_lint',
+          'run_tests',
+          'run_evaluate',
+          'run_parse',
+          'run_instantiate',
+          'signal_done',
+          'request_clarification',
+        ].includes(n),
+      )
+      .join(', ')}`,
   );
   log.info(
     `    registered: ${toolNames.filter((n) => !['write_file', 'read_file', 'search_realm', 'run_command', 'signal_done', 'request_clarification', 'update_project', 'update_issue', 'create_knowledge'].includes(n)).join(', ')}`,

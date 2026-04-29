@@ -6,6 +6,14 @@
  *
  * Usage:
  *   pnpm smoke:issue-loop
+ *
+ * TODO(CS-10883 follow-up): the mock agent turns in this script use
+ * retired tool names (write_file, read_file, signal_done as a regular
+ * factory tool, etc.). The loop's exit logic now relies on
+ * `result.status === 'done'` from the agent (which the mock already
+ * returns), so the smoke script still runs to completion — but the
+ * tool-call labels in the mock turns no longer match real production
+ * traces. Refresh once the new agent surface has settled.
  */
 
 // This should be first

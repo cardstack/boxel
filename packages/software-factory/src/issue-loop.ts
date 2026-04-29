@@ -389,26 +389,36 @@ export async function runIssueLoop(
         }`,
       );
 
-      // The loop owns issue status transitions. The agent reports
-      // completion by ending its turn; `result.status === 'done'`
-      // covers both that path (heuristic: any tool calls happened)
-      // and any future explicit done-signal mechanism. The loop
-      // promotes the issue to `done` only when the agent reports
-      // done, validation passes, AND the sync succeeded — a failed
-      // sync means the realm doesn't have the agent's writes, so
-      // marking it done would claim completion for work that isn't
-      // actually delivered.
-      let agentReportedDone = result.status === 'done';
+      // Refresh issue state from realm first — the agent may have
+      // explicitly transitioned it (to `blocked`, for example) via
+      // its tool calls, and we need to respect that before deciding
+      // whether to auto-mark `done`.
+      issue = await scheduler.refreshIssueState(issue);
+      log.info(`  Issue state after refresh: status=${issue.status}`);
 
-      if (agentReportedDone && validationResults?.passed && !syncFailed) {
+      // The loop owns the implicit "agent finished, work landed,
+      // validation passed → mark done" transition. We only flip the
+      // issue when:
+      //   1. The agent reported done (`result.status === 'done'`)
+      //   2. The issue is still `in_progress` (agent hasn't marked
+      //      it `blocked` / `done` / something else explicitly)
+      //   3. Validation passed
+      //   4. The workspace sync to the realm succeeded — a failed
+      //      sync means the realm doesn't have the agent's writes,
+      //      so marking it done would claim completion for work
+      //      that isn't actually delivered.
+      let shouldAutoMarkDone =
+        result.status === 'done' &&
+        issue.status === 'in_progress' &&
+        validationResults?.passed === true &&
+        !syncFailed;
+
+      if (shouldAutoMarkDone) {
         try {
           await issueStore.updateIssue(issue.id, { status: 'done' });
           // updateIssue writes the status flip to the local workspace.
-          // refreshIssueState below queries the realm's search index, so
-          // the flip has to reach the realm before the refresh — otherwise
-          // the loop reads stale `in_progress` and runs another inner
-          // iteration (or, with a low maxIterationsPerIssue, exits as
-          // max_iterations instead of done).
+          // The realm only sees it once we sync; without the sync,
+          // the next refresh would read stale `in_progress`.
           let doneSync = await syncWorkspace();
           if (!doneSync.ok) {
             log.warn(
@@ -418,24 +428,22 @@ export async function runIssueLoop(
           log.info(
             `  Issue marked done (agent ended turn, validation passed, sync succeeded)`,
           );
+          issue = await scheduler.refreshIssueState(issue);
+          log.info(`  Issue state after auto-done: status=${issue.status}`);
         } catch (err) {
           log.warn(
             `  Failed to mark issue as done: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
-      } else if (agentReportedDone && syncFailed) {
+      } else if (result.status === 'done' && syncFailed) {
         log.info(
           `  Agent reported done but workspace sync failed — work isn't on the realm yet, continuing iteration`,
         );
-      } else if (agentReportedDone && !validationResults?.passed) {
+      } else if (result.status === 'done' && !validationResults?.passed) {
         log.info(
           `  Agent reported done but validation failed — continuing iteration`,
         );
       }
-
-      // Refresh issue state from realm
-      issue = await scheduler.refreshIssueState(issue);
-      log.info(`  Issue state after refresh: status=${issue.status}`);
 
       // Check exit conditions
       if (issue.status === 'done') {

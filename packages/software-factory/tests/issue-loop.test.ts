@@ -526,7 +526,13 @@ module('issue-loop > max inner iterations', function () {
     );
   });
 
-  test('max iterations with passing validation keeps max_iterations exit reason', async function (assert) {
+  test('passing validation auto-marks issue done on first iteration', async function (assert) {
+    // After CS-10883 the loop owns the implicit "agent finished
+    // their turn + validation passed → mark done" transition, so
+    // the agent doesn't need to call `signal_done` (or any other
+    // explicit done signal). When the first turn does real work
+    // and validation passes, the loop should mark the issue done
+    // and exit immediately — even if maxIterationsPerIssue is 3.
     let store = new MockIssueStore([
       makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
     ]);
@@ -557,9 +563,8 @@ module('issue-loop > max inner iterations', function () {
       }),
     );
 
-    // When validation passes but issue not done, exit reason stays max_iterations
-    assert.strictEqual(result.issueResults[0].exitReason, 'max_iterations');
-    assert.strictEqual(result.issueResults[0].innerIterations, 3);
+    assert.strictEqual(result.issueResults[0].exitReason, 'done');
+    assert.strictEqual(result.issueResults[0].innerIterations, 1);
   });
 
   test('updateIssue called when blocking due to max iterations + failing validation', async function (assert) {

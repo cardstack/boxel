@@ -15,7 +15,6 @@
 import { resolve } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
-import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { logger } from './logger';
@@ -50,7 +49,6 @@ import {
 } from './issue-loop';
 import { RealmIssueStore, type IssueStore } from './issue-scheduler';
 import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader';
-import { fetchCardTypeSchema } from './darkfactory-schemas';
 import { withStdoutRedirected } from './redirect-stdout';
 
 let log = logger('factory-issue-loop-wiring');
@@ -139,14 +137,6 @@ export async function runFactoryIssueLoop(
     client,
   });
 
-  let darkfactoryModuleBase = new URL('software-factory/', realmServerUrl).href;
-  let cardTypeSchemas = await loadDarkFactorySchemas(
-    client,
-    realmServerUrl,
-    targetRealmUrl,
-    darkfactoryModuleBase,
-  );
-
   let testResultsModuleUrl = new URL(
     'software-factory/test-results',
     realmServerUrl,
@@ -170,12 +160,10 @@ export async function runFactoryIssueLoop(
   let hostAppUrl = config.hostAppUrl ?? realmServerUrl;
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealmUrl,
-    darkfactoryModuleUrl,
     realmServerUrl,
     client,
     workspaceDir,
     testResultsModuleUrl,
-    cardTypeSchemas,
     hostAppUrl,
   };
 
@@ -427,80 +415,3 @@ export async function retryBlockedIssues(
 }
 
 // ---------------------------------------------------------------------------
-// DarkFactory schema loading
-// ---------------------------------------------------------------------------
-
-const DARKFACTORY_CARD_TYPES = ['Project', 'Issue', 'KnowledgeArticle'];
-const BASE_CARD_TYPES: { module: string; name: string }[] = [
-  { module: 'https://cardstack.com/base/spec', name: 'Spec' },
-];
-
-async function loadDarkFactorySchemas(
-  client: BoxelCLIClient,
-  realmServerUrl: string,
-  commandRealmUrl: string,
-  darkfactoryModuleBase: string,
-): Promise<
-  | Map<
-      string,
-      {
-        attributes: Record<string, unknown>;
-        relationships?: Record<string, unknown>;
-      }
-    >
-  | undefined
-> {
-  let darkfactoryModule = `${ensureTrailingSlash(darkfactoryModuleBase)}darkfactory`;
-  let schemas = new Map<
-    string,
-    {
-      attributes: Record<string, unknown>;
-      relationships?: Record<string, unknown>;
-    }
-  >();
-
-  for (let cardName of DARKFACTORY_CARD_TYPES) {
-    try {
-      let schema = await fetchCardTypeSchema(
-        client,
-        realmServerUrl,
-        commandRealmUrl,
-        {
-          module: rri(darkfactoryModule),
-          name: cardName,
-        },
-      );
-      if (schema) {
-        schemas.set(cardName, schema);
-      }
-    } catch (error) {
-      log.warn(
-        `Could not fetch schema for ${cardName}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  }
-
-  for (let { module: mod, name } of BASE_CARD_TYPES) {
-    try {
-      let schema = await fetchCardTypeSchema(
-        client,
-        realmServerUrl,
-        commandRealmUrl,
-        { module: rri(mod), name },
-      );
-      if (schema) {
-        schemas.set(name, schema);
-      }
-    } catch (error) {
-      log.warn(
-        `Could not fetch schema for ${name}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  }
-
-  return schemas.size > 0 ? schemas : undefined;
-}
