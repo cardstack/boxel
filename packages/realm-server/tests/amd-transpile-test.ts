@@ -105,6 +105,22 @@ module(basename(__filename), function () {
       await runSharedTest(amdTranspileTests, assert, {});
     });
 
+    test('shorthand property of an imported name (regression P0-1)', async function (assert) {
+      await runSharedTest(amdTranspileTests, assert, {});
+    });
+
+    test('for-let loop variable shadowing an import (regression P0-2a)', async function (assert) {
+      await runSharedTest(amdTranspileTests, assert, {});
+    });
+
+    test('for-in var hoisting through function scope (regression P0-2b)', async function (assert) {
+      await runSharedTest(amdTranspileTests, assert, {});
+    });
+
+    test('computed key in destructured export (regression P0-3)', async function (assert) {
+      await runSharedTest(amdTranspileTests, assert, {});
+    });
+
     test('export default of an imported binding', async function (assert) {
       await runSharedTest(amdTranspileTests, assert, {});
     });

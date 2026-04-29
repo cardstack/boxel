@@ -21,7 +21,7 @@
 //     on `_exports` so mutations to the local propagate to importers.
 //   - Re-exports of imported names (`export { x }`, `export { x } from`,
 //     `export *`) install getters that read through the dep arg.
-//   - `export default <expression>` stripps the source statement to a
+//   - `export default <expression>` strips the source statement to a
 //     `var __default$N = (<expr>);` capture (so the identifier-rewrite
 //     walk can rewrite imported names inside `<expr>`) and appends an
 //     `_exports.default = __default$N` setter at the end of the body.
@@ -585,6 +585,9 @@ function rewriteIdentifierReferences(
       case 'LabeledStatement':
         if (body.body) collectFunctionScopeHoists(body.body);
         if (body.init) collectFunctionScopeHoists(body.init);
+        // for-in / for-of LHS can be `var x` — that var hoists to the
+        // enclosing function scope, same as any other var.
+        if (body.left) collectFunctionScopeHoists(body.left);
         break;
     }
   };
@@ -690,10 +693,14 @@ function rewriteIdentifierReferences(
       case 'ExportNamedDeclaration':
         // `export const X = ...` / `export function f() {...}` — the
         // declaration body was kept (only `export ` keyword stripped), so
-        // walk into it for identifier rewriting.
+        // walk into it for identifier rewriting. For destructured forms
+        // like `export const { [k]: v } = obj`, we also need to walk
+        // computed keys in the pattern (the `k` reference, not the `v`
+        // binding LHS).
         if (node.declaration) {
           if (node.declaration.type === 'VariableDeclaration') {
             for (const d of node.declaration.declarations) {
+              walkPatternComputedKeys(d.id);
               if (d.init) walk(d.init, d, 'init', null);
             }
           } else {
@@ -775,6 +782,22 @@ function rewriteIdentifierReferences(
       case 'ForInStatement':
       case 'ForOfStatement': {
         pushScope('block');
+        // Pull `let`/`const` bindings out of the for-head into the block
+        // scope BEFORE walking init/test/update/body — otherwise the loop
+        // variable would still be visible as a top-level (potentially
+        // imported) name and references inside the test/update/body would
+        // get rewritten to `_dep.x`.
+        for (const head of [node.init, node.left]) {
+          if (
+            head &&
+            head.type === 'VariableDeclaration' &&
+            (head.kind === 'let' || head.kind === 'const')
+          ) {
+            for (const d of head.declarations) {
+              collectPatternBindings(d.id, declareInCurrent);
+            }
+          }
+        }
         if (node.init) walk(node.init, node, 'init', null);
         if (node.left) walk(node.left, node, 'left', null);
         if (node.test) walk(node.test, node, 'test', null);
@@ -840,7 +863,21 @@ function rewriteIdentifierReferences(
         ) {
           const accessor = importedAccess.get(node.name);
           if (accessor) {
-            ms.overwrite(node.start, node.end, accessor);
+            // Shorthand property `{ x }` where `x` is an imported name:
+            // the AST has `key` and `value` both pointing at the same
+            // Identifier node. Naive `ms.overwrite(start, end, '_foo.x')`
+            // would emit `{ _foo.x }` — a SyntaxError. Insert the
+            // explicit `key:` prefix so we get `{ x: _foo.x }`.
+            if (
+              parent &&
+              parent.type === 'Property' &&
+              parent.shorthand &&
+              parentKey === 'value'
+            ) {
+              ms.overwrite(node.start, node.end, `${node.name}: ${accessor}`);
+            } else {
+              ms.overwrite(node.start, node.end, accessor);
+            }
           }
         }
         return;

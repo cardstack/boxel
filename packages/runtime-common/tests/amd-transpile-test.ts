@@ -338,6 +338,73 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
     assert.strictEqual(exports.alias, 100);
   },
 
+  'shorthand property of an imported name (regression P0-1)': async (
+    assert,
+  ) => {
+    // `import { x } from 'foo'; const r = { x };` — naive overwrite of
+    // the shorthand identifier produces `{ _foo$1.x }` (SyntaxError).
+    // We must emit the explicit `x: _foo$1.x` form instead.
+    let out = transpileAmd(
+      `import { user } from 'auth';
+       export function pack() { return { user }; }`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out, { auth: { user: 'live' } });
+    assert.deepEqual((exports.pack as () => unknown)(), { user: 'live' });
+  },
+
+  'for-let loop variable shadowing an import (regression P0-2a)': async (
+    assert,
+  ) => {
+    // `for (let i = 0; i < N; i++)` where `i` is also imported — the
+    // loop variable must shadow the import inside the test/update/body.
+    let out = transpileAmd(
+      `import { i } from 'shadow';
+       export function loop() {
+         let last = -1;
+         for (let i = 0; i < 3; i++) { last = i; }
+         return last;
+       }`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out, { shadow: { i: 'IMPORTED' } });
+    assert.strictEqual((exports.loop as () => number)(), 2);
+  },
+
+  'for-in var hoisting through function scope (regression P0-2b)': async (
+    assert,
+  ) => {
+    // `for (var k in obj) {}` — `k` hoists to the enclosing function
+    // scope and must shadow the imported `k` for both the loop body
+    // AND the post-loop reference.
+    let out = transpileAmd(
+      `import { k } from 'shadow';
+       export function readK() {
+         let last;
+         for (var k in { a: 1, b: 2 }) { last = k; }
+         return [k, last];
+       }`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out, { shadow: { k: 'IMPORTED' } });
+    let result = (exports.readK as () => [string, string])();
+    assert.strictEqual(result[0], 'b', 'post-loop k holds the last loop value');
+    assert.strictEqual(result[1], 'b', 'in-loop k is the var, not the import');
+  },
+
+  'computed key in destructured export (regression P0-3)': async (assert) => {
+    // `export const { [k]: v } = obj` where `k` is imported — the
+    // computed-key reference must be rewritten so the destructure picks
+    // the right property at runtime.
+    let out = transpileAmd(
+      `import { keyName } from 'cfg';
+       export const { [keyName]: chosen } = { actualKey: 'value!' };`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out, { cfg: { keyName: 'actualKey' } });
+    assert.strictEqual(exports.chosen, 'value!');
+  },
+
   'export default of an imported binding': async (assert) => {
     // Regression for the exact bug that broke base-realm indexing — a
     // module like `import x from 'foo'; export default x;`. The

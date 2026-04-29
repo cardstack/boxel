@@ -31,7 +31,6 @@
     "@types/qs": "catalog:",
     "@types/uuid": "catalog:",
     "acorn": "catalog:",
-    "acorn-walk": "catalog:",
     "awesome-phonenumber": "catalog:",
     "babel-import-util": "^1.2.2",
     "babel-plugin-ember-template-compilation": "catalog:",
