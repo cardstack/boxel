@@ -35,10 +35,24 @@
 //
 //     • thrown + not revoked  → genuine uncaught exception, surface
 //                               it as a real error signal.
-//     • thrown + revoked      → silently caught upstream (the RSVP
-//                               late-`.catch` case above) — drop it
-//                               so we don't swamp the error doc with
-//                               transient noise.
+//     • thrown + revoked      → V8 retracted the uncaught status (a
+//                               late `.catch` got attached
+//                               downstream — typically RSVP /
+//                               Backburner / Ember runloop). We
+//                               still surface the entry — render-
+//                               runner tags the title with
+//                               "(revoked by late .catch)" so the
+//                               lifecycle is visible to operators.
+//
+//   An earlier iteration of this module discarded revoked entries
+//   as "transient noise". That turned out to be wrong: the
+//   whitepaper-class render bug fits the revoked pattern exactly
+//   (RSVP swallows the rejection so `unhandledrejection` never
+//   fires; Glimmer's render tree is still poisoned), and dropping
+//   them was actively discarding the actionable stack we'd
+//   captured. The render either way ends up in error state, and
+//   `additionalErrors` is only attached to error docs, so the
+//   noise risk is bounded.
 //
 // Lifecycle:
 //
@@ -110,17 +124,20 @@ interface CdpExceptionRevokedEvent {
 
 export interface RuntimeExceptionRecorder {
   // Called once per Runtime.exceptionThrown. The recorder owns the
-  // exceptionId-to-storage-key mapping internally so that on a later
-  // `recordRevoked(exceptionId)` it can find and remove the matching
+  // exceptionId-to-storage-key mapping internally so that a later
+  // `recordRevoked(exceptionId)` can find and tag the matching
   // entry. Returning false signals storage was at limit (e.g.
   // CONSOLE_ERROR_LIMIT exceeded); when that happens the recorder
-  // must NOT retain any tracking for this exceptionId, so a follow-
-  // up revocation is a clean no-op rather than a phantom remove.
+  // must NOT retain any tracking for this exceptionId, so a
+  // follow-up revocation is a clean no-op rather than a phantom
+  // tag.
   recordThrown: (exceptionId: number, entry: ConsoleErrorEntry) => boolean;
-  // Called once per Runtime.exceptionRevoked. The recorder finds the
-  // entry it stored for this exceptionId (if any) and removes it.
-  // No-op if recordThrown was never called for this id, or if it
-  // returned false (storage was at limit).
+  // Called once per Runtime.exceptionRevoked. The recorder finds
+  // the entry it stored for this exceptionId (if any) and tags it
+  // as revoked — it stays in the bucket so render-runner can
+  // surface it on the error doc with a `(revoked by late .catch)`
+  // marker. No-op if recordThrown was never called for this id,
+  // or if it returned false (storage was at limit).
   recordRevoked: (exceptionId: number) => void;
 }
 
@@ -169,12 +186,12 @@ export async function attachRuntimeExceptionCapture(
       recorder.recordThrown(details.exceptionId, entry);
       // Logged at debug, not error: V8 fires this for every uncaught
       // throw including the ones RSVP / Backburner catch a microtask
-      // later (which are then revoked and dropped from the bucket).
-      // Logging at error would flood production logs with transient
-      // late-catch noise. The actual surfaced exceptions reach the
-      // error doc via `additionalErrors`; that's the operator-facing
-      // signal. If you want raw V8 visibility, enable `prerenderer-
-      // chrome` at debug.
+      // later (now tagged `revoked: true` rather than dropped, but
+      // still common). Logging at error would flood production logs
+      // with transient late-catch noise. The actual surfaced
+      // exceptions reach the error doc via `additionalErrors`;
+      // that's the operator-facing signal. If you want raw V8
+      // visibility, enable `prerenderer-chrome` at debug.
       chromeLog.debug(
         'Runtime.exceptionThrown affinity=%s pageId=%s exceptionId=%s text=%s',
         getAffinityKey(),

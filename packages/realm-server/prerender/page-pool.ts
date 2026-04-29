@@ -138,14 +138,13 @@ export type ConsoleErrorEntry = {
   type: ReturnType<ConsoleMessage['type']>;
   text: string;
   location?: ConsoleErrorLocation;
-  // Captured CDP stack frames from the originating site. Today only
-  // the `source: 'exception'` path populates this — V8's
-  // `stackTrace.callFrames` attached to a `Runtime.exceptionThrown`
-  // event flow through verbatim. The field is intentionally on the
-  // shared shape so the console-error path can also wire up
-  // `ConsoleMessage.stackTrace()` later without changing the
-  // serialisation contract; absence here just means render-runner
-  // emits a SerializedError with no `stack` field for that entry.
+  // Captured CDP stack frames from the originating site. Populated by
+  // both the `source: 'console'` path (via `ConsoleMessage.stackTrace()`
+  // — Chrome attaches frames to `console.error` and "Uncaught (in
+  // promise)" log lines, which is the desync-detector's only lead
+  // back at the offending template / getter / helper) and by the
+  // `source: 'exception'` path (V8's `stackTrace.callFrames` from a
+  // `Runtime.exceptionThrown` event).
   stackFrames?: ConsoleErrorLocation[];
   // Discriminates 'console' (page.on('console')) vs 'exception'
   // (Runtime.exceptionThrown over CDP). The two share storage and
@@ -154,6 +153,19 @@ export type ConsoleErrorEntry = {
   // distinct so an operator can tell which layer surfaced the error.
   // Default 'console' so existing call sites stay backward-compat.
   source?: 'console' | 'exception';
+  // Set on `source: 'exception'` entries when V8 later fires
+  // `Runtime.exceptionRevoked` for the same exceptionId — i.e. some
+  // downstream code attached a `.catch` after V8 had already reported
+  // the rejection as uncaught (RSVP / Backburner / Ember runloop
+  // commonly do this). The original design dropped these as
+  // "transient noise", but the whitepaper-class render bug IS exactly
+  // this pattern: RSVP swallows the rejection so `unhandledrejection`
+  // never fires, the render is wedged anyway, and the only signal we
+  // had was being silently discarded. We now keep revoked entries in
+  // the bucket so they reach `additionalErrors`; render-runner adds
+  // a `(revoked by late .catch)` marker to the surfaced title so
+  // operators can see the lifecycle.
+  revoked?: boolean;
 };
 
 const log = logger('prerenderer');
@@ -1551,8 +1563,50 @@ export class PagePool {
     let key = exceptionKeys?.get(exceptionId);
     if (!key) return;
     let bucket = this.#consoleErrorsByPageId.get(pageId);
-    bucket?.delete(key);
-    exceptionKeys!.delete(exceptionId);
+    let entry = bucket?.get(key);
+    if (entry) {
+      // Tag the existing entry instead of deleting it. The whitepaper-
+      // class render bug fits the "thrown then revoked" pattern (RSVP
+      // / Backburner attaches a late `.catch` that retracts V8's
+      // uncaught status), and dropping these entries was actively
+      // discarding the actionable stack we'd captured. Render-runner
+      // surfaces revoked entries with `(revoked by late .catch)` in
+      // the title so operators can see the lifecycle without losing
+      // the lead.
+      entry.revoked = true;
+    }
+    // Keep the exceptionKeys mapping — there's no further follow-up
+    // event to dispatch, but a stale-but-harmless entry is better
+    // than a phantom remove if V8 ever re-fires for the same id.
+  }
+
+  // Test-only seam: writes a `source: 'exception'` entry directly
+  // into the per-page bucket and tags it as revoked, mimicking the
+  // end state of a real CDP `Runtime.exceptionThrown` ->
+  // `Runtime.exceptionRevoked` pair without needing V8 to actually
+  // fire the events. We can't synthesize a card-level fixture that
+  // produces real CDP exception events (Ember's runloop catches
+  // synthetic throws before V8 classifies them as uncaught), so
+  // this seam lets the integration tests pin down that the
+  // bucket-to-additionalErrors merge happens at every error-doc
+  // call site (timeout, render error, unusable, fileExtract,
+  // fileRender). Production code never calls this.
+  __test_seedRevokedException(
+    pageId: string,
+    entry: ConsoleErrorEntry,
+    exceptionId: number,
+  ): void {
+    // Force `source: 'exception'` so the seam can't be silently
+    // misused with a `source: 'console'` entry — that would serialize
+    // through render-runner as a "Console error", not the
+    // "Uncaught exception (revoked by late .catch)" we're trying to
+    // pin down. Clone so we don't mutate the caller's object.
+    let seededEntry: ConsoleErrorEntry = {
+      ...entry,
+      source: 'exception',
+    };
+    this.#recordThrownException(pageId, exceptionId, seededEntry);
+    this.#recordRevokedException(pageId, exceptionId);
   }
 
   #attachPageConsole(page: Page, affinityKey: string, pageId: string): void {
@@ -1600,10 +1654,30 @@ export class PagePool {
           formatted,
         );
         if (type === 'error' || type === 'assert') {
+          // Puppeteer's ConsoleMessage.stackTrace() returns the CDP-reported
+          // call stack at the point the message was emitted. Chrome
+          // populates this for "Uncaught (in promise) ..." logs even when
+          // no JS-level error event fires, so it's our best lead for the
+          // desync class of failures.
+          let pptrStackTrace = message.stackTrace?.();
+          let stackFrames: ConsoleErrorLocation[] | undefined =
+            Array.isArray(pptrStackTrace) && pptrStackTrace.length > 0
+              ? pptrStackTrace
+                  .filter((frame) => !!frame?.url)
+                  .map((frame) => ({
+                    url: frame.url,
+                    lineNumber: frame.lineNumber,
+                    columnNumber: frame.columnNumber,
+                  }))
+              : undefined;
+          if (stackFrames && stackFrames.length === 0) {
+            stackFrames = undefined;
+          }
           this.#recordConsoleError(pageId, {
             type,
             text: formatted,
             location: locationData,
+            stackFrames,
           });
         }
       } catch (e) {
@@ -1626,7 +1700,13 @@ export class PagePool {
     if (bucket.size >= CONSOLE_ERROR_LIMIT) {
       return;
     }
-    let location = entry.location;
+    // Dedup key falls back to the top stack frame when the message has
+    // no location of its own. Browser-internal "Uncaught (in promise)
+    // ..." logs typically have no `message.location()`, so two distinct
+    // throws with the same exception text but different originating sites
+    // would otherwise collapse into one entry — and we'd lose the stack
+    // frames that are the only debugging signal for the desync class.
+    let location = entry.location ?? entry.stackFrames?.[0];
     let key = [
       entry.type,
       entry.text,

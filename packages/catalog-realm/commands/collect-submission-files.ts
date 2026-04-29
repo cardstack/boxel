@@ -22,6 +22,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import GetCardCommand from '@cardstack/boxel-host/commands/get-card';
+import ReadBinaryFileCommand from '@cardstack/boxel-host/commands/read-binary-file';
 import ReadSourceCommand from '@cardstack/boxel-host/commands/read-source';
 import SerializeCardCommand from '@cardstack/boxel-host/commands/serialize-card';
 
@@ -87,6 +88,7 @@ export default class CollectSubmissionFilesCommand extends Command<
   ): Promise<FileWithContent[]> {
     let realmUrl = new RealmPaths(new URL(listingRealm)).url;
     let getCardCommand = new GetCardCommand(this.commandContext);
+    let readBinaryFileCommand = new ReadBinaryFileCommand(this.commandContext);
     let readSourceCommand = new ReadSourceCommand(this.commandContext);
 
     const listing = (await getCardCommand.execute({
@@ -167,7 +169,7 @@ export default class CollectSubmissionFilesCommand extends Command<
       return path;
     };
 
-    // Build a map of source URL (extension-less) → PR path (extension-less).
+    // Build a map of source URL → PR path.
     // After the PR merges into the catalog, cross-realm references in the
     // submitted files must resolve to their new co-located files. We rewrite
     // all references in file contents to relative paths so the submission is
@@ -216,10 +218,33 @@ export default class CollectSubmissionFilesCommand extends Command<
         let source = await readSourceCommand.execute({
           path: `${listing.id}.json`,
         });
+
+        // Resolve thumbnail URL before rewriting listing.json so we can
+        // rewrite absolute thumbnail references to the copied PR asset path.
+        let rawThumbnailUrl = extractThumbnailUrl(source.content);
+        let thumbnailUrl: string | undefined;
+        let thumbnailPath: string | undefined;
+        if (rawThumbnailUrl) {
+          thumbnailUrl = new URL(rawThumbnailUrl, `${listing.id}.json`).href;
+          thumbnailPath = toRepoRelativePath(thumbnailUrl, '');
+          urlToRepoPath.set(thumbnailUrl, thumbnailPath);
+        }
+
         filesWithContent.push({
           path,
           content: rewriteReferences(source.content, path),
         });
+
+        if (thumbnailUrl && thumbnailPath && !seenPaths.has(thumbnailPath)) {
+          seenPaths.add(thumbnailPath);
+          let binary = await readBinaryFileCommand.execute({
+            url: thumbnailUrl,
+          });
+          filesWithContent.push({
+            path: thumbnailPath,
+            content: binary.base64Content ?? '',
+          });
+        }
       }
     }
 
@@ -328,6 +353,17 @@ export default class CollectSubmissionFilesCommand extends Command<
     }
 
     return [...instancesById.values()];
+  }
+}
+
+function extractThumbnailUrl(listingJsonContent: string): string | null {
+  try {
+    let doc = JSON.parse(listingJsonContent) as Record<string, any>;
+    let thumbnailRel = doc?.data?.relationships?.['cardInfo.cardThumbnail'];
+    let url = thumbnailRel?.links?.self;
+    return typeof url === 'string' && url.trim() ? url.trim() : null;
+  } catch {
+    return null;
   }
 }
 

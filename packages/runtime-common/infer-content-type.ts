@@ -19,3 +19,15 @@ export function inferContentType(filename: string): string {
   let mimeType = lookupMimeType(filename);
   return mimeType ? mimeType : DEFAULT_FILE_CONTENT_TYPE;
 }
+
+export function isBinaryFilename(filename: string): boolean {
+  let mimeType = inferContentType(filename);
+  // SVG is image/* but is XML-based text
+  if (mimeType === 'image/svg+xml') return false;
+  return (
+    mimeType.startsWith('image/') ||
+    mimeType.startsWith('font/') ||
+    mimeType === 'application/pdf' ||
+    mimeType === 'application/vnd.ms-fontobject' // .eot legacy font
+  );
+}

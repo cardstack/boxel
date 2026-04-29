@@ -9,7 +9,11 @@ import {
   type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager';
-import { PagePool, StandbyTargetNotReadyError } from './page-pool';
+import {
+  PagePool,
+  StandbyTargetNotReadyError,
+  type ConsoleErrorEntry,
+} from './page-pool';
 import { RenderRunner, type Timings } from './render-runner';
 import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry';
 import { toAffinityKey } from './affinity';
@@ -137,6 +141,15 @@ export class Prerenderer {
   // (operators read this locally) so we don't inflate every heartbeat.
   getQueueDepthSnapshot() {
     return this.#pagePool.getQueueDepthSnapshot();
+  }
+
+  // Test-only seam — see PagePool.__test_seedRevokedException.
+  __test_seedRevokedException(
+    pageId: string,
+    entry: ConsoleErrorEntry,
+    exceptionId: number,
+  ): void {
+    this.#pagePool.__test_seedRevokedException(pageId, entry, exceptionId);
   }
 
   async stop(): Promise<void> {
@@ -496,6 +509,11 @@ export class Prerenderer {
     rawArgs: PrerenderVisitArgs & {
       opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
       signal?: AbortSignal;
+      // Test-only hook fired right after a page is acquired and its
+      // bucket has been reset. Used by tests that need to seed the
+      // bucket via `__test_seedRevokedException` so the seed survives
+      // into the merge step. Production callers don't pass this.
+      onTabAcquired?: (info: { pageId: string }) => void;
     },
   ): Promise<{
     response: RenderVisitResponse;
@@ -522,6 +540,9 @@ export class Prerenderer {
       opts,
     } = this.#gateClearCache(rawArgs);
     let signal = (rawArgs as { signal?: AbortSignal }).signal;
+    let testOnTabAcquired = (
+      rawArgs as { onTabAcquired?: (info: { pageId: string }) => void }
+    ).onTabAcquired;
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     let activity = this.#affinityActivity.record(
       affinityKey,
@@ -529,6 +550,10 @@ export class Prerenderer {
       'visit',
       'file',
     );
+    let onTabAcquired = (info: { pageId: string }) => {
+      activity.markRunning();
+      testOnTabAcquired?.(info);
+    };
     // See `prerenderModule` — declared before the try so a synchronous
     // throw from `#registerPeakSampling` can't leak the activity entry.
     let poller: PeakRegistration | undefined;
@@ -569,7 +594,7 @@ export class Prerenderer {
             fileData,
             types,
             signal,
-            onTabAcquired: activity.markRunning,
+            onTabAcquired,
           });
         } catch (e) {
           // Caller cancelled — log + conditionally evict, then
@@ -600,7 +625,7 @@ export class Prerenderer {
               fileData,
               types,
               signal,
-              onTabAcquired: activity.markRunning,
+              onTabAcquired,
             });
           } catch (e2) {
             if (e2 instanceof PrerenderCancelledError) {

@@ -1,0 +1,82 @@
+// Local-dev log scraper. Discovers running Docker containers via the Docker
+// socket and ships their stdout into Loki with a label schema that mirrors
+// what staging / production FireLens emits.
+//
+// Label schema (load-bearing — see packages/observability/README.md):
+//   env      — environment marker; constant "local" here, "staging" / "production" hosted
+//   service  — container/process name (e.g. realm-server, worker, synapse, postgres)
+//   realm    — opt-in realm name; set per-container via the `boxel.realm` Docker label
+
+logging {
+	level  = "info"
+	format = "logfmt"
+}
+
+discovery.docker "containers" {
+	host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+	targets = discovery.docker.containers.targets
+
+	// Drop the observability stack's own Compose services — querying their
+	// logs in Grafana creates runaway noise and a Grafana → Loki feedback
+	// loop. Match the exact Compose service label so unrelated containers
+	// whose names merely contain grafana / loki / alloy (e.g. "loki-migrator")
+	// aren't dropped accidentally.
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		regex         = "^(grafana|loki|alloy)$"
+		action        = "drop"
+	}
+
+	// Docker exposes container name as "/<name>"; strip the leading slash.
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "service"
+	}
+
+	// Optional realm label — only set when the container exposes
+	// `boxel.realm`. Without the (.+) match, the rule would always set the
+	// label (to an empty string), so queries like `realm!=""` would behave
+	// differently from "realm absent".
+	rule {
+		source_labels = ["__meta_docker_container_label_boxel_realm"]
+		regex         = "(.+)"
+		target_label  = "realm"
+	}
+
+	// Constant env marker so dashboards can filter local vs hosted in mixed setups.
+	rule {
+		target_label = "env"
+		replacement  = "local"
+		action       = "replace"
+	}
+}
+
+loki.source.docker "containers" {
+	host       = "unix:///var/run/docker.sock"
+	targets    = discovery.relabel.containers.output
+	forward_to = [loki.process.filter_old.receiver]
+}
+
+// Long-running containers (e.g. a `boxel-pg` that's been up for a year)
+// hand Alloy their entire log history when it first attaches. Loki rejects
+// anything outside its small ordering window, generating a 400-storm. Drop
+// anything older than 24h before forwarding so the local feed shows just
+// what's recent.
+loki.process "filter_old" {
+	forward_to = [loki.write.local.receiver]
+
+	stage.drop {
+		older_than          = "24h"
+		drop_counter_reason = "too_old"
+	}
+}
+
+loki.write "local" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}
