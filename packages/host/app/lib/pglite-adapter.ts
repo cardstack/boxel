@@ -12,6 +12,7 @@ export default class PGLiteAdapter implements DBAdapter {
   readonly kind = 'pg';
   private db: PGlite | undefined;
   private tables: string[] = [];
+  private snapshots = new Map<string, PGlite>();
   #isClosed = false;
   private started: Promise<void>;
 
@@ -34,7 +35,10 @@ export default class PGLiteAdapter implements DBAdapter {
 
     if (this.schemaSQL) {
       try {
-        await waitForPromise(this.db.exec(this.schemaSQL), 'pglite schema init');
+        await waitForPromise(
+          this.db.exec(this.schemaSQL),
+          'pglite schema init',
+        );
       } catch (e: any) {
         console.error(
           `Error executing PG schema SQL: ${e.message}\n${this.schemaSQL}`,
@@ -59,6 +63,10 @@ export default class PGLiteAdapter implements DBAdapter {
   async close() {
     this.assertNotClosed();
     await this.started;
+    for (let snapshot of this.snapshots.values()) {
+      await snapshot.close();
+    }
+    this.snapshots.clear();
     await this.pglite.close();
     this.#isClosed = true;
   }
@@ -66,8 +74,12 @@ export default class PGLiteAdapter implements DBAdapter {
   async reset() {
     this.assertNotClosed();
     await this.started;
-    for (let table of this.tables) {
-      await this.execute(`DELETE FROM ${table}`);
+    // TRUNCATE reclaims storage immediately (unlike DELETE which leaves
+    // dead tuples until VACUUM). This keeps memory stable across tests.
+    if (this.tables.length > 0) {
+      await this.pglite.exec(
+        `TRUNCATE ${this.tables.join(', ')} RESTART IDENTITY`,
+      );
     }
   }
 
@@ -156,27 +168,58 @@ export default class PGLiteAdapter implements DBAdapter {
     this.tables = result.map((r) => r.tablename) as string[];
   }
 
-  // Snapshot support - for now, simple implementations that can be enhanced later
+  // --- Snapshot support via PGLite clone() ---
+  // Each snapshot is a frozen clone of the PGLite instance. On import we
+  // clone the snapshot again (so it can be re-imported multiple times)
+  // and swap it in as the active database.
+
   async exportSnapshot(snapshotName?: string): Promise<string> {
-    // For the spike, snapshots are not yet implemented with PGLite.
-    // The test framework will fall through to running full setup each time.
-    return snapshotName ?? 'noop';
+    this.assertNotClosed();
+    await this.started;
+    let name = snapshotName ?? `snapshot_${this.snapshots.size + 1}`;
+    let clone = await waitForPromise(
+      (this.pglite as any).clone() as Promise<PGlite>,
+      'pglite snapshot export',
+    );
+    this.snapshots.set(name, clone);
+    return name;
   }
 
-  hasSnapshot(_snapshotName: string): boolean {
-    return false;
+  hasSnapshot(snapshotName: string): boolean {
+    return this.snapshots.has(snapshotName);
   }
 
-  async deleteSnapshotsByPrefix(_snapshotNamePrefix: string): Promise<void> {
-    // no-op for now
+  async importSnapshot(snapshotName: string): Promise<void> {
+    this.assertNotClosed();
+    await this.started;
+    let snapshot = this.snapshots.get(snapshotName);
+    if (!snapshot) {
+      throw new Error(`Unknown snapshot '${snapshotName}'`);
+    }
+    // Clone the snapshot so it can be imported again later
+    let restored = await waitForPromise(
+      (snapshot as any).clone() as Promise<PGlite>,
+      'pglite snapshot import',
+    );
+    // Swap: close the current instance and replace it
+    await this.pglite.close();
+    this.db = restored;
   }
 
-  async deleteSnapshot(_snapshotName: string): Promise<void> {
-    // no-op for now
+  async deleteSnapshot(snapshotName: string): Promise<void> {
+    let snapshot = this.snapshots.get(snapshotName);
+    if (snapshot) {
+      await snapshot.close();
+      this.snapshots.delete(snapshotName);
+    }
   }
 
-  async importSnapshot(_snapshotName: string): Promise<void> {
-    // no-op for now
+  async deleteSnapshotsByPrefix(snapshotNamePrefix: string): Promise<void> {
+    for (let name of Array.from(this.snapshots.keys())) {
+      if (name.startsWith(snapshotNamePrefix)) {
+        await this.deleteSnapshot(name);
+      }
+    }
   }
 
   private assertNotClosed() {
