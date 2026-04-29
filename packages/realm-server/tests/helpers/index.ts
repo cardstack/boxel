@@ -252,8 +252,14 @@ export function createVirtualNetwork() {
   return virtualNetwork;
 }
 
+let testDbCounter = 0;
 export function prepareTestDB(): void {
-  process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
+  // PID + monotonic counter rules out same-process collisions and makes
+  // cross-process collisions essentially impossible. The previous
+  // `Math.random() * 10_000_000` form had ~0.6% birthday-paradox collision
+  // probability across ~350 tests in a shard, which surfaced in CI as
+  // `database "test_db_<n>" already exists` from cloneTestDBFromTemplate.
+  process.env.PGDATABASE = `test_db_${process.pid}_${++testDbCounter}`;
 }
 
 function pgAdminConnectionConfig() {
@@ -357,6 +363,18 @@ async function cloneTestDBFromTemplate(
   let client = new PgClient(pgAdminConnectionConfig());
   try {
     await client.connect();
+    // Defensive: drop a same-named DB before creating. prepareTestDB() now
+    // produces unique names, but a stray DB from a crashed prior run or a
+    // shared cluster could otherwise resurface as "database already exists".
+    await client.query(
+      `SELECT pg_terminate_backend(pid)
+         FROM pg_stat_activity
+        WHERE datname = $1 AND pid <> pg_backend_pid()`,
+      [database],
+    );
+    await client.query(
+      `DROP DATABASE IF EXISTS ${quotePgIdentifier(database)}`,
+    );
     await client.query(
       `CREATE DATABASE ${quotePgIdentifier(database)} TEMPLATE ${quotePgIdentifier(
         templateDatabaseName,
@@ -655,9 +673,9 @@ export function setupDB(
     templateDatabase?: TestDatabaseTemplateProvider;
   } = {},
 ) {
-  let dbAdapter: PgAdapter;
-  let publisher: QueuePublisher;
-  let runner: QueueRunner;
+  let dbAdapter: PgAdapter | undefined;
+  let publisher: QueuePublisher | undefined;
+  let runner: QueueRunner | undefined;
 
   const runBeforeHook = async () => {
     prepareTestDB();
@@ -676,17 +694,29 @@ export function setupDB(
   };
 
   const runAfterHook = async () => {
-    await publisher?.destroy();
+    // Clear refs as we go so a partial-setup beforeEach (e.g. the
+    // create-DB step throws after the previous test already closed
+    // its adapter) can't cascade into "Called end on pool more than
+    // once" when the next afterEach runs against stale closure state.
     if (publisher) {
-      trackedQueuePublishers.delete(publisher);
+      let p = publisher;
+      publisher = undefined;
+      trackedQueuePublishers.delete(p);
+      await p.destroy();
     }
-    await runner?.destroy();
     if (runner) {
-      trackedQueueRunners.delete(runner);
+      let r = runner;
+      runner = undefined;
+      trackedQueueRunners.delete(r);
+      await r.destroy();
     }
-    await dbAdapter?.close();
     if (dbAdapter) {
-      trackedDbAdapters.delete(dbAdapter);
+      let a = dbAdapter;
+      dbAdapter = undefined;
+      trackedDbAdapters.delete(a);
+      if (!a.isClosed) {
+        await a.close();
+      }
     }
   };
 
@@ -702,11 +732,13 @@ export function setupDB(
     }
     hooks.before(async function () {
       await runBeforeHook();
-      await args.before!(dbAdapter, publisher, runner);
+      await args.before!(dbAdapter!, publisher!, runner!);
     });
 
     hooks.after(async function () {
-      await args.after?.(dbAdapter, publisher, runner);
+      if (dbAdapter && publisher && runner) {
+        await args.after?.(dbAdapter, publisher, runner);
+      }
       await runAfterHook();
     });
   }
@@ -719,11 +751,13 @@ export function setupDB(
     }
     hooks.beforeEach(async function () {
       await runBeforeHook();
-      await args.beforeEach!(dbAdapter, publisher, runner);
+      await args.beforeEach!(dbAdapter!, publisher!, runner!);
     });
 
     hooks.afterEach(async function () {
-      await args.afterEach?.(dbAdapter, publisher, runner);
+      if (dbAdapter && publisher && runner) {
+        await args.afterEach?.(dbAdapter, publisher, runner);
+      }
       await runAfterHook();
     });
   }
