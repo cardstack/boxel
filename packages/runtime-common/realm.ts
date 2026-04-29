@@ -4684,8 +4684,7 @@ export class Realm {
         let adoptsFrom = (cardDoc!.data as any).meta?.adoptsFrom;
         if (
           !isPlainObject(adoptsFrom) ||
-          adoptsFrom.module !==
-            'https://cardstack.com/base/realm-config' ||
+          adoptsFrom.module !== 'https://cardstack.com/base/realm-config' ||
           adoptsFrom.name !== 'RealmConfig'
         ) {
           return systemError({
