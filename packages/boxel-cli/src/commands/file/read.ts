@@ -7,6 +7,7 @@ import {
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { FG_RED, DIM, RESET } from '../../lib/colors';
+import { cliLog } from '../../lib/cli-log';
 
 export interface ReadResult {
   ok: boolean;
@@ -95,9 +96,9 @@ export function registerReadCommand(parent: Command): void {
       }
 
       if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
+        cliLog.output(JSON.stringify(result, null, 2));
       } else if (result.ok) {
-        console.log(result.content ?? '');
+        cliLog.output(result.content ?? '');
       } else {
         console.error(
           `${DIM}Status:${RESET} ${result.status ?? '(no status)'}`,
