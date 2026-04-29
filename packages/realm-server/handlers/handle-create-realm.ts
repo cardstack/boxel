@@ -6,8 +6,13 @@ import {
   setContextResponse,
 } from '../middleware';
 import type Koa from 'koa';
-import type { RealmInfo } from '@cardstack/runtime-common';
-import { logger, SupportedMimeType } from '@cardstack/runtime-common';
+import type { Realm, RealmInfo } from '@cardstack/runtime-common';
+import {
+  createResponse,
+  DEFAULT_PERMISSIONS,
+  logger,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 import type { CreateRoutesArgs } from '../routes';
 
@@ -62,6 +67,7 @@ export default function handleCreateRealmRequest({
     }
 
     let url: string | undefined;
+    let realm: Realm | undefined;
     let info: Partial<RealmInfo> | undefined;
     let start = Date.now();
     try {
@@ -70,6 +76,7 @@ export default function handleCreateRealmRequest({
         ...json.data.attributes,
       });
       url = result.url;
+      realm = result.realm;
       info = result.info;
       log.debug(`created new realm ${url} in ${Date.now() - start} ms`);
     } catch (e: any) {
@@ -94,13 +101,15 @@ export default function handleCreateRealmRequest({
       }
     }
 
-    // Phase 3 PR 2: handler is stateless. createRealm wrote the realm
-    // directory + dual-wrote realm_registry + emitted NOTIFY. The
-    // reconciler on every instance picks up the row and lazy-mounts on
-    // first request. status:'pending' tells the client to poll
-    // /<url>/_readiness-check before treating the realm as ready.
-    let response = new Response(
-      JSON.stringify(
+    // Phase 3 PR 2: createRealm wrote the realm directory + the
+    // realm_registry row, then mounted + started the realm via the
+    // reconciler so it's fully indexed on this instance. The 202 +
+    // status:'pending' is for sibling instances — they pick up the
+    // realm via NOTIFY realm_registry and lazy-mount on first
+    // request. Clients should poll /<url>/_readiness-check before
+    // treating the realm as ready globally.
+    let response = createResponse({
+      body: JSON.stringify(
         {
           data: {
             type: 'realm',
@@ -115,13 +124,19 @@ export default function handleCreateRealmRequest({
         null,
         2,
       ),
-      {
+      init: {
         status: 202,
         headers: {
           'content-type': SupportedMimeType.JSONAPI,
         },
       },
-    );
+      requestContext: {
+        realm,
+        permissions: {
+          [ownerUserId]: DEFAULT_PERMISSIONS,
+        },
+      },
+    });
     await setContextResponse(ctxt, response);
     return;
   };

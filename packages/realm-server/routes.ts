@@ -92,7 +92,7 @@ export type CreateRoutesArgs = {
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-  }) => Promise<{ url: string; info: Partial<RealmInfo> }>;
+  }) => Promise<{ url: string; realm: Realm; info: Partial<RealmInfo> }>;
   serveHostApp: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;

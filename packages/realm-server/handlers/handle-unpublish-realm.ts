@@ -1,5 +1,6 @@
 import type Koa from 'koa';
 import {
+  createResponse,
   query,
   SupportedMimeType,
   logger,
@@ -21,6 +22,7 @@ import {
 } from '../middleware';
 import type { CreateRoutesArgs } from '../routes';
 import type { RealmServerTokenClaim } from '../utils/jwt';
+import type { Realm } from '@cardstack/runtime-common';
 import {
   collectAllFilePaths,
   removeRealmFiles,
@@ -142,8 +144,16 @@ export default function handleUnpublishRealm({
         await removeRealmPermissions(dbAdapter, new URL(publishedRealmURL));
       });
 
-      let response = new Response(
-        JSON.stringify(
+      // Permissions for the published realm were removed inside the
+      // write lock above, so fetchRealmPermissions(publishedRealmURL)
+      // would return nothing useful for X-Boxel-Realm-Public-Readable.
+      // Pass an empty permissions map — createResponse just needs
+      // realm.url for X-Boxel-Realm-Url.
+      let realmForResponse = publishedRealm ?? {
+        url: publishedRealmURL,
+      };
+      let response = createResponse({
+        body: JSON.stringify(
           {
             data: {
               type: 'unpublished_realm',
@@ -158,13 +168,17 @@ export default function handleUnpublishRealm({
           null,
           2,
         ),
-        {
+        init: {
           status: 200,
           headers: {
             'content-type': SupportedMimeType.JSONAPI,
           },
         },
-      );
+        requestContext: {
+          realm: realmForResponse as Realm,
+          permissions: {},
+        },
+      });
       await setContextResponse(ctxt, response);
       return;
     } catch (error: any) {

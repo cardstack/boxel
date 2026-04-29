@@ -636,8 +636,10 @@ export class RealmServer {
     // boot + LISTEN/poll. A request that arrives between a sibling
     // instance's POST /_create-realm (or /_publish-realm) and this
     // instance's reconciler picking up NOTIFY would otherwise 404.
-    // Fall through to a direct registry probe — try descending path
-    // prefixes against realm_registry.url.
+    // Fall through to a direct registry probe — match on every path
+    // prefix and let Postgres pick the longest URL so a request to
+    // `/foo/bar/baz/file.json` resolves to `/foo/bar/baz/` if that's
+    // registered, not `/foo/` (both prefixes are valid candidates).
     let candidatePaths = candidateRealmURLs(requestURL);
     if (candidatePaths.length === 0) {
       return undefined;
@@ -651,7 +653,7 @@ export class RealmServer {
     let rows = (await query(this.dbAdapter, [
       `SELECT url FROM realm_registry WHERE url IN`,
       ...inClause,
-      `LIMIT 1`,
+      `ORDER BY LENGTH(url) DESC LIMIT 1`,
     ])) as { url: string }[];
     if (rows.length === 0) {
       return undefined;
@@ -968,7 +970,7 @@ export class RealmServer {
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-  }): Promise<{ url: string; info: Partial<RealmInfo> }> => {
+  }): Promise<{ url: string; realm: Realm; info: Partial<RealmInfo> }> => {
     // Server-root collision check. Read realms[] AND realm_registry —
     // every production realm has a registry row, but test fixtures
     // construct CLI-style realms via runTestRealmServer that don't
@@ -1093,15 +1095,24 @@ export class RealmServer {
       userInitiatedPriority,
     );
 
-    // Mount + start the realm on this instance now. ensureMounted
-    // awaits realm.start(), which awaits the from-scratch-index job.
-    // By the time we return 202, indexing is complete on this
-    // instance, so the queue is idle by the time the test framework
-    // tears down. Sibling instances pick the realm up via NOTIFY and
-    // lazy-mount on first request.
-    await this.reconciler.lookupOrMount(url);
+    // Synchronously mount + start the realm on the *handling* instance.
+    // The 202 response with status:'pending' is for sibling instances —
+    // they pick up the realm via NOTIFY realm_registry and lazy-mount
+    // on first request. On this instance the realm is fully ready by
+    // the time we return: ensureMounted publishes into realms[] /
+    // virtualNetwork via prepareRealmFromRow and awaits realm.start(),
+    // which awaits the from-scratch-index job. Mounting eagerly here
+    // also drains the queue locally so the test framework's teardown
+    // (close server → drain runner → close DB) doesn't race a worker
+    // mid-fetch on the now-closed HTTP listener.
+    let realm = await this.reconciler.lookupOrMount(url);
+    if (!realm) {
+      throw new Error(
+        `expected realm ${url} to be mounted after createRealm — registry row missing or mount failed`,
+      );
+    }
 
-    return { url, info };
+    return { url, realm, info };
   };
 
   private sendEvent = async (

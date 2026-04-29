@@ -494,10 +494,19 @@ export default function handlePublishRealm({
       // first request. This preserves the test-suite's synchronous-
       // publish semantics while keeping the handler purely registry-
       // driven.
-      await reconciler.lookupOrMount(publishedRealmURL);
+      let publishedRealm = await reconciler.lookupOrMount(publishedRealmURL);
+      if (!publishedRealm) {
+        throw new Error(
+          `expected published realm ${publishedRealmURL} to be mounted after publish — registry row missing or mount failed`,
+        );
+      }
+      let publishedPermissions = await fetchRealmPermissions(
+        dbAdapter,
+        new URL(publishedRealmURL),
+      );
 
-      let response = new Response(
-        JSON.stringify(
+      let response = createResponse({
+        body: JSON.stringify(
           {
             data: {
               type: 'published_realm',
@@ -513,13 +522,17 @@ export default function handlePublishRealm({
           null,
           2,
         ),
-        {
+        init: {
           status: 202,
           headers: {
             'content-type': SupportedMimeType.JSONAPI,
           },
         },
-      );
+        requestContext: {
+          realm: publishedRealm,
+          permissions: publishedPermissions,
+        },
+      });
       await setContextResponse(ctxt, response);
       return;
     } catch (error: any) {
