@@ -137,6 +137,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements: () => placements,
       columnCount: () => 2,
+      isColumnVisible: () => true,
       containerElement: () => container,
       onChange: () => assert.step('change'),
       onSelect: (index: number | null) => {
@@ -176,6 +177,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements: () => placements,
       columnCount: () => 2,
+      isColumnVisible: () => true,
       containerElement: () => container,
       onChange: (nextPlacements: KanbanPlacement[]) => {
         changedPlacements = nextPlacements;
@@ -229,6 +231,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements: () => placements,
       columnCount: () => 2,
+      isColumnVisible: () => true,
       containerElement: () => container,
       onChange: (nextPlacements: KanbanPlacement[]) => {
         changes.push(nextPlacements);
@@ -271,6 +274,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements: () => placements,
       columnCount: () => 2,
+      isColumnVisible: () => true,
       containerElement: () => container,
       onChange: () => {},
     });
@@ -309,6 +313,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements: () => placements,
       columnCount: () => 2,
+      isColumnVisible: () => true,
       containerElement: () => container,
       onChange: () => {},
     });
@@ -355,6 +360,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements: () => placements,
       columnCount: () => 2,
+      isColumnVisible: () => true,
       containerElement: () => container,
       onChange: (nextPlacements: KanbanPlacement[]) => {
         changedPlacements = nextPlacements;
@@ -409,6 +415,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements: () => placements,
       columnCount: () => 2,
+      isColumnVisible: () => true,
       containerElement: () => container,
       onChange: () => {},
       onSelect: (index: number | null) => {
@@ -438,6 +445,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements: () => placements,
       columnCount: () => 2,
+      isColumnVisible: () => true,
       containerElement: () => container,
       onChange: () => {},
       onSelect: (index: number | null) => {
@@ -460,6 +468,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements: () => placements,
       columnCount: () => 2,
+      isColumnVisible: () => true,
       containerElement: () => container,
       onChange: () => {
         dragActivated = true;
@@ -512,7 +521,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
       const mgr = new KanbanDragManager({
         placements: () => mp,
         columnCount: () => 2,
-        isColumnVisible: opts.isColumnVisible,
+        isColumnVisible: opts.isColumnVisible ?? (() => true),
         containerElement: () => mc,
         onChange: opts.onChange ?? (() => {}),
         onSelect: opts.onSelect,
@@ -801,6 +810,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements: () => placements,
       columnCount: () => 2,
+      isColumnVisible: () => true,
       containerElement: () => container,
       onChange: () => {
         changed = true;

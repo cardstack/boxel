@@ -39,7 +39,7 @@ export type KanbanInteractionMode = 'idle' | 'pending' | 'drag' | 'kb-drag';
 export interface KanbanDragManagerSignature {
   Args: {
     columnCount: number;
-    isColumnVisible?: (column: number) => boolean;
+    isColumnVisible: (column: number) => boolean;
     onChange: (placements: KanbanPlacement[]) => void;
     onOpen?: (index: number) => void;
     onSelect?: (index: number | null) => void;
@@ -675,7 +675,7 @@ export class KanbanDragManager extends Component<KanbanDragManagerSignature> {
   }
 
   private isColumnVisible(column: number): boolean {
-    return this.args.isColumnVisible?.(column) ?? true;
+    return this.args.isColumnVisible(column);
   }
 
   private cancelDrag(): void {
