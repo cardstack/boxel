@@ -33,9 +33,17 @@
 #   --source-profile <name>   override / set the source AWS profile to use
 #                             for this env (cached for next time)
 #
+# Reset:
+#   claude-aws --reset        wipes ${XDG_CONFIG_HOME:-~/.config}/claude-aws/config
+#                             so the interactive source-profile prompt
+#                             fires from scratch on the next run. Useful
+#                             if you typed the wrong profile name. Takes
+#                             no other arguments. Does not need aws/jq
+#                             installed.
+#
 # On first run for a given env, the script prompts for the source AWS
 # profile (since teammates pick their own profile names) and caches the
-# choice in ~/.config/claude-aws/config.
+# choice at ${XDG_CONFIG_HOME:-~/.config}/claude-aws/config.
 #
 # After running, Claude can run:
 #   aws --profile claude-staging <command>
@@ -45,6 +53,9 @@ set -euo pipefail
 
 # Fail early with a clear hint if a required dep is missing — without
 # this, the user gets an opaque "jq: command not found" mid-script.
+# Defined here, but the aws/jq invocations live below the --reset
+# early-exit so a teammate without aws/jq installed can still run
+# `claude-aws --reset` to recover from a bad cached source-profile.
 require_command() {
     if ! command -v "$1" >/dev/null 2>&1; then
         echo "Error: required command '$1' is not installed or not on PATH." >&2
@@ -52,8 +63,6 @@ require_command() {
         exit 1
     fi
 }
-require_command aws
-require_command jq
 
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/claude-aws"
 CONFIG_FILE="$CONFIG_DIR/config"
@@ -69,6 +78,7 @@ ROLE_DURATION_SECONDS=43200
 
 usage() {
     echo "Usage: $0 <staging|prod> <MFA_TOKEN> [--source-profile <name>]" >&2
+    echo "   or: $0 --reset       (wipe cached source-profile choices)" >&2
     echo "Example: $0 staging 123456" >&2
     exit 1
 }
@@ -78,6 +88,7 @@ usage() {
 ENV_NAME=""
 MFA_TOKEN=""
 SOURCE_PROFILE_OVERRIDE=""
+RESET=0
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -88,6 +99,13 @@ while [ "$#" -gt 0 ]; do
                 usage
             fi
             shift 2
+            ;;
+        --reset)
+            # Wipe $CONFIG_FILE — forgets all cached source-profile
+            # choices. Useful when you typed the wrong profile name and
+            # want the prompt back from a clean slate.
+            RESET=1
+            shift
             ;;
         -h|--help)
             usage
@@ -106,9 +124,27 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
+if [ "$RESET" -eq 1 ]; then
+    if [ -n "$ENV_NAME" ] || [ -n "$MFA_TOKEN" ] || [ -n "$SOURCE_PROFILE_OVERRIDE" ]; then
+        echo "--reset takes no other arguments" >&2
+        usage
+    fi
+    if [ -f "$CONFIG_FILE" ]; then
+        rm -f "$CONFIG_FILE"
+        echo "Cleared $CONFIG_FILE" >&2
+    else
+        echo "Nothing to clear (no $CONFIG_FILE)" >&2
+    fi
+    exit 0
+fi
+
 if [ -z "$ENV_NAME" ] || [ -z "$MFA_TOKEN" ]; then
     usage
 fi
+
+# Tools needed for the AWS path (not for --reset).
+require_command aws
+require_command jq
 
 case "$ENV_NAME" in
     staging) TARGET_PROFILE="claude-staging" ;;
