@@ -45,17 +45,28 @@ cd "$(dirname "$0")/.."
 source ./scripts/grafanactl-env.sh "$env_name"
 
 # Pre-flight prereqs for hosted envs BEFORE grafanactl pushes anything.
-# Otherwise a missing LOKI_URL or absent yq would surface only after
+# Otherwise a missing env var or absent yq would surface only after
 # dashboards/folders had already been re-pushed, leaving a partial apply.
 if [[ "$env_name" != "local" ]]; then
   for cmd in yq jq curl envsubst; do
     command -v "$cmd" >/dev/null \
       || { echo "error: missing dependency: ${cmd}" >&2; exit 1; }
   done
-  [[ -n "${GRAFANA_TOKEN:-}" ]] \
-    || { echo "error: GRAFANA_TOKEN not set after sourcing grafanactl-env.sh" >&2; exit 1; }
-  [[ -n "${LOKI_URL:-}" ]] \
-    || { echo "error: LOKI_URL not set; expected /${env_name}/loki/internal_url to be sourced into the environment" >&2; exit 1; }
+  required_env_vars=(
+    GRAFANA_TOKEN
+    # Loki — CS-10968
+    LOKI_URL
+    # Boxel-db postgres + synapse-prometheus — CS-10978
+    BOXEL_DB_HOST
+    BOXEL_DB_NAME
+    BOXEL_DB_USER
+    BOXEL_DB_PASSWORD
+    SYNAPSE_PROMETHEUS_URL
+  )
+  for v in "${required_env_vars[@]}"; do
+    [[ -n "${!v:-}" ]] \
+      || { echo "error: ${v} not set; CI fetches it from SSM in observability-apply-${env_name}.yml — for a local hosted run, export it manually first (see apply-datasources.sh header for the SSM path)" >&2; exit 1; }
+  done
 fi
 
 cfg="$(./scripts/render-config.sh "$env_name")"
