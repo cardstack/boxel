@@ -482,7 +482,9 @@ export class KanbanDragManager {
       return;
     }
 
-    const bodyEl = colEl.querySelector('[data-kanban-col-body]') as HTMLElement | null;
+    const bodyEl = colEl.querySelector(
+      '[data-kanban-col-body]',
+    ) as HTMLElement | null;
     if (!bodyEl) {
       return;
     }

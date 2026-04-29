@@ -133,49 +133,71 @@ export class KanbanPlaneInner extends Component<{
     );
   };
 
+  private _insertionStyleCacheKey = '';
+  private _insertionStyleCache = new Map<number, SafeString>();
+
   insertionBoxStyle = (colIndex: number): SafeString => {
     if (!this.showInsertionBox(colIndex) || !this.containerElement)
       return sanitizeHtmlSafe('display: none');
     const ins = this.manager.insertion!;
     const ghostH = this.manager.dragGhostHeight || this.cardFormat.height;
+
+    const cacheKey = `${ins.column}:${ins.insertBeforeIndex}:${ins.position}:${ghostH}`;
+    if (cacheKey !== this._insertionStyleCacheKey) {
+      this._insertionStyleCacheKey = cacheKey;
+      this._insertionStyleCache.clear();
+    }
+    const cached = this._insertionStyleCache.get(colIndex);
+    if (cached !== undefined) return cached;
+
     const colCards = this.columnCards(colIndex).filter(
       (p) => p.index !== this.manager.activeDragIndex,
     );
 
-    if (colCards.length === 0) return sanitizeHtmlSafe(`height: ${ghostH}px`);
+    let result: SafeString;
 
-    const insertIdx = Math.min(ins.position - 1, colCards.length);
-
-    if (insertIdx >= colCards.length) {
-      const lastEl = this.containerElement.querySelector(
-        `[data-card-index="${colCards[colCards.length - 1]?.index}"]`,
-      ) as HTMLElement | null;
-      if (lastEl?.parentElement) {
-        const rect = lastEl.getBoundingClientRect();
-        const parentRect = lastEl.parentElement.getBoundingClientRect();
-        const cs = getComputedStyle(lastEl);
-        const matrix = new DOMMatrix(cs.transform);
-        const offset = rect.bottom - matrix.m42 - parentRect.top + 6;
-        return sanitizeHtmlSafe(
-          `transform: translateY(${offset}px); height: ${ghostH}px`,
-        );
-      }
+    if (colCards.length === 0) {
+      result = sanitizeHtmlSafe(`height: ${ghostH}px`);
     } else {
-      const beforeEl = this.containerElement.querySelector(
-        `[data-card-index="${colCards[insertIdx]?.index}"]`,
-      ) as HTMLElement | null;
-      if (beforeEl?.parentElement) {
-        const rect = beforeEl.getBoundingClientRect();
-        const parentRect = beforeEl.parentElement.getBoundingClientRect();
-        const cs = getComputedStyle(beforeEl);
-        const matrix = new DOMMatrix(cs.transform);
-        const offset = rect.top - matrix.m42 - parentRect.top - 3;
-        return sanitizeHtmlSafe(
-          `transform: translateY(${offset}px); height: ${ghostH}px`,
-        );
+      const insertIdx = Math.min(ins.position - 1, colCards.length);
+
+      if (insertIdx >= colCards.length) {
+        const lastEl = this.containerElement.querySelector(
+          `[data-card-index="${colCards[colCards.length - 1]?.index}"]`,
+        ) as HTMLElement | null;
+        if (lastEl?.parentElement) {
+          const rect = lastEl.getBoundingClientRect();
+          const parentRect = lastEl.parentElement.getBoundingClientRect();
+          const cs = getComputedStyle(lastEl);
+          const matrix = new DOMMatrix(cs.transform);
+          const offset = rect.bottom - matrix.m42 - parentRect.top + 6;
+          result = sanitizeHtmlSafe(
+            `transform: translateY(${offset}px); height: ${ghostH}px`,
+          );
+        } else {
+          result = sanitizeHtmlSafe(`height: ${ghostH}px`);
+        }
+      } else {
+        const beforeEl = this.containerElement.querySelector(
+          `[data-card-index="${colCards[insertIdx]?.index}"]`,
+        ) as HTMLElement | null;
+        if (beforeEl?.parentElement) {
+          const rect = beforeEl.getBoundingClientRect();
+          const parentRect = beforeEl.parentElement.getBoundingClientRect();
+          const cs = getComputedStyle(beforeEl);
+          const matrix = new DOMMatrix(cs.transform);
+          const offset = rect.top - matrix.m42 - parentRect.top - 3;
+          result = sanitizeHtmlSafe(
+            `transform: translateY(${offset}px); height: ${ghostH}px`,
+          );
+        } else {
+          result = sanitizeHtmlSafe(`height: ${ghostH}px`);
+        }
       }
     }
-    return sanitizeHtmlSafe(`height: ${ghostH}px`);
+
+    this._insertionStyleCache.set(colIndex, result);
+    return result;
   };
 
   get ghostStyle(): SafeString {

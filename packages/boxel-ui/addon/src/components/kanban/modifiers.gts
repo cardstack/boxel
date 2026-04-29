@@ -6,8 +6,13 @@ export class CaptureElement extends Modifier<{
   };
   Element: HTMLElement;
 }> {
+  #element: HTMLElement | null = null;
+
   modify(el: HTMLElement, [callback]: [(el: HTMLElement) => void]) {
-    callback(el);
+    if (el !== this.#element) {
+      this.#element = el;
+      callback(el);
+    }
   }
 }
 
