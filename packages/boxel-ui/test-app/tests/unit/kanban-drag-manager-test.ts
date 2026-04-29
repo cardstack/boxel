@@ -32,6 +32,52 @@ function stubRect(
   });
 }
 
+// Two cards in column 0 (sortOrder 1 & 2), one card in column 1 (sortOrder 1).
+function makeMultiBoard(): {
+  container: HTMLElement;
+  placements: KanbanPlacement[];
+} {
+  let container = document.createElement('div');
+  let col0 = document.createElement('div');
+  let col1 = document.createElement('div');
+  let body0 = document.createElement('div');
+  let body1 = document.createElement('div');
+  let card0 = document.createElement('div');
+  let card1 = document.createElement('div');
+  let card2 = document.createElement('div');
+
+  col0.setAttribute('data-kanban-column', '0');
+  col1.setAttribute('data-kanban-column', '1');
+  body0.className = 'col-body';
+  body1.className = 'col-body';
+  card0.setAttribute('data-card-index', '0');
+  card1.setAttribute('data-card-index', '1');
+  card2.setAttribute('data-card-index', '2');
+
+  stubRect(col0, { left: 0, top: 0, width: 200, height: 400 });
+  stubRect(col1, { left: 220, top: 0, width: 200, height: 400 });
+  stubRect(body0, { left: 0, top: 0, width: 200, height: 400 });
+  stubRect(body1, { left: 220, top: 0, width: 200, height: 400 });
+  stubRect(card0, { left: 8, top: 10, width: 184, height: 80 });
+  stubRect(card2, { left: 8, top: 98, width: 184, height: 80 });
+  stubRect(card1, { left: 228, top: 10, width: 184, height: 80 });
+
+  body0.append(card0, card2);
+  body1.append(card1);
+  col0.append(body0);
+  col1.append(body1);
+  container.append(col0, col1);
+
+  return {
+    container,
+    placements: [
+      { index: 0, column: 0, sortOrder: 1 },
+      { index: 2, column: 0, sortOrder: 2 },
+      { index: 1, column: 1, sortOrder: 1 },
+    ],
+  };
+}
+
 function makeBoard(): HTMLElement {
   let container = document.createElement('div');
   let column0 = document.createElement('div');
@@ -449,6 +495,259 @@ module('Unit | kanban-drag-manager', function (hooks) {
 
     assert.false(dragActivated, 'onChange was not called after destroy');
     assert.strictEqual(manager.interactionMode, 'pending');
+  });
+
+  module('keyboard interactions', function (kbHooks) {
+    let mc: HTMLElement;
+    let mp: KanbanPlacement[];
+
+    kbHooks.beforeEach(function () {
+      const board = makeMultiBoard();
+      mc = board.container;
+      mp = board.placements;
+    });
+
+    function makeKbManager(opts: {
+      onChange?: (p: KanbanPlacement[]) => void;
+      onSelect?: (i: number | null) => void;
+    } = {}) {
+      const mgr = new KanbanDragManager({
+        placements: () => mp,
+        columnCount: () => 2,
+        containerElement: () => mc,
+        onChange: opts.onChange ?? (() => {}),
+        onSelect: opts.onSelect,
+      });
+      mgr.registerContainer(mc);
+      return mgr;
+    }
+
+    function keyEvent(
+      key: string,
+      target: Element | null = null,
+    ): { event: KeyboardEvent; prevented: () => boolean } {
+      let prevented = false;
+      const event = {
+        key,
+        target: target ?? document.body,
+        preventDefault() {
+          prevented = true;
+        },
+      } as unknown as KeyboardEvent;
+      return { event, prevented: () => prevented };
+    }
+
+    test('Space on a focused card enters kb-drag mode', function (assert) {
+      const mgr = makeKbManager();
+      const card0 = mc.querySelector('[data-card-index="0"]')!;
+      const { event, prevented } = keyEvent(' ', card0);
+      mgr.onKeyDown(event);
+      assert.true(prevented());
+      assert.strictEqual(mgr.interactionMode, 'kb-drag');
+      assert.strictEqual(mgr.activeDragIndex, 0);
+      assert.strictEqual(mgr.kbGrabIndex, 0);
+      assert.true(mgr.announcement.startsWith('Grabbed'));
+    });
+
+    test('Enter on a focused card also enters kb-drag mode', function (assert) {
+      const mgr = makeKbManager();
+      const card0 = mc.querySelector('[data-card-index="0"]')!;
+      mgr.onKeyDown(keyEvent('Enter', card0).event);
+      assert.strictEqual(mgr.interactionMode, 'kb-drag');
+      assert.strictEqual(mgr.activeDragIndex, 0);
+    });
+
+    test('Space outside a card in idle mode does nothing', function (assert) {
+      const mgr = makeKbManager();
+      mgr.onKeyDown(keyEvent(' ').event);
+      assert.strictEqual(mgr.interactionMode, 'idle');
+      assert.strictEqual(mgr.activeDragIndex, null);
+    });
+
+    test('initial insertion points before the card immediately below the grabbed card', function (assert) {
+      const mgr = makeKbManager();
+      const card0 = mc.querySelector('[data-card-index="0"]')!;
+      mgr.onKeyDown(keyEvent(' ', card0).event);
+      // card0 is sortOrder 1; card2 is the next card (sortOrder 2) in col 0
+      assert.deepEqual(mgr.insertion, {
+        column: 0,
+        insertBeforeIndex: 2,
+        position: 2,
+      });
+    });
+
+    test('ArrowDown in kb-drag moves insertion to end of column', function (assert) {
+      const mgr = makeKbManager();
+      const card0 = mc.querySelector('[data-card-index="0"]')!;
+      mgr.onKeyDown(keyEvent(' ', card0).event);
+      mgr.onKeyDown(keyEvent('ArrowDown').event);
+      assert.deepEqual(mgr.insertion, {
+        column: 0,
+        insertBeforeIndex: -1,
+        position: 3,
+      });
+      assert.strictEqual(mgr.announcement, 'Position 2 of 2.');
+    });
+
+    test('ArrowDown at end of column does not change insertion', function (assert) {
+      const mgr = makeKbManager();
+      // card2 is last in col 0 (sortOrder 2)
+      const card2 = mc.querySelector('[data-card-index="2"]')!;
+      mgr.onKeyDown(keyEvent(' ', card2).event);
+      const before = mgr.insertion;
+      mgr.onKeyDown(keyEvent('ArrowDown').event);
+      assert.deepEqual(mgr.insertion, before);
+    });
+
+    test('ArrowUp in kb-drag moves insertion earlier in the column', function (assert) {
+      const mgr = makeKbManager();
+      // Start with card2 (last) so there is room to move up
+      const card2 = mc.querySelector('[data-card-index="2"]')!;
+      mgr.onKeyDown(keyEvent(' ', card2).event);
+      // initial: end of column (insertBeforeIndex -1)
+      mgr.onKeyDown(keyEvent('ArrowUp').event);
+      // Should now be before card0 (the only remaining card)
+      assert.deepEqual(mgr.insertion, {
+        column: 0,
+        insertBeforeIndex: 0,
+        position: 1,
+      });
+    });
+
+    test('ArrowRight in kb-drag moves insertion to next column', function (assert) {
+      const mgr = makeKbManager();
+      const card0 = mc.querySelector('[data-card-index="0"]')!;
+      mgr.onKeyDown(keyEvent(' ', card0).event);
+      mgr.onKeyDown(keyEvent('ArrowRight').event);
+      assert.strictEqual(mgr.insertion?.column, 1);
+      assert.true(mgr.announcement.startsWith('Column 2'));
+    });
+
+    test('ArrowLeft after ArrowRight returns insertion to original column', function (assert) {
+      const mgr = makeKbManager();
+      const card0 = mc.querySelector('[data-card-index="0"]')!;
+      mgr.onKeyDown(keyEvent(' ', card0).event);
+      mgr.onKeyDown(keyEvent('ArrowRight').event);
+      assert.strictEqual(mgr.insertion?.column, 1);
+      mgr.onKeyDown(keyEvent('ArrowLeft').event);
+      assert.strictEqual(mgr.insertion?.column, 0);
+    });
+
+    test('Space in kb-drag commits the drop and fires onChange', function (assert) {
+      let changed: KanbanPlacement[] | undefined;
+      const mgr = makeKbManager({ onChange: (p) => (changed = p) });
+      const card0 = mc.querySelector('[data-card-index="0"]')!;
+      mgr.onKeyDown(keyEvent(' ', card0).event);
+      mgr.onKeyDown(keyEvent('ArrowRight').event);
+      mgr.onKeyDown(keyEvent(' ').event);
+      assert.strictEqual(mgr.interactionMode, 'idle');
+      assert.strictEqual(mgr.activeDragIndex, null);
+      assert.notStrictEqual(changed, undefined);
+      assert.strictEqual(
+        changed!.find((p) => p.index === 0)?.column,
+        1,
+        'card 0 should land in column 1',
+      );
+      assert.strictEqual(mgr.announcement, 'Card dropped.');
+    });
+
+    test('Enter in kb-drag also commits the drop', function (assert) {
+      let changed: KanbanPlacement[] | undefined;
+      const mgr = makeKbManager({ onChange: (p) => (changed = p) });
+      const card0 = mc.querySelector('[data-card-index="0"]')!;
+      mgr.onKeyDown(keyEvent(' ', card0).event);
+      mgr.onKeyDown(keyEvent('ArrowRight').event);
+      mgr.onKeyDown(keyEvent('Enter').event);
+      assert.strictEqual(mgr.interactionMode, 'idle');
+      assert.notStrictEqual(changed, undefined);
+    });
+
+    test('no-op drop announces "returned to original position" and does not fire onChange', function (assert) {
+      let changed = false;
+      const mgr = makeKbManager({ onChange: () => (changed = true) });
+      const card0 = mc.querySelector('[data-card-index="0"]')!;
+      // grab and immediately drop without moving
+      mgr.onKeyDown(keyEvent(' ', card0).event);
+      mgr.onKeyDown(keyEvent(' ').event);
+      assert.false(changed);
+      assert.strictEqual(mgr.announcement, 'Card returned to original position.');
+      assert.strictEqual(mgr.interactionMode, 'idle');
+    });
+
+    test('Escape in kb-drag cancels and restores snapshot via onChange', function (assert) {
+      let changes: KanbanPlacement[][] = [];
+      const mgr = makeKbManager({ onChange: (p) => changes.push(p) });
+      const card0 = mc.querySelector('[data-card-index="0"]')!;
+      mgr.onKeyDown(keyEvent(' ', card0).event);
+      mgr.onKeyDown(keyEvent('ArrowRight').event);
+      const { event, prevented } = keyEvent('Escape');
+      mgr.onKeyDown(event);
+      assert.true(prevented());
+      assert.strictEqual(mgr.interactionMode, 'idle');
+      assert.strictEqual(mgr.activeDragIndex, null);
+      assert.deepEqual(changes, [mp], 'snapshot placements are restored');
+      assert.strictEqual(mgr.announcement, 'Movement cancelled.');
+    });
+
+    test('ArrowDown in idle mode moves selectedIndex to the next card in column', function (assert) {
+      let lastSelected: number | null | undefined;
+      const mgr = makeKbManager({
+        onSelect: (i) => (lastSelected = i),
+      });
+      mgr.select(0);
+      mgr.onKeyDown(keyEvent('ArrowDown').event);
+      assert.strictEqual(mgr.selectedIndex, 2, 'card2 is next in col 0');
+      assert.strictEqual(lastSelected, 2);
+    });
+
+    test('ArrowUp in idle at top of column keeps selectedIndex unchanged', function (assert) {
+      const mgr = makeKbManager();
+      mgr.select(0);
+      mgr.onKeyDown(keyEvent('ArrowUp').event);
+      assert.strictEqual(mgr.selectedIndex, 0);
+    });
+
+    test('ArrowDown in idle with no selection selects the first card', function (assert) {
+      const mgr = makeKbManager();
+      assert.strictEqual(mgr.selectedIndex, null);
+      mgr.onKeyDown(keyEvent('ArrowDown').event);
+      assert.strictEqual(mgr.selectedIndex, 0);
+    });
+
+    test('ArrowRight in idle moves selectedIndex to adjacent column', function (assert) {
+      let lastSelected: number | null | undefined;
+      const mgr = makeKbManager({
+        onSelect: (i) => (lastSelected = i),
+      });
+      mgr.select(0);
+      mgr.onKeyDown(keyEvent('ArrowRight').event);
+      assert.strictEqual(mgr.selectedIndex, 1, 'card1 is in col 1');
+      assert.strictEqual(lastSelected, 1);
+    });
+
+    test('ArrowLeft in idle moves selectedIndex back to original column', function (assert) {
+      const mgr = makeKbManager();
+      mgr.select(1); // card1 is in col 1
+      mgr.onKeyDown(keyEvent('ArrowLeft').event);
+      // col 0 has card0 at sortOrder 1 — same row position
+      assert.strictEqual(mgr.selectedIndex, 0);
+    });
+
+    test('arrow keys in idle mode always prevent default', function (assert) {
+      const mgr = makeKbManager();
+      for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) {
+        const { event, prevented } = keyEvent(key);
+        mgr.onKeyDown(event);
+        assert.true(prevented(), `${key} prevents default`);
+      }
+    });
+
+    test('arrow keys in idle do not change interactionMode', function (assert) {
+      const mgr = makeKbManager();
+      mgr.select(0);
+      mgr.onKeyDown(keyEvent('ArrowDown').event);
+      assert.strictEqual(mgr.interactionMode, 'idle');
+    });
   });
 
   test('dropping outside all columns when insertion is null does not call onChange', async function (assert) {

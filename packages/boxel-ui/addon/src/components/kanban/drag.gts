@@ -17,12 +17,11 @@ const DRAG_THRESHOLD_PX = 4;
 
 function placementsEqual(a: KanbanPlacement[], b: KanbanPlacement[]): boolean {
   if (a.length !== b.length) return false;
-  return a.every((p, i) => {
-    const q = b[i]!;
+  const bMap = new Map(b.map((p) => [p.index, p]));
+  return a.every((p) => {
+    const q = bMap.get(p.index);
     return (
-      p.index === q.index &&
-      p.column === q.column &&
-      p.sortOrder === q.sortOrder
+      q !== undefined && p.column === q.column && p.sortOrder === q.sortOrder
     );
   });
 }
@@ -79,6 +78,7 @@ export class KanbanDragManager {
   private startClientY = 0;
   private dragIndex: number | null = null;
   private holdTimer: ReturnType<typeof setTimeout> | null = null;
+  private settleTimer: ReturnType<typeof setTimeout> | null = null;
   private snapshotPlacements: KanbanPlacement[] | null = null;
   private suppressLostPointerCapture = false;
 
@@ -249,7 +249,8 @@ export class KanbanDragManager {
 
     this.isSettling = true;
 
-    setTimeout(() => {
+    this.settleTimer = setTimeout(() => {
+      this.settleTimer = null;
       if (pendingInsertion && pendingDragIndex !== null) {
         const placements = this.placementsFn();
         const newPlacements = resolveInsertion(
@@ -336,6 +337,10 @@ export class KanbanDragManager {
     if (this.holdTimer) {
       clearTimeout(this.holdTimer);
       this.holdTimer = null;
+    }
+    if (this.settleTimer) {
+      clearTimeout(this.settleTimer);
+      this.settleTimer = null;
     }
     document.body.style.userSelect = '';
     (document.body.style as BodyStyle).webkitUserSelect = '';
@@ -665,6 +670,10 @@ export class KanbanDragManager {
     if (this.holdTimer) {
       clearTimeout(this.holdTimer);
       this.holdTimer = null;
+    }
+    if (this.settleTimer) {
+      clearTimeout(this.settleTimer);
+      this.settleTimer = null;
     }
     document.body.style.userSelect = '';
     (document.body.style as BodyStyle).webkitUserSelect = '';

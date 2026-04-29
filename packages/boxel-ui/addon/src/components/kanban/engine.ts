@@ -3,9 +3,8 @@
 // ── Types ────────────────────────────────────────────────────────────── //
 
 export interface KanbanPlacement {
-  // card index in linksToMany
-  column: number;
-  index: number; // which lane (0-based)
+  column: number; // which lane (0-based)
+  index: number; // card index in linksToMany
   sortOrder: number; // position within column (1, 2, 3...)
 }
 
@@ -177,6 +176,9 @@ export function autoPlaceKanban(
   itemCount: number,
   columnCount: number,
 ): KanbanPlacement[] {
+  if (columnCount <= 0) {
+    return [];
+  }
   const placements: KanbanPlacement[] = [];
   for (let i = 0; i < itemCount; i++) {
     const col = i % columnCount;
