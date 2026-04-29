@@ -98,6 +98,7 @@ import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
+import isPlainObject from 'lodash/isPlainObject';
 import { z } from 'zod';
 import { inferContentType } from './infer-content-type';
 import type { CardFields } from './resource-types';
@@ -4651,16 +4652,30 @@ export class Realm {
       };
       let existingCard = await this.readFileAsText(cardPath, undefined);
       if (existingCard?.content) {
+        let parsed: unknown;
         try {
-          cardDoc = JSON.parse(existingCard.content);
-          cardDoc!.data = cardDoc!.data ?? ({} as any);
-          cardDoc!.data.attributes = cardDoc!.data.attributes ?? {};
+          parsed = JSON.parse(existingCard.content);
         } catch (e: any) {
           return systemError({
             requestContext,
             message: `Unable to parse existing realm config card: ${e.message}`,
           });
         }
+        if (!isPlainObject(parsed)) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config card is not a JSON object`,
+          });
+        }
+        cardDoc = parsed as typeof cardDoc;
+        cardDoc!.data = cardDoc!.data ?? ({} as any);
+        if (!isPlainObject(cardDoc!.data)) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config card data is not a JSON object`,
+          });
+        }
+        cardDoc!.data.attributes = cardDoc!.data.attributes ?? {};
       }
       // `name` is exposed on the public RealmInfo shape but stored on the
       // RealmConfig card under cardInfo.name (the standard CardDef slot
@@ -4690,14 +4705,22 @@ export class Realm {
         undefined,
       );
       if (existingConfig?.content) {
+        let parsed: unknown;
         try {
-          realmConfig = JSON.parse(existingConfig.content);
+          parsed = JSON.parse(existingConfig.content);
         } catch (e: any) {
           return systemError({
             requestContext,
             message: `Unable to parse existing realm config: ${e.message}`,
           });
         }
+        if (!isPlainObject(parsed)) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config is not a JSON object`,
+          });
+        }
+        realmConfig = parsed as Record<string, unknown>;
       }
       Object.assign(realmConfig!, sidecarAttrs);
     }
