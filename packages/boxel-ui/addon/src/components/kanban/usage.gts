@@ -17,6 +17,7 @@ import ViewSelector from '../view-selector/index.gts';
 import { KanbanDragManager } from './drag.gts';
 import {
   type KanbanColumnConfig,
+  type KanbanPlacement,
   autoPlaceKanban,
   cardsInColumn,
 } from './engine.ts';
@@ -101,20 +102,17 @@ export default class KanbanUsage extends Component {
   @tracked cardSizeView = 'tile';
   @tracked cardSize: FittedFormatId = 'regular-tile';
 
-  manager = new KanbanDragManager({
-    placements: () => this.placements,
-    columnCount: () => this.columns.length,
-    containerElement: () => null,
-    onChange: (placements) => {
-      this.placements = placements;
-    },
-    onSelect: (index) => {
-      this.selectedIndex = index;
-    },
-    onOpen: (index) => {
-      this.openedIndex = index;
-    },
-  });
+  @action handlePlacementsChange(placements: KanbanPlacement[]): void {
+    this.placements = placements;
+  }
+
+  @action handleSelect(index: number | null): void {
+    this.selectedIndex = index;
+  }
+
+  @action handleOpen(index: number): void {
+    this.openedIndex = index;
+  }
 
   get selectedCard(): DemoCard | null {
     if (this.selectedIndex === null) {
@@ -221,31 +219,40 @@ export default class KanbanUsage extends Component {
           </div>
 
           <div class='kanban-plane-demo'>
-            <KanbanPlane
-              @columns={{this.columns}}
+            <KanbanDragManager
               @placements={{this.placements}}
-              @manager={{this.manager}}
-              @cardSize={{this.cardSize}}
-              @hideEmpty={{this.hideEmpty}}
-              @onAddCard={{this.addCard}}
+              @columnCount={{this.columns.length}}
+              @onChange={{this.handlePlacementsChange}}
+              @onSelect={{this.handleSelect}}
+              @onOpen={{this.handleOpen}}
+              as |manager|
             >
-              <:card as |placement|>
-                {{#let (get this.cards placement.index) as |card|}}
-                  <CardContainer class='demo-card'>
-                    <div class='demo-card-kind'>{{card.kind}}</div>
-                    <h3>{{card.title}}</h3>
-                  </CardContainer>
-                {{/let}}
-              </:card>
-              <:ghost as |dragIndex|>
-                {{#let (get this.cards dragIndex) as |card|}}
-                  <CardContainer class='demo-card demo-card--ghost'>
-                    <div class='demo-card-kind'>{{card.kind}}</div>
-                    <h3>{{card.title}}</h3>
-                  </CardContainer>
-                {{/let}}
-              </:ghost>
-            </KanbanPlane>
+              <KanbanPlane
+                @columns={{this.columns}}
+                @placements={{this.placements}}
+                @manager={{manager}}
+                @cardSize={{this.cardSize}}
+                @hideEmpty={{this.hideEmpty}}
+                @onAddCard={{this.addCard}}
+              >
+                <:card as |placement|>
+                  {{#let (get this.cards placement.index) as |card|}}
+                    <CardContainer class='demo-card'>
+                      <div class='demo-card-kind'>{{card.kind}}</div>
+                      <h3>{{card.title}}</h3>
+                    </CardContainer>
+                  {{/let}}
+                </:card>
+                <:ghost as |dragIndex|>
+                  {{#let (get this.cards dragIndex) as |card|}}
+                    <CardContainer class='demo-card demo-card--ghost'>
+                      <div class='demo-card-kind'>{{card.kind}}</div>
+                      <h3>{{card.title}}</h3>
+                    </CardContainer>
+                  {{/let}}
+                </:ghost>
+              </KanbanPlane>
+            </KanbanDragManager>
           </div>
         </div>
       </:example>

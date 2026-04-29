@@ -1,7 +1,7 @@
 // KanbanDragManager — Drag interaction for Kanban boards.
 // Uses insertion model: cards insert BETWEEN other cards.
 
-import { scheduleOnce } from '@ember/runloop';
+import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 
@@ -17,7 +17,9 @@ import {
 const DRAG_THRESHOLD_PX = 4;
 
 function placementsEqual(a: KanbanPlacement[], b: KanbanPlacement[]): boolean {
-  if (a.length !== b.length) return false;
+  if (a.length !== b.length) {
+    return false;
+  }
   const bMap = new Map(b.map((p) => [p.index, p]));
   return a.every((p) => {
     const q = bMap.get(p.index);
@@ -34,26 +36,22 @@ type BodyStyle = CSSStyleDeclaration & { webkitUserSelect: string };
 
 export type KanbanInteractionMode = 'idle' | 'pending' | 'drag' | 'kb-drag';
 
-export interface KanbanDragManagerOptions {
-  columnCount: () => number;
-  containerElement: () => HTMLElement | null;
-  onChange: (placements: KanbanPlacement[]) => void;
-  onOpen?: (index: number) => void;
-  onSelect?: (index: number | null) => void;
-  placements: () => KanbanPlacement[];
+export interface KanbanDragManagerSignature {
+  Args: {
+    columnCount: number;
+    onChange: (placements: KanbanPlacement[]) => void;
+    onOpen?: (index: number) => void;
+    onSelect?: (index: number | null) => void;
+    placements: KanbanPlacement[];
+  };
+  Blocks: {
+    default: [KanbanDragManager];
+  };
 }
 
 // ── KanbanDragManager ────────────────────────────────────────────────── //
 
-export class KanbanDragManager {
-  // ── Dependencies ───────────────────────────────────────────────────
-  private placementsFn: () => KanbanPlacement[];
-  private columnCountFn: () => number;
-  private containerFn: () => HTMLElement | null;
-  private onChangeFn: (placements: KanbanPlacement[]) => void;
-  private onSelectFn: ((index: number | null) => void) | undefined;
-  private onOpenFn: ((index: number) => void) | undefined;
-
+export class KanbanDragManager extends Component<KanbanDragManagerSignature> {
   // ── Tracked State ──────────────────────────────────────────────────
   @tracked selectedIndex: number | null = null;
   @tracked interactionMode: KanbanInteractionMode = 'idle';
@@ -84,6 +82,10 @@ export class KanbanDragManager {
       this.activateDrag(container);
     }
   });
+  private focusCardTask = restartableTask(async (index: number) => {
+    await timeout(0);
+    this.focusCard(index);
+  });
   private settleTimer: ReturnType<typeof setTimeout> | null = null;
   private snapshotPlacements: KanbanPlacement[] | null = null;
   private suppressLostPointerCapture = false;
@@ -91,13 +93,16 @@ export class KanbanDragManager {
   // ── Public container ref ───────────────────────────────────────────
   containerRef: HTMLElement | null = null;
 
-  constructor(opts: KanbanDragManagerOptions) {
-    this.placementsFn = opts.placements;
-    this.columnCountFn = opts.columnCount;
-    this.containerFn = () => this.containerRef ?? opts.containerElement();
-    this.onChangeFn = opts.onChange;
-    this.onSelectFn = opts.onSelect;
-    this.onOpenFn = opts.onOpen;
+  override willDestroy(): void {
+    super.willDestroy();
+    this.holdTask.cancelAll();
+    this.focusCardTask.cancelAll();
+    if (this.settleTimer) {
+      clearTimeout(this.settleTimer);
+      this.settleTimer = null;
+    }
+    document.body.style.userSelect = '';
+    (document.body.style as BodyStyle).webkitUserSelect = '';
   }
 
   get isDragging(): boolean {
@@ -117,10 +122,14 @@ export class KanbanDragManager {
   // ── Pointer Handlers ───────────────────────────────────────────────
 
   onPointerDown = (e: PointerEvent): void => {
-    if (e.button !== 0 || this.interactionMode !== 'idle') return;
+    if (e.button !== 0 || this.interactionMode !== 'idle') {
+      return;
+    }
 
-    const container = this.containerFn();
-    if (!container) return;
+    const container = this.containerRef;
+    if (!container) {
+      return;
+    }
 
     const targetEl = e.target as HTMLElement;
     const cardEl = targetEl?.closest?.(
@@ -128,7 +137,7 @@ export class KanbanDragManager {
     ) as HTMLElement | null;
     if (!cardEl) {
       this.selectedIndex = null;
-      this.onSelectFn?.(null);
+      this.args.onSelect?.(null);
       return;
     }
 
@@ -141,7 +150,7 @@ export class KanbanDragManager {
     this.pointerClientY = e.clientY;
     this.dragIndex = hitIndex;
     this.selectedIndex = hitIndex;
-    this.onSelectFn?.(hitIndex);
+    this.args.onSelect?.(hitIndex);
     this.interactionMode = 'pending';
 
     document.body.style.userSelect = 'none';
@@ -154,13 +163,17 @@ export class KanbanDragManager {
 
   onPointerCancel = (event: Event): void => {
     const e = event as PointerEvent;
-    if (e.pointerId !== this.activePointerId) return;
+    if (e.pointerId !== this.activePointerId) {
+      return;
+    }
     this.abortPointerInteraction();
   };
 
   onLostPointerCapture = (event: Event): void => {
     const e = event as PointerEvent;
-    if (e.pointerId !== this.activePointerId) return;
+    if (e.pointerId !== this.activePointerId) {
+      return;
+    }
     if (this.suppressLostPointerCapture) {
       return;
     }
@@ -169,8 +182,12 @@ export class KanbanDragManager {
 
   onPointerMove = (event: Event): void => {
     const e = event as PointerEvent;
-    if (e.pointerId !== this.activePointerId || this.interactionMode === 'idle')
+    if (
+      e.pointerId !== this.activePointerId ||
+      this.interactionMode === 'idle'
+    ) {
       return;
+    }
 
     this.pointerClientX = e.clientX;
     this.pointerClientY = e.clientY;
@@ -179,33 +196,41 @@ export class KanbanDragManager {
       const dx = e.clientX - this.startClientX;
       const dy = e.clientY - this.startClientY;
       if (Math.sqrt(dx * dx + dy * dy) >= DRAG_THRESHOLD_PX) {
-        const container = this.containerFn();
-        if (container) this.activateDrag(container);
+        const container = this.containerRef;
+        if (container) {
+          this.activateDrag(container);
+        }
       }
       return;
     }
 
-    const container = this.containerFn();
-    if (!container || this.dragIndex === null) return;
+    const container = this.containerRef;
+    if (!container || this.dragIndex === null) {
+      return;
+    }
 
-    const placements = this.placementsFn();
+    const placements = this.args.placements;
     const point = findInsertionFromPointer(
       e.clientX,
       e.clientY,
       container,
       placements,
       this.dragIndex,
-      this.columnCountFn(),
+      this.args.columnCount,
     );
     this.insertion = point;
   };
 
   onPointerUp = (event: Event): void => {
     const e = event as PointerEvent;
-    if (e.pointerId !== this.activePointerId) return;
+    if (e.pointerId !== this.activePointerId) {
+      return;
+    }
 
-    const container = this.containerFn();
-    if (container) this.releasePointerCapture(container, e.pointerId);
+    const container = this.containerRef;
+    if (container) {
+      this.releasePointerCapture(container, e.pointerId);
+    }
 
     if (this.interactionMode === 'pending') {
       this.holdTask.cancelAll();
@@ -216,7 +241,9 @@ export class KanbanDragManager {
       this.snapshotPlacements = null;
       document.body.style.userSelect = '';
       (document.body.style as BodyStyle).webkitUserSelect = '';
-      if (tappedIndex !== null) this.onOpenFn?.(tappedIndex);
+      if (tappedIndex !== null) {
+        this.args.onOpen?.(tappedIndex);
+      }
       return;
     }
 
@@ -230,7 +257,7 @@ export class KanbanDragManager {
 
     // No-op drop: card released at its original position — skip settle entirely.
     if (pendingInsertion !== null && pendingDragIndex !== null) {
-      const placements = this.placementsFn();
+      const placements = this.args.placements;
       const next = resolveInsertion(
         pendingDragIndex,
         pendingInsertion,
@@ -251,19 +278,19 @@ export class KanbanDragManager {
     this.settleTimer = setTimeout(() => {
       this.settleTimer = null;
       if (pendingInsertion && pendingDragIndex !== null) {
-        const placements = this.placementsFn();
+        const placements = this.args.placements;
         const newPlacements = resolveInsertion(
           pendingDragIndex,
           pendingInsertion,
           placements,
         );
-        this.onChangeFn(newPlacements);
+        this.args.onChange(newPlacements);
         this.announcement = 'Card moved.';
       } else {
         this.announcement = 'Movement cancelled.';
       }
 
-      scheduleOnce('afterRender', this, this.resetSession);
+      this.resetSession();
     }, 200);
   };
 
@@ -281,7 +308,7 @@ export class KanbanDragManager {
         this.cancelDrag();
       } else {
         this.selectedIndex = null;
-        this.onSelectFn?.(null);
+        this.args.onSelect?.(null);
       }
       return;
     }
@@ -329,18 +356,8 @@ export class KanbanDragManager {
 
   select = (index: number | null): void => {
     this.selectedIndex = index;
-    this.onSelectFn?.(index);
+    this.args.onSelect?.(index);
   };
-
-  destroy(): void {
-    this.holdTask.cancelAll();
-    if (this.settleTimer) {
-      clearTimeout(this.settleTimer);
-      this.settleTimer = null;
-    }
-    document.body.style.userSelect = '';
-    (document.body.style as BodyStyle).webkitUserSelect = '';
-  }
 
   // ── Private ────────────────────────────────────────────────────────
 
@@ -348,7 +365,7 @@ export class KanbanDragManager {
     this.holdTask.cancelAll();
     this.interactionMode = 'drag';
     this.activeDragIndex = this.dragIndex;
-    this.snapshotPlacements = this.placementsFn().map((p) => ({ ...p }));
+    this.snapshotPlacements = this.args.placements.map((p) => ({ ...p }));
 
     const cardEl = container.querySelector(
       `[data-card-index="${this.dragIndex}"]`,
@@ -363,9 +380,11 @@ export class KanbanDragManager {
   }
 
   private measureSettlePosition(container: HTMLElement): void {
-    if (!this.insertion) return;
+    if (!this.insertion) {
+      return;
+    }
     const { column, position } = this.insertion;
-    const placements = this.placementsFn();
+    const placements = this.args.placements;
     const colCards = placements
       .filter((p) => p.column === column && p.index !== this.dragIndex)
       .sort((a, b) => a.sortOrder - b.sortOrder);
@@ -373,10 +392,14 @@ export class KanbanDragManager {
     const colEl = container.querySelector(
       `[data-kanban-column="${column}"]`,
     ) as HTMLElement | null;
-    if (!colEl) return;
+    if (!colEl) {
+      return;
+    }
 
     const bodyEl = colEl.querySelector('.col-body') as HTMLElement | null;
-    if (!bodyEl) return;
+    if (!bodyEl) {
+      return;
+    }
 
     if (colCards.length === 0) {
       const bodyRect = bodyEl.getBoundingClientRect();
@@ -419,9 +442,11 @@ export class KanbanDragManager {
   }
 
   private startKeyboardDrag(index: number): void {
-    const placements = this.placementsFn();
+    const placements = this.args.placements;
     const placement = placements.find((p) => p.index === index);
-    if (!placement) return;
+    if (!placement) {
+      return;
+    }
 
     const colCards = cardsInColumn(placement.column, placements).filter(
       (p) => p.index !== index,
@@ -436,7 +461,7 @@ export class KanbanDragManager {
     this.selectedIndex = index;
     this.snapshotPlacements = placements.map((p) => ({ ...p }));
     this.insertion = this.slotToInsertion(placement.column, slot, colCards);
-    this.onSelectFn?.(index);
+    this.args.onSelect?.(index);
     this.announcement =
       'Grabbed. Use arrow keys to move, Space or Enter to drop, Escape to cancel.';
   }
@@ -450,7 +475,9 @@ export class KanbanDragManager {
       ' ',
       'Enter',
     ];
-    if (!movingKeys.includes(e.key)) return;
+    if (!movingKeys.includes(e.key)) {
+      return;
+    }
     e.preventDefault();
 
     if (e.key === ' ' || e.key === 'Enter') {
@@ -458,17 +485,21 @@ export class KanbanDragManager {
       return;
     }
 
-    if (!this.insertion) return;
-    const placements = this.placementsFn();
+    if (!this.insertion) {
+      return;
+    }
+    const placements = this.args.placements;
     const { column } = this.insertion;
-    const totalColumns = this.columnCountFn();
+    const totalColumns = this.args.columnCount;
 
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       const newColumn =
         e.key === 'ArrowLeft'
           ? Math.max(0, column - 1)
           : Math.min(totalColumns - 1, column + 1);
-      if (newColumn === column) return;
+      if (newColumn === column) {
+        return;
+      }
       const currentColCards = cardsInColumn(column, placements).filter(
         (p) => p.index !== this.activeDragIndex,
       );
@@ -490,7 +521,9 @@ export class KanbanDragManager {
       e.key === 'ArrowUp'
         ? Math.max(0, currentSlot - 1)
         : Math.min(colCards.length, currentSlot + 1);
-    if (newSlot === currentSlot) return;
+    if (newSlot === currentSlot) {
+      return;
+    }
     this.insertion = this.slotToInsertion(column, newSlot, colCards);
     this.announcement = `Position ${newSlot + 1} of ${colCards.length + 1}.`;
   }
@@ -499,10 +532,10 @@ export class KanbanDragManager {
     const pendingInsertion = this.insertion;
     const pendingIndex = this.kbGrabIndex;
     if (pendingInsertion !== null && pendingIndex !== null) {
-      const placements = this.placementsFn();
+      const placements = this.args.placements;
       const next = resolveInsertion(pendingIndex, pendingInsertion, placements);
       if (!placementsEqual(placements, next)) {
-        this.onChangeFn(next);
+        this.args.onChange(next);
         this.announcement = 'Card dropped.';
       } else {
         this.announcement = 'Card returned to original position.';
@@ -511,7 +544,7 @@ export class KanbanDragManager {
     const focusTarget = pendingIndex;
     this.resetSession();
     if (focusTarget !== null) {
-      scheduleOnce('afterRender', this, this.focusCard, focusTarget);
+      void this.focusCardTask.perform(focusTarget);
     }
   }
 
@@ -519,17 +552,19 @@ export class KanbanDragManager {
     const focusTarget = this.kbGrabIndex;
     this.announcement = 'Movement cancelled.';
     if (this.snapshotPlacements) {
-      this.onChangeFn(this.snapshotPlacements);
+      this.args.onChange(this.snapshotPlacements);
     }
     this.resetSession();
     if (focusTarget !== null) {
-      scheduleOnce('afterRender', this, this.focusCard, focusTarget);
+      void this.focusCardTask.perform(focusTarget);
     }
   }
 
   private navigateFocus(direction: 'up' | 'down' | 'left' | 'right'): void {
-    const placements = this.placementsFn();
-    if (placements.length === 0) return;
+    const placements = this.args.placements;
+    if (placements.length === 0) {
+      return;
+    }
 
     const currentIndex = this.selectedIndex;
     const current =
@@ -558,7 +593,7 @@ export class KanbanDragManager {
       targetCard = cards[idx + 1];
     } else {
       const delta = direction === 'left' ? -1 : 1;
-      const totalCols = this.columnCountFn();
+      const totalCols = this.args.columnCount;
       let col = current.column + delta;
       while (col >= 0 && col < totalCols) {
         const cards = colCards(col);
@@ -570,14 +605,16 @@ export class KanbanDragManager {
       }
     }
 
-    if (!targetCard) return;
+    if (!targetCard) {
+      return;
+    }
     this.selectedIndex = targetCard.index;
-    this.onSelectFn?.(targetCard.index);
-    scheduleOnce('afterRender', this, this.focusCard, targetCard.index);
+    this.args.onSelect?.(targetCard.index);
+    void this.focusCardTask.perform(targetCard.index);
   }
 
   private focusCard(index: number): void {
-    const el = this.containerFn()?.querySelector(
+    const el = this.containerRef?.querySelector(
       `[data-card-index="${index}"]`,
     ) as HTMLElement | null;
     el?.focus();
@@ -587,7 +624,9 @@ export class KanbanDragManager {
     insertion: InsertionPoint,
     colCards: KanbanPlacement[],
   ): number {
-    if (insertion.insertBeforeIndex === -1) return colCards.length;
+    if (insertion.insertBeforeIndex === -1) {
+      return colCards.length;
+    }
     const idx = colCards.findIndex(
       (c) => c.index === insertion.insertBeforeIndex,
     );
@@ -617,13 +656,13 @@ export class KanbanDragManager {
   private cancelDrag(): void {
     this.announcement = 'Movement cancelled.';
     if (this.snapshotPlacements) {
-      this.onChangeFn(this.snapshotPlacements);
+      this.args.onChange(this.snapshotPlacements);
     }
     this.abortPointerInteraction();
   }
 
   private abortPointerInteraction(): void {
-    const container = this.containerFn();
+    const container = this.containerRef;
     if (container && this.activePointerId !== null) {
       this.releasePointerCapture(container, this.activePointerId);
     }
@@ -661,6 +700,7 @@ export class KanbanDragManager {
     this.snapshotPlacements = null;
     this.interactionMode = 'idle';
     this.holdTask.cancelAll();
+    this.focusCardTask.cancelAll();
     if (this.settleTimer) {
       clearTimeout(this.settleTimer);
       this.settleTimer = null;
@@ -668,4 +708,6 @@ export class KanbanDragManager {
     document.body.style.userSelect = '';
     (document.body.style as BodyStyle).webkitUserSelect = '';
   }
+
+  <template>{{yield this}}</template>
 }

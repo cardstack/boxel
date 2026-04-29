@@ -43,7 +43,7 @@ module('Integration | Component | kanban-plane', function (hooks) {
         sortOrder: 2,
       },
     ];
-    const manager = new KanbanDragManager({
+    const manager = new KanbanDragManager(this.owner, {
       placements: () => placements,
       columnCount: () => columns.length,
       containerElement: () => null,
@@ -90,7 +90,7 @@ module('Integration | Component | kanban-plane', function (hooks) {
         sortOrder: 0,
       },
     ];
-    const manager = new KanbanDragManager({
+    const manager = new KanbanDragManager(this.owner, {
       placements: () => placements,
       columnCount: () => columns.length,
       containerElement: () => null,
@@ -139,7 +139,7 @@ module('Integration | Component | kanban-plane', function (hooks) {
         sortOrder: 1,
       },
     ];
-    const manager = new KanbanDragManager({
+    const manager = new KanbanDragManager(this.owner, {
       placements: () => placements,
       columnCount: () => columns.length,
       containerElement: () => null,
@@ -184,7 +184,7 @@ module('Integration | Component | kanban-plane', function (hooks) {
     const onAddCard = (key: string | null) => {
       addedColumnKey = key;
     };
-    const manager = new KanbanDragManager({
+    const manager = new KanbanDragManager(this.owner, {
       placements: () => placements,
       columnCount: () => columns.length,
       containerElement: () => null,
