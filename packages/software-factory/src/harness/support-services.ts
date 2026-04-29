@@ -14,7 +14,7 @@ import {
   DEFAULT_PG_HOST,
   DEFAULT_PG_PORT,
   CONFIGURED_HOST_URL,
-  findAvailablePort,
+  findAndHoldAvailablePort,
   findHostDistPackageDir,
   findRootRepoCheckoutDir,
   hostDir,
@@ -241,7 +241,11 @@ async function ensureHostReady(): Promise<{
       }
       ensureBoxelUIDist(hostPackageDir);
       assertUsableHostDist(hostPackageDir);
-      let port = await findAvailablePort();
+      // Hold the port until just before spawn so a sibling allocation
+      // cannot race in and take it. See findAndHoldAvailablePort comment
+      // for the full failure mode this guards against.
+      let portReservation = await findAndHoldAvailablePort();
+      let port = portReservation.port;
       let hostURL = `http://localhost:${port}/`;
       let hostDistDir = join(hostPackageDir, 'dist');
       let serveConfigPath = join(hostPackageDir, 'tests', 'serve.json');
@@ -249,6 +253,7 @@ async function ensureHostReady(): Promise<{
         `serving built host dist from ${hostPackageDir} at ${hostURL}`,
       );
 
+      await portReservation.release();
       let child = spawn(
         'npx',
         [
@@ -435,11 +440,21 @@ async function attemptStartHarnessPrerenderServer(options: {
   url: string;
   stop(): Promise<void>;
 }> {
-  let port = options.port ?? 0;
-  if (port === 0) {
-    port = await findAvailablePort();
+  let port: number;
+  let portReservation: Awaited<
+    ReturnType<typeof findAndHoldAvailablePort>
+  > | null = null;
+  if (options.port && options.port !== 0) {
+    port = options.port;
+  } else {
+    portReservation = await findAndHoldAvailablePort();
+    port = portReservation.port;
   }
   let url = `http://localhost:${port}`;
+  // Release the holder right before the child binds (only if we allocated).
+  if (portReservation) {
+    await portReservation.release();
+  }
   let child = spawn(
     'ts-node',
     ['--transpileOnly', 'prerender/prerender-server', `--port=${port}`],
