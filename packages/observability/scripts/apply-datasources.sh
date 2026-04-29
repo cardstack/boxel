@@ -127,25 +127,32 @@ shopt -s nullglob
 files=(provisioning/datasources/*.yaml)
 [[ "${#files[@]}" -gt 0 ]] || { echo "no datasource yaml files found" >&2; exit 0; }
 
-# Loud warning if the AMG-extracted JSON manifests are still around but
-# unprocessed — see CS-10978 follow-up. They have hardcoded staging
-# hostnames, so blindly pushing them to prod would silently create
-# wrong-pointing data sources. Migrate to YAML + ${VAR} placeholders
-# before adding them to the glob.
-skipped=(provisioning/datasources/*.json)
-if [[ "${#skipped[@]}" -gt 0 ]]; then
-  echo "apply-datasources: WARN — skipping JSON manifests (need per-env URL templating before push, see CS-10978):" >&2
-  for s in "${skipped[@]}"; do echo "    skip: $s" >&2; done
-fi
-
 echo "apply-datasources: env=${env_name} server=${grafana_server} files=${#files[@]}" >&2
+
+# Validate that every ${VAR} the YAML references is actually set before we
+# call envsubst. envsubst substitutes unset variables with empty strings,
+# so a typo in a placeholder name would silently push e.g. `url: ""` to
+# Grafana. Pre-checking the raw payload catches that loudly.
+assert_placeholders_resolved() {
+  local raw="$1" file="$2"
+  local refs ref name
+  refs="$(grep -oE '\$\{[A-Z_][A-Z0-9_]*\}' <<<"$raw" | sort -u || true)"
+  while IFS= read -r ref; do
+    [[ -z "$ref" ]] && continue
+    name="${ref#\$\{}"; name="${name%\}}"
+    [[ -n "${!name+x}" ]] || fail "${file}: \${${name}} referenced but not set in environment"
+  done <<<"$refs"
+}
 
 for f in "${files[@]}"; do
   echo "→ ${f}" >&2
   # Each file is `apiVersion: 1` + `datasources: [...]`. Pull the entries
-  # out as JSON one per line, envsubst them so ${LOKI_URL} etc. resolve,
-  # then upsert each one.
+  # out as JSON one per line, envsubst them so ${VAR} placeholders resolve,
+  # then upsert each one. secureJsonData (passwords, API keys) flows
+  # through the same path — Grafana's HTTP API accepts it on POST/PUT
+  # exactly as it appears in the file-provisioning shape.
   yq -o json -I0 '.datasources[]' "$f" | while IFS= read -r raw; do
+    assert_placeholders_resolved "$raw" "$f"
     payload="$(envsubst <<<"$raw")"
     upsert "$payload"
   done
