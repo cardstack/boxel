@@ -14,6 +14,7 @@ import {
   type TestRunAttributes,
 } from '../src/factory-test-realm';
 import { createMockClient } from './helpers/mock-client';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -24,6 +25,7 @@ const testRealmOptions = {
   testResultsModuleUrl:
     'https://realms.example.test/software-factory/test-results',
   realmServerUrl: 'https://realms.example.test/',
+  workspaceDir: createTestWorkspace().dir,
 };
 
 // ---------------------------------------------------------------------------
@@ -396,25 +398,16 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
 // ---------------------------------------------------------------------------
 
 module('factory-test-realm > createTestRun', function () {
-  test('POSTs card document to test realm', async function (assert) {
-    let capturedUrl: string | undefined;
-    let capturedInit: RequestInit | undefined;
-
-    let mockFetch = (async (
-      url: string | URL | Request,
-      init?: RequestInit,
-    ) => {
-      capturedUrl = String(url);
-      capturedInit = init;
-      return new Response('{}', { status: 200 });
-    }) as typeof globalThis.fetch;
+  test('writes TestRun card to workspace with running status', async function (assert) {
+    let workspace = createTestWorkspace();
 
     let result = await createTestRun(
       'define-sticky-note',
       ['test A', 'test B'],
       {
         ...testRealmOptions,
-        client: createMockClient({ fetch: mockFetch }),
+        workspaceDir: workspace.dir,
+        client: createMockClient(),
         sequenceNumber: 1,
       },
     );
@@ -424,46 +417,37 @@ module('factory-test-realm > createTestRun', function () {
       result.testRunId,
       'Validations/test_define-sticky-note-1',
     );
-    assert.strictEqual(
-      capturedUrl,
-      'https://realms.example.test/user/personal-tests/Validations/test_define-sticky-note-1.json',
-    );
-    assert.strictEqual(capturedInit?.method, 'POST');
 
-    let headers = capturedInit?.headers as Record<string, string>;
-    assert.strictEqual(headers['Content-Type'], SupportedMimeType.CardSource);
-
-    let body = JSON.parse(capturedInit?.body as string);
+    // The card lives on local disk — the orchestrator syncs it to the
+    // realm between iterations.
+    let written = workspace.read('Validations/test_define-sticky-note-1.json');
+    let body = JSON.parse(written);
     assert.strictEqual(body.data.meta.adoptsFrom.name, 'TestRun');
     assert.strictEqual(body.data.attributes.status, 'running');
+
+    workspace.cleanup();
   });
 
-  test('returns error on HTTP failure', async function (assert) {
-    let mockFetch = (async () => {
-      return new Response('Forbidden', { status: 403 });
-    }) as typeof globalThis.fetch;
+  test('returns error when workspace write fails', async function (assert) {
+    // Point workspaceDir at a path that can't be created (a regular file
+    // blocks the directory creation inside writeCard).
+    let workspace = createTestWorkspace();
+    workspace.write('blocker', 'file');
+    let badWorkspaceDir = `${workspace.dir}/blocker`;
 
     let result = await createTestRun('my-test', ['test A'], {
       ...testRealmOptions,
-      client: createMockClient({ fetch: mockFetch }),
+      workspaceDir: badWorkspaceDir,
+      client: createMockClient(),
     });
 
     assert.false(result.created);
-    assert.true(result.error?.includes('403'));
-  });
+    assert.true(
+      Boolean(result.error && result.error.length > 0),
+      'surfaces fs error',
+    );
 
-  test('returns error on network failure', async function (assert) {
-    let mockFetch = (async () => {
-      throw new Error('Network unreachable');
-    }) as typeof globalThis.fetch;
-
-    let result = await createTestRun('my-test', ['test A'], {
-      ...testRealmOptions,
-      client: createMockClient({ fetch: mockFetch }),
-    });
-
-    assert.false(result.created);
-    assert.strictEqual(result.error, 'Network unreachable');
+    workspace.cleanup();
   });
 });
 
@@ -472,8 +456,8 @@ module('factory-test-realm > createTestRun', function () {
 // ---------------------------------------------------------------------------
 
 module('factory-test-realm > completeTestRun', function () {
-  test('reads existing card and updates with TestRunAttributes', async function (assert) {
-    let calls: { url: string; method: string }[] = [];
+  test('reads existing card from workspace and writes updated attributes back', async function (assert) {
+    let workspace = createTestWorkspace();
 
     let existingCard = {
       data: {
@@ -493,23 +477,10 @@ module('factory-test-realm > completeTestRun', function () {
         },
       },
     };
-
-    let mockFetch = (async (
-      url: string | URL | Request,
-      init?: RequestInit,
-    ) => {
-      let urlStr = String(url);
-      let method = init?.method ?? 'GET';
-      calls.push({ url: urlStr, method });
-
-      if (method === 'GET') {
-        return new Response(JSON.stringify(existingCard), {
-          status: 200,
-          headers: { 'Content-Type': SupportedMimeType.CardSource },
-        });
-      }
-      return new Response('{}', { status: 200 });
-    }) as typeof globalThis.fetch;
+    workspace.write(
+      'Validations/test_define-sticky-note-1.json',
+      JSON.stringify(existingCard, null, 2),
+    );
 
     let attrs: TestRunAttributes = {
       status: 'passed',
@@ -522,16 +493,25 @@ module('factory-test-realm > completeTestRun', function () {
     let result = await completeTestRun(
       'Validations/test_define-sticky-note-1',
       attrs,
-      { ...testRealmOptions, client: createMockClient({ fetch: mockFetch }) },
+      {
+        ...testRealmOptions,
+        workspaceDir: workspace.dir,
+        client: createMockClient(),
+      },
     );
 
     assert.true(result.updated);
-    assert.strictEqual(calls.length, 2);
-    assert.strictEqual(calls[0].method, 'GET');
-    assert.strictEqual(calls[1].method, 'POST');
-    assert.true(
-      calls[1].url.includes('Validations/test_define-sticky-note-1.json'),
+
+    // The workspace file was updated with the completion attributes
+    // (status flipped from running → passed, durationMs added).
+    let updated = JSON.parse(
+      workspace.read('Validations/test_define-sticky-note-1.json'),
     );
+    assert.strictEqual(updated.data.attributes.status, 'passed');
+    assert.strictEqual(updated.data.attributes.durationMs, 1500);
+    assert.true(Boolean(updated.data.attributes.completedAt));
+
+    workspace.cleanup();
   });
 
   test('returns error when read fails', async function (assert) {

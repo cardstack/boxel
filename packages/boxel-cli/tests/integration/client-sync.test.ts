@@ -173,4 +173,43 @@ describe('BoxelCLIClient.sync (integration)', () => {
     expect(result.pushed).toEqual([]);
     expect(result.pulled).toEqual([]);
   });
+
+  it('paths containing a space round-trip without duplicating across syncs', async () => {
+    // Regression: realm `_mtimes` returns paths URL-encoded
+    // (`Knowledge%20Articles/foo.json`), but the local listing has
+    // them decoded (`Knowledge Articles/foo.json`). Without
+    // normalizing, the diff treated the encoded and decoded variants
+    // as two different files — a second sync would "pull" the
+    // remote copy, leaving the workspace with both.
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+    let relativePath = 'Knowledge Articles/sticky-note-brief.json';
+
+    writeLocalFile(localDir, relativePath, '{"title":"Brief"}\n');
+
+    let firstSync = await client.sync(realmUrl, localDir, {
+      preferLocal: true,
+    });
+    expect(firstSync.hasError).toBe(false);
+    expect(firstSync.pushed).toContain(relativePath);
+
+    // Second sync: nothing has changed locally or remotely. The
+    // expected outcome is an idempotent no-op — no pulls, no pushes,
+    // no duplicates.
+    let secondSync = await client.sync(realmUrl, localDir, {
+      preferLocal: true,
+    });
+    expect(secondSync.hasError).toBe(false);
+    expect(secondSync.pushed).toEqual([]);
+    expect(secondSync.pulled).toEqual([]);
+
+    // The on-disk workspace should still have only the original
+    // file — not a `Knowledge%20Articles/...` duplicate.
+    expect(fs.existsSync(path.join(localDir, relativePath))).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(localDir, 'Knowledge%20Articles/sticky-note-brief.json'),
+      ),
+    ).toBe(false);
+  });
 });

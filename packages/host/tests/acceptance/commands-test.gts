@@ -635,7 +635,47 @@ module('Acceptance | Commands tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
 
-    await click('[data-test-message-idx="1"] [data-test-command-apply]');
+    // The aibot message is delivered via the mock-matrix listener which pushes
+    // it through a 100ms-debounced drain. data-room-settled only tracks
+    // loadAllTimelineEvents, so the second message can lag behind the settled
+    // marker. Wait for the apply button to actually be in the DOM before
+    // clicking, and dump diagnostics if it never shows up so future flakes
+    // are debuggable.
+    let applySelector = '[data-test-message-idx="1"] [data-test-command-apply]';
+    try {
+      await waitFor(applySelector, { timeout: 10_000 });
+    } catch (err) {
+      let messageIdxs = findAll('[data-test-message-idx]').map((el) =>
+        el.getAttribute('data-test-message-idx'),
+      );
+      let applyButtons = findAll('[data-test-command-apply]').map((el) =>
+        el.getAttribute('data-test-command-apply'),
+      );
+      let roomEventsSummary = getRoomEvents(roomId).map((e) => ({
+        eventId: e.event_id,
+        type: e.type,
+        sender: e.sender,
+        msgtype: (e.content as any)?.msgtype,
+        hasCommandRequests: Array.isArray(
+          (e.content as any)?.[APP_BOXEL_COMMAND_REQUESTS_KEY],
+        ),
+      }));
+      console.error(
+        '[scripted-command-test] apply button never rendered. Diagnostic:',
+        JSON.stringify(
+          {
+            roomId,
+            renderedMessageIdxs: messageIdxs,
+            renderedApplyButtonStates: applyButtons,
+            roomEvents: roomEventsSummary,
+          },
+          null,
+          2,
+        ),
+      );
+      throw err;
+    }
+    await click(applySelector);
     await waitUntil(
       () => findAll('[data-test-operator-mode-stack]').length === 2,
     );

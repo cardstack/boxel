@@ -9,10 +9,6 @@
  * every tool's contract explicit and prevents an agent-produced path from
  * silently reaching outside the target realm across URL/path handling
  * layers with different normalization rules.
- *
- * Consolidated under CS-10823 — previous copies in `eval-execution.ts`
- * and `instantiate-execution.ts` diverged (one lacked the empty-string
- * guard, neither rejected backslashes or percent-encoded traversal).
  */
 
 /**

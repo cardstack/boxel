@@ -15,7 +15,12 @@ import type {
   SchedulableIssue,
 } from './factory-agent';
 
-import { ensureJsonExtension, addCommentToIssue } from './realm-operations';
+import {
+  addCommentToIssue,
+  ensureJsonExtension,
+  toRealmRelativePath,
+} from './realm-operations';
+import { readCard, writeCard } from './workspace-fs';
 import { logger } from './logger';
 
 let log = logger('issue-scheduler');
@@ -184,17 +189,25 @@ export interface RealmIssueStoreConfig {
   /** Absolute module URL for the darkfactory module (e.g. from inferDarkfactoryModuleUrl()). */
   darkfactoryModuleUrl: string;
   client: BoxelCLIClient;
+  /**
+   * Local workspace directory mirroring the target realm. Issue mutations
+   * (updateIssue, updateProjectStatus, addComment) read/patch/write the
+   * workspace copy; listIssues / refreshIssue still query the realm index.
+   */
+  workspaceDir: string;
 }
 
 export class RealmIssueStore implements IssueStore {
   private realmUrl: string;
   private darkfactoryModuleUrl: string;
   private client: BoxelCLIClient;
+  private workspaceDir: string;
 
   constructor(config: RealmIssueStoreConfig) {
     this.realmUrl = config.realmUrl;
     this.darkfactoryModuleUrl = config.darkfactoryModuleUrl;
     this.client = config.client;
+    this.workspaceDir = config.workspaceDir;
   }
 
   async listIssues(): Promise<SchedulableIssue[]> {
@@ -235,23 +248,21 @@ export class RealmIssueStore implements IssueStore {
     issueId: string,
     updates: { status?: string; priority?: string },
   ): Promise<void> {
-    // Read the source JSON file (not the indexed card, which can have
-    // stripped relationships during indexing).
-    let readResult = await this.client.read(
-      this.realmUrl,
-      ensureJsonExtension(issueId),
+    let filePath = ensureJsonExtension(
+      toRealmRelativePath(issueId, this.realmUrl),
     );
-    if (!readResult.ok || !readResult.content) {
+    let readResult = await readCard(this.workspaceDir, filePath);
+    if (!readResult.ok || !readResult.document) {
       let reason =
         readResult.status === 404
-          ? 'issue not found'
-          : (readResult.error ?? 'no content returned');
+          ? 'issue not found in workspace'
+          : (readResult.error ?? 'no document returned');
       throw new Error(
         `Failed to read issue "${issueId}" for update: ${reason}`,
       );
     }
 
-    let doc = JSON.parse(readResult.content) as LooseSingleCardDocument;
+    let doc = readResult.document as unknown as LooseSingleCardDocument;
     let attrs = (doc.data.attributes ?? {}) as Record<string, unknown>;
 
     if (updates.status != null) {
@@ -264,9 +275,9 @@ export class RealmIssueStore implements IssueStore {
 
     doc.data.attributes = attrs;
 
-    let writeResult = await this.client.write(
-      this.realmUrl,
-      ensureJsonExtension(issueId),
+    let writeResult = await writeCard(
+      this.workspaceDir,
+      filePath,
       JSON.stringify(doc, null, 2),
     );
 
@@ -284,9 +295,8 @@ export class RealmIssueStore implements IssueStore {
     comment: { body: string; author: string },
   ): Promise<void> {
     let result = await addCommentToIssue(
-      this.client,
-      this.realmUrl,
-      issueId,
+      this.workspaceDir,
+      toRealmRelativePath(issueId, this.realmUrl),
       comment,
     );
     if (!result.ok) {
@@ -298,7 +308,8 @@ export class RealmIssueStore implements IssueStore {
   }
 
   async updateProjectStatus(projectStatus: string): Promise<void> {
-    // We expect exactly one Project card per target realm.
+    // We expect exactly one Project card per target realm. The search
+    // index stays on the realm — card mutations happen locally.
     let result = await this.client.search(this.realmUrl, {
       filter: {
         type: { module: this.darkfactoryModuleUrl, name: 'Project' },
@@ -314,29 +325,26 @@ export class RealmIssueStore implements IssueStore {
     }
 
     let projectId = result.data[0].id as string;
-    // Strip the realm URL prefix to get the relative path
-    let relativePath = projectId.replace(this.realmUrl, '');
+    let relativePath = toRealmRelativePath(projectId, this.realmUrl);
+    let filePath = ensureJsonExtension(relativePath);
 
-    let readResult = await this.client.read(
-      this.realmUrl,
-      ensureJsonExtension(relativePath),
-    );
-    if (!readResult.ok || !readResult.content) {
+    let readResult = await readCard(this.workspaceDir, filePath);
+    if (!readResult.ok || !readResult.document) {
       log.warn(
-        `Failed to read project "${relativePath}" for status update (status ${readResult.status ?? 'N/A'}): ${readResult.error ?? 'no content'}`,
+        `Failed to read project "${relativePath}" for status update (status ${readResult.status ?? 'N/A'}): ${readResult.error ?? 'no document'}`,
       );
       return;
     }
 
-    let doc = JSON.parse(readResult.content) as LooseSingleCardDocument;
+    let doc = readResult.document as unknown as LooseSingleCardDocument;
     let attrs = (doc.data.attributes ?? {}) as Record<string, unknown>;
     attrs.projectStatus = projectStatus;
     attrs.updatedAt = new Date().toISOString();
     doc.data.attributes = attrs;
 
-    let writeResult = await this.client.write(
-      this.realmUrl,
-      ensureJsonExtension(relativePath),
+    let writeResult = await writeCard(
+      this.workspaceDir,
+      filePath,
       JSON.stringify(doc, null, 2),
     );
 

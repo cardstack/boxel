@@ -9,6 +9,7 @@ import {
   type EvalModuleResult,
 } from '../src/validators/eval-step';
 import { createMockClient } from './helpers/mock-client';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -21,6 +22,7 @@ function makeConfig(
     client: createMockClient(),
     realmServerUrl: 'https://example.test/',
     evalResultsModuleUrl: 'https://example.test/eval-result',
+    workspaceDir: createTestWorkspace().dir,
     // Default to a no-op sequence resolver for unit tests
     getNextSequenceNumber: async () => 1,
     ...overrides,

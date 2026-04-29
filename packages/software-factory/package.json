@@ -29,6 +29,7 @@
     "test:node": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/test.ts --node-only",
     "test:playwright": "playwright test",
     "test:playwright:headed": "playwright test --headed",
+    "test:playwright:shard": "playwright test --shard",
     "test:realm": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/run-realm-tests.ts"
   },
   "devDependencies": {
