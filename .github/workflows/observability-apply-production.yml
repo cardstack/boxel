@@ -123,25 +123,32 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Source GRAFANA_TOKEN and LOKI_URL from SSM
-        # GRAFANA_TOKEN authenticates `grafanactl resources push` (dashboards
-        # + folders) and `apply-datasources.sh` (data sources via HTTP API).
-        # LOKI_URL is substituted into provisioning/datasources/loki.yaml at
-        # push time so the data source points at the in-VPC Loki NLB.
+      - name: Source data-source secrets from SSM
+        # Each provisioning/datasources/*.yaml has placeholders that get
+        # substituted by apply-datasources.sh at push time. The IAM grants
+        # for these specific SSM paths live in cardstack/infra at
+        # configs/boxel-observability-apply/ — adding a new env var here
+        # without the matching grant gets a hard AccessDenied.
         run: |
-          GRAFANA_TOKEN="$(aws ssm get-parameter \
-            --name /production/grafana/grafanactl_token \
-            --with-decryption \
-            --query 'Parameter.Value' \
-            --output text)"
-          echo "::add-mask::$GRAFANA_TOKEN"
-          echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
+          fetch() {  # name path [--with-decryption]
+            local var="$1" path="$2"
+            shift 2
+            local val
+            val="$(aws ssm get-parameter --name "$path" "$@" \
+              --query 'Parameter.Value' --output text)"
+            if [[ " $* " == *" --with-decryption "* ]]; then
+              echo "::add-mask::$val"
+            fi
+            echo "${var}=${val}" >> "$GITHUB_ENV"
+          }
 
-          LOKI_URL="$(aws ssm get-parameter \
-            --name /production/loki/internal_url \
-            --query 'Parameter.Value' \
-            --output text)"
-          echo "LOKI_URL=$LOKI_URL" >> "$GITHUB_ENV"
+          fetch GRAFANA_TOKEN          /production/grafana/grafanactl_token   --with-decryption
+          fetch LOKI_URL               /production/loki/internal_url
+          fetch BOXEL_DB_HOST          /production/boxel-grafana/db_host
+          fetch SYNAPSE_PROMETHEUS_URL /production/boxel-grafana/prometheus_url
+          fetch BOXEL_DB_NAME          /production/boxel/PGDATABASE
+          fetch BOXEL_DB_USER          /production/boxel/GRAFANA_DB_USER
+          fetch BOXEL_DB_PASSWORD      /production/boxel/GRAFANA_DB_PASSWORD  --with-decryption
 
       - name: Apply
         working-directory: packages/observability
