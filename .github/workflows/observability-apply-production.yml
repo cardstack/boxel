@@ -54,9 +54,10 @@ jobs:
 
     env:
       AWS_REGION: us-east-1
-      # Dedicated, narrowly-scoped role created in cardstack/infra#666
-      # (configs/boxel-observability-apply/production). Has exactly one
-      # permission: ssm:GetParameter on /production/grafana/grafanactl_token.
+      # Dedicated, narrowly-scoped role at configs/boxel-observability-apply/production
+      # in cardstack/infra. Permissions are ssm:GetParameter on:
+      #   /production/grafana/grafanactl_token  (added in cardstack/infra#666)
+      #   /production/loki/internal_url         (added in cardstack/infra#674, CS-10968)
       AWS_ROLE_ARN: arn:aws:iam::120317779495:role/boxel-observability-apply
       # Server URL is NOT set here — single source of truth is
       # packages/observability/grafanactl/config.yaml (see staging workflow

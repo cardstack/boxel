@@ -40,9 +40,17 @@ fail() { echo "error: $1" >&2; exit 1; }
 env_name=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env)    env_name="$2"; shift 2;;
-    --env=*)  env_name="${1#--env=}"; shift;;
-    *)        usage_error "unknown option: $1";;
+    --env)
+      [[ $# -ge 2 && "$2" != -* ]] || usage_error "--env requires a value"
+      env_name="$2"
+      shift 2
+      ;;
+    --env=*)
+      env_name="${1#--env=}"
+      [[ -n "$env_name" ]] || usage_error "--env requires a value"
+      shift
+      ;;
+    *) usage_error "unknown option: $1";;
   esac
 done
 
@@ -87,10 +95,13 @@ upsert() {
     -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
     "${grafana_server}/api/datasources/uid/${uid}")"
 
+  # `--fail-with-body` makes curl exit non-zero on 4xx/5xx and still print
+  # the response body, so a 401/403/500 on the upsert fails the script
+  # instead of silently logging a "successful" no-op.
   case "$http_status" in
     200)
       echo "  ↻ updating ${uid}" >&2
-      curl -sS -X PUT \
+      curl -sS --fail-with-body -X PUT \
         -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
         -H "Content-Type: application/json" \
         --data-binary "$payload" \
@@ -99,7 +110,7 @@ upsert() {
       ;;
     404)
       echo "  + creating ${uid}" >&2
-      curl -sS -X POST \
+      curl -sS --fail-with-body -X POST \
         -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
         -H "Content-Type: application/json" \
         --data-binary "$payload" \
@@ -115,6 +126,17 @@ upsert() {
 shopt -s nullglob
 files=(provisioning/datasources/*.yaml)
 [[ "${#files[@]}" -gt 0 ]] || { echo "no datasource yaml files found" >&2; exit 0; }
+
+# Loud warning if the AMG-extracted JSON manifests are still around but
+# unprocessed — see CS-10978 follow-up. They have hardcoded staging
+# hostnames, so blindly pushing them to prod would silently create
+# wrong-pointing data sources. Migrate to YAML + ${VAR} placeholders
+# before adding them to the glob.
+skipped=(provisioning/datasources/*.json)
+if [[ "${#skipped[@]}" -gt 0 ]]; then
+  echo "apply-datasources: WARN — skipping JSON manifests (need per-env URL templating before push, see CS-10978):" >&2
+  for s in "${skipped[@]}"; do echo "    skip: $s" >&2; done
+fi
 
 echo "apply-datasources: env=${env_name} server=${grafana_server} files=${#files[@]}" >&2
 
