@@ -261,19 +261,20 @@ module(basename(__filename), function () {
     );
     assert.strictEqual(
       clamped.additionalErrors!.length,
-      ERROR_DOC_MAX_ADDITIONAL_ERRORS + 1,
-      'step 5 DID run: capped at MAX + sentinel',
+      ERROR_DOC_MAX_ADDITIONAL_ERRORS,
+      'step 5 DID run: array length matches the constant (MAX-1 entries + sentinel)',
     );
-    let sentinel = clamped.additionalErrors![ERROR_DOC_MAX_ADDITIONAL_ERRORS];
+    let sentinel =
+      clamped.additionalErrors![ERROR_DOC_MAX_ADDITIONAL_ERRORS - 1];
     assert.ok(
       isOmittedSentinel(sentinel),
       'sentinel entry recorded the omission',
     );
     assert.ok(
-      new RegExp(`${count - ERROR_DOC_MAX_ADDITIONAL_ERRORS}`).test(
+      new RegExp(`${count - (ERROR_DOC_MAX_ADDITIONAL_ERRORS - 1)}`).test(
         sentinel.message,
       ),
-      'sentinel records the number dropped',
+      'sentinel records the original count minus the preserved entries',
     );
   });
 
@@ -302,9 +303,14 @@ module(basename(__filename), function () {
       1,
       'step 6 DID run: only sentinel left',
     );
+    let sentinel = clamped.additionalErrors![0];
     assert.ok(
-      isOmittedSentinel(clamped.additionalErrors![0]),
+      isOmittedSentinel(sentinel),
       'lone entry is the omitted-sentinel',
+    );
+    assert.ok(
+      new RegExp(`\\b${count}\\b`).test(sentinel.message),
+      'step 6 sentinel reports the ORIGINAL additionalErrors count, not the post-step-5 count',
     );
   });
 

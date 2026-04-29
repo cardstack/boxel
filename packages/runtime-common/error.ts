@@ -97,6 +97,12 @@ export function clampSerializedError(error: SerializedError): SerializedError {
   let entries = (): any[] | null =>
     Array.isArray(working.additionalErrors) ? working.additionalErrors : null;
 
+  // Capture once up front so the omitted-sentinel messages emitted by
+  // steps 5 and 6 can report the *original* count even after step 5
+  // has already replaced the array with a (preserved + sentinel)
+  // shorter form.
+  let originalAdditionalCount = entries()?.length ?? 0;
+
   // 1. Per-entry stacks.
   let arr = entries();
   if (arr) {
@@ -141,21 +147,30 @@ export function clampSerializedError(error: SerializedError): SerializedError {
   }
   if (jsonByteSize(working) <= ERROR_DOC_MAX_BYTES) return working;
 
-  // 5. Cap entry count.
+  // 5. Cap entry count. The final array length is exactly
+  //    ERROR_DOC_MAX_ADDITIONAL_ERRORS — `MAX - 1` real entries plus
+  //    one sentinel summarising the rest — so the constant name and
+  //    the resulting array length agree.
   arr = entries();
   if (arr && arr.length > ERROR_DOC_MAX_ADDITIONAL_ERRORS) {
-    let omitted = arr.length - ERROR_DOC_MAX_ADDITIONAL_ERRORS;
-    working.additionalErrors = [
-      ...arr.slice(0, ERROR_DOC_MAX_ADDITIONAL_ERRORS),
-      omittedSentinel(omitted),
-    ];
+    let preservedCount = Math.max(ERROR_DOC_MAX_ADDITIONAL_ERRORS - 1, 0);
+    working.additionalErrors =
+      preservedCount > 0
+        ? [
+            ...arr.slice(0, preservedCount),
+            omittedSentinel(originalAdditionalCount - preservedCount),
+          ]
+        : [omittedSentinel(originalAdditionalCount - preservedCount)];
   }
   if (jsonByteSize(working) <= ERROR_DOC_MAX_BYTES) return working;
 
-  // 6. Drop additionalErrors entirely.
-  let omittedCount = entries()?.length ?? 0;
+  // 6. Drop additionalErrors entirely. The sentinel reports the
+  //    original count regardless of how many entries step 5 left
+  //    behind.
   working.additionalErrors =
-    omittedCount > 0 ? [omittedSentinel(omittedCount)] : null;
+    originalAdditionalCount > 0
+      ? [omittedSentinel(originalAdditionalCount)]
+      : null;
   if (jsonByteSize(working) <= ERROR_DOC_MAX_BYTES) return working;
 
   // 7. Aggressively shrink the envelope itself.
