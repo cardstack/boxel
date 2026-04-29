@@ -367,16 +367,23 @@ export function transpileAmd(
           // of the AMD body via a setter (avoids TDZ when the expression
           // forward-references a `const`/`class` declared later in the
           // source).
+          //
+          // Replace just the `export default ` keyword (15 chars) with the
+          // var capture, then append `)` before any trailing `;`. We do
+          // NOT trim to `decl.start..decl.end` because acorn's positions
+          // SKIP source-level parens — for `export default (foo);`, decl
+          // points at `foo` (inside the parens), so consuming
+          // `[node.start..decl.start]` would eat the source `(` while
+          // leaving the source `)` untouched, producing `var X = (foo));`
+          // (double-paren SyntaxError). Replacing only the keyword and
+          // appending before `;` leaves source-level parens intact, which
+          // is harmless: `var X = ((foo));` parses fine.
           const tempName = freshDefaultName();
-          // Replace just the prefix `export default ` with the var capture.
-          // The expression body stays at its original source position, so
-          // the walker visits it with the correct AST positions and no
-          // magic-string overlap occurs.
-          const exprStart = decl.start;
-          ms.overwrite(node.start, exprStart, `var ${tempName} = (`);
-          // Append `);` after the expression; if a trailing `;` already
-          // exists in source we leave it alone (a stray extra `;` is fine).
-          ms.appendRight(decl.end, ')');
+          const headEnd = node.start + 'export default '.length;
+          ms.overwrite(node.start, headEnd, `var ${tempName} = (`);
+          let tail = node.end;
+          if (src[tail - 1] === ';') tail -= 1;
+          ms.appendRight(tail, ')');
           exportStatements.push(`_exports.default = ${tempName};`);
         }
         break;

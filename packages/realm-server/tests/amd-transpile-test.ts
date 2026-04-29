@@ -105,6 +105,18 @@ module(basename(__filename), function () {
       await runSharedTest(amdTranspileTests, assert, {});
     });
 
+    test('export default with parens around expression (regression P0)', async function (assert) {
+      await runSharedTest(amdTranspileTests, assert, {});
+    });
+
+    test('export default IIFE (regression P0)', async function (assert) {
+      await runSharedTest(amdTranspileTests, assert, {});
+    });
+
+    test('export default parenthesised function expression (regression P0)', async function (assert) {
+      await runSharedTest(amdTranspileTests, assert, {});
+    });
+
     test('shorthand property of an imported name (regression P0-1)', async function (assert) {
       await runSharedTest(amdTranspileTests, assert, {});
     });

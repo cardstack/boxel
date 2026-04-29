@@ -338,6 +338,37 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
     assert.strictEqual(exports.alias, 100);
   },
 
+  'export default with parens around expression (regression P0)': async (
+    assert,
+  ) => {
+    // `export default (foo);` — acorn's `decl` AST positions skip the
+    // source-level parens, so an earlier version produced
+    // `var __default$0 = (foo));` (double `)` → SyntaxError). The fix
+    // replaces just the `export default ` keyword and appends before
+    // any trailing `;`, leaving source parens in place.
+    let out = transpileAmd(`export default (1 + 2);`, { moduleId });
+    let { exports } = runAmd(out);
+    assert.strictEqual(exports.default, 3);
+  },
+
+  'export default IIFE (regression P0)': async (assert) => {
+    let out = transpileAmd(`export default (function () { return 9; })();`, {
+      moduleId,
+    });
+    let { exports } = runAmd(out);
+    assert.strictEqual(exports.default, 9);
+  },
+
+  'export default parenthesised function expression (regression P0)': async (
+    assert,
+  ) => {
+    let out = transpileAmd(`export default (function () { return 'pf'; });`, {
+      moduleId,
+    });
+    let { exports } = runAmd(out);
+    assert.strictEqual((exports.default as () => string)(), 'pf');
+  },
+
   'shorthand property of an imported name (regression P0-1)': async (
     assert,
   ) => {
