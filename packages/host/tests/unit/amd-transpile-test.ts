@@ -56,7 +56,7 @@ module('Unit | amd-transpile (CS-10977)', function () {
     assert.strictEqual(capturedId, moduleId);
     assert.deepEqual(deps, ['exports']);
     assert.true(
-      Object.getOwnPropertyDescriptor(exports, '__esModule')!.value === true,
+      Object.getOwnPropertyDescriptor(exports, '__esModule')!.value,
       '__esModule marker is set',
     );
   });
@@ -116,14 +116,12 @@ module('Unit | amd-transpile (CS-10977)', function () {
     const cardApi: { primitive?: symbol } = {};
     let { exports } = runAmd(out, { 'card-api': cardApi });
     cardApi.primitive = Symbol('primitive');
-    assert.strictEqual(
+    assert.true(
       (exports.check as (v: unknown) => boolean)(cardApi.primitive),
-      true,
       'reads through dep arg at call time',
     );
-    assert.strictEqual(
+    assert.false(
       (exports.check as (v: unknown) => boolean)(undefined),
-      false,
       'does not snapshot undefined',
     );
   });
@@ -200,19 +198,17 @@ module('Unit | amd-transpile (CS-10977)', function () {
   });
 
   test('export default IIFE (regression P0)', function (assert) {
-    let out = transpileAmd(
-      `export default (function () { return 9; })();`,
-      { moduleId },
-    );
+    let out = transpileAmd(`export default (function () { return 9; })();`, {
+      moduleId,
+    });
     let { exports } = runAmd(out);
     assert.strictEqual(exports.default, 9);
   });
 
   test('export default parenthesised function expression (regression P0)', function (assert) {
-    let out = transpileAmd(
-      `export default (function () { return 'pf'; });`,
-      { moduleId },
-    );
+    let out = transpileAmd(`export default (function () { return 'pf'; });`, {
+      moduleId,
+    });
     let { exports } = runAmd(out);
     assert.strictEqual((exports.default as () => string)(), 'pf');
   });
@@ -344,10 +340,9 @@ module('Unit | amd-transpile (CS-10977)', function () {
   });
 
   test('export * skips names that this module declares explicitly', function (assert) {
-    let out = transpileAmd(
-      `export const a = 'local'; export * from 'foo';`,
-      { moduleId },
-    );
+    let out = transpileAmd(`export const a = 'local'; export * from 'foo';`, {
+      moduleId,
+    });
     let { exports } = runAmd(out, { foo: { a: 'remote', b: 2 } });
     assert.strictEqual(exports.a, 'local', 'local wins over re-export *');
     assert.strictEqual(exports.b, 2);
@@ -372,10 +367,9 @@ module('Unit | amd-transpile (CS-10977)', function () {
   test('string literal containing "import.meta" is preserved', function (assert) {
     // Regression: regex-based replacement would corrupt this; the AST walk
     // we use only matches MetaProperty nodes.
-    let out = transpileAmd(
-      `export const s = "import.meta.url is a thing";`,
-      { moduleId },
-    );
+    let out = transpileAmd(`export const s = "import.meta.url is a thing";`, {
+      moduleId,
+    });
     let { exports, deps } = runAmd(out);
     assert.strictEqual(exports.s, 'import.meta.url is a thing');
     assert.false(
@@ -385,10 +379,9 @@ module('Unit | amd-transpile (CS-10977)', function () {
   });
 
   test('export { a, b as c } of locals', function (assert) {
-    let out = transpileAmd(
-      `const a = 1; const b = 2; export { a, b as c };`,
-      { moduleId },
-    );
+    let out = transpileAmd(`const a = 1; const b = 2; export { a, b as c };`, {
+      moduleId,
+    });
     let { exports } = runAmd(out);
     assert.strictEqual(exports.a, 1);
     assert.strictEqual(exports.c, 2);
@@ -454,20 +447,18 @@ module('Unit | amd-transpile (CS-10977)', function () {
   });
 
   test('destructured export const { a, b } = obj', function (assert) {
-    let out = transpileAmd(
-      `export const { a, b } = { a: 1, b: 2 };`,
-      { moduleId },
-    );
+    let out = transpileAmd(`export const { a, b } = { a: 1, b: 2 };`, {
+      moduleId,
+    });
     let { exports } = runAmd(out);
     assert.strictEqual(exports.a, 1);
     assert.strictEqual(exports.b, 2);
   });
 
   test('destructured export const [first, second] = arr', function (assert) {
-    let out = transpileAmd(
-      `export const [first, second] = [10, 20];`,
-      { moduleId },
-    );
+    let out = transpileAmd(`export const [first, second] = [10, 20];`, {
+      moduleId,
+    });
     let { exports } = runAmd(out);
     assert.strictEqual(exports.first, 10);
     assert.strictEqual(exports.second, 20);
@@ -488,10 +479,9 @@ module('Unit | amd-transpile (CS-10977)', function () {
   });
 
   test('identical-name import binding via { x: x }', function (assert) {
-    let out = transpileAmd(
-      `import { foo } from 'src'; export const r = foo;`,
-      { moduleId },
-    );
+    let out = transpileAmd(`import { foo } from 'src'; export const r = foo;`, {
+      moduleId,
+    });
     let { exports } = runAmd(out, { src: { foo: 'BAR' } });
     assert.strictEqual(exports.r, 'BAR');
   });
