@@ -11,6 +11,293 @@ function trimModuleIdentifier(moduleIdentifier: string): string {
 
 export const PACKAGES_FAKE_ORIGIN = 'https://packages/';
 
+// Marker key the strict-namespace Proxy honors — modules tagged with
+// this opt out of the missing-export check. Useful for modules whose
+// exports are intentionally dynamic (e.g. test-only scaffolding) or
+// for explicit interop with code that probes for optional keys.
+//
+// Specifically: when the namespace has the property
+// `ALLOW_MISSING_NAMED_EXPORTS` set to the literal value `true`, the
+// strict wrapper is skipped and the namespace is returned verbatim.
+// Missing-key access then returns `undefined`, matching pre-Proxy
+// behavior. The `=== true` check (rather than truthy/`Reflect.has`)
+// avoids stray inherited properties or sentinel-shaped values from
+// accidentally opting a module out.
+export const ALLOW_MISSING_NAMED_EXPORTS = Symbol.for(
+  'shim-handler.allowMissingNamedExports',
+);
+
+// Helper for shims that are intentional fallbacks — empty-or-stub
+// namespaces that exist only to keep import resolution from
+// crashing when the real module isn't present in the build (e.g.
+// the live-test scaffolding shims in `host/app/lib/externals.ts`).
+// Marks the returned object with `ALLOW_MISSING_NAMED_EXPORTS` so
+// the strict-namespace Proxy won't throw on names that the
+// fallback doesn't actually expose.
+export function fallbackShim(extras?: ModuleLike): ModuleLike {
+  let stub: ModuleLike = { ...(extras ?? {}) };
+  (stub as any)[ALLOW_MISSING_NAMED_EXPORTS] = true;
+  return stub;
+}
+
+// Names the JS runtime and common library code probe on arbitrary
+// objects, NOT real named imports. Critical inclusions:
+//
+//   • `then` — `await ns` and `Promise.resolve(ns).then(...)` both
+//     call `Reflect.get(value, 'then')` to detect thenables. If the
+//     strict Proxy throws on this lookup, every awaited shimmed
+//     module breaks (we observed exactly this in CI: cascading
+//     `ReferenceError: Module '...' has no exported member 'then'`
+//     across host / matrix / realm-server suites).
+//   • `__esModule` — bundler CJS/ESM interop probes this to decide
+//     how to bridge default exports.
+//   • `toJSON` — `JSON.stringify(ns)` probes for it.
+//   • Object.prototype method names (`toString`, `valueOf`, etc.) —
+//     runtime + library code commonly probes these. They aren't
+//     real exports either.
+//
+// All of these pass through unchanged; missing ones return whatever
+// the underlying namespace would have returned (typically `undefined`
+// for `then`/`__esModule`, the inherited Object.prototype method for
+// the others).
+const RUNTIME_PROBE_NAMES = new Set<string>([
+  'then',
+  '__esModule',
+  'toJSON',
+  'toString',
+  'valueOf',
+  'hasOwnProperty',
+  'isPrototypeOf',
+  'propertyIsEnumerable',
+  'toLocaleString',
+  'constructor',
+]);
+
+// Wraps a shimmed module with a Proxy that throws a clear,
+// actionable error when an importer reads a name that doesn't
+// exist on the namespace. Plain JavaScript silently produces
+// `undefined` for missing named imports, which then surfaces as a
+// confusing "Cannot convert undefined or null to object" deep in
+// Glimmer's helper-encoder (or wherever the importer eventually
+// uses the binding) — the deterministic whitepaper render bug is
+// exactly this footgun.
+//
+// Scope: every property *get* with a string key that isn't on the
+// namespace AND isn't a runtime-probe name throws. Symbol gets,
+// `has`, `ownKeys`, and `getOwnPropertyDescriptor` traps pass
+// through unchanged so runtime introspection (`'foo' in ns`,
+// `Object.keys(ns)`, `Reflect.has(...)`) keeps working.
+//
+// Escape hatch: if the namespace exposes
+// `ALLOW_MISSING_NAMED_EXPORTS`, the Proxy returns `undefined` for
+// missing string keys (pre-Proxy behavior). Modules that
+// intentionally expose a dynamic shape can opt out this way.
+export function wrapWithStrictNamespace(
+  moduleIdentifier: string,
+  namespace: ModuleLike,
+): ModuleLike {
+  if (
+    namespace == null ||
+    typeof namespace !== 'object' ||
+    (namespace as any)[ALLOW_MISSING_NAMED_EXPORTS] === true
+  ) {
+    return namespace;
+  }
+  return new Proxy(namespace, {
+    get(target, prop, receiver) {
+      // Symbol properties (Symbol.toPrimitive, Symbol.iterator,
+      // etc.) pass through — they're never the "I imported a name
+      // that doesn't exist" pattern.
+      if (typeof prop !== 'string') {
+        return Reflect.get(target, prop, receiver);
+      }
+      // Own-property check, NOT `prop in target`. An "exported
+      // member" of a namespace is an own property; inherited names
+      // like `toString`, `hasOwnProperty`, `constructor` from
+      // `Object.prototype` aren't exports. Treating them as exports
+      // (via `prop in target`) would silently let a card read those
+      // values and bypass the missing-import check.
+      if (Object.prototype.hasOwnProperty.call(target, prop)) {
+        return Reflect.get(target, prop, receiver);
+      }
+      // Runtime probe — let it through to whatever the underlying
+      // object would return. NOT a missing-import case.
+      if (RUNTIME_PROBE_NAMES.has(prop)) {
+        return Reflect.get(target, prop, receiver);
+      }
+      throw new ReferenceError(
+        `Module '${moduleIdentifier}' has no exported member '${prop}'. ` +
+          `If this is a card, check the import statement that names '${prop}' — ` +
+          `you may be importing from the wrong module ID. ` +
+          `(JavaScript silently produces \`undefined\` for missing named imports, ` +
+          `which then surfaces as confusing downstream errors. This Proxy ` +
+          `surfaces the missing import directly.)`,
+      );
+    },
+  });
+}
+
+// Backoff schedule applied between retries for a failed
+// `shimAsyncModule` resolver. Aligned with `loader.ts`'s
+// `DEFAULT_TRANSIENT_RETRY_DELAYS_MS = [100, 300, 900]` so the two
+// retry layers use the same shape — operators investigating a flaky
+// fetch see consistent backoff across realm-source fetches and
+// shim-resolver chunk fetches. Worst-case added latency on a
+// persistent failure: ~1.3s, well under cardRenderTimeout (90s).
+//
+// Each entry is a wallclock delay in ms BEFORE the corresponding
+// retry attempt. The first attempt has no preceding delay, so the
+// schedule starts at `RETRY_DELAYS_MS[0]` for the second attempt.
+// Total maximum elapsed wait = sum of entries.
+const RETRY_DELAYS_MS: readonly number[] = [100, 300, 900];
+
+// Patterns we consider transient for dynamic-import / chunk-fetch
+// failures. Match against `err.name` AND `err.message` because
+// browsers / loaders disagree on which carries the discriminator
+// (Webpack uses `err.name === 'ChunkLoadError'`; native Node
+// `import()` uses message-based identifiers; some bundlers wrap
+// network errors with their own classes that only surface in the
+// message).
+//
+// HTTP statuses: only 502/503/504 match. `loader.ts` explicitly
+// excludes 500 because the loader's own `_fetch` converts network
+// failures into synthetic 500 Response objects, and we don't want
+// to double-retry those. The same policy applies here so the two
+// retry layers can't disagree on what counts as transient.
+//
+// NOTE: anything NOT matched here is surfaced on the first attempt
+// without retry. This is deliberate — retrying a `SyntaxError` from
+// a malformed module just wastes the budget and delays the actual
+// error reaching the operator.
+const RETRYABLE_ERROR_NAMES = new Set([
+  'ChunkLoadError',
+  'NetworkError',
+  'TimeoutError',
+  'AbortError',
+]);
+// Node `err.code` values for transient socket / DNS failures. Distinct
+// from `RETRYABLE_ERROR_NAMES` because Node attaches these on
+// `err.code` (kept in this set) while browsers expose the same class
+// of failure via `err.name` (kept in the names set above).
+const RETRYABLE_ERROR_CODES = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ETIMEDOUT',
+  'EPIPE',
+]);
+const RETRYABLE_MESSAGE_PATTERNS: readonly RegExp[] = [
+  /Loading (?:CSS )?chunk \S+ failed/i,
+  // Specifically the dynamic-import failure message — a bare
+  // `/Failed to fetch/i` was tempting here but matches too much: any
+  // resolver that throws "Failed to fetch <whatever>" for a non-
+  // chunk reason (deliberate `fetch()` calls inside the resolver,
+  // for instance) would get retried as if it were a chunk-load
+  // transient. The dynamic-import variant is what `import()`
+  // actually throws on a chunk-fetch failure, and that's the case
+  // we want to retry.
+  /Failed to fetch dynamically imported module/i,
+  /NetworkError when attempting to fetch resource/i,
+  /ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN/,
+  /ERR_(?:CONNECTION_RESET|CONNECTION_REFUSED|NETWORK_CHANGED|INTERNET_DISCONNECTED|EMPTY_RESPONSE|TIMED_OUT)/,
+  /status of 50[234]/i,
+  /returned HTTP 50[234]/i,
+];
+
+export function isRetryableShimResolveError(error: unknown): boolean {
+  if (!error) return false;
+  if (typeof error !== 'object') return false;
+  let err = error as { name?: unknown; message?: unknown; code?: unknown };
+  if (typeof err.name === 'string' && RETRYABLE_ERROR_NAMES.has(err.name)) {
+    return true;
+  }
+  if (typeof err.code === 'string' && RETRYABLE_ERROR_CODES.has(err.code)) {
+    return true;
+  }
+  if (typeof err.message === 'string') {
+    for (let pattern of RETRYABLE_MESSAGE_PATTERNS) {
+      if (pattern.test(err.message)) return true;
+    }
+  }
+  return false;
+}
+
+export interface ShimRetryDeps {
+  // Pluggable for tests so we can assert backoff behavior without
+  // burning real wallclock time. When omitted, the retry path uses
+  // `defaultDelay` (a thin `setTimeout`-based sleep) below.
+  delay?: (ms: number) => Promise<void>;
+  // Override the default backoff schedule. Tests can pass `[]` to
+  // collapse retries into a single attempt.
+  retryDelaysMs?: readonly number[];
+  // Override the retryable-error classifier. Defaults to
+  // `isRetryableShimResolveError`. Tests can force-retry every error
+  // or force-skip every retry to exercise both branches.
+  isRetryable?: (error: unknown) => boolean;
+}
+
+const defaultDelay = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+// Minimal logging surface used by `withResolveRetry`. Narrower than
+// `ReturnType<typeof logger>` so tests can pass a no-op stub without
+// having to construct a full `loglevel` instance — the production
+// code only ever calls `warn` and `debug`.
+export interface ShimRetryLogger {
+  warn: (...args: unknown[]) => void;
+  debug: (...args: unknown[]) => void;
+}
+
+// Wraps a shim resolver with retry-on-transient-failure + bounded
+// exponential backoff. Returns a function with the same signature as
+// the input, so `shimAsyncModule` can swap it in transparently.
+//
+// On non-retryable errors (SyntaxError, ReferenceError, etc. — see
+// `isRetryableShimResolveError`), the function fails fast on the
+// first attempt with the original error preserved verbatim. This
+// keeps the operator-facing error message intact instead of
+// burying it under "tried 3 times".
+export function withResolveRetry<TArgs extends unknown[], TResult>(
+  label: string,
+  log: ShimRetryLogger,
+  fn: (...args: TArgs) => Promise<TResult>,
+  deps: ShimRetryDeps = {},
+): (...args: TArgs) => Promise<TResult> {
+  let delay = deps.delay ?? defaultDelay;
+  let delaysMs = deps.retryDelaysMs ?? RETRY_DELAYS_MS;
+  let isRetryable = deps.isRetryable ?? isRetryableShimResolveError;
+  return async (...args: TArgs): Promise<TResult> => {
+    let lastError: unknown;
+    let totalAttempts = delaysMs.length + 1;
+    for (let attempt = 0; attempt < totalAttempts; attempt++) {
+      try {
+        return await fn(...args);
+      } catch (err) {
+        lastError = err;
+        if (attempt === totalAttempts - 1) break;
+        if (!isRetryable(err)) {
+          // Fail fast for non-transient errors — retrying a syntax
+          // error or a missing module wastes the budget and delays
+          // the error surfacing to the operator.
+          log.debug(
+            `shim resolver for ${label} failed with non-retryable error; not retrying`,
+            err,
+          );
+          break;
+        }
+        let waitMs = delaysMs[attempt];
+        log.warn(
+          `shim resolver for ${label} failed on attempt ${attempt + 1}/${totalAttempts}; retrying in ${waitMs}ms`,
+          err,
+        );
+        await delay(waitMs);
+      }
+    }
+    throw lastError;
+  };
+}
+
 export class PackageShimHandler {
   private resolveImport: (moduleIdentifier: string) => string;
   private moduleIds = new Map<string, () => Promise<ModuleLike>>();
@@ -32,7 +319,15 @@ export class PackageShimHandler {
           (await this.getModuleByPrefix(request.url));
         if (shimmedModule) {
           let response = new Response();
-          (response as any)[Symbol.for('shimmed-module')] = shimmedModule;
+          // Wrap with the strict-namespace Proxy so importers that
+          // name a non-existent export get a clear ReferenceError at
+          // the access site instead of silently consuming `undefined`
+          // and surfacing a confusing downstream error. The wrapped
+          // namespace preserves the underlying module's shape for all
+          // existing keys; only missing-key string reads change
+          // behavior.
+          (response as any)[Symbol.for('shimmed-module')] =
+            wrapWithStrictNamespace(request.url, shimmedModule);
           return response;
         }
         return null;
@@ -55,17 +350,31 @@ export class PackageShimHandler {
     );
   }
 
-  shimAsyncModule(descriptor: ModuleDescriptor) {
+  shimAsyncModule(descriptor: ModuleDescriptor, retryDeps?: ShimRetryDeps) {
+    // Wrap each user-supplied resolver with bounded retry against the
+    // transient-failure error class. The original resolver typically
+    // calls `import('<some-package>')`, which compiles to a runtime
+    // chunk fetch — and chunk fetches can blip on network errors,
+    // mid-deploy chunk-hash swaps, or transient 5xx responses. Without
+    // retry, a single dropped fetch translates into the consumer
+    // seeing `undefined` exports, which is what the whitepaper render
+    // bug looks like to Glimmer's helper-encoder.
+    //
+    // Non-transient errors (SyntaxError from a bad module, missing
+    // module, etc.) fail fast on the first attempt — see
+    // `isRetryableShimResolveError`.
     if ('prefix' in descriptor) {
+      let label = `prefix:${descriptor.prefix}`;
       this.modulePrefixes.set(
         this.resolveImport(descriptor.prefix),
-        descriptor.resolve,
+        withResolveRetry(label, this.log, descriptor.resolve, retryDeps),
       );
     } else {
       let moduleIdentifier = this.resolveImport(descriptor.id);
+      let label = `id:${descriptor.id}`;
       this.moduleIds.set(
         trimModuleIdentifier(moduleIdentifier),
-        descriptor.resolve,
+        withResolveRetry(label, this.log, descriptor.resolve, retryDeps),
       );
     }
   }

@@ -13,6 +13,10 @@ import {
 import type { ToolExecutor } from '../src/factory-tool-executor';
 import { ToolRegistry } from '../src/factory-tool-registry';
 import { createMockClient } from './helpers/mock-client';
+import {
+  createTestWorkspace,
+  type TestWorkspace,
+} from './helpers/workspace-fixture';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -65,11 +69,58 @@ const DEFAULT_CARD_TYPE_SCHEMAS = new Map<
   ],
 ]);
 
+// Workspaces created during test execution. Cleaned up by a global
+// QUnit.testDone hook so we don't leak temp dirs across this file's
+// many tests; the workspace-fixture's process-exit hook is a fallback
+// for anything that slips past, but cleaning per-test is cheaper and
+// keeps the OS tmpdir from growing during the run.
+let pendingWorkspaces: TestWorkspace[] = [];
+declare const QUnit: {
+  testDone: (cb: () => void) => void;
+};
+let testDoneHookInstalled = false;
+function installTestDoneHook() {
+  if (testDoneHookInstalled) return;
+  if (typeof QUnit === 'undefined') return;
+  testDoneHookInstalled = true;
+  QUnit.testDone(() => {
+    let toClean = pendingWorkspaces;
+    pendingWorkspaces = [];
+    for (let ws of toClean) {
+      ws.cleanup();
+    }
+  });
+}
+
+function makeWorkspace(): TestWorkspace {
+  installTestDoneHook();
+  let ws = createTestWorkspace();
+  pendingWorkspaces.push(ws);
+  return ws;
+}
+
+/**
+ * Tests need to inspect (and sometimes pre-seed) the workspace that the
+ * tools read/write against. `makeConfig` returns the config as usual; the
+ * workspace is attached on the side via a parallel WeakMap so existing
+ * call sites that only care about the config object continue to work.
+ */
+let configWorkspaces = new WeakMap<ToolBuilderConfig, TestWorkspace>();
+
+function workspaceFor(config: ToolBuilderConfig): TestWorkspace {
+  let ws = configWorkspaces.get(config);
+  if (!ws) {
+    throw new Error('No workspace attached to ToolBuilderConfig');
+  }
+  return ws;
+}
+
 function makeConfig(
   overrides?: Partial<ToolBuilderConfig> & { fetch?: typeof globalThis.fetch },
 ): ToolBuilderConfig {
-  let { fetch: fetchOverride, client, ...rest } = overrides ?? {};
-  return {
+  let { fetch: fetchOverride, client, workspaceDir, ...rest } = overrides ?? {};
+  let workspace = workspaceDir ? undefined : makeWorkspace();
+  let config: ToolBuilderConfig = {
     targetRealmUrl: TARGET_REALM,
     darkfactoryModuleUrl:
       'https://realms.example.test/software-factory/darkfactory',
@@ -77,9 +128,14 @@ function makeConfig(
     client:
       client ??
       createMockClient(fetchOverride ? { fetch: fetchOverride } : undefined),
+    workspaceDir: workspaceDir ?? workspace!.dir,
     cardTypeSchemas: DEFAULT_CARD_TYPE_SCHEMAS,
     ...rest,
   };
+  if (workspace) {
+    configWorkspaces.set(config, workspace);
+  }
+  return config;
 }
 
 interface CapturedRequest {
@@ -228,11 +284,11 @@ module('factory-tool-builder > tool building', function () {
 // ---------------------------------------------------------------------------
 
 module('factory-tool-builder > write_file', function () {
-  test('writes .gts file with raw text body', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
+  test('writes .gts file to the workspace with raw text body', async function (assert) {
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
+    let config = makeConfig();
+    let ws = workspaceFor(config);
     let tools = buildFactoryTools(config, executor, registry);
     let writeTool = findTool(tools, 'write_file');
 
@@ -242,17 +298,18 @@ module('factory-tool-builder > write_file', function () {
     })) as { ok: boolean };
 
     assert.true(result.ok);
-    assert.strictEqual(requests.length, 1);
-    assert.strictEqual(requests[0].url, `${TARGET_REALM}my-card.gts`);
-    assert.strictEqual(requests[0].method, 'POST');
-    assert.strictEqual(requests[0].body, 'export default class MyCard {}');
+    assert.true(ws.exists('my-card.gts'), 'workspace has my-card.gts');
+    assert.strictEqual(
+      ws.read('my-card.gts'),
+      'export default class MyCard {}',
+    );
   });
 
-  test('routes .ts file to writeFile', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
+  test('writes nested .ts path to the workspace', async function (assert) {
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
+    let config = makeConfig();
+    let ws = workspaceFor(config);
     let tools = buildFactoryTools(config, executor, registry);
     let writeTool = findTool(tools, 'write_file');
 
@@ -262,15 +319,17 @@ module('factory-tool-builder > write_file', function () {
     })) as { ok: boolean };
 
     assert.true(result.ok);
-    assert.strictEqual(requests[0].url, `${TARGET_REALM}utils/helpers.ts`);
-    assert.strictEqual(requests[0].body, 'export function helper() {}');
+    assert.strictEqual(
+      ws.read('utils/helpers.ts'),
+      'export function helper() {}',
+    );
   });
 
   test('writes .json file as raw content (no JSON parsing)', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
+    let config = makeConfig();
+    let ws = workspaceFor(config);
     let tools = buildFactoryTools(config, executor, registry);
     let writeTool = findTool(tools, 'write_file');
 
@@ -284,10 +343,8 @@ module('factory-tool-builder > write_file', function () {
     })) as { ok: boolean };
 
     assert.true(result.ok);
-    assert.strictEqual(requests[0].url, `${TARGET_REALM}Card/1.json`);
-    assert.strictEqual(requests[0].method, 'POST');
-    // writeFile sends raw content as-is
-    assert.strictEqual(requests[0].body, cardJson);
+    // Content is written verbatim — no re-serialization by write_file.
+    assert.strictEqual(ws.read('Card/1.json'), cardJson);
   });
 });
 
@@ -491,35 +548,47 @@ module('factory-tool-builder > path-arg validation', function () {
 // ---------------------------------------------------------------------------
 
 module('factory-tool-builder > realm targeting', function () {
-  test('write_file defaults to target realm', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
+  test('write_file writes to the workspace (target realm)', async function (assert) {
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
+    let config = makeConfig();
+    let ws = workspaceFor(config);
     let tools = buildFactoryTools(config, executor, registry);
     let writeTool = findTool(tools, 'write_file');
 
     await writeTool.execute({ path: 'card.gts', content: 'content' });
 
-    assert.strictEqual(requests[0].url, `${TARGET_REALM}card.gts`);
+    assert.true(ws.exists('card.gts'));
+    assert.strictEqual(ws.read('card.gts'), 'content');
   });
 
-  test('read_file targets target realm', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {
-      data: { attributes: {} },
-    });
+  test('read_file reads from the workspace (target realm)', async function (assert) {
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
+    let config = makeConfig();
+    let ws = workspaceFor(config);
+    // Pre-seed the workspace with the file the agent will read.
+    ws.write('card.gts', 'export class Card {}');
     let tools = buildFactoryTools(config, executor, registry);
     let readTool = findTool(tools, 'read_file');
 
-    await readTool.execute({ path: 'card.gts' });
+    let result = (await readTool.execute({ path: 'card.gts' })) as {
+      ok: boolean;
+      content?: string;
+    };
 
-    assert.strictEqual(requests[0].url, `${TARGET_REALM}card.gts`);
+    assert.true(result.ok);
+    assert.strictEqual(result.content, 'export class Card {}');
   });
 
-  test('update_issue targets target realm', async function (assert) {
+  test('update_issue reads from and writes to the workspace', async function (assert) {
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig();
+    let ws = workspaceFor(config);
+
+    // Pre-seed an existing issue so update_issue exercises the read-
+    // patch-write path rather than the fresh-document fallback.
     let existingDoc = {
       data: {
         type: 'card',
@@ -532,10 +601,8 @@ module('factory-tool-builder > realm targeting', function () {
         },
       },
     };
-    let { fetch: mockFetch, requests } = createMockFetch(200, {}, existingDoc);
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
+    ws.write('Issues/1.json', JSON.stringify(existingDoc, null, 2));
+
     let tools = buildFactoryTools(config, executor, registry);
     let updateTool = findTool(tools, 'update_issue');
 
@@ -544,16 +611,17 @@ module('factory-tool-builder > realm targeting', function () {
       attributes: { status: 'blocked' },
     });
 
-    // First request is GET (read), second is POST (write)
-    let writeRequest = requests.find((r) => r.method === 'POST')!;
-    assert.strictEqual(writeRequest.url, `${TARGET_REALM}Issues/1.json`);
+    let updated = JSON.parse(ws.read('Issues/1.json'));
+    assert.strictEqual(updated.data.attributes.status, 'blocked');
+    // The pre-existing summary is preserved via read-patch-write.
+    assert.strictEqual(updated.data.attributes.summary, 'Existing issue');
   });
 
-  test('create_knowledge targets target realm', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
+  test('create_knowledge writes to the workspace', async function (assert) {
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
+    let config = makeConfig();
+    let ws = workspaceFor(config);
     let tools = buildFactoryTools(config, executor, registry);
     let knowledgeTool = findTool(tools, 'create_knowledge');
 
@@ -562,7 +630,9 @@ module('factory-tool-builder > realm targeting', function () {
       attributes: { articleTitle: 'Guide' },
     });
 
-    assert.strictEqual(requests[0].url, `${TARGET_REALM}Knowledge/deploy.json`);
+    assert.true(ws.exists('Knowledge/deploy.json'));
+    let written = JSON.parse(ws.read('Knowledge/deploy.json'));
+    assert.strictEqual(written.data.attributes.articleTitle, 'Guide');
   });
 
   test('search_realm targets target realm', async function (assert) {
@@ -775,14 +845,11 @@ module(
           },
         },
       };
-      let { fetch: mockFetch, requests } = createMockFetch(
-        200,
-        {},
-        existingIssue,
-      );
       let registry = new ToolRegistry();
       let { executor } = createMockToolExecutor(new Map());
-      let config = makeConfig({ fetch: mockFetch });
+      let config = makeConfig();
+      let ws = workspaceFor(config);
+      ws.write('Issues/1.json', JSON.stringify(existingIssue, null, 2));
       let tools = buildFactoryTools(config, executor, registry);
       let tool = findTool(tools, 'update_issue');
 
@@ -791,8 +858,7 @@ module(
         attributes: { status: 'blocked', summary: 'Updated summary' },
       });
 
-      let writeRequest = requests.find((r) => r.method === 'POST')!;
-      let body = JSON.parse(writeRequest.body);
+      let body = JSON.parse(ws.read('Issues/1.json'));
       assert.strictEqual(body.data.type, 'card');
       assert.strictEqual(
         body.data.attributes.status,
@@ -839,14 +905,11 @@ module(
           },
         },
       };
-      let { fetch: mockFetch, requests } = createMockFetch(
-        200,
-        {},
-        existingIssue,
-      );
       let registry = new ToolRegistry();
       let { executor } = createMockToolExecutor(new Map());
-      let config = makeConfig({ fetch: mockFetch });
+      let config = makeConfig();
+      let ws = workspaceFor(config);
+      ws.write('Issues/1.json', JSON.stringify(existingIssue, null, 2));
       let tools = buildFactoryTools(config, executor, registry);
       let tool = findTool(tools, 'update_issue');
 
@@ -855,8 +918,7 @@ module(
         attributes: { status: 'done', summary: 'Build sticky note' },
       });
 
-      let writeRequest = requests.find((r) => r.method === 'POST')!;
-      let body = JSON.parse(writeRequest.body);
+      let body = JSON.parse(ws.read('Issues/1.json'));
       assert.strictEqual(
         body.data.attributes.status,
         'in_progress',
@@ -883,14 +945,11 @@ module(
           },
         },
       };
-      let { fetch: mockFetch, requests } = createMockFetch(
-        200,
-        {},
-        existingIssue,
-      );
       let registry = new ToolRegistry();
       let { executor } = createMockToolExecutor(new Map());
-      let config = makeConfig({ fetch: mockFetch });
+      let config = makeConfig();
+      let ws = workspaceFor(config);
+      ws.write('Issues/1.json', JSON.stringify(existingIssue, null, 2));
       let tools = buildFactoryTools(config, executor, registry);
       let tool = findTool(tools, 'update_issue');
 
@@ -898,8 +957,7 @@ module(
         path: 'Issues/1.json',
         attributes: { status: 'blocked', summary: 'Stuck' },
       });
-      let writeRequests = requests.filter((r) => r.method === 'POST');
-      let body1 = JSON.parse(writeRequests[0].body);
+      let body1 = JSON.parse(ws.read('Issues/1.json'));
       assert.strictEqual(
         body1.data.attributes.status,
         'blocked',
@@ -910,8 +968,7 @@ module(
         path: 'Issues/1.json',
         attributes: { status: 'backlog', summary: 'Unblocked' },
       });
-      writeRequests = requests.filter((r) => r.method === 'POST');
-      let body2 = JSON.parse(writeRequests[1].body);
+      let body2 = JSON.parse(ws.read('Issues/1.json'));
       assert.strictEqual(
         body2.data.attributes.status,
         'backlog',
@@ -937,14 +994,11 @@ module(
           },
         },
       };
-      let { fetch: mockFetch, requests } = createMockFetch(
-        200,
-        {},
-        existingIssue,
-      );
       let registry = new ToolRegistry();
       let { executor } = createMockToolExecutor(new Map());
-      let config = makeConfig({ fetch: mockFetch });
+      let config = makeConfig();
+      let ws = workspaceFor(config);
+      ws.write('Issues/1.json', JSON.stringify(existingIssue, null, 2));
       let tools = buildFactoryTools(config, executor, registry);
       let tool = findTool(tools, 'update_issue');
 
@@ -952,8 +1006,7 @@ module(
         path: 'Issues/1.json',
         attributes: { description: 'Overwritten!', status: 'blocked' },
       });
-      let writeRequest = requests.find((r) => r.method === 'POST')!;
-      let body = JSON.parse(writeRequest.body);
+      let body = JSON.parse(ws.read('Issues/1.json'));
       assert.strictEqual(
         body.data.attributes.description,
         'Original description',
@@ -980,14 +1033,11 @@ module(
           },
         },
       };
-      let { fetch: mockFetch, requests } = createMockFetch(
-        200,
-        {},
-        existingProject,
-      );
       let registry = new ToolRegistry();
       let { executor } = createMockToolExecutor(new Map());
-      let config = makeConfig({ fetch: mockFetch });
+      let config = makeConfig();
+      let ws = workspaceFor(config);
+      ws.write('Project/mvp.json', JSON.stringify(existingProject, null, 2));
       let tools = buildFactoryTools(config, executor, registry);
       let tool = findTool(tools, 'update_project');
 
@@ -996,8 +1046,7 @@ module(
         attributes: { projectStatus: 'completed' },
       });
 
-      let writeRequest = requests.find((r) => r.method === 'POST')!;
-      let body = JSON.parse(writeRequest.body);
+      let body = JSON.parse(ws.read('Project/mvp.json'));
       assert.strictEqual(
         body.data.relationships,
         undefined,
@@ -1008,7 +1057,7 @@ module(
 );
 
 // ---------------------------------------------------------------------------
-// run_tests tool (in-memory validation — CS-10777)
+// run_tests tool (in-memory validation)
 // ---------------------------------------------------------------------------
 
 module('buildFactoryTools — run_tests', function () {
@@ -1104,7 +1153,7 @@ module('buildFactoryTools — run_tests', function () {
 });
 
 // ---------------------------------------------------------------------------
-// run_lint tool (in-memory validation — CS-10776)
+// run_lint tool (in-memory validation)
 // ---------------------------------------------------------------------------
 
 module('buildFactoryTools — run_lint', function () {
@@ -1378,15 +1427,11 @@ module('factory-tool-builder > add_comment', function () {
       },
     };
 
-    let { fetch: mockFetch, requests } = createReadWriteMockFetch(
-      200,
-      existingIssue,
-      200,
-      {},
-    );
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
+    let config = makeConfig();
+    let ws = workspaceFor(config);
+    ws.write('Issues/test-issue.json', JSON.stringify(existingIssue, null, 2));
     let tools = buildFactoryTools(config, executor, registry);
     let tool = findTool(tools, 'add_comment');
 
@@ -1397,11 +1442,8 @@ module('factory-tool-builder > add_comment', function () {
     })) as { ok: boolean };
 
     assert.true(result.ok);
-    assert.strictEqual(requests.length, 2, 'one read + one write');
-    assert.strictEqual(requests[0].method, 'GET');
-    assert.strictEqual(requests[1].method, 'POST');
 
-    let writtenBody = JSON.parse(requests[1].body);
+    let writtenBody = JSON.parse(ws.read('Issues/test-issue.json'));
     assert.strictEqual(writtenBody.data.attributes.summary, 'Test issue');
     assert.strictEqual(writtenBody.data.attributes.status, 'in_progress');
     assert.strictEqual(writtenBody.data.attributes.comments.length, 1);
@@ -1448,15 +1490,11 @@ module('factory-tool-builder > add_comment', function () {
       },
     };
 
-    let { fetch: mockFetch, requests } = createReadWriteMockFetch(
-      200,
-      existingIssue,
-      200,
-      {},
-    );
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
+    let config = makeConfig();
+    let ws = workspaceFor(config);
+    ws.write('Issues/test-issue.json', JSON.stringify(existingIssue, null, 2));
     let tools = buildFactoryTools(config, executor, registry);
     let tool = findTool(tools, 'add_comment');
 
@@ -1468,7 +1506,7 @@ module('factory-tool-builder > add_comment', function () {
 
     assert.true(result.ok);
 
-    let writtenBody = JSON.parse(requests[1].body);
+    let writtenBody = JSON.parse(ws.read('Issues/test-issue.json'));
     assert.strictEqual(
       writtenBody.data.attributes.comments.length,
       2,
@@ -1539,15 +1577,11 @@ module('factory-tool-builder > add_comment', function () {
       },
     };
 
-    let { fetch: mockFetch, requests } = createReadWriteMockFetch(
-      200,
-      existingIssue,
-      200,
-      {},
-    );
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
+    let config = makeConfig();
+    let ws = workspaceFor(config);
+    ws.write('Issues/linked.json', JSON.stringify(existingIssue, null, 2));
     let tools = buildFactoryTools(config, executor, registry);
     let tool = findTool(tools, 'add_comment');
 
@@ -1559,7 +1593,7 @@ module('factory-tool-builder > add_comment', function () {
 
     assert.true(result.ok);
 
-    let writtenBody = JSON.parse(requests[1].body);
+    let writtenBody = JSON.parse(ws.read('Issues/linked.json'));
     assert.ok(
       writtenBody.data.relationships,
       'relationships should be preserved',
@@ -1571,7 +1605,7 @@ module('factory-tool-builder > add_comment', function () {
   });
 });
 
-// run_evaluate tool (in-memory validation — CS-10779)
+// run_evaluate tool (in-memory validation)
 // ---------------------------------------------------------------------------
 
 module('buildFactoryTools — run_evaluate', function () {
@@ -1755,7 +1789,7 @@ module('buildFactoryTools — run_evaluate', function () {
   });
 });
 
-// run_parse tool (in-memory validation — CS-10778)
+// run_parse tool (in-memory validation)
 // ---------------------------------------------------------------------------
 
 module('buildFactoryTools — run_parse', function () {
@@ -1937,7 +1971,7 @@ module('buildFactoryTools — run_parse', function () {
 });
 
 // ---------------------------------------------------------------------------
-// run_instantiate tool (in-memory validation — CS-10823)
+// run_instantiate tool (in-memory validation)
 // ---------------------------------------------------------------------------
 
 module('buildFactoryTools — run_instantiate', function () {

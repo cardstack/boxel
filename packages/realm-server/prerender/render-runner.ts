@@ -80,6 +80,43 @@ const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
   [`Failed to execute 'removeChild' on 'Node'`, 'NotFoundError'],
 ];
 
+// Title shown on the SerializedError that wraps a captured console
+// or runtime-exception entry. Distinct labels make it obvious in the
+// error doc which CDP layer surfaced the signal:
+//
+//   • 'Uncaught exception' → Runtime.exceptionThrown (V8 layer; the
+//     primary signal for the whitepaper-class bug where unhandled-
+//     rejection / window.error never fire)
+//   • 'Uncaught exception (revoked by late .catch)' → V8 fired
+//     `Runtime.exceptionRevoked` for this id, meaning RSVP / Backburner
+//     attached a `.catch` after V8 had already reported the rejection
+//     as uncaught. The render is still wedged (the late catch doesn't
+//     un-poison Glimmer's render tree) — surfacing the entry preserves
+//     the actionable stack while making the lifecycle visible.
+//   • 'Console assert'     → console.assert(...) failure
+//   • 'Console error'      → console.error(...) or Chrome's late
+//     "Uncaught (in promise) ..." console tracker line
+export function titleForConsoleErrorEntry(entry: ConsoleErrorEntry): string {
+  if (entry.source === 'exception') {
+    return entry.revoked
+      ? 'Uncaught exception (revoked by late .catch)'
+      : 'Uncaught exception';
+  }
+  return entry.type === 'assert' ? 'Console assert' : 'Console error';
+}
+
+// Stack-trace header line. Same source-distinction logic as the
+// title above, formatted as `<HeaderName>: <message>` so the existing
+// error viewer renders these identically to native Node stacks.
+export function stackHeaderForConsoleErrorEntry(
+  entry: ConsoleErrorEntry,
+): string {
+  if (entry.source === 'exception') {
+    return entry.revoked ? 'UncaughtExceptionRevoked' : 'UncaughtException';
+  }
+  return entry.type === 'assert' ? 'AssertionError' : 'ConsoleError';
+}
+
 export class RenderRunner {
   #pagePool: PagePool;
   #boxelHostURL: string;
@@ -355,13 +392,18 @@ export class RenderRunner {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
     signal?: AbortSignal;
-    // Fires after `getPageForAffinity` resolves — i.e. when this
-    // attempt stops waiting on the semaphore / tab queue and actually
-    // has a page. CS-10872 diagnostic hook; used by the Prerenderer
-    // to flip `affinitySnapshot.sameAffinityActivity[*].state` from
-    // `queued` to `running`, which is what makes the deadlock
-    // fingerprint meaningful.
-    onTabAcquired?: () => void;
+    // Fires after `getPageForAffinity` resolves AND the per-page
+    // console/exception bucket has been reset — i.e. when this attempt
+    // has a page AND the bucket is empty for THIS render. The reset
+    // happens before the callback so a test fixture that seeds the
+    // bucket via `Prerenderer.__test_seedRevokedException` doesn't
+    // get its seed wiped out by reset. Originally introduced as a
+    // CS-10872 diagnostic hook (used by the Prerenderer to flip
+    // `affinitySnapshot.sameAffinityActivity[*].state` from `queued`
+    // to `running`); the post-reset position adds a fraction of a
+    // ms to that transition but keeps the deadlock fingerprint
+    // accurate.
+    onTabAcquired?: (info: { pageId: string }) => void;
   }): Promise<{
     response: ModuleRenderResponse;
     timings: Timings;
@@ -375,7 +417,6 @@ export class RenderRunner {
 
     const { page, reused, launchMs, waits, pageId, release } =
       await this.#getPageForAffinity(affinityKey, auth, 'module', signal);
-    onTabAcquired?.();
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
@@ -385,6 +426,7 @@ export class RenderRunner {
       timedOut: false,
     };
     this.#pagePool.resetConsoleErrors(pageId);
+    onTabAcquired?.({ pageId: pageId ?? 'unknown' });
     const markTimeout = (err?: RenderError) => {
       if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
         poolInfo.timedOut = true;
@@ -531,7 +573,7 @@ export class RenderRunner {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     signal?: AbortSignal;
     // See the matching param on `prerenderModuleAttempt`.
-    onTabAcquired?: () => void;
+    onTabAcquired?: (info: { pageId: string }) => void;
   }): Promise<{
     response: RenderVisitResponse;
     timings: Timings;
@@ -551,7 +593,6 @@ export class RenderRunner {
 
     const { page, reused, launchMs, waits, pageId, release } =
       await this.#getPageForAffinity(affinityKey, auth, 'file', signal);
-    onTabAcquired?.();
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
@@ -561,6 +602,7 @@ export class RenderRunner {
       timedOut: false,
     };
     this.#pagePool.resetConsoleErrors(pageId);
+    onTabAcquired?.({ pageId: pageId ?? 'unknown' });
     const markTimeout = (err?: RenderError) => {
       if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
         poolInfo.timedOut = true;
@@ -1388,19 +1430,21 @@ export class RenderRunner {
   ): SerializedError[] {
     return consoleErrors.map((entry) => ({
       status: 500,
-      title: entry.type === 'assert' ? 'Console assert' : 'Console error',
+      title: titleForConsoleErrorEntry(entry),
       message: this.#formatConsoleError(entry),
       stack: this.#formatConsoleErrorStack(entry),
       additionalErrors: null,
     }));
   }
 
-  // When the desync detector surfaces a render error with no
-  // captured exception, the only lead back to the offending template is
-  // the call stack the browser attached to its console.error log. We
-  // assemble that into a Node-style stack string (header line +
-  // `    at <url>:<line>:<col>` frames) so the existing error viewer
-  // renders it the same as any other captured stack.
+  // Assembles a Node-style stack string (header line +
+  // `    at <url>:<line>:<col>` frames) from whatever frames CDP
+  // attached to the entry. Used for both console-error and
+  // runtime-exception sources — the header line distinguishes them.
+  // For the desync-detector path (host-side surfacing of a render
+  // wedge with no JS-observable throw), this is the only lead back
+  // at the offending template / getter / helper, since Chrome
+  // populates the stack on its "Uncaught (in promise)" console line.
   #formatConsoleErrorStack(entry: ConsoleErrorEntry): string | undefined {
     let frames = entry.stackFrames;
     if (!Array.isArray(frames) || frames.length === 0) {
@@ -1424,7 +1468,7 @@ export class RenderRunner {
     if (lines.length === 0) {
       return undefined;
     }
-    let header = entry.type === 'assert' ? 'AssertionError' : 'ConsoleError';
+    let header = stackHeaderForConsoleErrorEntry(entry);
     return [`${header}: ${entry.text}`, ...lines].join('\n');
   }
 

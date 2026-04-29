@@ -1,6 +1,8 @@
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
+import { readCard, writeCard } from './workspace-fs';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -29,6 +31,8 @@ export interface LintResultAttributes {
 export interface LintResultRealmOptions {
   targetRealmUrl: string;
   client: BoxelCLIClient;
+  /** Local workspace directory — LintResult cards are written here. */
+  workspaceDir: string;
 }
 
 export interface CreateLintResultOptions {
@@ -59,8 +63,8 @@ export async function createLintResult(
     projectCardUrl: options.projectCardUrl,
   });
 
-  let result = await options.client.write(
-    options.targetRealmUrl,
+  let result = await writeCard(
+    options.workspaceDir,
     `${lintResultId}.json`,
     JSON.stringify(document, null, 2),
   );
@@ -80,19 +84,16 @@ export async function completeLintResult(
   attrs: LintResultAttributes,
   options: LintResultRealmOptions & { projectCardUrl?: string },
 ): Promise<{ updated: boolean; error?: string }> {
-  let readResult = await options.client.read(
-    options.targetRealmUrl,
-    lintResultId,
-  );
+  let readResult = await readCard(options.workspaceDir, `${lintResultId}.json`);
 
-  if (!readResult.ok || !readResult.content) {
+  if (!readResult.ok || !readResult.document) {
     return {
       updated: false,
-      error: `Failed to read LintResult: ${readResult.error}`,
+      error: `Failed to read LintResult: ${readResult.error ?? 'not found'}`,
     };
   }
 
-  let document = JSON.parse(readResult.content) as LooseSingleCardDocument;
+  let document = readResult.document as unknown as LooseSingleCardDocument;
   let completionAttrs: Record<string, unknown> = {
     status: attrs.status,
     completedAt: new Date().toISOString(),
@@ -117,8 +118,8 @@ export async function completeLintResult(
     };
   }
 
-  let writeResult = await options.client.write(
-    options.targetRealmUrl,
+  let writeResult = await writeCard(
+    options.workspaceDir,
     `${lintResultId}.json`,
     JSON.stringify(document, null, 2),
   );

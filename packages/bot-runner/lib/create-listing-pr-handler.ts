@@ -109,23 +109,37 @@ export class CreateListingPRHandler {
   async addContentsToCommit(
     eventContent: BotTriggerEventContent,
     runCommandResult?: RunCommandResponse | null,
+    binaryFiles?: { path: string; content: string }[],
   ): Promise<void> {
     let context = getCreateListingPRContext(eventContent);
     if (!context) {
       return;
     }
-    let branchWrite = await getContentsFromRealm(
+    let rawFiles = await getContentsFromRealm(
       runCommandResult?.cardResultString,
     );
-    if (branchWrite.files.length === 0) {
+    let folderName = buildSubmissionFolderName(context);
+    let textFiles = rawFiles.map((file) => ({
+      ...file,
+      path: `${folderName}/${file.path}`,
+      isBinary: false as const,
+    }));
+    let binaryFilesWithFolder = (binaryFiles ?? []).map((file) => ({
+      ...file,
+      path: `${folderName}/${file.path}`,
+      isBinary: true as const,
+    }));
+    let allFiles = [...textFiles, ...binaryFilesWithFolder];
+    if (allFiles.length === 0) {
       return;
     }
+    let hash = hashFiles(allFiles);
     await this.githubClient.writeFilesToBranch({
       owner: context.owner,
       repo: context.repoName,
       branch: context.head,
-      files: branchWrite.files,
-      message: `add ${context.listingDisplayName} changes [boxel-content-hash:${branchWrite.hash}]`,
+      files: allFiles,
+      message: `add ${context.listingDisplayName} changes [boxel-content-hash:${hash}]`,
     });
   }
 
@@ -225,12 +239,19 @@ export class CreateListingPRHandler {
       `- Listing Name: ${context.listingDisplayName}`,
       `- Room ID: \`${context.roomId}\``,
       `- User ID: \`${runAs}\``,
-      `- Number of Files: ${files.files.length}`,
+      `- Number of Files: ${files.length}`,
       ...(workflowCardUrl
         ? [`- Workflow Card: [${workflowCardUrl}](${workflowCardUrl})`]
         : []),
     ].join('\n');
   }
+}
+
+function buildSubmissionFolderName(context: CreateListingPRContext): string {
+  // Wrap files under the room segment of the branch path
+  // ("room-<base64-roomId>"). Each PR is scoped to one branch, so the room
+  // segment alone uniquely identifies the submission's location on disk.
+  return context.head.split('/')[0];
 }
 
 function mapOpenPullRequestResult(
@@ -248,21 +269,17 @@ function mapOpenPullRequestResult(
   };
 }
 
-async function getContentsFromRealm(cardResultString?: string | null): Promise<{
-  files: { path: string; content: string }[];
-  hash: string;
-}> {
+async function getContentsFromRealm(
+  cardResultString?: string | null,
+): Promise<{ path: string; content: string }[]> {
   if (!cardResultString || !cardResultString.trim()) {
-    return { files: [], hash: hashFiles([]) };
+    return [];
   }
-
   let parsed = parseJSONLike(cardResultString);
   if (parsed === undefined) {
-    return { files: [], hash: hashFiles([]) };
+    return [];
   }
-
-  let files = extractFileContents(parsed);
-  return { files, hash: hashFiles(files) };
+  return extractFileContents(parsed);
 }
 
 function parseJSONLike(value: string): unknown | undefined {

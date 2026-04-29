@@ -2,12 +2,6 @@
  * OpenRouter-backed factory agent — implements `LoopAgent` by driving a
  * remote LLM through OpenRouter's OpenAI-compatible tool-use protocol.
  *
- * Sibling backends live in `factory-agent-claude-code.ts` (Claude Agent SDK)
- * and eventually `factory-agent-codex-cli.ts` (Codex CLI, tracked in
- * CS-10594). The three implementations stay isolated: one file per
- * backend, all conforming to the same `LoopAgent` interface, selected
- * by `createLoopAgent()` in `factory-issue-loop-wiring.ts`.
- *
  * Flow: this agent sends tool definitions to the LLM via the API's
  * `tools` parameter. The LLM emits `tool_calls[]`, we dispatch each
  * through `FactoryTool.execute()`, feed the result back as a `role: "tool"`

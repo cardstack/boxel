@@ -1,0 +1,21 @@
+{
+  "apiVersion": 1,
+  "datasources": [
+    {
+      "name": "synapse-prometheus",
+      "uid": "bes7ustjf8w74b",
+      "type": "prometheus",
+      "access": "proxy",
+      "url": "https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-3510f3ab-12d1-4ea3-975d-b3117aa7a672/",
+      "isDefault": false,
+      "editable": false,
+      "jsonData": {
+        "httpMethod": "POST",
+        "sigV4Auth": true,
+        "sigV4AuthType": "ec2_iam_role",
+        "sigV4Region": "us-east-1",
+        "sigV4Service": "aps"
+      }
+    }
+  ]
+}

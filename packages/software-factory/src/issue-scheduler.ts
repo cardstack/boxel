@@ -15,7 +15,12 @@ import type {
   SchedulableIssue,
 } from './factory-agent';
 
-import { ensureJsonExtension, addCommentToIssue } from './realm-operations';
+import {
+  addCommentToIssue,
+  ensureJsonExtension,
+  toRealmRelativePath,
+} from './realm-operations';
+import { readCard, writeCard } from './workspace-fs';
 import { logger } from './logger';
 
 let log = logger('issue-scheduler');
@@ -184,17 +189,25 @@ export interface RealmIssueStoreConfig {
   /** Absolute module URL for the darkfactory module (e.g. from inferDarkfactoryModuleUrl()). */
   darkfactoryModuleUrl: string;
   client: BoxelCLIClient;
+  /**
+   * Local workspace directory mirroring the target realm. Issue mutations
+   * (updateIssue, updateProjectStatus, addComment) read/patch/write the
+   * workspace copy; listIssues / refreshIssue still query the realm index.
+   */
+  workspaceDir: string;
 }
 
 export class RealmIssueStore implements IssueStore {
   private realmUrl: string;
   private darkfactoryModuleUrl: string;
   private client: BoxelCLIClient;
+  private workspaceDir: string;
 
   constructor(config: RealmIssueStoreConfig) {
     this.realmUrl = config.realmUrl;
     this.darkfactoryModuleUrl = config.darkfactoryModuleUrl;
     this.client = config.client;
+    this.workspaceDir = config.workspaceDir;
   }
 
   async listIssues(): Promise<SchedulableIssue[]> {
@@ -235,23 +248,21 @@ export class RealmIssueStore implements IssueStore {
     issueId: string,
     updates: { status?: string; priority?: string },
   ): Promise<void> {
-    // Read the source JSON file (not the indexed card, which can have
-    // stripped relationships during indexing).
-    let readResult = await this.client.read(
-      this.realmUrl,
-      ensureJsonExtension(issueId),
+    let filePath = ensureJsonExtension(
+      toRealmRelativePath(issueId, this.realmUrl),
     );
-    if (!readResult.ok || !readResult.content) {
+    let readResult = await readCard(this.workspaceDir, filePath);
+    if (!readResult.ok || !readResult.document) {
       let reason =
         readResult.status === 404
-          ? 'issue not found'
-          : (readResult.error ?? 'no content returned');
+          ? 'issue not found in workspace'
+          : (readResult.error ?? 'no document returned');
       throw new Error(
         `Failed to read issue "${issueId}" for update: ${reason}`,
       );
     }
 
-    let doc = JSON.parse(readResult.content) as LooseSingleCardDocument;
+    let doc = readResult.document as unknown as LooseSingleCardDocument;
     let attrs = (doc.data.attributes ?? {}) as Record<string, unknown>;
 
     if (updates.status != null) {
@@ -264,9 +275,9 @@ export class RealmIssueStore implements IssueStore {
 
     doc.data.attributes = attrs;
 
-    let writeResult = await this.client.write(
-      this.realmUrl,
-      ensureJsonExtension(issueId),
+    let writeResult = await writeCard(
+      this.workspaceDir,
+      filePath,
       JSON.stringify(doc, null, 2),
     );
 
@@ -284,9 +295,8 @@ export class RealmIssueStore implements IssueStore {
     comment: { body: string; author: string },
   ): Promise<void> {
     let result = await addCommentToIssue(
-      this.client,
-      this.realmUrl,
-      issueId,
+      this.workspaceDir,
+      toRealmRelativePath(issueId, this.realmUrl),
       comment,
     );
     if (!result.ok) {
@@ -298,7 +308,8 @@ export class RealmIssueStore implements IssueStore {
   }
 
   async updateProjectStatus(projectStatus: string): Promise<void> {
-    // We expect exactly one Project card per target realm.
+    // We expect exactly one Project card per target realm. The search
+    // index stays on the realm — card mutations happen locally.
     let result = await this.client.search(this.realmUrl, {
       filter: {
         type: { module: this.darkfactoryModuleUrl, name: 'Project' },
@@ -314,29 +325,26 @@ export class RealmIssueStore implements IssueStore {
     }
 
     let projectId = result.data[0].id as string;
-    // Strip the realm URL prefix to get the relative path
-    let relativePath = projectId.replace(this.realmUrl, '');
+    let relativePath = toRealmRelativePath(projectId, this.realmUrl);
+    let filePath = ensureJsonExtension(relativePath);
 
-    let readResult = await this.client.read(
-      this.realmUrl,
-      ensureJsonExtension(relativePath),
-    );
-    if (!readResult.ok || !readResult.content) {
+    let readResult = await readCard(this.workspaceDir, filePath);
+    if (!readResult.ok || !readResult.document) {
       log.warn(
-        `Failed to read project "${relativePath}" for status update (status ${readResult.status ?? 'N/A'}): ${readResult.error ?? 'no content'}`,
+        `Failed to read project "${relativePath}" for status update (status ${readResult.status ?? 'N/A'}): ${readResult.error ?? 'no document'}`,
       );
       return;
     }
 
-    let doc = JSON.parse(readResult.content) as LooseSingleCardDocument;
+    let doc = readResult.document as unknown as LooseSingleCardDocument;
     let attrs = (doc.data.attributes ?? {}) as Record<string, unknown>;
     attrs.projectStatus = projectStatus;
     attrs.updatedAt = new Date().toISOString();
     doc.data.attributes = attrs;
 
-    let writeResult = await this.client.write(
-      this.realmUrl,
-      ensureJsonExtension(relativePath),
+    let writeResult = await writeCard(
+      this.workspaceDir,
+      filePath,
       JSON.stringify(doc, null, 2),
     );
 
@@ -354,17 +362,30 @@ export class RealmIssueStore implements IssueStore {
 // ---------------------------------------------------------------------------
 
 /**
- * Extract card IDs from a Boxel linksToMany relationship.
+ * Extract card IDs from a Boxel linksToMany relationship, resolved
+ * against the parent card's URL so the result matches `card.id` from
+ * the realm search index.
  *
  * Boxel encodes linksToMany with dotted keys:
  *   "blockedBy.0": { links: { self: "../Issues/abc" } }
  *   "blockedBy.1": { links: { self: "../Issues/def" } }
  *
- * The card ID is extracted from the last path segment of the link URL.
+ * The realm's search index returns each card's `id` as a full URL
+ * (`http://.../Issues/abc`). For the loop's blocker check
+ * (`getUnblockedIssues`) to find a blocker's status in the
+ * `issue.id → status` map, the IDs we put into `blockedBy` must use
+ * the same key space — i.e. also be full URLs. Resolving the
+ * relative `../Issues/abc` link against the parent card's URL gives
+ * us that.
+ *
+ * `parentCardId` is the full URL from `card.id` of the issue whose
+ * relationships we're parsing. Without a valid base we fall back to
+ * the link as-is.
  */
 function extractLinksToManyIds(
   relationships: Record<string, unknown> | undefined,
   fieldName: string,
+  parentCardId: string,
 ): string[] {
   if (!relationships) {
     return [];
@@ -378,16 +399,15 @@ function extractLinksToManyIds(
 
     let rel = value as { links?: { self?: string | null } } | undefined;
     let linkUrl = rel?.links?.self;
-    if (typeof linkUrl === 'string' && linkUrl.length > 0) {
-      // Extract card ID from URL — last path segment
-      // e.g. "../Issues/abc" → "Issues/abc", "https://realm/Issues/abc" → "Issues/abc"
-      let lastSlash = linkUrl.lastIndexOf('/');
-      let secondLastSlash = linkUrl.lastIndexOf('/', lastSlash - 1);
-      if (secondLastSlash >= 0) {
-        ids.push(linkUrl.slice(secondLastSlash + 1));
-      } else {
-        ids.push(linkUrl);
-      }
+    if (typeof linkUrl !== 'string' || linkUrl.length === 0) continue;
+
+    try {
+      ids.push(new URL(linkUrl, parentCardId).href);
+    } catch {
+      // Non-URL parent (e.g. tests using bare ids like "a") — fall
+      // back to the link verbatim. Tests in this case pass already-
+      // matching ids so the lookup still works.
+      ids.push(linkUrl);
     }
   }
 
@@ -405,13 +425,15 @@ function mapCardToSchedulableIssue(
   let attrs = (card.attributes ?? card) as Record<string, unknown>;
   let id = (card.id ?? attrs.id ?? '') as string;
 
-  // Extract blockedBy IDs from relationship links.
-  // Boxel uses dotted keys for linksToMany: "blockedBy.0", "blockedBy.1", etc.
-  // Each has { links: { self: "../Issues/some-id" } } where the last path
-  // segment is the card ID.
+  // Extract blockedBy IDs from relationship links, resolved against
+  // this card's id so the resulting URLs match what other cards'
+  // `card.id` looks like in the search results. Without resolution
+  // the keys would be relative ("Issues/foo") while `issue.id` is
+  // a full URL — getUnblockedIssues would never find the blocker.
   let blockedBy = extractLinksToManyIds(
     card.relationships as Record<string, unknown> | undefined,
     'blockedBy',
+    id,
   );
 
   return {

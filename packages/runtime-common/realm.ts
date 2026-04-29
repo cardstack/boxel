@@ -231,6 +231,10 @@ type CachedSourceFileEntry = {
   ref: FileRef;
   defaultHeaders: Record<string, string>;
   canonicalPath: LocalPath;
+  // md5 of the materialized body, computed once on cache populate. Used
+  // as the ETag base so two writes within the same unix second still
+  // produce distinct ETags — see `buildEtag` for the rationale.
+  contentHash: string | undefined;
 };
 
 type CachedSourceRedirectEntry = {
@@ -265,15 +269,24 @@ type ModuleLoadResult =
       headers: Record<string, string>;
     };
 
+// ETag base prefers a content fingerprint (md5 of the file body) over
+// `lastModified` because the unix-second timestamp collides for two
+// writes that land in the same second — and `cachedFetch` (loader →
+// cached-fetch) will then serve a stale 304-cached body. We compute the
+// content hash on the cache-miss path of the source endpoint, where the
+// content is already being materialized into memory, and stash it on the
+// cache entry so subsequent serves reuse it. Adapters that don't yet
+// surface a content fingerprint fall back to `lastModified` and keep the
+// pre-existing behavior.
 function buildEtag(
-  lastModified: number | undefined,
+  base: string | number | undefined,
   variant?: string,
 ): string | undefined {
-  if (lastModified == null) {
+  if (base == null) {
     return undefined;
   }
-  let base = String(lastModified);
-  return variant ? `${base}:${variant}` : base;
+  let baseStr = String(base);
+  return variant ? `${baseStr}:${variant}` : baseStr;
 }
 
 function computeContentHash(content: string | Uint8Array): string {
@@ -289,6 +302,21 @@ function computeContentHash(content: string | Uint8Array): string {
       throw new Error('Failed to compute content hash');
     }
   }
+}
+
+// Cheap helper for the source endpoint: returns md5 of the body when the
+// ref has already been materialized to a string or Uint8Array. Returns
+// undefined for stream refs (the caller falls back to lastModified).
+function contentHashFromMaterializedRef(ref: FileRef): string | undefined {
+  let { content } = ref;
+  if (typeof content === 'string' || content instanceof Uint8Array) {
+    try {
+      return computeContentHash(content);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
 }
 
 function computeContentSize(content: string | Uint8Array): number {
@@ -1088,7 +1116,23 @@ export class Realm {
       invalidations = new Set([...invalidations, ...workingInvalidations]);
     };
 
-    for (let [path, content] of files) {
+    // Iterate modules (executable extensions) before everything else so
+    // any instance in the same batch finds its module indexed when
+    // fileSerialization runs. Without this, a batch that contains both
+    // `foo.gts` and `FooCard/instance.json` iterated in the client's
+    // natural (often alphabetical) order leaves the instance ahead of
+    // the module, the flush-on-transition below never fires, and
+    // fileSerialization throws FilterRefersToNonexistentTypeError.
+    // Stable within each group — only the module/non-module partition
+    // changes, not the relative order inside it.
+    let orderedFiles = [...files].sort(([pathA], [pathB]) => {
+      let aIsModule = hasExecutableExtension(pathA);
+      let bIsModule = hasExecutableExtension(pathB);
+      if (aIsModule === bIsModule) return 0;
+      return aIsModule ? -1 : 1;
+    });
+
+    for (let [path, content] of orderedFiles) {
       let url = this.paths.fileURL(path);
       let currentWriteType: 'module' | 'instance' | undefined =
         hasExecutableExtension(path)
@@ -1098,6 +1142,21 @@ export class Realm {
               isCardDocumentString(content)
             ? 'instance'
             : undefined;
+
+      // Flush any modules written so far in this batch to the index
+      // BEFORE we serialize the next instance. fileSerialization calls
+      // lookupDefinition, which needs dependent modules to be indexed;
+      // without this, the first instance after a module in the batch
+      // throws FilterRefersToNonexistentTypeError and the whole atomic
+      // batch rolls back.
+      // TODO: we could be more precise here and keep track of what
+      // modules the instances depend on and only flush when an instance
+      // depends on a module that is part of this operation.
+      if (lastWriteType === 'module' && currentWriteType === 'instance') {
+        await performIndex();
+        urls = [];
+      }
+
       if (typeof content === 'string') {
         try {
           let doc = JSON.parse(content);
@@ -1140,17 +1199,6 @@ export class Realm {
       }
       let contentHash = computeContentHash(content);
       let contentSize = computeContentSize(content);
-      if (lastWriteType === 'module' && currentWriteType === 'instance') {
-        // we need to generate/update possible definition in order for
-        // instance file serialization that may depend on the included module to
-        // work. TODO: we could be more precise here and keep track of what
-        // modules the instances depend on and only flush the modules to index
-        // when you you see that you have an instance that you are about to
-        // write to disk that depends on a module that is part of this
-        // operation.
-        await performIndex();
-        urls = [];
-      }
       this.sendIndexInitiationEvent(url.href);
       await this.trackOwnWrite(path);
       let { lastModified } = await this.#adapter.write(path, content);
@@ -1460,6 +1508,12 @@ export class Realm {
         if (e instanceof CardError) {
           return responseWithError(e, requestContext);
         }
+        // Log the underlying exception before returning 500 — otherwise
+        // callers only see "Write Error" and the original stack trace is
+        // lost, making atomic-batch failures effectively undebuggable.
+        this.#log.error(
+          `Atomic write failed: ${e.message}\n${e.stack ?? '(no stack)'}`,
+        );
         return createResponse({
           body: JSON.stringify({
             errors: [{ title: 'Write Error', detail: e.message }],
@@ -2099,6 +2153,11 @@ export class Realm {
     options?: {
       defaultHeaders?: Record<string, string>;
       etagVariant?: string;
+      // Optional content-derived fingerprint (e.g. md5 of body bytes).
+      // Takes precedence over `ref.lastModified` for the ETag — see
+      // `buildEtag`. Callers that have the materialized body already
+      // (the source endpoint cache-miss path) compute this for free.
+      etagBase?: string;
     },
   ): Promise<ResponseWithNodeStream> {
     let contentType = options?.defaultHeaders?.['content-type'];
@@ -2115,7 +2174,10 @@ export class Realm {
     let cacheControl = contentType?.startsWith('image/')
       ? `${cacheVisibility}, max-age=60, must-revalidate`
       : `${cacheVisibility}, max-age=0`;
-    let etag = buildEtag(ref.lastModified, options?.etagVariant);
+    let etag = buildEtag(
+      options?.etagBase ?? ref.lastModified,
+      options?.etagVariant,
+    );
     let lastModified = formatRFC7231(ref.lastModified * 1000);
     if (etag && request.headers.get('if-none-match') === etag) {
       return createResponse({
@@ -2373,6 +2435,7 @@ export class Realm {
                 [CACHE_HEADER]: CACHE_HIT_VALUE,
               },
               etagVariant: SOURCE_ETAG_VARIANT,
+              etagBase: cached.contentHash,
             },
           );
         } finally {
@@ -2440,15 +2503,21 @@ export class Realm {
         });
       } else {
         let cachedRef = await this.materializeFileRef(handle);
+        // Compute the content fingerprint while we have the body in
+        // memory — `cachedRef.content` is already a string/Uint8Array
+        // post-materialization, so this is a single md5 with no extra I/O.
+        let contentHash = contentHashFromMaterializedRef(cachedRef);
         this.#sourceCache.set(localName, {
           type: 'file',
           ref: cachedRef,
           defaultHeaders,
           canonicalPath: handle.path,
+          contentHash,
         });
         return await this.serveLocalFile(request, cachedRef, requestContext, {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
+          etagBase: contentHash,
         });
       }
     } finally {

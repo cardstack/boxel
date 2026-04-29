@@ -13,6 +13,7 @@ import {
   removeSync,
   writeFileSync,
 } from 'fs-extra';
+import { utimesSync } from 'fs';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   baseRealm,
@@ -72,6 +73,7 @@ module(basename(__filename), function () {
     let testRealmURL = realmURL;
     let testRealm: Realm;
     let testRealmHttpServer: Server;
+    let testRealmPath: string;
     let request: RealmRequest;
     let serverRequest: SuperTest<Test>;
     let dir: DirResult;
@@ -86,12 +88,14 @@ module(basename(__filename), function () {
     function onRealmSetup(args: {
       testRealm: Realm;
       testRealmHttpServer: Server;
+      testRealmPath: string;
       request: SuperTest<Test>;
       dir: DirResult;
       dbAdapter: PgAdapter;
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
+      testRealmPath = args.testRealmPath;
       serverRequest = args.request;
       request = withRealmPath(args.request, realmURL);
       dir = args.dir;
@@ -917,6 +921,66 @@ module(basename(__filename), function () {
         notModifiedModuleResponse.headers['etag'],
         moduleEtag,
         '304 response echoes module variant ETag',
+      );
+    });
+
+    // Regression test for the flaky `atomic-endpoints-test > can update an
+    // existing instance` failure. The bug: source ETags were keyed by
+    // `lastModified` in whole unix seconds, so two writes landing in the
+    // same second produced identical ETags — `cachedFetch` then returned
+    // a 304-cached stale body. Force the same on-disk mtime across two
+    // different writes and assert the source ETag is content-derived.
+    test('source ETag distinguishes content even when on-disk lastModified collides', async function (assert) {
+      let modulePath = 'etag-collision-test.json';
+      let initial = JSON.stringify({ value: 'initial' });
+      let updated = JSON.stringify({ value: 'updated' });
+      // Both writes are pinned to the same wall-clock second below.
+      let collidingMtime = new Date('2026-01-01T00:00:00Z');
+      let absolutePath = join(testRealmPath, modulePath);
+      let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+
+      await testRealm.write(modulePath, initial);
+      utimesSync(absolutePath, collidingMtime, collidingMtime);
+
+      let firstResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', authHeader);
+      assert.strictEqual(firstResponse.status, 200, 'first request succeeds');
+      let firstEtag = firstResponse.headers['etag'];
+      assert.ok(firstEtag, 'first response carries an ETag');
+
+      await testRealm.write(modulePath, updated);
+      utimesSync(absolutePath, collidingMtime, collidingMtime);
+
+      let secondResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', authHeader);
+      assert.strictEqual(secondResponse.status, 200, 'second request succeeds');
+      let secondEtag = secondResponse.headers['etag'];
+      assert.ok(secondEtag, 'second response carries an ETag');
+
+      assert.notStrictEqual(
+        firstEtag,
+        secondEtag,
+        'distinct content yields distinct ETags despite identical lastModified',
+      );
+
+      let conditionalResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', authHeader)
+        .set('If-None-Match', firstEtag);
+      assert.strictEqual(
+        conditionalResponse.status,
+        200,
+        'conditional GET with the prior ETag must not return 304',
+      );
+      assert.strictEqual(
+        conditionalResponse.text.trim(),
+        updated,
+        'conditional GET serves the updated body, not the cached prior body',
       );
     });
 

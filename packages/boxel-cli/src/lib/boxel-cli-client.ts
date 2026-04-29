@@ -10,17 +10,34 @@ import {
   type ListFilesResult,
 } from '../commands/file/list';
 import {
+  search as fileSearch,
+  type SearchResult,
+  type SearchCommandOptions,
+} from '../commands/search';
+import {
   readTranspiledModule,
   type ReadTranspiledResult,
 } from '../commands/read-transpiled';
 import { write as coreWrite, type WriteResult } from '../commands/file/write';
+import {
+  cancelIndexing as coreCancelIndexing,
+  type CancelIndexingResult,
+} from '../commands/realm/cancel-indexing';
 import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { pull as realmPull } from '../commands/realm/pull';
 import { sync as realmSync, type SyncResult } from '../commands/realm/sync';
+import { waitForReady as coreWaitForReady } from '../commands/realm/wait-for-ready';
 import { getProfileManager, type ProfileManager } from './profile-manager';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-export type { ReadResult, ListFilesResult, ReadTranspiledResult, SyncResult };
+export type {
+  ReadResult,
+  ListFilesResult,
+  ReadTranspiledResult,
+  SyncResult,
+  SearchResult,
+  SearchCommandOptions,
+};
 
 const MIME = {
   CardSource: 'application/vnd.card+source',
@@ -72,13 +89,6 @@ export interface SyncOptions {
 export type { DeleteResult };
 export type { WriteResult };
 
-export interface SearchResult {
-  ok: boolean;
-  status?: number;
-  data?: Record<string, unknown>[];
-  error?: string;
-}
-
 export interface RunCommandResult {
   status: 'ready' | 'error' | 'unusable';
   /** Serialized command result (JSON string), or null. */
@@ -104,10 +114,7 @@ export interface AtomicResult {
   error?: string;
 }
 
-export interface CancelIndexingResult {
-  ok: boolean;
-  error?: string;
-}
+export type { CancelIndexingResult };
 
 export class BoxelCLIClient {
   private pm: ProfileManager;
@@ -198,44 +205,14 @@ export class BoxelCLIClient {
   }
 
   /**
-   * Search a realm using the `_search` endpoint.
+   * Federated search across one or more realms via `_federated-search`.
+   * Delegates to the standalone `search()` in `commands/search.ts`.
    */
   async search(
-    realmUrl: string,
+    realmUrls: string | string[],
     query: Record<string, unknown>,
   ): Promise<SearchResult> {
-    let searchUrl = `${ensureTrailingSlash(realmUrl)}_search`;
-
-    try {
-      let response = await this.pm.authedRealmFetch(searchUrl, {
-        method: 'QUERY',
-        headers: {
-          Accept: MIME.CardJson,
-          'Content-Type': MIME.JSON,
-        },
-        body: JSON.stringify(query),
-      });
-
-      if (!response.ok) {
-        let body = await response.text();
-        return {
-          ok: false,
-          status: response.status,
-          error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-        };
-      }
-
-      let result = (await response.json()) as {
-        data?: Record<string, unknown>[];
-      };
-      return { ok: true, data: result.data };
-    } catch (err) {
-      return {
-        ok: false,
-        status: 0,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
+    return fileSearch(realmUrls, query, { profileManager: this.pm });
   }
 
   /**
@@ -328,28 +305,10 @@ export class BoxelCLIClient {
     realmUrl: string,
     timeoutMs = 30_000,
   ): Promise<WaitForReadyResult> {
-    let readinessUrl = `${ensureTrailingSlash(realmUrl)}_readiness-check`;
-    let startedAt = Date.now();
-
-    while (Date.now() - startedAt < timeoutMs) {
-      try {
-        let response = await this.pm.authedRealmFetch(readinessUrl, {
-          method: 'GET',
-          headers: { Accept: MIME.JSON },
-        });
-        if (response.ok) {
-          return { ready: true };
-        }
-      } catch {
-        // retry
-      }
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-
-    return {
-      ready: false,
-      error: `Realm not ready after ${timeoutMs}ms: ${readinessUrl}`,
-    };
+    return coreWaitForReady(realmUrl, {
+      timeoutMs,
+      profileManager: this.pm,
+    });
   }
 
   /**
@@ -419,33 +378,10 @@ export class BoxelCLIClient {
    * Cancel all indexing jobs (running + pending) for a realm.
    */
   async cancelAllIndexingJobs(realmUrl: string): Promise<CancelIndexingResult> {
-    let cancelUrl = `${ensureTrailingSlash(realmUrl)}_cancel-indexing-job`;
-
-    try {
-      let response = await this.pm.authedRealmFetch(cancelUrl, {
-        method: 'POST',
-        headers: {
-          Accept: MIME.JSON,
-          'Content-Type': MIME.JSON,
-        },
-        body: JSON.stringify({ cancelPending: true }),
-      });
-
-      if (!response.ok) {
-        let body = await response.text();
-        return {
-          ok: false,
-          error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-        };
-      }
-
-      return { ok: true };
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
+    return coreCancelIndexing(realmUrl, {
+      profileManager: this.pm,
+      cancelPending: true,
+    });
   }
 
   /**

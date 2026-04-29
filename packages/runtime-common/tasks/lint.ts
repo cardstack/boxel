@@ -12,6 +12,13 @@ export interface LintArgs {
 
 export type LintResult = Linter.FixReport;
 
+// No coalesce handler: each lint enqueue carries its own `source` (the file
+// the user is editing) and the caller awaits a result derived from THAT
+// source. Two concurrent lint requests across instances are for distinct
+// sources; coalescing would return one caller's lint output to a different
+// caller. The work is also short and bucketed across 10 random concurrency
+// groups, so duplicate-instance contention is negligible.
+
 export const lintSource: Task<LintArgs, LintResult> = ({ reportStatus, log }) =>
   async function (args) {
     let { source: _remove, ...displayableArgs } = args;

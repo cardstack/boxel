@@ -421,6 +421,14 @@ export async function startIsolatedRealmStack({
     MATRIX_REGISTRATION_SHARED_SECRET: context.matrixRegistrationSecret,
     REALM_SERVER_MATRIX_USERNAME: DEFAULT_MATRIX_SERVER_USERNAME,
     REALM_SERVER_FULL_INDEX_ON_STARTUP: String(fullIndexOnStartup),
+    // When restoring from a template snapshot, the modules cache has already
+    // been rewritten to the runtime port by `rewriteClonedRealmServerUrls`.
+    // Tell the realm-server to keep that cache instead of wiping it on
+    // startup, so the first lookupDefinition for a fixture-side module hits
+    // the cache instead of paying a cold prerender (~45s for darkfactory.gts).
+    REALM_SERVER_SKIP_MODULES_CACHE_CLEAR_ON_STARTUP: fullIndexOnStartup
+      ? 'false'
+      : 'true',
     LOW_CREDIT_THRESHOLD: '2000',
     LOG_LEVELS: DEFAULT_REALM_LOG_LEVELS,
     BOXEL_TRUST_FORWARDED_URL: 'true',

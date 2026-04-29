@@ -287,6 +287,8 @@ async function scenarioSingleIssue(): Promise<void> {
     issueStore: store,
     createValidator: () => new MockValidator([makePassingValidation()]),
     targetRealmUrl: 'https://example.test/target/',
+    workspaceDir: '/tmp/boxel-factory-smoke',
+    syncWorkspace: async () => ({ ok: true }),
   });
 
   printResult(result);
@@ -344,6 +346,8 @@ async function scenarioDependencyCascade(): Promise<void> {
     issueStore: store,
     createValidator: () => new MockValidator([makePassingValidation()]),
     targetRealmUrl: 'https://example.test/target/',
+    workspaceDir: '/tmp/boxel-factory-smoke',
+    syncWorkspace: async () => ({ ok: true }),
   });
 
   printResult(result);
@@ -415,6 +419,8 @@ async function scenarioPriorityOrdering(): Promise<void> {
     issueStore: store,
     createValidator: () => new MockValidator([makePassingValidation()]),
     targetRealmUrl: 'https://example.test/target/',
+    workspaceDir: '/tmp/boxel-factory-smoke',
+    syncWorkspace: async () => ({ ok: true }),
   });
 
   printResult(result);
@@ -470,6 +476,8 @@ async function scenarioMaxIterations(): Promise<void> {
     issueStore: store,
     createValidator: () => new MockValidator(validations),
     targetRealmUrl: 'https://example.test/target/',
+    workspaceDir: '/tmp/boxel-factory-smoke',
+    syncWorkspace: async () => ({ ok: true }),
     maxIterationsPerIssue: 3,
   });
 
@@ -516,6 +524,8 @@ async function scenarioBlockedIssue(): Promise<void> {
     issueStore: store,
     createValidator: () => new MockValidator([makePassingValidation()]),
     targetRealmUrl: 'https://example.test/target/',
+    workspaceDir: '/tmp/boxel-factory-smoke',
+    syncWorkspace: async () => ({ ok: true }),
   });
 
   printResult(result);
@@ -544,6 +554,8 @@ async function scenarioEmptyProject(): Promise<void> {
     issueStore: store,
     createValidator: () => new NoOpValidator(),
     targetRealmUrl: 'https://example.test/target/',
+    workspaceDir: '/tmp/boxel-factory-smoke',
+    syncWorkspace: async () => ({ ok: true }),
   });
 
   printResult(result);
@@ -597,6 +609,8 @@ async function scenarioValidationPipeline(): Promise<void> {
     issueStore: store,
     createValidator: createPipeline,
     targetRealmUrl: 'https://example.test/target/',
+    workspaceDir: '/tmp/boxel-factory-smoke',
+    syncWorkspace: async () => ({ ok: true }),
   });
 
   printResult(result);
@@ -735,6 +749,8 @@ async function scenarioBootstrapSeedIssue(): Promise<void> {
     issueStore: store,
     createValidator: () => new NoOpValidator(),
     targetRealmUrl: 'https://example.test/target/',
+    workspaceDir: '/tmp/boxel-factory-smoke',
+    syncWorkspace: async () => ({ ok: true }),
     briefUrl: 'https://example.test/brief/',
   });
 
