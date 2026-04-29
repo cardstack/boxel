@@ -35,6 +35,12 @@ grafanactl/
 provisioning/          # mounted into Grafana at /etc/grafana/provisioning/
   datasources/         # data sources (Loki, Postgres, CloudWatch, Prometheus)
   alerting/            # alert rule groups, contact points, notification policies
+alloy/
+  config.alloy         # local log scraper config — discovers Docker containers
+                       # and ships their stdout into Loki
+loki/
+  config.yaml          # local Loki config (single-node, filesystem, accepts
+                       # historical Docker logs)
 scripts/
   apply.sh             # ./scripts/apply.sh --env <local|staging|production>
   pull.sh              # ./scripts/pull.sh  --env <name> --path <dir>
@@ -43,7 +49,7 @@ scripts/
   grafanactl-env.sh    # sourceable; exports GRAFANA_TOKEN from SSM for staging/prod
 templates/
   env-vars.env.example
-docker-compose.yml     # local Grafana 12.4.3 + Loki 3.4.4 (Alloy commented out)
+docker-compose.yml     # local Grafana 12.4.3 + Loki 3.4.4 + Alloy 1.10.0
 ```
 
 ## Local workflow
@@ -52,16 +58,50 @@ docker-compose.yml     # local Grafana 12.4.3 + Loki 3.4.4 (Alloy commented out)
 # One-time: install grafanactl
 brew install --formula grafanactl
 
-# Bring up local Grafana + Loki
+# Bring up local Grafana + Loki + Alloy (log scraper)
 docker compose up -d
 # Grafana: http://localhost:3001  (admin / admin)
 # Loki:    http://localhost:3100
+# Alloy:   http://localhost:12345  (target / pipeline debug UI)
 
 # Verify connectivity
 ./scripts/check.sh --env local
 
 # Apply (no-op until Phase 3 imports dashboards from AMG)
 ./scripts/apply.sh --env local
+```
+
+In Grafana, run a LogQL query like `{env="local"}` against the Loki data
+source to see lines from any other container running on the host.
+
+> **Note**: the local Alloy pipeline drops Docker log entries older than
+> 24 hours before they reach Loki. Loki itself is configured to accept
+> historical entries (`reject_old_samples: false` in `loki/config.yaml`),
+> but Alloy's `stage.drop { older_than = "24h" }` filter prevents the
+> initial backfill of long-lived containers (e.g. a `boxel-pg` that's
+> been up for months) from flooding Loki on first attach. Edit
+> `alloy/config.alloy` and restart the stack if you want a wider window.
+
+## Loki label schema
+
+The label set is **load-bearing**: dashboards written in LogQL select on
+these labels, so the local scraper, staging FireLens, and production
+FireLens must all emit the same shape. Pick the schema once, here.
+
+| Label     | Source (local)                              | Source (staging / production)             |
+| --------- | ------------------------------------------- | ----------------------------------------- |
+| `env`     | constant `local` (set in `alloy/config.alloy`) | constant `staging` / `production` (FireLens record_modifier) |
+| `service` | Docker container name, leading `/` stripped | ECS task family, e.g. `realm-server`, `worker`, `synapse` |
+| `realm`   | opt-in via Docker label `boxel.realm=<name>` | realm name from worker/realm-server task env |
+
+The local scraper drops `grafana`, `loki`, and `alloy`'s own log streams
+to keep `{env="local"}` queries clean and avoid a Grafana → Loki feedback
+loop.
+
+To tag a custom local container so dashboards pick it up by realm:
+
+```sh
+docker run --label boxel.realm=test_realm --name my-realm-worker ...
 ```
 
 ## Staging / production workflow
@@ -92,7 +132,8 @@ CI will run `apply.sh --env staging` on merge to main once Phase 4 (CS-10932) la
 | CS-10912  | 2     | landed      | Local `docker-compose.yml` for Grafana   |
 | CS-10913  | 2     | landed      | grafanactl `local`/`staging`/`prod` ctxs |
 | CS-10918  | 2.5   | landed      | Loki container + data source             |
-| CS-10922  | 3     | this PR     | AMG export and reformat                  |
+| CS-10916  | 2.5   | this PR     | Alloy log scraper for local              |
+| CS-10922  | 3     | landed      | AMG export and reformat                  |
 | CS-10932  | 4     | not started | CI: apply to staging on merge            |
 | CS-10933  | 4     | not started | CI: post diff comment on PRs             |
 | CS-10936  | 5     | not started | CI: apply to production                  |
@@ -103,7 +144,6 @@ CI will run `apply.sh --env staging` on merge to main once Phase 4 (CS-10932) la
 
 ## Known cleanups (deferred)
 
-- **Alloy log scraping config.** docker-compose has Alloy commented out; un-comment + add `alloy/config.alloy` to ship logs into local Loki. Separate ticket — not strictly required for Loki data source to be useful.
 - **Staging/production Loki ECS deployment.** Currently no Loki running in staging or production. Staging/production Grafana provisioning expects `${LOKI_URL}` to be set on the ECS task; that's an infra ticket.
 - **`provisioning/` delivery to staging/production ECS.** The provisioning files (data sources + alert rules) need to land on the ECS Grafana container — image bake, S3-init, or EFS mount. Decide and ship as a separate infra ticket.
 - **Secret env-var wiring for data sources.** `provisioning/datasources/*.json` omits `secureJsonData` (passwords, API keys). The staging/production ECS Grafana task needs those env vars set from SSM (`GRAFANA_DB_PASSWORD` etc.) and the provisioning files updated to reference them via `${ENV_VAR}`.
