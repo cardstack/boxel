@@ -1,16 +1,28 @@
 name: PR Status Comment
 
-# Reusable: invoked by each workflow that uploads a `pr-comment-slot-*`
-# artifact. Rebuilds the unified sticky comment (header `pr-status`) from
-# whatever slots currently exist for the given head SHA. Cross-workflow
-# concurrency is enforced at the job level so calls from different parent
-# workflows serialize for the same branch and don't clobber each other.
+# Reusable: invoked by each workflow that uploads a `pr-comment-slot-<slot>`
+# artifact. Updates only the named slot's section of the unified sticky
+# comment (header `pr-status`); other sections are preserved from the
+# existing comment so a slow-finishing workflow doesn't wipe out sections
+# that finished earlier (including those from a prior commit).
+#
+# Each section is delimited in the comment body with HTML markers:
+#   <!-- pr-status-slot:<slot> -->
+#   ...
+#   <!-- /pr-status-slot:<slot> -->
+#
+# Cross-workflow concurrency is enforced at the job level so calls from
+# different parent workflows serialize for the same branch.
 
 on:
   workflow_call:
     inputs:
       head-sha:
-        description: Commit SHA to aggregate slot artifacts for
+        description: Commit SHA the calling run is targeting
+        required: true
+        type: string
+      slot:
+        description: Slot name being refreshed (e.g. preview, host-tests, realm-tests)
         required: true
         type: string
 
@@ -48,49 +60,68 @@ jobs:
           fi
           echo "number=$pr" >>"$GITHUB_OUTPUT"
 
-      - name: Collect slot artifacts for this commit
+      - name: Download fresh slot artifact from this run
         if: steps.pr.outputs.skip != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          SHA: ${{ inputs.head-sha }}
+          RUN_ID: ${{ github.run_id }}
+          SLOT: ${{ inputs.slot }}
         run: |
           set -euo pipefail
-          mkdir -p slots
+          mkdir -p fresh
+          # The slot was uploaded by an earlier job in the same workflow run.
+          # Failures here (e.g. uploader skipped) fall through to preserving
+          # whatever the existing comment has for this slot.
+          gh run download -R "$REPO" "$RUN_ID" \
+            -n "pr-comment-slot-$SLOT" -D fresh/ 2>/dev/null || true
 
-          # No status filter: the calling workflow run is still in_progress.
-          # Most recent runs are returned first; first download per slot wins.
-          gh api -X GET "/repos/$REPO/actions/runs" \
-            -f head_sha="$SHA" --paginate \
-            --jq '.workflow_runs[].id' > runs.txt
-
-          while read -r run_id; do
-            [ -n "$run_id" ] || continue
-            artifacts=$(
-              gh api "/repos/$REPO/actions/runs/$run_id/artifacts" --paginate \
-                --jq '.artifacts[].name' \
-              | grep '^pr-comment-slot-' || true
-            )
-            [ -n "$artifacts" ] || continue
-            while read -r name; do
-              [ -n "$name" ] || continue
-              [ -d "slots/$name" ] && continue
-              gh run download -R "$REPO" "$run_id" -n "$name" -D "slots/$name" || true
-            done <<<"$artifacts"
-          done < runs.txt
+      - name: Fetch existing pr-status comment body
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          : > existing.md
+          # marocchino sticky-pull-request-comment marks its comment with
+          # this header so it can find and update it. Filter on that and on
+          # the github-actions bot author for safety.
+          gh api --paginate "/repos/$REPO/issues/$PR/comments?per_page=100" \
+            --jq '.[] | select(
+                    .user.login == "github-actions[bot]"
+                    and (.body | contains("<!-- Sticky Pull Request Commentpr-status -->"))
+                  ) | .body' \
+            > existing.md || true
 
       - name: Assemble comment body
         if: steps.pr.outputs.skip != 'true'
         id: body
+        env:
+          SLOT: ${{ inputs.slot }}
         run: |
           set -euo pipefail
           : > comment.md
           # Fixed slot order. Add new slot names here as we add emitters.
           for slot in preview host-tests realm-tests; do
-            f="slots/pr-comment-slot-$slot/slot.md"
-            if [ -s "$f" ]; then
-              cat "$f" >> comment.md
-              printf '\n\n' >> comment.md
+            content=""
+            if [ "$slot" = "$SLOT" ] && [ -s "fresh/slot.md" ]; then
+              content=$(cat fresh/slot.md)
+            else
+              content=$(awk -v s="$slot" '
+                $0 == "<!-- pr-status-slot:" s " -->" { flag=1; next }
+                $0 == "<!-- /pr-status-slot:" s " -->" { flag=0 }
+                flag
+              ' existing.md)
+            fi
+            if [ -n "$content" ]; then
+              {
+                echo "<!-- pr-status-slot:$slot -->"
+                printf '%s\n' "$content"
+                echo "<!-- /pr-status-slot:$slot -->"
+                echo
+              } >> comment.md
             fi
           done
           if [ ! -s comment.md ]; then

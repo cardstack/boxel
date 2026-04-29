@@ -701,6 +701,7 @@ jobs:
       actions: read
     with:
       head-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      slot: realm-tests
     secrets: inherit
 
   vscode-boxel-tools-package:
