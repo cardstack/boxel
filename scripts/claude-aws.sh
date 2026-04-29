@@ -34,15 +34,16 @@
 #                             for this env (cached for next time)
 #
 # Reset:
-#   claude-aws --reset        wipes ~/.config/claude-aws/config so the
-#                             interactive source-profile prompt fires
-#                             from scratch on the next run. Useful if
-#                             you typed the wrong profile name. Takes
-#                             no other arguments.
+#   claude-aws --reset        wipes ${XDG_CONFIG_HOME:-~/.config}/claude-aws/config
+#                             so the interactive source-profile prompt
+#                             fires from scratch on the next run. Useful
+#                             if you typed the wrong profile name. Takes
+#                             no other arguments. Does not need aws/jq
+#                             installed.
 #
 # On first run for a given env, the script prompts for the source AWS
 # profile (since teammates pick their own profile names) and caches the
-# choice in ~/.config/claude-aws/config.
+# choice at ${XDG_CONFIG_HOME:-~/.config}/claude-aws/config.
 #
 # After running, Claude can run:
 #   aws --profile claude-staging <command>
@@ -52,6 +53,9 @@ set -euo pipefail
 
 # Fail early with a clear hint if a required dep is missing — without
 # this, the user gets an opaque "jq: command not found" mid-script.
+# Defined here, but the aws/jq invocations live below the --reset
+# early-exit so a teammate without aws/jq installed can still run
+# `claude-aws --reset` to recover from a bad cached source-profile.
 require_command() {
     if ! command -v "$1" >/dev/null 2>&1; then
         echo "Error: required command '$1' is not installed or not on PATH." >&2
@@ -59,8 +63,6 @@ require_command() {
         exit 1
     fi
 }
-require_command aws
-require_command jq
 
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/claude-aws"
 CONFIG_FILE="$CONFIG_DIR/config"
@@ -99,9 +101,9 @@ while [ "$#" -gt 0 ]; do
             shift 2
             ;;
         --reset)
-            # Wipe ~/.config/claude-aws/config — forgets all cached
-            # source-profile choices. Useful when you typed the wrong
-            # profile name and want the prompt back from a clean slate.
+            # Wipe $CONFIG_FILE — forgets all cached source-profile
+            # choices. Useful when you typed the wrong profile name and
+            # want the prompt back from a clean slate.
             RESET=1
             shift
             ;;
@@ -139,6 +141,10 @@ fi
 if [ -z "$ENV_NAME" ] || [ -z "$MFA_TOKEN" ]; then
     usage
 fi
+
+# Tools needed for the AWS path (not for --reset).
+require_command aws
+require_command jq
 
 case "$ENV_NAME" in
     staging) TARGET_PROFILE="claude-staging" ;;

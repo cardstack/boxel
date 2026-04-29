@@ -58,7 +58,7 @@ The first time the user runs `mise run claude-aws staging <token>`, the script w
 Source AWS profile for staging:
 ```
 
-Type the source profile name (e.g. `cardstack`). It's saved to `~/.config/claude-aws/config` and never prompted for again unless the user passes `--source-profile <name>` to override. Same dance for prod the first time `mise run claude-aws prod <token>` is run.
+Type the source profile name (e.g. `cardstack`). It's saved to `${XDG_CONFIG_HOME:-~/.config}/claude-aws/config` (the XDG config directory; default is `~/.config/claude-aws/config`) and never prompted for again unless the user passes `--source-profile <name>` to override. Same dance for prod the first time `mise run claude-aws prod <token>` is run.
 
 If you typed the wrong profile name (or want to clear the cache for any reason), run:
 
@@ -66,7 +66,7 @@ If you typed the wrong profile name (or want to clear the cache for any reason),
 mise run claude-aws --reset
 ```
 
-That wipes `~/.config/claude-aws/config` so the next normal invocation prompts again from scratch. `--reset` takes no other arguments — just `--reset`, no env, no token. Equivalent shortcut to deleting the config file by hand.
+That wipes the config file (path above) so the next normal invocation prompts again from scratch. `--reset` takes no other arguments — just `--reset`, no env, no token. It does not require `aws` / `jq` to be installed, so it's also the right recovery path on a freshly-cloned machine before the rest of the prereqs are in place. Equivalent shortcut to deleting the config file by hand.
 
 ### 3. Per-session — refresh the role-assumed credentials (every ~12h)
 
