@@ -84,6 +84,7 @@ export interface IssueContextBuilderLike {
   buildForIssue(params: {
     issue: IssueData;
     targetRealmUrl: string;
+    workspaceDir?: string;
     validationResults?: ValidationResults;
     /** Pre-formatted validation context from Validator.formatForContext(). */
     validationContext?: string;
@@ -219,6 +220,7 @@ export async function runIssueLoop(
     issueStore,
     createValidator,
     targetRealmUrl,
+    workspaceDir,
     syncWorkspace,
     briefUrl,
     maxIterationsPerIssue = DEFAULT_MAX_ITERATIONS_PER_ISSUE,
@@ -327,6 +329,7 @@ export async function runIssueLoop(
       let context = await contextBuilder.buildForIssue({
         issue,
         targetRealmUrl,
+        workspaceDir,
         validationResults,
         validationContext,
         briefUrl,
@@ -386,17 +389,18 @@ export async function runIssueLoop(
         }`,
       );
 
-      // The loop owns issue status transitions. The agent signals
-      // completion via signal_done; the loop promotes to "done" only
-      // when signal_done is called, validation passes, AND the sync
-      // succeeded. A failed sync means the realm doesn't have the
-      // agent's writes, so marking the issue done would claim
-      // completion for work that isn't actually delivered.
-      let agentSignaledDone = result.toolCalls.some(
-        (tc) => tc.tool === 'signal_done',
-      );
+      // The loop owns issue status transitions. The agent reports
+      // completion by ending its turn; `result.status === 'done'`
+      // covers both that path (heuristic: any tool calls happened)
+      // and any future explicit done-signal mechanism. The loop
+      // promotes the issue to `done` only when the agent reports
+      // done, validation passes, AND the sync succeeded — a failed
+      // sync means the realm doesn't have the agent's writes, so
+      // marking it done would claim completion for work that isn't
+      // actually delivered.
+      let agentReportedDone = result.status === 'done';
 
-      if (agentSignaledDone && validationResults?.passed && !syncFailed) {
+      if (agentReportedDone && validationResults?.passed && !syncFailed) {
         try {
           await issueStore.updateIssue(issue.id, { status: 'done' });
           // updateIssue writes the status flip to the local workspace.
@@ -412,20 +416,20 @@ export async function runIssueLoop(
             );
           }
           log.info(
-            `  Issue marked done (agent called signal_done, validation passed, sync succeeded)`,
+            `  Issue marked done (agent ended turn, validation passed, sync succeeded)`,
           );
         } catch (err) {
           log.warn(
             `  Failed to mark issue as done: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
-      } else if (agentSignaledDone && syncFailed) {
+      } else if (agentReportedDone && syncFailed) {
         log.info(
-          `  Agent signaled done but workspace sync failed — work isn't on the realm yet, continuing iteration`,
+          `  Agent reported done but workspace sync failed — work isn't on the realm yet, continuing iteration`,
         );
-      } else if (agentSignaledDone && !validationResults?.passed) {
+      } else if (agentReportedDone && !validationResults?.passed) {
         log.info(
-          `  Agent signaled done but validation failed — continuing iteration`,
+          `  Agent reported done but validation failed — continuing iteration`,
         );
       }
 

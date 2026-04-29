@@ -194,10 +194,13 @@ module('factory-prompt-loader > FilePromptLoader', function () {
       skills: [],
     });
     assert.ok(
-      result.includes('signal_done'),
-      'system prompt contains signal_done',
+      result.includes('Read'),
+      'system prompt mentions native Read tool',
     );
-    assert.ok(result.includes('read_file'), 'system prompt contains read_file');
+    assert.ok(
+      result.includes('npx boxel search'),
+      'system prompt mentions boxel CLI search',
+    );
   });
 
   test('caches templates on subsequent loads', function (assert) {
@@ -248,10 +251,13 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
       'includes role description',
     );
     assert.ok(
-      result.includes('signal_done'),
-      'includes signal_done instruction',
+      result.includes('end your turn'),
+      'instructs the agent to end its turn naturally',
     );
-    assert.ok(result.includes('read_file'), 'includes read_file instruction');
+    assert.ok(
+      result.includes('npx boxel search'),
+      'mentions boxel CLI search via Bash',
+    );
   });
 
   test('includes realm URLs', function (assert) {
@@ -326,14 +332,14 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
     // Verify structural elements are present and correctly ordered
     let roleIdx = result.indexOf('# Role');
     let rulesIdx = result.indexOf('# Rules');
-    let realmsIdx = result.indexOf('# Realms');
+    let realmsIdx = result.indexOf('# Workspace and target realm');
     let skill1Idx = result.indexOf('# Skill: boxel-development');
     let skill2Idx = result.indexOf('# Skill: testing-guide');
 
     assert.ok(roleIdx >= 0, 'has Role section');
     assert.ok(rulesIdx > roleIdx, 'Rules after Role');
-    assert.ok(realmsIdx > rulesIdx, 'Realms after Rules');
-    assert.ok(skill1Idx > realmsIdx, 'first skill after Realms');
+    assert.ok(realmsIdx > rulesIdx, 'Workspace section after Rules');
+    assert.ok(skill1Idx > realmsIdx, 'first skill after Workspace');
     assert.ok(skill2Idx > skill1Idx, 'second skill after first');
 
     // Verify content of skill references
@@ -407,7 +413,10 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
       result.includes('Implement this issue'),
       'has implementation instructions',
     );
-    assert.ok(result.includes('signal_done'), 'mentions signal_done');
+    assert.ok(
+      result.includes('End your turn'),
+      'instructs agent to end turn instead of explicit signal',
+    );
   });
 
   test('includes checklist when present', function (assert) {
@@ -702,7 +711,10 @@ module('factory-prompt-loader > assembleTestPrompt', function () {
       'includes file content',
     );
     assert.ok(result.includes('target realm'), 'includes realm');
-    assert.ok(result.includes('signal_done'), 'instructs to call signal_done');
+    assert.ok(
+      result.includes('end your turn'),
+      'instructs agent to end turn after writing files',
+    );
   });
 });
 

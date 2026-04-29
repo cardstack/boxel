@@ -227,6 +227,13 @@ export interface AgentContext {
   /** @deprecated Iteration tracking is now owned by the orchestrator. */
   iteration?: number;
   targetRealmUrl: string;
+  /**
+   * Absolute path to the local workspace directory mirroring the target
+   * realm. The agent uses this as its `cwd` and reads/writes target-realm
+   * files via native filesystem tools (Read/Write/Edit/Glob/Grep). The
+   * outer loop syncs this directory to the realm between iterations.
+   */
+  workspaceDir?: string;
   /** Validation results from the prior inner-loop iteration (used for pass/fail checks). */
   validationResults?: ValidationResults;
   /** Pre-formatted validation context from Validator.formatForContext() — the sole mechanism for validation reaching the LLM. */

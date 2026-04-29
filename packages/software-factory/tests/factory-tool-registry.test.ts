@@ -158,7 +158,7 @@ module('factory-tool-registry > validateArgs', function () {
 
   test('multiple missing required args produce multiple errors', function (assert) {
     let registry = new ToolRegistry();
-    let errors = registry.validateArgs('realm-write', {});
+    let errors = registry.validateArgs('realm-create', {});
     assert.true(
       errors.length >= 3,
       `expected at least 3 errors, got ${errors.length}`,
@@ -279,12 +279,12 @@ module('factory-tool-registry > built-in manifests', function () {
 
   test('expected realm-api tools are registered', function (assert) {
     let registry = new ToolRegistry();
-    // realm-read/realm-write/realm-delete are scoped to non-target realms
-    // by the executor's safety check; target-realm I/O goes through the
-    // workspace.
-    assert.true(registry.has('realm-read'));
-    assert.true(registry.has('realm-write'));
-    assert.true(registry.has('realm-delete'));
+    // The realm-read / realm-write / realm-delete manifests were retired
+    // in CS-10883 — target-realm I/O goes through the local workspace and
+    // native filesystem tools, and remote-realm reads use search_realms.
+    assert.false(registry.has('realm-read'));
+    assert.false(registry.has('realm-write'));
+    assert.false(registry.has('realm-delete'));
     assert.true(registry.has('realm-search'));
     assert.true(registry.has('realm-create'));
   });

@@ -1,25 +1,22 @@
 /**
- * Runtime integration test asserting the schema boundary between the two
- * agent backends:
+ * Runtime integration test asserting that:
  *
- *   ClaudeCodeFactoryAgent  → Zod schemas only (never JSON Schema)
+ *   ClaudeCodeFactoryAgent  → uses native SDK tools, never hits OpenRouter
  *   OpenRouterFactoryAgent  → JSON Schema only (never Zod)
  *
- * The factory defines tools with JSON-Schema `parameters`. OpenRouter
- * consumes those verbatim; the Claude Agent SDK consumes Zod — so a
- * dedicated adapter converts JSON Schema → Zod at the Claude edge. This
- * test inspects what each agent actually hands to its transport and
- * catches any regression where the two shapes cross over.
+ * After CS-10883 the Claude path runs entirely through the SDK's
+ * built-in tools (Read/Write/Edit/Glob/Grep/Bash) — there is no
+ * in-process MCP server, so there's no schema-conversion boundary to
+ * assert on the Claude side. The OpenRouter path still consumes the
+ * factory's JSON-Schema `parameters` verbatim, so we keep those wire
+ * assertions to catch any regression where Zod state crosses over.
  */
 
 import { module, test } from 'qunit';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import {
-  ClaudeCodeFactoryAgent,
-  buildSdkToolsFromFactoryTools,
-} from '../src/factory-agent/claude-code';
+import { ClaudeCodeFactoryAgent } from '../src/factory-agent/claude-code';
 import { OpenRouterFactoryAgent } from '../src/factory-agent/openrouter';
 import { OPENROUTER_CHAT_URL } from '../src/factory-agent';
 import type { AgentContext } from '../src/factory-agent';
@@ -94,35 +91,6 @@ function emptyQueryIterator() {
 // ---------------------------------------------------------------------------
 
 module('factory-agent-schema-boundary / runtime', function () {
-  test('Claude path: MCP tool definitions carry Zod shapes, not JSON Schema', function (assert) {
-    let sdkTools = buildSdkToolsFromFactoryTools([makeTool()], {
-      onToolCall: () => {},
-      onSignal: () => {},
-    });
-
-    let inputSchema = sdkTools[0].inputSchema as Record<string, unknown>;
-
-    // JSON Schema would expose `{ type: 'object', properties: {...} }`.
-    // Zod raw shape exposes `{ <propertyName>: ZodType }`.
-    assert.notStrictEqual(
-      (inputSchema as { type?: unknown }).type,
-      'object',
-      'Claude path: inputSchema is NOT a JSON Schema with top-level "type"',
-    );
-    assert.ok(inputSchema.path, 'Claude path: inputSchema.path is set');
-    assert.strictEqual(
-      typeof inputSchema.path,
-      'object',
-      'Claude path: inputSchema has keyed entries per property',
-    );
-    let pathField = inputSchema.path as { parse?: unknown };
-    assert.strictEqual(
-      typeof pathField.parse,
-      'function',
-      'Claude path: each property is a Zod type (exposes .parse)',
-    );
-  });
-
   test('OpenRouter path: the wire body carries raw JSON Schema tool definitions', async function (assert) {
     // `OpenRouterFactoryAgent` switches to a direct OpenRouter HTTP path when
     // `OPENROUTER_API_KEY` is present in the environment, which would

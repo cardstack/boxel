@@ -390,6 +390,7 @@ export function assembleSystemPrompt(
 
   return loader.load('system', {
     targetRealmUrl: context.targetRealmUrl,
+    workspaceDir: context.workspaceDir ?? '',
     skills,
   });
 }

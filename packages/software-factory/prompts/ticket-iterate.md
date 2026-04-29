@@ -51,13 +51,19 @@ All validation steps passed.
 
 # Instructions
 
-Fix the validation failures shown above. You have the same tools available. You can:
+Fix the validation failures shown above. You have the same tools as
+before:
 
-- Use read_file to inspect the current state of your implementation
-- Use write_file to update implementation or test files
-- Use search_realm to check what cards exist
-- If a lint violation is in your code, fix the code to pass lint
-- If the test expectation is wrong, fix the test
-- If the implementation is wrong, fix the implementation
+- `Read` / `Glob` / `Grep` on the local workspace to inspect the
+  current state of your implementation
+- `Write` / `Edit` to update implementation or test files in the
+  workspace
+- `npx boxel search` (via `Bash`) to check what cards exist in remote
+  realms
+- If a lint violation is in your code, fix the code to pass lint.
+- If the test expectation is wrong, fix the test.
+- If the implementation is wrong, fix the implementation.
 
-When done, call signal_done.
+When you've made the fixes, end your turn. The orchestrator runs
+validation again and either closes the issue or hands you the next
+batch of failures.

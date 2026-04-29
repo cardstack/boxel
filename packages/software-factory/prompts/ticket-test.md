@@ -23,4 +23,4 @@ Tests must:
 - Verify card-specific behavior, field values, and relationships
 - Keep all test data in browser memory — no external realm writes
 
-Use write_file to create test files, then call signal_done.
+Write test files into the local workspace with `Write`, then end your turn. The orchestrator runs the test pipeline automatically.

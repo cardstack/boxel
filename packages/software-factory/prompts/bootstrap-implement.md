@@ -17,9 +17,17 @@ Description:
 
 ## What to Create
 
-Create the following artifacts in the target realm using the available tools
-(`write_file`, `update_issue`, `create_knowledge`). Use `search_realm` and
-`read_file` to inspect existing state before creating anything.
+Create the following artifacts in the target realm. Write the card
+JSON files directly into the workspace with `Write`. Inspect existing
+state first with `Read` / `Glob` / `Grep` on the local workspace, and
+`npx boxel search` (via `Bash`) for cross-realm discovery.
+
+Start by reading the seed Issue card at `Issues/bootstrap-seed.json`.
+Copy its `meta.adoptsFrom.module` value verbatim — that's the
+darkfactory module URL you'll use for the `adoptsFrom` block on every
+Project / Issue / KnowledgeArticle card you create below. The
+`adoptsFrom.name` differs per card type: `Project`, `Issue`, or
+`KnowledgeArticle`.
 
 ### 1. Project Card
 
@@ -110,13 +118,22 @@ dependency cards are implemented before cards that consume them.
 
 ## Instructions
 
-1. Use `read_file` to read the brief at the URL above (if it is in a realm) or use the brief content in the description
-2. Derive the slug and project code from the brief title
-3. Create the Project card
-4. Create Knowledge Article cards (at least brief context + agent onboarding)
-5. Identify entry-point cards from the brief — these are the top-level cards users interact with
-6. Create one implementation Issue per entry-point card, with all relationships wired
-7. Call `signal_done()` — the orchestrator manages issue status transitions. Do NOT set the issue status yourself.
+1. Use the brief content in the issue description above (or fetch the
+   brief URL with `npx boxel search` / `npx boxel pull` via `Bash` if
+   it lives in a realm).
+2. Read `Issues/bootstrap-seed.json` to capture the darkfactory
+   `adoptsFrom.module` URL.
+3. Derive the slug and project code from the brief title.
+4. Create the Project card.
+5. Create Knowledge Article cards (at least brief context + agent
+   onboarding).
+6. Identify entry-point cards from the brief — these are the top-level
+   cards users interact with.
+7. Create one implementation Issue per entry-point card, with all
+   relationships wired.
+8. End your turn. The orchestrator manages issue status transitions and
+   runs validation; do NOT set the issue status yourself.
 
-Create artifacts in the order listed — Project first, then Knowledge Articles,
-then Issues — so that relationship targets exist when referenced.
+Create artifacts in the order listed — Project first, then Knowledge
+Articles, then Issues — so that relationship targets exist when
+referenced.

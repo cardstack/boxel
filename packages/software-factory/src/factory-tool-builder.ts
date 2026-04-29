@@ -44,6 +44,27 @@ import type { RunTestsInMemoryOptions, RunTestsResult } from './test-run-types';
 import { readCard, writeCard } from './workspace-fs';
 
 // ---------------------------------------------------------------------------
+// Local helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Coerce the `realms` argument from a `search_realms` tool call into the
+ * `string[]` shape `client.search()` expects. The LLM can emit it as a
+ * single string, an array, or omit it entirely; this guards `client.search`
+ * from crashing on a malformed call (e.g. trying to iterate a bare string).
+ * An empty result means "search every realm the active profile can see."
+ */
+function normalizeRealmUrls(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((v): v is string => typeof v === 'string' && v.length > 0);
+  }
+  if (typeof value === 'string' && value.length > 0) {
+    return [value];
+  }
+  return [];
+}
+
+// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
@@ -143,10 +164,7 @@ export function buildFactoryTools(
   toolRegistry: ToolRegistry,
 ): FactoryTool[] {
   let tools: FactoryTool[] = [
-    buildWriteFileTool(config),
-    buildReadFileTool(config),
-    buildFetchTranspiledModuleTool(config),
-    buildSearchRealmTool(config),
+    buildSearchRealmsTool(config),
     buildRunCommandTool(config),
     buildRunLintTool(config),
     buildRunTestsTool(config),
@@ -226,99 +244,15 @@ export function requireStringArg(
 // Factory-level tools
 // ---------------------------------------------------------------------------
 
-function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
+function buildSearchRealmsTool(config: ToolBuilderConfig): FactoryTool {
   return {
-    name: 'write_file',
+    name: 'search_realms',
     description:
-      'Write a file to the target realm workspace. The path must include the file extension. Writes go to the local workspace and are synced to the realm between iterations.',
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description:
-            'Realm-relative file path with extension (e.g., "my-card.gts", "Card/1.json")',
-        },
-        content: { type: 'string', description: 'File content' },
-        realm: {
-          type: 'string',
-          enum: ['target'],
-          description: 'Which realm to write to (default: target)',
-        },
-      },
-      required: ['path', 'content'],
-    },
-    execute: async (args) => {
-      let path = requireStringArg(args, 'path', 'write_file');
-      let content = requireStringArg(args, 'content', 'write_file');
-      return writeCard(config.workspaceDir, path, content);
-    },
-  };
-}
-
-function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
-  return {
-    name: 'read_file',
-    description:
-      'Read a file from the target realm workspace. Returns parsed JSON when possible, otherwise raw text.',
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description: 'Realm-relative file path',
-        },
-        realm: {
-          type: 'string',
-          enum: ['target'],
-          description: 'Which realm to read from (default: target)',
-        },
-      },
-      required: ['path'],
-    },
-    execute: async (args) => {
-      let path = requireStringArg(args, 'path', 'read_file');
-      return readCard(config.workspaceDir, path);
-    },
-  };
-}
-
-function buildFetchTranspiledModuleTool(
-  config: ToolBuilderConfig,
-): FactoryTool {
-  return {
-    name: 'fetch_transpiled_module',
-    description:
-      "Debugging tool ONLY for investigating runtime errors in .gts modules you've written. Use when an eval or instantiate validation error reports a line/column number — those line numbers refer to the transpiled output, not your .gts source, so fetching the transpiled output is how you locate the offending source construct. Never use the transpiled output as a reference for how to write code. Do NOT copy its patterns (setComponentTemplate, precompileTemplate, wire-format templates, base64 CSS imports) into source — always write idiomatic Ember / <template>-tag / CardDef source. Editing: only edit the .gts source (the transpiled output is regenerated on the next write). Auth: per-realm JWT.",
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description:
-            'Realm-relative module path. The .gts extension is optional — the realm accepts either form.',
-        },
-        realm: {
-          type: 'string',
-          enum: ['target'],
-          description: 'Which realm to read from (default: target)',
-        },
-      },
-      required: ['path'],
-    },
-    execute: async (args) => {
-      let path = requireStringArg(args, 'path', 'fetch_transpiled_module');
-      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
-      return config.client.readTranspiled(realmUrl, path);
-    },
-  };
-}
-
-function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
-  return {
-    name: 'search_realm',
-    description:
-      'Search for cards in a realm using a structured query. Auth: per-realm JWT.',
+      'Federated search across one or more realms via the realm server\'s ' +
+      '`/_federated-search` endpoint. Use this to discover cards in remote ' +
+      'realms (catalog, base realm, other users\' realms). For target-realm ' +
+      'lookups, prefer reading the local workspace directly (native filesystem ' +
+      'access). Auth: server token via the active Boxel profile.',
     parameters: {
       type: 'object',
       properties: {
@@ -326,18 +260,21 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
           type: 'object',
           description: 'Search query object (filter, sort, page)',
         },
-        realm: {
-          type: 'string',
-          enum: ['target'],
-          description: 'Which realm to search (default: target)',
+        realms: {
+          oneOf: [
+            { type: 'string' },
+            { type: 'array', items: { type: 'string' } },
+          ],
+          description:
+            'Realm URL or array of realm URLs to search. Omit to search all realms accessible to the active profile.',
         },
       },
       required: ['query'],
     },
     execute: async (args) => {
       let query = args.query as Record<string, unknown>;
-      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
-      let result = await config.client.search(realmUrl, query);
+      let realmUrls = normalizeRealmUrls(args.realms);
+      let result = await config.client.search(realmUrls, query);
       return result.ok ? { data: result.data } : { error: result.error };
     },
   };
@@ -695,10 +632,9 @@ function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
       'orchestrator still runs the full validation pipeline (which writes ' +
       'an EvalResult card) automatically after signal_done, so calling ' +
       'this is optional. When a failure reports a line/column, those ' +
-      'numbers refer to the transpiled module — use `fetch_transpiled_module` ' +
-      'to locate the offending source construct, then fix the .gts source ' +
-      '(never copy transpiled patterns back into source). Auth: realm ' +
-      'server token.',
+      'numbers refer to the transpiled module — fix the corresponding .gts ' +
+      'source construct (never copy transpiled patterns back into source). ' +
+      'Auth: realm server token.',
     parameters: {
       type: 'object',
       properties: {
@@ -795,10 +731,9 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
       'still runs the full validation pipeline (which writes an ' +
       'InstantiateResult card) automatically after signal_done, so calling ' +
       'this is optional. When a failure reports a line/column, those numbers ' +
-      'refer to the transpiled module — use `fetch_transpiled_module` to ' +
-      'locate the offending source construct, then fix the .gts source ' +
-      '(never copy transpiled patterns back into source). Auth: realm server ' +
-      'token.',
+      'refer to the transpiled module — fix the corresponding .gts source ' +
+      'construct (never copy transpiled patterns back into source). Auth: ' +
+      'realm server token.',
     parameters: {
       type: 'object',
       properties: {
@@ -943,13 +878,3 @@ function buildRegisteredTool(
   };
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function resolveRealmUrl(
-  config: ToolBuilderConfig,
-  _realm: string | undefined,
-): string {
-  return config.targetRealmUrl;
-}

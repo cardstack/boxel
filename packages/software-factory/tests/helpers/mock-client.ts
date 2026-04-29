@@ -134,10 +134,18 @@ export function createMockClient(options?: MockClientOptions): BoxelCLIClient {
     },
 
     async search(
-      realmUrl: string,
+      realmUrls: string | string[],
       query: Record<string, unknown>,
     ): Promise<SearchResult> {
-      let searchUrl = `${ensureTrailingSlash(realmUrl)}_search`;
+      let realms = Array.isArray(realmUrls) ? realmUrls : [realmUrls];
+      // Mirror the real BoxelCLIClient: federated search posts to the
+      // realm server's `_federated-search` endpoint with `realms` in the body.
+      // Fall back to a per-realm `_search` URL when no realms are provided
+      // so legacy single-realm callers still hit the mock fetch.
+      let searchUrl =
+        realms.length > 0
+          ? `${ensureTrailingSlash(realms[0])}_federated-search`
+          : '_federated-search';
       try {
         let response = await fetchImpl(searchUrl, {
           method: 'QUERY',
@@ -145,7 +153,7 @@ export function createMockClient(options?: MockClientOptions): BoxelCLIClient {
             Accept: 'application/vnd.card+json',
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(query),
+          body: JSON.stringify({ realms, ...query }),
         });
         if (!response.ok) {
           let body = await response.text();
