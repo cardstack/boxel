@@ -24,6 +24,9 @@ datasources:
     jsonData:
       httpMethod: POST
       sigV4Auth: true
-      sigV4AuthType: ec2_iam_role
+      # `default` so SigV4 uses the AWS SDK default credential chain (ECS
+      # task role here). AMG's `ec2_iam_role` is a legacy alias newer
+      # Grafana rejects with a 403.
+      sigV4AuthType: default
       sigV4Region: us-east-1
       sigV4Service: aps
