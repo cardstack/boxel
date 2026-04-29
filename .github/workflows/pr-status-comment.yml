@@ -75,7 +75,7 @@ jobs:
             while read -r name; do
               [ -n "$name" ] || continue
               [ -d "slots/$name" ] && continue
-              gh run download "$run_id" -n "$name" -D "slots/$name" || true
+              gh run download -R "$REPO" "$run_id" -n "$name" -D "slots/$name" || true
             done <<<"$artifacts"
           done < runs.txt
 
