@@ -34,7 +34,7 @@ export class BindPointerDown extends Modifier<{
     this.#handler = handler;
   }
 
-  willRemove() {
+  willDestroy() {
     if (this.#element && this.#handler) {
       this.#element.removeEventListener('pointerdown', this.#handler);
     }

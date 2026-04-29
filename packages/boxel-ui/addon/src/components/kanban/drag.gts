@@ -356,6 +356,7 @@ export class KanbanDragManager {
     }
 
     if (container && finalInsertion) {
+      this.scrollInsertionTargetIntoView(container, finalInsertion);
       this.measureSettlePosition(container);
     }
 
@@ -384,6 +385,12 @@ export class KanbanDragManager {
 
   onKeyDown = (event: Event): void => {
     const e = event as KeyboardEvent;
+
+    if (e.key === 'Tab' && this.interactionMode === 'kb-drag') {
+      e.preventDefault();
+      this.cancelKeyboardDrag();
+      return;
+    }
 
     if (e.key === 'Escape') {
       if (this.interactionMode === 'kb-drag') {
@@ -465,6 +472,51 @@ export class KanbanDragManager {
     }
   }
 
+  private scrollInsertionTargetIntoView(
+    container: HTMLElement,
+    insertion: InsertionPoint,
+  ): void {
+    const { column, insertBeforeIndex } = insertion;
+    const colEl = container.querySelector(
+      `[data-kanban-column="${column}"]`,
+    ) as HTMLElement | null;
+    const bodyEl = colEl?.querySelector(
+      '[data-kanban-col-body]',
+    ) as HTMLElement | null;
+    if (!bodyEl) {
+      return;
+    }
+
+    let targetEl: HTMLElement | null = null;
+    if (insertBeforeIndex !== -1) {
+      targetEl = container.querySelector(
+        `[data-card-index="${insertBeforeIndex}"]`,
+      ) as HTMLElement | null;
+    } else {
+      const placements = this.args.placements;
+      const colCards = placements
+        .filter((p) => p.column === column && p.index !== this.dragIndex)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+      const last = colCards[colCards.length - 1];
+      if (last) {
+        targetEl = container.querySelector(
+          `[data-card-index="${last.index}"]`,
+        ) as HTMLElement | null;
+      }
+    }
+
+    if (targetEl) {
+      const targetRect = targetEl.getBoundingClientRect();
+      const bodyRect = bodyEl.getBoundingClientRect();
+      if (
+        targetRect.bottom > bodyRect.bottom ||
+        targetRect.top < bodyRect.top
+      ) {
+        targetEl.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }
+
   private measureSettlePosition(container: HTMLElement): void {
     if (!this.insertion) {
       return;
@@ -489,11 +541,17 @@ export class KanbanDragManager {
       return;
     }
 
+    const bodyCs = getComputedStyle(bodyEl);
+    const bodyPadTop = parseFloat(bodyCs.paddingTop);
+    const bodyPadLeft = parseFloat(bodyCs.paddingLeft);
+    const bodyPadRight = parseFloat(bodyCs.paddingRight);
+    const gap = parseFloat(bodyCs.gap) || 0;
+
     if (colCards.length === 0) {
       const bodyRect = bodyEl.getBoundingClientRect();
-      this.settleX = bodyRect.left + 4;
-      this.settleY = bodyRect.top + 8;
-      this.settleWidth = bodyRect.width - 8;
+      this.settleX = bodyRect.left + bodyPadLeft;
+      this.settleY = bodyRect.top + bodyPadTop;
+      this.settleWidth = bodyRect.width - bodyPadLeft - bodyPadRight;
       this.settleHeight = this.dragGhostHeight;
       return;
     }
@@ -509,7 +567,7 @@ export class KanbanDragManager {
         const cs = getComputedStyle(lastCardEl);
         const matrix = new DOMMatrix(cs.transform);
         this.settleX = rect.left - matrix.m41;
-        this.settleY = rect.bottom - matrix.m42 + 6;
+        this.settleY = rect.bottom - matrix.m42 + gap;
         this.settleWidth = rect.width;
         this.settleHeight = this.dragGhostHeight;
       }
@@ -690,6 +748,9 @@ export class KanbanDragManager {
     } else {
       const delta = direction === 'left' ? -1 : 1;
       const totalCols = this.args.columnCount;
+      const currentRowIndex = colCards(current.column).findIndex(
+        (p) => p.index === current.index,
+      );
       let col = current.column + delta;
       while (col >= 0 && col < totalCols) {
         if (!this.isColumnVisible(col)) {
@@ -698,7 +759,7 @@ export class KanbanDragManager {
         }
         const cards = colCards(col);
         if (cards.length > 0) {
-          targetCard = cards[Math.min(current.sortOrder - 1, cards.length - 1)];
+          targetCard = cards[Math.min(currentRowIndex, cards.length - 1)];
           break;
         }
         col += delta;
