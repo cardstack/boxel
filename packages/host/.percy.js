@@ -28,8 +28,8 @@ module.exports = {
        * highlighting verification for stability; Percy's job is layout
        * regressions, not grammar correctness.)
        */
-      .monaco-editor .view-lines span[class^="mtk"],
-      .monaco-editor .view-lines span[class*=" mtk"] {
+      .monaco-editor .view-lines,
+      .monaco-editor .view-lines * {
         color: inherit !important;
       }
       /*
