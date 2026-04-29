@@ -33,6 +33,21 @@ module.exports = {
         color: inherit !important;
       }
       /*
+       * Diff editors in inline mode produce a sub-pixel text-positioning
+       * flip-flop on Edge: consecutive captures of identical content
+       * land at slightly different vertical sub-pixel offsets, shifting
+       * the anti-aliasing across every text row in the diff. Approving
+       * one capture just primes the other to flake on the next run.
+       * Regular Monaco code blocks (single editor) are stable; only
+       * `.monaco-diff-editor` shows this. Hide diff-editor text from
+       * Percy — the test still asserts content/structure programmatically
+       * and Percy still captures the diff editor's frame, gutter, and
+       * surrounding chrome.
+       */
+      .monaco-diff-editor .view-lines {
+        visibility: hidden;
+      }
+      /*
        * Land every CSS animation and transition on its final state so Percy
        * captures aren't racing the animation clock. Negative delay + 1ms
        * duration fast-forwards each animation past its last keyframe before
