@@ -1,5 +1,6 @@
-import type { SharedTests } from '../helpers';
-import { transpileAmd } from '../amd-transpile';
+import { module, test } from 'qunit';
+
+import { transpileAmd } from '@cardstack/runtime-common/amd-transpile';
 
 // Run an AMD-wrapped source string with a fake `define` that captures
 // (moduleId, deps, factory). Stub each non-`exports`/`__import_meta__` dep
@@ -48,8 +49,8 @@ function runAmd(
 
 const moduleId = 'http://test/m.js';
 
-const tests: SharedTests<Record<string, never>> = Object.freeze({
-  'wraps an empty module in define()': async (assert) => {
+module('Unit | amd-transpile (CS-10977)', function () {
+  test('wraps an empty module in define()', function (assert) {
     let out = transpileAmd('', { moduleId });
     let { moduleId: capturedId, deps, exports } = runAmd(out);
     assert.strictEqual(capturedId, moduleId);
@@ -58,24 +59,24 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       Object.getOwnPropertyDescriptor(exports, '__esModule')!.value === true,
       '__esModule marker is set',
     );
-  },
+  });
 
-  'export const X = expr': async (assert) => {
+  test('export const X = expr', function (assert) {
     let out = transpileAmd(`export const X = 42;`, { moduleId });
     let { exports } = runAmd(out);
     assert.strictEqual(exports.X, 42);
-  },
+  });
 
-  'export let with body-time mutation': async (assert) => {
+  test('export let with body-time mutation', function (assert) {
     // Mutations made INSIDE the module body should show up.
     let out = transpileAmd(`export let counter = 0; counter = 5;`, {
       moduleId,
     });
     let { exports } = runAmd(out);
     assert.strictEqual(exports.counter, 5, 'reflects body-end value');
-  },
+  });
 
-  'export let mutated by exported function (live binding)': async (assert) => {
+  test('export let mutated by exported function (live binding)', function (assert) {
     // CS-10977 regression: `export let counter; export function inc() { counter++; }`
     // — after `inc()` the importer must see counter+1. The fix is a getter
     // on `_exports.counter` so the read goes through the local variable.
@@ -96,11 +97,9 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
     );
     (exports.increment as () => void)();
     assert.strictEqual(exports.counter, 2);
-  },
+  });
 
-  'circular dep: imported value is read at use-time, not import-time': async (
-    assert,
-  ) => {
+  test('circular dep: imported value is read at use-time, not import-time', function (assert) {
     // CS-10977 regression: when card-api and contains-many-component import
     // each other, the loader evaluates the deps before the body. If the
     // transpiler snapshots `_dep.x` at body entry, that snapshot is `undefined`
@@ -113,10 +112,7 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       { moduleId },
     );
     // Stub `card-api` with a partially-evaluated _exports object that gets
-    // populated AFTER our module's body has run. If we snapshot, `primitive`
-    // captures undefined and `check(undefined)` returns true. If we read at
-    // call time, `primitive` is the post-body Symbol and `check(undefined)`
-    // returns false.
+    // populated AFTER our module's body has run.
     const cardApi: { primitive?: symbol } = {};
     let { exports } = runAmd(out, { 'card-api': cardApi });
     cardApi.primitive = Symbol('primitive');
@@ -130,12 +126,9 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       false,
       'does not snapshot undefined',
     );
-  },
+  });
 
-  'shadowed import name is not rewritten': async (assert) => {
-    // If a function declares a parameter / local with the same name as an
-    // imported binding, references inside that scope use the local — not
-    // the dep arg.
+  test('shadowed import name is not rewritten', function (assert) {
     let out = transpileAmd(
       `import { x } from 'foo';
        export function outer(x) { return x; }
@@ -153,194 +146,49 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       'imported',
       'unshadowed reference goes through the dep',
     );
-  },
+  });
 
-  'export function f': async (assert) => {
+  test('export function f', function (assert) {
     let out = transpileAmd(`export function f() { return 7; }`, { moduleId });
     let { exports } = runAmd(out);
     assert.strictEqual(typeof exports.f, 'function');
     assert.strictEqual((exports.f as () => number)(), 7);
-  },
+  });
 
-  'export class C': async (assert) => {
+  test('export class C', function (assert) {
     let out = transpileAmd(`export class C { ping() { return 'pong'; } }`, {
       moduleId,
     });
     let { exports } = runAmd(out);
     let inst = new (exports.C as new () => { ping: () => string })();
     assert.strictEqual(inst.ping(), 'pong');
-  },
+  });
 
-  'export default expression': async (assert) => {
+  test('export default expression', function (assert) {
     let out = transpileAmd(`export default 1 + 2;`, { moduleId });
     let { exports } = runAmd(out);
     assert.strictEqual(exports.default, 3);
-  },
+  });
 
-  'export default named function': async (assert) => {
+  test('export default named function', function (assert) {
     let out = transpileAmd(`export default function f() { return 9; }`, {
       moduleId,
     });
     let { exports } = runAmd(out);
     assert.strictEqual((exports.default as () => number)(), 9);
-  },
+  });
 
-  'export default anonymous class': async (assert) => {
+  test('export default anonymous class', function (assert) {
     let out = transpileAmd(
       `export default class { hello() { return 'hi'; } };`,
-      {
-        moduleId,
-      },
+      { moduleId },
     );
     let { exports } = runAmd(out);
     let inst = new (exports.default as new () => { hello: () => string })();
     assert.strictEqual(inst.hello(), 'hi');
-  },
+  });
 
-  'named import binds via destructuring': async (assert) => {
-    let out = transpileAmd(
-      `import { a, b as c } from 'foo'; export const r = a + c;`,
-      { moduleId },
-    );
-    let { exports, deps } = runAmd(out, { foo: { a: 10, b: 20 } });
-    assert.true(deps.includes('foo'), 'foo declared as dep');
-    assert.strictEqual(exports.r, 30);
-  },
-
-  'default import uses .default': async (assert) => {
-    let out = transpileAmd(`import D from 'foo'; export const r = D.x;`, {
-      moduleId,
-    });
-    let { exports } = runAmd(out, { foo: { default: { x: 'ok' } } });
-    assert.strictEqual(exports.r, 'ok');
-  },
-
-  'namespace import binds the dep arg': async (assert) => {
-    let out = transpileAmd(
-      `import * as ns from 'foo'; export const r = ns.a + ns.b;`,
-      { moduleId },
-    );
-    let { exports } = runAmd(out, { foo: { a: 1, b: 2 } });
-    assert.strictEqual(exports.r, 3);
-  },
-
-  'side-effect-only import declares the dep': async (assert) => {
-    let out = transpileAmd(`import 'foo';`, { moduleId });
-    let { deps } = runAmd(out, { foo: {} });
-    assert.true(deps.includes('foo'), 'foo declared as dep');
-  },
-
-  're-export from foo uses live-binding getter': async (assert) => {
-    let out = transpileAmd(`export { x as y } from 'foo';`, { moduleId });
-    // Mutate `foo.x` *after* the factory has run; reading `_exports.y`
-    // must see the new value (proves it's a getter, not a snapshot).
-    let foo: { x: number } = { x: 1 };
-    let { exports } = runAmd(out, { foo });
-    assert.strictEqual(exports.y, 1, 'initial value');
-    foo.x = 99;
-    assert.strictEqual(exports.y, 99, 'live-binding updates flow through');
-  },
-
-  're-export of imported binding uses live-binding getter': async (assert) => {
-    let out = transpileAmd(`import { x } from 'foo'; export { x };`, {
-      moduleId,
-    });
-    let foo: { x: number } = { x: 5 };
-    let { exports } = runAmd(out, { foo });
-    assert.strictEqual(exports.x, 5);
-    foo.x = 50;
-    assert.strictEqual(exports.x, 50, 'live binding through dep arg');
-  },
-
-  'export * from foo installs getters for each key': async (assert) => {
-    let out = transpileAmd(`export * from 'foo';`, { moduleId });
-    let foo: Record<string, unknown> = { a: 1, b: 2, default: 999 };
-    let { exports } = runAmd(out, { foo });
-    assert.strictEqual(exports.a, 1);
-    assert.strictEqual(exports.b, 2);
-    assert.strictEqual(
-      exports.default,
-      undefined,
-      'export * skips the default key',
-    );
-    foo.a = 7;
-    assert.strictEqual(exports.a, 7, 'live-binding via getter');
-  },
-
-  'export * skips names that this module declares explicitly': async (
-    assert,
-  ) => {
-    let out = transpileAmd(`export const a = 'local'; export * from 'foo';`, {
-      moduleId,
-    });
-    let { exports } = runAmd(out, { foo: { a: 'remote', b: 2 } });
-    assert.strictEqual(exports.a, 'local', 'local wins over re-export *');
-    assert.strictEqual(exports.b, 2);
-  },
-
-  'export * as ns from foo installs a namespace getter': async (assert) => {
-    let out = transpileAmd(`export * as ns from 'foo';`, { moduleId });
-    let foo = { a: 1 };
-    let { exports } = runAmd(out, { foo });
-    assert.deepEqual(exports.ns, foo);
-  },
-
-  'import.meta is replaced and added to deps': async (assert) => {
-    let out = transpileAmd(`export const u = import.meta.url;`, { moduleId });
-    let { exports, deps } = runAmd(out, {
-      __import_meta__: { url: 'meta-url-here' },
-    });
-    assert.true(deps.includes('__import_meta__'), 'import meta declared');
-    assert.strictEqual(exports.u, 'meta-url-here');
-  },
-
-  'string literal containing "import.meta" is preserved': async (assert) => {
-    // Regression: regex-based replacement would corrupt this; the AST walk
-    // we use only matches MetaProperty nodes.
-    let out = transpileAmd(`export const s = "import.meta.url is a thing";`, {
-      moduleId,
-    });
-    let { exports, deps } = runAmd(out);
-    assert.strictEqual(exports.s, 'import.meta.url is a thing');
-    assert.false(
-      deps.includes('__import_meta__'),
-      'no actual import.meta usage, no dep added',
-    );
-  },
-
-  'export { a, b as c } of locals': async (assert) => {
-    let out = transpileAmd(`const a = 1; const b = 2; export { a, b as c };`, {
-      moduleId,
-    });
-    let { exports } = runAmd(out);
-    assert.strictEqual(exports.a, 1);
-    assert.strictEqual(exports.c, 2);
-  },
-
-  'mixed default + named import on same statement': async (assert) => {
-    let out = transpileAmd(
-      `import D, { a } from 'foo'; export const r = D.id + a;`,
-      { moduleId },
-    );
-    let { exports } = runAmd(out, { foo: { default: { id: 'X' }, a: 'Y' } });
-    assert.strictEqual(exports.r, 'XY');
-  },
-
-  'multiple exports of the same import are all live': async (assert) => {
-    let out = transpileAmd(
-      `import { v } from 'foo'; export { v, v as alias };`,
-      { moduleId },
-    );
-    let foo: { v: number } = { v: 1 };
-    let { exports } = runAmd(out, { foo });
-    foo.v = 100;
-    assert.strictEqual(exports.v, 100);
-    assert.strictEqual(exports.alias, 100);
-  },
-
-  'export default with parens around expression (regression P0)': async (
-    assert,
-  ) => {
+  test('export default with parens around expression (regression P0)', function (assert) {
     // `export default (foo);` — acorn's `decl` AST positions skip the
     // source-level parens, so an earlier version produced
     // `var __default$0 = (foo));` (double `)` → SyntaxError). The fix
@@ -349,29 +197,27 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
     let out = transpileAmd(`export default (1 + 2);`, { moduleId });
     let { exports } = runAmd(out);
     assert.strictEqual(exports.default, 3);
-  },
+  });
 
-  'export default IIFE (regression P0)': async (assert) => {
-    let out = transpileAmd(`export default (function () { return 9; })();`, {
-      moduleId,
-    });
+  test('export default IIFE (regression P0)', function (assert) {
+    let out = transpileAmd(
+      `export default (function () { return 9; })();`,
+      { moduleId },
+    );
     let { exports } = runAmd(out);
     assert.strictEqual(exports.default, 9);
-  },
+  });
 
-  'export default parenthesised function expression (regression P0)': async (
-    assert,
-  ) => {
-    let out = transpileAmd(`export default (function () { return 'pf'; });`, {
-      moduleId,
-    });
+  test('export default parenthesised function expression (regression P0)', function (assert) {
+    let out = transpileAmd(
+      `export default (function () { return 'pf'; });`,
+      { moduleId },
+    );
     let { exports } = runAmd(out);
     assert.strictEqual((exports.default as () => string)(), 'pf');
-  },
+  });
 
-  'shorthand property of an imported name (regression P0-1)': async (
-    assert,
-  ) => {
+  test('shorthand property of an imported name (regression P0-1)', function (assert) {
     // `import { x } from 'foo'; const r = { x };` — naive overwrite of
     // the shorthand identifier produces `{ _foo$1.x }` (SyntaxError).
     // We must emit the explicit `x: _foo$1.x` form instead.
@@ -382,11 +228,9 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
     );
     let { exports } = runAmd(out, { auth: { user: 'live' } });
     assert.deepEqual((exports.pack as () => unknown)(), { user: 'live' });
-  },
+  });
 
-  'for-let loop variable shadowing an import (regression P0-2a)': async (
-    assert,
-  ) => {
+  test('for-let loop variable shadowing an import (regression P0-2a)', function (assert) {
     // `for (let i = 0; i < N; i++)` where `i` is also imported — the
     // loop variable must shadow the import inside the test/update/body.
     let out = transpileAmd(
@@ -400,14 +244,9 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
     );
     let { exports } = runAmd(out, { shadow: { i: 'IMPORTED' } });
     assert.strictEqual((exports.loop as () => number)(), 2);
-  },
+  });
 
-  'for-in var hoisting through function scope (regression P0-2b)': async (
-    assert,
-  ) => {
-    // `for (var k in obj) {}` — `k` hoists to the enclosing function
-    // scope and must shadow the imported `k` for both the loop body
-    // AND the post-loop reference.
+  test('for-in var hoisting through function scope (regression P0-2b)', function (assert) {
     let out = transpileAmd(
       `import { k } from 'shadow';
        export function readK() {
@@ -421,9 +260,9 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
     let result = (exports.readK as () => [string, string])();
     assert.strictEqual(result[0], 'b', 'post-loop k holds the last loop value');
     assert.strictEqual(result[1], 'b', 'in-loop k is the var, not the import');
-  },
+  });
 
-  'computed key in destructured export (regression P0-3)': async (assert) => {
+  test('computed key in destructured export (regression P0-3)', function (assert) {
     // `export const { [k]: v } = obj` where `k` is imported — the
     // computed-key reference must be rewritten so the destructure picks
     // the right property at runtime.
@@ -434,9 +273,149 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
     );
     let { exports } = runAmd(out, { cfg: { keyName: 'actualKey' } });
     assert.strictEqual(exports.chosen, 'value!');
-  },
+  });
 
-  'export default of an imported binding': async (assert) => {
+  test('named import binds via destructuring', function (assert) {
+    let out = transpileAmd(
+      `import { a, b as c } from 'foo'; export const r = a + c;`,
+      { moduleId },
+    );
+    let { exports, deps } = runAmd(out, { foo: { a: 10, b: 20 } });
+    assert.true(deps.includes('foo'), 'foo declared as dep');
+    assert.strictEqual(exports.r, 30);
+  });
+
+  test('default import uses .default', function (assert) {
+    let out = transpileAmd(`import D from 'foo'; export const r = D.x;`, {
+      moduleId,
+    });
+    let { exports } = runAmd(out, { foo: { default: { x: 'ok' } } });
+    assert.strictEqual(exports.r, 'ok');
+  });
+
+  test('namespace import binds the dep arg', function (assert) {
+    let out = transpileAmd(
+      `import * as ns from 'foo'; export const r = ns.a + ns.b;`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out, { foo: { a: 1, b: 2 } });
+    assert.strictEqual(exports.r, 3);
+  });
+
+  test('side-effect-only import declares the dep', function (assert) {
+    let out = transpileAmd(`import 'foo';`, { moduleId });
+    let { deps } = runAmd(out, { foo: {} });
+    assert.true(deps.includes('foo'), 'foo declared as dep');
+  });
+
+  test('re-export from foo uses live-binding getter', function (assert) {
+    let out = transpileAmd(`export { x as y } from 'foo';`, { moduleId });
+    let foo: { x: number } = { x: 1 };
+    let { exports } = runAmd(out, { foo });
+    assert.strictEqual(exports.y, 1, 'initial value');
+    foo.x = 99;
+    assert.strictEqual(exports.y, 99, 'live-binding updates flow through');
+  });
+
+  test('re-export of imported binding uses live-binding getter', function (assert) {
+    let out = transpileAmd(`import { x } from 'foo'; export { x };`, {
+      moduleId,
+    });
+    let foo: { x: number } = { x: 5 };
+    let { exports } = runAmd(out, { foo });
+    assert.strictEqual(exports.x, 5);
+    foo.x = 50;
+    assert.strictEqual(exports.x, 50, 'live binding through dep arg');
+  });
+
+  test('export * from foo installs getters for each key', function (assert) {
+    let out = transpileAmd(`export * from 'foo';`, { moduleId });
+    let foo: Record<string, unknown> = { a: 1, b: 2, default: 999 };
+    let { exports } = runAmd(out, { foo });
+    assert.strictEqual(exports.a, 1);
+    assert.strictEqual(exports.b, 2);
+    assert.strictEqual(
+      exports.default,
+      undefined,
+      'export * skips the default key',
+    );
+    foo.a = 7;
+    assert.strictEqual(exports.a, 7, 'live-binding via getter');
+  });
+
+  test('export * skips names that this module declares explicitly', function (assert) {
+    let out = transpileAmd(
+      `export const a = 'local'; export * from 'foo';`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out, { foo: { a: 'remote', b: 2 } });
+    assert.strictEqual(exports.a, 'local', 'local wins over re-export *');
+    assert.strictEqual(exports.b, 2);
+  });
+
+  test('export * as ns from foo installs a namespace getter', function (assert) {
+    let out = transpileAmd(`export * as ns from 'foo';`, { moduleId });
+    let foo = { a: 1 };
+    let { exports } = runAmd(out, { foo });
+    assert.deepEqual(exports.ns, foo);
+  });
+
+  test('import.meta is replaced and added to deps', function (assert) {
+    let out = transpileAmd(`export const u = import.meta.url;`, { moduleId });
+    let { exports, deps } = runAmd(out, {
+      __import_meta__: { url: 'meta-url-here' },
+    });
+    assert.true(deps.includes('__import_meta__'), 'import meta declared');
+    assert.strictEqual(exports.u, 'meta-url-here');
+  });
+
+  test('string literal containing "import.meta" is preserved', function (assert) {
+    // Regression: regex-based replacement would corrupt this; the AST walk
+    // we use only matches MetaProperty nodes.
+    let out = transpileAmd(
+      `export const s = "import.meta.url is a thing";`,
+      { moduleId },
+    );
+    let { exports, deps } = runAmd(out);
+    assert.strictEqual(exports.s, 'import.meta.url is a thing');
+    assert.false(
+      deps.includes('__import_meta__'),
+      'no actual import.meta usage, no dep added',
+    );
+  });
+
+  test('export { a, b as c } of locals', function (assert) {
+    let out = transpileAmd(
+      `const a = 1; const b = 2; export { a, b as c };`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out);
+    assert.strictEqual(exports.a, 1);
+    assert.strictEqual(exports.c, 2);
+  });
+
+  test('mixed default + named import on same statement', function (assert) {
+    let out = transpileAmd(
+      `import D, { a } from 'foo'; export const r = D.id + a;`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out, { foo: { default: { id: 'X' }, a: 'Y' } });
+    assert.strictEqual(exports.r, 'XY');
+  });
+
+  test('multiple exports of the same import are all live', function (assert) {
+    let out = transpileAmd(
+      `import { v } from 'foo'; export { v, v as alias };`,
+      { moduleId },
+    );
+    let foo: { v: number } = { v: 1 };
+    let { exports } = runAmd(out, { foo });
+    foo.v = 100;
+    assert.strictEqual(exports.v, 100);
+    assert.strictEqual(exports.alias, 100);
+  });
+
+  test('export default of an imported binding', function (assert) {
     // Regression for the exact bug that broke base-realm indexing — a
     // module like `import x from 'foo'; export default x;`. The
     // identifier-rewrite walk and the export-default rewrite must agree
@@ -452,18 +431,9 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       sanitize: { sanitizeHtmlSafe: 'live-fn' },
     });
     assert.strictEqual(exports.default, 'live-fn');
-  },
+  });
 
-  'export default forward-references a const declared later (TDZ-safe)': async (
-    assert,
-  ) => {
-    // ESM technically allows the source order `export default Foo; const Foo`,
-    // but the in-place assignment we used to emit hit a TDZ ReferenceError.
-    // The fix captures into `var __default$N = (Foo);` at the source
-    // position (still TDZ for `const Foo` declared LATER, same as ESM)
-    // and defers the `_exports.default` setter to the end of the body.
-    // We test the SAFE order here (const declared first), where the new
-    // approach must also keep working.
+  test('export default forward-references a const declared later (TDZ-safe)', function (assert) {
     let out = transpileAmd(
       `const greeting = 'hi';
        export default greeting;`,
@@ -471,11 +441,9 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
     );
     let { exports } = runAmd(out);
     assert.strictEqual(exports.default, 'hi');
-  },
+  });
 
-  'export default expression with imported name inside': async (assert) => {
-    // `export default fn(x)` where x is imported — the walker must rewrite
-    // `x` inside the captured expression.
+  test('export default expression with imported name inside', function (assert) {
     let out = transpileAmd(
       `import { x } from 'foo';
        export default { value: x, more: x };`,
@@ -483,31 +451,29 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
     );
     let { exports } = runAmd(out, { foo: { x: 42 } });
     assert.deepEqual(exports.default, { value: 42, more: 42 });
-  },
+  });
 
-  'destructured export const { a, b } = obj': async (assert) => {
-    // Codex P1 — was throwing; now walks the pattern and emits a getter
-    // per bound name.
-    let out = transpileAmd(`export const { a, b } = { a: 1, b: 2 };`, {
-      moduleId,
-    });
+  test('destructured export const { a, b } = obj', function (assert) {
+    let out = transpileAmd(
+      `export const { a, b } = { a: 1, b: 2 };`,
+      { moduleId },
+    );
     let { exports } = runAmd(out);
     assert.strictEqual(exports.a, 1);
     assert.strictEqual(exports.b, 2);
-  },
+  });
 
-  'destructured export const [first, second] = arr': async (assert) => {
-    let out = transpileAmd(`export const [first, second] = [10, 20];`, {
-      moduleId,
-    });
+  test('destructured export const [first, second] = arr', function (assert) {
+    let out = transpileAmd(
+      `export const [first, second] = [10, 20];`,
+      { moduleId },
+    );
     let { exports } = runAmd(out);
     assert.strictEqual(exports.first, 10);
     assert.strictEqual(exports.second, 20);
-  },
+  });
 
-  'collision-safe __default$N synthesised name': async (assert) => {
-    // If the source already declares `__default$0`, the synthesised temp
-    // for the anonymous default must not collide.
+  test('collision-safe __default$N synthesised name', function (assert) {
     let out = transpileAmd(
       `const __default$0 = 'hand-coded';
        export default function() { return __default$0; };`,
@@ -519,16 +485,14 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       'hand-coded',
       'hand-coded __default$0 still accessible',
     );
-  },
+  });
 
-  'identical-name import binding via { x: x }': async (assert) => {
-    // Defensive: the `local === imported` shortcut must produce valid JS.
-    let out = transpileAmd(`import { foo } from 'src'; export const r = foo;`, {
-      moduleId,
-    });
+  test('identical-name import binding via { x: x }', function (assert) {
+    let out = transpileAmd(
+      `import { foo } from 'src'; export const r = foo;`,
+      { moduleId },
+    );
     let { exports } = runAmd(out, { src: { foo: 'BAR' } });
     assert.strictEqual(exports.r, 'BAR');
-  },
+  });
 });
-
-export default tests;
