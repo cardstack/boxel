@@ -831,6 +831,10 @@ module(basename(__filename), function () {
           );
 
         assert.strictEqual(unpublishResponse.status, 200, 'HTTP 200 status');
+        // Phase 3: unmount is reconciler-driven (NOTIFY realm_registry).
+        // Force a reconcile pass so the published realm is unmounted on
+        // this instance before the "404 after unpublish" assertion below.
+        await testRealmServer.testingOnlyReconcile();
         assert.strictEqual(
           unpublishResponse.body.data.type,
           'unpublished_realm',
