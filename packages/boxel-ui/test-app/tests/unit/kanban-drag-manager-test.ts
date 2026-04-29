@@ -48,8 +48,8 @@ function makeMultiBoard(): {
 
   col0.setAttribute('data-kanban-column', '0');
   col1.setAttribute('data-kanban-column', '1');
-  body0.className = 'col-body';
-  body1.className = 'col-body';
+  body0.setAttribute('data-kanban-col-body', '');
+  body1.setAttribute('data-kanban-col-body', '');
   card0.setAttribute('data-card-index', '0');
   card1.setAttribute('data-card-index', '1');
   card2.setAttribute('data-card-index', '2');
@@ -89,8 +89,8 @@ function makeBoard(): HTMLElement {
 
   column0.setAttribute('data-kanban-column', '0');
   column1.setAttribute('data-kanban-column', '1');
-  body0.className = 'col-body';
-  body1.className = 'col-body';
+  body0.setAttribute('data-kanban-col-body', '');
+  body1.setAttribute('data-kanban-col-body', '');
   card0.setAttribute('data-card-index', '0');
   card1.setAttribute('data-card-index', '1');
 
@@ -170,7 +170,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     assert.verifySteps([]);
   });
 
-  test('moving beyond threshold activates drag and dropping emits updated placements on the first move', async function (assert) {
+  test('moving beyond threshold activates drag and dropping emits updated placements', async function (assert) {
     let changedPlacements: KanbanPlacement[] | undefined;
 
     let manager = new KanbanDragManager({
@@ -576,21 +576,20 @@ module('Unit | kanban-drag-manager', function (hooks) {
       return { event, prevented: () => prevented };
     }
 
-    test('Space on a focused card enters kb-drag mode', function (assert) {
+    test('Space or Enter on a focused card enters kb-drag mode', function (assert) {
       const mgr = makeKbManager();
       const card0 = mc.querySelector('[data-card-index="0"]')!;
-      const { event, prevented } = keyEvent(' ', card0);
-      mgr.onKeyDown(event);
-      assert.true(prevented());
+
+      const { event: spaceEvent, prevented: spacePrevent } = keyEvent(' ', card0);
+      mgr.onKeyDown(spaceEvent);
+      assert.true(spacePrevent());
       assert.strictEqual(mgr.interactionMode, 'kb-drag');
       assert.strictEqual(mgr.activeDragIndex, 0);
       assert.strictEqual(mgr.kbGrabIndex, 0);
       assert.true(mgr.announcement.startsWith('Grabbed'));
-    });
 
-    test('Enter on a focused card also enters kb-drag mode', function (assert) {
-      const mgr = makeKbManager();
-      const card0 = mc.querySelector('[data-card-index="0"]')!;
+      // Enter also enters kb-drag
+      mgr.onKeyDown(keyEvent('Escape').event);
       mgr.onKeyDown(keyEvent('Enter', card0).event);
       assert.strictEqual(mgr.interactionMode, 'kb-drag');
       assert.strictEqual(mgr.activeDragIndex, 0);
@@ -615,7 +614,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
       });
     });
 
-    test('ArrowDown in kb-drag moves insertion to end of column', function (assert) {
+    test('ArrowDown in kb-drag moves insertion down; stops at column boundary', function (assert) {
       const mgr = makeKbManager();
       const card0 = mc.querySelector('[data-card-index="0"]')!;
       mgr.onKeyDown(keyEvent(' ', card0).event);
@@ -626,13 +625,8 @@ module('Unit | kanban-drag-manager', function (hooks) {
         position: 3,
       });
       assert.strictEqual(mgr.announcement, 'Position 2 of 2.');
-    });
 
-    test('ArrowDown at end of column does not change insertion', function (assert) {
-      const mgr = makeKbManager();
-      // card2 is last in col 0 (sortOrder 2)
-      const card2 = mc.querySelector('[data-card-index="2"]')!;
-      mgr.onKeyDown(keyEvent(' ', card2).event);
+      // already at end — another ArrowDown should not change insertion
       const before = mgr.insertion;
       mgr.onKeyDown(keyEvent('ArrowDown').event);
       assert.deepEqual(mgr.insertion, before);
@@ -653,21 +647,13 @@ module('Unit | kanban-drag-manager', function (hooks) {
       });
     });
 
-    test('ArrowRight in kb-drag moves insertion to next column', function (assert) {
+    test('ArrowRight and ArrowLeft in kb-drag move insertion across columns', function (assert) {
       const mgr = makeKbManager();
       const card0 = mc.querySelector('[data-card-index="0"]')!;
       mgr.onKeyDown(keyEvent(' ', card0).event);
       mgr.onKeyDown(keyEvent('ArrowRight').event);
       assert.strictEqual(mgr.insertion?.column, 1);
       assert.true(mgr.announcement.startsWith('Column 2'));
-    });
-
-    test('ArrowLeft after ArrowRight returns insertion to original column', function (assert) {
-      const mgr = makeKbManager();
-      const card0 = mc.querySelector('[data-card-index="0"]')!;
-      mgr.onKeyDown(keyEvent(' ', card0).event);
-      mgr.onKeyDown(keyEvent('ArrowRight').event);
-      assert.strictEqual(mgr.insertion?.column, 1);
       mgr.onKeyDown(keyEvent('ArrowLeft').event);
       assert.strictEqual(mgr.insertion?.column, 0);
     });
@@ -693,7 +679,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
       assert.strictEqual(mgr.insertion?.column, 2);
     });
 
-    test('Space in kb-drag commits the drop and fires onChange', function (assert) {
+    test('Space or Enter in kb-drag commits the drop and fires onChange', function (assert) {
       let changed: KanbanPlacement[] | undefined;
       const mgr = makeKbManager({ onChange: (p) => (changed = p) });
       const card0 = mc.querySelector('[data-card-index="0"]')!;
@@ -709,16 +695,14 @@ module('Unit | kanban-drag-manager', function (hooks) {
         'card 0 should land in column 1',
       );
       assert.strictEqual(mgr.announcement, 'Card dropped.');
-    });
 
-    test('Enter in kb-drag also commits the drop', function (assert) {
-      let changed: KanbanPlacement[] | undefined;
-      const mgr = makeKbManager({ onChange: (p) => (changed = p) });
-      const card0 = mc.querySelector('[data-card-index="0"]')!;
-      mgr.onKeyDown(keyEvent(' ', card0).event);
-      mgr.onKeyDown(keyEvent('ArrowRight').event);
-      mgr.onKeyDown(keyEvent('Enter').event);
-      assert.strictEqual(mgr.interactionMode, 'idle');
+      // Enter also commits
+      changed = undefined;
+      const mgr2 = makeKbManager({ onChange: (p) => (changed = p) });
+      mgr2.onKeyDown(keyEvent(' ', card0).event);
+      mgr2.onKeyDown(keyEvent('ArrowRight').event);
+      mgr2.onKeyDown(keyEvent('Enter').event);
+      assert.strictEqual(mgr2.interactionMode, 'idle');
       assert.notStrictEqual(changed, undefined);
     });
 
@@ -752,47 +736,41 @@ module('Unit | kanban-drag-manager', function (hooks) {
       assert.strictEqual(mgr.announcement, 'Movement cancelled.');
     });
 
-    test('ArrowDown in idle mode moves selectedIndex to the next card in column', function (assert) {
+    test('idle navigation moves selection across rows and columns', function (assert) {
       let lastSelected: number | null | undefined;
-      const mgr = makeKbManager({
-        onSelect: (i) => (lastSelected = i),
-      });
-      mgr.select(0);
+      const mgr = makeKbManager({ onSelect: (i) => (lastSelected = i) });
+
+      // no selection → ArrowDown selects first card
+      const { event: downNoSel, prevented: downNoSelPrev } = keyEvent('ArrowDown');
+      mgr.onKeyDown(downNoSel);
+      assert.true(downNoSelPrev(), 'ArrowDown prevents default');
+      assert.strictEqual(mgr.interactionMode, 'idle', 'navigation does not change interactionMode');
+      assert.strictEqual(mgr.selectedIndex, 0, 'selects first card');
+
+      // ArrowDown moves to next card in column
       mgr.onKeyDown(keyEvent('ArrowDown').event);
       assert.strictEqual(mgr.selectedIndex, 2, 'card2 is next in col 0');
       assert.strictEqual(lastSelected, 2);
-    });
 
-    test('ArrowUp in idle at top of column keeps selectedIndex unchanged', function (assert) {
-      const mgr = makeKbManager();
+      // ArrowUp at top of column keeps selection unchanged
       mgr.select(0);
-      mgr.onKeyDown(keyEvent('ArrowUp').event);
-      assert.strictEqual(mgr.selectedIndex, 0);
-    });
+      const { event: upAtTop, prevented: upPrev } = keyEvent('ArrowUp');
+      mgr.onKeyDown(upAtTop);
+      assert.true(upPrev(), 'ArrowUp prevents default');
+      assert.strictEqual(mgr.selectedIndex, 0, 'stays at top');
 
-    test('ArrowDown in idle with no selection selects the first card', function (assert) {
-      const mgr = makeKbManager();
-      assert.strictEqual(mgr.selectedIndex, null);
-      mgr.onKeyDown(keyEvent('ArrowDown').event);
-      assert.strictEqual(mgr.selectedIndex, 0);
-    });
-
-    test('ArrowRight in idle moves selectedIndex to adjacent column', function (assert) {
-      let lastSelected: number | null | undefined;
-      const mgr = makeKbManager({
-        onSelect: (i) => (lastSelected = i),
-      });
-      mgr.select(0);
-      mgr.onKeyDown(keyEvent('ArrowRight').event);
+      // ArrowRight moves to adjacent column
+      const { event: rightEvent, prevented: rightPrev } = keyEvent('ArrowRight');
+      mgr.onKeyDown(rightEvent);
+      assert.true(rightPrev(), 'ArrowRight prevents default');
       assert.strictEqual(mgr.selectedIndex, 1, 'card1 is in col 1');
       assert.strictEqual(lastSelected, 1);
-    });
 
-    test('ArrowLeft in idle moves selectedIndex back to original column', function (assert) {
-      const mgr = makeKbManager();
-      mgr.select(1); // card1 is in col 1
-      mgr.onKeyDown(keyEvent('ArrowLeft').event);
-      // col 0 has card0 at sortOrder 1 — same row position
+      // ArrowLeft moves back
+      mgr.select(1);
+      const { event: leftEvent, prevented: leftPrev } = keyEvent('ArrowLeft');
+      mgr.onKeyDown(leftEvent);
+      assert.true(leftPrev(), 'ArrowLeft prevents default');
       assert.strictEqual(mgr.selectedIndex, 0);
     });
 
@@ -814,22 +792,6 @@ module('Unit | kanban-drag-manager', function (hooks) {
       mgr.onKeyDown(keyEvent('ArrowRight').event);
 
       assert.strictEqual(mgr.selectedIndex, 2);
-    });
-
-    test('arrow keys in idle mode always prevent default', function (assert) {
-      const mgr = makeKbManager();
-      for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) {
-        const { event, prevented } = keyEvent(key);
-        mgr.onKeyDown(event);
-        assert.true(prevented(), `${key} prevents default`);
-      }
-    });
-
-    test('arrow keys in idle do not change interactionMode', function (assert) {
-      const mgr = makeKbManager();
-      mgr.select(0);
-      mgr.onKeyDown(keyEvent('ArrowDown').event);
-      assert.strictEqual(mgr.interactionMode, 'idle');
     });
   });
 
@@ -879,117 +841,52 @@ module('Unit | kanban-drag-manager', function (hooks) {
 
     await delay(350);
 
-    assert.false(
-      changed,
-      'onChange must not fire when dropped outside the board',
-    );
+    assert.false(changed, 'onChange must not fire when dropped outside the board');
     assert.strictEqual(manager.interactionMode, 'idle');
   });
 
-  test('dropping outside the board still commits when a visible insertion target was already active', async function (assert) {
+  test('dropping outside the board commits the last visible insertion target', async function (assert) {
     let changedPlacements: KanbanPlacement[] | undefined;
-
-    let manager = new KanbanDragManager({
-      placements,
-      columnCount: 2,
-      isColumnVisible: () => true,
-      onChange: (nextPlacements: KanbanPlacement[]) => {
-        changedPlacements = nextPlacements;
-      },
-    });
-
-    container.setPointerCapture = () => {};
-    container.releasePointerCapture = () => {};
-    manager.registerContainer(container);
-    (manager as any).measureSettlePosition = () => {};
-
-    let card = container.querySelector('[data-card-index="0"]') as HTMLElement;
-
-    manager.onPointerDown({
-      button: 0,
-      pointerId: 7,
-      clientX: 20,
-      clientY: 20,
-      target: card,
-    } as unknown as PointerEvent);
-    manager.onPointerMove({
-      pointerId: 7,
-      clientX: 260,
-      clientY: 30,
-    } as unknown as PointerEvent);
-
-    assert.deepEqual(manager.insertion, {
-      column: 1,
-      insertBeforeIndex: -1,
-      position: 2,
-    });
-
-    manager.onPointerUp({
-      pointerId: 7,
-      clientX: 9999,
-      clientY: 30,
-    } as unknown as PointerEvent);
-
-    await delay(350);
-
-    assert.ok(changedPlacements, 'drop should commit the visible insertion');
-    assert.deepEqual(changedPlacements, [
+    const expected = [
       { index: 0, column: 1, sortOrder: 2 },
       { index: 1, column: 1, sortOrder: 1 },
-    ]);
-    assert.strictEqual(manager.interactionMode, 'idle');
-  });
+    ];
 
-  test('dropping while the visible insertion target is partially off-screen still commits there', async function (assert) {
-    let changedPlacements: KanbanPlacement[] | undefined;
+    function makeManager() {
+      changedPlacements = undefined;
+      const mgr = new KanbanDragManager({
+        placements,
+        columnCount: 2,
+        isColumnVisible: () => true,
+        onChange: (next: KanbanPlacement[]) => {
+          changedPlacements = next;
+        },
+      });
+      container.setPointerCapture = () => {};
+      container.releasePointerCapture = () => {};
+      mgr.registerContainer(container);
+      (mgr as any).measureSettlePosition = () => {};
+      return mgr;
+    }
 
-    let manager = new KanbanDragManager({
-      placements,
-      columnCount: 2,
-      isColumnVisible: () => true,
-      onChange: (nextPlacements: KanbanPlacement[]) => {
-        changedPlacements = nextPlacements;
-      },
-    });
+    const card = container.querySelector('[data-card-index="0"]') as HTMLElement;
 
-    container.setPointerCapture = () => {};
-    container.releasePointerCapture = () => {};
-    manager.registerContainer(container);
-    (manager as any).measureSettlePosition = () => {};
-
-    let card = container.querySelector('[data-card-index="0"]') as HTMLElement;
-
-    manager.onPointerDown({
-      button: 0,
-      pointerId: 8,
-      clientX: 20,
-      clientY: 20,
-      target: card,
-    } as unknown as PointerEvent);
-    manager.onPointerMove({
-      pointerId: 8,
-      clientX: 260,
-      clientY: 30,
-    } as unknown as PointerEvent);
-
-    assert.deepEqual(manager.insertion, {
-      column: 1,
-      insertBeforeIndex: -1,
-      position: 2,
-    });
-
-    manager.onPointerUp({
-      pointerId: 8,
-      clientX: 260,
-      clientY: 9999,
-    } as unknown as PointerEvent);
-
+    // off-screen X
+    let mgr = makeManager();
+    mgr.onPointerDown({ button: 0, pointerId: 7, clientX: 20, clientY: 20, target: card } as unknown as PointerEvent);
+    mgr.onPointerMove({ pointerId: 7, clientX: 260, clientY: 30 } as unknown as PointerEvent);
+    mgr.onPointerUp({ pointerId: 7, clientX: 9999, clientY: 30 } as unknown as PointerEvent);
     await delay(350);
+    assert.deepEqual(changedPlacements, expected, 'commits with off-screen X');
+    assert.strictEqual(mgr.interactionMode, 'idle');
 
-    assert.deepEqual(changedPlacements, [
-      { index: 0, column: 1, sortOrder: 2 },
-      { index: 1, column: 1, sortOrder: 1 },
-    ]);
-    assert.strictEqual(manager.interactionMode, 'idle');
+    // off-screen Y
+    mgr = makeManager();
+    mgr.onPointerDown({ button: 0, pointerId: 8, clientX: 20, clientY: 20, target: card } as unknown as PointerEvent);
+    mgr.onPointerMove({ pointerId: 8, clientX: 260, clientY: 30 } as unknown as PointerEvent);
+    mgr.onPointerUp({ pointerId: 8, clientX: 260, clientY: 9999 } as unknown as PointerEvent);
+    await delay(350);
+    assert.deepEqual(changedPlacements, expected, 'commits with off-screen Y');
+    assert.strictEqual(mgr.interactionMode, 'idle');
   });
 });
