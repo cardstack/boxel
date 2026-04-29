@@ -58,7 +58,15 @@ The first time the user runs `mise run claude-aws staging <token>`, the script w
 Source AWS profile for staging:
 ```
 
-Type the source profile name (e.g. `cardstack`). It's saved to `~/.config/claude-aws/config` and never prompted for again unless the user passes `--source-profile <name>` to override. Same dance for prod the first time `mise run claude-aws prod <token>` is run.
+Type the source profile name (e.g. `cardstack`). It's saved to `${XDG_CONFIG_HOME:-~/.config}/claude-aws/config` (the XDG config directory; default is `~/.config/claude-aws/config`) and never prompted for again unless the user passes `--source-profile <name>` to override. Same dance for prod the first time `mise run claude-aws prod <token>` is run.
+
+If you typed the wrong profile name (or want to clear the cache for any reason), run:
+
+```sh
+mise run claude-aws --reset
+```
+
+That wipes the config file (path above) so the next normal invocation prompts again from scratch. `--reset` takes no other arguments — just `--reset`, no env, no token. It does not require `aws` / `jq` to be installed, so it's also the right recovery path on a freshly-cloned machine before the rest of the prereqs are in place. Equivalent shortcut to deleting the config file by hand.
 
 ### 3. Per-session — refresh the role-assumed credentials (every ~12h)
 
@@ -78,7 +86,7 @@ After that, Claude can run any `aws --profile claude-staging ...` or `aws --prof
 | `mise ERROR no task claude-aws found` | They typed it wrong (common: `cluade-aws`) or the mise task file is missing — re-clone or pull main. |
 | `An error occurred (AccessDenied) … MultiFactorAuthentication failed with invalid MFA one time pass code` | The token expired before they hit enter. Wait for a fresh code and try again. |
 | `No source AWS profile is configured for 'staging'.` followed by a list | Expected on first run. Type the source profile name (most teammates use `cardstack` / `cardstack-prod` but it varies). |
-| `No MFA device registered for profile <name>` | They picked the wrong source profile, or their IAM user actually has no MFA. List MFA devices: `aws iam list-mfa-devices --profile <profile>`. |
+| `No MFA device registered for profile <name>` | They picked the wrong source profile (cached on first run). List MFA devices: `aws iam list-mfa-devices --profile <profile>`. To clear the bad choice and re-prompt, run `mise run claude-aws --reset`, then re-run with the right profile. |
 | `An error occurred (AccessDenied) when calling the AssumeRole operation: User: ... is not authorized to perform: sts:AssumeRole on resource: arn:aws:iam::...:role/boxel-claude-readonly` | Either the infra side of CS-10962 hasn't been applied to that account yet (so the role doesn't exist or doesn't trust the user's group), or the user's IAM user isn't in `read-only` or `full-access`. Check role existence: `aws --profile <source> iam get-role --role-name boxel-claude-readonly`. |
 | `An error occurred (NoRegion)` when Claude later runs `aws --profile claude-staging …` | They ran the script on an old version that didn't carry region forward. Either re-run `mise run claude-aws <env> <token>` (the current script copies the region from the source profile), or set it manually: `aws configure set region us-east-1 --profile claude-staging`. |
 
