@@ -1,9 +1,10 @@
 // KanbanPlane — Public wrapper that owns the default drag manager.
+import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 
 import type { FittedFormatId } from '../../helpers.ts';
-import { type KanbanDragManagerSignature, KanbanDragManager } from './drag.gts';
+import { type KanbanDragManagerArgs, KanbanDragManager } from './drag.gts';
 import { type KanbanColumnConfig, type KanbanPlacement } from './engine.ts';
 import { KanbanPlaneInner } from './plane-inner.gts';
 
@@ -49,9 +50,10 @@ export class KanbanPlane extends Component<{
       get placements() {
         return self.args.placements;
       },
-    } satisfies KanbanDragManagerSignature['Args'];
+    } satisfies KanbanDragManagerArgs;
 
-    this.ownedManager = new KanbanDragManager(owner, managerArgs);
+    this.ownedManager = new KanbanDragManager(managerArgs);
+    registerDestructor(this, () => this.ownedManager.destroy());
   }
 
   handleChange = (placements: KanbanPlacement[]): void => {

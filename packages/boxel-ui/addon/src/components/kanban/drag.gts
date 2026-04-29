@@ -1,7 +1,6 @@
 // KanbanDragManager — Drag interaction for Kanban boards.
 // Uses insertion model: cards insert BETWEEN other cards.
 
-import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 
@@ -36,23 +35,20 @@ type BodyStyle = CSSStyleDeclaration & { webkitUserSelect: string };
 
 export type KanbanInteractionMode = 'idle' | 'pending' | 'drag' | 'kb-drag';
 
-export interface KanbanDragManagerSignature {
-  Args: {
-    columnCount: number;
-    isColumnVisible: (column: number) => boolean;
-    onChange: (placements: KanbanPlacement[]) => void;
-    onOpen?: (index: number) => void;
-    onSelect?: (index: number | null) => void;
-    placements: KanbanPlacement[];
-  };
-  Blocks: {
-    default: [KanbanDragManager];
-  };
+export interface KanbanDragManagerArgs {
+  columnCount: number;
+  isColumnVisible: (column: number) => boolean;
+  onChange: (placements: KanbanPlacement[]) => void;
+  onOpen?: (index: number) => void;
+  onSelect?: (index: number | null) => void;
+  placements: KanbanPlacement[];
 }
 
 // ── KanbanDragManager ────────────────────────────────────────────────── //
 
-export class KanbanDragManager extends Component<KanbanDragManagerSignature> {
+export class KanbanDragManager {
+  private args: KanbanDragManagerArgs;
+
   // ── Tracked State ──────────────────────────────────────────────────
   @tracked selectedIndex: number | null = null;
   @tracked interactionMode: KanbanInteractionMode = 'idle';
@@ -94,8 +90,11 @@ export class KanbanDragManager extends Component<KanbanDragManagerSignature> {
   // ── Public container ref ───────────────────────────────────────────
   containerRef: HTMLElement | null = null;
 
-  override willDestroy(): void {
-    super.willDestroy();
+  constructor(args: KanbanDragManagerArgs) {
+    this.args = args;
+  }
+
+  destroy(): void {
     this.holdTask.cancelAll();
     this.focusCardTask.cancelAll();
     if (this.settleTimer) {
@@ -733,6 +732,4 @@ export class KanbanDragManager extends Component<KanbanDragManagerSignature> {
     document.body.style.userSelect = '';
     (document.body.style as BodyStyle).webkitUserSelect = '';
   }
-
-  <template>{{yield this}}</template>
 }
