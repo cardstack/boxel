@@ -478,7 +478,12 @@ LOG_LEVELS=*=info,index-runner=debug,index-perf=debug,worker=debug
 
 In the deployed environments this is an environment variable on the worker ECS task definition; the task reads it from the same place `setup-logger.ts` reads any other env var. The operator paths to update it:
 
-- **Staging / production**: `LOG_LEVELS` is wired through SSM (see your terraform / deploy config — search the deploy repo for `LOG_LEVELS` to find the parameter path; the worker ECS task picks it up via `valueFrom` in its container definition). Update the SSM parameter, then force a new deployment of `boxel-worker-<env>` — the change is read once at process start, so a running worker will keep its old levels until a new task starts. For one-shot triage of a *future* job, deploy the change first, then trigger the reindex.
+- **Staging / production**: `LOG_LEVELS` is held in AWS SSM Parameter Store at `/<env>/boxel/LOG_LEVELS` (e.g. `/staging/boxel/LOG_LEVELS`, `/production/boxel/LOG_LEVELS`). The worker ECS task definition references it via `valueFrom`, so the value is injected as the container's `LOG_LEVELS` env var at task start. To adjust levels:
+  1. Update the SSM parameter value (AWS Console → Systems Manager → Parameter Store, or `aws ssm put-parameter --name /<env>/boxel/LOG_LEVELS --value '<new-levels>' --overwrite` if you have write access — Claude does not).
+  2. Force a new deployment of `boxel-worker-<env>` from the ECS console (Services → boxel-worker-<env> → Update → "Force new deployment"). The new task picks up the updated SSM value at boot.
+  3. The realm-server task reads `LOG_LEVELS` for *its own* logging; in deployed envs the worker is a separate task and only its `LOG_LEVELS` matters for indexing-job logs. If you also want indexing logs that the realm-server emits during invalidation discovery (e.g. for jobs the realm-server queues directly), redeploy `boxel-realm-server-<env>` too.
+
+  Levels apply to subsequently-launched worker processes; a job already in flight keeps the levels it was launched with. So for triage of a *future* job, update SSM and redeploy first, then trigger the reindex.
 - **Locally**: prepend the env var, e.g. `LOG_LEVELS='*=info,index-runner=debug,index-perf=debug' pnpm start-all` — same as the `prerenderer-reproduce=debug` pattern in the [Reproducing a render interactively](#reproducing-a-render-interactively) section.
 
 Sample CloudWatch greps, using `cw` from the `aws-access` skill (substitute `claude-staging` / `claude-prod` and the matching log group):
@@ -513,7 +518,21 @@ A short rubric for the most common shapes:
 - **High confidence the stall is at file X**: the bottom row of `boxel_index_working` (max `indexedAt` for the batch's `invalidationId`) is X **AND** the worker's last `begin fused visit of file X` line has no matching `completed fused visit of file X` line **AND** the bottom row's `recentModuleEvaluations[0].url` (or `currentlyEvaluatingModule` / `inFlightModuleImports[0]`) is a module under X. Treat the row's `timing_diagnostics` as a Mode A capture and walk the [Classify in one pass](#classify-in-one-pass) table.
 - **Medium confidence**: only two of the three signals agree. Most often the worker log is the dropout — debug-level logging wasn't on. Promote `index-runner` to debug and trigger a follow-up reindex to validate.
 - **Low confidence — the runner stalled before any per-file work**: `boxel_index_working` has no rows for this batch's `invalidationId` (no row stamped with the batch UUID, no `is_deleted = TRUE` tombstones at the batch's `realm_version`). The worker is still in **invalidation discovery** — either the mtime walk (no `discovering invalidations in dir` line yet) or the consumer fan-out (the `discovering` line is there but no per-file visit-start lines). Look at the worker's `index-perf` `time to get file system mtimes` / `time to invalidate` lines — if those are missing too, you're stuck in the realm-server fetch (`reader.mtimes()` → `_mtimes` HTTP call) or in `Batch.invalidate`'s own jsonb-containment SQL (`itemsThatReference`). Then go look at what *should* have been in the seed but wasn't — cross-check the EFS file listing against the realm's `boxel_index.last_modified` per step 3.
-- **Confirm a "rejected" job actually failed cleanly**: `jobs.status = 'rejected'` should pair with the matching reservation's `completed_at IS NOT NULL`. If `completed_at IS NULL`, the worker bailed before its finalize transaction (see `pg-queue.ts` lines 619-696); the reservation's `locked_until` will eventually expire and another worker can claim it. The `Sentry.captureException` immediately before status flip means the actual error is in Sentry, not the worker log line — reach for Sentry first when triaging a `rejected` job.
+- **Confirm a "rejected" job actually failed cleanly**: `jobs.status = 'rejected'` should pair with the matching reservation's `completed_at IS NOT NULL`. If `completed_at IS NULL`, the worker bailed before its finalize transaction (see `pg-queue.ts` lines 619-696); the reservation's `locked_until` will eventually expire and another worker can claim it.
+
+  The actual error is in **`jobs.result`** (jsonb). When the worker's `await job.run(...)` throws, `pg-queue.ts:626-627` does `result = serializableError(err); newStatus = 'rejected';` and the finalize UPDATE writes both into the row. Read it directly:
+
+  ```sql
+  SELECT id, job_type, status, finished_at,
+         args->>'realmURL' AS realm_url,
+         result->>'message' AS error_message,
+         result->>'name'    AS error_class,
+         result->'stack'    AS stack_trace
+  FROM jobs
+  WHERE id = <job_id>;
+  ```
+
+  `result` is the same shape `serializableError` produces: `{ message, name, stack, ... }`. For triage, `error_message` + `error_class` is usually enough; `stack_trace` is there when you need to find the throw site. Sentry has the same payload (and more breadcrumbs) but you don't need to leave the DB to get the rejection reason.
 
 ### 9. What this mode can't tell you
 
