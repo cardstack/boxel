@@ -135,10 +135,9 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let opened: number | null = null;
 
     let manager = new KanbanDragManager({
-      placements: () => placements,
-      columnCount: () => 2,
+      placements,
+      columnCount: 2,
       isColumnVisible: () => true,
-      containerElement: () => container,
       onChange: () => assert.step('change'),
       onSelect: (index: number | null) => {
         selected = index;
@@ -175,10 +174,9 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let changedPlacements: KanbanPlacement[] | undefined;
 
     let manager = new KanbanDragManager({
-      placements: () => placements,
-      columnCount: () => 2,
+      placements,
+      columnCount: 2,
       isColumnVisible: () => true,
-      containerElement: () => container,
       onChange: (nextPlacements: KanbanPlacement[]) => {
         changedPlacements = nextPlacements;
       },
@@ -209,19 +207,21 @@ module('Unit | kanban-drag-manager', function (hooks) {
     assert.strictEqual(manager.dragGhostWidth, 184);
     assert.deepEqual(manager.insertion, {
       column: 1,
-      insertBeforeIndex: 1,
-      position: 1,
+      insertBeforeIndex: -1,
+      position: 2,
     });
 
     manager.onPointerUp({
       pointerId: 2,
+      clientX: 260,
+      clientY: 30,
     } as unknown as PointerEvent);
 
     await delay(350);
 
     assert.deepEqual(changedPlacements, [
-      { index: 0, column: 1, sortOrder: 1 },
-      { index: 1, column: 1, sortOrder: 2 },
+      { index: 0, column: 1, sortOrder: 2 },
+      { index: 1, column: 1, sortOrder: 1 },
     ]);
   });
 
@@ -229,10 +229,9 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let changes: KanbanPlacement[][] = [];
 
     let manager = new KanbanDragManager({
-      placements: () => placements,
-      columnCount: () => 2,
+      placements,
+      columnCount: 2,
       isColumnVisible: () => true,
-      containerElement: () => container,
       onChange: (nextPlacements: KanbanPlacement[]) => {
         changes.push(nextPlacements);
       },
@@ -272,10 +271,9 @@ module('Unit | kanban-drag-manager', function (hooks) {
 
   test('hold-delay activates drag without pointer movement', async function (assert) {
     let manager = new KanbanDragManager({
-      placements: () => placements,
-      columnCount: () => 2,
+      placements,
+      columnCount: 2,
       isColumnVisible: () => true,
-      containerElement: () => container,
       onChange: () => {},
     });
 
@@ -311,10 +309,9 @@ module('Unit | kanban-drag-manager', function (hooks) {
 
   test('pointer cancel resets drag state and restores body selection', function (assert) {
     let manager = new KanbanDragManager({
-      placements: () => placements,
-      columnCount: () => 2,
+      placements,
+      columnCount: 2,
       isColumnVisible: () => true,
-      containerElement: () => container,
       onChange: () => {},
     });
 
@@ -358,10 +355,9 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let changedPlacements: KanbanPlacement[] | undefined;
 
     let manager = new KanbanDragManager({
-      placements: () => placements,
-      columnCount: () => 2,
+      placements,
+      columnCount: 2,
       isColumnVisible: () => true,
-      containerElement: () => container,
       onChange: (nextPlacements: KanbanPlacement[]) => {
         changedPlacements = nextPlacements;
       },
@@ -394,7 +390,11 @@ module('Unit | kanban-drag-manager', function (hooks) {
       clientY: 30,
     } as unknown as PointerEvent);
 
-    manager.onPointerUp({ pointerId: 6 } as unknown as PointerEvent);
+    manager.onPointerUp({
+      pointerId: 6,
+      clientX: 260,
+      clientY: 30,
+    } as unknown as PointerEvent);
 
     assert.true(manager.isSettling);
     assert.strictEqual(manager.activeDragIndex, 0);
@@ -403,20 +403,54 @@ module('Unit | kanban-drag-manager', function (hooks) {
     await delay(350);
 
     assert.deepEqual(changedPlacements, [
-      { index: 0, column: 1, sortOrder: 1 },
-      { index: 1, column: 1, sortOrder: 2 },
+      { index: 0, column: 1, sortOrder: 2 },
+      { index: 1, column: 1, sortOrder: 1 },
     ]);
     assert.strictEqual(manager.interactionMode, 'idle');
+  });
+
+  test('dragging from the card edge still switches columns as soon as the pointer enters the next lane', function (assert) {
+    let manager = new KanbanDragManager({
+      placements,
+      columnCount: 2,
+      isColumnVisible: () => true,
+      onChange: () => {},
+    });
+
+    container.setPointerCapture = () => {};
+    container.releasePointerCapture = () => {};
+    manager.registerContainer(container);
+
+    let card = container.querySelector('[data-card-index="0"]') as HTMLElement;
+
+    manager.onPointerDown({
+      button: 0,
+      pointerId: 7,
+      clientX: 188,
+      clientY: 20,
+      target: card,
+    } as unknown as PointerEvent);
+    manager.onPointerMove({
+      pointerId: 7,
+      clientX: 230,
+      clientY: 30,
+    } as unknown as PointerEvent);
+
+    assert.strictEqual(manager.interactionMode, 'drag');
+    assert.deepEqual(manager.insertion, {
+      column: 1,
+      insertBeforeIndex: -1,
+      position: 2,
+    });
   });
 
   test('escape while idle clears selection without calling preventDefault', function (assert) {
     let deselected = false;
 
     let manager = new KanbanDragManager({
-      placements: () => placements,
-      columnCount: () => 2,
+      placements,
+      columnCount: 2,
       isColumnVisible: () => true,
-      containerElement: () => container,
       onChange: () => {},
       onSelect: (index: number | null) => {
         if (index === null) deselected = true;
@@ -443,10 +477,9 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let lastSelected: number | null | undefined;
 
     let manager = new KanbanDragManager({
-      placements: () => placements,
-      columnCount: () => 2,
+      placements,
+      columnCount: 2,
       isColumnVisible: () => true,
-      containerElement: () => container,
       onChange: () => {},
       onSelect: (index: number | null) => {
         lastSelected = index;
@@ -466,10 +499,9 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let dragActivated = false;
 
     let manager = new KanbanDragManager({
-      placements: () => placements,
-      columnCount: () => 2,
+      placements,
+      columnCount: 2,
       isColumnVisible: () => true,
-      containerElement: () => container,
       onChange: () => {
         dragActivated = true;
       },
@@ -519,10 +551,9 @@ module('Unit | kanban-drag-manager', function (hooks) {
       } = {},
     ) {
       const mgr = new KanbanDragManager({
-        placements: () => mp,
-        columnCount: () => 2,
+        placements: mp,
+        columnCount: 2,
         isColumnVisible: opts.isColumnVisible ?? (() => true),
-        containerElement: () => mc,
         onChange: opts.onChange ?? (() => {}),
         onSelect: opts.onSelect,
       });
@@ -648,10 +679,9 @@ module('Unit | kanban-drag-manager', function (hooks) {
         { index: 2, column: 2, sortOrder: 1 },
       ];
       const mgr = new KanbanDragManager({
-        placements: () => mp,
-        columnCount: () => 3,
+        placements: mp,
+        columnCount: 3,
         isColumnVisible: (column: number) => column !== 1,
-        containerElement: () => mc,
         onChange: () => {},
       });
       mgr.registerContainer(mc);
@@ -773,10 +803,9 @@ module('Unit | kanban-drag-manager', function (hooks) {
         { index: 2, column: 2, sortOrder: 1 },
       ];
       const mgr = new KanbanDragManager({
-        placements: () => mp,
-        columnCount: () => 3,
+        placements: mp,
+        columnCount: 3,
         isColumnVisible: (column: number) => column !== 1,
-        containerElement: () => mc,
         onChange: () => {},
       });
       mgr.registerContainer(mc);
@@ -808,10 +837,9 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let changed = false;
 
     let manager = new KanbanDragManager({
-      placements: () => placements,
-      columnCount: () => 2,
+      placements,
+      columnCount: 2,
       isColumnVisible: () => true,
-      containerElement: () => container,
       onChange: () => {
         changed = true;
       },
@@ -855,6 +883,113 @@ module('Unit | kanban-drag-manager', function (hooks) {
       changed,
       'onChange must not fire when dropped outside the board',
     );
+    assert.strictEqual(manager.interactionMode, 'idle');
+  });
+
+  test('dropping outside the board still commits when a visible insertion target was already active', async function (assert) {
+    let changedPlacements: KanbanPlacement[] | undefined;
+
+    let manager = new KanbanDragManager({
+      placements,
+      columnCount: 2,
+      isColumnVisible: () => true,
+      onChange: (nextPlacements: KanbanPlacement[]) => {
+        changedPlacements = nextPlacements;
+      },
+    });
+
+    container.setPointerCapture = () => {};
+    container.releasePointerCapture = () => {};
+    manager.registerContainer(container);
+    (manager as any).measureSettlePosition = () => {};
+
+    let card = container.querySelector('[data-card-index="0"]') as HTMLElement;
+
+    manager.onPointerDown({
+      button: 0,
+      pointerId: 7,
+      clientX: 20,
+      clientY: 20,
+      target: card,
+    } as unknown as PointerEvent);
+    manager.onPointerMove({
+      pointerId: 7,
+      clientX: 260,
+      clientY: 30,
+    } as unknown as PointerEvent);
+
+    assert.deepEqual(manager.insertion, {
+      column: 1,
+      insertBeforeIndex: -1,
+      position: 2,
+    });
+
+    manager.onPointerUp({
+      pointerId: 7,
+      clientX: 9999,
+      clientY: 30,
+    } as unknown as PointerEvent);
+
+    await delay(350);
+
+    assert.ok(changedPlacements, 'drop should commit the visible insertion');
+    assert.deepEqual(changedPlacements, [
+      { index: 0, column: 1, sortOrder: 2 },
+      { index: 1, column: 1, sortOrder: 1 },
+    ]);
+    assert.strictEqual(manager.interactionMode, 'idle');
+  });
+
+  test('dropping while the visible insertion target is partially off-screen still commits there', async function (assert) {
+    let changedPlacements: KanbanPlacement[] | undefined;
+
+    let manager = new KanbanDragManager({
+      placements,
+      columnCount: 2,
+      isColumnVisible: () => true,
+      onChange: (nextPlacements: KanbanPlacement[]) => {
+        changedPlacements = nextPlacements;
+      },
+    });
+
+    container.setPointerCapture = () => {};
+    container.releasePointerCapture = () => {};
+    manager.registerContainer(container);
+    (manager as any).measureSettlePosition = () => {};
+
+    let card = container.querySelector('[data-card-index="0"]') as HTMLElement;
+
+    manager.onPointerDown({
+      button: 0,
+      pointerId: 8,
+      clientX: 20,
+      clientY: 20,
+      target: card,
+    } as unknown as PointerEvent);
+    manager.onPointerMove({
+      pointerId: 8,
+      clientX: 260,
+      clientY: 30,
+    } as unknown as PointerEvent);
+
+    assert.deepEqual(manager.insertion, {
+      column: 1,
+      insertBeforeIndex: -1,
+      position: 2,
+    });
+
+    manager.onPointerUp({
+      pointerId: 8,
+      clientX: 260,
+      clientY: 9999,
+    } as unknown as PointerEvent);
+
+    await delay(350);
+
+    assert.deepEqual(changedPlacements, [
+      { index: 0, column: 1, sortOrder: 2 },
+      { index: 1, column: 1, sortOrder: 1 },
+    ]);
     assert.strictEqual(manager.interactionMode, 'idle');
   });
 });
