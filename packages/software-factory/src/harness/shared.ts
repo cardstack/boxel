@@ -297,21 +297,85 @@ export function hashString(value: string): string {
 }
 
 export async function findAvailablePort(): Promise<number> {
-  return await new Promise<number>((resolve, reject) => {
-    let server = createNetServer();
-    server.once('error', reject);
+  let reservation = await findAndHoldAvailablePort();
+  await reservation.release();
+  return reservation.port;
+}
+
+/**
+ * A port number plus a `release()` that closes the holder socket keeping
+ * the port reserved. Prefer this over `findAvailablePort()` whenever there
+ * is a non-trivial gap between "I picked a port" and "the child process
+ * actually binds to it". Without the hold the OS port-0 allocator can
+ * hand the same port to a sibling caller in the same process (the
+ * concrete failure mode that hit the cache:prepare path of the SF
+ * harness, where the realm-server, worker-manager, prerender, host-dist
+ * and compat-proxy ports were all picked back-to-back from the ephemeral
+ * range and could collide before any subprocess had a chance to bind).
+ *
+ * Usage:
+ *
+ *   let reservation = await findAndHoldAvailablePort();
+ *   try {
+ *     // ... long-running setup that allocates other ports ...
+ *     await reservation.release();
+ *     spawn('child', ['--port', String(reservation.port)]);
+ *   } catch (err) {
+ *     await reservation.release();
+ *     throw err;
+ *   }
+ */
+export type PortReservation = {
+  readonly port: number;
+  release(): Promise<void>;
+};
+
+export async function findAndHoldAvailablePort(): Promise<PortReservation> {
+  return await new Promise<PortReservation>((resolveOuter, rejectOuter) => {
+    // Immediately destroy any incoming connection. The holder exists only
+    // to keep the kernel from handing the port to a sibling allocator;
+    // accepting traffic would let an unsuspecting HTTP client (e.g. the
+    // indexing-progress poller) connect to a socket with no HTTP server
+    // behind it and hang waiting for a response that never comes.
+    // Destroying on connect surfaces as ECONNRESET on the client side,
+    // which fetch reports as a TypeError — the poller's catch handler
+    // treats that as a transient failure and tries again on the next
+    // tick.
+    let server = createNetServer((socket) => socket.destroy());
+    let onError = (error: NodeJS.ErrnoException) => {
+      server.close();
+      rejectOuter(error);
+    };
+    server.once('error', onError);
     server.listen(0, '127.0.0.1', () => {
       let address = server.address();
       if (!address || typeof address === 'string') {
-        reject(new Error('Unable to determine allocated port'));
+        server.close();
+        rejectOuter(new Error('Unable to determine allocated port'));
         return;
       }
-      server.close((error) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve(address.port);
-        }
+      server.off('error', onError);
+      // Swallow late errors after a successful bind so they don't surface
+      // as unhandled 'error' events.
+      server.on('error', () => {});
+      let released = false;
+      resolveOuter({
+        port: address.port,
+        release: () =>
+          new Promise<void>((resolveClose, rejectClose) => {
+            if (released) {
+              resolveClose();
+              return;
+            }
+            released = true;
+            server.close((closeError) => {
+              if (closeError) {
+                rejectClose(closeError);
+              } else {
+                resolveClose();
+              }
+            });
+          }),
       });
     });
   });
