@@ -483,6 +483,19 @@ export default function handlePublishRealm({
         },
       );
 
+      // Mount + start the published realm on this instance now. The
+      // reconciler's prepareRealmFromRow constructs a Realm and adds
+      // it to realms[] / virtualNetwork; ensureMounted then awaits
+      // realm.start() which awaits the from-scratch-index job we
+      // enqueued above (the chooseFromScratch coalesce JOINs the
+      // start()-enqueued job with ours). By the time we return 202,
+      // indexing is complete on this instance — sibling instances
+      // pick the published realm up via NOTIFY and lazy-mount on
+      // first request. This preserves the test-suite's synchronous-
+      // publish semantics while keeping the handler purely registry-
+      // driven.
+      await reconciler.lookupOrMount(publishedRealmURL);
+
       let response = new Response(
         JSON.stringify(
           {

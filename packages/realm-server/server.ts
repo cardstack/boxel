@@ -1065,10 +1065,11 @@ export class RealmServer {
       this.virtualNetwork.addURLMapping(new URL(url), actualRealmURL);
     }
 
-    // Phase 3: enqueue the from-scratch index job synchronously so the
-    // queue worker can pick it up regardless of which instance ends up
-    // mounting the realm. Previously this was implicit in
-    // `realm.start()`, which the stateless handler no longer calls.
+    // Phase 3: enqueue the from-scratch-index job at userInitiatedPriority
+    // so the canonical (post-coalesce) job carries that priority — even
+    // if reconciler.lookupOrMount below also enqueues one at the default
+    // systemInitiatedPriority via realm.start(). The chooseFromScratch
+    // coalesce JOINs same-realm jobs and keeps maxPriority.
     await enqueueReindexRealmJob(
       url,
       ownerUsername,
@@ -1076,6 +1077,14 @@ export class RealmServer {
       this.dbAdapter,
       userInitiatedPriority,
     );
+
+    // Mount + start the realm on this instance now. ensureMounted
+    // awaits realm.start(), which awaits the from-scratch-index job.
+    // By the time we return 202, indexing is complete on this
+    // instance, so the queue is idle by the time the test framework
+    // tears down. Sibling instances pick the realm up via NOTIFY and
+    // lazy-mount on first request.
+    await this.reconciler.lookupOrMount(url);
 
     return { url, info };
   };
