@@ -404,6 +404,11 @@ jobs:
       - host-merge-reports-and-publish
     if: ${{ !cancelled() && needs.host-merge-reports-and-publish.result == 'success' }}
     uses: ./.github/workflows/pr-status-comment.yml
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      actions: read
     with:
       head-sha: ${{ github.event.pull_request.head.sha || github.sha }}
     secrets: inherit

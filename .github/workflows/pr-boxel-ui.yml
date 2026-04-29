@@ -81,6 +81,11 @@ jobs:
       - post-preview-comment
     if: ${{ !cancelled() && needs.post-preview-comment.result == 'success' }}
     uses: ./.github/workflows/pr-status-comment.yml
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      actions: read
     with:
       head-sha: ${{ github.event.pull_request.head.sha }}
     secrets: inherit
