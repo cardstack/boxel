@@ -59,7 +59,9 @@ These two facts mean **memory is almost always the binding constraint** for prer
 
 ## Procedure
 
-The skill has four steps. Do them in order; the later ones depend on numbers you derive earlier.
+The skill has four required steps plus an optional fifth. Do steps 1–4 in order; the later ones depend on numbers you derive earlier. Step 5 (Fargate pricing comparison) is optional — only needed when the resize affects task size.
+
+A note on units before you start: ECS / Fargate task memory is configured in **MiB** (binary, 2^20 bytes), and the CloudWatch `MemoryUtilization` percentage is computed against that allocated MiB value. So an "8 GB" task is really 8 GiB = 8192 MiB, and 98 % of it is 8030 MiB ≈ 7.84 GiB. The math below uses MiB / GiB throughout for consistency with what the AWS APIs actually return; if you see "GB" in this skill it's shorthand for "GiB" — never decimal gigabytes.
 
 ### Step 1: Capture the telemetry window
 
@@ -67,29 +69,35 @@ Goal: a snapshot of how the existing fleet is behaving. Three sources:
 
 #### CloudWatch — CPU and memory utilisation
 
-Get 24-hour and 7-day windows. The 24 h shows steady state; the 7 d catches bursts you'd otherwise miss.
+Get 24-hour AND 7-day windows. The 24 h shows steady state; the 7 d catches bursts you'd otherwise miss. Run the snippet below twice — once with `WINDOW=24h`, once with `WINDOW=7d` — and compare.
 
 ```sh
-END=$(date -u +%FT%TZ); START=$(date -u -d '7 days ago' +%FT%TZ);
 ENV=staging  # or production
 PROFILE=claude-${ENV}  # provisioned via the aws-access skill
+WINDOW=24h   # change to 7d for the second run; the case statement below picks the matching --period
+END=$(date -u +%FT%TZ)
+case "$WINDOW" in
+  24h) START=$(date -u -d '24 hours ago' +%FT%TZ); PERIOD=300  ;;  # 5-min datapoints
+  7d)  START=$(date -u -d '7 days ago'  +%FT%TZ); PERIOD=3600 ;;  # 1-hour datapoints
+  *) echo "WINDOW must be 24h or 7d" >&2; exit 1 ;;
+esac
 
-echo "=== CPU 7d (% of allocated vCPU) ==="
+echo "=== CPU $WINDOW (% of allocated vCPU) ==="
 aws --profile $PROFILE cloudwatch get-metric-statistics \
   --namespace AWS/ECS --metric-name CPUUtilization \
   --dimensions Name=ServiceName,Value=boxel-prerender-server-${ENV} \
                Name=ClusterName,Value=${ENV} \
-  --start-time "$START" --end-time "$END" --period 3600 \
+  --start-time "$START" --end-time "$END" --period $PERIOD \
   --statistics Average Maximum \
   --query '{count: length(Datapoints), peakAvg: max(Datapoints[*].Average), peakMax: max(Datapoints[*].Maximum)}' \
   --output json
 
-echo "=== Memory 7d (% of allocated MB) ==="
+echo "=== Memory $WINDOW (% of allocated MiB) ==="
 aws --profile $PROFILE cloudwatch get-metric-statistics \
   --namespace AWS/ECS --metric-name MemoryUtilization \
   --dimensions Name=ServiceName,Value=boxel-prerender-server-${ENV} \
                Name=ClusterName,Value=${ENV} \
-  --start-time "$START" --end-time "$END" --period 3600 \
+  --start-time "$START" --end-time "$END" --period $PERIOD \
   --statistics Average Maximum \
   --query '{count: length(Datapoints), peakAvg: max(Datapoints[*].Average), peakMax: max(Datapoints[*].Maximum)}' \
   --output json
@@ -133,7 +141,13 @@ The output is a histogram: how many snapshots saw each `(totalTabs, totalPending
 Confirms whether the system held under pressure (zero render-timeouts) or was at the edge. Queries the `boxel_index.timing_diagnostics` JSONB column via the `aws-access` skill's port-forward + `claude_readonly_user` flow.
 
 ```sql
--- 7-day render-timing histogram
+-- 7-day render-timing histogram. The `::int` casts assume the
+-- diagnostic shape Prerenderer emits today; if a row is missing
+-- a key (older diagnostic shape, partial write, manual edit) the
+-- whole query errors. If that happens, narrow the WHERE clause to
+-- skip the malformed rows: e.g. `AND timing_diagnostics->'waits' ?
+-- 'tabQueueMs'` (the JSONB `?` operator tests for a key) keeps
+-- only rows with that key present.
 SELECT 
   count(*) AS rows_with_diag,
   count(*) FILTER (WHERE (timing_diagnostics->>'totalElapsedMs')::int >= 145000) AS at_or_over_timeout,
@@ -146,6 +160,8 @@ SELECT
   max((timing_diagnostics->'waits'->>'semaphoreMs')::int) AS max_sem_ms
 FROM boxel_index
 WHERE timing_diagnostics IS NOT NULL
+  AND timing_diagnostics ? 'totalElapsedMs'
+  AND (timing_diagnostics->>'indexedAt') ~ '^[0-9]+$'
   AND (timing_diagnostics->>'indexedAt')::bigint > extract(epoch from now() - interval '7 days')*1000;
 ```
 
