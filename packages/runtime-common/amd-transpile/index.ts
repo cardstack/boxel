@@ -171,19 +171,21 @@ export function transpileAmd(
     }
   }
 
-  // The AMD wrapper hardcodes the parameter names `_exports` and
-  // `__import_meta__` and (when `export *` is used) declares
-  // `var _exportNames = {...}` in the wrapper body. If the user source
-  // declares any of these at top level, the emitted code is either a
-  // SyntaxError (let/const/class redeclares the parameter) or silently
-  // shadows the synthesized binding (var/function). Reject at transpile
-  // time with a clear error rather than emit broken AMD.
-  for (const reserved of ['_exports', '__import_meta__', '_exportNames']) {
-    if (topLevelDeclaredNames.has(reserved)) {
-      throw new Error(
-        `amd-transpile: source declares reserved name \`${reserved}\` at top level (${moduleId}); the AMD wrapper uses this name. Rename the local declaration.`,
-      );
-    }
+  // The AMD wrapper unconditionally emits `_exports` as the first
+  // factory parameter, so a top-level user declaration of that name is
+  // always a collision: let/const/class would be a SyntaxError at eval
+  // time; var/function would silently shadow the parameter and break
+  // every emitted `_exports.x = ...` setter. Reject up front with a
+  // clear error rather than produce broken AMD.
+  //
+  // `__import_meta__` and `_exportNames` are also reserved, but only
+  // synthesized when their feature is actually used in the source —
+  // those rejections are deferred to the points where we know they'd
+  // be emitted.
+  if (topLevelDeclaredNames.has('_exports')) {
+    throw new Error(
+      `amd-transpile: source declares reserved name \`_exports\` at top level (${moduleId}); the AMD wrapper uses this name as the exports parameter. Rename the local declaration.`,
+    );
   }
 
   // Synthesize a fresh top-level identifier for `__default$N` that
@@ -434,6 +436,14 @@ export function transpileAmd(
           exportStatements.push(defineGetter(exportedName, argName));
           localExportNames.push(exportedName);
         } else {
+          // `var _exportNames = {...}` is only synthesized into the
+          // wrapper body when at least one bare `export * from ...` is
+          // present, so the reserved-name check is deferred to here.
+          if (topLevelDeclaredNames.has('_exportNames')) {
+            throw new Error(
+              `amd-transpile: source declares reserved name \`_exportNames\` at top level (${moduleId}); the AMD wrapper uses this name to filter \`export *\` keys. Rename the local declaration.`,
+            );
+          }
           hasExportStar = true;
           exportStatements.push(reExportStarSnippet(argName));
         }
@@ -453,6 +463,15 @@ export function transpileAmd(
   // visited at most once.
   const usesImportMeta = new IdentifierRewriter(ms, importedAccess).run(ast);
   if (usesImportMeta) {
+    // `__import_meta__` is only synthesized as a wrapper parameter when
+    // the source actually references `import.meta`, so the reserved-name
+    // check is deferred to here. A user `var __import_meta__ = ...`
+    // without any `import.meta` usage is harmless and accepted.
+    if (topLevelDeclaredNames.has('__import_meta__')) {
+      throw new Error(
+        `amd-transpile: source declares reserved name \`__import_meta__\` at top level (${moduleId}); the AMD wrapper uses this name as the import.meta parameter. Rename the local declaration.`,
+      );
+    }
     deps.push('__import_meta__');
     argNames.push('__import_meta__');
   }

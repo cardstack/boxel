@@ -794,18 +794,35 @@ module('Unit | amd-transpile (CS-10977)', function () {
     );
   });
 
-  test('user-declared `__import_meta__` is rejected at transpile time (regression P2)', function (assert) {
+  test('user-declared `__import_meta__` is rejected when import.meta is used (regression P2)', function (assert) {
     assert.throws(
       () =>
         transpileAmd(`const __import_meta__ = 1; console.log(import.meta);`, {
           moduleId,
         }),
       /reserved name `__import_meta__`/,
-      'rejects modules that redeclare the AMD import.meta parameter',
+      'rejects modules that redeclare the AMD import.meta parameter when import.meta is referenced',
     );
   });
 
-  test('user-declared `_exportNames` is rejected at transpile time (regression P2)', function (assert) {
+  test('user-declared `__import_meta__` is accepted when import.meta is NOT used (regression P2)', function (assert) {
+    // The wrapper only synthesizes `__import_meta__` as a parameter when
+    // the source actually references `import.meta`. Without that
+    // reference, the user's local `__import_meta__` is harmless.
+    let out = transpileAmd(
+      `const __import_meta__ = 'local';
+       export const r = __import_meta__;`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out);
+    assert.strictEqual(
+      exports.r,
+      'local',
+      'no import.meta → user declaration accepted as a regular local',
+    );
+  });
+
+  test('user-declared `_exportNames` is rejected when `export *` is used (regression P2)', function (assert) {
     assert.throws(
       () =>
         transpileAmd(
@@ -813,7 +830,24 @@ module('Unit | amd-transpile (CS-10977)', function () {
           { moduleId },
         ),
       /reserved name `_exportNames`/,
-      'rejects modules that redeclare the AMD export* lookup table',
+      'rejects modules that redeclare the AMD export* lookup table when export * is present',
+    );
+  });
+
+  test('user-declared `_exportNames` is accepted without `export *` (regression P2)', function (assert) {
+    // The wrapper only declares `var _exportNames` when at least one
+    // bare `export * from ...` is present. Without that, the user's
+    // local `_exportNames` is harmless.
+    let out = transpileAmd(
+      `const _exportNames = { custom: true };
+       export const r = _exportNames;`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out);
+    assert.deepEqual(
+      exports.r,
+      { custom: true },
+      'no export * → user declaration accepted as a regular local',
     );
   });
 });
