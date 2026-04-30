@@ -29,7 +29,6 @@ import {
   primitive,
   localId,
   getField,
-  meta,
   PermissionsContextName,
   fields,
   cardTypeDisplayName,
@@ -2136,64 +2135,6 @@ module('Integration | card-basics', function (hooks) {
           'cannot assign a linksTo field to a value that is not instance of the field card',
         );
       }
-    });
-
-    test('linksTo with sameRealm rejects assignments to a card in a different realm', async function (assert) {
-      class Pet extends CardDef {
-        @field firstName = contains(StringField);
-      }
-      class Person extends CardDef {
-        @field firstName = contains(StringField);
-        @field pet = linksTo(Pet, { sameRealm: true });
-      }
-      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
-
-      let realmA = 'http://test-realm/a/';
-      let realmB = 'http://test-realm/b/';
-
-      let mango = new Pet({ firstName: 'Mango' });
-      (mango as any)[meta] = {
-        adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
-        realmURL: realmA,
-      };
-
-      let crossRealmPet = new Pet({ firstName: 'Stranger' });
-      (crossRealmPet as any)[meta] = {
-        adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
-        realmURL: realmB,
-      };
-
-      // Same-realm assignment is accepted.
-      let hassan = new Person({ firstName: 'Hassan' });
-      (hassan as any)[meta] = {
-        adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
-        realmURL: realmA,
-      };
-      hassan.pet = mango;
-      assert.strictEqual(hassan.pet, mango, 'same-realm linksTo accepted');
-
-      // Cross-realm assignment is rejected.
-      try {
-        hassan.pet = crossRealmPet;
-        throw new Error('expected error was not thrown');
-      } catch (err: any) {
-        assert.ok(
-          err.message.match(
-            /linksTo field 'pet' must reference a card in the same realm/,
-          ),
-          `cross-realm linksTo rejected: ${err.message}`,
-        );
-      }
-
-      // When the parent has no realm context, the check is skipped (safety
-      // valve for synthetic in-memory construction).
-      let unscopedHassan = new Person({ firstName: 'Hassan' });
-      unscopedHassan.pet = crossRealmPet;
-      assert.strictEqual(
-        unscopedHassan.pet,
-        crossRealmPet,
-        'check is skipped when parent realm is unknown',
-      );
     });
 
     test('can render a linksTo field', async function (assert) {
