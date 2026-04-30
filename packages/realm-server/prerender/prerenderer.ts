@@ -132,7 +132,10 @@ export class Prerenderer {
     return this.#pagePool.getWarmAffinities();
   }
 
-  getVacancySnapshot(): Record<string, { idle: boolean; tabCount: number }> {
+  getVacancySnapshot(): Record<
+    string,
+    { idle: boolean; tabCount: number; maxPendingPriority?: number }
+  > {
     return this.#pagePool.getVacancySnapshot();
   }
 

@@ -435,12 +435,51 @@ export class PagePool {
   // currently owned by this affinity has an empty render queue — the next
   // visit can run without waiting. `tabCount` tracks how many pages the
   // affinity has claimed (bounded by PRERENDER_AFFINITY_TAB_MAX).
-  getVacancySnapshot(): Record<string, { idle: boolean; tabCount: number }> {
-    let snapshot: Record<string, { idle: boolean; tabCount: number }> = {};
+  //
+  // `maxPendingPriority` is the highest priority across all queued
+  // waiters for this affinity (per-tab queues + the per-affinity file-
+  // admission semaphore). It excludes in-flight holders because the
+  // queue tracks only what's still waiting. The manager's
+  // scoreCandidate uses it to route an arriving high-priority request
+  // away from servers whose existing waiters would still leapfrog it.
+  // Omitted when no waiters are queued — a strictly-idle affinity has
+  // no priority bar to clear.
+  getVacancySnapshot(): Record<
+    string,
+    { idle: boolean; tabCount: number; maxPendingPriority?: number }
+  > {
+    let snapshot: Record<
+      string,
+      { idle: boolean; tabCount: number; maxPendingPriority?: number }
+    > = {};
     for (let [affinityKey, entries] of this.#affinityPages) {
       let tabCount = entries.size;
       let idle = [...entries].every((entry) => entry.queue.pendingCount === 0);
-      snapshot[affinityKey] = { idle, tabCount };
+      let maxPendingPriority: number | undefined;
+      for (let entry of entries) {
+        for (let prio of entry.queue.pendingByPriority().keys()) {
+          if (maxPendingPriority === undefined || prio > maxPendingPriority) {
+            maxPendingPriority = prio;
+          }
+        }
+      }
+      let sem = this.#fileAdmission.get(affinityKey);
+      if (sem) {
+        for (let prio of sem.pendingByPriority().keys()) {
+          if (maxPendingPriority === undefined || prio > maxPendingPriority) {
+            maxPendingPriority = prio;
+          }
+        }
+      }
+      let entry: {
+        idle: boolean;
+        tabCount: number;
+        maxPendingPriority?: number;
+      } = { idle, tabCount };
+      if (maxPendingPriority !== undefined) {
+        entry.maxPendingPriority = maxPendingPriority;
+      }
+      snapshot[affinityKey] = entry;
     }
     return snapshot;
   }

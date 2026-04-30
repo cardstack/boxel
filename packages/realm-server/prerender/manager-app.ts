@@ -19,7 +19,20 @@ import type { AffinityType } from '@cardstack/runtime-common';
 // Consumed by warm-vacancy-first routing (CS-10758): `idle: true` means
 // every tab for this affinity has an empty render queue; `tabCount`
 // tracks the affinity's claimed tabs.
-export type AffinityVacancy = { idle: boolean; tabCount: number };
+//
+// `maxPendingPriority` is the priority of the highest-priority pending
+// entry for this affinity (across both the per-tab queues and the per-
+// affinity file-admission semaphore). `0` when no pending or all
+// pending is at priority 0. Used by `scoreCandidate` to route an
+// incoming high-priority request away from servers whose pending queue
+// would otherwise leapfrog it. Optional for back-compat — older
+// servers don't include it; routing falls back to the warmth-only
+// vacancy logic when absent.
+export type AffinityVacancy = {
+  idle: boolean;
+  tabCount: number;
+  maxPendingPriority?: number;
+};
 
 type ServerInfo = {
   url: string;
@@ -85,7 +98,7 @@ export function buildPrerenderManagerApp(options?: {
   chooseServerForAffinity: (
     affinityType: AffinityType,
     affinityValue: string,
-    options?: { exclude?: Iterable<string> },
+    options?: { exclude?: Iterable<string>; priority?: number },
   ) => string | null;
 } {
   const app = new Koa<Koa.DefaultState, Koa.Context>();
@@ -441,10 +454,20 @@ export function buildPrerenderManagerApp(options?: {
             Number.isInteger((value as AffinityVacancy).tabCount) &&
             (value as AffinityVacancy).tabCount >= 0
           ) {
-            parsed[key] = {
+            let entry: AffinityVacancy = {
               idle: (value as AffinityVacancy).idle,
               tabCount: (value as AffinityVacancy).tabCount,
             };
+            // Surface the highest queued priority so routing can avoid
+            // servers whose existing waiters would leapfrog the
+            // incoming request. Tolerate older heartbeats by leaving
+            // the field unset when missing or malformed —
+            // scoreCandidate falls back to the warmth-only logic.
+            let mpp = (value as AffinityVacancy).maxPendingPriority;
+            if (typeof mpp === 'number' && Number.isFinite(mpp)) {
+              entry.maxPendingPriority = mpp;
+            }
+            parsed[key] = entry;
           }
         }
         affinityVacancy = parsed;
@@ -588,6 +611,13 @@ export function buildPrerenderManagerApp(options?: {
     info: ServerInfo;
     bucket: 0 | 1 | 2;
     assignedPref: 0 | 1;
+    // 0 when the incoming priority strictly beats this server's queued
+    // waiters for the affinity (i.e. our request would jump to the
+    // head of the queue), 1 otherwise. Tie-break ahead of `load` and
+    // `age`, behind `bucket` and `assignedPref`. Always 0 when the
+    // server has no pending entries, so the priority signal never
+    // demotes a strictly-idle server.
+    priorityPref: 0 | 1;
     load: number;
     age: number;
   };
@@ -597,6 +627,7 @@ export function buildPrerenderManagerApp(options?: {
     info: ServerInfo,
     affinityKey: string,
     assignedSet: Set<string>,
+    incomingPriority: number,
   ): Candidate | undefined {
     let vacancy = info.affinityVacancy.get(affinityKey);
     let warm = !!vacancy && vacancy.tabCount >= 1;
@@ -617,11 +648,22 @@ export function buildPrerenderManagerApp(options?: {
     } else {
       return undefined; // cold + busy
     }
+    // Priority preference: prefer servers where our request would not
+    // sit behind higher- or equal-priority queued work. `mpp` undefined
+    // means no waiters → preferred. Strictly greater incoming priority
+    // beats whatever's queued (we'd land at the head). Otherwise we'd
+    // queue behind existing work, so deprioritise. Older servers that
+    // don't report `maxPendingPriority` map to undefined → treated as
+    // preferred, matching the warmth-only routing fallback.
+    let mpp = vacancy?.maxPendingPriority;
+    let priorityPref: 0 | 1 =
+      mpp === undefined || incomingPriority > mpp ? 0 : 1;
     return {
       url,
       info,
       bucket,
       assignedPref: assignedSet.has(url) ? 0 : 1,
+      priorityPref,
       load: info.activeAffinities.size,
       age: info.lastAssignedAt,
     };
@@ -631,13 +673,20 @@ export function buildPrerenderManagerApp(options?: {
     affinityKey: string,
     excludeSet: Set<string>,
     assigned: readonly string[],
+    incomingPriority: number,
   ): string | undefined {
     let assignedSet = new Set(assigned);
     let best: Candidate | undefined;
     for (let [url, info] of registry.servers) {
       if (excludeSet.has(url)) continue;
       if (!isServerUsable(info)) continue;
-      let candidate = scoreCandidate(url, info, affinityKey, assignedSet);
+      let candidate = scoreCandidate(
+        url,
+        info,
+        affinityKey,
+        assignedSet,
+        incomingPriority,
+      );
       if (!candidate) continue;
       if (!best || isBetter(candidate, best)) {
         best = candidate;
@@ -650,6 +699,16 @@ export function buildPrerenderManagerApp(options?: {
     if (a.bucket !== b.bucket) return a.bucket < b.bucket;
     if (a.assignedPref !== b.assignedPref)
       return a.assignedPref < b.assignedPref;
+    // Priority preference is a soft tie-break: it kicks in once the
+    // bucket and stickiness preferences are equal. We don't want it to
+    // override warmth (a warm+busy server is still preferable to a
+    // cold+idle one even if the cold server has zero queue) — that
+    // would re-introduce the cold-tab penalty the warm-vacancy-first
+    // routing was designed around. Within a bucket it does the right
+    // thing: among multiple warm+busy servers, route the priority-10
+    // request to the one whose queue is all priority-0.
+    if (a.priorityPref !== b.priorityPref)
+      return a.priorityPref < b.priorityPref;
     if (a.load !== b.load) return a.load < b.load;
     return a.age < b.age;
   }
@@ -658,11 +717,15 @@ export function buildPrerenderManagerApp(options?: {
   function chooseServerForAffinity(
     affinityType: AffinityType,
     affinityValue: string,
-    options?: { exclude?: Iterable<string> },
+    options?: { exclude?: Iterable<string>; priority?: number },
   ): string | null {
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     cleanupAssignments();
     let exclude = new Set(options?.exclude ? [...options.exclude] : []);
+    let incomingPriority =
+      typeof options?.priority === 'number' && Number.isFinite(options.priority)
+        ? options.priority
+        : 0;
     let assigned = (registry.affinities.get(affinityKey) || []).filter(
       (url) => !exclude.has(url),
     );
@@ -672,7 +735,12 @@ export function buildPrerenderManagerApp(options?: {
     // even at multiplex=1. The multiplex cap is enforced by trimming the
     // assigned list after the pick, which may quietly shift assignment to
     // the better-scoring server.
-    let candidate = pickByVacancy(affinityKey, exclude, assigned);
+    let candidate = pickByVacancy(
+      affinityKey,
+      exclude,
+      assigned,
+      incomingPriority,
+    );
     if (candidate) {
       let list = [...assigned];
       if (!list.includes(candidate)) list.push(candidate);
@@ -893,6 +961,16 @@ export function buildPrerenderManagerApp(options?: {
         attrs.affinityValue.length > 0
           ? attrs.affinityValue
           : undefined;
+      // Priority comes from the worker job (stamped onto the request
+      // attributes by the wire-format threading). Pass through to
+      // scoreCandidate so a high-priority request prefers servers
+      // without higher-priority pending work. Defaults to 0 (system
+      // priority) when absent for back-compat with older callers /
+      // direct curl.
+      let incomingPriority =
+        typeof attrs.priority === 'number' && Number.isFinite(attrs.priority)
+          ? attrs.priority
+          : 0;
       if (!affinityType) {
         ctxt.status = 400;
         ctxt.body = {
@@ -940,6 +1018,7 @@ export function buildPrerenderManagerApp(options?: {
         if (clientAborted) return;
         let target = chooseServerForAffinity(affinityType, affinityValue, {
           exclude: attempts,
+          priority: incomingPriority,
         });
         if (!target) {
           log.debug(
