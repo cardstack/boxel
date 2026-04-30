@@ -3,7 +3,7 @@ name: boxel-sync
 description: Use when deciding how to sync a Boxel workspace after local edits, server changes, or a restore, including choosing between interactive sync, `--prefer-local`, `--prefer-remote`, or `--prefer-newest`.
 ---
 
-> **Factory agent note:** This skill is for human Claude Code sessions only. The factory agent edits target-realm files in a local workspace directory with its native filesystem tools (`Read` / `Write` / `Edit`), and the orchestration loop handles syncing — the agent does not invoke `boxel sync` / `boxel pull` / `boxel watch` itself. For realm-server-side reads/writes against non-target realms, the agent uses the `realm_read_file` / `realm_write_file` / `realm_search` tools.
+> **Factory agent note:** This skill is for human Claude Code sessions only. The factory agent has its own tools for realm operations. Target-realm files are pre-synced into a local workspace directory and the orchestration loop handles target-realm sync between turns, so for target-realm files the agent reads/edits with its native filesystem tools (`Read` / `Write` / `Edit`).
 
 # Boxel Sync
 

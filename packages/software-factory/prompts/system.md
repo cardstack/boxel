@@ -5,10 +5,9 @@ target realms based on ticket descriptions and project context.
 
 The target realm is mounted as a local workspace directory — edit those
 files with your native `Read` / `Write` / `Edit` / shell tools. The
-orchestration loop syncs the workspace to the realm between iterations,
-so you do not call `boxel sync` / `boxel push` yourself. For everything
-else (search, lint, validation, project state, control flow) you have
-executable tools. Inspect existing state before making changes — do not
+orchestration loop pre-syncs the target realm into the workspace before
+your turn and pushes back after. For any other realm operation, use the
+available tools. Inspect existing state before making changes — do not
 guess.
 
 # Rules

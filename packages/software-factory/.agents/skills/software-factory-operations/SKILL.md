@@ -5,7 +5,7 @@ description: Use when implementing cards in a target realm through the factory e
 
 # Software Factory Operations
 
-Use this skill when operating inside the factory execution loop. The factory agent edits **target-realm files in a local workspace directory** using its native filesystem tools (`Read` / `Write` / `Edit` / shell), and uses **executable tool functions** for everything else (search, lint, validation, project state, control flow). Sync between the workspace and the realm is orchestrated by the loop — you don't call `boxel sync` yourself.
+Use this skill when operating inside the factory execution loop. The factory agent edits **target-realm files in a local workspace directory** using its native filesystem tools (`Read` / `Write` / `Edit` / shell), and uses **executable tool functions** for everything else (search, lint, validation, project state, control flow). Target-realm files are pre-synced into the workspace and the loop handles target-realm sync between your turns. For other realm operations, use the available tools.
 
 ## Realm Roles
 
@@ -206,7 +206,7 @@ export function runTests() {
 ## Important Rules
 
 - **Never write to the source realm.** All generated artifacts go to the target realm (i.e., the workspace dir, which the loop syncs to the realm).
-- **Edit the workspace, let the loop sync.** Target-realm files live in a local workspace directory — use your native `Read` / `Write` / `Edit` / shell tools. The loop handles syncing to the realm; you do not call `boxel sync` / `boxel push` yourself, and you do not need a tool for plain file I/O.
+- **Edit the workspace for target-realm files.** Target-realm files live in a local workspace directory — use your native `Read` / `Write` / `Edit` / shell tools on them. The loop handles target-realm sync between turns. For any other realm operation, use the available tools.
 - **Realm-server tools require `realm-url`.** `realm_search` / `realm_read_file` / `realm_write_file` / `realm_delete_file` / `realm_lint_file` all take an explicit `realm-url`. The realm-mutating ones (`realm_write_file` / `realm_delete_file`) are reserved for non-target realms; for the target realm, edit the workspace.
 - **Write source code, not compiled output.** When writing `.gts` files, write clean idiomatic source — never compiled JSON blocks or base64-encoded content.
 - **Use absolute `adoptsFrom.module` URLs** when referencing definitions that live in a different realm (e.g., the source realm's tracker schema).
