@@ -346,6 +346,7 @@ export class Prerenderer {
             auth,
             opts,
             renderOptions: attemptOptions,
+            priority,
             signal,
             onTabAcquired: activity.markRunning,
           });
@@ -492,6 +493,7 @@ export class Prerenderer {
         command,
         commandInput,
         opts,
+        priority,
         signal,
       });
       Prerenderer.decorateRenderErrorsWithTimings(
@@ -606,6 +608,7 @@ export class Prerenderer {
             renderOptions: attemptOptions,
             fileData,
             types,
+            priority,
             signal,
             onTabAcquired,
           });
@@ -637,6 +640,7 @@ export class Prerenderer {
               renderOptions: attemptOptions,
               fileData,
               types,
+              priority,
               signal,
               onTabAcquired,
             });

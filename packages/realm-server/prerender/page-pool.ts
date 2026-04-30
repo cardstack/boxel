@@ -13,76 +13,107 @@ import { AsyncSemaphore } from './async-semaphore';
 import { attachRuntimeExceptionCapture } from './runtime-exception-capture';
 
 type RenderSemaphore = {
-  acquire(signal?: AbortSignal): Promise<() => void>;
+  acquire(signal?: AbortSignal, priority?: number): Promise<() => void>;
 };
 
 // Exported so cancellation-plumbing unit tests can drive it
-// directly — it's a pure in-memory FIFO with no Chrome dependency.
+// directly — it's a per-tab serializer with no Chrome dependency.
+//
+// CS-10976 PR 4: replaces the prior FIFO promise-chain with a
+// priority-bucketed queue. Higher priority dequeues first, FIFO
+// within the same priority. Default priority is `0` so existing
+// callers that don't specify keep the old FIFO behaviour.
 export class TabQueue {
-  #pending: Promise<void> = Promise.resolve();
-  #depth = 0;
+  // `held` is true while a caller holds the lease (post-acquire,
+  // pre-release). Subsequent acquires queue rather than running.
+  #held = false;
+  #queue: Array<{
+    resolve: () => void;
+    reject: (err: unknown) => void;
+    priority: number;
+    settled: boolean;
+  }> = [];
 
-  async acquire(signal?: AbortSignal): Promise<() => void> {
+  async acquire(
+    signal?: AbortSignal,
+    priority: number = 0,
+  ): Promise<() => void> {
     throwIfAborted(signal);
-    let release!: () => void;
-    let next = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let prev = this.#pending;
-    this.#pending = prev.catch(() => {}).then(() => next);
-    this.#depth++;
-    // Race the prior-slot wait against the caller's abort signal.
-    // If the signal fires first, release our slot immediately so
-    // downstream waiters aren't blocked on a cancelled holder,
-    // then throw so `getPage` can bail out.
-    let onAbortPromise: Promise<never> | null = null;
-    let onAbortCleanup: (() => void) | undefined;
-    if (signal) {
-      onAbortPromise = new Promise<never>((_, reject) => {
-        let onAbort = () => {
-          reject(
-            new PrerenderCancelledError({
-              state: 'queued',
-              reason:
-                typeof signal.reason === 'string' ? signal.reason : undefined,
-            }),
-          );
-        };
-        signal.addEventListener('abort', onAbort, { once: true });
-        onAbortCleanup = () => signal.removeEventListener('abort', onAbort);
-      });
+    if (!this.#held) {
+      this.#held = true;
+      return this.#makeRelease();
     }
+    // Queue and wait for the lease. On abort while queued, splice the
+    // entry out so downstream waiters aren't blocked on a cancelled
+    // holder; throw a `'queued'`-state cancellation so `getPage` can
+    // bail out cleanly.
+    let entry: {
+      resolve: () => void;
+      reject: (err: unknown) => void;
+      priority: number;
+      settled: boolean;
+    };
+    let onAbort: (() => void) | undefined;
     try {
-      if (onAbortPromise) {
-        await Promise.race([prev.catch(() => {}), onAbortPromise]);
-      } else {
-        await prev.catch(() => {});
-      }
-    } catch (e) {
-      this.#depth--;
-      release();
-      throw e;
+      await new Promise<void>((resolve, reject) => {
+        entry = { resolve, reject, priority, settled: false };
+        // Priority-ordered insertion (matches `AsyncSemaphore`):
+        // highest priority first, FIFO within priority.
+        let insertIdx = this.#queue.findIndex((e) => e.priority < priority);
+        if (insertIdx === -1) {
+          this.#queue.push(entry);
+        } else {
+          this.#queue.splice(insertIdx, 0, entry);
+        }
+        if (signal) {
+          onAbort = () => {
+            if (entry.settled) return;
+            entry.settled = true;
+            let idx = this.#queue.indexOf(entry);
+            if (idx !== -1) this.#queue.splice(idx, 1);
+            reject(
+              new PrerenderCancelledError({
+                state: 'queued',
+                reason:
+                  typeof signal.reason === 'string' ? signal.reason : undefined,
+              }),
+            );
+          };
+          signal.addEventListener('abort', onAbort, { once: true });
+        }
+      });
     } finally {
-      onAbortCleanup?.();
+      if (signal && onAbort) signal.removeEventListener('abort', onAbort);
     }
-    // A late abort between Promise.race resolving and us returning
-    // — treat as the same cancellation.
-    if (signal?.aborted) {
-      this.#depth--;
-      release();
-      throwIfAborted(signal);
-    }
+    // Lease handed off — `#held` was already true before our resolve.
+    return this.#makeRelease();
+  }
+
+  #makeRelease(): () => void {
     let released = false;
     return () => {
       if (released) return;
       released = true;
-      this.#depth--;
-      release();
+      // Highest-priority oldest waiter (front of queue) gets the lease.
+      // Skip already-settled (cancelled) entries — they were spliced
+      // by `onAbort` but for safety we tolerate stale entries here.
+      while (this.#queue.length > 0) {
+        let next = this.#queue.shift()!;
+        if (next.settled) continue;
+        next.settled = true;
+        // `#held` stays true: the lease just transferred.
+        next.resolve();
+        return;
+      }
+      this.#held = false;
     };
   }
 
+  // Live count = (active holder ? 1 : 0) + queued waiters. Matches the
+  // pre-PR-4 semantics: callers use `pendingCount === 0` to mean "idle"
+  // and `pendingCount > 1` to mean "queue is forming behind the holder".
   get pendingCount(): number {
-    return this.#depth;
+    return (this.#held ? 1 : 0) + this.#queue.length;
   }
 }
 
@@ -513,7 +544,7 @@ export class PagePool {
   async getPage(
     affinityKey: string,
     queue: PrerenderQueue = 'file',
-    opts?: { signal?: AbortSignal },
+    opts?: { signal?: AbortSignal; priority?: number },
   ): Promise<{
     page: Page;
     reused: boolean;
@@ -533,6 +564,12 @@ export class PagePool {
     release: () => void;
   }> {
     let signal = opts?.signal;
+    // CS-10976 PR 4: priority threaded from the producer side. Higher
+    // priority requests jump to the head of the per-server file
+    // admission semaphore, the per-affinity tab queue, and the global
+    // render semaphore — without preempting in-flight work. `0` is the
+    // back-compat default so callers that don't care continue to FIFO.
+    let priority = opts?.priority ?? 0;
     throwIfAborted(signal);
     let t0 = Date.now();
     // File-queue admission control. Acquired BEFORE tab selection so
@@ -544,7 +581,11 @@ export class PagePool {
     let admissionMs = 0;
     if (queue === 'file') {
       let admissionStart = Date.now();
-      releaseAdmission = await this.#acquireFileAdmission(affinityKey, signal);
+      releaseAdmission = await this.#acquireFileAdmission(
+        affinityKey,
+        signal,
+        priority,
+      );
       admissionMs = Date.now() - admissionStart;
     }
     // Every release path (success + the error paths below) funnels
@@ -572,6 +613,7 @@ export class PagePool {
       ({ entry, reused, releaseTab } = await this.#selectEntryForAffinity(
         affinityKey,
         signal,
+        priority,
       ));
     } catch (e) {
       releaseAdmission?.();
@@ -599,7 +641,7 @@ export class PagePool {
     let releaseGlobal: (() => void) | undefined;
     try {
       releaseGlobal = this.#renderSemaphore
-        ? await this.#renderSemaphore.acquire(signal)
+        ? await this.#renderSemaphore.acquire(signal, priority)
         : undefined;
     } catch (e) {
       // Semaphore cancelled before we got a slot. Release the tab
@@ -963,6 +1005,7 @@ export class PagePool {
   async #acquireFileAdmission(
     affinityKey: string,
     signal?: AbortSignal,
+    priority: number = 0,
   ): Promise<() => void> {
     if (this.#disableFileAdmission) {
       // Test opt-out — existing tab-routing unit tests predate the
@@ -976,7 +1019,7 @@ export class PagePool {
       semaphore = new AsyncSemaphore(this.#fileAdmissionCap);
       this.#fileAdmission.set(affinityKey, semaphore);
     }
-    let rawRelease = await semaphore.acquire(signal);
+    let rawRelease = await semaphore.acquire(signal, priority);
     // Wrap the raw release so every release path (success or any of
     // `getPage`'s mid-setup error bailouts) also attempts idle cleanup
     // of the semaphore map entry. Without this, an erroring file call
@@ -1014,6 +1057,7 @@ export class PagePool {
   async #selectEntryForAffinity(
     affinityKey: string,
     signal?: AbortSignal,
+    priority: number = 0,
   ): Promise<{ entry: PoolEntry; reused: boolean; releaseTab: () => void }> {
     let entries = this.#affinityPages.get(affinityKey);
     let entryList = entries
@@ -1022,7 +1066,7 @@ export class PagePool {
     let idle = entryList.filter((entry) => entry.queue.pendingCount === 0);
     if (idle.length > 0) {
       let entry = this.#selectLRUTab(idle);
-      let releaseTab = await entry.queue.acquire(signal);
+      let releaseTab = await entry.queue.acquire(signal, priority);
       return { entry, reused: true, releaseTab };
     }
     if (entryList.length < this.#affinityTabMax) {
@@ -1041,13 +1085,13 @@ export class PagePool {
       }
       let commandeered = this.#commandeerDormantTab(affinityKey);
       if (commandeered) {
-        let releaseTab = await commandeered.queue.acquire(signal);
+        let releaseTab = await commandeered.queue.acquire(signal, priority);
         return { entry: commandeered, reused: false, releaseTab };
       }
     }
     if (entryList.length > 0) {
       let entry = this.#selectLeastPendingTab(entryList);
-      let releaseTab = await entry.queue.acquire(signal);
+      let releaseTab = await entry.queue.acquire(signal, priority);
       return { entry, reused: true, releaseTab };
     }
     let fallbackShared = this.#tryClaimOrphanContext(affinityKey);
@@ -1062,7 +1106,7 @@ export class PagePool {
     }
     let fallback = this.#commandeerDormantTab(affinityKey);
     if (fallback) {
-      let releaseTab = await fallback.queue.acquire(signal);
+      let releaseTab = await fallback.queue.acquire(signal, priority);
       return { entry: fallback, reused: false, releaseTab };
     }
     if (entryList.length === 0) {
@@ -1079,7 +1123,7 @@ export class PagePool {
         let entry = this.#selectLeastPendingTab(crossAffinityEntries);
         entry.transitioning = true;
         try {
-          let releaseTab = await entry.queue.acquire(signal);
+          let releaseTab = await entry.queue.acquire(signal, priority);
           return { entry, reused: false, releaseTab };
         } catch (error) {
           entry.transitioning = false;
