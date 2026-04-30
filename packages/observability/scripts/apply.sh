@@ -44,11 +44,17 @@ cd "$(dirname "$0")/.."
 # shellcheck source=./grafanactl-env.sh
 source ./scripts/grafanactl-env.sh "$env_name"
 
+# `jq` is needed for the dashboard render step below in every env (including
+# local), so always check it. The other dependencies are only needed for the
+# hosted-env data-source push; check them inside the env-specific block.
+command -v jq >/dev/null \
+  || { echo "error: missing dependency: jq" >&2; exit 1; }
+
 # Pre-flight prereqs for hosted envs BEFORE grafanactl pushes anything.
 # Otherwise a missing env var or absent yq would surface only after
 # dashboards/folders had already been re-pushed, leaving a partial apply.
 if [[ "$env_name" != "local" ]]; then
-  for cmd in yq jq curl envsubst; do
+  for cmd in yq curl envsubst; do
     command -v "$cmd" >/dev/null \
       || { echo "error: missing dependency: ${cmd}" >&2; exit 1; }
   done
@@ -93,6 +99,10 @@ esac
 shopt -s globstar nullglob
 for f in "$rendered"/dashboards/**/*.json; do
   [[ -f "$f" ]] || continue
+  # `set -e` aborts on a non-zero exit, but only for "simple commands" — a
+  # `jq ... > out && mv ...` chain swallows jq's failure inside the &&,
+  # leaving the script to continue with an unrendered file. Run as two
+  # separate statements so a jq error fails the script.
   jq --arg url "$realm_server_url" '
     walk(
       if type == "object"
@@ -103,7 +113,8 @@ for f in "$rendered"/dashboards/**/*.json; do
         | (if .current then .current.value = $url | .current.text = $url else . end)
       else . end
     )
-  ' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+  ' "$f" > "$f.tmp"
+  mv "$f.tmp" "$f"
 done
 shopt -u globstar nullglob
 
