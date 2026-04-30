@@ -96,7 +96,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "{service=\"worker\"} |~ \"^\\\\[worker $worker_id \"",
+            "expr": "{service=\"worker\", worker_id=\"$worker_id\"}",
             "queryType": "range",
             "refId": "A"
           }
