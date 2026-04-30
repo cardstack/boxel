@@ -23,6 +23,8 @@ import {
 import type { CreateRoutesArgs } from '../routes';
 import type { RealmServerTokenClaim } from '../utils/jwt';
 import { removeMountedRealm } from './realm-destruction-utils';
+import { deleteFromRegistryByUrl } from '../lib/realm-registry-writes';
+import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
 const log = logger('handle-unpublish');
 
@@ -114,19 +116,26 @@ export default function handleUnpublishRealm({
         PUBLISHED_DIRECTORY_NAME,
         publishedRealmInfo.id,
       );
-      await removeMountedRealm({
-        realm: existingPublishedRealm,
-        realmPath: publishedRealmPath,
-        realms,
-        virtualNetwork,
+      // Serialize concurrent writers for this realm URL (publish/unpublish/
+      // realm.write). Lock released on callback exit.
+      await withRealmWriteLock(dbAdapter, publishedRealmURL, async () => {
+        await removeMountedRealm({
+          realm: existingPublishedRealm,
+          realmPath: publishedRealmPath,
+          realms,
+          virtualNetwork,
+        });
+
+        await query(dbAdapter, [
+          `DELETE FROM published_realms WHERE published_realm_url =`,
+          param(publishedRealmURL),
+        ]);
+
+        // Phase 1 dual-write: mirror the delete into realm_registry.
+        await deleteFromRegistryByUrl(dbAdapter, publishedRealmURL);
+
+        await removeRealmPermissions(dbAdapter, new URL(publishedRealmURL));
       });
-
-      await query(dbAdapter, [
-        `DELETE FROM published_realms WHERE published_realm_url =`,
-        param(publishedRealmURL),
-      ]);
-
-      await removeRealmPermissions(dbAdapter, new URL(publishedRealmURL));
 
       let response = createResponse({
         body: JSON.stringify(

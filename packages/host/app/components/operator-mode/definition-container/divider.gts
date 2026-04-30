@@ -38,6 +38,11 @@ export const Divider: TemplateOnlyComponent<Signature> = <template>
       font: 500 var(--boxel-font-xs);
       letter-spacing: var(--divider-content-lsp, var(--boxel-lsp-xs));
       text-wrap: nowrap;
+      /* InheritIcon's fill is var(--icon-color, #000). Without this override
+         the icon inherits --icon-color from the operator-mode container,
+         which resolves to near-white and vanishes on the light divider
+         background. Pinning it here makes the icon deterministic. */
+      --icon-color: var(--boxel-dark);
     }
   </style>
 </template>;

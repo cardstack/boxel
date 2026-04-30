@@ -27,7 +27,6 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
-    "id": 24,
     "links": [
       {
         "asDropdown": false,
@@ -286,7 +285,7 @@
         {
           "hide": 2,
           "name": "realm_server",
-          "query": "https://realms-staging.stack.cards/",
+          "query": "__REALM_SERVER_URL__",
           "skipUrlSync": false,
           "type": "constant"
         }
@@ -299,8 +298,6 @@
     "timepicker": {},
     "timezone": "browser",
     "title": "User Credits",
-    "uid": "eetquziy9np4wa",
-    "version": 1,
     "weekStart": ""
   }
 }
