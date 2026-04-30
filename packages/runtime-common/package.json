@@ -30,6 +30,7 @@
     "@types/pluralize": "catalog:",
     "@types/qs": "catalog:",
     "@types/uuid": "catalog:",
+    "acorn": "catalog:",
     "awesome-phonenumber": "catalog:",
     "babel-import-util": "^1.2.2",
     "babel-plugin-ember-template-compilation": "catalog:",
@@ -52,6 +53,7 @@
     "jsonwebtoken": "catalog:",
     "lodash": "catalog:",
     "loglevel": "catalog:",
+    "magic-string": "catalog:",
     "marked": "catalog:",
     "marked-alert": "catalog:",
     "marked-extended-tables": "catalog:",
@@ -86,7 +88,9 @@
     "ember-cli-htmlbars": "^6.3.0",
     "monaco-editor": "catalog:",
     "statuses": "catalog:",
-    "@glint/ember-tsc": "catalog:"
+    "@glint/ember-tsc": "catalog:",
+    "es-module-lexer": "^1.7.0",
+    "ts-node": "^10.9.1"
   },
   "peerDependencies": {
     "@babel/core": "catalog:",
@@ -96,6 +100,8 @@
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:js": "eslint . ",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
-    "lint:types": "ember-tsc --noEmit"
+    "lint:types": "ember-tsc --noEmit",
+    "bench:amd:prep": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/bench-amd/prepare-fixtures.ts",
+    "bench:amd": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/bench-amd/bench.ts"
   }
 }

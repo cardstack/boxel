@@ -176,6 +176,17 @@ export interface BoxelErrorForContext {
   message: string;
   stack?: string;
   sourceUrl?: string;
+  // CS-10977: optional structured payload carried alongside the message/stack
+  // so consumers (CopyButton, AI assistant, error context) can include the
+  // captured browser console errors and prerender diagnostics that the
+  // render runner attached to the error doc.
+  additionalErrors?: Array<{
+    message?: string;
+    stack?: string;
+    status?: number;
+    title?: string;
+  }> | null;
+  diagnostics?: Record<string, unknown>;
 }
 
 export interface BoxelContext {
