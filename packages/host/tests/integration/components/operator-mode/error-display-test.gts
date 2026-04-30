@@ -307,6 +307,45 @@ module(
       );
     });
 
+    test('truncate caps final length at the configured max including suffix', async function (assert) {
+      // 4KB stack budget, suffix is ' …[truncated]' (14 chars). The
+      // rendered length must be <= 4096, not 4096 + suffix length.
+      let longStack = 'b'.repeat(20 * 1024);
+      let error: CardErrorJSONAPI = {
+        id: 'https://example.com/x',
+        status: 500,
+        title: 'Render error',
+        message: 'boom',
+        realm: 'https://example.com/',
+        meta: {
+          lastKnownGoodHtml: null,
+          cardTitle: null,
+          scopedCssUrls: [],
+          stack: null,
+        },
+        additionalErrors: [
+          { title: 'Big stack', message: 'long', stack: longStack } as any,
+        ],
+      };
+
+      await render(<template><CardErrorDetail @error={{error}} /></template>);
+      await click('[data-test-toggle-details]');
+      await waitFor('[data-test-error-additional-errors]');
+
+      let stackEl = document.querySelector(
+        '[data-test-error-additional-stack]',
+      );
+      let rendered = stackEl?.textContent ?? '';
+      assert.ok(
+        rendered.endsWith(' …[truncated]'),
+        'truncation suffix is at the end',
+      );
+      assert.ok(
+        rendered.length <= 4 * 1024,
+        `rendered stack length (${rendered.length}) is at or below the 4KiB budget`,
+      );
+    });
+
     test('does not duplicate message when entry has no title', async function (assert) {
       let error: CardErrorJSONAPI = {
         id: 'https://example.com/x',
