@@ -7,6 +7,10 @@ on:
         description: Commit SHA that produced the preview
         required: true
         type: string
+    outputs:
+      slots:
+        description: Space-separated list of preview slot names that were uploaded
+        value: ${{ jobs.publish-preview-comment.outputs.slots }}
 
 permissions:
   contents: read
@@ -14,11 +18,13 @@ permissions:
 jobs:
   publish-preview-comment:
     runs-on: ubuntu-latest
+    outputs:
+      slots: ${{ steps.gather.outputs.slots }}
     concurrency:
       group: publish-preview-comment-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - name: Gather preview links
+      - name: Gather preview links and write per-link slot files
         id: gather
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -39,37 +45,46 @@ jobs:
           host_production="$(echo "$statuses" | jq -r 'map(select(.context == "Preview boxel-host production")) | .[0].target_url // empty')"
           ui_staging="$(echo "$statuses" | jq -r 'map(select(.context == "Preview boxel-ui staging")) | .[0].target_url // empty')"
 
-          if [ -z "$host_staging$host_production$ui_staging" ]; then
-            echo "empty=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          slots=""
+          if [ -n "$host_staging" ]; then
+            mkdir -p slot-host-staging
+            printf -- '- [Host staging preview](%s)\n' "$host_staging" > slot-host-staging/slot.md
+            slots="$slots preview-host-staging"
+          fi
+          if [ -n "$host_production" ]; then
+            mkdir -p slot-host-production
+            printf -- '- [Host production preview](%s)\n' "$host_production" > slot-host-production/slot.md
+            slots="$slots preview-host-production"
+          fi
+          if [ -n "$ui_staging" ]; then
+            mkdir -p slot-ui-staging
+            printf -- '- [Boxel UI staging preview](%s)\n' "$ui_staging" > slot-ui-staging/slot.md
+            slots="$slots preview-ui-staging"
           fi
 
-          {
-            echo "message<<EOF"
-            echo "### Preview deployments"
-            echo
-            if [ -n "$host_staging" ]; then
-              echo "- [Host staging preview]($host_staging)"
-            fi
-            if [ -n "$host_production" ]; then
-              echo "- [Host production preview]($host_production)"
-            fi
-            if [ -n "$ui_staging" ]; then
-              echo "- [Boxel UI staging preview]($ui_staging)"
-            fi
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-      - name: Write preview slot file
-        if: steps.gather.outputs.empty != 'true'
-        env:
-          MESSAGE: ${{ steps.gather.outputs.message }}
-        run: |
-          mkdir -p slot
-          printf '%s\n' "$MESSAGE" > slot/slot.md
-      - name: Upload preview slot
-        if: steps.gather.outputs.empty != 'true'
+          slots="${slots# }"
+          echo "slots=$slots" >> "$GITHUB_OUTPUT"
+
+      - name: Upload host staging preview slot
+        if: contains(steps.gather.outputs.slots, 'preview-host-staging')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: pr-comment-slot-preview
-          path: slot/
+          name: pr-comment-slot-preview-host-staging
+          path: slot-host-staging/
+          retention-days: 7
+
+      - name: Upload host production preview slot
+        if: contains(steps.gather.outputs.slots, 'preview-host-production')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pr-comment-slot-preview-host-production
+          path: slot-host-production/
+          retention-days: 7
+
+      - name: Upload UI staging preview slot
+        if: contains(steps.gather.outputs.slots, 'preview-ui-staging')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pr-comment-slot-preview-ui-staging
+          path: slot-ui-staging/
           retention-days: 7

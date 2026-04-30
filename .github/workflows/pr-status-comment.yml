@@ -1,10 +1,10 @@
 name: PR Status Comment
 
-# Reusable: invoked by each workflow that uploads a `pr-comment-slot-<slot>`
-# artifact. Updates only the named slot's section of the unified sticky
+# Reusable: invoked by each workflow that uploads `pr-comment-slot-<slot>`
+# artifacts. Updates only the named slots' sections of the unified sticky
 # comment (header `pr-status`); other sections are preserved from the
-# existing comment so a slow-finishing workflow doesn't wipe out sections
-# that finished earlier (including those from a prior commit).
+# existing comment so a slow-finishing workflow doesn't wipe sections that
+# finished earlier (including those from a prior commit).
 #
 # Each section is delimited in the comment body with HTML markers:
 #   <!-- pr-status-slot:<slot> -->
@@ -21,8 +21,8 @@ on:
         description: Commit SHA the calling run is targeting
         required: true
         type: string
-      slot:
-        description: Slot name being refreshed (e.g. preview, host-tests, realm-tests)
+      slots:
+        description: Space-separated list of slot names this invocation refreshes
         required: true
         type: string
 
@@ -60,21 +60,20 @@ jobs:
           fi
           echo "number=$pr" >>"$GITHUB_OUTPUT"
 
-      - name: Download fresh slot artifact from this run
+      - name: Download fresh slot artifacts from this run
         if: steps.pr.outputs.skip != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
-          SLOT: ${{ inputs.slot }}
+          SLOTS: ${{ inputs.slots }}
         run: |
           set -euo pipefail
           mkdir -p fresh
-          # The slot was uploaded by an earlier job in the same workflow run.
-          # Failures here (e.g. uploader skipped) fall through to preserving
-          # whatever the existing comment has for this slot.
-          gh run download -R "$REPO" "$RUN_ID" \
-            -n "pr-comment-slot-$SLOT" -D fresh/ 2>/dev/null || true
+          for slot in $SLOTS; do
+            gh run download -R "$REPO" "$RUN_ID" \
+              -n "pr-comment-slot-$slot" -D "fresh/$slot/" 2>/dev/null || true
+          done
 
       - name: Fetch existing pr-status comment body
         if: steps.pr.outputs.skip != 'true'
@@ -85,9 +84,6 @@ jobs:
         run: |
           set -euo pipefail
           : > existing.md
-          # marocchino sticky-pull-request-comment marks its comment with
-          # this header so it can find and update it. Filter on that and on
-          # the github-actions bot author for safety.
           gh api --paginate "/repos/$REPO/issues/$PR/comments?per_page=100" \
             --jq '.[] | select(
                     .user.login == "github-actions[bot]"
@@ -99,31 +95,68 @@ jobs:
         if: steps.pr.outputs.skip != 'true'
         id: body
         env:
-          SLOT: ${{ inputs.slot }}
+          SLOTS: ${{ inputs.slots }}
         run: |
           set -euo pipefail
-          : > comment.md
-          # Fixed slot order. Add new slot names here as we add emitters.
-          for slot in preview host-tests realm-tests; do
-            content=""
-            if [ "$slot" = "$SLOT" ] && [ -s "fresh/slot.md" ]; then
-              content=$(cat fresh/slot.md)
-            else
-              content=$(awk -v s="$slot" '
-                $0 == "<!-- pr-status-slot:" s " -->" { flag=1; next }
-                $0 == "<!-- /pr-status-slot:" s " -->" { flag=0 }
-                flag
-              ' existing.md)
-            fi
+
+          get_content() {
+            local slot="$1"
+            local fresh_file="fresh/$slot/slot.md"
+            case " $SLOTS " in
+              *" $slot "*)
+                if [ -s "$fresh_file" ]; then
+                  cat "$fresh_file"
+                  return
+                fi
+                ;;
+            esac
+            awk -v s="$slot" '
+              $0 == "<!-- pr-status-slot:" s " -->" { flag=1; next }
+              $0 == "<!-- /pr-status-slot:" s " -->" { flag=0 }
+              flag
+            ' existing.md
+          }
+
+          emit_section() {
+            local slot="$1"
+            local content
+            content=$(get_content "$slot")
             if [ -n "$content" ]; then
-              {
-                echo "<!-- pr-status-slot:$slot -->"
-                printf '%s\n' "$content"
-                echo "<!-- /pr-status-slot:$slot -->"
-                echo
-              } >> comment.md
+              echo "<!-- pr-status-slot:$slot -->"
+              printf '%s\n' "$content"
+              echo "<!-- /pr-status-slot:$slot -->"
+              return 0
+            fi
+            return 1
+          }
+
+          : > comment.md
+
+          # Preview group: header rendered iff at least one preview-* slot
+          # has content; each link's bullet is its own delimited slot.
+          preview_buf=$(mktemp)
+          : > "$preview_buf"
+          have_preview=false
+          for slot in preview-host-staging preview-host-production preview-ui-staging; do
+            if emit_section "$slot" >>"$preview_buf"; then
+              have_preview=true
             fi
           done
+          if $have_preview; then
+            {
+              echo "### Preview deployments"
+              echo
+              cat "$preview_buf"
+              echo
+            } >> comment.md
+          fi
+
+          for slot in host-tests realm-tests; do
+            if emit_section "$slot" >>comment.md; then
+              echo >> comment.md
+            fi
+          done
+
           if [ ! -s comment.md ]; then
             echo "empty=true" >>"$GITHUB_OUTPUT"
           fi

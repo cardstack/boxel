@@ -411,7 +411,7 @@ jobs:
       actions: read
     with:
       head-sha: ${{ github.event.pull_request.head.sha || github.sha }}
-      slot: host-tests
+      slots: host-tests
     secrets: inherit
 
   host-memory-baseline:
