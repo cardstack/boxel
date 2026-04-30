@@ -284,8 +284,8 @@ module(basename(__filename), function () {
       }
     });
 
-    test('high-priority tier: tier dormant by default (HIGH_PRIORITY_MAX/THRESHOLD unset)', function (assert) {
-      withEnv(
+    test('high-priority tier: tier dormant by default (HIGH_PRIORITY_MAX/THRESHOLD unset)', async function (assert) {
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '2',
           PRERENDER_PAGE_POOL_MAX: '6',
@@ -308,8 +308,8 @@ module(basename(__filename), function () {
       );
     });
 
-    test('high-priority tier: env vars set the upper ceiling and threshold', function (assert) {
-      withEnv(
+    test('high-priority tier: env vars set the upper ceiling and threshold', async function (assert) {
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '2',
           PRERENDER_PAGE_POOL_MAX: '6',
@@ -324,8 +324,8 @@ module(basename(__filename), function () {
       );
     });
 
-    test('high-priority tier: HIGH_PRIORITY_MAX < MAX is clamped to MAX', function (assert) {
-      withEnv(
+    test('high-priority tier: HIGH_PRIORITY_MAX < MAX is clamped to MAX', async function (assert) {
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '2',
           PRERENDER_PAGE_POOL_MAX: '6',
@@ -343,8 +343,8 @@ module(basename(__filename), function () {
       );
     });
 
-    test('high-priority tier: dormant when single-tier dynamic config (MIN === MAX) — no expansion possible', function (assert) {
-      withEnv(
+    test('high-priority tier: dormant when single-tier dynamic config (MIN === MAX) — no expansion possible', async function (assert) {
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '4',
           PRERENDER_PAGE_POOL_MAX: '4',
@@ -579,7 +579,7 @@ module(basename(__filename), function () {
     });
 
     test('high-priority tier: low-priority caller stops expanding at MAX', async function (assert) {
-      withEnv(
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '2',
           PRERENDER_PAGE_POOL_MAX: '4',
@@ -610,7 +610,7 @@ module(basename(__filename), function () {
     });
 
     test('high-priority tier: high-priority caller can expand past MAX into HIGH_PRIORITY_MAX', async function (assert) {
-      withEnv(
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '2',
           PRERENDER_PAGE_POOL_MAX: '4',
@@ -639,7 +639,7 @@ module(basename(__filename), function () {
     });
 
     test('high-priority tier: caller AT threshold qualifies; caller below does not', async function (assert) {
-      withEnv(
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '2',
           PRERENDER_PAGE_POOL_MAX: '3',
@@ -647,7 +647,10 @@ module(basename(__filename), function () {
           PRERENDER_HIGH_PRIORITY_THRESHOLD: '5',
         },
         async () => {
-          let { pool } = track(makeStubPool({ maxPages: 4 }));
+          let semaphore = new AsyncSemaphore(2);
+          let { pool } = track(
+            makeStubPool({ maxPages: 4, renderSemaphore: semaphore }),
+          );
           // Exhaust the burst tier with priority-4 (below threshold).
           // Should stop at MAX=3.
           for (let i = 0; i < 5; i++) {
@@ -672,7 +675,7 @@ module(basename(__filename), function () {
     });
 
     test('high-priority tier: contraction returns to MIN regardless of which tier expansion reached', async function (assert) {
-      withEnv(
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '2',
           PRERENDER_PAGE_POOL_MAX: '4',
