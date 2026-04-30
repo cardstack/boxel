@@ -699,7 +699,16 @@ module(basename(__filename), function () {
           assert.strictEqual(pool.currentMaxPages, 6, 'expanded to HP_MAX');
 
           // Contraction should walk us back to MIN regardless of tier.
-          await new Promise((r) => setTimeout(r, 400));
+          // Poll instead of sleeping a fixed duration: each tick is
+          // bounded to one tab per cooldown window, but event-loop
+          // scheduling under CI load can stretch the wall time.
+          let deadlineMs = Date.now() + 5000;
+          while (
+            pool.currentMaxPages > 2 &&
+            Date.now() < deadlineMs
+          ) {
+            await new Promise((r) => setTimeout(r, 20));
+          }
           assert.strictEqual(
             pool.currentMaxPages,
             2,

@@ -296,9 +296,12 @@ export class PagePool {
   #highPriorityMaxPages: number;
   // Priority value at or above which an arriving request can drive
   // expansion past `#maxBurstPages` into the high-priority tier.
-  // Defaults to `Infinity` when the high-priority tier is unset, so
-  // no priority value can satisfy the comparison and the tier stays
-  // dormant.
+  // Defaults to `Infinity` when the tier is unset; the upstream
+  // `parsePositiveInt` validation rejects non-integers so no real-
+  // world priority value can satisfy `priority >= +Infinity`. (Note:
+  // a literal `Number.POSITIVE_INFINITY` *would* satisfy it, but no
+  // production code path produces that value — priorities arrive as
+  // integers from the worker queue.)
   #highPriorityThreshold: number;
   // Wall-time threshold for the contraction tick: `#maxPages > #minPages`
   // AND no pending waiters anywhere on the pool for at least this long
@@ -472,8 +475,9 @@ export class PagePool {
       this.#highPriorityMaxPages = envHighPriorityMax;
       this.#highPriorityThreshold = envHighPriorityThreshold;
     } else {
-      // Tier dormant: no priority value can satisfy `priority >= +Infinity`,
-      // so `#tryExpand` will stop at `#maxBurstPages`.
+      // Tier dormant: real-world (integer) priority values can never
+      // satisfy `priority >= +Infinity`, so `#tryExpand` will stop at
+      // `#maxBurstPages`.
       this.#highPriorityMaxPages = this.#maxBurstPages;
       this.#highPriorityThreshold = Number.POSITIVE_INFINITY;
     }
