@@ -2,7 +2,10 @@
   "apiVersion": "dashboard.grafana.app/v1beta1",
   "kind": "Dashboard",
   "metadata": {
-    "name": "bfbgdczbhebr4c"
+    "name": "bfbgdczbhebr4c",
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    }
   },
   "spec": {
     "annotations": {
