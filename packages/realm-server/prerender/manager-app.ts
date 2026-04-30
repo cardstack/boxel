@@ -20,14 +20,19 @@ import type { AffinityType } from '@cardstack/runtime-common';
 // every tab for this affinity has an empty render queue; `tabCount`
 // tracks the affinity's claimed tabs.
 //
-// `maxPendingPriority` is the priority of the highest-priority pending
-// entry for this affinity (across both the per-tab queues and the per-
-// affinity file-admission semaphore). `0` when no pending or all
-// pending is at priority 0. Used by `scoreCandidate` to route an
-// incoming high-priority request away from servers whose pending queue
-// would otherwise leapfrog it. Optional for back-compat — older
-// servers don't include it; routing falls back to the warmth-only
-// vacancy logic when absent.
+// `maxPendingPriority` is the priority of the highest-priority queued
+// waiter for this affinity (across both the per-tab queues and the
+// per-affinity file-admission semaphore). Two distinct absent cases,
+// both safe to treat as "no priority bar to clear":
+//   - undefined / omitted: the server reported no queued waiters, OR
+//     the server is older and predates this field.
+//   - `0`: there are queued waiters but the highest is priority 0
+//     (background work) — an incoming priority-10 request will jump
+//     ahead of them.
+// Used by `scoreCandidate` to route an incoming high-priority request
+// away from servers whose existing queued work would otherwise
+// leapfrog it. When absent, routing falls back to the warmth-only
+// vacancy logic.
 export type AffinityVacancy = {
   idle: boolean;
   tabCount: number;
@@ -699,14 +704,19 @@ export function buildPrerenderManagerApp(options?: {
     if (a.bucket !== b.bucket) return a.bucket < b.bucket;
     if (a.assignedPref !== b.assignedPref)
       return a.assignedPref < b.assignedPref;
-    // Priority preference is a soft tie-break: it kicks in once the
-    // bucket and stickiness preferences are equal. We don't want it to
-    // override warmth (a warm+busy server is still preferable to a
-    // cold+idle one even if the cold server has zero queue) — that
-    // would re-introduce the cold-tab penalty the warm-vacancy-first
-    // routing was designed around. Within a bucket it does the right
-    // thing: among multiple warm+busy servers, route the priority-10
-    // request to the one whose queue is all priority-0.
+    // Priority preference is a soft tie-break ranked AFTER the bucket
+    // and stickiness comparisons above. The invariant order (warm+idle
+    // > cold+idle > warm+busy, defined in scoreCandidate) is preserved
+    // because `bucket` is checked first — a `cold+idle` candidate
+    // always beats a `warm+busy` one regardless of `priorityPref`,
+    // even when the warm+busy server has a queue full of low-priority
+    // work the incoming request would jump ahead of. Where priority
+    // preference does kick in: among multiple candidates in the SAME
+    // bucket (e.g. several warm+busy servers all serving the affinity),
+    // it routes a priority-10 request to the one whose queued work is
+    // all lower priority, so the incoming request lands at the head of
+    // that server's queue instead of behind same-priority work
+    // somewhere else.
     if (a.priorityPref !== b.priorityPref)
       return a.priorityPref < b.priorityPref;
     if (a.load !== b.load) return a.load < b.load;

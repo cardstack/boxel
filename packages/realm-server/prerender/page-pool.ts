@@ -471,15 +471,15 @@ export class PagePool {
           }
         }
       }
-      let entry: {
+      let snapshotEntry: {
         idle: boolean;
         tabCount: number;
         maxPendingPriority?: number;
       } = { idle, tabCount };
       if (maxPendingPriority !== undefined) {
-        entry.maxPendingPriority = maxPendingPriority;
+        snapshotEntry.maxPendingPriority = maxPendingPriority;
       }
-      snapshot[affinityKey] = entry;
+      snapshot[affinityKey] = snapshotEntry;
     }
     return snapshot;
   }

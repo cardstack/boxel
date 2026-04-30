@@ -1426,7 +1426,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('priority preference does not override bucket: warm+busy with priority-10 still beats cold+idle', async function (assert) {
+    test('priority preference does not override bucket: cold+idle still beats warm+busy with priority-10', async function (assert) {
       // Soft tie-break: priority preference must not promote a cold+idle
       // candidate above a warm+busy one. Warmth is the primary signal —
       // the cold-tab penalty would re-emerge if priority routing
