@@ -782,13 +782,12 @@ Why: the seed mints arbitrary user-impersonating tokens with arbitrary permissio
   "expiresAt":  "<iso>",  // 1d from mintedAt
   "user":       "@ctse:stack.cards",
   "realmUrl":   "https://realms-staging.stack.cards/ctse/concrete-mockingbird/",
-  "hostUrl":    "https://boxel-host-staging.stack.cards",  // may be null if realm host is unknown
   "jwt":        "eyJ...",
   "session":    "{\"<realmUrl>\":\"eyJ...\"}"
 }
 ```
 
-If `hostUrl` is `null` in the artifact, the script couldn't infer the boxel-host-app URL from the realm hostname — the JWT/session are still valid, but Claude needs the host URL separately to build a `/render` URL. Ask the user, or have them re-run with `--host-url <url>` to fill it in.
+The host URL isn't in the artifact — Claude derives it from the realm URL when building the `/render` URL (recipe below). Matrix isn't involved in this flow at all; the realm-server's `checkPermission` just verifies the HS256 signature against the seed and looks up the user's row in `realm_user_permissions`.
 
 Before using it, Claude must check:
 
@@ -808,7 +807,16 @@ Once Claude has the artifact, it constructs the URL the prerender uses, mirrorin
 
 Slot-by-slot:
 
-- **`<hostUrl>`** — straight from the artifact's `hostUrl` field.
+- **`<hostUrl>`** — derive from the artifact's `realmUrl` host. The boxel-host-app URL (NOT matrix — matrix isn't involved in this flow). Recognised patterns, mirroring the deployed-env Caddy config + local dev / env-mode Traefik labels in `mise-tasks/lib/env-vars.sh`:
+
+  | Realm host | Host-app URL |
+  |---|---|
+  | `realms-staging.stack.cards` | `https://boxel-host-staging.stack.cards` |
+  | `realms.stack.cards` | `https://boxel-host.stack.cards` |
+  | `realm-server.<slug>.localhost` | `http://host.<slug>.localhost` (BOXEL_ENVIRONMENT mode) |
+  | `localhost` or `*.localhost` (standard) | `http://localhost:4200` |
+
+  If the realm host doesn't match any of these patterns, ask the user — don't guess. Constrain `realms-` matching to `*.stack.cards` so any future deployment using a `realms-` prefix on a different domain isn't silently mapped to a wrong (and possibly non-existent) host.
 - **`<encodeURIComponent(cardUrl)>`** — the card's full file URL **including `.json`** (the indexer renders against the .json file, not the bare card-id). `https://realms-staging.stack.cards/ctse/concrete-mockingbird/Environment/demo.json` → `https%3A%2F%2Frealms-staging.stack.cards%2Fctse%2Fconcrete-mockingbird%2FEnvironment%2Fdemo.json`. Omitting `.json` lands you on the host's login page because the route doesn't match.
 - **`<nonce>`** — any string. The indexer uses a monotonic counter; for manual replays `1` is fine.
 - **`<encodeURIComponent(JSON.stringify(options))>`** — the render-route options object, JSON-encoded then URL-encoded. The shape lives in `packages/runtime-common/render-route-options.ts`. Common values:
@@ -877,10 +885,10 @@ Then re-mint with `--permissions read,write,realm-owner` (or whatever the column
 
 For local dev: matrix `server_name` is `localhost` (`packages/matrix/docker/synapse/dev/homeserver.yaml:1`), so user IDs are `@<username>:localhost`. Two local-dev modes are supported:
 
-- **Standard mode** (no `BOXEL_ENVIRONMENT` set) — realm at `http://localhost:4201/...`, host at `http://localhost:4200`. The script's `inferHost` returns `http://localhost:4200`.
-- **Environment mode** (`BOXEL_ENVIRONMENT=<name>` set) — realm at `http://realm-server.<slug>.localhost/...`, host at `http://host.<slug>.localhost` (Traefik routing per `mise-tasks/lib/env-vars.sh`). The script's `inferHost` extracts `<slug>` from the realm host and emits the matching `host.<slug>.localhost`.
+- **Standard mode** (no `BOXEL_ENVIRONMENT` set) — realm at `http://localhost:4201/...`, host-app at `http://localhost:4200`.
+- **Environment mode** (`BOXEL_ENVIRONMENT=<name>` set) — realm at `http://realm-server.<slug>.localhost/...`, host-app at `http://host.<slug>.localhost` (Traefik routing per `mise-tasks/lib/env-vars.sh`).
 
-Both modes share `@<user>:localhost` for the matrix-domain part of user IDs. If you've configured a non-default matrix `server_name`, pass `--host-url` (and `--user` if needed) explicitly.
+Both modes share `@<user>:localhost` for the matrix-domain part of user IDs. The host-app URL Claude needs to build the `/render` URL is derived from the realm URL per the table in the URL recipe section above. If you've configured a non-default matrix `server_name`, pass `--user` to the script explicitly.
 
 **Public realms (`'*': ['read']` in the permissions table) don't need a JWT.** Published realms always get this set (`packages/realm-server/handlers/handle-publish-realm.ts:326`). If you're rendering a published card, no token is needed — though minting still works, the request just doesn't depend on it.
 

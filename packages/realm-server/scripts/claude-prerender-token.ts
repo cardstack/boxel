@@ -74,16 +74,6 @@ function usage(): void {
       `                           SELECT read, write, realm_owner FROM realm_user_permissions\n` +
       `                           WHERE realm_url = '<url>' AND username = '<user>';\n` +
       `                         and pass exactly those columns as the list.\n` +
-      `  --host-url <url>       Override the boxel-host-app base URL recorded in the\n` +
-      `                         artifact (NOT matrix — matrix isn't used here; the host\n` +
-      `                         app is where the /render route lives that Claude navigates to).\n` +
-      `                         Default: inferred from realm host —\n` +
-      `                           realms-staging.stack.cards         → boxel-host-staging.stack.cards\n` +
-      `                           realms.stack.cards                 → boxel-host.stack.cards\n` +
-      `                           realm-server.<slug>.localhost      → host.<slug>.localhost\n` +
-      `                                                                (BOXEL_ENVIRONMENT mode)\n` +
-      `                           localhost / *.localhost (standard) → http://localhost:4200\n` +
-      `                         REQUIRED when the realm host doesn't match these patterns.\n` +
       `  --output <path>        Override output path. Default: ${DEFAULT_OUTPUT_PATH}.\n` +
       `  --no-output            Don't write the JSON artifact (stdout only).\n` +
       `  --help                 Show this help.\n`,
@@ -117,49 +107,6 @@ function parseArgs(argv: string[]): ParsedArgs {
     }
   }
   return { positional, opts };
-}
-
-// Infer the boxel-HOST-APP base URL from the realm host. (Not matrix —
-// matrix isn't involved in this flow at all: we bypass Matrix login by
-// signing the JWT directly against REALM_SECRET_SEED. The
-// realm-server's `checkPermission` only verifies the HS256 signature
-// against the seed — no contact with matrix.) The host-app URL goes
-// into the artifact's `hostUrl` because Claude needs it to build the
-// /render URL — the prerender route lives on the host app.
-//
-// Recognised patterns (mirrors the deployed-env Caddy config + local
-// dev / env-mode Traefik labels in `mise-tasks/lib/env-vars.sh`):
-//
-//   • realms-staging.stack.cards         → boxel-host-staging.stack.cards
-//   • realms.stack.cards                 → boxel-host.stack.cards
-//   • realm-server.<slug>.localhost      → host.<slug>.localhost  (env mode)
-//   • localhost(:NNNN) / *.localhost     → http://localhost:4200  (standard mode)
-//
-// Returns null for anything else; main() then prompts the operator to
-// pass --host-url. Constrained to `.stack.cards` so any future deployment
-// using a `realms-` prefix on a different domain isn't silently mapped
-// to a wrong (and non-existent) host.
-function inferHost(realmURL: string): string | null {
-  const u = new URL(realmURL);
-  const hostname = u.hostname;
-  // Env-mode local: realm-server.<slug>.localhost → host.<slug>.localhost
-  const envMatch = hostname.match(/^realm-server\.(.+)\.localhost$/);
-  if (envMatch) {
-    return `${u.protocol}//host.${envMatch[1]}.localhost`;
-  }
-  // Standard local: any *.localhost (including bare 'localhost'). Standard
-  // dev-server boxel-host is always on :4200.
-  if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
-    return `${u.protocol}//localhost:4200`;
-  }
-  // Deployed: realms-<env>.stack.cards → boxel-host-<env>.stack.cards
-  if (hostname.startsWith('realms-') && hostname.endsWith('.stack.cards')) {
-    return `${u.protocol}//${hostname.replace(/^realms-/, 'boxel-host-')}`;
-  }
-  if (hostname === 'realms.stack.cards') {
-    return `${u.protocol}//boxel-host.stack.cards`;
-  }
-  return null;
 }
 
 // Mirrors `userIdFromUsername` in
@@ -353,26 +300,6 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  // Resolve hostUrl. The JWT/session don't depend on it — host inference
-  // only fills the artifact's `hostUrl` field, which Claude later uses
-  // to build the /render URL. So a missing hostUrl is a warning, not an
-  // error: emit a JWT regardless, mark hostUrl null in the artifact, and
-  // let the consumer (Claude or a human) supply the host downstream.
-  const hostUrl: string | null =
-    (opts['host-url'] as string | undefined) ?? inferHost(realmURL);
-  if (!hostUrl) {
-    process.stderr.write(
-      `warning: cannot infer boxel-host URL from realm host '${new URL(realmURL).hostname}';\n` +
-        `         artifact will record hostUrl=null. Pass --host-url <url> to fill it in.\n` +
-        `         Recognised patterns:\n` +
-        `           realms-staging.stack.cards         → boxel-host-staging.stack.cards\n` +
-        `           realms.stack.cards                 → boxel-host.stack.cards\n` +
-        `           realm-server.<slug>.localhost      → host.<slug>.localhost\n` +
-        `                                                (BOXEL_ENVIRONMENT mode)\n` +
-        `           localhost / *.localhost (standard) → http://localhost:4200\n`,
-    );
-  }
-
   // Seed last — by this point everything else has validated, so the seed
   // is the final input we ask for.
   const rawSecret =
@@ -412,7 +339,6 @@ async function main(): Promise<void> {
       decoded?.exp != null ? new Date(decoded.exp * 1000).toISOString() : null,
     user: userId,
     realmUrl: realmURL,
-    hostUrl,
     jwt: token,
     session,
   };
