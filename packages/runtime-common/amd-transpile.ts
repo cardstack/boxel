@@ -72,6 +72,17 @@ export function transpileAmd(
     allowAwaitOutsideFunction: true,
   }) as Program;
 
+  // Top-level await isn't supported by the AMD wrapper (the emitted
+  // factory is a non-async function — `await` at the top level becomes
+  // a SyntaxError at `eval(src)` time). Reject at transpile time with a
+  // clear message instead of letting it fall through to a confusing
+  // eval error.
+  if (hasTopLevelAwait(ast)) {
+    throw new Error(
+      `amd-transpile: top-level await is not supported by the loader (${moduleId})`,
+    );
+  }
+
   const ms = new MagicString(src);
 
   // AMD dep list and the matching factory parameter names. We always
@@ -785,6 +796,40 @@ function rewriteIdentifierReferences(
         return;
       }
 
+      case 'StaticBlock': {
+        // Class static initializer block — ES2022 `class C { static { ... } }`.
+        // It has its own var + lexical environment (like a function body)
+        // so `let x` inside MUST shadow imports only within the block, not
+        // in surrounding instance methods. Treat as function scope.
+        pushScope('function');
+        collectFunctionScopeHoists(node.body);
+        collectBlockScopeDecls(node.body);
+        for (const s of node.body) walk(s, node, 'body', 'body');
+        popScope();
+        return;
+      }
+
+      case 'SwitchStatement': {
+        // JS treats the entire switch body as one block scope. `let`/
+        // `const`/`class` declared in `case 1:` are still in scope (in
+        // TDZ) during `case 2:`. Without this, a `let x` declared in a
+        // case where `x` is also imported would let the walker rewrite
+        // post-loop references to `_foo.x`.
+        pushScope('block');
+        const allCaseStmts: any[] = [];
+        for (const c of node.cases) {
+          for (const s of c.consequent) allCaseStmts.push(s);
+        }
+        collectBlockScopeDecls(allCaseStmts);
+        walk(node.discriminant, node, 'discriminant', null);
+        for (const c of node.cases) {
+          if (c.test) walk(c.test, c, 'test', null);
+          for (const s of c.consequent) walk(s, c, 'consequent', 'consequent');
+        }
+        popScope();
+        return;
+      }
+
       case 'ForStatement':
       case 'ForInStatement':
       case 'ForOfStatement': {
@@ -862,6 +907,47 @@ function rewriteIdentifierReferences(
       case 'BreakStatement':
       case 'ContinueStatement':
         return;
+
+      case 'AssignmentExpression': {
+        // The LHS is an Lvalue, not a reference. We must NOT rewrite
+        // imported names there — that would silently mutate the dep's
+        // _exports namespace (`imp = 1` would compile to `_foo.imp = 1`).
+        // ESM treats imports as read-only; mirror that by leaving the
+        // identifier alone. At runtime the unbound name will throw
+        // ReferenceError under strict mode (AMD modules ARE strict).
+        const left = node.left;
+        if (
+          left.type === 'ObjectPattern' ||
+          left.type === 'ArrayPattern'
+        ) {
+          // Destructuring assignment, e.g. `({ x } = obj)`. Walk only
+          // computed keys + assignment-pattern defaults; the binding
+          // identifiers themselves stay as-is.
+          walkPatternComputedKeys(left);
+        } else if (left.type === 'Identifier') {
+          // `imp = 1` — leave the LHS untouched.
+        } else {
+          // MemberExpression or other — walk normally so e.g.
+          // `obj.x = imp` rewrites `imp` (it's a reference there).
+          walk(left, node, 'left', null);
+        }
+        walk(node.right, node, 'right', null);
+        return;
+      }
+
+      case 'UpdateExpression': {
+        // `imp++` / `++imp` / `imp--` / `--imp`. Same rule as
+        // AssignmentExpression: the argument is an LValue, not a
+        // reference. Leave Identifier arguments alone; walk
+        // MemberExpression arguments normally.
+        const arg = node.argument;
+        if (arg.type === 'Identifier') {
+          // leave it
+        } else {
+          walk(arg, node, 'argument', null);
+        }
+        return;
+      }
 
       case 'Identifier': {
         if (
@@ -978,4 +1064,45 @@ function rewriteIdentifierReferences(
 
   walk(ast, null, '', null);
   return usesImportMeta;
+}
+
+// Detect a top-level `AwaitExpression` (i.e. one not inside any function
+// body). Used to reject TLA at transpile time — see `transpileAmd`.
+function hasTopLevelAwait(ast: Program): boolean {
+  let found = false;
+  const visit = (node: any) => {
+    if (found || !node || typeof node !== 'object') return;
+    // Don't cross function boundaries — `await` inside a regular or
+    // async function is a non-issue for the AMD wrapper.
+    if (
+      node.type === 'FunctionDeclaration' ||
+      node.type === 'FunctionExpression' ||
+      node.type === 'ArrowFunctionExpression'
+    ) {
+      return;
+    }
+    if (node.type === 'AwaitExpression') {
+      found = true;
+      return;
+    }
+    for (const key of Object.keys(node)) {
+      if (
+        key === 'type' ||
+        key === 'start' ||
+        key === 'end' ||
+        key === 'loc' ||
+        key === 'range'
+      ) {
+        continue;
+      }
+      const child = (node as any)[key];
+      if (Array.isArray(child)) {
+        for (const c of child) visit(c);
+      } else if (child && typeof child === 'object' && 'type' in child) {
+        visit(child);
+      }
+    }
+  };
+  for (const stmt of ast.body) visit(stmt);
+  return found;
 }

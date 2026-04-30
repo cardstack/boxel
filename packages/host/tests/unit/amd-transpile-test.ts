@@ -186,6 +186,140 @@ module('Unit | amd-transpile (CS-10977)', function () {
     assert.strictEqual(inst.hello(), 'hi');
   });
 
+  test('assignment to imported binding throws (regression P1)', function (assert) {
+    // `imp = 1` where `imp` is imported must NOT be rewritten to
+    // `_foo$1.imp = 1` — that would silently mutate the dep's _exports
+    // namespace. ESM treats imports as read-only; we leave the LHS
+    // untouched and let strict-mode runtime throw ReferenceError.
+    let out = transpileAmd(
+      `import { imp } from 'foo';
+       export function bad() { imp = 99; }`,
+      { moduleId },
+    );
+    let foo = { imp: 1 };
+    let { exports } = runAmd(out, { foo });
+    assert.throws(
+      () => (exports.bad as () => void)(),
+      /ReferenceError/,
+      'assigning to an imported binding throws at runtime',
+    );
+    assert.strictEqual(foo.imp, 1, "dep's exports namespace untouched");
+  });
+
+  test('post-increment of imported binding throws (regression P1)', function (assert) {
+    let out = transpileAmd(
+      `import { x } from 'foo';
+       export function bad() { x++; }`,
+      { moduleId },
+    );
+    let foo = { x: 1 };
+    let { exports } = runAmd(out, { foo });
+    assert.throws(
+      () => (exports.bad as () => void)(),
+      /ReferenceError/,
+      'incrementing an imported binding throws at runtime',
+    );
+    assert.strictEqual(foo.x, 1, "dep's exports namespace untouched");
+  });
+
+  test('destructuring-assignment to imported binding throws (regression P1)', function (assert) {
+    // `({ x } = obj)` where `x` is imported — same read-only rule via
+    // a different syntactic path (Property shorthand inside an
+    // AssignmentExpression LHS pattern).
+    let out = transpileAmd(
+      `import { x } from 'foo';
+       export function bad(obj) { ({ x } = obj); }`,
+      { moduleId },
+    );
+    let foo = { x: 1 };
+    let { exports } = runAmd(out, { foo });
+    assert.throws(
+      () => (exports.bad as (o: unknown) => void)({ x: 99 }),
+      /ReferenceError/,
+      'destructure-assigning to an imported binding throws at runtime',
+    );
+    assert.strictEqual(foo.x, 1, "dep's exports namespace untouched");
+  });
+
+  test('class static block shadows imports within the block (regression P2)', function (assert) {
+    // ES2022 class static initializer blocks have their own var + lexical
+    // env. `let x` inside `static { ... }` must shadow an imported `x`
+    // ONLY within the block, not in surrounding instance methods.
+    let out = transpileAmd(
+      `import { x } from 'shadow';
+       export class C {
+         static {
+           let x = 'inner';
+           C.staticReadsX = x;
+         }
+         instanceReadsX() { return x; }
+       }`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out, { shadow: { x: 'IMPORTED' } });
+    let C = exports.C as { staticReadsX: string } & {
+      new (): { instanceReadsX(): string };
+    };
+    assert.strictEqual(C.staticReadsX, 'inner', 'static block shadow wins');
+    assert.strictEqual(
+      new C().instanceReadsX(),
+      'IMPORTED',
+      'instance method sees the import',
+    );
+  });
+
+  test('switch body block scope shadows imports across cases (regression P2)', function (assert) {
+    // JS treats the entire switch body as a single block scope. A
+    // `let x` declared in one case is in scope (in TDZ) during another.
+    // The walker must collect block-scope decls from EVERY case
+    // consequent before walking, so a reference to `x` in a later case
+    // doesn't get rewritten to `_foo$1.x` when there's a same-named
+    // `let x` somewhere in the switch.
+    let out = transpileAmd(
+      `import { x } from 'shadow';
+       export function pick(n) {
+         switch (n) {
+           case 1: { let x = 'one'; return x; }
+           case 2: { let x = 'two'; return x; }
+           default: return 'other';
+         }
+       }`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out, { shadow: { x: 'IMPORTED' } });
+    assert.strictEqual((exports.pick as (n: number) => string)(1), 'one');
+    assert.strictEqual((exports.pick as (n: number) => string)(2), 'two');
+    assert.strictEqual((exports.pick as (n: number) => string)(3), 'other');
+  });
+
+  test('top-level await is rejected at transpile time (regression P2)', function (assert) {
+    // The AMD wrapper emits a non-async factory, so a top-level
+    // `await` would become a SyntaxError at eval time. Reject up
+    // front with a clear error message instead.
+    assert.throws(
+      () =>
+        transpileAmd(`import { p } from 'foo'; export const r = await p;`, {
+          moduleId,
+        }),
+      /top-level await is not supported/,
+    );
+  });
+
+  test('top-level await inside an async function is fine', function (assert) {
+    // Sanity check: `await` inside an async function (regular or
+    // arrow) must NOT trigger the top-level-await rejection.
+    let out = transpileAmd(
+      `import { p } from 'foo';
+       export async function r() { return await p; }`,
+      { moduleId },
+    );
+    let foo = { p: Promise.resolve(42) };
+    let { exports } = runAmd(out, { foo });
+    return (exports.r as () => Promise<number>)().then((v) => {
+      assert.strictEqual(v, 42);
+    });
+  });
+
   test('export default with parens around expression (regression P0)', function (assert) {
     // `export default (foo);` — acorn's `decl` AST positions skip the
     // source-level parens, so an earlier version produced
