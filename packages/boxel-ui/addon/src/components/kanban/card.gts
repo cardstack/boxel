@@ -55,7 +55,10 @@ const KanbanCard: TemplateOnlyComponent<Signature> = <template>
     }
     .card.board-dragging {
       transition:
-        transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+        transform 240ms cubic-bezier(0.4, 0, 0.2, 1),
+        height 200ms cubic-bezier(0.4, 0, 1, 1),
+        margin 200ms cubic-bezier(0.4, 0, 1, 1),
+        opacity 150ms ease-out,
         box-shadow 120ms ease-out;
     }
     .card:hover {

@@ -57,6 +57,9 @@ export class KanbanDragManager {
   @tracked selectedIndex: number | null = null;
   @tracked interactionMode: KanbanInteractionMode = 'idle';
   @tracked activeDragIndex: number | null = null;
+  // Deferred by one render frame so the source card's collapse animation begins
+  // after the ghost has materialised, rather than in the same paint.
+  @tracked collapseIndex: number | null = null;
   @tracked pointerClientX = 0;
   @tracked pointerClientY = 0;
   @tracked dragGhostWidth = 0;
@@ -469,12 +472,18 @@ export class KanbanDragManager {
 
   // ── Private ────────────────────────────────────────────────────────
 
+  private applyCollapse = (): void => {
+    this.collapseIndex = this.dragIndex;
+  };
+
   private activateDrag(container: HTMLElement): void {
     this.holdTask.cancelAll();
     this.interactionMode = 'drag';
     this.activeDragIndex = this.dragIndex;
     // Snapshot the pre-drag placements so cancellation can restore them.
     this.snapshotPlacements = this.args.placements.map((p) => ({ ...p }));
+    // Defer the collapse so it starts after the ghost has painted.
+    scheduleOnce('afterRender', this, this.applyCollapse);
 
     const rect = this.measureActiveCardRect(container, this.dragIndex);
     if (rect) {
@@ -651,6 +660,7 @@ export class KanbanDragManager {
     // but advances it in discrete slots instead of by pointer geometry.
     this.interactionMode = 'kb-drag';
     this.activeDragIndex = index;
+    this.collapseIndex = index;
     this.kbGrabIndex = index;
     this.selectedIndex = index;
     this.snapshotPlacements = placements.map((p) => ({ ...p }));
@@ -964,6 +974,7 @@ export class KanbanDragManager {
     this.suppressLostPointerCapture = false;
     this.activePointerId = null;
     this.activeDragIndex = null;
+    this.collapseIndex = null;
     this.kbGrabIndex = null;
     this.insertion = null;
     this.insertionBoxOffset = null;

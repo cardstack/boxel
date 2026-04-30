@@ -108,7 +108,7 @@ export class KanbanPlaneInner extends Component<{
   }
 
   isSource = (p: KanbanPlacement): boolean =>
-    p.index === this.manager.activeDragIndex;
+    p.index === this.manager.collapseIndex;
 
   isTargetColumn = (colIndex: number): boolean => {
     const ins = this.manager.insertion;
@@ -318,7 +318,7 @@ export class KanbanPlaneInner extends Component<{
         color: var(--_kanban-primary-fg);
         z-index: 0;
         pointer-events: none;
-        transition: transform 120ms ease-out;
+        transition: transform 240ms cubic-bezier(0.4, 0, 0.2, 1);
       }
 
       .empty-col {
