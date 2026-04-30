@@ -201,11 +201,11 @@ module('Integration | preview', function (hooks) {
       SharedTemplateCard,
     });
 
-    let card = new SharedTemplateCard({ firstName: 'Mango' });
+    let cardInstance = new SharedTemplateCard({ firstName: 'Mango' });
 
     class TestDriver extends GlimmerComponent {
       @tracked format: Format = 'isolated';
-      card = card;
+      card = cardInstance;
       flip = () => {
         this.format = this.format === 'isolated' ? 'edit' : 'isolated';
       };
@@ -273,11 +273,11 @@ module('Integration | preview', function (hooks) {
       DistinctTemplateCard,
     });
 
-    let card = new DistinctTemplateCard({ firstName: 'Mango' });
+    let cardInstance = new DistinctTemplateCard({ firstName: 'Mango' });
 
     class TestDriver extends GlimmerComponent {
       @tracked format: Format = 'isolated';
-      card = card;
+      card = cardInstance;
       flip = () => {
         this.format = this.format === 'isolated' ? 'edit' : 'isolated';
       };
@@ -351,13 +351,13 @@ module('Integration | preview', function (hooks) {
       FieldHostCard,
     });
 
-    let card = new FieldHostCard({
+    let cardInstance = new FieldHostCard({
       detail: new SharedFormatField({ name: 'Mango' }),
     });
 
     class TestDriver extends GlimmerComponent {
       @tracked format: Format = 'isolated';
-      card = card;
+      card = cardInstance;
       flip = () => {
         this.format = this.format === 'isolated' ? 'edit' : 'isolated';
       };
