@@ -55,6 +55,8 @@ beforeAll(async () => {
       'touch-check.gts': SOURCE_GTS,
       'cards/one.json': makeCardJson('One'),
       'cards/two.json': makeCardJson('Two'),
+      'cards/three.json': makeCardJson('Three'),
+      'cards/four.json': makeCardJson('Four'),
     },
   });
 
@@ -85,12 +87,25 @@ async function readMtimes(): Promise<Record<string, number>> {
   );
 }
 
+async function readFileContent(relPath: string): Promise<string> {
+  let response = await profileManager.authedRealmFetch(
+    `${realmUrl}${relPath}`,
+    {
+      method: 'GET',
+      headers: { Accept: 'application/vnd.card+source' },
+    },
+  );
+  return response.text();
+}
+
 describe('file touch (integration)', () => {
   it('touching a .json file updates its mtime on the realm', async () => {
     let target = 'cards/one.json';
     let before = (await readMtimes())[`${realmUrl}${target}`];
     expect(before).toBeDefined();
 
+    // mtime is second-resolution on most filesystems; sleep > 1s so we can
+    // reliably observe a change.
     await new Promise((r) => setTimeout(r, 1100));
 
     let result = await touchFiles(realmUrl, [target], { profileManager });
@@ -102,11 +117,27 @@ describe('file touch (integration)', () => {
     expect(after).toBeGreaterThan(before);
   });
 
+  it('touching a .json file persists `_touched` in `meta`', async () => {
+    let target = 'cards/three.json';
+    let before = Date.now();
+    let result = await touchFiles(realmUrl, [target], { profileManager });
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+
+    let content = await readFileContent(target);
+    let parsed = JSON.parse(content) as {
+      data: { meta: { _touched?: number } };
+    };
+    expect(typeof parsed.data.meta._touched).toBe('number');
+    expect(parsed.data.meta._touched!).toBeGreaterThanOrEqual(before);
+  });
+
   it('touching a .gts file updates its mtime', async () => {
     let target = 'touch-check.gts';
     let before = (await readMtimes())[`${realmUrl}${target}`];
     expect(before).toBeDefined();
 
+    // mtime is second-resolution on most filesystems; sleep > 1s so we can
+    // reliably observe a change.
     await new Promise((r) => setTimeout(r, 1100));
 
     let result = await touchFiles(realmUrl, [target], { profileManager });
@@ -115,6 +146,26 @@ describe('file touch (integration)', () => {
 
     let after = (await readMtimes())[`${realmUrl}${target}`];
     expect(after).toBeGreaterThan(before);
+  });
+
+  it('touching a .gts file toggles the `// touched for re-index` comment', async () => {
+    let target = 'touch-check.gts';
+    let initial = await readFileContent(target);
+    let initiallyHasComment = initial.includes('// touched for re-index');
+
+    let firstTouch = await touchFiles(realmUrl, [target], { profileManager });
+    expect(firstTouch.ok, JSON.stringify(firstTouch)).toBe(true);
+    let afterFirst = await readFileContent(target);
+    expect(afterFirst.includes('// touched for re-index')).toBe(
+      !initiallyHasComment,
+    );
+
+    let secondTouch = await touchFiles(realmUrl, [target], { profileManager });
+    expect(secondTouch.ok, JSON.stringify(secondTouch)).toBe(true);
+    let afterSecond = await readFileContent(target);
+    expect(afterSecond.includes('// touched for re-index')).toBe(
+      initiallyHasComment,
+    );
   });
 
   it('--all enumerates and touches every .json and .gts in the realm', async () => {
@@ -126,6 +177,8 @@ describe('file touch (integration)', () => {
     expect(result.touched).toContain('touch-check.gts');
     expect(result.touched).toContain('cards/one.json');
     expect(result.touched).toContain('cards/two.json');
+    // protected files must never be in the touched list
+    expect(result.touched).not.toContain('.realm.json');
   });
 
   it('--dry-run reports the planned touches without writing', async () => {
@@ -142,6 +195,39 @@ describe('file touch (integration)', () => {
     // mtime should not have changed
     let after = (await readMtimes())[`${realmUrl}${target}`];
     expect(after).toBe(before);
+  });
+
+  it('skips files with unsupported extensions', async () => {
+    let result = await touchFiles(realmUrl, ['cards/note.txt'], {
+      profileManager,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.touched).toEqual([]);
+    expect(result.skipped).toEqual([
+      { path: 'cards/note.txt', reason: 'unsupported extension' },
+    ]);
+  });
+
+  it('skips protected files like `.realm.json`', async () => {
+    let result = await touchFiles(realmUrl, ['.realm.json'], {
+      profileManager,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.touched).toEqual([]);
+    expect(result.skipped).toEqual([
+      { path: '.realm.json', reason: 'protected file' },
+    ]);
+  });
+
+  it('skips paths that 404 on the realm', async () => {
+    let result = await touchFiles(realmUrl, ['cards/does-not-exist.json'], {
+      profileManager,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.touched).toEqual([]);
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped[0].path).toBe('cards/does-not-exist.json');
+    expect(result.skipped[0].reason).toContain('404');
   });
 
   it('returns error when no paths and no --all', async () => {

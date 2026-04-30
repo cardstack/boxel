@@ -4,8 +4,10 @@ import {
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from '../../lib/profile-manager';
-import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
-import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+import { isProtectedFile } from '../../lib/realm-sync-base';
+import { listFiles } from './list';
+import { read } from './read';
+import { write } from './write';
 import { FG_GREEN, FG_RED, DIM, RESET } from '../../lib/colors';
 
 export interface TouchResult {
@@ -56,7 +58,6 @@ export async function touchFiles(
     };
   }
 
-  let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
   let targets: string[];
 
   if (options?.all) {
@@ -68,8 +69,8 @@ export async function touchFiles(
         error: 'Cannot pass file paths together with --all',
       };
     }
-    let listed = await listTouchableFiles(pm, normalizedRealmUrl);
-    if ('error' in listed) {
+    let listed = await listFiles(realmUrl, { profileManager: pm });
+    if (listed.error) {
       return {
         ok: false,
         touched: [],
@@ -77,7 +78,9 @@ export async function touchFiles(
         error: listed.error,
       };
     }
-    targets = listed.paths;
+    targets = listed.filenames.filter(
+      (p) => p.endsWith('.json') || p.endsWith('.gts'),
+    );
   } else {
     if (paths.length === 0) {
       return {
@@ -99,64 +102,31 @@ export async function touchFiles(
       continue;
     }
 
+    if (isProtectedFile(path)) {
+      skipped.push({ path, reason: 'protected file' });
+      continue;
+    }
+
     if (options?.dryRun) {
       touched.push(path);
       continue;
     }
 
-    let url = new URL(path, normalizedRealmUrl).href;
-    let getResponse: Response;
-    try {
-      getResponse = await pm.authedRealmFetch(url, {
-        method: 'GET',
-        headers: { Accept: SupportedMimeType.CardSource },
-      });
-    } catch (err) {
-      skipped.push({
-        path,
-        reason: err instanceof Error ? err.message : String(err),
-      });
+    let readResult = await read(realmUrl, path, { profileManager: pm });
+    if (!readResult.ok || readResult.content == null) {
+      skipped.push({ path, reason: readResult.error ?? 'read failed' });
       continue;
     }
 
-    if (!getResponse.ok) {
-      let body = await getResponse.text().catch(() => '(no body)');
-      skipped.push({
-        path,
-        reason: `GET HTTP ${getResponse.status}: ${body.slice(0, 200)}`,
-      });
-      continue;
-    }
-
-    let original = await getResponse.text();
     let next = path.endsWith('.json')
-      ? touchJson(original)
-      : touchGts(original);
+      ? touchJson(readResult.content)
+      : touchGts(readResult.content);
 
-    let putResponse: Response;
-    try {
-      putResponse = await pm.authedRealmFetch(url, {
-        method: 'POST',
-        headers: {
-          Accept: SupportedMimeType.CardSource,
-          'Content-Type': SupportedMimeType.CardSource,
-        },
-        body: next,
-      });
-    } catch (err) {
-      skipped.push({
-        path,
-        reason: err instanceof Error ? err.message : String(err),
-      });
-      continue;
-    }
-
-    if (!putResponse.ok) {
-      let body = await putResponse.text().catch(() => '(no body)');
-      skipped.push({
-        path,
-        reason: `POST HTTP ${putResponse.status}: ${body.slice(0, 200)}`,
-      });
+    let writeResult = await write(realmUrl, path, next, {
+      profileManager: pm,
+    });
+    if (!writeResult.ok) {
+      skipped.push({ path, reason: writeResult.error ?? 'write failed' });
       continue;
     }
 
@@ -164,51 +134,6 @@ export async function touchFiles(
   }
 
   return { ok: skipped.length === 0, touched, skipped };
-}
-
-async function listTouchableFiles(
-  pm: ProfileManager,
-  normalizedRealmUrl: string,
-): Promise<{ paths: string[] } | { error: string }> {
-  let mtimesUrl = `${normalizedRealmUrl}_mtimes`;
-  let response: Response;
-  try {
-    response = await pm.authedRealmFetch(mtimesUrl, {
-      method: 'GET',
-      headers: { Accept: SupportedMimeType.Mtimes },
-    });
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) };
-  }
-
-  if (!response.ok) {
-    let body = await response.text().catch(() => '(no body)');
-    return {
-      error: `_mtimes returned HTTP ${response.status}: ${body.slice(0, 300)}`,
-    };
-  }
-
-  let json = (await response.json()) as {
-    data?: { attributes?: { mtimes?: Record<string, number> } };
-  };
-  let mtimes =
-    json?.data?.attributes?.mtimes ??
-    (json as unknown as Record<string, number>);
-
-  let paths: string[] = [];
-  for (let fullUrl of Object.keys(mtimes)) {
-    if (!fullUrl.startsWith(normalizedRealmUrl)) {
-      continue;
-    }
-    let relativePath = fullUrl.slice(normalizedRealmUrl.length);
-    if (!relativePath || relativePath.endsWith('/')) {
-      continue;
-    }
-    if (relativePath.endsWith('.json') || relativePath.endsWith('.gts')) {
-      paths.push(relativePath);
-    }
-  }
-  return { paths: paths.sort() };
 }
 
 function touchJson(content: string): string {
@@ -225,13 +150,7 @@ function touchJson(content: string): string {
 }
 
 function toggleTrailingNewline(content: string): string {
-  if (content.endsWith('\n\n')) {
-    return content.slice(0, -1);
-  }
-  if (content.endsWith('\n')) {
-    return content + '\n';
-  }
-  return content + '\n';
+  return content.endsWith('\n\n') ? content.slice(0, -1) : content + '\n';
 }
 
 function touchGts(content: string): string {
@@ -247,7 +166,8 @@ export function registerTouchCommand(parent: Command): void {
   parent
     .command('touch')
     .description(
-      'Force realm re-indexing of one or more files by making a semantically-neutral edit',
+      'Force realm re-indexing of one or more files by making a semantically-neutral edit. ' +
+        '--all touches every .json/.gts in the realm without confirmation; use with care.',
     )
     .argument(
       '[paths...]',
