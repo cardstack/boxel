@@ -917,7 +917,25 @@ export class RealmServer {
       ...(backgroundURL ? { backgroundURL } : {}),
       publishable: true,
     };
-    writeJSONSync(join(realmPath, '.realm.json'), info);
+    writeJSONSync(join(realmPath, '.realm.json'), {
+      publishable: true,
+    });
+    writeJSONSync(join(realmPath, 'realm.json'), {
+      data: {
+        type: 'card',
+        attributes: {
+          cardInfo: { name },
+          ...(iconURL ? { iconURL } : {}),
+          ...(backgroundURL ? { backgroundURL } : {}),
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/realm-config',
+            name: 'RealmConfig',
+          },
+        },
+      },
+    });
     writeJSONSync(join(realmPath, 'index.json'), {
       data: {
         type: 'card',
@@ -1022,7 +1040,10 @@ export class RealmServer {
         let realmName = maybeRealm.name;
         let realmPath = join(this.realmsRootPath, owner, realmName);
         let maybeRealmContents = readdirSync(realmPath);
-        if (maybeRealmContents.includes('.realm.json')) {
+        if (
+          maybeRealmContents.includes('.realm.json') ||
+          maybeRealmContents.includes('realm.json')
+        ) {
           let url = new URL(
             `${this.serverURL.pathname.replace(
               /\/$/,
@@ -1122,9 +1143,12 @@ export class RealmServer {
         try {
           let maybeRealmContents = readdirSync(realmPath);
 
-          if (!maybeRealmContents.includes('.realm.json')) {
+          if (
+            !maybeRealmContents.includes('.realm.json') &&
+            !maybeRealmContents.includes('realm.json')
+          ) {
             this.log.warn(
-              `Directory ${realmPath} exists but does not contain .realm.json, skipping`,
+              `Directory ${realmPath} exists but does not contain .realm.json or realm.json, skipping`,
             );
             continue;
           }

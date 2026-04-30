@@ -13,6 +13,7 @@ import {
   removeSync,
   writeFileSync,
 } from 'fs-extra';
+import { utimesSync } from 'fs';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   baseRealm,
@@ -72,6 +73,7 @@ module(basename(__filename), function () {
     let testRealmURL = realmURL;
     let testRealm: Realm;
     let testRealmHttpServer: Server;
+    let testRealmPath: string;
     let request: RealmRequest;
     let serverRequest: SuperTest<Test>;
     let dir: DirResult;
@@ -86,12 +88,14 @@ module(basename(__filename), function () {
     function onRealmSetup(args: {
       testRealm: Realm;
       testRealmHttpServer: Server;
+      testRealmPath: string;
       request: SuperTest<Test>;
       dir: DirResult;
       dbAdapter: PgAdapter;
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
+      testRealmPath = args.testRealmPath;
       serverRequest = args.request;
       request = withRealmPath(args.request, realmURL);
       dir = args.dir;
@@ -408,10 +412,70 @@ module(basename(__filename), function () {
           },
           'response includes updated realm info',
         );
-        assert.deepEqual(
-          readJSONSync(realmConfigPath),
-          { ...(initialConfig ?? {}), backgroundURL: 'new-bg' },
-          '.realm.json contains the updated property',
+        // backgroundURL is owned by the RealmConfig card, not the sidecar.
+        let cardPath = join(dir.name, 'realm_server_1', 'test', 'realm.json');
+        let cardDoc = readJSONSync(cardPath);
+        assert.strictEqual(
+          cardDoc.data.attributes.backgroundURL,
+          'new-bg',
+          'realm.json card contains the updated backgroundURL',
+        );
+      });
+
+      test('can clear card-owned URL fields by patching null', async function (assert) {
+        let auth = `Bearer ${createJWT(testRealm, 'user', [
+          'read',
+          'write',
+          'realm-owner',
+        ])}`;
+
+        // First set non-null values so we have something to clear.
+        let setResponse = await request
+          .patch('/_config')
+          .set('Accept', SupportedMimeType.JSON)
+          .set('Authorization', auth)
+          .send({
+            data: {
+              type: 'realm-config',
+              attributes: {
+                backgroundURL: 'http://example.com/bg.jpg',
+                iconURL: 'http://example.com/icon.png',
+              },
+            },
+          });
+        assert.strictEqual(setResponse.status, 200, 'set HTTP 200 status');
+        assert.strictEqual(
+          setResponse.body.data.attributes.backgroundURL,
+          'http://example.com/bg.jpg',
+          'backgroundURL set in overlay',
+        );
+        assert.strictEqual(
+          setResponse.body.data.attributes.iconURL,
+          'http://example.com/icon.png',
+          'iconURL set in overlay',
+        );
+
+        // Now clear them.
+        let clearResponse = await request
+          .patch('/_config')
+          .set('Accept', SupportedMimeType.JSON)
+          .set('Authorization', auth)
+          .send({
+            data: {
+              type: 'realm-config',
+              attributes: { backgroundURL: null, iconURL: null },
+            },
+          });
+        assert.strictEqual(clearResponse.status, 200, 'clear HTTP 200 status');
+        assert.strictEqual(
+          clearResponse.body.data.attributes.backgroundURL,
+          null,
+          'backgroundURL is null after patching null',
+        );
+        assert.strictEqual(
+          clearResponse.body.data.attributes.iconURL,
+          null,
+          'iconURL is null after patching null',
         );
       });
 
@@ -694,6 +758,10 @@ module(basename(__filename), function () {
         writeFileSync(realmConfigPath, invalidContent);
 
         try {
+          // publishable is sidecar-owned, so this exercises the sidecar
+          // JSON-parse error path. Card-owned fields (name, backgroundURL,
+          // iconURL, hostRoutingRules) go to realm.json and would not
+          // surface an error from a malformed .realm.json.
           let response = await request
             .patch('/_config')
             .set('Accept', SupportedMimeType.JSON)
@@ -708,7 +776,7 @@ module(basename(__filename), function () {
             .send({
               data: {
                 type: 'realm-config',
-                attributes: { backgroundURL: 'updated-bg' },
+                attributes: { publishable: false },
               },
             });
 
@@ -917,6 +985,66 @@ module(basename(__filename), function () {
         notModifiedModuleResponse.headers['etag'],
         moduleEtag,
         '304 response echoes module variant ETag',
+      );
+    });
+
+    // Regression test for the flaky `atomic-endpoints-test > can update an
+    // existing instance` failure. The bug: source ETags were keyed by
+    // `lastModified` in whole unix seconds, so two writes landing in the
+    // same second produced identical ETags — `cachedFetch` then returned
+    // a 304-cached stale body. Force the same on-disk mtime across two
+    // different writes and assert the source ETag is content-derived.
+    test('source ETag distinguishes content even when on-disk lastModified collides', async function (assert) {
+      let modulePath = 'etag-collision-test.json';
+      let initial = JSON.stringify({ value: 'initial' });
+      let updated = JSON.stringify({ value: 'updated' });
+      // Both writes are pinned to the same wall-clock second below.
+      let collidingMtime = new Date('2026-01-01T00:00:00Z');
+      let absolutePath = join(testRealmPath, modulePath);
+      let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+
+      await testRealm.write(modulePath, initial);
+      utimesSync(absolutePath, collidingMtime, collidingMtime);
+
+      let firstResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', authHeader);
+      assert.strictEqual(firstResponse.status, 200, 'first request succeeds');
+      let firstEtag = firstResponse.headers['etag'];
+      assert.ok(firstEtag, 'first response carries an ETag');
+
+      await testRealm.write(modulePath, updated);
+      utimesSync(absolutePath, collidingMtime, collidingMtime);
+
+      let secondResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', authHeader);
+      assert.strictEqual(secondResponse.status, 200, 'second request succeeds');
+      let secondEtag = secondResponse.headers['etag'];
+      assert.ok(secondEtag, 'second response carries an ETag');
+
+      assert.notStrictEqual(
+        firstEtag,
+        secondEtag,
+        'distinct content yields distinct ETags despite identical lastModified',
+      );
+
+      let conditionalResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', authHeader)
+        .set('If-None-Match', firstEtag);
+      assert.strictEqual(
+        conditionalResponse.status,
+        200,
+        'conditional GET with the prior ETag must not return 304',
+      );
+      assert.strictEqual(
+        conditionalResponse.text.trim(),
+        updated,
+        'conditional GET serves the updated body, not the cached prior body',
       );
     });
 
@@ -1792,6 +1920,14 @@ module(basename(__filename), function () {
                   kind: 'file',
                 },
               },
+              'realm.json': {
+                links: {
+                  related: `${testRealmHref}realm.json`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
               'sample.md': {
                 links: {
                   related: `${testRealmHref}sample.md`,
@@ -1843,6 +1979,7 @@ module(basename(__filename), function () {
     const basePath = resolve(join(__dirname, '..', '..', 'base'));
     const demoFileSystem: Record<string, string | LooseSingleCardDocument> = {
       '.realm.json': readJSONSync(join(__dirname, 'cards', '.realm.json')),
+      'realm.json': readJSONSync(join(__dirname, 'cards', 'realm.json')),
       'person.gts': readFileSync(
         join(__dirname, 'cards', 'person.gts'),
         'utf8',

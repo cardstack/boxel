@@ -21,3 +21,4 @@ import './eval-execution.test';
 import './instantiate-step.test';
 import './parse-step.test';
 import './port-allocator.test';
+import './find-and-hold-available-port.test';

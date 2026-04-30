@@ -22,10 +22,7 @@ import {
   getBoxComponent,
 } from './field-component';
 import { Button, IconButton, Pill } from '@cardstack/boxel-ui/components';
-import {
-  restartableTask,
-  type EncapsulatedTaskDescriptor as Descriptor,
-} from 'ember-concurrency';
+import { restartableTask } from 'ember-concurrency';
 import {
   chooseCard,
   chooseFile,
@@ -109,7 +106,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
   </template>
 
   add = () => {
-    (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
+    this.chooseCard.perform();
   };
 
   private chooseCard = restartableTask(async () => {

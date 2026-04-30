@@ -44,6 +44,31 @@ cd "$(dirname "$0")/.."
 # shellcheck source=./grafanactl-env.sh
 source ./scripts/grafanactl-env.sh "$env_name"
 
+# Pre-flight prereqs for hosted envs BEFORE grafanactl pushes anything.
+# Otherwise a missing env var or absent yq would surface only after
+# dashboards/folders had already been re-pushed, leaving a partial apply.
+if [[ "$env_name" != "local" ]]; then
+  for cmd in yq jq curl envsubst; do
+    command -v "$cmd" >/dev/null \
+      || { echo "error: missing dependency: ${cmd}" >&2; exit 1; }
+  done
+  required_env_vars=(
+    GRAFANA_TOKEN
+    # Loki — CS-10968
+    LOKI_URL
+    # Boxel-db postgres + synapse-prometheus — CS-10978
+    BOXEL_DB_HOST
+    BOXEL_DB_NAME
+    BOXEL_DB_USER
+    BOXEL_DB_PASSWORD
+    SYNAPSE_PROMETHEUS_URL
+  )
+  for v in "${required_env_vars[@]}"; do
+    [[ -n "${!v:-}" ]] \
+      || { echo "error: ${v} not set; CI fetches it from SSM in observability-apply-${env_name}.yml — for a local hosted run, export it manually first (see apply-datasources.sh header for the SSM path)" >&2; exit 1; }
+  done
+fi
+
 cfg="$(./scripts/render-config.sh "$env_name")"
 trap 'rm -f "$cfg"' EXIT
 
@@ -53,3 +78,7 @@ grafanactl \
   resources push \
   --path ./grafanactl/resources \
   "${forwarded_args[@]}"
+
+# Data sources — grafanactl doesn't manage them, so push via HTTP API.
+# Local skips this (docker-compose handles file provisioning).
+./scripts/apply-datasources.sh --env "$env_name"

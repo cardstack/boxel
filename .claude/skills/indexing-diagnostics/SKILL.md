@@ -1,6 +1,6 @@
 ---
 name: indexing-diagnostics
-description: Investigate slow or failing indexing using the diagnostics persisted on every `boxel_index` row (`timing_diagnostics` JSONB column, mirrored onto `error_doc.diagnostics` for error rows) plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, and (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, or when investigating the CS-10820 saturation class of incidents.
+description: Investigate slow or failing indexing using the diagnostics persisted on every `boxel_index` row (`timing_diagnostics` JSONB column, mirrored onto `error_doc.diagnostics` for error rows) plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, and (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, or when investigating the CS-10820 saturation class of incidents. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -22,6 +22,15 @@ Three places, all correlated:
 3. **Logs** — `prerender-server`, `manager`, and `remote-prerenderer` lines all carry `requestId=…`. `grep requestId=<uuid>` collates one call across all three processes. For saturation incidents there's also the periodic `prerender-queue-snapshot` line on each prerender server.
 
 For UI triage you'll typically read the JSON error response (which surfaces `error_doc.diagnostics` as `meta.diagnostics`). For operator / SQL triage — especially slow non-failing reindexes — query the `timing_diagnostics` column directly.
+
+## How to actually run these queries
+
+The SQL examples below are environment-agnostic — they work the same against local dev, staging, or prod. What changes is *how you reach the database*:
+
+- **Local dev**: `psql "$DATABASE_URL"` (or whatever your local boxel server uses) directly.
+- **Staging / prod**: the RDS instances are private to the cardstack VPC. Use the `aws-access` skill — it covers (a) provisioning a Claude-usable AWS session via `mise run claude-aws <env> <token>`, (b) the SSM port-forward tunnel through the realm-server ECS task to RDS, and (c) connecting via psql as the read-only `claude_readonly_user` (member of `readonly_role`). This skill assumes you've already got that connection working; it doesn't re-document the AWS plumbing.
+
+When wrapping a query below into the staging/prod form, run it through the `psql -h localhost -p <local-port> -A -t` invocation that the `aws-access` skill sets up — same SQL, different transport.
 
 ## The four stall categories
 
@@ -137,6 +146,399 @@ GROUP BY 1
 ORDER BY p95_ms DESC NULLS LAST
 LIMIT 20;
 ```
+
+## Mode C — a worker job is stuck or got rejected
+
+Mode A and Mode B both assume `boxel_index` has up-to-date `timing_diagnostics` for the rows you're investigating. That assumption breaks when an indexing job is *in progress* or got rejected mid-flight: nothing has been committed to `boxel_index` yet (the indexer writes to a staging table and only swaps on success — see [Reading partial progress from `boxel_index_working`](#5-reading-partial-progress-from-boxel_index_working) below), so the diagnostics column there is stale or null for the affected rows.
+
+For this mode the diagnostic stance flips from "what timed out" (Mode A) or "what was slow" (Mode B) to **"what hasn't happened yet"**. You're reconstructing the work the job *would have done* from three sources together:
+
+1. **`boxel_index_working`** — the staging table the indexer writes to as it makes progress. On success its rows for the touched URLs are copied into `boxel_index` (`Batch.applyBatchUpdates` in `packages/runtime-common/index-writer.ts`). On failure (worker crash, job timeout, manual cancel) the working rows are left behind, which is exactly the bisection signal you want: any row in `boxel_index_working` that is *not yet* in `boxel_index` (or has a higher `realm_version`) was already processed by the stuck job.
+2. **EFS file mtimes** — reachable via the `aws-access` skill's "Browsing the EFS filesystem" path (the `boxel-claude-fs-readonly-<env>` Fargate task). Combined with `boxel_index.last_modified` (the indexer's view of when each file was last processed) this lets you reconstruct what *would* have been invalidated by a from-scratch run, *before* any `boxel_index_working` rows existed.
+3. **Worker logs** in CloudWatch (`ecs-boxel-worker-<env>`) — confirms the job's start, the file it was on at the freeze point, and any partial completion lines.
+
+### 1. Recognising the situation
+
+You're in Mode C territory if any of these hold:
+
+- The worker log shows a `starting from-scratch indexing` or `starting from incremental indexing` line for the realm but no matching `completed from scratch indexing` / `completed incremental indexing` line in the same `[job: <id>.<rid>]` group (the job-identity prefix is `[job: <jobId>.<reservationId>]`; see `jobIdentity` in `packages/runtime-common/utils.ts`).
+- `boxel_index` rows for the realm look stale (`last_modified` predates the file's EFS mtime, or `timing_diagnostics->>'indexedAt'` is older than you'd expect for the last reindex you triggered).
+- The job-id appears as `unfulfilled` in `jobs` and has at least one row in `job_reservations` whose `completed_at IS NULL` (in-flight). A `rejected` row in `jobs` with no `completed_at` on its newest reservation means the worker bailed but the worker-finalize transaction may not have run cleanly.
+- A subsequent reindex was enqueued and re-reserved the same concurrency group (`indexing:<realm-url>`) — check `job_reservations.created_at` for the same `job_id`.
+
+Job/reservation health (read-only):
+
+```sql
+-- Find recent unfinished or rejected indexing jobs for a realm.
+SELECT
+  j.id                                                AS job_id,
+  j.job_type,
+  j.status,
+  j.created_at,
+  j.finished_at,
+  j.args->>'realmURL'                                 AS realm_url,
+  j.timeout                                           AS timeout_sec,
+  j.concurrency_group
+FROM jobs j
+WHERE j.args->>'realmURL' = '<realm-url>'
+  AND j.job_type IN ('from-scratch-index', 'incremental-index', 'copy-index')
+ORDER BY j.created_at DESC
+LIMIT 20;
+
+-- Reservations for one job. completed_at IS NULL with locked_until in the
+-- future = a worker is currently holding it. completed_at IS NULL with
+-- locked_until in the past = the reservation expired and the row is
+-- eligible to be claimed by another worker (i.e. the job will be retried).
+SELECT
+  id, job_id, worker_id, created_at, locked_until, completed_at,
+  locked_until < NOW() AS expired
+FROM job_reservations
+WHERE job_id = <job-id>
+ORDER BY created_at DESC;
+```
+
+(See `packages/runtime-common/realm-index-updater.ts::publishFullIndex` and `update`, `packages/runtime-common/jobs/reindex-realm.ts`, and `packages/postgres/pg-queue.ts` for how these tables are populated and what `unfulfilled` / `resolved` / `rejected` mean. The full-reindex path (`enqueueReindexRealmJob` with `clearLastModified: true`) intentionally nulls `boxel_index.last_modified` *before* enqueuing — relevant to step 3 below.)
+
+### 2. Distinguishing from-scratch vs incremental
+
+Look at the worker log's start line for the job. Both come from `index-runner.ts` at debug level on the `index-runner` logger:
+
+- From-scratch: `[job: <jobId>.<rid>] starting from scratch indexing` (line 156). The wrapping task layer (`tasks/indexer.ts` line 252) also logs `[job: …] starting from-scratch indexing for job: <stringified-args>` on the `worker` logger; this is the line that contains the full args payload (realmURL, realmUsername).
+- Incremental: `[job: <jobId>.<rid>] starting from incremental indexing for <comma-separated-urls>` (line 273). The matching `worker`-logger line is `[job: …] starting incremental indexing for job: <stringified-args>` — its `changes` array is the seed set you'll need in step 4.
+
+Both lines are at `debug`. If the worker's `LOG_LEVELS` is `*=info` (the default — see `packages/realm-server/setup-logger.ts`), neither will be in CloudWatch. Check which loggers are on before you try to grep — see [step 7](#7-cross-referencing-with-worker-logs).
+
+The next steps differ by mode:
+
+- From-scratch: the seed isn't in the job args; you have to reconstruct it from EFS mtimes vs `boxel_index.last_modified` (step 3).
+- Incremental: the seed is the `changes` array in the job's args (step 4).
+
+### 3. Reconstructing the invalidation graph for a from-scratch job
+
+The from-scratch path lives in `IndexRunner.fromScratch` (`packages/runtime-common/index-runner.ts`). It:
+
+1. Reads every existing row's `(url, type, last_modified, has_error)` from `boxel_index` — this is `Batch.getModifiedTimes` in `index-writer.ts` (line 212):
+
+   ```sql
+   SELECT i.url, i.type, i.last_modified, i.has_error
+   FROM boxel_index AS i
+   WHERE i.realm_url = '<realm-url>';
+   ```
+
+2. Walks the realm's filesystem via the `_mtimes` endpoint (`Realm.realmMtimes` in `realm.ts` line 4307) — for the deployed environments you reproduce this walk by browsing EFS via the fs-explorer task in `aws-access`. The endpoint walks `realmsRootPath` recursively, calls `lastModified()` per file, and returns `{ <fileURL>: <epoch-seconds> }`. Skips anything matched by `.gitignore` or the realm's hard-coded ignore list (`.git`, `.realm.json`, `.template-lintrc.js`).
+
+3. Builds the seed set in `discoverInvalidations` (`packages/runtime-common/index-runner/discover-invalidations.ts`). A file is in the seed if **any** of:
+   - it's not in the index (`!indexEntry`),
+   - the index row has `has_error = TRUE` (re-try error rows on every from-scratch),
+   - `last_modified IS NULL` in the index (full-reindex with `clearLastModified` zeroed it — that's why `_full-reindex` is destined to invalidate everything),
+   - the filesystem mtime differs from the index's `last_modified` (file was edited since last successful index).
+
+   Plus: any URL in `boxel_index` that is **not** present on disk is added as a deletion ("tombstone") seed. From the code (lines 64-90):
+
+   ```ts
+   for (let [mtimeUrl, lastModified] of Object.entries(filesystemMtimes)) {
+     let indexEntry = indexMtimes.get(mtimeUrl);
+     if (
+       !indexEntry ||
+       indexEntry.hasError ||
+       indexEntry.lastModified == null ||
+       lastModified !== indexEntry.lastModified
+     ) {
+       invalidationList.push(mtimeUrl);
+     }
+   }
+   let deletedUrls = [...indexMtimes.keys()].filter(
+     (indexedUrl) => !filesystemMtimes[indexedUrl],
+   );
+   invalidationList.push(...deletedUrls);
+   ```
+
+   Reproduce that comparison by hand. To find rows in the index that *would have* been seeded:
+
+   ```sql
+   -- "Stale" rows in boxel_index — anything where the indexer's view of
+   -- last_modified is missing, errored, or older than what's on disk is
+   -- a from-scratch seed candidate. (Compare against the fs-explorer
+   -- mtime listing for the realm; the EFS endpoint reports seconds, the
+   -- DB stores seconds in `last_modified`.)
+   SELECT
+     i.url,
+     i.type,
+     i.has_error,
+     i.last_modified,
+     to_timestamp(i.last_modified::bigint) AS index_seen_at
+   FROM boxel_index AS i
+   WHERE i.realm_url = '<realm-url>'
+     AND (
+       i.has_error = TRUE
+       OR i.last_modified IS NULL
+     )
+   ORDER BY i.has_error DESC, i.last_modified ASC NULLS FIRST;
+   ```
+
+   Then take the EFS listing for the same realm (recursively via the fs-explorer Caddy autoindex — `packages/runtime-common/realm.ts` walks every file under the realm root, skipping `.git` / ignored paths) and join it against `boxel_index.last_modified`. The set of files where filesystem mtime differs from `last_modified` (or the file isn't in `boxel_index` at all) is the from-scratch seed.
+
+4. Once the seed is known, the runner immediately calls `Batch.invalidate(seed)` to grow the seed by consumer fan-out (step 5). The visit loop then iterates over the resulting invalidation list.
+
+If the worker froze before any seed-driven visit ran (no rows in `boxel_index_working` for this batch — see step 6), it's stuck either in the mtime-walk on the realm-server side (slow EFS / many files) or in `Batch.invalidate`'s consumer fan-out. The CloudWatch line that proves we got past mtime-collection is `[job: …] discovering invalidations in dir <realm-url>` — emitted on both `index-runner` and `index-perf` from `discoverInvalidations.ts` line 34/37. Absence of that line on a `*=debug` worker means we're still in the fetch.
+
+### 4. Reconstructing the invalidation graph for an incremental job
+
+The incremental path (`IndexRunner.incremental`) skips the mtime walk entirely. The seed is the `changes` array in the job args, available verbatim in:
+
+- The `jobs.args` JSONB row for `job_type = 'incremental-index'`:
+
+  ```sql
+  SELECT id, args->'changes' AS changes
+  FROM jobs
+  WHERE id = <job-id>;
+  ```
+
+- The worker's `starting incremental indexing for job: …` line (worker logger, debug level), which stringifies the entire `args`.
+- `IndexRunner.incremental`'s own line (index-runner logger, debug level): `starting from incremental indexing for <comma-separated-urls>` — gives just the URLs, not operations.
+
+Each entry is `{ url: string, operation: 'update' | 'delete' }`. The runner converts that to `URL` objects, calls `Batch.invalidate(urls)` once, and proceeds to visit. Skip directly to the consumer fan-out (step 5) using these URLs as the seed.
+
+### 5. Computing consumers (the fan-out)
+
+The fan-out is **iterative**, not a single recursive CTE. `Batch.invalidate(urls)` (`packages/runtime-common/index-writer.ts` line 826) drives the loop:
+
+1. For each seed URL, collect concrete-URL matches across `boxel_index_working` (current batch) and `boxel_index` (production) — `urlsMatchingSeed` (lines 776-819).
+2. For each matched URL, call `calculateInvalidations(alias)` (line 1066) which finds rows that reference the alias in their `deps` jsonb array, then recurses into those rows' aliases. Recursion is bounded by a `visited` set per `invalidate()` call — there are no fixed iteration counts, the walk continues until `visited` saturates.
+3. The single SQL building block is `itemsThatReference(resolvedPath)` (line 978), which on Postgres uses jsonb containment. **Where to read from depends on the question**: at runtime the indexer queries `boxel_index_working` so mid-batch tombstones and rewrites are visible to subsequent fan-out iterations. For *post-mortem* reconstruction of a stuck job, prefer `boxel_index` (committed state) — that gives you the state the runner *started* with, before its own writes confused the picture. If the job partially advanced, probe both tables side-by-side to see what was already redrawn vs. what was still untouched.
+
+   ```sql
+   -- One iteration of consumer fan-out, against the committed state
+   -- (post-mortem flavour). Returns rows whose deps array contains the
+   -- seed URL. Loop in your head: feed each result's file_alias (or url,
+   -- per the invalidationTraversalAlias rule) back in as the next
+   -- iteration's seed.
+   SELECT i.url, i.file_alias, i.type
+   FROM boxel_index AS i
+   WHERE i.deps @> '["<seed-url>"]'::jsonb
+     AND i.realm_url = '<realm-url>'
+   LIMIT 1000;
+
+   -- Same iteration against the live in-batch view (matches what the
+   -- runner is actually walking right now). For a stuck job, run BOTH
+   -- and diff the URL sets — the difference is what the batch has
+   -- already tombstoned or rewritten.
+   SELECT i.url, i.file_alias, i.type
+   FROM boxel_index_working AS i
+   WHERE i.deps @> '["<seed-url>"]'::jsonb
+     AND i.realm_url = '<realm-url>'
+   LIMIT 1000;
+   ```
+
+   When the seed has a `@cardstack/...` "registered prefix" form (catalog modules, etc.), the runtime also probes the unresolved form — `@>` against `["<unresolved-prefix>/..."]`. Reproduce by-hand only if your seed URL is one of those (look for `unresolveCardReference` in `card-reference-resolver.ts`).
+
+4. The `invalidationTraversalAlias` rule (line 1095) decides what gets fed into the *next* iteration:
+   - For `type = 'instance'` rows: the row's own `url` (the `.json` URL).
+   - For executable file rows (`.gts` / `.ts` / `.js` / `.gjs`) with a `file_alias`: the `file_alias` (path with extension trimmed). Executable consumers see the *aliased* URL in `deps`, not the source file with extension.
+   - Otherwise (non-executable file rows): the row's `url`.
+
+5. After the loop converges (no new URLs added to `visited`), `tombstoneEntries(invalidations)` (line 684) inserts a `is_deleted = true` row for every invalidated URL into `boxel_index_working` with `realm_version = <next-version>`, stamped with the batch's current `invalidationId`. **This is the first DB-side write of the batch.** If the worker died before this, `boxel_index_working` will not yet contain partial-progress rows for the new realm version (step 6 will be empty).
+
+To reconstruct the consumer set against the live DB, run the iteration manually:
+
+```sql
+-- Iteration 1: direct consumers of one seed URL.
+SELECT i.url, i.file_alias, i.type
+FROM boxel_index AS i
+WHERE i.realm_url = '<realm-url>'
+  AND i.deps @> '["<seed-url>"]'::jsonb;
+
+-- Iteration N: feed each previous iteration's traversal alias (per the
+-- invalidationTraversalAlias rule above) back into the same query.
+-- Stop when the union of unique URLs stops growing.
+```
+
+For a quick approximation against a stuck job — a single SQL pass that covers most realms (no transitive recursion, but catches one hop):
+
+```sql
+-- All rows in boxel_index that depend on any URL in a seed set.
+-- Use this to estimate the size of the fan-out one hop deep.
+WITH seeds(url) AS (VALUES
+  ('<seed-url-1>'),
+  ('<seed-url-2>')
+)
+SELECT DISTINCT i.url, i.type, i.file_alias
+FROM boxel_index AS i, seeds
+WHERE i.realm_url = '<realm-url>'
+  AND i.deps @> jsonb_build_array(seeds.url);
+```
+
+Two-hop fan-out: rerun with the first hop's `(url, file_alias, type)` plugged in via `invalidationTraversalAlias` (instance → use `url`; executable file → use `file_alias`; non-executable file → use `url`). In practice the runtime walk converges in 2-4 hops for typical realms; if you're still discovering new URLs after 5-6 hops, you've hit a tightly-cycled module graph and reconstruction by hand isn't going to be cheap.
+
+### 6. Reading partial progress from `boxel_index_working`
+
+`boxel_index_working` carries the batch's in-progress writes, keyed by `(url, realm_url)`. The indexer writes here continuously via `Batch.updateEntry` (line 310). On `Batch.done()` (line 476), rows are copied into `boxel_index` with the new `realm_version` and the working table is **left in place** — it's not truncated (each invalidation is keyed by realm version inside the table). For a stuck job, the rows already written carry the same `invalidationId` and bracket the freeze point.
+
+```sql
+-- Partial progress for a stuck batch: rows the in-progress job has
+-- already written, ordered by indexedAt so the bottom row is the file
+-- that was being worked on when things froze.
+--
+-- The diagnostic projection mirrors Mode B's fan-out query — use
+-- timing_diagnostics->>'renderStage' / 'currentlyEvaluatingModule' /
+-- 'recentModuleEvaluations[0].url' to identify the specific module the
+-- worker stalled on.
+SELECT
+  url,
+  type,
+  has_error,
+  realm_version,
+  to_timestamp((timing_diagnostics->>'indexedAt')::bigint / 1000)
+                                                       AS indexed_at,
+  timing_diagnostics->>'invalidationId'                AS invalidation_id,
+  timing_diagnostics->>'renderStage'                   AS render_stage,
+  timing_diagnostics->>'currentlyEvaluatingModule'     AS evaluating_module,
+  timing_diagnostics->'recentModuleEvaluations'->0->>'url'
+                                                       AS slowest_module,
+  jsonb_array_length(
+    COALESCE(timing_diagnostics->'inFlightModuleImports', '[]'::jsonb)
+  )                                                    AS modules_in_flight,
+  jsonb_array_length(
+    COALESCE(timing_diagnostics->'queryLoadsInFlight', '[]'::jsonb)
+  )                                                    AS queries_in_flight
+FROM boxel_index_working
+WHERE realm_url = '<realm-url>'
+  AND timing_diagnostics->>'invalidationId' = '<invalidation-id>'
+ORDER BY (timing_diagnostics->>'indexedAt')::bigint ASC;
+```
+
+If you don't already have an `invalidationId`, find the most recent batch's ID against the working table (the last `updateEntry` for the realm wins):
+
+```sql
+SELECT
+  timing_diagnostics->>'invalidationId'                AS invalidation_id,
+  realm_version,
+  count(*)                                             AS rows_written,
+  to_timestamp(
+    min((timing_diagnostics->>'indexedAt')::bigint) / 1000
+  )                                                    AS first_write,
+  to_timestamp(
+    max((timing_diagnostics->>'indexedAt')::bigint) / 1000
+  )                                                    AS last_write
+FROM boxel_index_working
+WHERE realm_url = '<realm-url>'
+  AND timing_diagnostics->>'invalidationId' IS NOT NULL
+GROUP BY 1, 2
+ORDER BY last_write DESC
+LIMIT 10;
+```
+
+The bottom row of the per-`invalidationId` query (max `indexedAt`) is **the most recently completed file**; the file the worker stalled on is most likely the *next* one in the planned visit order (which is sorted in `index-runner.ts::sortInvalidations` — `.json` files visited after their non-`.json` counterparts; otherwise lexical by href). Combine three signals to pin it down:
+
+1. The bottom row's `url` is the last-completed file.
+2. The worker log's last `begin fused visit of file <url>` line for the job (visit-file.ts line 108, `index-runner` logger, debug level) names the file the visit *started* on. If there's no matching `completed fused visit of file <url>` line, that's where the worker froze.
+3. The bottom row's `currentlyEvaluatingModule` / `recentModuleEvaluations[0].url` / `inFlightModuleImports[]` say *which* module inside that visit was the stall point — same field semantics as Mode A.
+
+To read which row would have been visited next from the working table (rows already invalidated but not yet written-with-content — these are the tombstones inserted by `Batch.invalidate`):
+
+```sql
+-- Tombstones the batch inserted but hasn't yet rewritten with content.
+-- Filtered to the batch's realm_version so older tombstones don't leak
+-- in. Sort lexically (close to the actual visit order — see
+-- sortInvalidations).
+SELECT url, type, file_alias, is_deleted
+FROM boxel_index_working
+WHERE realm_url = '<realm-url>'
+  AND realm_version = <realm-version>
+  AND is_deleted = TRUE
+ORDER BY url ASC;
+```
+
+If `boxel_index_working` has **zero rows** for this batch's `invalidationId`, the worker died before any DB write — see [step 9](#9-what-this-mode-cant-tell-you).
+
+### 7. Cross-referencing with worker logs
+
+The worker logs to `ecs-boxel-worker-<env>` (see the `aws-access` skill's CloudWatch table). The relevant logger names:
+
+| Logger | Defined at | Lines you care about |
+|---|---|---|
+| `worker` | `packages/runtime-common/worker.ts:80`, `packages/realm-server/worker.ts:22` | `starting from-scratch indexing for job: <args>` and `starting incremental indexing for job: <args>` (debug). Includes the full job args — use this to recover the seed for incrementals. |
+| `realm-index-updater` | `packages/runtime-common/realm-index-updater.ts:29` | `Realm <url> is starting indexing` (info), `Realm <url> has completed indexing in <s>s: <stats>` (info). Always on at `*=info`; coarse but covers job lifecycle. |
+| `index-runner` | `packages/runtime-common/index-runner.ts:48` | `starting from scratch indexing` / `starting from incremental indexing for <urls>` (debug), `discovering invalidations in dir <url>` (debug), `begin fused visit of file <url>` / `completed fused visit of file <url>` per file (debug, both in `visit-file.ts`), `completed from scratch indexing in <ms>ms` / `completed incremental indexing for <urls> in <ms>ms` (debug). **This is the per-file progress channel.** |
+| `index-perf` | `packages/runtime-common/index-runner.ts:50`, `packages/runtime-common/index-writer.ts:173` | Per-stage perf timings (debug): `time to get file system mtimes <ms>`, `time to invalidate <url> <ms>`, `completed getting index mtimes in <ms>`, `completed invalidations in <ms>`, `completed index visit in <ms>`, `completed index finalization in <ms>`, `inserted invalidated rows for <urls> in <ms>`, `time to determine items that reference <path> <ms>`. Useful to confirm *which* phase a stuck job is in. |
+
+`LOG_LEVELS` is read once at process start in `packages/realm-server/setup-logger.ts:4`:
+
+```ts
+(globalThis as any)._logDefinitions = makeLogDefinitions(
+  process.env.LOG_LEVELS || '*=info',
+);
+```
+
+Default is `*=info`, which means **none of the per-file or per-phase indexing lines appear** in CloudWatch. To get bisection-grade detail for a worker investigation, set:
+
+```
+LOG_LEVELS=*=info,index-runner=debug,index-perf=debug,worker=debug
+```
+
+In the deployed environments this is an environment variable on the worker ECS task definition; the task reads it from the same place `setup-logger.ts` reads any other env var. The operator paths to update it:
+
+- **Staging / production**: `LOG_LEVELS` is held in AWS SSM Parameter Store at `/<env>/boxel/LOG_LEVELS` (e.g. `/staging/boxel/LOG_LEVELS`, `/production/boxel/LOG_LEVELS`). The worker ECS task definition references it via `valueFrom`, so the value is injected as the container's `LOG_LEVELS` env var at task start. To adjust levels:
+  1. Update the SSM parameter value (AWS Console → Systems Manager → Parameter Store, or `aws ssm put-parameter --name /<env>/boxel/LOG_LEVELS --value '<new-levels>' --overwrite` if you have write access — Claude does not).
+  2. Force a new deployment of `boxel-worker-<env>` from the ECS console (Services → boxel-worker-<env> → Update → "Force new deployment"). The new task picks up the updated SSM value at boot.
+  3. The realm-server task reads `LOG_LEVELS` for *its own* logging; in deployed envs the worker is a separate task and only its `LOG_LEVELS` matters for indexing-job logs. If you also want indexing logs that the realm-server emits during invalidation discovery (e.g. for jobs the realm-server queues directly), redeploy `boxel-realm-server-<env>` too.
+
+  Levels apply to subsequently-launched worker processes; a job already in flight keeps the levels it was launched with. So for triage of a *future* job, update SSM and redeploy first, then trigger the reindex.
+- **Locally**: prepend the env var, e.g. `LOG_LEVELS='*=info,index-runner=debug,index-perf=debug' pnpm start-all` — same as the `prerenderer-reproduce=debug` pattern in the [Reproducing a render interactively](#reproducing-a-render-interactively) section.
+
+Sample CloudWatch greps, using `cw` from the `aws-access` skill (substitute `claude-staging` / `claude-prod` and the matching log group):
+
+```sh
+# All log lines for a specific job (job id + reservation id make the
+# group key). Run AFTER you have job_id from the jobs query in step 1.
+cw --profile claude-staging --region us-east-1 tail -b 2h \
+  -g '[job: 4271.' \
+  ecs-boxel-worker-staging
+
+# Lifecycle lines only (always-on at info).
+cw --profile claude-staging --region us-east-1 tail -b 2h \
+  -g 'Realm http://realms.example.com/<realm>/' \
+  ecs-boxel-worker-staging
+
+# Per-file progress (only useful if index-runner=debug is on).
+cw --profile claude-staging --region us-east-1 tail -b 2h \
+  -g 'fused visit of file' \
+  ecs-boxel-worker-staging
+
+# Phase boundaries (only useful if index-perf=debug is on).
+cw --profile claude-staging --region us-east-1 tail -b 2h \
+  -g 'completed invalidations\|completed index visit\|completed index finalization' \
+  ecs-boxel-worker-staging
+```
+
+### 8. Putting it together — confidence levels
+
+A short rubric for the most common shapes:
+
+- **High confidence the stall is at file X**: the bottom row of `boxel_index_working` (max `indexedAt` for the batch's `invalidationId`) is X **AND** the worker's last `begin fused visit of file X` line has no matching `completed fused visit of file X` line **AND** the bottom row's `recentModuleEvaluations[0].url` (or `currentlyEvaluatingModule` / `inFlightModuleImports[0]`) is a module under X. Treat the row's `timing_diagnostics` as a Mode A capture and walk the [Classify in one pass](#classify-in-one-pass) table.
+- **Medium confidence**: only two of the three signals agree. Most often the worker log is the dropout — debug-level logging wasn't on. Promote `index-runner` to debug and trigger a follow-up reindex to validate.
+- **Low confidence — the runner stalled before any per-file work**: `boxel_index_working` has no rows for this batch's `invalidationId` (no row stamped with the batch UUID, no `is_deleted = TRUE` tombstones at the batch's `realm_version`). The worker is still in **invalidation discovery** — either the mtime walk (no `discovering invalidations in dir` line yet) or the consumer fan-out (the `discovering` line is there but no per-file visit-start lines). Look at the worker's `index-perf` `time to get file system mtimes` / `time to invalidate` lines — if those are missing too, you're stuck in the realm-server fetch (`reader.mtimes()` → `_mtimes` HTTP call) or in `Batch.invalidate`'s own jsonb-containment SQL (`itemsThatReference`). Then go look at what *should* have been in the seed but wasn't — cross-check the EFS file listing against the realm's `boxel_index.last_modified` per step 3.
+- **Confirm a "rejected" job actually failed cleanly**: `jobs.status = 'rejected'` should pair with the matching reservation's `completed_at IS NOT NULL`. If `completed_at IS NULL`, the worker bailed before its finalize transaction (see `pg-queue.ts` lines 619-696); the reservation's `locked_until` will eventually expire and another worker can claim it.
+
+  The actual error is in **`jobs.result`** (jsonb). When the worker's `await job.run(...)` throws, `pg-queue.ts:627-628` does `result = serializableError(err); newStatus = 'rejected';` and the finalize UPDATE writes both into the row. Read it directly:
+
+  ```sql
+  SELECT id, job_type, status, finished_at,
+         args->>'realmURL' AS realm_url,
+         result->>'message' AS error_message,
+         result->>'name'    AS error_class,
+         result->'stack'    AS stack_trace
+  FROM jobs
+  WHERE id = <job_id>;
+  ```
+
+  `result` is the same shape `serializableError` produces: `{ message, name, stack, ... }`. For triage, `error_message` + `error_class` is usually enough; `stack_trace` is there when you need to find the throw site. Sentry has the same payload (and more breadcrumbs) but you don't need to leave the DB to get the rejection reason.
+
+### 9. What this mode can't tell you
+
+- If the worker died *before* any DB write — crashed during `discoverInvalidations`, OOM-killed during the mtime walk, or threw inside `Batch.invalidate`'s own SQL — `boxel_index_working` will have no rows for this batch's `invalidationId`. The `Batch` object mints the `invalidationId` in its constructor, but it only lands on disk when the first `updateEntry` or `tombstoneEntries` call runs. Until then the only diagnostic signals are the worker log and the EFS state. Mode C cannot reconstruct *which* file the worker was processing in that case — you need either `index-runner=debug` log output or a Sentry trace.
+- The `timing_diagnostics` for partial-progress rows is the **per-render** capture for that row's prerender call. It won't tell you why the *next* render froze. If the bottom-row's diagnostic is clean (low `renderElapsedMs`, no in-flight loads), the stall is between renders — usually `Batch.invalidate` recursion against a tightly-cycled module graph, or DB contention on the `boxel_index_working` upsert. The `index-perf` `time to determine items that reference …` lines are the only fingerprints of that loop.
+- A `boxel_index` row's `timing_diagnostics` reflects the **last successful** indexing pass, not the in-flight one. Don't confuse a stale `boxel_index` `indexedAt` with the stuck job — always cross-reference against the matching `boxel_index_working` row (same `(url, realm_url)`) before drawing conclusions.
 
 ## Field-by-field reading
 
