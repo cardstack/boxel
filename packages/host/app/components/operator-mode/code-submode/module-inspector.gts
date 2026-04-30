@@ -85,6 +85,7 @@ import type StoreService from '@cardstack/host/services/store';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 import { runWhileActive } from '@cardstack/host/utils/run-while-active';
 
+import { idFromCardOrURL } from 'https://cardstack.com/base/card-api';
 import type {
   CardDef,
   Format,
@@ -350,12 +351,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   private viewCardInCodeSubmode: ViewCardFn = async (cardOrURL) => {
-    let cardId =
-      typeof cardOrURL === 'string'
-        ? cardOrURL
-        : cardOrURL instanceof URL
-          ? cardOrURL.href
-          : cardOrURL.id;
+    let cardId = idFromCardOrURL(cardOrURL);
     if (!cardId) {
       return;
     }

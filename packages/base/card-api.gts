@@ -2352,6 +2352,14 @@ export type ViewCardFn = (
   },
 ) => void;
 
+export function idFromCardOrURL(
+  cardOrURL: CardDef | URL | string,
+): string {
+  if (typeof cardOrURL === 'string') return cardOrURL;
+  if (cardOrURL instanceof URL) return cardOrURL.href;
+  return cardOrURL.id;
+}
+
 export type EditCardFn = (
   card: CardDef,
   opts?: { useBaseTemplate?: boolean },

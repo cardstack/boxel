@@ -63,6 +63,7 @@ import {
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
+import { idFromCardOrURL } from 'https://cardstack.com/base/card-api';
 import type {
   CardContext,
   CardDef,
@@ -240,12 +241,7 @@ export default class InteractSubmode extends Component {
         return;
       }
     }
-    let cardId =
-      typeof cardOrURL === 'string'
-        ? cardOrURL
-        : cardOrURL instanceof URL
-          ? cardOrURL.href
-          : cardOrURL.id;
+    let cardId = idFromCardOrURL(cardOrURL);
     if (!cardId) {
       return;
     }
