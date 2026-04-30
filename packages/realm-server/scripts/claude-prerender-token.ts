@@ -74,7 +74,9 @@ function usage(): void {
       `                           SELECT read, write, realm_owner FROM realm_user_permissions\n` +
       `                           WHERE realm_url = '<url>' AND username = '<user>';\n` +
       `                         and pass exactly those columns as the list.\n` +
-      `  --host-url <url>       Override the boxel-host base URL recorded in the artifact.\n` +
+      `  --host-url <url>       Override the boxel-host-app base URL recorded in the\n` +
+      `                         artifact (NOT matrix — matrix isn't used here; the host\n` +
+      `                         app is where the /render route lives that Claude navigates to).\n` +
       `                         Default: inferred from realm host —\n` +
       `                           realms-staging.stack.cards         → boxel-host-staging.stack.cards\n` +
       `                           realms.stack.cards                 → boxel-host.stack.cards\n` +
@@ -117,9 +119,16 @@ function parseArgs(argv: string[]): ParsedArgs {
   return { positional, opts };
 }
 
-// Infer the boxel-host base URL from the realm host. Recognised patterns
-// (mirrors the deployed-env Caddy config + local dev / env-mode Traefik
-// labels in `mise-tasks/lib/env-vars.sh`):
+// Infer the boxel-HOST-APP base URL from the realm host. (Not matrix —
+// matrix isn't involved in this flow at all: we bypass Matrix login by
+// signing the JWT directly against REALM_SECRET_SEED. The
+// realm-server's `checkPermission` only verifies the HS256 signature
+// against the seed — no contact with matrix.) The host-app URL goes
+// into the artifact's `hostUrl` because Claude needs it to build the
+// /render URL — the prerender route lives on the host app.
+//
+// Recognised patterns (mirrors the deployed-env Caddy config + local
+// dev / env-mode Traefik labels in `mise-tasks/lib/env-vars.sh`):
 //
 //   • realms-staging.stack.cards         → boxel-host-staging.stack.cards
 //   • realms.stack.cards                 → boxel-host.stack.cards
@@ -344,21 +353,24 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  // Resolve hostUrl before signing/printing — failing here would leak a
-  // valid JWT to stdout while exiting with a usage error.
-  const hostUrl =
+  // Resolve hostUrl. The JWT/session don't depend on it — host inference
+  // only fills the artifact's `hostUrl` field, which Claude later uses
+  // to build the /render URL. So a missing hostUrl is a warning, not an
+  // error: emit a JWT regardless, mark hostUrl null in the artifact, and
+  // let the consumer (Claude or a human) supply the host downstream.
+  const hostUrl: string | null =
     (opts['host-url'] as string | undefined) ?? inferHost(realmURL);
   if (!hostUrl) {
     process.stderr.write(
-      `error: cannot infer boxel-host URL from realm host '${new URL(realmURL).hostname}'.\n` +
-        `       Pass --host-url <url> explicitly. Recognised patterns:\n` +
-        `         realms-staging.stack.cards         → boxel-host-staging.stack.cards\n` +
-        `         realms.stack.cards                 → boxel-host.stack.cards\n` +
-        `         realm-server.<slug>.localhost      → host.<slug>.localhost\n` +
-        `                                              (BOXEL_ENVIRONMENT mode)\n` +
-        `         localhost / *.localhost (standard) → http://localhost:4200\n`,
+      `warning: cannot infer boxel-host URL from realm host '${new URL(realmURL).hostname}';\n` +
+        `         artifact will record hostUrl=null. Pass --host-url <url> to fill it in.\n` +
+        `         Recognised patterns:\n` +
+        `           realms-staging.stack.cards         → boxel-host-staging.stack.cards\n` +
+        `           realms.stack.cards                 → boxel-host.stack.cards\n` +
+        `           realm-server.<slug>.localhost      → host.<slug>.localhost\n` +
+        `                                                (BOXEL_ENVIRONMENT mode)\n` +
+        `           localhost / *.localhost (standard) → http://localhost:4200\n`,
     );
-    process.exit(2);
   }
 
   // Seed last — by this point everything else has validated, so the seed

@@ -782,11 +782,13 @@ Why: the seed mints arbitrary user-impersonating tokens with arbitrary permissio
   "expiresAt":  "<iso>",  // 1d from mintedAt
   "user":       "@ctse:stack.cards",
   "realmUrl":   "https://realms-staging.stack.cards/ctse/concrete-mockingbird/",
-  "hostUrl":    "https://boxel-host-staging.stack.cards",
+  "hostUrl":    "https://boxel-host-staging.stack.cards",  // may be null if realm host is unknown
   "jwt":        "eyJ...",
   "session":    "{\"<realmUrl>\":\"eyJ...\"}"
 }
 ```
+
+If `hostUrl` is `null` in the artifact, the script couldn't infer the boxel-host-app URL from the realm hostname — the JWT/session are still valid, but Claude needs the host URL separately to build a `/render` URL. Ask the user, or have them re-run with `--host-url <url>` to fill it in.
 
 Before using it, Claude must check:
 
