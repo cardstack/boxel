@@ -807,7 +807,7 @@ Once Claude has the artifact, it constructs the URL the prerender uses, mirrorin
 Slot-by-slot:
 
 - **`<hostUrl>`** — straight from the artifact's `hostUrl` field.
-- **`<encodeURIComponent(cardUrl)>`** — the card you're investigating, NO trailing `.json`. `https://realms-staging.stack.cards/ctse/concrete-mockingbird/Environment/demo` → `https%3A%2F%2Frealms-staging.stack.cards%2Fctse%2Fconcrete-mockingbird%2FEnvironment%2Fdemo`.
+- **`<encodeURIComponent(cardUrl)>`** — the card's full file URL **including `.json`** (the indexer renders against the .json file, not the bare card-id). `https://realms-staging.stack.cards/ctse/concrete-mockingbird/Environment/demo.json` → `https%3A%2F%2Frealms-staging.stack.cards%2Fctse%2Fconcrete-mockingbird%2FEnvironment%2Fdemo.json`. Omitting `.json` lands you on the host's login page because the route doesn't match.
 - **`<nonce>`** — any string. The indexer uses a monotonic counter; for manual replays `1` is fine.
 - **`<encodeURIComponent(JSON.stringify(options))>`** — the render-route options object, JSON-encoded then URL-encoded. The shape lives in `packages/runtime-common/render-route-options.ts`. Common values:
   - `{"cardRender":true}` → `%7B%22cardRender%22%3Atrue%7D` (the indexer's card-render pass — what you want for a card desync repro)
@@ -816,22 +816,62 @@ Slot-by-slot:
 - **`<format>`** — `isolated` (matches the indexer for card-render), `embedded`, `fitted`, or `atom`. Default to `isolated`.
 - **`/0`** — recursion-depth segment. Always `0` for card render.
 
+All six dynamic segments must be present and correctly encoded. If any is missing or malformed, the route doesn't match and the host falls through to its login page — easy to diagnose because you'll see a login form instead of a prerender container.
+
 Worked example for the demo card:
 
 ```
-https://boxel-host-staging.stack.cards/render/https%3A%2F%2Frealms-staging.stack.cards%2Fctse%2Fconcrete-mockingbird%2FEnvironment%2Fdemo/1/%7B%22cardRender%22%3Atrue%7D/html/isolated/0
+https://boxel-host-staging.stack.cards/render/https%3A%2F%2Frealms-staging.stack.cards%2Fctse%2Fconcrete-mockingbird%2FEnvironment%2Fdemo.json/1/%7B%22cardRender%22%3Atrue%7D/html/isolated/0
 ```
 
-The Chrome MCP recipe (set `localStorage['boxel-session']` first, then navigate, then poll status / call `__boxelRenderDiagnostics()`) is shared with Path B — see [Chrome MCP / headful replay recipe](#chrome-mcp--headful-replay-recipe) below.
+#### Chrome MCP recipe (Path A specific — order matters)
+
+`localStorage['boxel-session']` must be set BEFORE navigating to `/render`. The render route reads it on initial load; if the session isn't there yet, the auth resolves as anonymous and the route 401s before any of the diagnostic surface is reachable.
+
+```
+1. mcp__chrome-devtools__new_page → <hostUrl>/   (lands on the login page or homepage —
+                                                  doesn't matter, we just need a same-origin
+                                                  document to set localStorage on)
+2. mcp__chrome-devtools__evaluate_script → localStorage.setItem('boxel-session', <session-from-artifact>)
+                                           where <session-from-artifact> is the artifact's
+                                           `session` field verbatim — a JSON-stringified map,
+                                           NOT a bare JWT.
+3. mcp__chrome-devtools__navigate_page → <render-url built above>
+4. mcp__chrome-devtools__evaluate_script → document.querySelector('[data-prerender]')?.dataset.prerenderStatus
+                                           polls 'loading' → 'ready' / 'error' / 'unusable'.
+5. Once stable, evaluate __boxelRenderDiagnostics?.() to grab the live diagnostic blob,
+   and inspect the console / DOM for the unminified throw.
+```
+
+If step 4 returns `null` (no `[data-prerender]` element at all) and the body shows a JSON `instance-error`, the request reached the host but failed auth — usually one of:
+
+- The `permissions` array in the JWT doesn't match the user's DB row exactly (see "How auth actually clears" below — re-mint with `--permissions` matching the DB).
+- The card URL in the render URL is missing `.json`.
+- localStorage wasn't set before navigation (set it, then reload — don't expect the host to pick it up mid-request).
 
 #### How auth actually clears the realm-server
 
 The realm-server's `checkPermission` (`packages/runtime-common/realm.ts:2249`) does two things in order:
 
 1. **Verify the JWT signature** against `REALM_SECRET_SEED`. Anyone with the seed can mint a valid signature — that's the diagnostic gate.
-2. **Look up the token's `user` claim in the realm's permission table** via `RealmPermissionChecker.for(username)` (`packages/runtime-common/realm-permission-checker.ts`). The `permissions` array in the JWT is advisory; the checker actually reads `realm_user_permissions[realm][username]` plus the `'*'` wildcard.
+2. **Look up the token's `user` claim in the realm's permission table** via `RealmPermissionChecker.for(username)` (`packages/runtime-common/realm-permission-checker.ts`).
+3. **Compare the JWT's `permissions` array against the DB's permissions array, sorted, byte-for-byte equal** (`packages/runtime-common/realm.ts:2306-2316`). This is the gotcha. The check is `JSON.stringify(token.permissions.sort()) === JSON.stringify(userPermissions.sort())`. So a JWT claiming `['read','realm-owner']` for a user whose DB row is `read=t,write=t,realm_owner=t` (which translates to `['read','write','realm-owner']`) is rejected with `PermissionMismatch` (401). Sub-set isn't enough; the arrays must be equal.
 
-So the `user` claim has to be a real Matrix ID with real DB permissions on the target realm. A made-up user passes signature verification but fails the checker → 401. The script's default derivation (`realms-staging.stack.cards/ctse/realm/` → `@ctse:stack.cards`) hits the realm owner's row — works for any 2-segment user-realm URL. For system realms (`/catalog/`, `/experiments/`), the script errors and asks for `--user @realm:<matrix-domain>` (the realm-server bot).
+Practical implications:
+
+- The `user` claim has to be a real Matrix ID — a made-up user passes signature verification but fails the lookup → 401. The script's default derivation (`realms-staging.stack.cards/ctse/realm/` → `@ctse:stack.cards`) hits the realm owner's row.
+- The `permissions` claim has to mirror the DB exactly. The script defaults to `['read','write','realm-owner']` because that's the standard realm-owner shape, but if the user has a non-default permission set on this realm (read-only collaborator, write-without-owner, etc.) you'll hit `PermissionMismatch`. The fix is `--permissions <list>` matching the DB row.
+- For system realms (`/catalog/`, `/experiments/`), the script errors and asks for `--user @realm:<matrix-domain>` (the realm-server bot).
+
+When the `instance-error` body says `User permissions in the JWT payload do not match the server's permissions`, it's specifically this check failing. Query the DB to see what the row actually is:
+
+```sql
+SELECT username, read, write, realm_owner
+FROM realm_user_permissions
+WHERE realm_url = '<realm-url>' AND username = '<user-from-artifact>';
+```
+
+Then re-mint with `--permissions read,write,realm-owner` (or whatever the columns are). Booleans translate one-to-one to array entries; column `realm_owner` becomes `realm-owner` (note the dash).
 
 For local dev: matrix `server_name` is `localhost` (`packages/matrix/docker/synapse/dev/homeserver.yaml:1`), so user IDs are `@<username>:localhost`. The script auto-handles `*.localhost` hosts.
 

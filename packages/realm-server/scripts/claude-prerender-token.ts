@@ -59,6 +59,14 @@ function usage(): void {
       `                         The realm-server checks this against its permissions\n` +
       `                         DB, so it MUST be a user that actually has perms on\n` +
       `                         the target realm.\n` +
+      `  --permissions <list>   Comma-separated permissions for the JWT claim. Default:\n` +
+      `                         'read,write,realm-owner' (the realm-owner shape).\n` +
+      `                         The realm-server requires this to EXACTLY match the user's\n` +
+      `                         row in realm_user_permissions — not a subset. If the default\n` +
+      `                         fails with PermissionMismatch (401), query the DB:\n` +
+      `                           SELECT read, write, realm_owner FROM realm_user_permissions\n` +
+      `                           WHERE realm_url = '<url>' AND username = '<user>';\n` +
+      `                         and pass exactly those columns as the list.\n` +
       `  --output <path>        Override output path. Default: ${DEFAULT_OUTPUT_PATH}.\n` +
       `  --no-output            Don't write the JSON artifact (stdout only).\n` +
       `  --help                 Show this help.\n`,
@@ -258,11 +266,24 @@ async function main(): Promise<void> {
     userId = derived;
   }
 
+  // The realm-server's checkPermission (`packages/runtime-common/realm.ts:2308`)
+  // requires JSON.stringify(token.permissions.sort()) === JSON.stringify(
+  // userPermissions.sort()) — the token's permissions must EXACTLY match
+  // what the realm's DB has for this user. Default ['read','write','realm-owner']
+  // matches the standard realm-owner shape; pass --permissions for other
+  // users (e.g. read-only collaborator, write-without-owner).
+  const permissionsRaw =
+    (opts.permissions as string | undefined) ?? 'read,write,realm-owner';
+  const permissions = permissionsRaw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
   const claims: TokenClaims = {
     user: userId,
     realm: realmURL,
     sessionRoom: '',
-    permissions: ['read', 'realm-owner'],
+    permissions,
     realmServerURL: realmOrigin,
   };
   const token = jwt.sign(claims, secret, { expiresIn: '1d' });
