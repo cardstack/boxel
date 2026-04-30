@@ -4158,10 +4158,10 @@ const rootBoxes = new WeakMap<object, Box<any>>();
 export class Box<T> {
   // Cache root boxes by model so repeat callers (eg. CardRenderer's
   // `renderedCard` getter, which runs on every reactive update) see a
-  // stable Box, which in turn gives `componentCache` a stable WeakMap
-  // key — without this, `<this.renderedCard />` would see a fresh
-  // FieldComponent class reference on every format flip and remount the
-  // entire card tree, defeating the identity short-circuit downstream.
+  // stable Box, which in turn gives `componentCache` (in field-component.gts,
+  // keyed on Box) a stable WeakMap key. Without this, every reactive
+  // re-evaluation of `renderedCard` produces a fresh FieldComponent class
+  // and Glimmer remounts the entire card tree at `<this.renderedCard />`.
   static create<T>(model: T): Box<T> {
     if (model && (typeof model === 'object' || typeof model === 'function')) {
       let cached = rootBoxes.get(model as object) as Box<T> | undefined;
