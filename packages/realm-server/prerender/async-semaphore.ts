@@ -27,7 +27,7 @@ export class AsyncSemaphore {
   }> = [];
 
   constructor(max: number) {
-    this.#capacity = Math.max(1, max);
+    this.#capacity = normalizeCapacity(max);
     this.#inUse = 0;
   }
 
@@ -95,9 +95,13 @@ export class AsyncSemaphore {
   // Resize the semaphore. Growing wakes queued waiters up to the new
   // cap. Shrinking is best-effort: in-flight slots are never preempted,
   // but no new waiters are admitted until #inUse falls under the new
-  // cap. `n` is clamped to a minimum of 1.
+  // cap. `n` is normalized through `normalizeCapacity`: NaN, non-finite,
+  // and non-integer values fall back to a clamped integer (`1` floor),
+  // matching the constructor's contract — `#inUse` is an integer
+  // counter, so a fractional cap would silently allow `floor(n)+1`
+  // concurrent holders.
   setCapacity(n: number): void {
-    let newCap = Math.max(1, n);
+    let newCap = normalizeCapacity(n);
     if (newCap === this.#capacity) return;
     this.#capacity = newCap;
     // Wake waiters up to the new cap. Same hand-off shape as #release
@@ -120,4 +124,17 @@ export class AsyncSemaphore {
       next.resolve(this.#release);
     }
   };
+}
+
+// Reject NaN / non-finite / non-integer / sub-1 values so the cap is
+// always a positive integer. This matters for resize callers (PagePool
+// expansion contraction in PR 7) where a malformed env-var or upstream
+// math would otherwise propagate `NaN` into `#capacity` and stall every
+// future acquire/release — comparisons against `NaN` are always false.
+// Floor on non-integers because `#inUse` is integer-counted and a
+// fractional cap effectively rounds up at the `<` comparison.
+function normalizeCapacity(n: number): number {
+  if (!Number.isFinite(n)) return 1;
+  let floored = Math.floor(n);
+  return floored < 1 ? 1 : floored;
 }

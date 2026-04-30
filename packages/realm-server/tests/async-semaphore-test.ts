@@ -36,6 +36,28 @@ module(basename(__filename), function () {
       assert.strictEqual(sem2.capacity, 1, 'cap=-5 clamped to 1');
     });
 
+    test('rejects non-finite construction capacity (NaN / Infinity)', function (assert) {
+      // Addresses Codex P2 + Copilot review on PR 4589: `Math.max(1, NaN)
+      // === NaN` would have permanently stalled every future acquire
+      // because comparisons against NaN are always false.
+      let nanSem = new AsyncSemaphore(NaN);
+      assert.strictEqual(nanSem.capacity, 1, 'NaN falls back to 1');
+      let infSem = new AsyncSemaphore(Infinity);
+      assert.strictEqual(infSem.capacity, 1, 'Infinity falls back to 1');
+      let negInfSem = new AsyncSemaphore(-Infinity);
+      assert.strictEqual(negInfSem.capacity, 1, '-Infinity falls back to 1');
+    });
+
+    test('floors fractional construction capacity', function (assert) {
+      // `#inUse` is an integer counter, so a fractional cap (e.g. 2.7)
+      // would let `2 < 2.7` admit a 3rd holder despite operator intent
+      // of "two slots".
+      let sem = new AsyncSemaphore(2.7);
+      assert.strictEqual(sem.capacity, 2, '2.7 floors to 2');
+      let sem2 = new AsyncSemaphore(0.9);
+      assert.strictEqual(sem2.capacity, 1, '0.9 floors-then-clamps to 1');
+    });
+
     test('inUseCount tracks acquire / release directly', async function (assert) {
       let sem = new AsyncSemaphore(2);
       let r1 = await sem.acquire();
@@ -233,6 +255,19 @@ module(basename(__filename), function () {
       assert.strictEqual(sem.capacity, 1, 'cap=0 clamped to 1');
       sem.setCapacity(-2);
       assert.strictEqual(sem.capacity, 1, 'cap=-2 clamped to 1');
+    });
+
+    test('rejects non-finite + fractional resize values', function (assert) {
+      // Same Codex/Copilot concern as the constructor — protected here
+      // because PagePool dynamic resize (PR 7) reads env-vars and
+      // arithmetic results, both of which can produce NaN/floats.
+      let sem = new AsyncSemaphore(3);
+      sem.setCapacity(NaN);
+      assert.strictEqual(sem.capacity, 1, 'NaN normalized to 1');
+      sem.setCapacity(Infinity);
+      assert.strictEqual(sem.capacity, 1, 'Infinity normalized to 1');
+      sem.setCapacity(4.7);
+      assert.strictEqual(sem.capacity, 4, '4.7 floors to 4');
     });
 
     test('no-op when new capacity equals current', function (assert) {
