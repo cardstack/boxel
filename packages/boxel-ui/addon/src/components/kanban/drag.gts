@@ -522,7 +522,12 @@ export class KanbanDragManager {
     const bodyRect = bodyEl.getBoundingClientRect();
     const scrollTop = bodyEl.scrollTop;
     const gap = parseFloat(getComputedStyle(bodyEl).gap) || 0;
-    const insertIdx = Math.min(position - 1, colCards.length);
+    // Find the first card whose sortOrder is >= the insertion position. Using
+    // sortOrder comparison instead of (position - 1) as an array index avoids
+    // an off-by-one when the source card is excluded from colCards (the gap in
+    // sortOrder values would push the index one past the intended slot).
+    const rawIdx = colCards.findIndex((c) => c.sortOrder >= position);
+    const insertIdx = rawIdx === -1 ? colCards.length : rawIdx;
 
     if (insertIdx >= colCards.length) {
       const lastEl = container.querySelector(
@@ -596,7 +601,8 @@ export class KanbanDragManager {
       return;
     }
 
-    const insertIdx = Math.min(position - 1, colCards.length);
+    const rawIdx = colCards.findIndex((c) => c.sortOrder >= position);
+    const insertIdx = rawIdx === -1 ? colCards.length : rawIdx;
 
     if (insertIdx >= colCards.length) {
       const lastCardEl = container.querySelector(
