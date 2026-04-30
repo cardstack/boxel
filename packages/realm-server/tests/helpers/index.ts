@@ -47,6 +47,11 @@ import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { RealmServer } from '../../server';
+import { sign as jwtSign } from 'jsonwebtoken';
+import {
+  RealmRegistryReconciler,
+  type RealmRegistryRow,
+} from '../../lib/realm-registry-reconciler';
 
 import {
   PgAdapter,
@@ -253,6 +258,32 @@ export function createVirtualNetwork() {
 }
 
 let testDbCounter = 0;
+
+// Build a reconciler suitable for tests that already construct Realms via
+// the test helpers. The realms are pre-mounted by the helper, so we just
+// register them with the reconciler so subsequent lookupOrMount() calls
+// resolve from `mounted`. mountFromRow throws if the request path ever asks
+// the reconciler to mount a URL it wasn't told about — that would indicate
+// a test reaching for a realm the helper didn't construct. unmount is a
+// no-op because tests tear down via closeServer(); the reconciler itself
+// has no row-deletion path to exercise here.
+export function makeTestReconciler(
+  dbAdapter: PgAdapter,
+  realms: Realm[],
+): RealmRegistryReconciler {
+  let reconciler = new RealmRegistryReconciler({
+    dbAdapter,
+    prepareRealmFromRow: (row: RealmRegistryRow) => {
+      throw new Error(
+        `test reconciler cannot construct realms; URL not pre-mounted: ${row.url}`,
+      );
+    },
+    unmount: async () => {},
+  });
+  reconciler.registerExistingMounts(realms);
+  return reconciler;
+}
+
 export function prepareTestDB(): void {
   // PID + monotonic counter rules out same-process collisions and makes
   // cross-process collisions essentially impossible. The previous
@@ -973,8 +1004,10 @@ export async function runTestRealmServer({
     seed: realmSecretSeed,
   });
 
+  let reconciler = makeTestReconciler(dbAdapter, realms);
   let testRealmServer = new RealmServer({
     realms,
+    reconciler,
     virtualNetwork,
     matrixClient,
     realmServerSecretSeed,
@@ -1111,8 +1144,10 @@ export async function runTestRealmServerWithRealms({
   });
 
   let serverURL = new URL(realms[0].realmURL.origin);
+  let reconciler = makeTestReconciler(dbAdapter, createdRealms);
   let testRealmServer = new RealmServer({
     realms: createdRealms,
+    reconciler,
     virtualNetwork,
     matrixClient,
     realmServerSecretSeed,
@@ -2109,6 +2144,36 @@ export function createJWT(
       realmServerURL: realm.realmServerURL,
     },
     '7d',
+  );
+}
+
+// Variant that builds a realm JWT from URL + seed instead of a Realm
+// instance. Useful when the realm hasn't been mounted yet (Phase 3 lazy
+// mount): the request that carries this JWT is the trigger that mounts
+// the realm. Auth verification on the server side uses the same shared
+// realmSecretSeed regardless of which Realm instance handles the
+// request, so the token is accepted as long as the URL claim matches.
+export function createJWTForRealmURL({
+  realmURL,
+  realmServerURL,
+  user,
+  permissions = [],
+}: {
+  realmURL: string;
+  realmServerURL: string;
+  user: string;
+  permissions?: RealmPermissions['user'];
+}) {
+  return jwtSign(
+    {
+      user,
+      realm: realmURL,
+      permissions,
+      sessionRoom: `test-session-room-for-${user}`,
+      realmServerURL,
+    },
+    realmSecretSeed,
+    { expiresIn: '7d' },
   );
 }
 
