@@ -107,7 +107,7 @@ export default class OperatorModeStack extends Component<Signature> {
   <template>
     <div class='operator-mode-stack' ...attributes>
       <div class='inner'>
-        {{#each @stackItems as |item i|}}
+        {{#each @stackItems key='id' as |item i|}}
           <OperatorModeStackItem
             @item={{item}}
             @index={{i}}

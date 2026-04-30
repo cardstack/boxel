@@ -4153,8 +4153,25 @@ export function getComponent(
   return boxComponent;
 }
 
+const rootBoxes = new WeakMap<object, Box<any>>();
+
 export class Box<T> {
+  // Cache root boxes by model so repeat callers (eg. CardRenderer's
+  // `renderedCard` getter, which runs on every reactive update) see a
+  // stable Box, which in turn gives `componentCache` a stable WeakMap
+  // key — without this, `<this.renderedCard />` would see a fresh
+  // FieldComponent class reference on every format flip and remount the
+  // entire card tree, defeating the identity short-circuit downstream.
   static create<T>(model: T): Box<T> {
+    if (model && (typeof model === 'object' || typeof model === 'function')) {
+      let cached = rootBoxes.get(model as object) as Box<T> | undefined;
+      if (cached) {
+        return cached;
+      }
+      let box = new Box<T>({ type: 'root', model });
+      rootBoxes.set(model as object, box);
+      return box;
+    }
     return new Box({ type: 'root', model });
   }
 
