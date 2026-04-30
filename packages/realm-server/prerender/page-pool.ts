@@ -471,15 +471,20 @@ export class PagePool {
       // slot. Both are 0 when the semaphore hasn't been lazily created
       // yet, or was deleted once it returned to idle.
       admission: { pending: number; cap: number };
-      // Per-priority breakdown of the affinity's pending work
-      // (CS-10976 PR 5). Aggregates queued waiters across all of the
-      // affinity's tabs (`tabPendingByPriority`) plus its file-
-      // admission semaphore (`admissionPendingByPriority`). Empty when
-      // nothing is pending. Surfaced in the `prerender-queue-snapshot`
-      // log line so operators can see whether a saturation event was
-      // dominated by user-priority work or background work.
-      tabPendingByPriority: Record<number, number>;
-      admissionPendingByPriority: Record<number, number>;
+      // Per-priority breakdown of the affinity's *queued* waiters
+      // (CS-10976 PR 5). Counts waiters only — it deliberately does
+      // NOT include the in-flight render holding the tab right now.
+      // That's why the field is `*Queued*` rather than `*Pending*`:
+      // `pendingTotal` (above) does include the holder per legacy
+      // semantics, and the rename keeps the two from being read as
+      // synonyms in `prerender-queue-snapshot` triage. `tab*` is the
+      // per-tab queues; `admission*` is the per-affinity file-
+      // admission semaphore. Empty when no waiters are queued.
+      // Surfaced in the `prerender-queue-snapshot` log so operators
+      // can see whether a saturation event was dominated by user-
+      // priority work or background work.
+      tabQueuedByPriority: Record<number, number>;
+      admissionQueuedByPriority: Record<number, number>;
     }>;
   } {
     let totalTabs = 0;
@@ -492,15 +497,15 @@ export class PagePool {
       idle: boolean;
       byQueue: { file: number; module: number; command: number };
       admission: { pending: number; cap: number };
-      tabPendingByPriority: Record<number, number>;
-      admissionPendingByPriority: Record<number, number>;
+      tabQueuedByPriority: Record<number, number>;
+      admissionQueuedByPriority: Record<number, number>;
     }> = [];
     for (let [affinityKey, entries] of this.#affinityPages) {
       let tabCount = entries.size;
       let pendingTotal = 0;
       let maxPending = 0;
       let byQueue = { file: 0, module: 0, command: 0 };
-      let tabPendingByPriority: Record<number, number> = {};
+      let tabQueuedByPriority: Record<number, number> = {};
       for (let entry of entries) {
         let p = entry.queue.pendingCount;
         pendingTotal += p;
@@ -511,17 +516,17 @@ export class PagePool {
         // only (excludes the holder); summing those is the right
         // signal for "what's backlogged behind these tabs".
         for (let [prio, n] of entry.queue.pendingByPriority()) {
-          tabPendingByPriority[prio] = (tabPendingByPriority[prio] ?? 0) + n;
+          tabQueuedByPriority[prio] = (tabQueuedByPriority[prio] ?? 0) + n;
         }
       }
       let sem = this.#fileAdmission.get(affinityKey);
       let admission = sem
         ? { pending: sem.pendingCount, cap: sem.capacity }
         : { pending: 0, cap: 0 };
-      let admissionPendingByPriority: Record<number, number> = {};
+      let admissionQueuedByPriority: Record<number, number> = {};
       if (sem) {
         for (let [prio, n] of sem.pendingByPriority()) {
-          admissionPendingByPriority[prio] = n;
+          admissionQueuedByPriority[prio] = n;
         }
       }
       totalTabs += tabCount;
@@ -534,8 +539,8 @@ export class PagePool {
         idle: pendingTotal === 0,
         byQueue,
         admission,
-        tabPendingByPriority,
-        admissionPendingByPriority,
+        tabQueuedByPriority,
+        admissionQueuedByPriority,
       });
     }
     return { totalTabs, totalPending, affinities };

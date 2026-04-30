@@ -196,7 +196,12 @@ export interface RenderTimeoutDiagnostics {
       // (CS-10976 PR 5). Surfaced so post-mortems can see what
       // priorities were competing — e.g. a priority-10 file render
       // stuck behind a priority-0 module call sticks out cleanly.
-      priority?: number;
+      // Required because the producer (`AffinityActivityTracker.record`)
+      // always supplies a value (defaults to 0). DB rows persisted
+      // before this PR will lack the field; consumers reading raw
+      // JSONB from `boxel_index.timing_diagnostics` should still
+      // null-check defensively.
+      priority: number;
     }>;
   };
 }

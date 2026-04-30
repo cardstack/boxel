@@ -174,7 +174,7 @@ module(basename(__filename), function () {
     );
 
     let snap = tracker.sameAffinityActivity(REALM_A, outer.handle);
-    let priorities = snap.map((s) => s.priority).sort();
+    let priorities = snap.map((s) => s.priority).sort((a, b) => a - b);
     assert.deepEqual(priorities, [0, 5], 'sibling priorities surfaced');
   });
 

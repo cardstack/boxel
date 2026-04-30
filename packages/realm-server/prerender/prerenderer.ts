@@ -850,15 +850,17 @@ export class Prerenderer {
               a.admission.cap > 0 && a.admission.pending > 0
                 ? `, admission=pending=${a.admission.pending}/cap=${a.admission.cap}`
                 : '';
-            // CS-10976 PR 5: priority breakdown of pending work for
-            // this affinity. Format: `priorities=<src>:<p>:<n>,<p>:<n>`
-            // where `<src>` is `tab` for tab-queue waiters or `adm` for
-            // file-admission waiters. Skipped when nothing is pending —
-            // idle affinities stay compact. Format chosen so a single
-            // grep can pull priority distributions out of the logs.
-            let priorityDetail = formatPendingByPriority(
-              a.tabPendingByPriority,
-              a.admissionPendingByPriority,
+            // CS-10976 PR 5: priority breakdown of *queued* waiters for
+            // this affinity (does NOT count the in-flight holder, which
+            // is what `pending=` above includes). Format:
+            // `priorities=<src>:<p>:<n>,<p>:<n>` where `<src>` is `tab`
+            // for tab-queue waiters or `adm` for file-admission waiters.
+            // Skipped when nothing is queued — idle affinities stay
+            // compact. Format chosen so a single grep can pull priority
+            // distributions out of the logs.
+            let priorityDetail = formatQueuedByPriority(
+              a.tabQueuedByPriority,
+              a.admissionQueuedByPriority,
             );
             return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail}${admissionDetail}${priorityDetail})`;
           })
@@ -879,13 +881,15 @@ export class Prerenderer {
 }
 
 // Format helper for the `prerender-queue-snapshot` log line's priority
-// breakdown (CS-10976 PR 5). Returns `, priorities=tab:10:3,0:1` when
-// the affinity has 3 priority-10 + 1 priority-0 tab-queue waiters and
-// no admission waiters. Returns `, priorities=tab:10:3,adm:0:2` when
-// the breakdown also includes admission-queue waiters. Returns the
-// empty string when nothing is pending. Numeric keys sort descending
-// within each source (highest priority first), matching dequeue order.
-function formatPendingByPriority(
+// breakdown (CS-10976 PR 5). Counts queued waiters only; the in-flight
+// holder is reflected separately in the `pending=` field on the same
+// log entry. Returns `, priorities=tab:10:3,0:1` when the affinity has
+// 3 priority-10 + 1 priority-0 tab-queue waiters and no admission
+// waiters. Returns `, priorities=tab:10:3|adm:0:2` when the breakdown
+// also includes admission-queue waiters. Returns the empty string when
+// nothing is queued. Numeric keys sort descending within each source
+// (highest priority first), matching dequeue order.
+function formatQueuedByPriority(
   tab: Record<number, number>,
   admission: Record<number, number>,
 ): string {
