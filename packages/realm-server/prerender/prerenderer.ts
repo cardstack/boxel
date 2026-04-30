@@ -376,6 +376,7 @@ export class Prerenderer {
               auth,
               opts,
               renderOptions: attemptOptions,
+              priority,
               signal,
               onTabAcquired: activity.markRunning,
             });
