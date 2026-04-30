@@ -33,6 +33,7 @@ jobs:
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
       workspace-sync-cli: ${{ steps.filter.outputs.workspace-sync-cli }}
       boxel-cli: ${{ steps.filter.outputs.boxel-cli }}
+      bench-amd: ${{ steps.filter.outputs.bench-amd }}
       # Force all tests to run when on ci-bisect* branches
       run_all: ${{ steps.force-run-all.outputs.run_all }}
     steps:
@@ -110,6 +111,13 @@ jobs:
             boxel-cli:
               - *shared
               - 'packages/boxel-cli/**'
+            bench-amd:
+              # Anything that can affect the AMD transpiler's wall-time
+              # OR the bench harness / committed fixtures / baseline.
+              # *shared covers runtime-common/** + package.json +
+              # pnpm-lock.yaml (catches acorn / magic-string version bumps).
+              - *shared
+              - 'bench-fixtures/runtime-common/amd-transpile/**'
       - name: Force run all jobs on ci-bisect branches
         id: force-run-all
         shell: bash
@@ -687,6 +695,31 @@ jobs:
           name: pr-comment-slot-realm-tests
           path: slot/
           retention-days: 7
+
+  amd-transpile-bench:
+    name: AMD Transpile Bench
+    needs: change-check
+    # Parallel-independent bench of the loader's ES → AMD transpiler.
+    # Compares production-candidate medians against
+    # `packages/runtime-common/scripts/bench-amd/baseline.json`. When
+    # baseline.json is absent the script runs in report-only mode and
+    # exits 0 — used to anchor the initial baseline from real CI numbers
+    # before enforcement is turned on. See CS-10983.
+    if: needs.change-check.outputs.bench-amd == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: amd-transpile-bench-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    env:
+      # Doubled vs. the local default (50/5) to dampen GH-runner noise.
+      ITER: 100
+      WARMUP: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Run bench gate
+        run: pnpm bench:amd:check
+        working-directory: packages/runtime-common
 
   post-pr-status:
     name: Update PR status comment

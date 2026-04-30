@@ -102,6 +102,7 @@
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:types": "ember-tsc --noEmit",
     "bench:amd:prep": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/bench-amd/prepare-fixtures.ts",
-    "bench:amd": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/bench-amd/bench.ts"
+    "bench:amd": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/bench-amd/bench.ts",
+    "bench:amd:check": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/bench-amd/check.ts"
   }
 }

@@ -7,11 +7,18 @@
 // Run from `packages/runtime-common`:
 //   pnpm bench:amd:prep
 //
-// Fixtures land in `scripts/bench-amd/fixtures/` (gitignored).
+// This is an INTENTIONAL-REFRESH operation: it overwrites the committed
+// fixtures at `<repo>/bench-fixtures/runtime-common/amd-transpile/`. The
+// bench gate compares against these frozen fixtures so that an unrelated
+// change to a card source or the upstream `transpile.ts` pipeline cannot
+// silently move the perf numbers. Re-run this only when you intentionally
+// want to re-anchor the bench inputs — and remember to regenerate
+// `baseline.json` in the same commit.
 import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 
-const repoRoot = path.resolve(__dirname, '../../../..');
+import { fixturesDir, repoRoot } from './paths';
+
 const baseDir = path.join(repoRoot, 'packages/base');
 
 const fixtures: { name: string; file: string }[] = [
@@ -34,17 +41,21 @@ const fixtures: { name: string; file: string }[] = [
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     require('../../transpile') as typeof import('../../transpile');
 
-  mkdirSync(path.join(__dirname, 'fixtures'), { recursive: true });
+  mkdirSync(fixturesDir, { recursive: true });
 
   for (const { name, file } of fixtures) {
     const src = readFileSync(path.join(baseDir, file), 'utf8');
     const transpiled = await transpileJS(src, file);
-    const outPath = path.join(__dirname, 'fixtures', `${name}.js`);
+    const outPath = path.join(fixturesDir, `${name}.js`);
     writeFileSync(outPath, transpiled, 'utf8');
     console.log(
       `${name.padEnd(12)}  in: ${src.length.toString().padStart(7)} bytes  →  out: ${transpiled.length.toString().padStart(7)} bytes`,
     );
   }
+
+  console.log(
+    `\nWrote fixtures to ${path.relative(repoRoot, fixturesDir)}/. Commit them along with any baseline.json updates.`,
+  );
 })().catch((err) => {
   console.error(err);
   process.exit(1);
