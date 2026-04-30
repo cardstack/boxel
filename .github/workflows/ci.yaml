@@ -112,11 +112,11 @@ jobs:
               - *shared
               - 'packages/boxel-cli/**'
             bench-amd:
-              # Anything that can affect the AMD transpiler's wall-time
-              # OR the bench harness / committed fixtures / baseline.
-              # *shared covers runtime-common/** + package.json +
-              # pnpm-lock.yaml (catches acorn / magic-string version bumps).
-              - *shared
+              # The AMD transpiler is a runtime-common module with no
+              # cross-workspace deps that affect its wall-time, so the
+              # bench only needs to fire for runtime-common edits and
+              # the committed bench fixtures.
+              - 'packages/runtime-common/**'
               - 'bench-fixtures/runtime-common/amd-transpile/**'
       - name: Force run all jobs on ci-bisect branches
         id: force-run-all
