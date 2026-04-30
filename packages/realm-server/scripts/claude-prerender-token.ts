@@ -27,7 +27,7 @@ import {
   DEFAULT_PERMISSIONS,
   ensureTrailingSlash,
 } from '@cardstack/runtime-common';
-import type { TokenClaims } from '@cardstack/runtime-common';
+import type { RealmAction, TokenClaims } from '@cardstack/runtime-common';
 
 // Default file Claude reads to pick up the artifacts without the user
 // pasting anything. Bounded leak window — the JWT inside is 1d.
@@ -226,7 +226,7 @@ function promptSeedSilently(question: string): Promise<string> {
   });
 }
 
-const VALID_PERMISSIONS = new Set([
+const VALID_PERMISSIONS = new Set<RealmAction>([
   'read',
   'write',
   'realm-owner',
@@ -285,13 +285,15 @@ async function main(): Promise<void> {
 
   // Validate permissions before the seed prompt, same reasoning.
   const permissionsOpt = opts.permissions as string | undefined;
-  const permissions = permissionsOpt
+  const rawPermissions = permissionsOpt
     ? permissionsOpt
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean)
     : [...DEFAULT_PERMISSIONS];
-  const invalidPerms = permissions.filter((p) => !VALID_PERMISSIONS.has(p));
+  const invalidPerms = rawPermissions.filter(
+    (p): p is string => !VALID_PERMISSIONS.has(p as RealmAction),
+  );
   if (invalidPerms.length) {
     process.stderr.write(
       `error: --permissions contains unknown values: ${invalidPerms.join(', ')}\n` +
@@ -299,6 +301,8 @@ async function main(): Promise<void> {
     );
     process.exit(2);
   }
+  // Narrow to RealmAction[] now that VALID_PERMISSIONS has gated the values.
+  const permissions = rawPermissions as RealmAction[];
 
   // Seed last — by this point everything else has validated, so the seed
   // is the final input we ask for.
