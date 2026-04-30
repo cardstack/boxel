@@ -1,0 +1,170 @@
+name: PR Status Comment
+
+# Reusable: invoked by each workflow that uploads `pr-comment-slot-<slot>`
+# artifacts. Updates only the named slots' sections of the unified sticky
+# comment (header `pr-status`); other sections are preserved from the
+# existing comment so a slow-finishing workflow doesn't wipe sections that
+# finished earlier (including those from a prior commit).
+#
+# Each section is delimited in the comment body with HTML markers:
+#   <!-- pr-status-slot:<slot> -->
+#   ...
+#   <!-- /pr-status-slot:<slot> -->
+#
+# Cross-workflow concurrency is enforced at the job level so calls from
+# different parent workflows serialize for the same branch.
+
+on:
+  workflow_call:
+    inputs:
+      head-sha:
+        description: Commit SHA the calling run is targeting
+        required: true
+        type: string
+      slots:
+        description: Space-separated list of slot names this invocation refreshes
+        required: true
+        type: string
+
+jobs:
+  update-comment:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      actions: read
+    concurrency:
+      group: pr-status-comment-${{ github.head_ref || inputs.head-sha }}
+      cancel-in-progress: false
+    steps:
+      - name: Resolve PR and check freshness
+        id: pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ inputs.head-sha }}
+        run: |
+          set -euo pipefail
+          pr=$(gh api "/repos/$REPO/commits/$SHA/pulls" --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then
+            echo "No PR for $SHA, skipping."
+            echo "skip=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          latest=$(gh api "/repos/$REPO/pulls/$pr" --jq '.head.sha')
+          if [ "$latest" != "$SHA" ]; then
+            echo "PR #$pr head is now $latest; event SHA $SHA stale; skipping."
+            echo "skip=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "number=$pr" >>"$GITHUB_OUTPUT"
+
+      - name: Download fresh slot artifacts from this run
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          SLOTS: ${{ inputs.slots }}
+        run: |
+          set -euo pipefail
+          mkdir -p fresh
+          for slot in $SLOTS; do
+            gh run download -R "$REPO" "$RUN_ID" \
+              -n "pr-comment-slot-$slot" -D "fresh/$slot/" 2>/dev/null || true
+          done
+
+      - name: Fetch existing pr-status comment body
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          : > existing.md
+          gh api --paginate "/repos/$REPO/issues/$PR/comments?per_page=100" \
+            --jq '.[] | select(
+                    .user.login == "github-actions[bot]"
+                    and (.body | contains("<!-- Sticky Pull Request Commentpr-status -->"))
+                  ) | .body' \
+            > existing.md || true
+
+      - name: Assemble comment body
+        if: steps.pr.outputs.skip != 'true'
+        id: body
+        env:
+          SLOTS: ${{ inputs.slots }}
+        run: |
+          set -euo pipefail
+
+          get_content() {
+            local slot="$1"
+            local fresh_file="fresh/$slot/slot.md"
+            case " $SLOTS " in
+              *" $slot "*)
+                if [ -s "$fresh_file" ]; then
+                  cat "$fresh_file"
+                  return
+                fi
+                ;;
+            esac
+            awk -v s="$slot" '
+              $0 == "<!-- pr-status-slot:" s " -->" { flag=1; next }
+              $0 == "<!-- /pr-status-slot:" s " -->" { flag=0 }
+              flag
+            ' existing.md
+          }
+
+          emit_section() {
+            local slot="$1"
+            local content
+            content=$(get_content "$slot")
+            if [ -n "$content" ]; then
+              echo "<!-- pr-status-slot:$slot -->"
+              printf '%s\n' "$content"
+              echo "<!-- /pr-status-slot:$slot -->"
+              return 0
+            fi
+            return 1
+          }
+
+          : > comment.md
+
+          # Preview group: header rendered iff at least one preview-* slot
+          # has content; each link's bullet is its own delimited slot.
+          preview_buf=$(mktemp)
+          : > "$preview_buf"
+          have_preview=false
+          for slot in preview-host-staging preview-host-production preview-ui-staging; do
+            if emit_section "$slot" >>"$preview_buf"; then
+              have_preview=true
+            fi
+          done
+          if $have_preview; then
+            {
+              echo "### Preview deployments"
+              echo
+              cat "$preview_buf"
+              echo
+            } >> comment.md
+          fi
+
+          for slot in host-tests realm-tests; do
+            if emit_section "$slot" >>comment.md; then
+              echo >> comment.md
+            fi
+          done
+
+          if [ ! -s comment.md ]; then
+            echo "empty=true" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Upsert sticky comment
+        if: steps.pr.outputs.skip != 'true' && steps.body.outputs.empty != 'true'
+        uses: marocchino/sticky-pull-request-comment@5060d4700a91de252c87eeddd2da026382d9298a # 2.9.4
+        with:
+          header: pr-status
+          number: ${{ steps.pr.outputs.number }}
+          path: comment.md
