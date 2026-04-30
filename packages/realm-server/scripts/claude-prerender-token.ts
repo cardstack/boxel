@@ -18,6 +18,7 @@ import {
   openSync,
   writeSync,
   closeSync,
+  fchmodSync,
   mkdirSync,
   constants as fsConstants,
 } from 'node:fs';
@@ -176,7 +177,13 @@ function promptSeedSilently(question: string): Promise<string> {
         stdin.setRawMode(false);
       }
       rl.close();
-      if (!wasFlowing) {
+      // `readableFlowing` is `true | false | null` (Node stream API):
+      // `null` means "no flow mode chosen yet" — i.e. the stream
+      // hasn't been read from. Only pause if we know the prior state
+      // was explicitly non-flowing (`false`); leaving `null` alone
+      // matches the "we found no flow mode, leave none" semantics
+      // and avoids unexpectedly pausing stdin after the prompt.
+      if (wasFlowing === false) {
         stdin.pause();
       }
     };
@@ -184,11 +191,17 @@ function promptSeedSilently(question: string): Promise<string> {
     let password = '';
     const onData = (chunk: Buffer) => {
       try {
+        // Strip terminal bracketed-paste markers that some
+        // terminals emit around a multi-char paste. Use explicit
+        // escape sequences (\x1b is ESC) rather than raw control
+        // chars in source — the raw form is fragile against
+        // editor / formatter normalization that may silently
+        // strip ESC bytes in string literals.
         const raw = chunk
           .toString()
-          .split('[200~')
+          .split('\x1b[200~')
           .join('')
-          .split('[201~')
+          .split('\x1b[201~')
           .join('');
         for (const c of raw) {
           if (c === '\n' || c === '\r') {
@@ -368,6 +381,14 @@ async function main(): Promise<void> {
       0o600,
     );
     try {
+      // The 0o600 mode argument to `openSync` only applies when the
+      // kernel CREATES the file (O_CREAT path). If the file already
+      // existed — last run left it behind, an attacker on a shared
+      // /tmp pre-created it before we ran — the existing mode bits
+      // are preserved across the O_TRUNC. Force-narrow them with
+      // `fchmodSync` so the JWT artifact is always 0600 on disk
+      // regardless of what was there before.
+      fchmodSync(fd, 0o600);
       writeSync(fd, data);
     } finally {
       closeSync(fd);

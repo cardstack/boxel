@@ -51,19 +51,19 @@ function makeStubPagePool(opts: {
   function makeStorage(): Storage {
     let values: Record<string, string> = {};
     return {
-      getItem(key) {
+      getItem(key: string) {
         return values[key] ?? null;
       },
-      setItem(key, value) {
+      setItem(key: string, value: string) {
         values[key] = value;
       },
-      removeItem(key) {
+      removeItem(key: string) {
         delete values[key];
       },
       clear() {
         values = {};
       },
-      key(index) {
+      key(index: number) {
         return Object.keys(values)[index] ?? null;
       },
       get length() {
