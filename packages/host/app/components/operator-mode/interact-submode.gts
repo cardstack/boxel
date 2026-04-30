@@ -63,7 +63,8 @@ import {
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
-import { idFromCardOrURL } from 'https://cardstack.com/base/card-api';
+import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
+
 import type {
   CardContext,
   CardDef,

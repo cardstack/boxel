@@ -41,7 +41,8 @@ import type HostModeStateService from '@cardstack/host/services/host-mode-state-
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import { idFromCardOrURL } from 'https://cardstack.com/base/card-api';
+import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
+
 import type {
   CardContext,
   CardDef,

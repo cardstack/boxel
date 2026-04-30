@@ -85,7 +85,8 @@ import type StoreService from '@cardstack/host/services/store';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 import { runWhileActive } from '@cardstack/host/utils/run-while-active';
 
-import { idFromCardOrURL } from 'https://cardstack.com/base/card-api';
+import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
+
 import type {
   CardDef,
   Format,
