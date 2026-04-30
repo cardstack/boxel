@@ -37,8 +37,17 @@ const WARMUP = Number(process.env.WARMUP ?? 2);
 
 interface Baseline {
   tolerance: number;
+  noise_floor_ms?: number;
   candidate: string;
   fixtures: Record<string, { median_ms: number }>;
+}
+
+// Mirrors `check.ts`'s allowed-threshold formula so the drill's
+// pass/trip decisions match the gate exactly.
+function allowedMs(baselineMs: number, b: Baseline): number {
+  const relative = baselineMs * b.tolerance;
+  const absolute = baselineMs + (b.noise_floor_ms ?? 0);
+  return Math.max(relative, absolute);
 }
 
 (async () => {
@@ -112,7 +121,7 @@ interface Baseline {
       samples.push(performance.now() - t0);
     }
     const s = stats(samples);
-    const allowed = base.median_ms * baseline.tolerance;
+    const allowed = allowedMs(base.median_ms, baseline);
     const ok = s.median <= allowed;
     const status = ok ? 'pass' : 'TRIP';
     console.log(

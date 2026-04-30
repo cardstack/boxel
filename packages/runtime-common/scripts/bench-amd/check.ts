@@ -31,8 +31,23 @@ interface Baseline {
   iterations?: number;
   warmup?: number;
   tolerance: number;
+  // Optional absolute noise floor in milliseconds. The allowed
+  // threshold for a fixture is `max(baseline × tolerance,
+  // baseline + noise_floor_ms)`. This handles small-magnitude
+  // fixtures where sub-ms runner jitter dominates the relative
+  // tolerance — e.g. a 0.65ms baseline × 1.25 = 0.81ms only leaves
+  // 0.16ms for noise, and observed GH-runner jitter on the smallest
+  // fixture has been up to 0.21ms. Default 0 (relative tolerance
+  // only).
+  noise_floor_ms?: number;
   candidate: string;
   fixtures: Record<string, { median_ms: number }>;
+}
+
+function allowedMs(baselineMs: number, b: Baseline): number {
+  const relative = baselineMs * b.tolerance;
+  const absolute = baselineMs + (b.noise_floor_ms ?? 0);
+  return Math.max(relative, absolute);
 }
 
 const DEFAULT_ITER = 100;
@@ -139,13 +154,18 @@ function appendStepSummary(markdown: string) {
     }
     lines.push('');
 
-    // Print a JSON snippet authors can paste straight into baseline.json
+    // Print a JSON snippet authors can paste straight into baseline.json.
+    // noise_floor_ms = 0.3 is opinionated default for the AMD bench: the
+    // smallest fixture is sub-ms and absolute runner jitter has been
+    // observed up to ~0.21ms across runs, which the relative tolerance
+    // alone can't absorb. See README.
     const snippet = {
       version: 1,
       generated: new Date().toISOString().slice(0, 10),
       iterations,
       warmup,
       tolerance: 1.25,
+      noise_floor_ms: 0.3,
       candidate: GATED_CANDIDATE,
       fixtures: Object.fromEntries(
         results.map((r) => [
@@ -186,8 +206,13 @@ function appendStepSummary(markdown: string) {
     process.exit(1);
   }
 
+  const noiseFloor = baseline!.noise_floor_ms ?? 0;
+  const noiseFloorNote =
+    noiseFloor > 0
+      ? ` or baseline + ${noiseFloor}ms absolute noise floor, whichever is more lenient`
+      : '';
   lines.push(
-    `Baseline tolerance: \`× ${tolerance.toFixed(2)}\` (fail if median exceeds baseline × tolerance).\n`,
+    `Baseline tolerance: \`× ${tolerance.toFixed(2)}\`${noiseFloorNote} (fail if median exceeds the allowed threshold).\n`,
   );
   lines.push('| Fixture | Baseline | Current | Allowed | Status |');
   lines.push('|---------|---------:|--------:|--------:|:------:|');
@@ -201,17 +226,19 @@ function appendStepSummary(markdown: string) {
       );
       continue;
     }
-    const allowed = base.median_ms * tolerance;
+    const allowed = allowedMs(base.median_ms, baseline!);
     const ok = r.median <= allowed;
     const status = ok ? 'PASS' : 'FAIL';
     lines.push(
       `| \`${r.fixture}\` | ${fmtMs(base.median_ms)} | ${fmtMs(r.median)} | ${fmtMs(allowed)} | ${status} |`,
     );
     if (!ok) {
+      const floorNote =
+        noiseFloor > 0 ? ` (with +${noiseFloor}ms noise floor)` : '';
       breaches.push(
         `${GATED_CANDIDATE} median for ${r.fixture} is ${fmtMsPrecise(r.median)}, ` +
-          `exceeds baseline ${fmtMsPrecise(base.median_ms)} × ${tolerance.toFixed(2)} tolerance ` +
-          `(= ${fmtMsPrecise(allowed)})`,
+          `exceeds allowed ${fmtMsPrecise(allowed)}${floorNote} ` +
+          `(baseline ${fmtMsPrecise(base.median_ms)} × ${tolerance.toFixed(2)} tolerance)`,
       );
     }
   }

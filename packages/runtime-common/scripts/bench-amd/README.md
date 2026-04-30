@@ -101,15 +101,36 @@ above baseline) per CS-10983.
   "iterations": 100,
   "warmup": 10,
   "tolerance": 1.25,
+  "noise_floor_ms": 0.3,
   "candidate": "production",
   "fixtures": {
-    "enum.js": { "median_ms": 2.1 },
-    "skill-set.js": { "median_ms": 6.2 },
-    "spec.js": { "median_ms": 8.3 },
-    "card-api.js": { "median_ms": 23.1 }
+    "enum.js": { "median_ms": 0.65 },
+    "skill-set.js": { "median_ms": 1.85 },
+    "spec.js": { "median_ms": 2.14 },
+    "card-api.js": { "median_ms": 10.04 }
   }
 }
 ```
+
+**Allowed threshold per fixture:**
+
+```
+allowed = max(baseline × tolerance, baseline + noise_floor_ms)
+```
+
+The relative `tolerance` (×1.25) handles regression detection for
+mid-to-large fixtures. The absolute `noise_floor_ms` handles the
+small-fixture case: at sub-ms baselines, GH-runner jitter (observed up
+to ~0.21ms across runs) can swamp the relative tolerance. With a 0.3ms
+floor, a 0.65ms baseline gets `max(0.81ms, 0.95ms) = 0.95ms` allowed —
+absorbs the noise without losing 2× regression sensitivity. For a 10ms
+baseline, relative dominates: `max(12.55ms, 10.34ms) = 12.55ms`. Same
+relative+absolute pattern as `check-memory-baseline.mjs` uses for the
+host-memory gate.
+
+Bump `noise_floor_ms` higher if a fixture keeps tripping on noise.
+Lower (or remove) once you have a fixture that's consistently larger
+and the absolute jitter no longer dominates.
 
 ### When the gate trips
 

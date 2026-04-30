@@ -25,8 +25,13 @@ import { tmpdir } from 'node:os';
 import { fixturesDir } from './paths';
 
 const STINGY_MEDIAN_MS = 0.001;
+// Matches the FAIL message produced by `check.ts`. The optional noise-
+// floor note (`(with +Nms noise floor)`) is permitted but not required —
+// the synthetic baseline this trip-test writes deliberately omits
+// `noise_floor_ms` so the regex stays stable across baseline shape
+// changes that don't affect the gate's wording.
 const FAIL_MSG_RE =
-  /production median for [\w.-]+ is [\d.]+ms, exceeds baseline [\d.]+ms × [\d.]+ tolerance \(= [\d.]+ms\)/;
+  /production median for [\w.-]+ is [\d.]+ms, exceeds allowed [\d.]+ms( \(with \+[\d.]+ms noise floor\))? \(baseline [\d.]+ms × [\d.]+ tolerance\)/;
 
 function listFixtureNames(): string[] {
   return readdirSync(fixturesDir)
