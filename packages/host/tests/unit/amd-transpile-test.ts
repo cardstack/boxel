@@ -503,9 +503,9 @@ module('Unit | amd-transpile (CS-10977)', function () {
     );
     let nsObj: Record<string, unknown> = {};
     let { exports } = runAmd(out, { foo: nsObj });
-    let result = (
-      exports.bad as (src: Record<string, unknown>) => unknown
-    )({ x: 42 });
+    let result = (exports.bad as (src: Record<string, unknown>) => unknown)({
+      x: 42,
+    });
     assert.strictEqual(result, 42, 'destructure-assigned ns.field is 42');
     assert.strictEqual(nsObj.field, 42, 'mutation reached the dep arg');
   });
@@ -536,9 +536,11 @@ module('Unit | amd-transpile (CS-10977)', function () {
     );
     let nsObj: Record<string, unknown> = {};
     let { exports } = runAmd(out, { foo: nsObj });
-    let result = (
-      exports.collect as (items: { x: number }[]) => unknown
-    )([{ x: 1 }, { x: 2 }, { x: 3 }]);
+    let result = (exports.collect as (items: { x: number }[]) => unknown)([
+      { x: 1 },
+      { x: 2 },
+      { x: 3 },
+    ]);
     assert.strictEqual(result, 3, 'last iteration mutated ns.field');
   });
 
