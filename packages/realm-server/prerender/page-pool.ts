@@ -538,6 +538,19 @@ export class PagePool {
         `file-queue admission: cap=${this.#fileAdmissionCap} (affinityTabMax=${this.#affinityTabMax}, deadlock-safety ceiling=${ceiling})`,
       );
     }
+    // Sync the injected render semaphore's capacity to the resolved
+    // `#maxPages`. Prerenderer constructs `AsyncSemaphore(options.
+    // maxPages)` and hands it in; under the dynamic-pool config the
+    // pool's live cap may be smaller (MIN < legacy maxPages) or
+    // larger (INITIAL > legacy maxPages) than that initial value, and
+    // without this sync the saturation trigger
+    // (`inUseCount >= capacity`) reads the wrong cap — expansion
+    // either never fires (live cap < semaphore cap, so the semaphore
+    // never saturates) or global concurrency is silently floored
+    // below `#minPages`.
+    if (this.#renderSemaphore?.setCapacity) {
+      this.#renderSemaphore.setCapacity(this.#maxPages);
+    }
     // Contraction loop is only useful when expansion is reachable —
     // i.e. when the pool is configured to grow beyond `#minPages`.
     // Pools running on the legacy fixed-size config skip the timer
@@ -1501,11 +1514,17 @@ export class PagePool {
       `pool contraction: maxPages=${prev}→${this.#maxPages} (min=${this.#minPages})`,
     );
     // Prefer dropping a standby first — it has no affinity warmth.
+    // Use the canonical `#closeEntry` teardown path (rather than just
+    // `context.close()`) so per-page diagnostic state
+    // (`#consoleErrorsByPageId`, `#exceptionKeysByPageId`,
+    // `#affinityKeyByPageId`) is cleaned up; otherwise repeated
+    // expand/contract cycles would leak stale entries for dead
+    // standby pages.
     if (this.#standbys.size > 0) {
       let standby = this.#selectLRUTab([...this.#standbys]);
       this.#standbys.delete(standby);
       try {
-        await standby.context.close();
+        await this.#closeEntry(standby);
       } catch (e) {
         log.debug('error closing standby during contraction:', e);
       }
