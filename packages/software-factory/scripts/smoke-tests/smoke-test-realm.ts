@@ -292,6 +292,8 @@ async function main() {
     evalResultsModuleUrl,
     instantiateResultsModuleUrl,
     parseResultsModuleUrl,
+    // Smoke-test doesn't exercise fs I/O — any real path is fine.
+    workspaceDir: '/tmp/boxel-factory-smoke',
   });
 
   let validationResults = await pipeline.validate(targetRealmUrl);

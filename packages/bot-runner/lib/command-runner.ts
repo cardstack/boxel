@@ -10,6 +10,7 @@ import {
   type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command';
+import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
 import {
   CreateListingPRHandler,
   type BotTriggerEventContent,
@@ -147,10 +148,18 @@ export class CommandRunner {
           throw new Error(errorMessage);
         }
 
-        // Extract allFileContents from the result
+        // Extract allFileContents from the result, separating binary files
+        // so they bypass the PrCard 512KB size limit.
         let allFileContents = extractFileContents(filesResult.cardResultString);
+        let binaryFileContents = allFileContents.filter((f) =>
+          isBinaryFilename(f.filename),
+        );
+        let textFileContents = allFileContents.filter(
+          (f) => !isBinaryFilename(f.filename),
+        );
         log.info('pr-listing-create: files collected', {
           fileCount: allFileContents.length,
+          binaryCount: binaryFileContents.length,
         });
 
         // Step 1.5: Lint & auto-fix collected files
@@ -313,7 +322,7 @@ export class CommandRunner {
               branchName,
               submittedBy: runAs,
               prSummary,
-              allFileContents,
+              allFileContents: textFileContents,
             },
           });
 
@@ -346,6 +355,10 @@ export class CommandRunner {
           await this.createListingPRHandler.addContentsToCommit(
             eventContent,
             prCardResult,
+            binaryFileContents.map((f) => ({
+              path: f.filename,
+              content: f.contents,
+            })),
           );
           let prResult = await this.createListingPRHandler.openCreateListingPR(
             eventContent,
@@ -490,6 +503,8 @@ function getCardUrl(cardResultString?: string | null): string | null {
     return null;
   }
 }
+
+
 
 function extractFileContents(
   cardResultString?: string | null,

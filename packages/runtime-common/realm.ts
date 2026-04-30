@@ -98,6 +98,7 @@ import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
+import isPlainObject from 'lodash/isPlainObject';
 import { z } from 'zod';
 import { inferContentType } from './infer-content-type';
 import type { CardFields } from './resource-types';
@@ -202,6 +203,16 @@ export type RealmInfo = {
 
 const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
 
+// Fields owned by the RealmConfig card instance at /realm.json. Anything not
+// in this set is still written to the legacy .realm.json sidecar until
+// CS-10053 / CS-10055 move the remaining flags off-file.
+const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
+  'name',
+  'backgroundURL',
+  'iconURL',
+  'hostRoutingRules',
+]);
+
 export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
@@ -231,6 +242,10 @@ type CachedSourceFileEntry = {
   ref: FileRef;
   defaultHeaders: Record<string, string>;
   canonicalPath: LocalPath;
+  // md5 of the materialized body, computed once on cache populate. Used
+  // as the ETag base so two writes within the same unix second still
+  // produce distinct ETags — see `buildEtag` for the rationale.
+  contentHash: string | undefined;
 };
 
 type CachedSourceRedirectEntry = {
@@ -265,15 +280,24 @@ type ModuleLoadResult =
       headers: Record<string, string>;
     };
 
+// ETag base prefers a content fingerprint (md5 of the file body) over
+// `lastModified` because the unix-second timestamp collides for two
+// writes that land in the same second — and `cachedFetch` (loader →
+// cached-fetch) will then serve a stale 304-cached body. We compute the
+// content hash on the cache-miss path of the source endpoint, where the
+// content is already being materialized into memory, and stash it on the
+// cache entry so subsequent serves reuse it. Adapters that don't yet
+// surface a content fingerprint fall back to `lastModified` and keep the
+// pre-existing behavior.
 function buildEtag(
-  lastModified: number | undefined,
+  base: string | number | undefined,
   variant?: string,
 ): string | undefined {
-  if (lastModified == null) {
+  if (base == null) {
     return undefined;
   }
-  let base = String(lastModified);
-  return variant ? `${base}:${variant}` : base;
+  let baseStr = String(base);
+  return variant ? `${baseStr}:${variant}` : baseStr;
 }
 
 function computeContentHash(content: string | Uint8Array): string {
@@ -289,6 +313,21 @@ function computeContentHash(content: string | Uint8Array): string {
       throw new Error('Failed to compute content hash');
     }
   }
+}
+
+// Cheap helper for the source endpoint: returns md5 of the body when the
+// ref has already been materialized to a string or Uint8Array. Returns
+// undefined for stream refs (the caller falls back to lastModified).
+function contentHashFromMaterializedRef(ref: FileRef): string | undefined {
+  let { content } = ref;
+  if (typeof content === 'string' || content instanceof Uint8Array) {
+    try {
+      return computeContentHash(content);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
 }
 
 function computeContentSize(content: string | Uint8Array): number {
@@ -1088,7 +1127,23 @@ export class Realm {
       invalidations = new Set([...invalidations, ...workingInvalidations]);
     };
 
-    for (let [path, content] of files) {
+    // Iterate modules (executable extensions) before everything else so
+    // any instance in the same batch finds its module indexed when
+    // fileSerialization runs. Without this, a batch that contains both
+    // `foo.gts` and `FooCard/instance.json` iterated in the client's
+    // natural (often alphabetical) order leaves the instance ahead of
+    // the module, the flush-on-transition below never fires, and
+    // fileSerialization throws FilterRefersToNonexistentTypeError.
+    // Stable within each group — only the module/non-module partition
+    // changes, not the relative order inside it.
+    let orderedFiles = [...files].sort(([pathA], [pathB]) => {
+      let aIsModule = hasExecutableExtension(pathA);
+      let bIsModule = hasExecutableExtension(pathB);
+      if (aIsModule === bIsModule) return 0;
+      return aIsModule ? -1 : 1;
+    });
+
+    for (let [path, content] of orderedFiles) {
       let url = this.paths.fileURL(path);
       let currentWriteType: 'module' | 'instance' | undefined =
         hasExecutableExtension(path)
@@ -1098,6 +1153,21 @@ export class Realm {
               isCardDocumentString(content)
             ? 'instance'
             : undefined;
+
+      // Flush any modules written so far in this batch to the index
+      // BEFORE we serialize the next instance. fileSerialization calls
+      // lookupDefinition, which needs dependent modules to be indexed;
+      // without this, the first instance after a module in the batch
+      // throws FilterRefersToNonexistentTypeError and the whole atomic
+      // batch rolls back.
+      // TODO: we could be more precise here and keep track of what
+      // modules the instances depend on and only flush when an instance
+      // depends on a module that is part of this operation.
+      if (lastWriteType === 'module' && currentWriteType === 'instance') {
+        await performIndex();
+        urls = [];
+      }
+
       if (typeof content === 'string') {
         try {
           let doc = JSON.parse(content);
@@ -1140,17 +1210,6 @@ export class Realm {
       }
       let contentHash = computeContentHash(content);
       let contentSize = computeContentSize(content);
-      if (lastWriteType === 'module' && currentWriteType === 'instance') {
-        // we need to generate/update possible definition in order for
-        // instance file serialization that may depend on the included module to
-        // work. TODO: we could be more precise here and keep track of what
-        // modules the instances depend on and only flush the modules to index
-        // when you you see that you have an instance that you are about to
-        // write to disk that depends on a module that is part of this
-        // operation.
-        await performIndex();
-        urls = [];
-      }
       this.sendIndexInitiationEvent(url.href);
       await this.trackOwnWrite(path);
       let { lastModified } = await this.#adapter.write(path, content);
@@ -1167,7 +1226,9 @@ export class Realm {
 
     if (addedFiles.length > 0 || updatedFiles.length > 0) {
       if (
-        [...addedFiles, ...updatedFiles].some((f) => f.endsWith('.realm.json'))
+        [...addedFiles, ...updatedFiles].some(
+          (f) => f === '.realm.json' || f === 'realm.json',
+        )
       ) {
         this.#cachedRealmInfo = null;
       }
@@ -1460,6 +1521,12 @@ export class Realm {
         if (e instanceof CardError) {
           return responseWithError(e, requestContext);
         }
+        // Log the underlying exception before returning 500 — otherwise
+        // callers only see "Write Error" and the original stack trace is
+        // lost, making atomic-batch failures effectively undebuggable.
+        this.#log.error(
+          `Atomic write failed: ${e.message}\n${e.stack ?? '(no stack)'}`,
+        );
         return createResponse({
           body: JSON.stringify({
             errors: [{ title: 'Write Error', detail: e.message }],
@@ -2099,6 +2166,11 @@ export class Realm {
     options?: {
       defaultHeaders?: Record<string, string>;
       etagVariant?: string;
+      // Optional content-derived fingerprint (e.g. md5 of body bytes).
+      // Takes precedence over `ref.lastModified` for the ETag — see
+      // `buildEtag`. Callers that have the materialized body already
+      // (the source endpoint cache-miss path) compute this for free.
+      etagBase?: string;
     },
   ): Promise<ResponseWithNodeStream> {
     let contentType = options?.defaultHeaders?.['content-type'];
@@ -2115,7 +2187,10 @@ export class Realm {
     let cacheControl = contentType?.startsWith('image/')
       ? `${cacheVisibility}, max-age=60, must-revalidate`
       : `${cacheVisibility}, max-age=0`;
-    let etag = buildEtag(ref.lastModified, options?.etagVariant);
+    let etag = buildEtag(
+      options?.etagBase ?? ref.lastModified,
+      options?.etagVariant,
+    );
     let lastModified = formatRFC7231(ref.lastModified * 1000);
     if (etag && request.headers.get('if-none-match') === etag) {
       return createResponse({
@@ -2373,6 +2448,7 @@ export class Realm {
                 [CACHE_HEADER]: CACHE_HIT_VALUE,
               },
               etagVariant: SOURCE_ETAG_VARIANT,
+              etagBase: cached.contentHash,
             },
           );
         } finally {
@@ -2440,15 +2516,21 @@ export class Realm {
         });
       } else {
         let cachedRef = await this.materializeFileRef(handle);
+        // Compute the content fingerprint while we have the body in
+        // memory — `cachedRef.content` is already a string/Uint8Array
+        // post-materialization, so this is a single md5 with no extra I/O.
+        let contentHash = contentHashFromMaterializedRef(cachedRef);
         this.#sourceCache.set(localName, {
           type: 'file',
           ref: cachedRef,
           defaultHeaders,
           canonicalPath: handle.path,
+          contentHash,
         });
         return await this.serveLocalFile(request, cachedRef, requestContext, {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
+          etagBase: contentHash,
         });
       }
     } finally {
@@ -4443,7 +4525,7 @@ export class Realm {
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath, undefined);
     let lastPublishedAt = await this.getLastPublishedAt();
-    let realmInfo = {
+    let realmInfo: RealmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,
       iconURL: null,
@@ -4458,9 +4540,6 @@ export class Realm {
       publishable: null,
       lastPublishedAt,
     };
-    if (!realmConfig) {
-      return realmInfo;
-    }
 
     if (realmConfig) {
       try {
@@ -4487,6 +4566,39 @@ export class Realm {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
     }
+
+    // Overlay from the RealmConfig card instance at /realm.json when it has
+    // been indexed. Uses instance() rather than cardDocument() to avoid
+    // recursing through attachRealmInfo → getRealmInfo → parseRealmInfo.
+    try {
+      let cardURL = new URL(
+        this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+      );
+      let indexEntry = await this.#realmIndexQueryEngine.instance(cardURL);
+      if (indexEntry?.type === 'instance') {
+        let attrs = (indexEntry.instance.attributes ?? {}) as Record<
+          string,
+          unknown
+        >;
+        let cardInfo = (attrs.cardInfo ?? {}) as Record<string, unknown>;
+        if (typeof cardInfo.name === 'string') {
+          realmInfo.name = cardInfo.name;
+        }
+        if ('backgroundURL' in attrs) {
+          realmInfo.backgroundURL =
+            typeof attrs.backgroundURL === 'string'
+              ? attrs.backgroundURL
+              : null;
+        }
+        if ('iconURL' in attrs) {
+          realmInfo.iconURL =
+            typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
+        }
+      }
+    } catch (e) {
+      this.#log.warn(`failed to read RealmConfig card from index: ${e}`);
+    }
+
     return realmInfo;
   }
 
@@ -4549,24 +4661,147 @@ export class Realm {
       });
     }
 
-    let fileURL = this.paths.fileURL(`.realm.json`);
-    let realmConfigPath: LocalPath = this.paths.local(fileURL);
-    let realmConfig: Record<string, unknown> = {};
-    let existingConfig = await this.readFileAsText(realmConfigPath, undefined);
-    if (existingConfig?.content) {
-      try {
-        realmConfig = JSON.parse(existingConfig.content);
-      } catch (e: any) {
-        return systemError({
-          requestContext,
-          message: `Unable to parse existing realm config: ${e.message}`,
-        });
+    let cardAttrs: Record<string, unknown> = {};
+    let sidecarAttrs: Record<string, unknown> = {};
+    for (let [key, value] of Object.entries(attributes)) {
+      if (REALM_CONFIG_CARD_PROPERTIES.has(key)) {
+        cardAttrs[key] = value;
+      } else {
+        sidecarAttrs[key] = value;
       }
     }
 
-    Object.assign(realmConfig, attributes);
-    let serializedConfig = JSON.stringify(realmConfig, null, 2) + '\n';
-    await this.write(realmConfigPath, serializedConfig);
+    // Read and merge BOTH files before writing either. A mixed PATCH like
+    // { name, publishable } touches both the card and the sidecar, and we
+    // don't want a malformed sidecar to surface 500 *after* the card has
+    // already been mutated.
+    let cardPath: LocalPath | undefined;
+    let cardDoc:
+      | {
+          data: {
+            type: string;
+            attributes?: Record<string, unknown>;
+            meta: { adoptsFrom: { module: string; name: string } };
+          };
+        }
+      | undefined;
+    if (Object.keys(cardAttrs).length > 0) {
+      cardPath = this.paths.local(this.paths.fileURL('realm.json'));
+      cardDoc = {
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      };
+      let existingCard = await this.readFileAsText(cardPath, undefined);
+      if (existingCard?.content) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(existingCard.content);
+        } catch (e: any) {
+          return systemError({
+            requestContext,
+            message: `Unable to parse existing realm config card: ${e.message}`,
+          });
+        }
+        if (!isPlainObject(parsed)) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config card is not a JSON object`,
+          });
+        }
+        cardDoc = parsed as typeof cardDoc;
+        cardDoc!.data = cardDoc!.data ?? ({} as any);
+        if (!isPlainObject(cardDoc!.data)) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config card data is not a JSON object`,
+          });
+        }
+        let adoptsFrom = (cardDoc!.data as any).meta?.adoptsFrom;
+        if (
+          !isPlainObject(adoptsFrom) ||
+          adoptsFrom.module !== 'https://cardstack.com/base/realm-config' ||
+          adoptsFrom.name !== 'RealmConfig'
+        ) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config card does not adopt from RealmConfig`,
+          });
+        }
+        let existingAttrs = cardDoc!.data.attributes;
+        if (existingAttrs != null && !isPlainObject(existingAttrs)) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config card attributes is not a JSON object`,
+          });
+        }
+        cardDoc!.data.attributes = existingAttrs ?? {};
+      }
+      // `name` is exposed on the public RealmInfo shape but stored on the
+      // RealmConfig card under cardInfo.name (the standard CardDef slot
+      // that drives cardTitle). Translate so PATCH /_config callers can
+      // keep sending { name: ... } unchanged.
+      for (let [key, value] of Object.entries(cardAttrs)) {
+        if (key === 'name') {
+          let existingCardInfo = (cardDoc!.data.attributes!.cardInfo ??
+            {}) as Record<string, unknown>;
+          cardDoc!.data.attributes!.cardInfo = {
+            ...existingCardInfo,
+            name: value,
+          };
+        } else {
+          cardDoc!.data.attributes![key] = value;
+        }
+      }
+    }
+
+    let realmConfigPath: LocalPath | undefined;
+    let realmConfig: Record<string, unknown> | undefined;
+    if (Object.keys(sidecarAttrs).length > 0) {
+      realmConfigPath = this.paths.local(this.paths.fileURL('.realm.json'));
+      realmConfig = {};
+      let existingConfig = await this.readFileAsText(
+        realmConfigPath,
+        undefined,
+      );
+      if (existingConfig?.content) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(existingConfig.content);
+        } catch (e: any) {
+          return systemError({
+            requestContext,
+            message: `Unable to parse existing realm config: ${e.message}`,
+          });
+        }
+        if (!isPlainObject(parsed)) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config is not a JSON object`,
+          });
+        }
+        realmConfig = parsed as Record<string, unknown>;
+      }
+      Object.assign(realmConfig!, sidecarAttrs);
+    }
+
+    if (cardPath !== undefined && cardDoc !== undefined) {
+      await this.write(cardPath, JSON.stringify(cardDoc, null, 2) + '\n');
+    }
+    if (realmConfigPath !== undefined && realmConfig !== undefined) {
+      await this.write(
+        realmConfigPath,
+        JSON.stringify(realmConfig, null, 2) + '\n',
+      );
+    }
+
     this.#cachedRealmInfo = null;
 
     let realmInfo = await this.parseRealmInfo();

@@ -135,6 +135,11 @@ export function installDelayedRuntimeRealmSearchPatch(delayMs: number): {
   // prerender waited for query resolution instead of "winning a race" by chance.
   let originalSearch = RuntimeRealm.prototype.search;
   let delayedSearchRequestCount = 0;
+  let restored = false;
+  // Sleeps that have not yet resolved. On restore() we wake them early so
+  // they skip the underlying search; otherwise a long delay (e.g. 8s) can
+  // outlive the realm/db fixture and the resumed call hits a closed pg pool.
+  let pendingSleepCancels = new Set<() => void>();
 
   RuntimeRealm.prototype.search = async function (
     this: RuntimeRealm,
@@ -142,13 +147,41 @@ export function installDelayedRuntimeRealmSearchPatch(delayMs: number): {
   ): Promise<Awaited<ReturnType<RuntimeRealm['search']>>> {
     // Exposed to tests as a stable signal that fallback search actually ran.
     delayedSearchRequestCount++;
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    await new Promise<void>((resolve) => {
+      let timer: ReturnType<typeof setTimeout>;
+      let wake = () => {
+        pendingSleepCancels.delete(wake);
+        clearTimeout(timer);
+        resolve();
+      };
+      pendingSleepCancels.add(wake);
+      timer = setTimeout(wake, delayMs);
+    });
+    if (restored) {
+      // The patch has been torn down — the test no longer cares about this
+      // search and the realm fixture (including its pg pool) may already be
+      // closed. Return an empty collection rather than reaching into a
+      // potentially-dead adapter; the caller (handle-search/searchRealms)
+      // will discard the result.
+      return {
+        data: [],
+        meta: { page: { total: 0 } },
+      } as Awaited<ReturnType<RuntimeRealm['search']>>;
+    }
     return await originalSearch.call(this, query);
   };
 
   return {
     getRequestCount: () => delayedSearchRequestCount,
     restore: () => {
+      restored = true;
+      // Wake any in-flight sleepers immediately; the `restored` guard above
+      // makes them skip originalSearch() so they don't query a closed pool.
+      let cancels = [...pendingSleepCancels];
+      pendingSleepCancels.clear();
+      for (let wake of cancels) {
+        wake();
+      }
       RuntimeRealm.prototype.search = originalSearch;
     },
   };

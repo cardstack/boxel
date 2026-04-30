@@ -10,6 +10,11 @@ import {
   type ListFilesResult,
 } from '../commands/file/list';
 import {
+  search as fileSearch,
+  type SearchResult,
+  type SearchCommandOptions,
+} from '../commands/search';
+import {
   readTranspiledModule,
   type ReadTranspiledResult,
 } from '../commands/read-transpiled';
@@ -25,7 +30,14 @@ import { waitForReady as coreWaitForReady } from '../commands/realm/wait-for-rea
 import { getProfileManager, type ProfileManager } from './profile-manager';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-export type { ReadResult, ListFilesResult, ReadTranspiledResult, SyncResult };
+export type {
+  ReadResult,
+  ListFilesResult,
+  ReadTranspiledResult,
+  SyncResult,
+  SearchResult,
+  SearchCommandOptions,
+};
 
 const MIME = {
   CardSource: 'application/vnd.card+source',
@@ -76,13 +88,6 @@ export interface SyncOptions {
 
 export type { DeleteResult };
 export type { WriteResult };
-
-export interface SearchResult {
-  ok: boolean;
-  status?: number;
-  data?: Record<string, unknown>[];
-  error?: string;
-}
 
 export interface RunCommandResult {
   status: 'ready' | 'error' | 'unusable';
@@ -200,44 +205,14 @@ export class BoxelCLIClient {
   }
 
   /**
-   * Search a realm using the `_search` endpoint.
+   * Federated search across one or more realms via `_federated-search`.
+   * Delegates to the standalone `search()` in `commands/search.ts`.
    */
   async search(
-    realmUrl: string,
+    realmUrls: string | string[],
     query: Record<string, unknown>,
   ): Promise<SearchResult> {
-    let searchUrl = `${ensureTrailingSlash(realmUrl)}_search`;
-
-    try {
-      let response = await this.pm.authedRealmFetch(searchUrl, {
-        method: 'QUERY',
-        headers: {
-          Accept: MIME.CardJson,
-          'Content-Type': MIME.JSON,
-        },
-        body: JSON.stringify(query),
-      });
-
-      if (!response.ok) {
-        let body = await response.text();
-        return {
-          ok: false,
-          status: response.status,
-          error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-        };
-      }
-
-      let result = (await response.json()) as {
-        data?: Record<string, unknown>[];
-      };
-      return { ok: true, data: result.data };
-    } catch (err) {
-      return {
-        ok: false,
-        status: 0,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
+    return fileSearch(realmUrls, query, { profileManager: this.pm });
   }
 
   /**

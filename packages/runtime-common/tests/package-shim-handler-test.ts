@@ -2,6 +2,8 @@ import type { SharedTests } from '../helpers';
 import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
+  ALLOW_MISSING_NAMED_EXPORTS,
+  wrapWithStrictNamespace,
   isRetryableShimResolveError,
   withResolveRetry,
   type ShimRetryLogger,
@@ -29,6 +31,225 @@ function makeRecordedDelay() {
 }
 
 const tests: SharedTests<Record<string, never>> = Object.freeze({
+  'wrapWithStrictNamespace returns existing exports unchanged': async (
+    assert,
+  ) => {
+    let ns = wrapWithStrictNamespace('@cardstack/runtime-common', {
+      foo: 1,
+      bar: 'hello',
+    });
+    assert.strictEqual(ns.foo, 1, 'numeric export passes through');
+    assert.strictEqual(ns.bar, 'hello', 'string export passes through');
+  },
+
+  'wrapWithStrictNamespace throws ReferenceError on missing string-key access':
+    async (assert) => {
+      let ns = wrapWithStrictNamespace('@cardstack/runtime-common', {
+        existing: 'value',
+      });
+      try {
+        // `void` to invoke the property access for its side effect
+        // (the Proxy throws) without binding the result. `let _ = …`
+        // would trip TS's noUnusedLocals despite the eslint-disable.
+        void ns.markdownToHtml;
+        assert.ok(false, 'should have thrown on missing-key access');
+      } catch (err: any) {
+        assert.true(
+          err instanceof ReferenceError,
+          'throws ReferenceError (matches the JS spec for unresolved bindings)',
+        );
+        assert.ok(
+          /has no exported member 'markdownToHtml'/.test(err?.message ?? ''),
+          `error message names the missing export, got: ${err?.message}`,
+        );
+        assert.ok(
+          /'@cardstack\/runtime-common'/.test(err?.message ?? ''),
+          `error message names the source module, got: ${err?.message}`,
+        );
+      }
+    },
+
+  'wrapWithStrictNamespace allows `in` checks without throwing': async (
+    assert,
+  ) => {
+    let ns = wrapWithStrictNamespace('@cardstack/runtime-common', {
+      foo: 1,
+    });
+    assert.true('foo' in ns, 'present key reports as in');
+    assert.false('bar' in ns, 'missing key reports as not in (no throw)');
+  },
+
+  'wrapWithStrictNamespace allows Object.keys to enumerate present exports':
+    async (assert) => {
+      let ns = wrapWithStrictNamespace('@cardstack/runtime-common', {
+        a: 1,
+        b: 2,
+      });
+      assert.deepEqual(
+        Object.keys(ns).sort(),
+        ['a', 'b'],
+        'Object.keys works without triggering the strict get trap',
+      );
+    },
+
+  'wrapWithStrictNamespace passes Symbol gets through without throwing': async (
+    assert,
+  ) => {
+    let ns = wrapWithStrictNamespace('@cardstack/runtime-common', {
+      foo: 1,
+    });
+    // Random symbol access — common in framework internals (e.g.
+    // Glimmer's tagged values). The Proxy must not throw on these.
+    let testSymbol = Symbol.for('boxel-test:does-not-exist');
+    assert.strictEqual(
+      (ns as any)[testSymbol],
+      undefined,
+      'symbol access passes through and returns the underlying value',
+    );
+  },
+
+  'wrapWithStrictNamespace allows runtime-probe `then` (await thenable detection)':
+    async (assert) => {
+      let ns = wrapWithStrictNamespace('@cardstack/runtime-common', {
+        someExport: 1,
+      });
+      // `await ns` does `Reflect.get(value, 'then')`. The Proxy must
+      // not throw on this — otherwise every awaited shimmed module
+      // breaks (we hit exactly this regression in CI: cascading
+      // `ReferenceError: Module '...' has no exported member 'then'`
+      // across host / matrix / realm-server suites).
+      let resolved = await Promise.resolve(ns);
+      assert.strictEqual(
+        resolved,
+        ns,
+        'await on a shimmed namespace returns the namespace (treated as non-thenable)',
+      );
+      assert.strictEqual(
+        (ns as any).then,
+        undefined,
+        '`.then` access returns undefined without throwing',
+      );
+    },
+
+  'wrapWithStrictNamespace allows runtime-probe `__esModule`, `toJSON`, and Object.prototype methods':
+    async (assert) => {
+      let ns = wrapWithStrictNamespace('@cardstack/runtime-common', {
+        someExport: 1,
+      });
+      // `__esModule` is what CJS/ESM interop bridges probe to decide
+      // how to import the default. Should be undefined, not a throw.
+      assert.strictEqual(
+        (ns as any).__esModule,
+        undefined,
+        '__esModule probe returns undefined without throwing',
+      );
+      // `toJSON` is what `JSON.stringify(ns)` probes for.
+      assert.strictEqual(
+        (ns as any).toJSON,
+        undefined,
+        'toJSON probe returns undefined without throwing',
+      );
+      // Object.prototype methods inherited via the prototype chain.
+      assert.strictEqual(
+        typeof (ns as any).toString,
+        'function',
+        'toString returns the inherited Object.prototype method',
+      );
+      assert.strictEqual(
+        typeof (ns as any).hasOwnProperty,
+        'function',
+        'hasOwnProperty returns the inherited Object.prototype method',
+      );
+    },
+
+  'wrapWithStrictNamespace honors the ALLOW_MISSING_NAMED_EXPORTS escape hatch':
+    async (assert) => {
+      let opted: any = { foo: 1 };
+      opted[ALLOW_MISSING_NAMED_EXPORTS] = true;
+      let ns = wrapWithStrictNamespace('@cardstack/runtime-common', opted);
+      // Module that opts out of strict checking gets pre-Proxy
+      // behavior — missing-key access returns undefined, no throw.
+      assert.strictEqual(
+        ns.somethingMissing,
+        undefined,
+        'opted-out module returns undefined for missing keys',
+      );
+      assert.strictEqual(ns.foo, 1, 'present keys still pass through');
+    },
+
+  'wrapWithStrictNamespace returns null/undefined namespaces unchanged': async (
+    assert,
+  ) => {
+    assert.strictEqual(
+      wrapWithStrictNamespace('x', null as any),
+      null,
+      'null passes through',
+    );
+    assert.strictEqual(
+      wrapWithStrictNamespace('x', undefined as any),
+      undefined,
+      'undefined passes through',
+    );
+  },
+
+  'PackageShimHandler#handle wraps the served module with the strict Proxy':
+    async (assert) => {
+      let handler = new PackageShimHandler(
+        (id) => `${PACKAGES_FAKE_ORIGIN}${id}`,
+      );
+      handler.shimModule('test-module', { existing: 1 });
+      let response = await handler.handle(
+        new Request(`${PACKAGES_FAKE_ORIGIN}test-module`),
+      );
+      assert.ok(response, 'handler returned a Response');
+      let shimmed = (response as any)?.[Symbol.for('shimmed-module')];
+      assert.strictEqual(shimmed.existing, 1, 'present export readable');
+      try {
+        void shimmed.notExported;
+        assert.ok(false, 'should have thrown on missing-key access');
+      } catch (err: any) {
+        assert.true(
+          err instanceof ReferenceError,
+          'served module is wrapped with the strict Proxy',
+        );
+      }
+    },
+
+  'PackageShimHandler error message names the full requested URL — useful for cards that import from a typo URL':
+    async (assert) => {
+      let handler = new PackageShimHandler(
+        (id) => `${PACKAGES_FAKE_ORIGIN}${id}`,
+      );
+      handler.shimModule('@cardstack/runtime-common', {
+        Loader: class {},
+        baseRealm: 'https://cardstack.com/base/',
+      });
+      let requestUrl = `${PACKAGES_FAKE_ORIGIN}@cardstack/runtime-common`;
+      let response = await handler.handle(new Request(requestUrl));
+      let shimmed = (response as any)?.[Symbol.for('shimmed-module')];
+      try {
+        // Re-create the deterministic whitepaper bug shape: a card
+        // imports `markdownToHtml` from `@cardstack/runtime-common`,
+        // which doesn't actually export that name.
+        void shimmed.markdownToHtml;
+        assert.ok(false, 'should have thrown');
+      } catch (err: any) {
+        assert.ok(
+          /has no exported member 'markdownToHtml'/.test(err?.message ?? ''),
+          `error names the missing export, got: ${err?.message}`,
+        );
+        // Lock in that the FULL request URL is in the error — not
+        // just the short module-id fragment. The
+        // `https://packages/...` origin is what the loader's logs
+        // and stack traces use, so an operator searching for it
+        // should be able to find this error.
+        assert.ok(
+          (err?.message ?? '').includes(requestUrl),
+          `error names the full request URL '${requestUrl}', got: ${err?.message}`,
+        );
+      }
+    },
+
   'returns the resolved module on first attempt when there is no failure':
     async (assert) => {
       let calls = 0;

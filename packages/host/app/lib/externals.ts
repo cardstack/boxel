@@ -56,6 +56,7 @@ import * as boxelUiModifiers from '@cardstack/boxel-ui/modifiers';
 
 import * as runtime from '@cardstack/runtime-common';
 import type { VirtualNetwork } from '@cardstack/runtime-common';
+import { fallbackShim } from '@cardstack/runtime-common/package-shim-handler';
 
 import { shimHostCommands } from '../commands';
 
@@ -187,9 +188,13 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
 
   // Some realm modules use host-only types or helpers. Provide a safe shim so
   // imports resolve even when the host module isn't present in the build.
-  virtualNetwork.shimModule('@cardstack/host/services/store', {
-    default: class {},
-  });
+  // Wrapped in `fallbackShim` so the strict-namespace check in the shim
+  // handler doesn't throw on names this stub doesn't expose — callers that
+  // reach beyond `default` here are expected to no-op in non-host envs.
+  virtualNetwork.shimModule(
+    '@cardstack/host/services/store',
+    fallbackShim({ default: class {} }),
+  );
 
   shimHostCommands(virtualNetwork);
 }
@@ -199,22 +204,44 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
 // environment without crashing. These are never actually called in production
 // — they just prevent import resolution errors.
 //
+// Each fallback is wrapped in `fallbackShim` so the strict-namespace check
+// in the shim handler doesn't throw `ReferenceError` on the names a card's
+// test code references (e.g. `setupCardTest`, `mockMatrixForTesting`). The
+// fallback's only job here is to keep import resolution from failing; the
+// names that get accessed return `undefined` in non-test envs, which is the
+// pre-strict-check behavior callers depend on.
+//
 // In live-test runs, live-test.js overrides these at the *realm loader* level
 // (via loader.shimModule) with the real implementations before importing test
 // modules. The loader-level shim takes precedence over this network-level
 // fallback, so the real helpers are used during test execution.
 export function shimModulesForLiveTests(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@ember/test-helpers', emberTestHelpers);
-  virtualNetwork.shimModule('@cardstack/host/tests/helpers', {});
-  virtualNetwork.shimModule('@cardstack/host/tests/helpers/mock-matrix', {});
-  virtualNetwork.shimModule('@cardstack/host/tests/helpers/setup', {});
-  virtualNetwork.shimModule('@cardstack/host/tests/helpers/adapter', {});
+  virtualNetwork.shimModule('@cardstack/host/tests/helpers', fallbackShim());
+  virtualNetwork.shimModule(
+    '@cardstack/host/tests/helpers/mock-matrix',
+    fallbackShim(),
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/host/tests/helpers/setup',
+    fallbackShim(),
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/host/tests/helpers/adapter',
+    fallbackShim(),
+  );
   virtualNetwork.shimModule(
     '@cardstack/host/tests/helpers/render-component',
-    {},
+    fallbackShim(),
   );
-  virtualNetwork.shimModule('@cardstack/host/tests/helpers/base-realm', {});
-  virtualNetwork.shimModule('@universal-ember/test-support', {});
-  virtualNetwork.shimModule('@ember/owner', {});
-  virtualNetwork.shimModule('@cardstack/host/config/environment', {});
+  virtualNetwork.shimModule(
+    '@cardstack/host/tests/helpers/base-realm',
+    fallbackShim(),
+  );
+  virtualNetwork.shimModule('@universal-ember/test-support', fallbackShim());
+  virtualNetwork.shimModule('@ember/owner', fallbackShim());
+  virtualNetwork.shimModule(
+    '@cardstack/host/config/environment',
+    fallbackShim(),
+  );
 }

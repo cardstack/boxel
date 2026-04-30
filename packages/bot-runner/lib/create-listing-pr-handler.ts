@@ -109,6 +109,7 @@ export class CreateListingPRHandler {
   async addContentsToCommit(
     eventContent: BotTriggerEventContent,
     runCommandResult?: RunCommandResponse | null,
+    binaryFiles?: { path: string; content: string }[],
   ): Promise<void> {
     let context = getCreateListingPRContext(eventContent);
     if (!context) {
@@ -117,20 +118,27 @@ export class CreateListingPRHandler {
     let rawFiles = await getContentsFromRealm(
       runCommandResult?.cardResultString,
     );
-    if (rawFiles.length === 0) {
-      return;
-    }
     let folderName = buildSubmissionFolderName(context);
-    let files = rawFiles.map((file) => ({
+    let textFiles = rawFiles.map((file) => ({
       ...file,
       path: `${folderName}/${file.path}`,
+      isBinary: false as const,
     }));
-    let hash = hashFiles(files);
+    let binaryFilesWithFolder = (binaryFiles ?? []).map((file) => ({
+      ...file,
+      path: `${folderName}/${file.path}`,
+      isBinary: true as const,
+    }));
+    let allFiles = [...textFiles, ...binaryFilesWithFolder];
+    if (allFiles.length === 0) {
+      return;
+    }
+    let hash = hashFiles(allFiles);
     await this.githubClient.writeFilesToBranch({
       owner: context.owner,
       repo: context.repoName,
       branch: context.head,
-      files,
+      files: allFiles,
       message: `add ${context.listingDisplayName} changes [boxel-content-hash:${hash}]`,
     });
   }

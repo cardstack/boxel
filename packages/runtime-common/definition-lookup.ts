@@ -9,7 +9,7 @@ import {
   separatedByCommas,
   type Expression,
 } from './expression';
-import type { SerializedError } from './error';
+import { clampSerializedError, type SerializedError } from './error';
 import {
   fetchUserPermissions,
   internalKeyFor,
@@ -852,7 +852,16 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           [param(moduleAlias)],
           [param(JSON.stringify(definitions ?? {}))],
           [param(JSON.stringify(deps ?? []))],
-          [param(errorDoc ? JSON.stringify(errorDoc) : null)],
+          [
+            param(
+              errorDoc
+                ? JSON.stringify({
+                    ...errorDoc,
+                    error: clampSerializedError(errorDoc.error),
+                  })
+                : null,
+            ),
+          ],
           [param(Date.now())],
           [param(resolvedRealmURL)],
           [param(cacheScope)],

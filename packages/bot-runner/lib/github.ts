@@ -44,7 +44,7 @@ export interface WriteFilesToBranchParams {
   owner: string;
   repo: string;
   branch: string;
-  files: { path: string; content: string }[];
+  files: { path: string; content: string; isBinary?: boolean }[];
   message: string;
 }
 
@@ -166,8 +166,13 @@ export class OctokitGitHubClient implements GitHubClient {
       .map((file) => ({
         path: file.path?.trim(),
         content: file.content ?? '',
+        isBinary: file.isBinary ?? false,
       }))
-      .filter((file) => !!file.path) as { path: string; content: string }[];
+      .filter((file) => !!file.path) as {
+      path: string;
+      content: string;
+      isBinary: boolean;
+    }[];
     if (normalizedFiles.length === 0) {
       throw new Error('at least one file path is required');
     }
@@ -198,7 +203,7 @@ export class OctokitGitHubClient implements GitHubClient {
           path: `/repos/${params.owner}/${params.repo}/git/blobs`,
           body: {
             content: file.content,
-            encoding: 'utf-8',
+            encoding: file.isBinary ? 'base64' : 'utf-8',
           },
         });
 

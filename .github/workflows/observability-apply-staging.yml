@@ -1,0 +1,117 @@
+name: Observability — apply to staging
+
+# Push to main with changes under packages/observability/** triggers a
+# `grafanactl resources push` against the staging self-host Grafana.
+# Mirrors the existing terraform-apply-on-merge pattern.
+#
+# Production has its own workflow (observability-apply-production.yml from
+# CS-10936) gated on manual dispatch.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/observability/**"
+      - ".github/workflows/observability-apply-staging.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  # Never run two applies in parallel against the same environment, but
+  # don't cancel an in-flight apply when a new commit lands — let it finish
+  # cleanly so we don't leave Grafana in a half-pushed state.
+  group: observability-apply-staging
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Apply to staging
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: us-east-1
+      # Dedicated, narrowly-scoped role at configs/boxel-observability-apply/staging
+      # in cardstack/infra. Permissions are ssm:GetParameter on:
+      #   /staging/grafana/grafanactl_token  (added in cardstack/infra#665)
+      #   /staging/loki/internal_url         (added in cardstack/infra#674, CS-10968)
+      # If the role doesn't exist or is missing one of those grants, the
+      # configure-aws-credentials step below will succeed but the SSM
+      # fetch step will fail with AccessDenied — apply the infra config first.
+      AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
+      # Server URL deliberately NOT set here. The committed
+      # packages/observability/grafanactl/config.yaml is the single source of
+      # truth for per-context server URLs (rendered to a tempfile by
+      # scripts/render-config.sh at apply time). Setting GRAFANA_SERVER as
+      # workflow env would silently override the config — if config.yaml's
+      # staging URL ever changes (e.g., Phase 6 cutover dashboard-staging.*
+      # rename), the workflow would still hit the old hostname.
+      #
+      # grafanactl is still pre-1.0 — bump as needed; the install action
+      # (.github/actions/install-grafanactl) verifies the SHA-256.
+      GRAFANACTL_VERSION: "0.1.10"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install grafanactl
+        uses: ./.github/actions/install-grafanactl
+        with:
+          version: ${{ env.GRAFANACTL_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Source data-source secrets from SSM
+        # Each provisioning/datasources/*.yaml has placeholders that get
+        # substituted by apply-datasources.sh at push time. The IAM grants
+        # for these specific SSM paths live in cardstack/infra at
+        # configs/boxel-observability-apply/ — adding a new env var here
+        # without the matching grant gets a hard AccessDenied.
+        run: |
+          fetch() {  # name path [--with-decryption]
+            local var="$1" path="$2"
+            shift 2
+            local val
+            val="$(aws ssm get-parameter --name "$path" "$@" \
+              --query 'Parameter.Value' --output text)"
+            # Mask SecureString-shaped values (token, password) so they
+            # can't leak into job logs even if a downstream step echoes them.
+            if [[ " $* " == *" --with-decryption "* ]]; then
+              echo "::add-mask::$val"
+            fi
+            echo "${var}=${val}" >> "$GITHUB_ENV"
+          }
+
+          fetch GRAFANA_TOKEN          /staging/grafana/grafanactl_token   --with-decryption
+          fetch LOKI_URL               /staging/loki/internal_url
+          fetch BOXEL_DB_HOST          /staging/boxel-grafana/db_host
+          fetch SYNAPSE_PROMETHEUS_URL /staging/boxel-grafana/prometheus_url
+          fetch BOXEL_DB_NAME          /staging/boxel/PGDATABASE
+          fetch BOXEL_DB_USER          /staging/boxel/GRAFANA_DB_USER
+          fetch BOXEL_DB_PASSWORD      /staging/boxel/GRAFANA_DB_PASSWORD  --with-decryption
+
+      - name: Apply
+        # apply.sh sources its own grafanactl-env.sh helper, which for
+        # `local` would `unset GRAFANA_TOKEN`. We're using `--env staging`
+        # which fetches from SSM via the helper — but in CI we already have
+        # GRAFANA_TOKEN exported, so the helper will overwrite it with a
+        # fresh fetch. That's fine and consistent.
+        working-directory: packages/observability
+        run: |
+          ./scripts/apply.sh --env staging
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Observability apply" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Target: staging (server URL from packages/observability/grafanactl/config.yaml)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- grafanactl: \`$GRAFANACTL_VERSION\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Status: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"

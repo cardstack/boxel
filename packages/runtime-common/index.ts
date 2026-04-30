@@ -421,6 +421,9 @@ export {
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
   isCardErrorJSONAPI,
+  clampSerializedError,
+  ERROR_DOC_MAX_BYTES,
+  ERROR_DOC_MAX_ADDITIONAL_ERRORS,
 } from './error';
 export { validateWriteSize } from './write-size-validation';
 export {

@@ -171,6 +171,15 @@ export class WriteBinaryFileResult extends CardDef {
   @field fileUrl = contains(StringField);
 }
 
+export class ReadBinaryFileInput extends CardDef {
+  @field url = contains(StringField);
+}
+
+export class ReadBinaryFileResult extends CardDef {
+  @field base64Content = contains(StringField);
+  @field contentType = contains(StringField);
+}
+
 export class GenerateThumbnailInput extends CardDef {
   @field prompt = contains(StringField);
   @field sourceImageUrl = contains(StringField);

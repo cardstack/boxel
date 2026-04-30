@@ -7,6 +7,7 @@ import { expect, test } from './fixtures';
 import { runLintInMemory } from '../src/lint-execution';
 import { BAD_LINT_GTS } from './helpers/lint-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
+import { createTestWorkspace } from './helpers/workspace-fixture';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -32,11 +33,16 @@ test.describe('runLintInMemory e2e', () => {
       realmServerToken: serverToken,
     });
 
+    let workspace: ReturnType<typeof createTestWorkspace> | undefined;
     try {
+      workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       // The fixture realm ships with a clean hello.gts and hello.test.gts.
       let result = await runLintInMemory({
         targetRealmUrl: realmUrl,
         client,
+        workspaceDir: workspace.dir,
       });
 
       expect(result.status).toBe('passed');
@@ -56,6 +62,7 @@ test.describe('runLintInMemory e2e', () => {
       );
       expect(validationArtifacts).toEqual([]);
     } finally {
+      workspace?.cleanup();
       cleanup();
     }
   });
@@ -87,9 +94,13 @@ test.describe('runLintInMemory e2e', () => {
       });
       expect(indexed).toBe(true);
 
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let result = await runLintInMemory({
         targetRealmUrl: realmUrl,
         client,
+        workspaceDir: workspace.dir,
       });
 
       expect(result.status).toBe('failed');
@@ -145,9 +156,13 @@ test.describe('runLintInMemory e2e', () => {
         }
       }
 
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       let result = await runLintInMemory({
         targetRealmUrl: realmUrl,
         client,
+        workspaceDir: workspace.dir,
       });
 
       expect(result.status).toBe('passed');
@@ -172,6 +187,7 @@ test.describe('runLintInMemory e2e', () => {
     let result = await runLintInMemory({
       targetRealmUrl: 'http://localhost:1/',
       client: thrower,
+      workspaceDir: createTestWorkspace().dir,
     });
 
     expect(result.status).toBe('error');
@@ -208,10 +224,14 @@ test.describe('runLintInMemory e2e', () => {
       });
       expect(indexed).toBe(true);
 
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
       // Lint only the clean file — should pass even though bad-lint.gts is dirty.
       let cleanOnly = await runLintInMemory({
         targetRealmUrl: realmUrl,
         client,
+        workspaceDir: workspace.dir,
         path: 'hello.gts',
       });
       expect(cleanOnly.status).toBe('passed');
@@ -223,6 +243,7 @@ test.describe('runLintInMemory e2e', () => {
       let dirtyOnly = await runLintInMemory({
         targetRealmUrl: realmUrl,
         client,
+        workspaceDir: workspace.dir,
         path: 'bad-lint.gts',
       });
       expect(dirtyOnly.status).toBe('failed');
@@ -258,6 +279,7 @@ test.describe('runLintInMemory e2e', () => {
     let result = await runLintInMemory({
       targetRealmUrl: 'http://localhost:1/',
       client: stubClient,
+      workspaceDir: createTestWorkspace().dir,
       path: 'Spec/sticky-note.json',
     });
 

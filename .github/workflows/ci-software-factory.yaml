@@ -39,9 +39,22 @@ jobs:
       caller: ci-software-factory
 
   software-factory-test:
-    name: Software Factory Tests
+    name: Software Factory Tests (shard ${{ matrix.shard.index }}/${{ matrix.shard.total }})
     needs: test-web-assets
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - index: 1
+            total: 3
+          - index: 2
+            total: 3
+          - index: 3
+            total: 3
+    concurrency:
+      group: ci-software-factory-shard-${{ matrix.shard.index }}-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
@@ -59,6 +72,7 @@ jobs:
         run: pnpm exec playwright install
         working-directory: packages/software-factory
       - name: Run Node tests
+        if: ${{ matrix.shard.index == 1 }}
         run: pnpm test:node
         working-directory: packages/software-factory
       - name: Serve test assets (icons + host dist)
@@ -66,13 +80,13 @@ jobs:
           mise run ci:serve-test-assets &
           timeout 180 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
       - name: Run Playwright tests
-        run: pnpm test:playwright
+        run: pnpm test:playwright:shard ${{ matrix.shard.index }}/${{ matrix.shard.total }}
         working-directory: packages/software-factory
       - name: Upload Playwright traces
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: software-factory-playwright-traces
+          name: software-factory-playwright-traces-shard-${{ matrix.shard.index }}
           path: packages/software-factory/test-results/**/trace.zip
           retention-days: 30
           if-no-files-found: ignore

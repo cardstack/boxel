@@ -343,6 +343,11 @@ module('factory-entrypoint', function (hooks) {
           createdRealm: false,
         }),
         createSeed: async () => mockSeedResult,
+        // Stub the workspace pull/sync so unit tests don't make real HTTP
+        // calls; the factory's workspace setup is covered by integration
+        // specs that exercise a live realm.
+        pullTargetRealm: async () => {},
+        syncWorkspaceToRealm: async () => {},
         runIssueLoop: async () => ({
           outcome: 'all_issues_done' as const,
           outerCycles: 1,
@@ -415,10 +420,12 @@ module('factory-entrypoint', function (hooks) {
           serverUrl: resolution.serverUrl,
           createdRealm: false,
         }),
-        createSeed: async (_brief, _url, options) => {
+        createSeed: async (_brief, options) => {
           capturedDarkfactoryModuleUrl = options.darkfactoryModuleUrl;
           return mockSeedResult;
         },
+        pullTargetRealm: async () => {},
+        syncWorkspaceToRealm: async () => {},
         runIssueLoop: async () => ({
           outcome: 'all_issues_done' as const,
           outerCycles: 0,

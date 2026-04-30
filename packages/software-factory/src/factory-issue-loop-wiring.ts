@@ -51,6 +51,7 @@ import {
 import { RealmIssueStore, type IssueStore } from './issue-scheduler';
 import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader';
 import { fetchCardTypeSchema } from './darkfactory-schemas';
+import { withStdoutRedirected } from './redirect-stdout';
 
 let log = logger('factory-issue-loop-wiring');
 
@@ -67,6 +68,12 @@ export interface IssueLoopWiringConfig {
   ownerUsername: string;
   /** Boxel CLI client — owns all realm auth and API calls. */
   client: BoxelCLIClient;
+  /**
+   * Local workspace directory mirroring the target realm. All target-realm
+   * reads/writes happen here; `client.pull` / `client.sync` move bytes
+   * between this directory and the realm.
+   */
+  workspaceDir: string;
   /** Which LLM backend to use. Defaults to 'claude'. */
   agent?: FactoryAgentProvider;
   /** Explicit OpenRouter model id; only honoured when agent === 'openrouter'. */
@@ -97,6 +104,7 @@ export async function runFactoryIssueLoop(
   let targetRealmUrl = ensureTrailingSlash(config.targetRealmUrl);
   let realmServerUrl = ensureTrailingSlash(config.realmServerUrl);
   let client = config.client;
+  let workspaceDir = config.workspaceDir;
 
   // 1. Issue store
   let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealmUrl);
@@ -104,6 +112,7 @@ export async function runFactoryIssueLoop(
     realmUrl: targetRealmUrl,
     darkfactoryModuleUrl,
     client,
+    workspaceDir,
   });
 
   // 1b. Retry blocked issues (default on, opt out with --no-retry-blocked)
@@ -113,8 +122,8 @@ export async function runFactoryIssueLoop(
 
   // 2. Context builder with issue relationship loader
   let issueLoader = new RealmIssueRelationshipLoader({
+    workspaceDir,
     realmUrl: targetRealmUrl,
-    client,
   });
   let contextBuilder = new ContextBuilder({
     skillResolver: new DefaultSkillResolver(),
@@ -128,6 +137,7 @@ export async function runFactoryIssueLoop(
     packageRoot: PACKAGE_ROOT,
     targetRealmUrl,
     client,
+    debug: config.debug,
   });
 
   let darkfactoryModuleBase = new URL('software-factory/', realmServerUrl).href;
@@ -164,6 +174,7 @@ export async function runFactoryIssueLoop(
     darkfactoryModuleUrl,
     realmServerUrl,
     client,
+    workspaceDir,
     testResultsModuleUrl,
     cardTypeSchemas,
     hostAppUrl,
@@ -210,6 +221,7 @@ export async function runFactoryIssueLoop(
       evalResultsModuleUrl,
       instantiateResultsModuleUrl,
       parseResultsModuleUrl,
+      workspaceDir,
       issueId,
       fetchFilenames: (realmUrl: string) => client.listFiles(realmUrl),
     });
@@ -224,6 +236,9 @@ export async function runFactoryIssueLoop(
     issueStore,
     createValidator,
     targetRealmUrl,
+    workspaceDir,
+    syncWorkspace: () =>
+      syncWorkspaceToRealm(client, targetRealmUrl, workspaceDir),
     briefUrl: config.briefUrl,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
     maxOuterCycles: config.maxOuterCycles,
@@ -260,7 +275,7 @@ export function assertAgentProviderImplemented(
   if (provider === 'codex') {
     throw new Error(
       'Codex CLI native agent is not yet implemented. ' +
-        'Re-run with --agent openrouter (tracked in CS-10594).',
+        'Re-run with --agent openrouter.',
     );
   }
 }
@@ -308,6 +323,52 @@ export function createLoopAgentWithLabel(config: CreateLoopAgentConfig): {
         label: `openrouter (model=${model})`,
       };
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Workspace sync helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Push the factory workspace to the target realm, preferring local changes.
+ *
+ * Called after each agent turn (so prerenderer-backed validators see the
+ * agent's writes) and after each validator run (so artifact cards appear
+ * in the Boxel UI). Logs but never throws — sync issues should surface as
+ * failed validation, not exceptions in the orchestrator.
+ */
+export interface WorkspaceSyncOutcome {
+  ok: boolean;
+  error?: string;
+}
+
+export async function syncWorkspaceToRealm(
+  client: BoxelCLIClient,
+  targetRealmUrl: string,
+  workspaceDir: string,
+): Promise<WorkspaceSyncOutcome> {
+  try {
+    let result = await withStdoutRedirected(() =>
+      client.sync(targetRealmUrl, workspaceDir, { preferLocal: true }),
+    );
+    if (result.error) {
+      log.warn(`Workspace sync error: ${result.error}`);
+      return { ok: false, error: result.error };
+    }
+    if (result.hasError) {
+      log.warn('Workspace sync completed with errors — see prior log lines');
+      return {
+        ok: false,
+        error:
+          'Workspace sync completed with per-file errors — see prior log lines for the failing paths and the realm-server response.',
+      };
+    }
+    return { ok: true };
+  } catch (err) {
+    let message = err instanceof Error ? err.message : String(err);
+    log.warn(`Workspace sync threw: ${message}`);
+    return { ok: false, error: message };
   }
 }
 

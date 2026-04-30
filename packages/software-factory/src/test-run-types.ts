@@ -36,6 +36,8 @@ export interface TestRunRealmOptions {
   /** URL to the test-results module in the source realm. Required, never inferred. */
   testResultsModuleUrl: string;
   client: BoxelCLIClient;
+  /** Local workspace directory — TestRun cards are written here. */
+  workspaceDir: string;
 }
 
 /** Additional options for creating a new TestRun card. */
@@ -161,6 +163,8 @@ export interface ExecuteTestRunOptions {
   slug: string;
   testNames: string[];
   client: BoxelCLIClient;
+  /** Local workspace directory — TestRun cards are written here. */
+  workspaceDir: string;
   forceNew?: boolean;
   issueURL?: string;
   /** URL to the Project card — used for TestRun relationship. */

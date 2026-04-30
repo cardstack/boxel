@@ -271,6 +271,11 @@ function makeLoopConfig(
     tools: DEFAULT_TOOLS,
     createValidator: () => new MockValidator([makePassingValidation()]),
     targetRealmUrl: 'https://example.test/target/',
+    // Unit tests don't exercise disk — a dummy path is fine because the
+    // loop itself never reads or writes the workspace; it only invokes the
+    // injected sync callback.
+    workspaceDir: '/tmp/boxel-factory-test-unit',
+    syncWorkspace: async () => ({ ok: true }),
     maxIterationsPerIssue: 5,
     maxOuterCycles: 50,
     ...overrides,
