@@ -62,6 +62,9 @@ if [[ "$env_name" != "local" ]]; then
     BOXEL_DB_USER
     BOXEL_DB_PASSWORD
     SYNAPSE_PROMETHEUS_URL
+    # Per-env realm-server base URL substituted into dashboards' realm_server
+    # constant template variable — CS-10923
+    REALM_SERVER_URL
   )
   for v in "${required_env_vars[@]}"; do
     [[ -n "${!v:-}" ]] \
@@ -70,13 +73,45 @@ if [[ "$env_name" != "local" ]]; then
 fi
 
 cfg="$(./scripts/render-config.sh "$env_name")"
-trap 'rm -f "$cfg"' EXIT
+
+# Render dashboards: copy the committed grafanactl/resources/ tree to a
+# tempdir and substitute env-specific values into each dashboard's
+# `templating.list[].query` for matching constant variables. Currently
+# substitutes:
+#   __REALM_SERVER_URL__  → REALM_SERVER_URL  (CS-10923)
+# Local mode uses a hardcoded http://localhost:4201/ default so devs
+# don't need any extra setup.
+rendered="$(mktemp -d -t grafanactl-render.XXXXXX)"
+trap 'rm -f "$cfg"; rm -rf "$rendered"' EXIT
+cp -R ./grafanactl/resources/. "$rendered/"
+
+case "$env_name" in
+  local) realm_server_url="${REALM_SERVER_URL:-http://localhost:4201/}" ;;
+  *)     realm_server_url="$REALM_SERVER_URL" ;;
+esac
+
+shopt -s globstar nullglob
+for f in "$rendered"/dashboards/**/*.json; do
+  [[ -f "$f" ]] || continue
+  jq --arg url "$realm_server_url" '
+    walk(
+      if type == "object"
+         and .name? == "realm_server"
+         and .type? == "constant"
+      then
+        .query = $url
+        | (if .current then .current.value = $url | .current.text = $url else . end)
+      else . end
+    )
+  ' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+done
+shopt -u globstar nullglob
 
 grafanactl \
   --config "$cfg" \
   --context "$env_name" \
   resources push \
-  --path ./grafanactl/resources \
+  --path "$rendered" \
   "${forwarded_args[@]}"
 
 # Data sources — grafanactl doesn't manage them, so push via HTTP API.
