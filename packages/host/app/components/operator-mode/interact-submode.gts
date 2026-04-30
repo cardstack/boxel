@@ -188,7 +188,6 @@ export default class InteractSubmode extends Component {
       id: localId,
       format: opts?.cardModeAfterCreation ?? 'edit',
       request: new Deferred(),
-      closeAfterSaving: opts?.closeAfterCreating,
       stackIndex,
       type: 'card',
     });
