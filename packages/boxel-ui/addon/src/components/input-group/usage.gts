@@ -47,7 +47,6 @@ export default class BoxelInputGroupUsage extends Component {
   @tracked placeholder: string | undefined;
   @tracked autocomplete: string | undefined;
   @tracked inputmode: string | undefined;
-  @tracked name: string | undefined;
   @tracked helperText = 'Please enter an amount';
   @tracked errorMessage = '';
   @tracked disabled = false;
@@ -130,7 +129,6 @@ export default class BoxelInputGroupUsage extends Component {
           @placeholder={{this.placeholder}}
           @autocomplete={{this.autocomplete}}
           @inputmode={{this.inputmode}}
-          @name={{this.name}}
           @onInput={{this.set}}
           @state={{this.state}}
           @validIcon={{this.validIcon}}
@@ -214,12 +212,6 @@ export default class BoxelInputGroupUsage extends Component {
           @description='The inputmode attribute value for the input (ignored when a default block is supplied)'
           @value={{this.inputmode}}
           @onInput={{fn (mut this.inputmode)}}
-        />
-        <Args.String
-          @name='name'
-          @description='The name attribute value for the input (ignored when a default block is supplied)'
-          @value={{this.name}}
-          @onInput={{fn (mut this.name)}}
         />
         <Args.String
           @name='value'
