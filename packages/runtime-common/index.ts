@@ -195,12 +195,13 @@ export interface RenderTimeoutDiagnostics {
       // Worker-job priority of the call that produced this entry.
       // Surfaced so post-mortems can see what priorities were competing
       // — e.g. a priority-10 file render stuck behind a priority-0
-      // module call sticks out cleanly. Optional in the schema even
-      // though fresh producers always emit a value: the same shape is
-      // deserialized from `boxel_index.timing_diagnostics`, where rows
-      // persisted before priority threading landed will lack the
-      // field. Consumers should treat absent as `0`.
-      priority?: number;
+      // module call sticks out cleanly. Required: producers always emit
+      // a value (`AffinityActivityTracker.record` defaults to 0).
+      // Consumers reading raw JSONB from
+      // `boxel_index.timing_diagnostics` should fill in `0` for any
+      // historic row that lacks the field before deserializing into
+      // this type — we don't model older shapes in the schema.
+      priority: number;
     }>;
   };
 }
