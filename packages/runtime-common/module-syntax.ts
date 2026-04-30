@@ -30,10 +30,7 @@ import {
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
 } from './index';
-import {
-  cardIdToURL,
-  resolveCardReference,
-} from './card-reference-resolver';
+import { cardIdToURL, resolveCardReference } from './card-reference-resolver';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live

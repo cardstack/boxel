@@ -428,9 +428,7 @@ module(basename(__filename), function () {
       });
 
       test('inRealm with RRI matches resource in realm', function (assert) {
-        assert.true(
-          paths.inRealm(rri('http://localhost:4201/base/card-api')),
-        );
+        assert.true(paths.inRealm(rri('http://localhost:4201/base/card-api')));
       });
 
       test('inRealm with RRI matches realm root without trailing slash', function (assert) {
@@ -443,9 +441,7 @@ module(basename(__filename), function () {
 
       test('local from RRI strips realm prefix', function (assert) {
         assert.strictEqual(
-          paths.local(
-            rri('http://localhost:4201/base/Card/my-instance'),
-          ),
+          paths.local(rri('http://localhost:4201/base/Card/my-instance')),
           'Card/my-instance',
         );
       });
@@ -458,10 +454,7 @@ module(basename(__filename), function () {
       });
 
       test('local from RRI returns empty string for realm root', function (assert) {
-        assert.strictEqual(
-          paths.local(rri('http://localhost:4201/base/')),
-          '',
-        );
+        assert.strictEqual(paths.local(rri('http://localhost:4201/base/')), '');
       });
 
       test('local from RRI throws for resource outside realm', function (assert) {
