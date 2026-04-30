@@ -110,7 +110,7 @@ these relationships, the agent would have no project scope or brief content.
 
 ## JSON:API Document Format
 
-Every card written via `write_file` must be a JSON:API document:
+Every card file you write into the workspace must be a JSON:API document:
 
 ```json
 {

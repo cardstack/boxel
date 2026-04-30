@@ -64,6 +64,7 @@ import {
 } from '../src/harness/shared';
 import { buildTestClient } from './helpers/test-client';
 import { createTestWorkspace } from './helpers/workspace-fixture';
+import { readCard, writeCard } from '../src/workspace-fs';
 
 test('realm_search returns results from the test realm', async ({ realm }) => {
   let { client, cleanup } = buildTestClient({
@@ -224,7 +225,6 @@ test('update_project writes and reads back a project card', async ({
     await client.pull(realm.realmURL.href, workspace.dir);
     let tools = await buildToolsForRealm(realm, client, workspace.dir);
     let updateProject = tools.find((t) => t.name === 'update_project')!;
-    let readFile = tools.find((t) => t.name === 'read_file')!;
 
     expect(updateProject).toBeDefined();
 
@@ -238,9 +238,10 @@ test('update_project writes and reads back a project card', async ({
 
     expect(writeResult.ok).toBe(true);
 
-    let readResult = (await readFile.execute({
-      path: 'Projects/tool-test-project.json',
-    })) as CardReadResult;
+    let readResult = (await readCard(
+      workspace.dir,
+      'Projects/tool-test-project.json',
+    )) as CardReadResult;
 
     expect(readResult.ok).toBe(true);
     let doc = readResult.document as unknown as LooseSingleCardDocument;
@@ -265,7 +266,6 @@ test('update_issue writes and reads back an issue card', async ({ realm }) => {
     await client.pull(realm.realmURL.href, workspace.dir);
     let tools = await buildToolsForRealm(realm, client, workspace.dir);
     let updateIssue = tools.find((t) => t.name === 'update_issue')!;
-    let readFile = tools.find((t) => t.name === 'read_file')!;
 
     expect(updateIssue).toBeDefined();
 
@@ -280,9 +280,10 @@ test('update_issue writes and reads back an issue card', async ({ realm }) => {
 
     expect(writeResult.ok).toBe(true);
 
-    let readResult = (await readFile.execute({
-      path: 'Issues/tool-test-issue.json',
-    })) as CardReadResult;
+    let readResult = (await readCard(
+      workspace.dir,
+      'Issues/tool-test-issue.json',
+    )) as CardReadResult;
 
     expect(readResult.ok).toBe(true);
     let doc = readResult.document as unknown as LooseSingleCardDocument;
@@ -309,14 +310,12 @@ test('add_comment appends a comment to an existing issue without changing other 
     let workspace = createTestWorkspace();
     await client.pull(realm.realmURL.href, workspace.dir);
     let tools = await buildToolsForRealm(realm, client, workspace.dir);
-    let writeFile = tools.find((t) => t.name === 'write_file')!;
     let addComment = tools.find((t) => t.name === 'add_comment')!;
-    let readFileTool = tools.find((t) => t.name === 'read_file')!;
 
     expect(addComment).toBeDefined();
 
-    // Create an issue via write_file (descriptions are set at creation time,
-    // not via update_issue which strips them)
+    // Pre-seed an issue directly into the workspace (descriptions are set
+    // at creation time, not via update_issue which strips them).
     let darkfactoryModule = `${realm.realmServerURL.href}software-factory/darkfactory`;
     let issueDoc = {
       data: {
@@ -332,10 +331,11 @@ test('add_comment appends a comment to an existing issue without changing other 
         },
       },
     };
-    let createResult = (await writeFile.execute({
-      path: 'Issues/comment-test-issue.json',
-      content: JSON.stringify(issueDoc, null, 2),
-    })) as CardWriteResult;
+    let createResult = (await writeCard(
+      workspace.dir,
+      'Issues/comment-test-issue.json',
+      JSON.stringify(issueDoc, null, 2),
+    )) as CardWriteResult;
 
     expect(createResult.ok).toBe(true);
 
@@ -349,9 +349,10 @@ test('add_comment appends a comment to an existing issue without changing other 
     expect(commentResult.ok).toBe(true);
 
     // Read back and verify
-    let readResult = (await readFileTool.execute({
-      path: 'Issues/comment-test-issue.json',
-    })) as CardReadResult;
+    let readResult = (await readCard(
+      workspace.dir,
+      'Issues/comment-test-issue.json',
+    )) as CardReadResult;
 
     expect(readResult.ok).toBe(true);
     let doc = readResult.document as unknown as LooseSingleCardDocument;
@@ -393,7 +394,6 @@ test('create_knowledge writes and reads back a knowledge article', async ({
     await client.pull(realm.realmURL.href, workspace.dir);
     let tools = await buildToolsForRealm(realm, client, workspace.dir);
     let createKnowledge = tools.find((t) => t.name === 'create_knowledge')!;
-    let readFile = tools.find((t) => t.name === 'read_file')!;
 
     expect(createKnowledge).toBeDefined();
 
@@ -407,9 +407,10 @@ test('create_knowledge writes and reads back a knowledge article', async ({
 
     expect(writeResult.ok).toBe(true);
 
-    let readResult = (await readFile.execute({
-      path: 'Knowledge Articles/tool-test-article.json',
-    })) as CardReadResult;
+    let readResult = (await readCard(
+      workspace.dir,
+      'Knowledge Articles/tool-test-article.json',
+    )) as CardReadResult;
 
     expect(readResult.ok).toBe(true);
     let doc = readResult.document as unknown as LooseSingleCardDocument;
@@ -436,7 +437,6 @@ test('create_catalog_spec writes and reads back a Spec card', async ({
     let createCatalogSpec = tools.find(
       (t) => t.name === 'create_catalog_spec',
     )!;
-    let readFile = tools.find((t) => t.name === 'read_file')!;
 
     expect(createCatalogSpec).toBeDefined();
 
@@ -451,9 +451,10 @@ test('create_catalog_spec writes and reads back a Spec card', async ({
 
     expect(writeResult.ok).toBe(true);
 
-    let readResult = (await readFile.execute({
-      path: 'Spec/tool-test-spec.json',
-    })) as CardReadResult;
+    let readResult = (await readCard(
+      workspace.dir,
+      'Spec/tool-test-spec.json',
+    )) as CardReadResult;
 
     expect(readResult.ok).toBe(true);
     let doc = readResult.document as unknown as LooseSingleCardDocument;

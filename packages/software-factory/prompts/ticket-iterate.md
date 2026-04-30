@@ -53,8 +53,8 @@ All validation steps passed.
 
 Fix the validation failures shown above. You have the same tools available. You can:
 
-- Use read_file to inspect the current state of your implementation
-- Use write_file to update implementation or test files
+- Use your native Read / Grep / shell tools on the workspace dir to inspect the current state of your implementation
+- Use your native Write / Edit tools to update implementation or test files
 - Use realm_search (with the target realm URL as `realm-url`) to check what cards exist
 - If a lint violation is in your code, fix the code to pass lint
 - If the test expectation is wrong, fix the test

@@ -3,7 +3,7 @@ name: boxel-restore
 description: Use when restoring a Boxel workspace to a previous checkpoint and syncing deletions back to the server safely, including stopping watch first and running `boxel sync . --prefer-local` after restore.
 ---
 
-> **Factory agent note:** This skill is for human Claude Code sessions only. The factory agent's tool registry does not include boxel-cli tools — all realm I/O uses `write_file`, `read_file`, and `search_realm` tools via the realm HTTP API.
+> **Factory agent note:** This skill is for human Claude Code sessions only. The factory agent edits target-realm files in a local workspace directory with its native filesystem tools (`Read` / `Write` / `Edit`), and the orchestration loop handles syncing — the agent does not invoke `boxel sync` / `boxel pull` / `boxel watch` itself. For realm-server-side reads/writes against non-target realms, the agent uses the `realm_read_file` / `realm_write_file` / `realm_search` tools.
 
 # Boxel Restore
 

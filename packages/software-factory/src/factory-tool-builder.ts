@@ -151,13 +151,13 @@ export function buildFactoryTools(
   toolExecutor: ToolExecutor,
   toolRegistry: ToolRegistry,
 ): FactoryTool[] {
-  // Workspace-fs tools (target-realm I/O via the local workspace) plus
-  // factory-domain orchestration tools. Anything that's a thin wrapper
-  // around `BoxelCLIClient.*` lives in boxel-cli's getToolDefinitions
-  // and is merged in below.
+  // Factory-domain orchestration tools (validation runners + signal tools).
+  // Files in the workspace are managed by the agent's native filesystem
+  // tools (Read/Write/Edit/shell) rather than dedicated tool calls — those
+  // primitives are strictly more efficient and capable than wrapping fs in
+  // a Node-backed tool. Realm-server-side I/O lives in boxel-cli's
+  // getToolDefinitions and is merged in below.
   let tools: FactoryTool[] = [
-    buildWriteFileTool(config),
-    buildReadFileTool(config),
     buildRunLintTool(config),
     buildRunTestsTool(config),
     buildRunEvaluateTool(config),
@@ -230,10 +230,10 @@ export function buildFactoryTools(
  * Enforce that a required string argument is present and non-empty. Returns
  * the trimmed value or throws a clear error that propagates back to the
  * model as a tool-call result. This is the only runtime guardrail against
- * an LLM emitting a malformed tool call like `write_file({})` — the JSON
- * Schema `required` declaration is advisory for OpenRouter's tool-use and
- * the model can still send empty args. Without this check, path strings
- * like `"undefined"` would end up at the realm's root (e.g., a file named
+ * an LLM emitting a malformed tool call with empty args — the JSON Schema
+ * `required` declaration is advisory for OpenRouter's tool-use and the
+ * model can still send empty args. Without this check, path strings like
+ * `"undefined"` would end up at the realm's root (e.g., a file named
  * `<realm>/undefined`).
  */
 export function requireStringArg(
@@ -254,63 +254,6 @@ export function requireStringArg(
 // ---------------------------------------------------------------------------
 // Factory-level tools
 // ---------------------------------------------------------------------------
-
-function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
-  return {
-    name: 'write_file',
-    description:
-      'Write a file to the target realm workspace. The path must include the file extension. Writes go to the local workspace and are synced to the realm between iterations.',
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description:
-            'Realm-relative file path with extension (e.g., "my-card.gts", "Card/1.json")',
-        },
-        content: { type: 'string', description: 'File content' },
-        realm: {
-          type: 'string',
-          enum: ['target'],
-          description: 'Which realm to write to (default: target)',
-        },
-      },
-      required: ['path', 'content'],
-    },
-    execute: async (args) => {
-      let path = requireStringArg(args, 'path', 'write_file');
-      let content = requireStringArg(args, 'content', 'write_file');
-      return writeCard(config.workspaceDir, path, content);
-    },
-  };
-}
-
-function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
-  return {
-    name: 'read_file',
-    description:
-      'Read a file from the target realm workspace. Returns parsed JSON when possible, otherwise raw text.',
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description: 'Realm-relative file path',
-        },
-        realm: {
-          type: 'string',
-          enum: ['target'],
-          description: 'Which realm to read from (default: target)',
-        },
-      },
-      required: ['path'],
-    },
-    execute: async (args) => {
-      let path = requireStringArg(args, 'path', 'read_file');
-      return readCard(config.workspaceDir, path);
-    },
-  };
-}
 
 /**
  * Wrap a `BoxelToolDefinition` from boxel-cli's `getToolDefinitions(...)`

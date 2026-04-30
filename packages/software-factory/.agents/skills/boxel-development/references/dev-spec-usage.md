@@ -18,7 +18,7 @@ Key concepts:
 
 Create at least one sample instance with realistic data for each top-level card. Sample instances serve as both catalog examples and test fixtures.
 
-Place sample instances in a folder named after the card type (e.g., `StickyNote/welcome-note.json`). Use `write_file` to create them. The `linkedExamples` relationship in the Spec card points to these using a relative path (e.g., `../StickyNote/welcome-note`).
+Place sample instances in a folder named after the card type (e.g., `StickyNote/welcome-note.json`) — for the target realm, create them with your native filesystem tools in the workspace dir. The `linkedExamples` relationship in the Spec card points to these using a relative path (e.g., `../StickyNote/welcome-note`).
 
 ---
 

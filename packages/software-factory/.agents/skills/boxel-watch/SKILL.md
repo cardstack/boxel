@@ -3,7 +3,7 @@ name: boxel-watch
 description: Use when starting or choosing settings for `boxel watch` to monitor remote Boxel changes, including active-development, quick-feedback, and background-monitoring intervals.
 ---
 
-> **Factory agent note:** This skill is for human Claude Code sessions only. The factory agent's tool registry does not include boxel-cli tools — all realm I/O uses `write_file`, `read_file`, and `search_realm` tools via the realm HTTP API.
+> **Factory agent note:** This skill is for human Claude Code sessions only. The factory agent edits target-realm files in a local workspace directory with its native filesystem tools (`Read` / `Write` / `Edit`), and the orchestration loop handles syncing — the agent does not invoke `boxel sync` / `boxel pull` / `boxel watch` itself. For realm-server-side reads/writes against non-target realms, the agent uses the `realm_read_file` / `realm_write_file` / `realm_search` tools.
 
 # Boxel Watch
 

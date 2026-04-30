@@ -336,6 +336,61 @@ module('factory-tool-executor > enforceRealmSafety', function () {
     );
   });
 
+  test('rejects sibling-host URL that string-prefix-matches an allowed prefix', function (assert) {
+    let safety: RealmSafetyConfig = {
+      targetRealmUrl: TEST_TARGET_REALM,
+      allowedRealmPrefixes: ['https://realms.example.test/'],
+    };
+    assert.throws(
+      () =>
+        enforceRealmSafety(
+          'realm_search',
+          {
+            'realm-url': 'https://realms.example.test.evil.com/hacker/realm/',
+            query: '{}',
+          },
+          safety,
+        ),
+      ToolSafetyError,
+      'sibling host masquerading as a path prefix should not be allowed',
+    );
+  });
+
+  test('rejects allowed-prefix exploit where origin differs even if path string starts the same', function (assert) {
+    let safety: RealmSafetyConfig = {
+      targetRealmUrl: TEST_TARGET_REALM,
+      allowedRealmPrefixes: ['https://realms.example.test/user/scratch-'],
+    };
+    assert.throws(
+      () =>
+        enforceRealmSafety(
+          'realm_search',
+          {
+            'realm-url': 'https://evil.example.com/user/scratch-123/',
+            query: '{}',
+          },
+          safety,
+        ),
+      ToolSafetyError,
+    );
+  });
+
+  test('allows within-origin path prefix matching', function (assert) {
+    let safety: RealmSafetyConfig = {
+      targetRealmUrl: TEST_TARGET_REALM,
+      allowedRealmPrefixes: ['https://realms.example.test/user/scratch-'],
+    };
+    enforceRealmSafety(
+      'realm_search',
+      {
+        'realm-url': 'https://realms.example.test/user/scratch-123/',
+        query: '{}',
+      },
+      safety,
+    );
+    assert.ok(true, 'no throw');
+  });
+
   test('throws when realm-url matches the configured source realm', function (assert) {
     let safety: RealmSafetyConfig = {
       targetRealmUrl: TEST_TARGET_REALM,

@@ -362,6 +362,15 @@ describe('requireStringArg', () => {
     expect(result).toBe('hello.gts');
   });
 
+  it('trims surrounding whitespace from the returned value', () => {
+    let result = requireStringArg(
+      { 'realm-url': '  https://realms.example.test/user/x/  ' },
+      'realm-url',
+      'test_tool',
+    );
+    expect(result).toBe('https://realms.example.test/user/x/');
+  });
+
   it('throws for missing arg', () => {
     expect(() => requireStringArg({}, 'path', 'test_tool')).toThrow(
       'requires a non-empty string "path"',

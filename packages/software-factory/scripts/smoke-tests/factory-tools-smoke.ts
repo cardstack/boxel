@@ -21,7 +21,13 @@ import {
   ToolExecutor,
   ToolNotFoundError,
   ToolSafetyError,
+  enforceRealmSafety,
 } from '../../src/factory-tool-executor';
+import {
+  adaptBoxelTool,
+  type FactoryTool,
+} from '../../src/factory-tool-builder';
+import { getToolDefinitions } from '@cardstack/boxel-cli/api';
 
 function makeMockClient(fetchImpl: typeof globalThis.fetch): BoxelCLIClient {
   async function jsonFetch(
@@ -188,9 +194,11 @@ async function main(): Promise<void> {
     log.info('');
   }
 
+  // The executor's registry only owns script tools now. Realm-side tools
+  // come from boxel-cli's getToolDefinitions and are wrapped via
+  // adaptBoxelTool — they're never dispatched through ToolExecutor.
+  check('only script tools registered', Object.keys(byCategory).length === 1);
   check('has script tools', byCategory['script']?.length === 2);
-  check('has boxel-cli tools', byCategory['boxel-cli']?.length === 6);
-  check('has realm-api tools', byCategory['realm-api']?.length === 5);
   check(
     'all names unique',
     new Set(manifests.map((m) => m.name)).size === manifests.length,
@@ -256,12 +264,22 @@ async function main(): Promise<void> {
     check('rejects source realm', err instanceof ToolSafetyError);
   }
 
-  // Unknown realm targeting (realm-api)
+  // Unknown realm targeting — exercise the standalone safety guard the
+  // factory wraps around boxel-cli tools (these tools are never dispatched
+  // through ToolExecutor, so we call enforceRealmSafety directly).
   try {
-    await executor.execute('realm_read_file', {
-      'realm-url': 'https://evil.example.test/hacker/realm/',
-      path: 'secrets.json',
-    });
+    enforceRealmSafety(
+      'realm_read_file',
+      {
+        'realm-url': 'https://evil.example.test/hacker/realm/',
+        path: 'secrets.json',
+      },
+      {
+        targetRealmUrl: 'https://realms.example.test/user/target/',
+        sourceRealmUrl: 'https://realms.example.test/user/source/',
+        allowedRealmPrefixes: ['https://realms.example.test/user/scratch-'],
+      },
+    );
     check('rejects unknown realm', false, 'did not throw');
   } catch (err) {
     check('rejects unknown realm', err instanceof ToolSafetyError);
@@ -290,37 +308,73 @@ async function main(): Promise<void> {
     );
   }) as typeof globalThis.fetch;
   let mockClient = makeMockClient(mockFetch);
-  let mockExecutor = new ToolExecutor(registry, {
-    packageRoot: process.cwd(),
-    targetRealmUrl: 'https://realms.example.test/user/target/',
-    client: mockClient,
+  // Build the realm-side tools the way the factory does at runtime:
+  // pull from boxel-cli's getToolDefinitions and wrap each with the
+  // standalone safety guard. ToolExecutor doesn't dispatch these tools —
+  // they live in boxel-cli and execute directly against the client.
+  let mockTargetRealm = 'https://realms.example.test/user/target/';
+  let scratchRealm = 'https://realms.example.test/user/scratch-1/';
+  let mockBoxelTools = getToolDefinitions(mockClient, {
+    targetRealmUrl: mockTargetRealm,
+    realmServerUrl: 'https://realms.example.test/',
   });
+  function findBoxelTool(name: string): FactoryTool {
+    let tool = mockBoxelTools.find((t) => t.name === name);
+    if (!tool) {
+      throw new Error(`boxel-cli tool "${name}" not in getToolDefinitions`);
+    }
+    return adaptBoxelTool(tool, {
+      targetRealmUrl: mockTargetRealm,
+      allowedRealmPrefixes: ['https://realms.example.test/user/scratch-'],
+    });
+  }
 
-  let readResult = await mockExecutor.execute('realm_read_file', {
-    'realm-url': 'https://realms.example.test/user/target/',
+  let realmRead = findBoxelTool('realm_read_file');
+  let readResult = await realmRead.execute({
+    'realm-url': scratchRealm,
     path: 'CardDef/hello.gts',
   });
-  check('realm_read_file exitCode=0', readResult.exitCode === 0);
-  check('realm_read_file has output', readResult.output !== undefined);
   check(
-    `realm_read_file duration ${readResult.durationMs}ms`,
-    readResult.durationMs >= 0,
+    'realm_read_file returns a result',
+    readResult !== undefined && readResult !== null,
   );
 
-  let searchResult = await mockExecutor.execute('realm_search', {
-    'realm-url': 'https://realms.example.test/user/target/',
+  let realmSearch = findBoxelTool('realm_search');
+  let searchResult = (await realmSearch.execute({
+    'realm-url': scratchRealm,
     query: JSON.stringify({ filter: { type: { name: 'Issue' } } }),
-  });
-  check('realm_search exitCode=0', searchResult.exitCode === 0);
+  })) as { data?: unknown[]; error?: string };
+  check('realm_search returns data', Array.isArray(searchResult.data));
 
-  let writeResult = await mockExecutor.execute('realm_write_file', {
-    'realm-url': 'https://realms.example.test/user/target/',
+  let realmWrite = findBoxelTool('realm_write_file');
+  let writeResult = (await realmWrite.execute({
+    'realm-url': scratchRealm,
     path: 'CardDef/new.gts',
     content: 'export class NewCard {}',
-  });
-  check('realm_write_file exitCode=0', writeResult.exitCode === 0);
+  })) as { ok: boolean };
+  check('realm_write_file ok', writeResult.ok === true);
 
   check(`mock fetch called ${mockCallCount} times`, mockCallCount === 3);
+
+  // Safety guard rejects realm_write_file targeting the target realm —
+  // those edits must go through the local workspace.
+  try {
+    await realmWrite.execute({
+      'realm-url': mockTargetRealm,
+      path: 'CardDef/new.gts',
+      content: 'should be rejected',
+    });
+    check(
+      'realm_write_file rejects target-realm target',
+      false,
+      'did not throw',
+    );
+  } catch (err) {
+    check(
+      'realm_write_file rejects target-realm target',
+      err instanceof ToolSafetyError,
+    );
+  }
 
   // -----------------------------------------------------------------------
   // 5. FactoryTool builder
@@ -367,18 +421,29 @@ async function main(): Promise<void> {
   );
 
   let toolNames = factoryTools.map((t) => t.name);
+  let factoryDomainNames = [
+    'run_lint',
+    'run_tests',
+    'run_evaluate',
+    'run_parse',
+    'run_instantiate',
+    'signal_done',
+    'request_clarification',
+    'update_project',
+    'update_issue',
+    'create_knowledge',
+    'create_catalog_spec',
+    'add_comment',
+  ];
   log.info(`  Built ${factoryTools.length} tools:`);
   log.info(
-    `    factory: ${toolNames.filter((n) => ['write_file', 'read_file', 'search_realm', 'run_command', 'signal_done', 'request_clarification', 'update_project', 'update_issue', 'create_knowledge'].includes(n)).join(', ')}`,
+    `    factory: ${toolNames.filter((n) => factoryDomainNames.includes(n)).join(', ')}`,
   );
   log.info(
-    `    registered: ${toolNames.filter((n) => !['write_file', 'read_file', 'search_realm', 'run_command', 'signal_done', 'request_clarification', 'update_project', 'update_issue', 'create_knowledge'].includes(n)).join(', ')}`,
+    `    boxel-cli + script: ${toolNames.filter((n) => !factoryDomainNames.includes(n)).join(', ')}`,
   );
   log.info('');
 
-  check('has write_file tool', toolNames.includes('write_file'));
-  check('has read_file tool', toolNames.includes('read_file'));
-  check('has search_realm tool', toolNames.includes('search_realm'));
   check('has signal_done tool', toolNames.includes('signal_done'));
   check(
     'has request_clarification tool',
@@ -386,37 +451,30 @@ async function main(): Promise<void> {
   );
   check('includes registered script tools', toolNames.includes('search-realm'));
   check(
-    'includes registered realm-api tools',
-    toolNames.includes('realm_read_file'),
+    'includes boxel-cli realm tools',
+    toolNames.includes('realm_read_file') &&
+      toolNames.includes('realm_search') &&
+      toolNames.includes('realm_lint_file'),
+  );
+  check(
+    'no workspace fs tools (agent uses native FS)',
+    !toolNames.includes('read_file') && !toolNames.includes('write_file'),
   );
 
-  // Test write_file with .gts (module source)
-  let writeFileTool = factoryTools.find((t) => t.name === 'write_file')!;
+  // Exercise realm_search through the adopted boxel-cli tool — verify the
+  // adopter calls the boxel-cli execute function and threads the result
+  // back. The mock fetch returns `{ ok: true }` so the search shape isn't
+  // exercised here; the safety guard + dispatch path is what we're checking.
   toolBuilderFetchCount = 0;
-  let gtsResult = (await writeFileTool.execute({
-    path: 'my-card.gts',
-    content: 'export class MyCard {}',
-  })) as { ok: boolean };
-  check('write_file .gts succeeds', gtsResult.ok === true);
-  check('write_file .gts made HTTP call', toolBuilderFetchCount === 1);
-
-  // Test write_file with .json (card source)
-  toolBuilderFetchCount = 0;
-  let jsonResult = (await writeFileTool.execute({
-    path: 'Card/1.json',
-    content: JSON.stringify({ data: { type: 'card', attributes: {} } }),
-  })) as { ok: boolean };
-  check('write_file .json succeeds', jsonResult.ok === true);
-  check('write_file .json made HTTP call', toolBuilderFetchCount === 1);
-
-  // Test write_file to test realm
-  toolBuilderFetchCount = 0;
-  await writeFileTool.execute({
-    path: 'Tests/spec.ts',
-    content: 'test content',
-    realm: 'test',
+  let realmSearchTool = factoryTools.find((t) => t.name === 'realm_search')!;
+  let searchOutput = await realmSearchTool.execute({
+    'realm-url': 'https://realms.example.test/user/target/',
+    query: JSON.stringify({ filter: { type: { name: 'CardDef' } } }),
   });
-  check('write_file to test realm made HTTP call', toolBuilderFetchCount === 1);
+  check(
+    'realm_search via builder hit the realm and returned a result',
+    toolBuilderFetchCount === 1 && searchOutput !== undefined,
+  );
 
   // Test signal_done
   let doneTool = factoryTools.find((t) => t.name === 'signal_done')!;

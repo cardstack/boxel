@@ -14,10 +14,11 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 const DEFAULT_TIMEOUT_MS = 60_000;
 
 /**
- * Tools that perform HTTP-direct card I/O. The safety guard rejects these
- * when they target the factory's target realm — target-realm I/O must go
- * through the workspace (via `write_file` / `read_file`) so local state
- * stays in sync with the realm between iterations.
+ * Tools that perform HTTP-direct card I/O against a remote realm. The safety
+ * guard rejects these when they target the factory's target realm —
+ * target-realm I/O must go through the local workspace (using the agent's
+ * native filesystem tools) so local state stays in sync with the realm
+ * between iterations.
  */
 const TARGET_REALM_BYPASS_TOOLS = new Set([
   'realm_read_file',
@@ -211,14 +212,14 @@ function validateRealmTarget(
 
   // The HTTP-direct card I/O tools (realm_read_file / realm_write_file / realm_delete_file)
   // must NOT target the factory's target realm — those edits would bypass
-  // the local workspace and diverge from the sync flow. Use write_file /
-  // read_file (workspace-backed) for target-realm I/O.
+  // the local workspace and diverge from the sync flow. Use the agent's
+  // native filesystem tools on the workspace directory for target-realm I/O.
   if (TARGET_REALM_BYPASS_TOOLS.has(toolName) && normalized === target) {
     throw new ToolSafetyError(
       `Tool "${toolName}" cannot target the target realm (${realmUrl}). ` +
-        `Use write_file / read_file instead — they operate on the local ` +
-        `workspace and sync to the realm between iterations. This tool is ` +
-        `reserved for scratch / non-target realms.`,
+        `Use the agent's native filesystem tools on the workspace directory ` +
+        `instead — those edits sync to the realm between iterations. This ` +
+        `tool is reserved for scratch / non-target realms.`,
     );
   }
 
@@ -227,12 +228,15 @@ function validateRealmTarget(
   // the rejection above fires first for target hits.
   let exactAllowed = TARGET_REALM_BYPASS_TOOLS.has(toolName) ? [] : [target];
 
-  // Prefix matches (no trailing slash — these are URL path prefixes).
+  // Prefix matches: within-origin path-string prefixes. Origin equality is
+  // enforced separately (see isUrlWithinPrefix) so a configured prefix like
+  // `https://realms.example.test/user/scratch-` cannot be exploited by a
+  // sibling-host URL like `https://realms.example.test.evil.com/...`.
   let prefixAllowed = config.allowedRealmPrefixes ?? [];
 
   let isAllowed =
     exactAllowed.some((exact) => normalized === exact) ||
-    prefixAllowed.some((prefix) => normalized.startsWith(prefix));
+    prefixAllowed.some((prefix) => isUrlWithinPrefix(normalized, prefix));
 
   if (!isAllowed) {
     throw new ToolSafetyError(
@@ -240,6 +244,21 @@ function validateRealmTarget(
         `Allowed: ${[...exactAllowed, ...prefixAllowed].join(', ')}`,
     );
   }
+}
+
+function isUrlWithinPrefix(url: string, prefix: string): boolean {
+  let urlObj: URL;
+  let prefixObj: URL;
+  try {
+    urlObj = new URL(url);
+    prefixObj = new URL(prefix);
+  } catch {
+    return false;
+  }
+  if (urlObj.origin !== prefixObj.origin) return false;
+  let urlPath = urlObj.pathname + urlObj.search;
+  let prefixPath = prefixObj.pathname + prefixObj.search;
+  return urlPath.startsWith(prefixPath);
 }
 
 function validateRealmServerTarget(

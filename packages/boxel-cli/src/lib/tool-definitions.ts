@@ -6,18 +6,17 @@
  * The factory imports `getToolDefinitions()` and spreads the result into
  * its FactoryTool[] array — no manual redefinition needed.
  *
- * Two flavors of file-system-shaped I/O exist in the factory's surface:
+ * Target-realm files live in the agent's local workspace directory; the
+ * agent edits them with its native filesystem tools (no dedicated
+ * read_file / write_file tool here, since wrapping fs in a tool is strictly
+ * less capable than what the agent can do natively).
  *
- *   - Target-realm I/O: handled by the factory's workspace-fs tools
- *     (`read_file` / `write_file`). Those operate against a local workspace
- *     directory and are kept synchronized with the realm by the loop's
- *     `client.pull` / `client.sync` boundaries.
- *   - Non-target realm I/O: the `realm_read_file` / `realm_write_file` /
- *     `realm_delete_file` / `realm_search` tools published here, which take an
- *     explicit `realm-url` argument and hit the realm over HTTP. The factory's
- *     `TARGET_REALM_BYPASS_TOOLS` guard rejects `realm_read_file` /
- *     `realm_write_file` / `realm_delete_file` when `realm-url` matches the
- *     target realm — agents must use the workspace-fs tools for target work.
+ * The realm-server-side tools published here take an explicit `realm-url`
+ * argument and hit the realm over HTTP. The factory's
+ * `TARGET_REALM_BYPASS_TOOLS` guard rejects `realm_read_file` /
+ * `realm_write_file` / `realm_delete_file` when `realm-url` matches the
+ * target realm — those are reserved for non-target realms (scratch,
+ * source, catalog, base, etc.) where the agent has no local workspace.
  */
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
@@ -61,7 +60,7 @@ export function requireStringArg(
         `Re-send the tool call with every required argument filled in.`,
     );
   }
-  return raw;
+  return raw.trim();
 }
 
 function resolveRealmUrl(
@@ -77,7 +76,7 @@ function resolveRealmUrl(
 // ---------------------------------------------------------------------------
 
 const NON_TARGET_GUIDANCE =
-  'For target-realm I/O, use `read_file` / `write_file` (workspace-backed) instead — this tool is reserved for non-target realms (scratch, source, catalog, base, etc.).';
+  'For target-realm I/O, edit files in the local workspace using your native filesystem tools — this tool is reserved for non-target realms (scratch, source, catalog, base, etc.).';
 
 function buildRealmReadTool(client: BoxelCLIClient): BoxelToolDefinition {
   return {

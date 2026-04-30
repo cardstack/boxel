@@ -5,7 +5,7 @@ description: Use when implementing cards in a target realm through the factory e
 
 # Software Factory Operations
 
-Use this skill when operating inside the factory execution loop. The factory agent communicates with realms exclusively through **executable tool functions** — not local filesystem writes or boxel CLI commands.
+Use this skill when operating inside the factory execution loop. The factory agent edits **target-realm files in a local workspace directory** using its native filesystem tools (`Read` / `Write` / `Edit` / shell), and uses **executable tool functions** for everything else (search, lint, validation, project state, control flow). Sync between the workspace and the realm is orchestrated by the loop — you don't call `boxel sync` yourself.
 
 ## Realm Roles
 
@@ -20,13 +20,14 @@ The agent has these tools during the execution loop. Use them by name — they a
 
 ### Reading and Searching
 
-- `read_file({ path, realm? })` — Read a file from the target realm. Use before modifying anything.
+- **Reading target-realm files** — Use your native `Read` tool (or shell `cat` / `head` / `grep`) on files in the workspace directory. There is no `read_file` tool; the workspace dir is just a normal local directory.
 - `read_transpiled({ path, realm? })` — Fetch the compiled JavaScript output of a `.gts` module. Use when an eval/instantiate error reports a line/column — those numbers reference the transpiled output, not your source.
-- `realm_search({ query, realm? })` — Search for cards using a structured query object (filter, sort, page). Use to check for existing cards, find duplicates, inspect project state.
+- `realm_search({ 'realm-url', query })` — Search for cards using a structured query object (filter, sort, page). `realm-url` is required — pass the target realm URL when searching the realm you're implementing against. Use to check for existing cards, find duplicates, inspect project state.
 
 ### Writing Files
 
-- `write_file({ path, content, realm? })` — Write a file to the target realm. Path must include extension (`.gts`, `.json`, `.test.gts`).
+- **Writing target-realm files** — Use your native `Write` / `Edit` tools (or shell redirects) on files in the workspace directory. Path is whatever fits inside the workspace dir; the loop syncs the workspace to the realm between iterations. Always write clean idiomatic source — never compiled JSON blocks, base64-encoded content, or wire-format template arrays.
+- For files in non-target realms (scratch, source, catalog, etc.) the agent has no local workspace — use `realm_write_file({ 'realm-url', path, content })` or `realm_read_file({ 'realm-url', path })` instead.
 
 ### Updating Project State
 
@@ -77,14 +78,14 @@ All five tools are safe to call repeatedly mid-turn; none of them write a realm 
 
 ## Required Flow
 
-1. **Inspect before writing.** Use `realm_search` and `read_file` to understand what already exists in the target realm before creating or modifying files.
-2. **Write card definitions** (`.gts`) via `write_file` to the target realm.
-3. **Write `.test.gts` test files** co-located with card definitions via `write_file` to the target realm. Every issue must have at least one test file. **Write tests immediately after the card definition, before any instances or catalog specs.**
-4. **Write card instances** (`.json`) via `write_file` to the target realm.
+1. **Inspect before writing.** Use `realm_search` (with the target realm URL as `realm-url`) plus your native `Read` / `Grep` / shell tools on the workspace dir to understand what already exists before creating or modifying files.
+2. **Write card definitions** (`.gts`) using your native `Write` tool into the workspace.
+3. **Write `.test.gts` test files** co-located with card definitions, using your native `Write` tool. Every issue must have at least one test file. **Write tests immediately after the card definition, before any instances or catalog specs.**
+4. **Write card instances** (`.json`) using your native `Write` tool. Place them in a folder named after the card type (e.g., `StickyNote/welcome-note.json`).
 5. **Write a Catalog Spec card** (`Spec/<card-name>.json`) for each top-level card defined in the brief. Link sample instances via `linkedExamples`.
 6. **(Optional) Call `run_tests()`** to self-validate before signalling done. This returns test results in-memory without writing any realm artifacts. Iterating on your own work with `run_tests` is faster than round-tripping through the orchestrator pipeline.
 7. **Call `signal_done()`** when all implementation and test files are written. The orchestrator runs the full validation pipeline (which persists a `TestRun` card, among other artifacts) automatically after this.
-8. **If tests fail**, the orchestrator feeds failure details back. Use `read_file` to inspect current state, then `write_file` to fix implementation or test files. Call `signal_done()` again.
+8. **If tests fail**, the orchestrator feeds failure details back. Use your native `Read` / `Edit` tools on the workspace to inspect and fix implementation or test files. Call `signal_done()` again.
 9. **Record progress** via `add_comment` — append notes, blocked reasons, or context to the issue. Never modify the issue description.
 
 ## Target Realm Artifact Structure
@@ -204,8 +205,9 @@ export function runTests() {
 
 ## Important Rules
 
-- **Never write to the source realm.** All generated artifacts go to the target realm.
-- **Use realm HTTP APIs only.** The factory agent does not have access to the local filesystem or boxel CLI commands (`boxel sync`, `boxel push`, etc.). All reads and writes go through the realm API via tool functions.
+- **Never write to the source realm.** All generated artifacts go to the target realm (i.e., the workspace dir, which the loop syncs to the realm).
+- **Edit the workspace, let the loop sync.** Target-realm files live in a local workspace directory — use your native `Read` / `Write` / `Edit` / shell tools. The loop handles syncing to the realm; you do not call `boxel sync` / `boxel push` yourself, and you do not need a tool for plain file I/O.
+- **Realm-server tools require `realm-url`.** `realm_search` / `realm_read_file` / `realm_write_file` / `realm_delete_file` / `realm_lint_file` all take an explicit `realm-url`. The realm-mutating ones (`realm_write_file` / `realm_delete_file`) are reserved for non-target realms; for the target realm, edit the workspace.
 - **Write source code, not compiled output.** When writing `.gts` files, write clean idiomatic source — never compiled JSON blocks or base64-encoded content.
 - **Use absolute `adoptsFrom.module` URLs** when referencing definitions that live in a different realm (e.g., the source realm's tracker schema).
 - **Start small and iterate.** Write the smallest working implementation first, then add the test. If tests fail, read the failure output carefully before making targeted fixes.

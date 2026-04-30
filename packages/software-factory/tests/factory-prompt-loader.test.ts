@@ -197,7 +197,10 @@ module('factory-prompt-loader > FilePromptLoader', function () {
       result.includes('signal_done'),
       'system prompt contains signal_done',
     );
-    assert.ok(result.includes('read_file'), 'system prompt contains read_file');
+    assert.ok(
+      result.includes('realm_search'),
+      'system prompt contains realm_search',
+    );
   });
 
   test('caches templates on subsequent loads', function (assert) {
@@ -251,7 +254,10 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
       result.includes('signal_done'),
       'includes signal_done instruction',
     );
-    assert.ok(result.includes('read_file'), 'includes read_file instruction');
+    assert.ok(
+      result.includes('realm_search'),
+      'includes realm_search instruction',
+    );
   });
 
   test('includes realm URLs', function (assert) {

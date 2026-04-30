@@ -202,11 +202,11 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     });
 
     // The shared prompt template references tools by their plain names
-    // (`read_file`, `signal_done`, etc.) — which is what OpenRouter's
+    // (`realm_search`, `signal_done`, etc.) — which is what OpenRouter's
     // tool-use protocol registers. The Claude Agent SDK exposes tools via
     // an MCP server and prefixes every tool name with `mcp__<server>__`,
-    // so without a bridge the model can see "write_file" in the prompt
-    // but only `mcp__factory__write_file` in its tool list. Append a
+    // so without a bridge the model can see "realm_search" in the prompt
+    // but only `mcp__factory__realm_search` in its tool list. Append a
     // short tool-naming note so the model can resolve the two
     // consistently. The OpenRouter path leaves the template untouched.
     let renameList = tools

@@ -247,8 +247,6 @@ module('factory-tool-builder > tool building', function () {
 
     let toolNames = tools.map((t) => t.name);
 
-    assert.true(toolNames.includes('write_file'));
-    assert.true(toolNames.includes('read_file'));
     assert.true(toolNames.includes('update_issue'));
     assert.true(toolNames.includes('add_comment'));
     assert.true(toolNames.includes('create_knowledge'));
@@ -283,83 +281,13 @@ module('factory-tool-builder > tool building', function () {
 });
 
 // ---------------------------------------------------------------------------
-// write_file: file routing (.gts vs .json)
-// ---------------------------------------------------------------------------
-
-module('factory-tool-builder > write_file', function () {
-  test('writes .gts file to the workspace with raw text body', async function (assert) {
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig();
-    let ws = workspaceFor(config);
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    let result = (await writeTool.execute({
-      path: 'my-card.gts',
-      content: 'export default class MyCard {}',
-    })) as { ok: boolean };
-
-    assert.true(result.ok);
-    assert.true(ws.exists('my-card.gts'), 'workspace has my-card.gts');
-    assert.strictEqual(
-      ws.read('my-card.gts'),
-      'export default class MyCard {}',
-    );
-  });
-
-  test('writes nested .ts path to the workspace', async function (assert) {
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig();
-    let ws = workspaceFor(config);
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    let result = (await writeTool.execute({
-      path: 'utils/helpers.ts',
-      content: 'export function helper() {}',
-    })) as { ok: boolean };
-
-    assert.true(result.ok);
-    assert.strictEqual(
-      ws.read('utils/helpers.ts'),
-      'export function helper() {}',
-    );
-  });
-
-  test('writes .json file as raw content (no JSON parsing)', async function (assert) {
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig();
-    let ws = workspaceFor(config);
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    let cardJson = JSON.stringify({
-      data: { type: 'card', attributes: { title: 'Test Card' } },
-    });
-
-    let result = (await writeTool.execute({
-      path: 'Card/1.json',
-      content: cardJson,
-    })) as { ok: boolean };
-
-    assert.true(result.ok);
-    // Content is written verbatim — no re-serialization by write_file.
-    assert.strictEqual(ws.read('Card/1.json'), cardJson);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Argument validation (guards against malformed LLM tool calls)
 // ---------------------------------------------------------------------------
 
 /**
  * The OpenRouter tool-use protocol treats `required` on parameter schemas
- * as advisory: models can still emit `tool_call` with an empty args blob
- * (`write_file({})`). Without runtime validation, the factory would
- * silently write to `<realm>/undefined` because `path` stringifies to the
+ * as advisory: models can still emit `tool_call` with an empty args blob.
+ * Without runtime validation, the factory would silently downstream the
  * literal "undefined" further down the call chain.
  *
  * These tests assert that every path-taking tool rejects
@@ -389,68 +317,6 @@ module('factory-tool-builder > path-arg validation', function () {
       `error mentions the tool name "${toolName}"`,
     );
   }
-
-  test('write_file({}) throws and does NOT hit the realm', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    await expectPathError(() => writeTool.execute({}), 'write_file', assert);
-    assert.strictEqual(
-      requests.length,
-      0,
-      'no realm HTTP request was made for an empty write_file call',
-    );
-  });
-
-  test('write_file with empty-string path throws', async function (assert) {
-    let { fetch: mockFetch } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    await expectPathError(
-      () => writeTool.execute({ path: '   ', content: 'x' }),
-      'write_file',
-      assert,
-    );
-  });
-
-  test('write_file with missing content throws (required arg)', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    let err: Error | undefined;
-    try {
-      await writeTool.execute({ path: 'card.gts' });
-    } catch (e) {
-      err = e as Error;
-    }
-    assert.ok(err);
-    assert.true(/non-empty string "content"/.test(err?.message ?? ''));
-    assert.strictEqual(requests.length, 0, 'no write request was made');
-  });
-
-  test('read_file({}) throws and does NOT hit the realm', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let readTool = findTool(tools, 'read_file');
-
-    await expectPathError(() => readTool.execute({}), 'read_file', assert);
-    assert.strictEqual(requests.length, 0);
-  });
 
   test('read_transpiled({}) throws', async function (assert) {
     let { fetch: mockFetch } = createMockFetch(200, {});
@@ -551,39 +417,6 @@ module('factory-tool-builder > path-arg validation', function () {
 // ---------------------------------------------------------------------------
 
 module('factory-tool-builder > realm targeting', function () {
-  test('write_file writes to the workspace (target realm)', async function (assert) {
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig();
-    let ws = workspaceFor(config);
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    await writeTool.execute({ path: 'card.gts', content: 'content' });
-
-    assert.true(ws.exists('card.gts'));
-    assert.strictEqual(ws.read('card.gts'), 'content');
-  });
-
-  test('read_file reads from the workspace (target realm)', async function (assert) {
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig();
-    let ws = workspaceFor(config);
-    // Pre-seed the workspace with the file the agent will read.
-    ws.write('card.gts', 'export class Card {}');
-    let tools = buildFactoryTools(config, executor, registry);
-    let readTool = findTool(tools, 'read_file');
-
-    let result = (await readTool.execute({ path: 'card.gts' })) as {
-      ok: boolean;
-      content?: string;
-    };
-
-    assert.true(result.ok);
-    assert.strictEqual(result.content, 'export class Card {}');
-  });
-
   test('update_issue reads from and writes to the workspace', async function (assert) {
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
@@ -831,7 +664,6 @@ module(
       assert.false(toolNames.includes('update_project'));
       assert.false(toolNames.includes('update_issue'));
       assert.false(toolNames.includes('create_knowledge'));
-      assert.true(toolNames.includes('write_file'));
       assert.true(toolNames.includes('run_command'));
     });
 

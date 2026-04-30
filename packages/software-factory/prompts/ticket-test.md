@@ -23,4 +23,4 @@ Tests must:
 - Verify card-specific behavior, field values, and relationships
 - Keep all test data in browser memory — no external realm writes
 
-Use write_file to create test files, then call signal_done.
+Use your native Write tool to create test files in the workspace, then call signal_done.

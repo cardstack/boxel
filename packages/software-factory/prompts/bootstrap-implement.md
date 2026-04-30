@@ -17,9 +17,12 @@ Description:
 
 ## What to Create
 
-Create the following artifacts in the target realm using the available tools
-(`write_file`, `update_issue`, `create_knowledge`). Use `realm_search` (pass
-the target realm URL as `realm-url`) and `read_file` to inspect existing
+Create the following artifacts in the target realm. The target realm is
+mounted as a local workspace dir — write `.json` and `.gts` files with
+your native `Write` / `Edit` tools, and use the `update_issue` /
+`create_knowledge` tools (which operate on workspace files too) for
+schema-aware card updates. Use `realm_search` (pass the target realm URL
+as `realm-url`) and your native `Read` / `Grep` tools to inspect existing
 state before creating anything.
 
 ### 1. Project Card
@@ -111,7 +114,7 @@ dependency cards are implemented before cards that consume them.
 
 ## Instructions
 
-1. Use `read_file` to read the brief at the URL above (if it is in a realm) or use the brief content in the description
+1. Read the brief at the URL above — if the URL points to a non-target realm, use `realm_read_file` with that realm's URL; if it's already in the target workspace, use your native `Read` tool. If the brief content is inlined in the description, just use that.
 2. Derive the slug and project code from the brief title
 3. Create the Project card
 4. Create Knowledge Article cards (at least brief context + agent onboarding)
