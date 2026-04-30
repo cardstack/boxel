@@ -219,20 +219,6 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
         }
       };
 
-      const releaseAfterLayoutPaint = () => {
-        // Layout/diff/indent-guide readiness has already fired by the time
-        // we reach here; give Monaco's view one paint frame plus the
-        // browser's commit to flush any final layout adjustments before
-        // Percy captures. Token colour state is intentionally not part of
-        // this wait — it is neutralised in .percy.js to avoid races with
-        // bracket-pair colorisation and async grammar registration.
-        // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- Monaco paints layout on its next rAF; the waiter must span that frame
-        requestAnimationFrame(() =>
-          // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- second frame to cover the paint following Monaco's layout
-          requestAnimationFrame(() => this.endAsync(operationId)),
-        );
-      };
-
       const checkInitComplete = () => {
         if (isInitialized) return;
 
@@ -242,7 +228,7 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
 
         ensureTokenization();
         isInitialized = true;
-        releaseAfterLayoutPaint();
+        this.endAsync(operationId);
       };
 
       // Listen for layout changes to detect when initialization is complete
@@ -293,7 +279,7 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
           contentSizeDisposable.dispose();
           diffDisposable?.dispose();
           decorationsDisposable.dispose();
-          releaseAfterLayoutPaint();
+          this.endAsync(operationId);
         }
       }, 2000);
 
