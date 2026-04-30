@@ -21,10 +21,32 @@ interface Signature {
     error: {
       message: string;
       stack?: string;
+      // CS-10977: optional structured payload — additional errors
+      // captured by the prerender runner and prerender diagnostics
+      // pulled off the error doc. Forwarded into the AI prompt body
+      // so the assistant has the underlying template throw and the
+      // timing context, not just the swallowed top-level message.
+      additionalErrors?: Array<{
+        message?: string;
+        stack?: string;
+        status?: number;
+        title?: string;
+      }>;
+      diagnostics?: Record<string, unknown>;
     };
     errorType: 'syntax' | 'runtime';
     fileToAttach: FileDef;
   };
+}
+
+const AI_ADDITIONAL_ERROR_STACK_MAX_BYTES = 8 * 1024;
+const AI_ADDITIONAL_ERRORS_LIMIT = 50;
+const AI_TRUNCATION_SUFFIX = ' …[truncated]';
+
+function truncateForAi(s: string | undefined, max: number): string | undefined {
+  if (s == null) return s;
+  if (s.length <= max) return s;
+  return s.slice(0, max) + AI_TRUNCATION_SUFFIX;
 }
 
 export default class SendErrorToAIAssistant extends Component<Signature> {
@@ -38,7 +60,45 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
     let message = error.message;
     let stack = error.stack ? `\n\nStack trace:\n${error.stack}` : '';
 
-    return `${prefix}\n\n${message}${stack}`;
+    let diagnosticsSection = '';
+    if (
+      error.diagnostics &&
+      typeof error.diagnostics === 'object' &&
+      Object.keys(error.diagnostics).length > 0
+    ) {
+      try {
+        diagnosticsSection = `\n\nDiagnostics:\n${JSON.stringify(
+          error.diagnostics,
+          null,
+          2,
+        )}`;
+      } catch {
+        // best-effort: skip diagnostics if unserializable
+      }
+    }
+
+    let additionalErrorsSection = '';
+    let entries = error.additionalErrors;
+    if (entries && entries.length > 0) {
+      let shown = entries.slice(0, AI_ADDITIONAL_ERRORS_LIMIT);
+      let parts = shown.map((e, i) => {
+        let title = e?.title ?? `Error ${i + 1}`;
+        let body = e?.message ? `\n${e.message}` : '';
+        let entryStack = truncateForAi(
+          e?.stack,
+          AI_ADDITIONAL_ERROR_STACK_MAX_BYTES,
+        );
+        let stackPart = entryStack ? `\nStack:\n${entryStack}` : '';
+        return `--- ${title} ---${body}${stackPart}`;
+      });
+      let footer =
+        entries.length > AI_ADDITIONAL_ERRORS_LIMIT
+          ? `\n\n(${entries.length - AI_ADDITIONAL_ERRORS_LIMIT} additional errors omitted)`
+          : '';
+      additionalErrorsSection = `\n\nAdditional Errors:\n${parts.join('\n\n')}${footer}`;
+    }
+
+    return `${prefix}\n\n${message}${stack}${diagnosticsSection}${additionalErrorsSection}`;
   }
 
   get commandContext() {

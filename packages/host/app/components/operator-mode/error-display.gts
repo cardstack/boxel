@@ -38,11 +38,35 @@ interface Signature {
     // beneath the stack trace so operators can classify a timeout
     // without opening the DB or correlating CloudWatch logs.
     diagnostics?: Record<string, unknown>;
+    // CS-10977: additional errors carried on the error doc — typically
+    // browser console errors captured by the prerender runner.
+    // Shown as a collapsed list under the stack trace so the operator
+    // can see the underlying template throw that the runloop swallowed.
+    additionalErrors?: Array<{
+      message?: string;
+      stack?: string;
+      status?: number;
+      title?: string;
+    }> | null;
     openDetails?: boolean;
     fileToAttach?: FileDef;
     viewInCodeMode?: boolean;
     cardId?: string;
   };
+}
+
+// Truncation budgets for the human-facing pane. The serialized error doc
+// is already clamped server-side (see clampSerializedError), but the
+// operator shouldn't see a 64KiB stack trace inline.
+const ADDITIONAL_ERRORS_DISPLAY_LIMIT = 20;
+const ADDITIONAL_ERROR_MESSAGE_MAX_BYTES = 2 * 1024;
+const ADDITIONAL_ERROR_STACK_MAX_BYTES = 4 * 1024;
+const TRUNCATION_SUFFIX = ' …[truncated]';
+
+function truncate(s: string | undefined, max: number): string | undefined {
+  if (s == null) return s;
+  if (s.length <= max) return s;
+  return s.slice(0, max) + TRUNCATION_SUFFIX;
 }
 
 export default class ErrorDisplay
@@ -76,7 +100,41 @@ export default class ErrorDisplay
     return {
       message: this.args.message ?? '',
       stack: this.args.stack,
+      additionalErrors: this.args.additionalErrors ?? undefined,
+      diagnostics: this.args.diagnostics,
     };
+  }
+
+  private get normalizedAdditionalErrors():
+    | Array<{
+        message?: string;
+        stack?: string;
+        status?: number;
+        title?: string;
+      }>
+    | undefined {
+    let raw = this.args.additionalErrors;
+    if (!raw || raw.length === 0) return undefined;
+    let entries = raw.slice(0, ADDITIONAL_ERRORS_DISPLAY_LIMIT).map((e) => ({
+      message: truncate(e?.message, ADDITIONAL_ERROR_MESSAGE_MAX_BYTES),
+      stack: truncate(e?.stack, ADDITIONAL_ERROR_STACK_MAX_BYTES),
+      status: e?.status,
+      title: e?.title,
+    }));
+    if (raw.length > ADDITIONAL_ERRORS_DISPLAY_LIMIT) {
+      let omitted = raw.length - ADDITIONAL_ERRORS_DISPLAY_LIMIT;
+      entries.push({
+        title: 'Errors omitted',
+        message: `${omitted} additional errors hidden`,
+        stack: undefined,
+        status: undefined,
+      });
+    }
+    return entries;
+  }
+
+  private get additionalErrorsCount(): number {
+    return this.args.additionalErrors?.length ?? 0;
   }
 
   private get errorText() {
@@ -247,6 +305,39 @@ export default class ErrorDisplay
               >{{this.diagnosticsText}}</pre>
             </div>
           {{/if}}
+          {{#if this.normalizedAdditionalErrors}}
+            <div
+              class='detail-item'
+              data-test-error-additional-errors
+              data-test-error-additional-errors-count={{this.additionalErrorsCount}}
+            >
+              <div class='detail-title'>Additional Errors:</div>
+              {{#each this.normalizedAdditionalErrors as |entry index|}}
+                <div
+                  class='additional-error-entry'
+                  data-test-error-additional-error
+                  data-test-error-additional-error-index={{index}}
+                >
+                  <div
+                    class='additional-error-heading'
+                    data-test-error-additional-heading
+                  >{{if entry.title entry.title entry.message}}</div>
+                  {{#if entry.message}}
+                    <p
+                      class='additional-error-message'
+                      data-test-error-additional-message
+                    >{{entry.message}}</p>
+                  {{/if}}
+                  {{#if entry.stack}}
+                    <pre
+                      data-test-error-additional-stack
+                      data-test-percy-hide
+                    >{{entry.stack}}</pre>
+                  {{/if}}
+                </div>
+              {{/each}}
+            </div>
+          {{/if}}
         </div>
       {{/if}}
     </div>
@@ -393,6 +484,30 @@ export default class ErrorDisplay
         justify-content: center;
         gap: var(--boxel-sp);
         margin-top: var(--boxel-sp-lg);
+      }
+
+      .additional-error-entry {
+        margin-bottom: var(--boxel-sp);
+        padding-bottom: var(--boxel-sp-xs);
+        border-bottom: 1px solid var(--boxel-200, #ddd);
+      }
+
+      .additional-error-entry:last-child {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: none;
+      }
+
+      .additional-error-heading {
+        font-weight: 600;
+        margin-bottom: var(--boxel-sp-xxs);
+        word-break: break-word;
+      }
+
+      .additional-error-message {
+        margin: 0 0 var(--boxel-sp-xs) 0;
+        font-size: var(--boxel-font-size-sm);
+        word-break: break-word;
       }
     </style>
   </template>
