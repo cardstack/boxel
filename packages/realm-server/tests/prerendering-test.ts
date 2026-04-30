@@ -1420,10 +1420,16 @@ module(basename(__filename), function () {
           'desync surfaces as 500',
         );
         assert.ok(
-          result.response.error?.error.message?.includes(
-            '[data-prerender-status]',
-          ),
-          `desync message names the DOM signal that never updated, got: ${result.response.error?.error.message}`,
+          result.response.error?.error.message
+            ?.toLowerCase()
+            .includes('ember rendering error'),
+          `desync message names the failure class (Ember rendering error), got: ${result.response.error?.error.message}`,
+        );
+        assert.ok(
+          result.response.error?.error.message
+            ?.toLowerCase()
+            .includes('additional errors'),
+          `desync message points users at the Additional Errors section, got: ${result.response.error?.error.message}`,
         );
         // Desync IS the signal that the runloop stopped advancing this
         // card's render — Glimmer's binding never landed. The page is

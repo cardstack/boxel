@@ -180,6 +180,7 @@ import './prerender-cancellation-test';
 import './async-semaphore-test';
 import './page-pool-expansion-test';
 import './page-pool-priority-test';
+import './prerender-deadlock-test';
 import './runtime-exception-capture-test';
 import './clamp-serialized-error-test';
 import './prerender-diagnostics-persistence-test';
