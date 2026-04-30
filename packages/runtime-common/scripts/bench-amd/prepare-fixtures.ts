@@ -14,7 +14,7 @@
 // silently move the perf numbers. Re-run this only when you intentionally
 // want to re-anchor the bench inputs — and remember to regenerate
 // `baseline.json` in the same commit.
-import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, readFileSync, mkdirSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
 import { fixturesDir, repoRoot } from './paths';
@@ -43,9 +43,31 @@ const fixtures: { name: string; file: string }[] = [
 
   mkdirSync(fixturesDir, { recursive: true });
 
+  // Babel resolves a relative `filename` against cwd, which leaks
+  // absolute worktree paths into the output (glimmer template
+  // manifests embed it as `moduleName`). Strip anything that looks
+  // like an absolute repo-root prefix so the committed fixtures are
+  // deterministic across contributors.
+  const absolutePathPrefixes = [
+    repoRoot + path.sep,
+    // Workspaces and worktrees can resolve symlinked paths differently;
+    // also strip a realpath-resolved prefix when it diverges from the
+    // logical repoRoot.
+    realpathSync(repoRoot) + path.sep,
+  ];
+  const sanitize = (s: string): string => {
+    let out = s;
+    for (const prefix of absolutePathPrefixes) {
+      if (prefix && prefix !== path.sep) {
+        out = out.split(prefix).join('');
+      }
+    }
+    return out;
+  };
+
   for (const { name, file } of fixtures) {
     const src = readFileSync(path.join(baseDir, file), 'utf8');
-    const transpiled = await transpileJS(src, file);
+    const transpiled = sanitize(await transpileJS(src, file));
     const outPath = path.join(fixturesDir, `${name}.js`);
     writeFileSync(outPath, transpiled, 'utf8');
     console.log(

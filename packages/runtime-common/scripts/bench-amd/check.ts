@@ -39,7 +39,26 @@ const DEFAULT_ITER = 100;
 const DEFAULT_WARMUP = 10;
 const GATED_CANDIDATE = 'production';
 
+// Display-only formatter for the markdown summary table.
 const fmtMs = (ms: number) => `${ms.toFixed(2)}ms`;
+// Higher-precision formatter for FAIL messages — the gate compares
+// unrounded medians, and 2-decimal rounding can produce confusing
+// "current=10.41ms exceeds allowed=10.41ms" pairs on borderline cases.
+const fmtMsPrecise = (ms: number) => `${ms.toFixed(4)}ms`;
+
+function parsePositiveInt(
+  name: string,
+  raw: string,
+  allowZero = false,
+): number {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || (allowZero ? n < 0 : n < 1)) {
+    throw new Error(
+      `${name} must be a ${allowZero ? 'non-negative' : 'positive'} integer, got ${JSON.stringify(raw)}`,
+    );
+  }
+  return n;
+}
 
 function appendStepSummary(markdown: string) {
   const target = process.env.GITHUB_STEP_SUMMARY;
@@ -48,8 +67,15 @@ function appendStepSummary(markdown: string) {
 }
 
 (async () => {
-  const iterations = Number(process.env.ITER ?? DEFAULT_ITER);
-  const warmup = Number(process.env.WARMUP ?? DEFAULT_WARMUP);
+  const iterations = parsePositiveInt(
+    'ITER',
+    process.env.ITER ?? String(DEFAULT_ITER),
+  );
+  const warmup = parsePositiveInt(
+    'WARMUP',
+    process.env.WARMUP ?? String(DEFAULT_WARMUP),
+    true,
+  );
 
   const hasBaseline = existsSync(baselinePath);
   let baseline: Baseline | undefined;
@@ -145,6 +171,21 @@ function appendStepSummary(markdown: string) {
   const breaches: string[] = [];
   const missingFromBaseline: string[] = [];
 
+  // Hard sanity check: a baseline fixture with no measured result means
+  // the gated candidate failed to run (renamed export, broken import,
+  // etc.). Treat that as a gate failure so the silent-pass case can't
+  // happen.
+  const orphaned = Object.keys(baseline!.fixtures).filter(
+    (f) => !results.some((r) => r.fixture === f),
+  );
+  if (orphaned.length > 0) {
+    console.error(
+      `\nFAIL: baseline lists ${orphaned.length} fixture(s) with no measurement: ${orphaned.join(', ')}. ` +
+        `The gated candidate (${GATED_CANDIDATE}) may have failed to load, or the fixture file is missing.`,
+    );
+    process.exit(1);
+  }
+
   lines.push(
     `Baseline tolerance: \`× ${tolerance.toFixed(2)}\` (fail if median exceeds baseline × tolerance).\n`,
   );
@@ -168,27 +209,13 @@ function appendStepSummary(markdown: string) {
     );
     if (!ok) {
       breaches.push(
-        `${GATED_CANDIDATE} median for ${r.fixture} is ${fmtMs(r.median)}, ` +
-          `exceeds baseline ${fmtMs(base.median_ms)} × ${tolerance.toFixed(2)} tolerance ` +
-          `(= ${fmtMs(allowed)})`,
+        `${GATED_CANDIDATE} median for ${r.fixture} is ${fmtMsPrecise(r.median)}, ` +
+          `exceeds baseline ${fmtMsPrecise(base.median_ms)} × ${tolerance.toFixed(2)} tolerance ` +
+          `(= ${fmtMsPrecise(allowed)})`,
       );
     }
   }
   lines.push('');
-
-  // Surface fixtures listed in baseline but missing from the run
-  // (e.g. someone deleted a fixture file but forgot to drop the entry).
-  // These don't fail the gate but are worth flagging.
-  const orphaned = Object.keys(baseline!.fixtures).filter(
-    (f) => !results.some((r) => r.fixture === f),
-  );
-  if (orphaned.length > 0) {
-    lines.push(
-      `Note: baseline lists fixtures not present in this run: ${orphaned
-        .map((f) => `\`${f}\``)
-        .join(', ')}\n`,
-    );
-  }
 
   if (breaches.length === 0 && missingFromBaseline.length === 0) {
     lines.push('All fixtures within tolerance.\n');

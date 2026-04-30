@@ -131,7 +131,7 @@ function enumField(Base, config) {
         {
           "id": "K9iUgW3S",
           "block": "[[[41,[30,0,[\"option\"]],[[[41,[30,0,[\"option\",\"icon\"]],[[[1,\"    \"],[8,[30,0,[\"option\",\"icon\"]],[[24,0,\"option-icon\"],[24,\"width\",\"16\"],[24,\"height\",\"16\"]],null,null],[1,\"\\n\"]],[]],null],[1,\"  \"],[10,1],[14,0,\"option-title\"],[15,\"data-test-enum-atom-unset\",[52,[30,0,[\"isUnsetFallback\"]],true,false]],[15,\"data-test-enum-atom-fallback\",[52,[30,0,[\"isValueFallback\"]],true,false]],[12],[1,\"\\n    \"],[1,[52,[30,0,[\"option\",\"label\"]],[30,0,[\"option\",\"label\"]],[30,0,[\"option\",\"value\"]]]],[1,\"\\n  \"],[13],[1,\"\\n\"]],[]],null]],[],[\"if\"]]",
-          "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/enum.gts",
+          "moduleName": "packages/runtime-common/enum.gts",
           "isStrictMode": true
         }), this);
       }
@@ -149,7 +149,7 @@ function enumField(Base, config) {
         {
           "id": "IoAjoLPK",
           "block": "[[[41,[30,1],[[[44,[[50,[32,0,[\"atom\"]],0,null,null]],[[[1,\"    \"],[8,[30,2],null,[[\"@model\",\"@configuration\"],[[30,1,[\"value\"]],[30,3]]],null],[1,\"\\n\"]],[2]]]],[]],null]],[\"@option\",\"Atom\",\"@configuration\"],[\"if\",\"let\",\"component\"]]",
-          "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/enum.gts",
+          "moduleName": "packages/runtime-common/enum.gts",
           "scope": () => [EnumField],
           "isStrictMode": true
         }), this);
@@ -178,7 +178,7 @@ function enumField(Base, config) {
         {
           "id": "wviNiEOb",
           "block": "[[[1,[30,0,[\"text\"]]]],[],[]]",
-          "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/enum.gts",
+          "moduleName": "packages/runtime-common/enum.gts",
           "isStrictMode": true
         }), this);
       }
@@ -231,7 +231,7 @@ function enumField(Base, config) {
         {
           "id": "9/v5eSNs",
           "block": "[[[8,[32,0],null,[[\"@options\",\"@selected\",\"@onChange\",\"@selectedItemComponent\",\"@disabled\",\"@renderInPlace\",\"@placeholder\"],[[30,0,[\"options\"]],[30,0,[\"selectedOption\"]],[30,0,[\"update\"]],[52,[30,0,[\"selectedOption\"]],[50,[32,1,[\"selectedItem\"]],0,null,[[\"configuration\"],[[30,1]]]]],[28,[32,2],[[30,2]],null],true,[30,0,[\"placeholder\"]]]],[[\"default\"],[[[[1,\"\\n\"],[44,[[50,[32,1,[\"atom\"]],0,null,null]],[[[1,\"    \"],[8,[30,4],null,[[\"@model\",\"@configuration\"],[[30,3,[\"value\"]],[30,1]]],null],[1,\"\\n\"]],[4]]]],[3]]]]]],[\"@configuration\",\"@canEdit\",\"opt\",\"Atom\"],[\"if\",\"component\",\"let\"]]",
-          "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/enum.gts",
+          "moduleName": "packages/runtime-common/enum.gts",
           "scope": () => [BoxelSelect, EnumField, not],
           "isStrictMode": true
         }), this);

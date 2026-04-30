@@ -804,7 +804,7 @@ class LinksTo {
         {
           "id": "fqBLOyuE",
           "block": "[[[8,[32,0],null,null,[[\"default\"],[[[[1,\"\\n  \"],[8,[32,1],null,null,[[\"default\"],[[[[1,\"\\n\"],[41,[28,[32,2],[[30,3],[30,2,[\"cardDef\"]],[32,3]],null],[[[1,\"      \"],[8,[32,4],[[17,4]],[[\"@model\",\"@field\",\"@typeConstraint\",\"@createCard\"],[[28,[32,5],null,null],[32,6],[30,5],[30,1,[\"createCard\"]]]],null],[1,\"\\n\"]],[]],[[[44,[[28,[32,7],[[32,6],[32,8]],null]],[[[1,\"        \"],[8,[30,6],[[17,4]],[[\"@format\",\"@displayContainer\"],[[28,[32,9],[[30,3],[30,2,[\"cardDef\"]],[32,8],[32,10]],null],[30,7]]],null],[1,\"\\n\"]],[6]]]],[]]],[1,\"  \"]],[2]]]]],[1,\"\\n\"]],[1]]]]]],[\"cardCrudFunctions\",\"defaultFormats\",\"@format\",\"&attrs\",\"@typeConstraint\",\"FieldComponent\",\"@displayContainer\"],[\"if\",\"let\"]]",
-          "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+          "moduleName": "packages/runtime-common/card-api.gts",
           "scope": () => [CardCrudFunctionsConsumer, DefaultFormatsConsumer, shouldRenderEditor, isComputed, LinksToEditor, getInnerModel, linksToField, fieldComponent, model, getChildFormat, isFileDefField],
           "isStrictMode": true
         }), this);
@@ -1449,7 +1449,7 @@ export class ReadOnlyField extends FieldDef {
       {
         "id": "YHIRqK09",
         "block": "[[[1,[30,1]]],[\"@model\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "isStrictMode": true
       }), this);
     }
@@ -1463,7 +1463,7 @@ export class ReadOnlyField extends FieldDef {
       {
         "id": "YHIRqK09",
         "block": "[[[1,[30,1]]],[\"@model\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "isStrictMode": true
       }), this);
     }
@@ -1480,7 +1480,7 @@ export class ReadOnlyField extends FieldDef {
       {
         "id": "8wTS6aGw",
         "block": "[[[1,[28,[32,0],[[30,1]],null]]],[\"@model\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "scope": () => [markdownEscape],
         "isStrictMode": true
       }), this);
@@ -1501,7 +1501,7 @@ export class StringField extends FieldDef {
       {
         "id": "YHIRqK09",
         "block": "[[[1,[30,1]]],[\"@model\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "isStrictMode": true
       }), this);
     }
@@ -1519,7 +1519,7 @@ export class StringField extends FieldDef {
       {
         "id": "9TpFsXRk",
         "block": "[[[8,[32,0],null,[[\"@value\",\"@onInput\",\"@disabled\"],[[30,1],[30,2],[28,[32,1],[[30,3]],null]]],null]],[\"@model\",\"@set\",\"@canEdit\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "scope": () => [BoxelInput, not],
         "isStrictMode": true
       }), this);
@@ -1534,7 +1534,7 @@ export class StringField extends FieldDef {
       {
         "id": "YHIRqK09",
         "block": "[[[1,[30,1]]],[\"@model\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "isStrictMode": true
       }), this);
     }
@@ -1552,7 +1552,7 @@ export class StringField extends FieldDef {
       {
         "id": "8wTS6aGw",
         "block": "[[[1,[28,[32,0],[[30,1]],null]]],[\"@model\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "scope": () => [markdownEscape],
         "isStrictMode": true
       }), this);
@@ -1577,7 +1577,7 @@ export class MaybeBase64Field extends StringField {
       {
         "id": "it6vWVk8",
         "block": "[[[41,[30,0,[\"isBase64\"]],[[[1,\"  \"],[10,\"em\"],[12],[1,\"(Base64 encoded value)\"],[13],[1,\"\\n\"]],[]],[[[1,\"  \"],[1,[30,1]],[1,\"\\n\"]],[]]]],[\"@model\"],[\"if\"]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "isStrictMode": true
       }), this);
     }
@@ -1605,7 +1605,7 @@ export class MaybeBase64Field extends StringField {
       {
         "id": "zeq9QLA6",
         "block": "[[[41,[30,0,[\"isBase64\"]],[[[1,\"  [binary content]\\n\"]],[]],[[[1,\"  \"],[1,[30,0,[\"escaped\"]]],[1,\"\\n\"]],[]]]],[],[\"if\"]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "isStrictMode": true
       }), this);
     }
@@ -1629,7 +1629,7 @@ export class TextAreaField extends StringField {
       {
         "id": "EXP9MhVa",
         "block": "[[[8,[32,0],[[24,0,\"boxel-text-area\"]],[[\"@value\",\"@onInput\",\"@type\",\"@readonly\"],[[30,1],[30,2],\"textarea\",[28,[32,1],[[30,3]],null]]],null]],[\"@model\",\"@set\",\"@canEdit\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "scope": () => [BoxelInput, not],
         "isStrictMode": true
       }), this);
@@ -1655,7 +1655,7 @@ export class TextAreaField extends StringField {
       {
         "id": "UJL+8pmH",
         "block": "[[[1,[30,0,[\"escapedWithBreaks\"]]]],[],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "isStrictMode": true
       }), this);
     }
@@ -1715,7 +1715,7 @@ export class CSSField extends TextAreaField {
       {
         "id": "jSEjNwGk",
         "block": "[[[10,0],[14,0,\"css-field-container\"],[14,\"data-scopedcss-3d2fc9e40e-98b77ab716\",\"\"],[12],[1,\"\\n\"],[41,[30,1,[\"length\"]],[[[1,\"    \"],[8,[32,0],[[24,0,\"css-field-copy-button\"],[24,\"data-scopedcss-3d2fc9e40e-98b77ab716\",\"\"]],[[\"@textToCopy\"],[[30,1]]],null],[1,\"\\n\"]],[]],null],[1,\"  \"],[10,\"pre\"],[14,0,\"css-field\"],[14,\"data-test-css-field\",\"\"],[14,\"data-scopedcss-3d2fc9e40e-98b77ab716\",\"\"],[12],[1,[52,[30,1],[30,1],\"/* No CSS defined */\"]],[13],[1,\"\\n\"],[13],[1,\"\\n\"]],[\"@model\"],[\"if\"]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "scope": () => [CopyButton],
         "isStrictMode": true
       }), this);
@@ -1747,7 +1747,7 @@ export class CSSField extends TextAreaField {
       {
         "id": "TzwMj1CX",
         "block": "[[[1,[30,0,[\"fenced\"]]]],[],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "isStrictMode": true
       }), this);
     }
@@ -1765,7 +1765,7 @@ export class MarkdownField extends StringField {
       {
         "id": "kWsCu+W2",
         "block": "[[[8,[32,0],null,[[\"@content\"],[[30,1]]],null]],[\"@model\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "scope": () => [MarkdownTemplate],
         "isStrictMode": true
       }), this);
@@ -1780,7 +1780,7 @@ export class MarkdownField extends StringField {
       {
         "id": "kWsCu+W2",
         "block": "[[[8,[32,0],null,[[\"@content\"],[[30,1]]],null]],[\"@model\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "scope": () => [MarkdownTemplate],
         "isStrictMode": true
       }), this);
@@ -1802,7 +1802,7 @@ export class MarkdownField extends StringField {
       {
         "id": "/YICgnf7",
         "block": "[[[8,[32,0],[[24,0,\"boxel-text-area\"]],[[\"@type\",\"@value\",\"@onInput\",\"@disabled\",\"@readonly\"],[\"textarea\",[30,1],[30,2],[28,[32,1],[[30,3]],null],[28,[32,1],[[30,3]],null]]],null]],[\"@model\",\"@set\",\"@canEdit\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "scope": () => [BoxelInput, not],
         "isStrictMode": true
       }), this);
@@ -1821,7 +1821,7 @@ export class MarkdownField extends StringField {
       {
         "id": "YHIRqK09",
         "block": "[[[1,[30,1]]],[\"@model\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "isStrictMode": true
       }), this);
     }
@@ -1856,7 +1856,7 @@ export class NumberField extends FieldDef {
       {
         "id": "YHIRqK09",
         "block": "[[[1,[30,1]]],[\"@model\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "isStrictMode": true
       }), this);
     }
@@ -1877,7 +1877,7 @@ export class NumberField extends FieldDef {
       {
         "id": "I9I+qs/C",
         "block": "[[[8,[32,0],null,[[\"@value\",\"@onInput\",\"@errorMessage\",\"@state\",\"@disabled\"],[[30,0,[\"textInputValidator\",\"asString\"]],[30,0,[\"textInputValidator\",\"onInput\"]],[30,0,[\"textInputValidator\",\"errorMessage\"]],[52,[30,0,[\"textInputValidator\",\"isInvalid\"]],\"invalid\",\"none\"],[28,[32,1],[[30,1]],null]]],null]],[\"@canEdit\"],[\"if\"]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "scope": () => [BoxelInput, not],
         "isStrictMode": true
       }), this);
@@ -1897,7 +1897,7 @@ export class NumberField extends FieldDef {
       {
         "id": "8wTS6aGw",
         "block": "[[[1,[28,[32,0],[[30,1]],null]]],[\"@model\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "scope": () => [markdownEscape],
         "isStrictMode": true
       }), this);
@@ -1979,7 +1979,7 @@ export class FileDef extends BaseDef {
       {
         "id": "n7QMmKbC",
         "block": "[[[1,[30,1,[\"name\"]]]],[\"@model\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "isStrictMode": true
       }), this);
     }
@@ -2098,7 +2098,7 @@ export class ImageDef extends FileDef {
       {
         "id": "SxyHmVEf",
         "block": "[[[1,[30,0,[\"text\"]]]],[],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/card-api.gts",
+        "moduleName": "packages/runtime-common/card-api.gts",
         "isStrictMode": true
       }), this);
     }

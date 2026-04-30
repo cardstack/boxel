@@ -1,9 +1,10 @@
 # amd-transpile bench
 
 Wall-time benchmark for the loader's ES → AMD transpilation step
-(`amd-transpile.ts`). Compares the production `transpileAmd` against a
-babel baseline (the previous `Loader.fetchModule` implementation), plus
-parse-only candidates that bound the theoretical floor.
+(`packages/runtime-common/amd-transpile/`, entry point `index.ts`).
+Compares the production `transpileAmd` against a babel baseline (the
+previous `Loader.fetchModule` implementation), plus parse-only
+candidates that bound the theoretical floor.
 
 A CI gate (`pnpm bench:amd:check`) enforces that `production` median
 times don't regress past a tolerance margin against the committed

@@ -89,11 +89,44 @@ export async function runBench(
   const warmup = options.warmup ?? DEFAULT_WARMUP;
   const filter = options.candidates;
 
+  if (!Number.isInteger(iterations) || iterations < 1) {
+    throw new Error(
+      `runBench: iterations must be a positive integer, got ${iterations}`,
+    );
+  }
+  if (!Number.isInteger(warmup) || warmup < 0) {
+    throw new Error(
+      `runBench: warmup must be a non-negative integer, got ${warmup}`,
+    );
+  }
+
   const fixtures = listFixtures();
+  if (fixtures.length === 0) {
+    throw new Error(
+      `runBench: no fixtures found in ${fixturesDir}. Run \`pnpm bench:amd:prep\` to generate them.`,
+    );
+  }
+
   const allCandidates = await loadCandidates();
   const candidates = filter
     ? allCandidates.filter((c) => filter.includes(c.name))
     : allCandidates;
+  if (candidates.length === 0) {
+    const want = filter ? `[${filter.join(', ')}]` : 'any';
+    const have = allCandidates.map((c) => c.name).join(', ') || '<none>';
+    throw new Error(
+      `runBench: no candidates matched (wanted=${want}, available=${have}).`,
+    );
+  }
+  if (filter) {
+    const matchedNames = candidates.map((c) => c.name);
+    const missing = filter.filter((n) => !matchedNames.includes(n));
+    if (missing.length > 0) {
+      throw new Error(
+        `runBench: requested candidates not found: ${missing.join(', ')}. Available: ${allCandidates.map((c) => c.name).join(', ')}.`,
+      );
+    }
+  }
 
   const fixtureSrc: Record<string, string> = {};
   for (const f of fixtures) {

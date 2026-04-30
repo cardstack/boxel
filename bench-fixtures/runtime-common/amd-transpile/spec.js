@@ -206,7 +206,7 @@ export class SpecHeader extends GlimmerComponent {
     {
       "id": "itOPYcuK",
       "block": "[[[10,\"header\"],[14,0,\"header\"],[14,\"aria-labelledby\",\"title\"],[14,\"data-scopedcss-1f2e0dba4a-52984aff94\",\"\"],[12],[1,\"\\n  \"],[10,0],[14,0,\"box header-icon-container\"],[14,\"data-scopedcss-1f2e0dba4a-52984aff94\",\"\"],[12],[1,\"\\n\"],[41,[30,0,[\"icon\"]],[[[1,\"      \"],[8,[30,0,[\"icon\"]],[[24,\"width\",\"35\"],[24,\"height\",\"35\"],[24,\"role\",\"presentation\"],[24,\"data-scopedcss-1f2e0dba4a-52984aff94\",\"\"]],null,null],[1,\"\\n\"]],[]],[[[41,[30,0,[\"defaultIcon\"]],[[[1,\"      \"],[8,[30,0,[\"defaultIcon\"]],[[24,\"width\",\"35\"],[24,\"height\",\"35\"],[24,\"role\",\"presentation\"],[24,\"data-scopedcss-1f2e0dba4a-52984aff94\",\"\"]],null,null],[1,\"\\n    \"]],[]],null]],[]]],[1,\"  \"],[13],[1,\"\\n  \"],[10,0],[14,0,\"header-info-container\"],[14,\"data-scopedcss-1f2e0dba4a-52984aff94\",\"\"],[12],[1,\"\\n\"],[41,[30,1],[[[1,\"      \"],[10,0],[14,0,\"header-title-container\"],[14,\"data-test-title\",\"\"],[14,\"data-scopedcss-1f2e0dba4a-52984aff94\",\"\"],[12],[1,\"\\n        \"],[10,\"label\"],[14,\"for\",\"spec-title\"],[14,0,\"boxel-sr-only\"],[14,\"data-scopedcss-1f2e0dba4a-52984aff94\",\"\"],[12],[1,\"Title\"],[13],[1,\"\\n        \"],[18,2,null],[1,\"\\n      \"],[13],[1,\"\\n      \"],[10,0],[14,0,\"header-description-container\"],[14,\"data-test-description\",\"\"],[14,\"data-scopedcss-1f2e0dba4a-52984aff94\",\"\"],[12],[1,\"\\n        \"],[10,\"label\"],[14,\"for\",\"spec-description\"],[14,0,\"boxel-sr-only\"],[14,\"data-scopedcss-1f2e0dba4a-52984aff94\",\"\"],[12],[1,\"Description\"],[13],[1,\"\\n        \"],[18,3,null],[1,\"\\n      \"],[13],[1,\"\\n\"]],[]],[[[1,\"      \"],[10,\"h1\"],[14,0,\"title\"],[14,1,\"title\"],[14,\"data-test-title\",\"\"],[14,\"data-scopedcss-1f2e0dba4a-52984aff94\",\"\"],[12],[1,\"\\n        \"],[18,2,null],[1,\"\\n      \"],[13],[1,\"\\n      \"],[10,2],[14,0,\"description\"],[14,\"data-test-description\",\"\"],[14,\"data-scopedcss-1f2e0dba4a-52984aff94\",\"\"],[12],[1,\"\\n        \"],[18,3,null],[1,\"\\n      \"],[13],[1,\"\\n\"]],[]]],[1,\"  \"],[13],[1,\"\\n\"],[13],[1,\"\\n\"]],[\"@isEditMode\",\"&title\",\"&description\"],[\"if\",\"yield\"]]",
-      "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/spec.gts",
+      "moduleName": "packages/runtime-common/spec.gts",
       "isStrictMode": true
     }), this);
   }
@@ -298,7 +298,7 @@ export class SpecReadmeSection extends GlimmerComponent {
     {
       "id": "Ynlk0yTm",
       "block": "[[[10,\"section\"],[14,0,\"readme section\"],[14,\"data-scopedcss-1f2e0dba4a-c74d324c24\",\"\"],[12],[1,\"\\n  \"],[10,\"header\"],[14,0,\"row-header\"],[14,\"aria-labelledby\",\"readme\"],[14,\"data-scopedcss-1f2e0dba4a-c74d324c24\",\"\"],[12],[1,\"\\n    \"],[10,0],[14,0,\"row-header-left\"],[14,\"data-scopedcss-1f2e0dba4a-c74d324c24\",\"\"],[12],[1,\"\\n      \"],[8,[32,0],[[24,\"width\",\"20\"],[24,\"height\",\"20\"],[24,\"role\",\"presentation\"],[24,\"data-scopedcss-1f2e0dba4a-c74d324c24\",\"\"]],null,null],[1,\"\\n      \"],[10,\"h2\"],[14,1,\"readme\"],[14,\"data-scopedcss-1f2e0dba4a-c74d324c24\",\"\"],[12],[1,\"Read Me\"],[13],[1,\"\\n    \"],[13],[1,\"\\n\"],[41,[30,1],[[[1,\"      \"],[8,[32,1],[[24,\"data-test-generate-readme\",\"\"],[24,\"data-scopedcss-1f2e0dba4a-c74d324c24\",\"\"],[4,[32,2],[\"click\",[30,0,[\"generateReadme\"]]],null]],[[\"@kind\",\"@size\",\"@loading\"],[\"primary\",\"extra-small\",[30,0,[\"generateReadmeTask\",\"isRunning\"]]]],[[\"default\"],[[[[1,\"\\n\"],[41,[30,0,[\"generateReadmeTask\",\"isRunning\"]],[[[1,\"          Generating...\\n\"]],[]],[[[1,\"          Generate README\\n\"]],[]]],[1,\"      \"]],[]]]]],[1,\"\\n\"]],[]],null],[1,\"  \"],[13],[1,\"\\n  \"],[10,0],[14,\"data-test-readme\",\"\"],[14,\"data-scopedcss-1f2e0dba4a-c74d324c24\",\"\"],[12],[1,\"\\n    \"],[18,2,null],[1,\"\\n  \"],[13],[1,\"\\n\"],[13],[1,\"\\n\"]],[\"@isEditMode\",\"&default\"],[\"if\",\"yield\"]]",
-      "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/spec.gts",
+      "moduleName": "packages/runtime-common/spec.gts",
       "scope": () => [BookOpenText, BoxelButton, on],
       "isStrictMode": true
     }), this);
@@ -398,7 +398,7 @@ export class SpecExamplesSection extends GlimmerComponent {
     {
       "id": "N+57OQcN",
       "block": "[[[10,\"section\"],[14,0,\"examples section\"],[14,\"data-scopedcss-1f2e0dba4a-b3ae79a17a\",\"\"],[12],[1,\"\\n  \"],[10,\"header\"],[14,0,\"row-header\"],[14,\"aria-labelledby\",\"examples\"],[14,\"data-scopedcss-1f2e0dba4a-b3ae79a17a\",\"\"],[12],[1,\"\\n    \"],[10,0],[14,0,\"row-header-left\"],[14,\"data-scopedcss-1f2e0dba4a-b3ae79a17a\",\"\"],[12],[1,\"\\n      \"],[8,[32,0],[[24,\"width\",\"20\"],[24,\"height\",\"20\"],[24,\"role\",\"presentation\"],[24,\"data-scopedcss-1f2e0dba4a-b3ae79a17a\",\"\"]],null,null],[1,\"\\n      \"],[10,\"h2\"],[14,1,\"examples\"],[14,\"data-scopedcss-1f2e0dba4a-b3ae79a17a\",\"\"],[12],[1,\"Examples\"],[13],[1,\"\\n    \"],[13],[1,\"\\n  \"],[13],[1,\"\\n\"],[41,[28,[32,1],[[30,0,[\"specType\"]],\"field\"],null],[[[41,[30,0,[\"isPrimitiveField\"]],[[[1,\"      \"],[10,2],[14,0,\"spec-example-incompatible-message\"],[14,\"data-test-spec-example-incompatible-primitives\",\"\"],[14,\"data-scopedcss-1f2e0dba4a-b3ae79a17a\",\"\"],[12],[1,\"\\n        \"],[10,1],[14,\"data-scopedcss-1f2e0dba4a-b3ae79a17a\",\"\"],[12],[1,[32,2]],[13],[1,\"\\n      \"],[13],[1,\"\\n\"]],[]],[[[1,\"      \"],[18,1,null],[1,\"\\n\"]],[]]]],[]],[[[1,\"    \"],[18,2,null],[1,\"\\n\"]],[]]],[13],[1,\"\\n\"]],[\"&containedExamples\",\"&linkedExamples\"],[\"if\",\"yield\"]]",
-      "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/spec.gts",
+      "moduleName": "packages/runtime-common/spec.gts",
       "scope": () => [LayersSubtract, eq, PRIMITIVE_INCOMPATIBILITY_MESSAGE],
       "isStrictMode": true
     }), this);
@@ -481,7 +481,7 @@ export class ExamplesWithInteractive extends GlimmerComponent {
     {
       "id": "DrV9g6R7",
       "block": "[[[10,\"section\"],[14,0,\"examples-with-interactive-preview section\"],[14,\"data-scopedcss-1f2e0dba4a-a64017c164\",\"\"],[12],[1,\"\\n  \"],[10,\"header\"],[14,0,\"row-header\"],[14,\"aria-labelledby\",\"examples-with-interactive-preview\"],[14,\"data-scopedcss-1f2e0dba4a-a64017c164\",\"\"],[12],[1,\"\\n    \"],[10,0],[14,0,\"row-header-left\"],[14,\"data-scopedcss-1f2e0dba4a-a64017c164\",\"\"],[12],[1,\"\\n      \"],[8,[32,0],[[24,\"width\",\"20\"],[24,\"height\",\"20\"],[24,\"role\",\"presentation\"],[24,\"data-scopedcss-1f2e0dba4a-a64017c164\",\"\"]],null,null],[1,\"\\n      \"],[10,\"h2\"],[14,1,\"examples-with-interactive-preview\"],[14,\"data-scopedcss-1f2e0dba4a-a64017c164\",\"\"],[12],[1,\"Field Usage Examples\"],[13],[1,\"\\n    \"],[13],[1,\"\\n  \"],[13],[1,\"\\n  \"],[10,0],[14,0,\"examples-with-interactive-grid\"],[14,\"data-scopedcss-1f2e0dba4a-a64017c164\",\"\"],[12],[1,\"\\n    \"],[18,1,null],[1,\"\\n  \"],[13],[1,\"\\n\"],[13],[1,\"\\n\"]],[\"&default\"],[\"yield\"]]",
-      "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/spec.gts",
+      "moduleName": "packages/runtime-common/spec.gts",
       "scope": () => [LayoutList],
       "isStrictMode": true
     }), this);
@@ -605,7 +605,7 @@ export class SpecModuleSection extends GlimmerComponent {
     {
       "id": "PNsea1cT",
       "block": "[[[10,\"section\"],[14,0,\"module section\"],[14,\"data-scopedcss-1f2e0dba4a-a09b32d675\",\"\"],[12],[1,\"\\n  \"],[10,\"header\"],[14,0,\"row-header\"],[14,\"aria-labelledby\",\"module\"],[14,\"data-scopedcss-1f2e0dba4a-a09b32d675\",\"\"],[12],[1,\"\\n    \"],[10,0],[14,0,\"row-header-left\"],[14,\"data-scopedcss-1f2e0dba4a-a09b32d675\",\"\"],[12],[1,\"\\n      \"],[8,[32,0],[[24,\"width\",\"20\"],[24,\"height\",\"20\"],[24,\"role\",\"presentation\"],[24,\"data-scopedcss-1f2e0dba4a-a09b32d675\",\"\"]],null,null],[1,\"\\n      \"],[10,\"h2\"],[14,1,\"module\"],[14,\"data-scopedcss-1f2e0dba4a-a09b32d675\",\"\"],[12],[1,\"Module\"],[13],[1,\"\\n    \"],[13],[1,\"\\n  \"],[13],[1,\"\\n  \"],[10,0],[14,0,\"code-ref-container\"],[14,\"data-scopedcss-1f2e0dba4a-a09b32d675\",\"\"],[12],[1,\"\\n    \"],[8,[32,1],[[24,\"data-scopedcss-1f2e0dba4a-a09b32d675\",\"\"]],[[\"@label\",\"@vertical\",\"@labelFontSize\"],[\"URL\",true,\"small\"]],[[\"default\"],[[[[1,\"\\n      \"],[10,0],[14,0,\"code-ref-row\"],[14,\"data-scopedcss-1f2e0dba4a-a09b32d675\",\"\"],[12],[1,\"\\n        \"],[8,[32,2],[[24,0,\"realm-icon\"],[24,\"data-scopedcss-1f2e0dba4a-a09b32d675\",\"\"]],[[\"@realmInfo\"],[[30,0,[\"realmInfo\"]]]],null],[1,\"\\n        \"],[10,1],[14,0,\"code-ref-value\"],[14,\"data-test-module-href\",\"\"],[14,\"data-scopedcss-1f2e0dba4a-a09b32d675\",\"\"],[12],[1,\"\\n          \"],[1,[30,0,[\"moduleHref\"]]],[1,\"\\n        \"],[13],[1,\"\\n      \"],[13],[1,\"\\n    \"]],[]]]]],[1,\"\\n    \"],[8,[32,1],[[24,\"data-scopedcss-1f2e0dba4a-a09b32d675\",\"\"]],[[\"@label\",\"@vertical\",\"@labelFontSize\"],[\"Module Name\",true,\"small\"]],[[\"default\"],[[[[1,\"\\n      \"],[10,0],[14,0,\"code-ref-row\"],[14,\"data-scopedcss-1f2e0dba4a-a09b32d675\",\"\"],[12],[1,\"\\n        \"],[8,[32,3],[[24,0,\"exported-arrow\"],[24,\"width\",\"10\"],[24,\"height\",\"10\"],[24,\"data-scopedcss-1f2e0dba4a-a09b32d675\",\"\"]],null,null],[1,\"\\n        \"],[10,0],[14,0,\"code-ref-value\"],[14,\"data-test-exported-name\",\"\"],[14,\"data-scopedcss-1f2e0dba4a-a09b32d675\",\"\"],[12],[1,\"\\n          \"],[1,[30,0,[\"refName\"]]],[1,\"\\n        \"],[13],[1,\"\\n        \"],[10,0],[14,0,\"exported-type\"],[14,\"data-test-exported-type\",\"\"],[14,\"data-scopedcss-1f2e0dba4a-a09b32d675\",\"\"],[12],[1,\"\\n          \"],[1,[30,0,[\"specType\"]]],[1,\"\\n        \"],[13],[1,\"\\n      \"],[13],[1,\"\\n    \"]],[]]]]],[1,\"\\n  \"],[13],[1,\"\\n\"],[13],[1,\"\\n\"]],[],[]]",
-      "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/spec.gts",
+      "moduleName": "packages/runtime-common/spec.gts",
       "scope": () => [GitBranch, FieldContainer, RealmIcon, ExportArrow],
       "isStrictMode": true
     }), this);
@@ -663,7 +663,7 @@ class Isolated extends Component {
     {
       "id": "asOQWfFq",
       "block": "[[[10,\"article\"],[14,0,\"container\"],[14,\"data-scopedcss-1f2e0dba4a-1b82ba6681\",\"\"],[12],[1,\"\\n  \"],[8,[32,0],[[24,\"data-scopedcss-1f2e0dba4a-1b82ba6681\",\"\"]],[[\"@model\"],[[30,1]]],[[\"title\",\"description\"],[[[[8,[30,2,[\"cardTitle\"]],[[24,\"data-scopedcss-1f2e0dba4a-1b82ba6681\",\"\"]],null,null]],[]],[[[8,[30,2,[\"cardDescription\"]],[[24,\"data-scopedcss-1f2e0dba4a-1b82ba6681\",\"\"]],null,null]],[]]]]],[1,\"\\n\\n  \"],[8,[32,1],[[24,\"data-scopedcss-1f2e0dba4a-1b82ba6681\",\"\"]],[[\"@model\",\"@context\"],[[30,1],[30,3]]],[[\"default\"],[[[[1,\"\\n    \"],[8,[30,2,[\"readMe\"]],[[24,\"data-scopedcss-1f2e0dba4a-1b82ba6681\",\"\"]],null,null],[1,\"\\n  \"]],[]]]]],[1,\"\\n\\n  \"],[8,[32,2],[[24,\"data-scopedcss-1f2e0dba4a-1b82ba6681\",\"\"]],[[\"@model\"],[[30,1]]],[[\"linkedExamples\",\"containedExamples\"],[[[[1,\"\\n      \"],[8,[30,2,[\"linkedExamples\"]],[[24,\"data-scopedcss-1f2e0dba4a-1b82ba6681\",\"\"]],null,null],[1,\"\\n    \"]],[]],[[[1,\"\\n      \"],[8,[30,2,[\"containedExamples\"]],[[24,\"data-scopedcss-1f2e0dba4a-1b82ba6681\",\"\"]],null,null],[1,\"\\n    \"]],[]]]]],[1,\"\\n\\n  \"],[8,[32,3],[[24,\"data-scopedcss-1f2e0dba4a-1b82ba6681\",\"\"]],[[\"@model\"],[[30,1]]],null],[1,\"\\n\"],[13],[1,\"\\n\"]],[\"@model\",\"@fields\",\"@context\"],[]]",
-      "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/spec.gts",
+      "moduleName": "packages/runtime-common/spec.gts",
       "scope": () => [SpecHeader, SpecReadmeSection, SpecExamplesSection, SpecModuleSection],
       "isStrictMode": true
     }), this);
@@ -735,7 +735,7 @@ class Fitted extends Component {
     {
       "id": "iO7PGiex",
       "block": "[[[8,[32,0],[[24,0,\"spec-fitted\"],[24,\"data-scopedcss-1f2e0dba4a-c6aebd78bb\",\"\"]],[[\"@primary\",\"@secondary\"],[[30,1,[\"cardTitle\"]],[30,1,[\"cardDescription\"]]]],[[\"thumbnail\",\"default\"],[[[[1,\"\\n\"],[41,[30,0,[\"icon\"]],[[[1,\"      \"],[8,[30,0,[\"icon\"]],[[24,\"width\",\"35\"],[24,\"height\",\"35\"],[24,\"role\",\"presentation\"],[24,\"data-scopedcss-1f2e0dba4a-c6aebd78bb\",\"\"]],null,null],[1,\"\\n\"]],[]],[[[41,[30,0,[\"defaultIcon\"]],[[[1,\"      \"],[8,[30,0,[\"defaultIcon\"]],[[24,\"width\",\"35\"],[24,\"height\",\"35\"],[24,\"role\",\"presentation\"],[24,\"data-scopedcss-1f2e0dba4a-c6aebd78bb\",\"\"]],null,null],[1,\"\\n    \"]],[]],null]],[]]],[1,\"  \"]],[]],[[[1,\"\\n\"],[41,[30,1,[\"specType\"]],[[[1,\"      \"],[8,[32,1],[[24,\"data-scopedcss-1f2e0dba4a-c6aebd78bb\",\"\"]],[[\"@specType\"],[[30,1,[\"specType\"]]]],null],[1,\"\\n\"]],[]],null],[1,\"  \"]],[]]]]],[1,\"\\n\"]],[\"@model\"],[\"if\"]]",
-      "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/spec.gts",
+      "moduleName": "packages/runtime-common/spec.gts",
       "scope": () => [BasicFitted, SpecTag],
       "isStrictMode": true
     }), this);
@@ -800,7 +800,7 @@ class Edit extends Component {
     {
       "id": "0MSLHd3N",
       "block": "[[[10,\"article\"],[14,0,\"container\"],[14,\"data-scopedcss-1f2e0dba4a-8d3e623300\",\"\"],[12],[1,\"\\n  \"],[8,[32,0],[[24,\"data-scopedcss-1f2e0dba4a-8d3e623300\",\"\"]],[[\"@model\",\"@isEditMode\"],[[30,1],true]],[[\"title\",\"description\"],[[[[8,[30,2,[\"cardTitle\"]],[[24,\"data-scopedcss-1f2e0dba4a-8d3e623300\",\"\"]],null,null]],[]],[[[8,[30,2,[\"cardDescription\"]],[[24,\"data-scopedcss-1f2e0dba4a-8d3e623300\",\"\"]],null,null]],[]]]]],[1,\"\\n\\n  \"],[8,[32,1],[[24,\"data-scopedcss-1f2e0dba4a-8d3e623300\",\"\"]],[[\"@model\",\"@context\",\"@isEditMode\"],[[30,1],[30,3],[30,4]]],[[\"default\"],[[[[1,\"\\n    \"],[8,[30,2,[\"readMe\"]],[[24,\"data-scopedcss-1f2e0dba4a-8d3e623300\",\"\"]],null,null],[1,\"\\n  \"]],[]]]]],[1,\"\\n\\n  \"],[8,[32,2],[[24,\"data-scopedcss-1f2e0dba4a-8d3e623300\",\"\"]],[[\"@model\"],[[30,1]]],[[\"linkedExamples\",\"containedExamples\"],[[[[1,\"\\n      \"],[8,[30,2,[\"linkedExamples\"]],[[24,\"data-scopedcss-1f2e0dba4a-8d3e623300\",\"\"]],[[\"@typeConstraint\"],[[30,0,[\"absoluteRef\"]]]],null],[1,\"\\n    \"]],[]],[[[1,\"\\n      \"],[8,[30,2,[\"containedExamples\"]],[[24,\"data-scopedcss-1f2e0dba4a-8d3e623300\",\"\"]],[[\"@typeConstraint\"],[[30,0,[\"absoluteRef\"]]]],null],[1,\"\\n    \"]],[]]]]],[1,\"\\n\\n  \"],[8,[32,3],[[24,\"data-scopedcss-1f2e0dba4a-8d3e623300\",\"\"]],[[\"@model\"],[[30,1]]],null],[1,\"\\n\"],[13],[1,\"\\n\"]],[\"@model\",\"@fields\",\"@context\",\"@canEdit\"],[]]",
-      "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/spec.gts",
+      "moduleName": "packages/runtime-common/spec.gts",
       "scope": () => [SpecHeader, SpecReadmeSection, SpecExamplesSection, SpecModuleSection],
       "isStrictMode": true
     }), this);
@@ -842,7 +842,7 @@ class SpecTitleField extends StringField {
       {
         "id": "ponVqECi",
         "block": "[[[8,[32,0],[[24,0,\"spec-title-input\"],[24,\"data-scopedcss-1f2e0dba4a-1dc8149c79\",\"\"]],[[\"@id\",\"@value\",\"@onInput\",\"@placeholder\",\"@disabled\"],[\"spec-title\",[30,1],[30,2],[30,0,[\"placeholder\"]],[28,[32,1],[[30,3]],null]]],null],[1,\"\\n\"]],[\"@model\",\"@set\",\"@canEdit\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/spec.gts",
+        "moduleName": "packages/runtime-common/spec.gts",
         "scope": () => [BoxelInput, not],
         "isStrictMode": true
       }), this);
@@ -882,7 +882,7 @@ class SpecDescriptionField extends StringField {
       {
         "id": "6JSlAIhq",
         "block": "[[[8,[32,0],[[24,0,\"spec-description-input\"],[24,\"data-scopedcss-1f2e0dba4a-79edf30d05\",\"\"]],[[\"@id\",\"@value\",\"@onInput\",\"@placeholder\",\"@disabled\"],[\"spec-description\",[30,1],[30,2],[30,0,[\"placeholder\"]],[28,[32,1],[[30,3]],null]]],null],[1,\"\\n\"]],[\"@model\",\"@set\",\"@canEdit\"],[]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/spec.gts",
+        "moduleName": "packages/runtime-common/spec.gts",
         "scope": () => [BoxelInput, not],
         "isStrictMode": true
       }), this);
@@ -1069,7 +1069,7 @@ export class Spec extends CardDef {
       {
         "id": "p+CCyBs9",
         "block": "[[[10,\"article\"],[14,0,\"embedded-spec\"],[14,\"data-scopedcss-1f2e0dba4a-9e458290ef\",\"\"],[12],[1,\"\\n  \"],[10,0],[14,0,\"header-icon-container\"],[14,\"data-scopedcss-1f2e0dba4a-9e458290ef\",\"\"],[12],[1,\"\\n    \"],[8,[30,0,[\"icon\"]],[[24,\"width\",\"30\"],[24,\"height\",\"30\"],[24,\"role\",\"presentation\"],[24,\"data-scopedcss-1f2e0dba4a-9e458290ef\",\"\"]],null,null],[1,\"\\n  \"],[13],[1,\"\\n  \"],[10,0],[14,0,\"header-info-container\"],[14,\"data-scopedcss-1f2e0dba4a-9e458290ef\",\"\"],[12],[1,\"\\n    \"],[10,\"h3\"],[14,0,\"title\"],[14,\"data-scopedcss-1f2e0dba4a-9e458290ef\",\"\"],[12],[8,[30,1,[\"cardTitle\"]],[[24,\"data-scopedcss-1f2e0dba4a-9e458290ef\",\"\"]],null,null],[13],[1,\"\\n    \"],[10,2],[14,0,\"description\"],[14,\"data-scopedcss-1f2e0dba4a-9e458290ef\",\"\"],[12],[8,[30,1,[\"cardDescription\"]],[[24,\"data-scopedcss-1f2e0dba4a-9e458290ef\",\"\"]],null,null],[13],[1,\"\\n  \"],[13],[1,\"\\n\"],[41,[30,2,[\"specType\"]],[[[1,\"    \"],[8,[32,0],[[24,\"data-scopedcss-1f2e0dba4a-9e458290ef\",\"\"]],[[\"@specType\"],[[30,2,[\"specType\"]]]],null],[1,\"\\n\"]],[]],null],[13],[1,\"\\n\"]],[\"@fields\",\"@model\"],[\"if\"]]",
-        "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/spec.gts",
+        "moduleName": "packages/runtime-common/spec.gts",
         "scope": () => [SpecTag],
         "isStrictMode": true
       }), this);
@@ -1109,7 +1109,7 @@ export class SpecTag extends GlimmerComponent {
     {
       "id": "ifvv1Tbq",
       "block": "[[[41,[30,0,[\"icon\"]],[[[1,\"  \"],[8,[32,0],[[24,0,\"spec-tag-pill\"],[17,1],[24,\"data-scopedcss-1f2e0dba4a-6759789cd1\",\"\"]],[[\"@variant\"],[\"muted\"]],[[\"iconLeft\",\"default\"],[[[[1,\"\\n      \"],[8,[30,0,[\"icon\"]],[[24,\"width\",\"18px\"],[24,\"height\",\"18px\"],[24,\"data-scopedcss-1f2e0dba4a-6759789cd1\",\"\"]],null,null],[1,\"\\n    \"]],[]],[[[1,\"\\n      \"],[1,[30,2]],[1,\"\\n    \"]],[]]]]],[1,\"\\n\\n\"]],[]],null]],[\"&attrs\",\"@specType\"],[\"if\"]]",
-      "moduleName": "/home/hassan/codez/boxel/.claude/worktrees/cs-10983-amd-transpile-bench-ci/packages/runtime-common/spec.gts",
+      "moduleName": "packages/runtime-common/spec.gts",
       "scope": () => [Pill],
       "isStrictMode": true
     }), this);
