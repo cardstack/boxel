@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { getProfileManager, type ProfileManager } from '../lib/profile-manager';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { FG_RED, DIM, RESET } from '../lib/colors';
+import { cliLog } from '../lib/cli-log';
 
 export interface ReadTranspiledResult {
   ok: boolean;
@@ -102,9 +103,9 @@ export function registerReadTranspiledCommand(program: Command): void {
       }
 
       if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
+        cliLog.output(JSON.stringify(result, null, 2));
       } else if (result.ok) {
-        console.log(result.content ?? '');
+        cliLog.output(result.content ?? '');
       } else {
         console.error(
           `${DIM}Status:${RESET} ${result.status ?? '(no status)'}`,

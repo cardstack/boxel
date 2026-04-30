@@ -93,12 +93,30 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.deepEqual(
           realmJSON,
           {
-            name: 'Test Realm',
-            backgroundURL: 'http://example.com/background.jpg',
-            iconURL: 'http://example.com/icon.jpg',
             publishable: true,
           },
-          '.realm.json is correct',
+          'sidecar .realm.json holds only legacy fields after CS-10051',
+        );
+        let realmCard = readJSONSync(join(realmPath, 'realm.json'));
+        assert.deepEqual(
+          realmCard,
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                cardInfo: { name: 'Test Realm' },
+                iconURL: 'http://example.com/icon.jpg',
+                backgroundURL: 'http://example.com/background.jpg',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/realm-config',
+                  name: 'RealmConfig',
+                },
+              },
+            },
+          },
+          'realm.json card holds card-owned fields',
         );
         assert.ok(
           existsSync(join(realmPath, 'index.json')),

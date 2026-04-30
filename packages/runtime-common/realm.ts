@@ -98,6 +98,7 @@ import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
+import isPlainObject from 'lodash/isPlainObject';
 import { z } from 'zod';
 import { inferContentType } from './infer-content-type';
 import type { CardFields } from './resource-types';
@@ -201,6 +202,16 @@ export type RealmInfo = {
 };
 
 const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
+
+// Fields owned by the RealmConfig card instance at /realm.json. Anything not
+// in this set is still written to the legacy .realm.json sidecar until
+// CS-10053 / CS-10055 move the remaining flags off-file.
+const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
+  'name',
+  'backgroundURL',
+  'iconURL',
+  'hostRoutingRules',
+]);
 
 export interface FileRef {
   path: LocalPath;
@@ -1258,7 +1269,9 @@ export class Realm {
 
     if (addedFiles.length > 0 || updatedFiles.length > 0) {
       if (
-        [...addedFiles, ...updatedFiles].some((f) => f.endsWith('.realm.json'))
+        [...addedFiles, ...updatedFiles].some(
+          (f) => f === '.realm.json' || f === 'realm.json',
+        )
       ) {
         this.#cachedRealmInfo = null;
       }
@@ -4557,7 +4570,7 @@ export class Realm {
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath, undefined);
     let lastPublishedAt = await this.getLastPublishedAt();
-    let realmInfo = {
+    let realmInfo: RealmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,
       iconURL: null,
@@ -4572,9 +4585,6 @@ export class Realm {
       publishable: null,
       lastPublishedAt,
     };
-    if (!realmConfig) {
-      return realmInfo;
-    }
 
     if (realmConfig) {
       try {
@@ -4601,6 +4611,39 @@ export class Realm {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
     }
+
+    // Overlay from the RealmConfig card instance at /realm.json when it has
+    // been indexed. Uses instance() rather than cardDocument() to avoid
+    // recursing through attachRealmInfo → getRealmInfo → parseRealmInfo.
+    try {
+      let cardURL = new URL(
+        this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+      );
+      let indexEntry = await this.#realmIndexQueryEngine.instance(cardURL);
+      if (indexEntry?.type === 'instance') {
+        let attrs = (indexEntry.instance.attributes ?? {}) as Record<
+          string,
+          unknown
+        >;
+        let cardInfo = (attrs.cardInfo ?? {}) as Record<string, unknown>;
+        if (typeof cardInfo.name === 'string') {
+          realmInfo.name = cardInfo.name;
+        }
+        if ('backgroundURL' in attrs) {
+          realmInfo.backgroundURL =
+            typeof attrs.backgroundURL === 'string'
+              ? attrs.backgroundURL
+              : null;
+        }
+        if ('iconURL' in attrs) {
+          realmInfo.iconURL =
+            typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
+        }
+      }
+    } catch (e) {
+      this.#log.warn(`failed to read RealmConfig card from index: ${e}`);
+    }
+
     return realmInfo;
   }
 
@@ -4663,24 +4706,147 @@ export class Realm {
       });
     }
 
-    let fileURL = this.paths.fileURL(`.realm.json`);
-    let realmConfigPath: LocalPath = this.paths.local(fileURL);
-    let realmConfig: Record<string, unknown> = {};
-    let existingConfig = await this.readFileAsText(realmConfigPath, undefined);
-    if (existingConfig?.content) {
-      try {
-        realmConfig = JSON.parse(existingConfig.content);
-      } catch (e: any) {
-        return systemError({
-          requestContext,
-          message: `Unable to parse existing realm config: ${e.message}`,
-        });
+    let cardAttrs: Record<string, unknown> = {};
+    let sidecarAttrs: Record<string, unknown> = {};
+    for (let [key, value] of Object.entries(attributes)) {
+      if (REALM_CONFIG_CARD_PROPERTIES.has(key)) {
+        cardAttrs[key] = value;
+      } else {
+        sidecarAttrs[key] = value;
       }
     }
 
-    Object.assign(realmConfig, attributes);
-    let serializedConfig = JSON.stringify(realmConfig, null, 2) + '\n';
-    await this.write(realmConfigPath, serializedConfig);
+    // Read and merge BOTH files before writing either. A mixed PATCH like
+    // { name, publishable } touches both the card and the sidecar, and we
+    // don't want a malformed sidecar to surface 500 *after* the card has
+    // already been mutated.
+    let cardPath: LocalPath | undefined;
+    let cardDoc:
+      | {
+          data: {
+            type: string;
+            attributes?: Record<string, unknown>;
+            meta: { adoptsFrom: { module: string; name: string } };
+          };
+        }
+      | undefined;
+    if (Object.keys(cardAttrs).length > 0) {
+      cardPath = this.paths.local(this.paths.fileURL('realm.json'));
+      cardDoc = {
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      };
+      let existingCard = await this.readFileAsText(cardPath, undefined);
+      if (existingCard?.content) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(existingCard.content);
+        } catch (e: any) {
+          return systemError({
+            requestContext,
+            message: `Unable to parse existing realm config card: ${e.message}`,
+          });
+        }
+        if (!isPlainObject(parsed)) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config card is not a JSON object`,
+          });
+        }
+        cardDoc = parsed as typeof cardDoc;
+        cardDoc!.data = cardDoc!.data ?? ({} as any);
+        if (!isPlainObject(cardDoc!.data)) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config card data is not a JSON object`,
+          });
+        }
+        let adoptsFrom = (cardDoc!.data as any).meta?.adoptsFrom;
+        if (
+          !isPlainObject(adoptsFrom) ||
+          adoptsFrom.module !== 'https://cardstack.com/base/realm-config' ||
+          adoptsFrom.name !== 'RealmConfig'
+        ) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config card does not adopt from RealmConfig`,
+          });
+        }
+        let existingAttrs = cardDoc!.data.attributes;
+        if (existingAttrs != null && !isPlainObject(existingAttrs)) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config card attributes is not a JSON object`,
+          });
+        }
+        cardDoc!.data.attributes = existingAttrs ?? {};
+      }
+      // `name` is exposed on the public RealmInfo shape but stored on the
+      // RealmConfig card under cardInfo.name (the standard CardDef slot
+      // that drives cardTitle). Translate so PATCH /_config callers can
+      // keep sending { name: ... } unchanged.
+      for (let [key, value] of Object.entries(cardAttrs)) {
+        if (key === 'name') {
+          let existingCardInfo = (cardDoc!.data.attributes!.cardInfo ??
+            {}) as Record<string, unknown>;
+          cardDoc!.data.attributes!.cardInfo = {
+            ...existingCardInfo,
+            name: value,
+          };
+        } else {
+          cardDoc!.data.attributes![key] = value;
+        }
+      }
+    }
+
+    let realmConfigPath: LocalPath | undefined;
+    let realmConfig: Record<string, unknown> | undefined;
+    if (Object.keys(sidecarAttrs).length > 0) {
+      realmConfigPath = this.paths.local(this.paths.fileURL('.realm.json'));
+      realmConfig = {};
+      let existingConfig = await this.readFileAsText(
+        realmConfigPath,
+        undefined,
+      );
+      if (existingConfig?.content) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(existingConfig.content);
+        } catch (e: any) {
+          return systemError({
+            requestContext,
+            message: `Unable to parse existing realm config: ${e.message}`,
+          });
+        }
+        if (!isPlainObject(parsed)) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config is not a JSON object`,
+          });
+        }
+        realmConfig = parsed as Record<string, unknown>;
+      }
+      Object.assign(realmConfig!, sidecarAttrs);
+    }
+
+    if (cardPath !== undefined && cardDoc !== undefined) {
+      await this.write(cardPath, JSON.stringify(cardDoc, null, 2) + '\n');
+    }
+    if (realmConfigPath !== undefined && realmConfig !== undefined) {
+      await this.write(
+        realmConfigPath,
+        JSON.stringify(realmConfig, null, 2) + '\n',
+      );
+    }
+
     this.#cachedRealmInfo = null;
 
     let realmInfo = await this.parseRealmInfo();

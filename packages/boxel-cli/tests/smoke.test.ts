@@ -21,6 +21,86 @@ describe('boxel-cli', () => {
     });
     expect(output.trim()).toMatch(/^\d+\.\d+\.\d+$/);
   });
+
+  it('exposes a global --quiet flag in --help', () => {
+    const output = execFileSync(process.execPath, [cliEntry, '--help'], {
+      encoding: 'utf8',
+    });
+    expect(output).toMatch(/-q, --quiet/);
+  });
+
+  it('silences chatty console.log output in a real command path under --quiet', () => {
+    // End-to-end: run a command that, on success, emits a `console.log`
+    // line ("✓ Profile created: …" — see profile.ts). With `--quiet`
+    // that line must be silenced, and the command's side-effect (the
+    // profile.json file) must still happen. This proves the interceptor
+    // is wired through the full CLI startup path, not just the unit
+    // tests in cli-log.test.ts.
+    let tmpHome = fs.mkdtempSync(join(os.tmpdir(), 'boxel-cli-quiet-'));
+    try {
+      let stdout = execFileSync(
+        process.execPath,
+        [cliEntry, '--quiet', 'profile', 'add', '-u', '@alice:stack.cards'],
+        {
+          encoding: 'utf8',
+          env: {
+            // Strip BOXEL_* from inherited env so a developer's shell
+            // can't perturb the result.
+            ...Object.fromEntries(
+              Object.entries(process.env).filter(
+                ([k]) => !k.startsWith('BOXEL_'),
+              ),
+            ),
+            HOME: tmpHome,
+            BOXEL_PASSWORD: 'hunter2',
+          },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+
+      // The success message ("✓ Profile created: …") goes through
+      // console.log; under --quiet the interceptor must swallow it.
+      expect(stdout).toBe('');
+
+      // Side-effect must still have happened.
+      expect(fs.existsSync(join(tmpHome, '.boxel-cli', 'profiles.json'))).toBe(
+        true,
+      );
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  });
+
+  it('emits the same console.log output normally without --quiet', () => {
+    // Negative control for the test above: without --quiet, the same
+    // command emits the success line to stdout. Without this, the
+    // --quiet test could trivially pass against a build that printed
+    // nothing in either mode.
+    let tmpHome = fs.mkdtempSync(join(os.tmpdir(), 'boxel-cli-noisy-'));
+    try {
+      let stdout = execFileSync(
+        process.execPath,
+        [cliEntry, 'profile', 'add', '-u', '@alice:stack.cards'],
+        {
+          encoding: 'utf8',
+          env: {
+            ...Object.fromEntries(
+              Object.entries(process.env).filter(
+                ([k]) => !k.startsWith('BOXEL_'),
+              ),
+            ),
+            HOME: tmpHome,
+            BOXEL_PASSWORD: 'hunter2',
+          },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+
+      expect(stdout).toMatch(/Profile created/);
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('boxel profile add (non-interactive)', () => {
