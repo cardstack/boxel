@@ -6,6 +6,7 @@ import {
 } from '../lib/profile-manager';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { FG_RED, DIM, RESET } from '../lib/colors';
+import { cliLog } from '../lib/cli-log';
 
 export interface SearchResult {
   ok: boolean;
@@ -142,9 +143,9 @@ export function registerSearchCommand(program: Command): void {
       }
 
       if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
+        cliLog.output(JSON.stringify(result, null, 2));
       } else if (result.ok) {
-        console.log(JSON.stringify(result.data ?? [], null, 2));
+        cliLog.output(JSON.stringify(result.data ?? [], null, 2));
       } else {
         console.error(
           `${DIM}Status:${RESET} ${result.status ?? '(no status)'}`,

@@ -113,6 +113,21 @@ jobs:
     if: ${{ !cancelled() && (needs.deploy-host-preview-staging.result == 'success' || needs.deploy-host-preview-production.result == 'success') }}
     uses: ./.github/workflows/preview-comment.yml
     with:
-      pr-number: ${{ github.event.pull_request.number }}
       head-sha: ${{ github.event.pull_request.head.sha }}
+    secrets: inherit
+
+  post-pr-status:
+    name: Update PR status comment
+    needs:
+      - post-preview-comment
+    if: ${{ !cancelled() && needs.post-preview-comment.result == 'success' && needs.post-preview-comment.outputs.slots != '' }}
+    uses: ./.github/workflows/pr-status-comment.yml
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      actions: read
+    with:
+      head-sha: ${{ github.event.pull_request.head.sha }}
+      slots: ${{ needs.post-preview-comment.outputs.slots }}
     secrets: inherit

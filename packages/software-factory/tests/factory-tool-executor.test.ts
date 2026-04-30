@@ -7,6 +7,7 @@ import {
   ToolExecutor,
   ToolNotFoundError,
   ToolSafetyError,
+  composeBoxelCliInvocation,
   type ToolExecutionLogEntry,
   type ToolExecutorConfig,
 } from '../src/factory-tool-executor';
@@ -433,6 +434,29 @@ module('factory-tool-executor > ToolResult shape', function () {
 // (BoxelCLIClient/ProfileManager own the fetch pipeline), so the executor no
 // longer wraps calls in an AbortController. The spawn-based timeout for
 // script and boxel-cli tools is covered elsewhere.
+
+// ---------------------------------------------------------------------------
+// composeBoxelCliInvocation
+// ---------------------------------------------------------------------------
+
+module('factory-tool-executor > composeBoxelCliInvocation', function () {
+  test('prepends --quiet by default', function (assert) {
+    let args = composeBoxelCliInvocation(['sync', '.', '--prefer-local']);
+    assert.deepEqual(args, ['boxel', '--quiet', 'sync', '.', '--prefer-local']);
+  });
+
+  test('omits --quiet when debug is true', function (assert) {
+    let args = composeBoxelCliInvocation(['sync', '.', '--prefer-local'], {
+      debug: true,
+    });
+    assert.deepEqual(args, ['boxel', 'sync', '.', '--prefer-local']);
+  });
+
+  test('treats debug:false the same as omitted', function (assert) {
+    let args = composeBoxelCliInvocation(['status', '.'], { debug: false });
+    assert.deepEqual(args, ['boxel', '--quiet', 'status', '.']);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -546,13 +546,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
     if (this.card) {
       request?.fulfill(this.card.id);
     }
-    this.operatorModeStateService.replaceItemInStack(
-      item,
-      item.clone({
-        request,
-        format: 'isolated',
-      }),
-    );
+    // Mutate format in place — keeps the StackItem instance, so the
+    // CardRenderer subtree stays mounted (no remount, no scroll loss,
+    // no width snap from prefersWideFormat re-evaluation) for CardDefs
+    // that share a template between isolated + edit formats.
+    this.operatorModeStateService.setItemFormat(item, 'isolated', { request });
   };
 
   private scrollIntoViewTask = restartableTask(async (selector: string) => {

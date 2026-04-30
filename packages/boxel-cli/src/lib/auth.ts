@@ -127,31 +127,40 @@ export async function getRealmTokens(
   return (await response.json()) as RealmTokens;
 }
 
+function userRealmsAccountDataUrl(matrixAuth: MatrixAuth): string {
+  return new URL(
+    `_matrix/client/v3/user/${encodeURIComponent(matrixAuth.userId)}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
+    matrixAuth.matrixUrl,
+  ).href;
+}
+
+export async function getUserRealmsFromMatrixAccountData(
+  matrixAuth: MatrixAuth,
+): Promise<string[]> {
+  try {
+    let response = await fetch(userRealmsAccountDataUrl(matrixAuth), {
+      headers: { Authorization: `Bearer ${matrixAuth.accessToken}` },
+    });
+    if (!response.ok) {
+      return [];
+    }
+    let data = (await response.json()) as { realms?: string[] };
+    return Array.isArray(data.realms) ? [...data.realms] : [];
+  } catch {
+    // Best-effort — treat unreachable account data as an empty list
+    return [];
+  }
+}
+
 export async function addRealmToMatrixAccountData(
   matrixAuth: MatrixAuth,
   realmUrl: string,
 ): Promise<void> {
-  let accountDataUrl = new URL(
-    `_matrix/client/v3/user/${encodeURIComponent(matrixAuth.userId)}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
-    matrixAuth.matrixUrl,
-  ).href;
-
-  let existingRealms: string[] = [];
-  try {
-    let getResponse = await fetch(accountDataUrl, {
-      headers: { Authorization: `Bearer ${matrixAuth.accessToken}` },
-    });
-    if (getResponse.ok) {
-      let data = (await getResponse.json()) as { realms?: string[] };
-      existingRealms = Array.isArray(data.realms) ? [...data.realms] : [];
-    }
-  } catch {
-    // Best-effort — if we can't read existing realms, start fresh
-  }
+  let existingRealms = await getUserRealmsFromMatrixAccountData(matrixAuth);
 
   if (!existingRealms.includes(realmUrl)) {
     existingRealms.push(realmUrl);
-    let putResponse = await fetch(accountDataUrl, {
+    let putResponse = await fetch(userRealmsAccountDataUrl(matrixAuth), {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',

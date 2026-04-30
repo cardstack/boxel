@@ -1,0 +1,32 @@
+# Prometheus data source pointing at the synapse AMP workspace. Auth uses
+# SigV4 with the ECS task role (`ec2_iam_role`); the role is the Grafana
+# ECS task's role in cardstack/infra:configs/grafana/, which already grants
+# AMP query actions (configured in CS-10907).
+#
+# The workspace endpoint differs per env — substituted at apply time:
+#
+#   ${SYNAPSE_PROMETHEUS_URL}  ← /<env>/boxel-grafana/prometheus_url
+#
+# Migrated from the AMG-era JSON manifest in CS-10978. Replaces the
+# `grafana_data_source.prometheus` resource in
+# cardstack/infra:configs/boxel-dashboard/.
+
+apiVersion: 1
+
+datasources:
+  - name: synapse-prometheus
+    uid: bes7ustjf8w74b
+    type: prometheus
+    access: proxy
+    url: ${SYNAPSE_PROMETHEUS_URL}
+    isDefault: false
+    editable: false
+    jsonData:
+      httpMethod: POST
+      sigV4Auth: true
+      # `default` so SigV4 uses the AWS SDK default credential chain (ECS
+      # task role here). AMG's `ec2_iam_role` is a legacy alias newer
+      # Grafana rejects with a 403.
+      sigV4AuthType: default
+      sigV4Region: us-east-1
+      sigV4Service: aps

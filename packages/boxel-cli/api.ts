@@ -23,3 +23,5 @@ export {
   resetProfileManager,
   setProfileManager,
 } from './src/lib/profile-manager';
+
+export { setQuiet, isQuiet } from './src/lib/cli-log';

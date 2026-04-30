@@ -36,6 +36,167 @@ export interface SerializedError {
   diagnostics?: Record<string, unknown>;
 }
 
+// Postgres `jsonb` containers store child offsets in 28 bits, so a
+// single jsonb array's elements must total < 256 MiB — a format-level
+// constraint baked into jsonb, not a column setting we can raise.
+// `clampSerializedError` is the chokepoint that guarantees an
+// error_doc never reaches that ceiling on the upsert path.
+//
+// In normal operation it is a pure pass-through: if the doc already
+// serializes under `ERROR_DOC_MAX_BYTES` we hand the input back
+// unchanged. Only when over budget do we progressively shed
+// structure, in this order, stopping as soon as we fit:
+//
+//   1. truncate each `additionalErrors[i].stack` to ~64 KiB
+//   2. truncate the top-level `stack` to ~64 KiB
+//   3. truncate each `additionalErrors[i].message` to ~16 KiB
+//   4. collapse nested `additionalErrors` of inherited entries
+//      (drop only the second level of nesting)
+//   5. cap the array length to MAX_ADDITIONAL_ERRORS, with a
+//      sentinel entry recording how many were omitted
+//   6. drop `additionalErrors` entirely with a sentinel — last
+//      resort, only reached if even one entry's scalars overflow
+//   7. aggressively shrink the top-level `stack`/`message` if even
+//      the bare envelope is still too big
+//
+// The budget is set to 8 MiB: 32× under the jsonb limit, plenty of
+// debug headroom for healthy errors, and small enough to leave room
+// for the rest of the row (`pristine_doc` / `search_doc` etc.).
+export const ERROR_DOC_MAX_BYTES = 8 * 1024 * 1024;
+export const ERROR_DOC_MAX_ADDITIONAL_ERRORS = 200;
+const ENTRY_STACK_BUDGET = 64 * 1024;
+const ENTRY_MESSAGE_BUDGET = 16 * 1024;
+
+function clampString(s: string, maxBytes: number): string {
+  // Per-character clamp — UTF-16 code units are a close-enough proxy
+  // for byte budgeting at this scale. The goal is "stay under 256 MB
+  // of jsonb", not byte-exact.
+  if (s.length <= maxBytes) return s;
+  let suffix = ' …[truncated]';
+  return s.slice(0, Math.max(0, maxBytes - suffix.length)) + suffix;
+}
+
+function jsonByteSize(value: unknown): number {
+  try {
+    return JSON.stringify(value)?.length ?? 0;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+export function clampSerializedError(error: SerializedError): SerializedError {
+  if (jsonByteSize(error) <= ERROR_DOC_MAX_BYTES) {
+    return error;
+  }
+
+  // Deep-copy so the input remains untouched. JSON round-trip is
+  // safe here because SerializedError is already a JSON-shape value
+  // (it is what we persist into a jsonb column).
+  let working: SerializedError = JSON.parse(JSON.stringify(error));
+
+  let entries = (): any[] | null =>
+    Array.isArray(working.additionalErrors) ? working.additionalErrors : null;
+
+  // Capture once up front so the omitted-sentinel messages emitted by
+  // steps 5 and 6 can report the *original* count even after step 5
+  // has already replaced the array with a (preserved + sentinel)
+  // shorter form.
+  let originalAdditionalCount = entries()?.length ?? 0;
+
+  // 1. Per-entry stacks.
+  let arr = entries();
+  if (arr) {
+    for (let entry of arr) {
+      if (typeof entry?.stack === 'string') {
+        entry.stack = clampString(entry.stack, ENTRY_STACK_BUDGET);
+      }
+    }
+  }
+  if (jsonByteSize(working) <= ERROR_DOC_MAX_BYTES) return working;
+
+  // 2. Top-level stack.
+  if (typeof working.stack === 'string') {
+    working.stack = clampString(working.stack, ENTRY_STACK_BUDGET);
+  }
+  if (jsonByteSize(working) <= ERROR_DOC_MAX_BYTES) return working;
+
+  // 3. Per-entry messages.
+  arr = entries();
+  if (arr) {
+    for (let entry of arr) {
+      if (typeof entry?.message === 'string') {
+        entry.message = clampString(entry.message, ENTRY_MESSAGE_BUDGET);
+      }
+    }
+  }
+  if (jsonByteSize(working) <= ERROR_DOC_MAX_BYTES) return working;
+
+  // 4. Collapse nested additionalErrors on inherited entries — only
+  //    the second level of nesting is dropped, not the parent's
+  //    flat list of contributors.
+  arr = entries();
+  if (arr) {
+    for (let entry of arr) {
+      if (
+        Array.isArray(entry?.additionalErrors) &&
+        entry.additionalErrors.length > 0
+      ) {
+        entry.additionalErrors = null;
+      }
+    }
+  }
+  if (jsonByteSize(working) <= ERROR_DOC_MAX_BYTES) return working;
+
+  // 5. Cap entry count. The final array length is exactly
+  //    ERROR_DOC_MAX_ADDITIONAL_ERRORS — `MAX - 1` real entries plus
+  //    one sentinel summarising the rest — so the constant name and
+  //    the resulting array length agree.
+  arr = entries();
+  if (arr && arr.length > ERROR_DOC_MAX_ADDITIONAL_ERRORS) {
+    let preservedCount = Math.max(ERROR_DOC_MAX_ADDITIONAL_ERRORS - 1, 0);
+    working.additionalErrors =
+      preservedCount > 0
+        ? [
+            ...arr.slice(0, preservedCount),
+            omittedSentinel(originalAdditionalCount - preservedCount),
+          ]
+        : [omittedSentinel(originalAdditionalCount - preservedCount)];
+  }
+  if (jsonByteSize(working) <= ERROR_DOC_MAX_BYTES) return working;
+
+  // 6. Drop additionalErrors entirely. The sentinel reports the
+  //    original count regardless of how many entries step 5 left
+  //    behind.
+  working.additionalErrors =
+    originalAdditionalCount > 0
+      ? [omittedSentinel(originalAdditionalCount)]
+      : null;
+  if (jsonByteSize(working) <= ERROR_DOC_MAX_BYTES) return working;
+
+  // 7. Aggressively shrink the envelope itself.
+  if (typeof working.stack === 'string') {
+    working.stack = clampString(working.stack, 1024);
+  }
+  working.message = clampString(working.message ?? '', 1024);
+  return working;
+}
+
+function omittedSentinel(count: number): {
+  status: number;
+  title: string;
+  message: string;
+  additionalErrors: null;
+} {
+  return {
+    status: 500,
+    title: 'Errors omitted',
+    message: `${count} additional error${
+      count === 1 ? '' : 's'
+    } omitted to satisfy error_doc size budget`,
+    additionalErrors: null,
+  };
+}
+
 export interface CardErrorJSONAPI {
   id?: string; // 404 errors won't necessarily have an id
   status: number;

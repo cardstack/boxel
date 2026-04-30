@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Mint a realm-scoped boxel-session JWT (the indexer's auth shape) and write to /tmp/claude-prerender.json for Claude to drive a live browser render"
+#MISE dir="packages/realm-server"
+
+exec ts-node --transpileOnly ./scripts/claude-prerender-token.ts "$@"

@@ -54,9 +54,10 @@ jobs:
 
     env:
       AWS_REGION: us-east-1
-      # Dedicated, narrowly-scoped role created in cardstack/infra#666
-      # (configs/boxel-observability-apply/production). Has exactly one
-      # permission: ssm:GetParameter on /production/grafana/grafanactl_token.
+      # Dedicated, narrowly-scoped role at configs/boxel-observability-apply/production
+      # in cardstack/infra. Permissions are ssm:GetParameter on:
+      #   /production/grafana/grafanactl_token  (added in cardstack/infra#666)
+      #   /production/loki/internal_url         (added in cardstack/infra#674, CS-10968)
       AWS_ROLE_ARN: arn:aws:iam::120317779495:role/boxel-observability-apply
       # Server URL is NOT set here — single source of truth is
       # packages/observability/grafanactl/config.yaml (see staging workflow
@@ -122,15 +123,32 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Source GRAFANA_TOKEN from SSM
+      - name: Source data-source secrets from SSM
+        # Each provisioning/datasources/*.yaml has placeholders that get
+        # substituted by apply-datasources.sh at push time. The IAM grants
+        # for these specific SSM paths live in cardstack/infra at
+        # configs/boxel-observability-apply/ — adding a new env var here
+        # without the matching grant gets a hard AccessDenied.
         run: |
-          GRAFANA_TOKEN="$(aws ssm get-parameter \
-            --name /production/grafana/grafanactl_token \
-            --with-decryption \
-            --query 'Parameter.Value' \
-            --output text)"
-          echo "::add-mask::$GRAFANA_TOKEN"
-          echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
+          fetch() {  # name path [--with-decryption]
+            local var="$1" path="$2"
+            shift 2
+            local val
+            val="$(aws ssm get-parameter --name "$path" "$@" \
+              --query 'Parameter.Value' --output text)"
+            if [[ " $* " == *" --with-decryption "* ]]; then
+              echo "::add-mask::$val"
+            fi
+            echo "${var}=${val}" >> "$GITHUB_ENV"
+          }
+
+          fetch GRAFANA_TOKEN          /production/grafana/grafanactl_token   --with-decryption
+          fetch LOKI_URL               /production/loki/internal_url
+          fetch BOXEL_DB_HOST          /production/boxel-grafana/db_host
+          fetch SYNAPSE_PROMETHEUS_URL /production/boxel-grafana/prometheus_url
+          fetch BOXEL_DB_NAME          /production/boxel/PGDATABASE
+          fetch BOXEL_DB_USER          /production/boxel/GRAFANA_DB_USER
+          fetch BOXEL_DB_PASSWORD      /production/boxel/GRAFANA_DB_PASSWORD  --with-decryption
 
       - name: Apply
         working-directory: packages/observability

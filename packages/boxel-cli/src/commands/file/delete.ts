@@ -8,6 +8,7 @@ import { isProtectedFile } from '../../lib/realm-sync-base';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { FG_RED, DIM, RESET } from '../../lib/colors';
+import { cliLog } from '../../lib/cli-log';
 
 export interface DeleteResult {
   ok: boolean;
@@ -95,7 +96,7 @@ export function registerDeleteCommand(parent: Command): void {
       }
 
       if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
+        cliLog.output(JSON.stringify(result, null, 2));
       } else if (result.ok) {
         console.log(`${DIM}Deleted:${RESET} ${filePath}`);
       } else {

@@ -183,7 +183,7 @@ export function createRemotePrerenderer(
   }
 
   return {
-    async prerenderModule({ realm, url, auth, renderOptions }) {
+    async prerenderModule({ realm, url, auth, renderOptions, priority }) {
       return await requestWithRetry<ModuleRenderResponse>(
         'prerender-module',
         'prerender-module-request',
@@ -194,6 +194,7 @@ export function createRemotePrerenderer(
           url,
           auth,
           renderOptions: renderOptions ?? {},
+          ...(priority !== undefined ? { priority } : {}),
         },
       );
     },
@@ -205,6 +206,7 @@ export function createRemotePrerenderer(
       fileData,
       types,
       batchId,
+      priority,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> {
       return await requestWithRetry<RenderVisitResponse>(
         'prerender-visit',
@@ -219,10 +221,11 @@ export function createRemotePrerenderer(
           ...(fileData ? { fileData } : {}),
           ...(types ? { types } : {}),
           ...(batchId ? { batchId } : {}),
+          ...(priority !== undefined ? { priority } : {}),
         },
       );
     },
-    async runCommand({ userId, auth, command, commandInput }) {
+    async runCommand({ userId, auth, command, commandInput, priority }) {
       return await requestWithRetry<RunCommandResponse>(
         'run-command',
         'run-command-request',
@@ -232,6 +235,7 @@ export function createRemotePrerenderer(
           auth,
           command,
           commandInput,
+          ...(priority !== undefined ? { priority } : {}),
         },
       );
     },

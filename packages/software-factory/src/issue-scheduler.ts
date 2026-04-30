@@ -362,17 +362,30 @@ export class RealmIssueStore implements IssueStore {
 // ---------------------------------------------------------------------------
 
 /**
- * Extract card IDs from a Boxel linksToMany relationship.
+ * Extract card IDs from a Boxel linksToMany relationship, resolved
+ * against the parent card's URL so the result matches `card.id` from
+ * the realm search index.
  *
  * Boxel encodes linksToMany with dotted keys:
  *   "blockedBy.0": { links: { self: "../Issues/abc" } }
  *   "blockedBy.1": { links: { self: "../Issues/def" } }
  *
- * The card ID is extracted from the last path segment of the link URL.
+ * The realm's search index returns each card's `id` as a full URL
+ * (`http://.../Issues/abc`). For the loop's blocker check
+ * (`getUnblockedIssues`) to find a blocker's status in the
+ * `issue.id → status` map, the IDs we put into `blockedBy` must use
+ * the same key space — i.e. also be full URLs. Resolving the
+ * relative `../Issues/abc` link against the parent card's URL gives
+ * us that.
+ *
+ * `parentCardId` is the full URL from `card.id` of the issue whose
+ * relationships we're parsing. Without a valid base we fall back to
+ * the link as-is.
  */
 function extractLinksToManyIds(
   relationships: Record<string, unknown> | undefined,
   fieldName: string,
+  parentCardId: string,
 ): string[] {
   if (!relationships) {
     return [];
@@ -386,16 +399,15 @@ function extractLinksToManyIds(
 
     let rel = value as { links?: { self?: string | null } } | undefined;
     let linkUrl = rel?.links?.self;
-    if (typeof linkUrl === 'string' && linkUrl.length > 0) {
-      // Extract card ID from URL — last path segment
-      // e.g. "../Issues/abc" → "Issues/abc", "https://realm/Issues/abc" → "Issues/abc"
-      let lastSlash = linkUrl.lastIndexOf('/');
-      let secondLastSlash = linkUrl.lastIndexOf('/', lastSlash - 1);
-      if (secondLastSlash >= 0) {
-        ids.push(linkUrl.slice(secondLastSlash + 1));
-      } else {
-        ids.push(linkUrl);
-      }
+    if (typeof linkUrl !== 'string' || linkUrl.length === 0) continue;
+
+    try {
+      ids.push(new URL(linkUrl, parentCardId).href);
+    } catch {
+      // Non-URL parent (e.g. tests using bare ids like "a") — fall
+      // back to the link verbatim. Tests in this case pass already-
+      // matching ids so the lookup still works.
+      ids.push(linkUrl);
     }
   }
 
@@ -413,13 +425,15 @@ function mapCardToSchedulableIssue(
   let attrs = (card.attributes ?? card) as Record<string, unknown>;
   let id = (card.id ?? attrs.id ?? '') as string;
 
-  // Extract blockedBy IDs from relationship links.
-  // Boxel uses dotted keys for linksToMany: "blockedBy.0", "blockedBy.1", etc.
-  // Each has { links: { self: "../Issues/some-id" } } where the last path
-  // segment is the card ID.
+  // Extract blockedBy IDs from relationship links, resolved against
+  // this card's id so the resulting URLs match what other cards'
+  // `card.id` looks like in the search results. Without resolution
+  // the keys would be relative ("Issues/foo") while `issue.id` is
+  // a full URL — getUnblockedIssues would never find the blocker.
   let blockedBy = extractLinksToManyIds(
     card.relationships as Record<string, unknown> | undefined,
     'blockedBy',
+    id,
   );
 
   return {

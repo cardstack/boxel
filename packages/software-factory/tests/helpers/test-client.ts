@@ -14,6 +14,7 @@ import {
   BoxelCLIClient,
   resetProfileManager,
   setProfileManager,
+  setQuiet,
 } from '@cardstack/boxel-cli/api';
 
 export interface TestClientOptions {
@@ -72,9 +73,17 @@ export function buildTestClient(options: TestClientOptions): {
   );
   setProfileManager(tempConfigDir);
 
+  // BoxelCLIClient.sync/pull/push delegate to the realm command code in
+  // process — same console.log lines a CLI invocation would emit. We're
+  // not parsing argv here, so the global `--quiet` flag never fires;
+  // turn quiet mode on explicitly so SF Playwright tests don't drown CI
+  // logs in "Starting sync …" / "Downloaded: …" / "Sync completed" noise.
+  setQuiet(true);
+
   let client = new BoxelCLIClient();
 
   let cleanup = () => {
+    setQuiet(false);
     resetProfileManager();
     rmSync(tempConfigDir, { recursive: true, force: true });
   };

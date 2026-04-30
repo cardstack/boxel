@@ -1,8 +1,14 @@
 import { module, test } from 'qunit';
 
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
 import type { SchedulableIssue } from '../src/factory-agent';
 
-import { IssueScheduler, type IssueStore } from '../src/issue-scheduler';
+import {
+  IssueScheduler,
+  RealmIssueStore,
+  type IssueStore,
+} from '../src/issue-scheduler';
 
 // ---------------------------------------------------------------------------
 // MockIssueStore
@@ -374,5 +380,91 @@ module('issue-scheduler > refreshIssueState', function () {
     // Now b should be unblocked
     let next = scheduler.pickNextIssue();
     assert.strictEqual(next?.id, 'b', 'b is now unblocked after a completed');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RealmIssueStore.listIssues — regression for blockedBy id resolution
+// ---------------------------------------------------------------------------
+
+module('issue-scheduler > RealmIssueStore blockedBy resolution', function () {
+  // Regression for the production bug observed in factory:go where a
+  // blocked issue ("kanban-board") was never picked even after its
+  // blocker ("kanban-card") had been marked `done`. The realm's
+  // search index returns each card's `id` as a full URL
+  // (`http://.../Issues/kanban-card`), but `blockedBy.X.links.self`
+  // is a relative path (`../Issues/kanban-card`). The mapping
+  // function used to reduce the relative link to its last two path
+  // segments (`Issues/kanban-card`), so the loop's `getUnblockedIssues`
+  // statusMap (keyed by full URL `issue.id`) never had a hit and
+  // every blocked issue stayed blocked forever. Fix resolves the
+  // relative link against the parent card's URL so the resulting key
+  // matches `issue.id`.
+  test('resolves relative blockedBy links against the parent card url', async function (assert) {
+    let realmUrl = 'http://localhost:4201/user/my-test-realm/';
+    let darkfactoryModuleUrl =
+      'http://localhost:4201/software-factory/darkfactory';
+    let kanbanCardId = `${realmUrl}Issues/kanban-card`;
+    let kanbanBoardId = `${realmUrl}Issues/kanban-board`;
+
+    let mockClient = {
+      async search() {
+        return {
+          ok: true,
+          data: [
+            {
+              id: kanbanCardId,
+              attributes: {
+                status: 'done',
+                priority: 'high',
+                order: 1,
+                summary: 'Implement Kanban Card card',
+                issueType: 'feature',
+              },
+              relationships: {},
+            },
+            {
+              id: kanbanBoardId,
+              attributes: {
+                status: 'backlog',
+                priority: 'medium',
+                order: 2,
+                summary: 'Implement Kanban Board card',
+                issueType: 'feature',
+              },
+              relationships: {
+                'blockedBy.0': {
+                  links: { self: '../Issues/kanban-card' },
+                },
+              },
+            },
+          ],
+        };
+      },
+    } as unknown as BoxelCLIClient;
+
+    let store = new RealmIssueStore({
+      realmUrl,
+      darkfactoryModuleUrl,
+      client: mockClient,
+      workspaceDir: '/tmp/scheduler-blockedby-resolution-fixture',
+    });
+
+    let scheduler = new IssueScheduler(store);
+    await scheduler.loadIssues();
+
+    // The mapping must produce a `blockedBy` entry whose key matches
+    // the blocker's `id` exactly. If it doesn't, `getUnblockedIssues`
+    // can't see that the blocker is `done` and `kanban-board` will
+    // be filtered out as still-blocked.
+    let picked = scheduler.pickNextIssue();
+    assert.strictEqual(
+      picked?.id,
+      kanbanBoardId,
+      'kanban-board should be picked once kanban-card is done — got: ' +
+        (picked === undefined
+          ? 'undefined (treated as still blocked)'
+          : (picked?.id ?? 'unknown')),
+    );
   });
 });

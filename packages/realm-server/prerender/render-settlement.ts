@@ -178,6 +178,11 @@ export function decorateRenderErrorsWithTimings(
   },
   totalMs: number,
   affinitySnapshot?: RenderTimeoutDiagnostics['affinitySnapshot'],
+  // Worker-job priority of the request that produced this render
+  // (CS-10976). Stamped into `response.meta.diagnostics.priority` so
+  // the indexer persists it on `boxel_index.timing_diagnostics`. `0`
+  // means system-priority / undefined caller (default).
+  priority?: number,
 ): void {
   if (!response || typeof response !== 'object') {
     return;
@@ -210,6 +215,7 @@ export function decorateRenderErrorsWithTimings(
     renderElapsedMs: timings.renderMs,
     totalElapsedMs: totalMs,
     ...(affinitySnapshot ? { affinitySnapshot } : {}),
+    ...(priority !== undefined ? { priority } : {}),
   };
   let existingMeta = (r.meta as PrerenderResponseMeta | undefined) ?? {};
   r.meta = {

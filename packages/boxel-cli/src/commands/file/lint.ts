@@ -8,6 +8,7 @@ import {
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { FG_GREEN, FG_RED, FG_YELLOW, DIM, RESET } from '../../lib/colors';
+import { cliLog } from '../../lib/cli-log';
 import { write } from './write';
 
 export interface LintMessage {
@@ -172,7 +173,7 @@ export function registerLintCommand(parent: Command): void {
       }
 
       if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
+        cliLog.output(JSON.stringify(result, null, 2));
         if (!result.ok) {
           process.exit(1);
         }

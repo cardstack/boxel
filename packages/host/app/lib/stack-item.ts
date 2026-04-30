@@ -1,3 +1,5 @@
+import { tracked } from '@glimmer/tracking';
+
 import { isFileDefInstance } from '@cardstack/runtime-common';
 import type { Deferred } from '@cardstack/runtime-common';
 import type { Store, StoreReadType } from '@cardstack/runtime-common';
@@ -52,11 +54,20 @@ export function detectStackItemTypeForTarget(
 }
 
 export class StackItem {
-  format: Format;
-  request?: Deferred<string>;
+  // `format`, `request`, `closeAfterSaving`, `useBaseTemplate` are
+  // tracked so that callers can mutate them IN PLACE (e.g. flipping
+  // `format` from 'isolated' → 'edit') without replacing the StackItem
+  // instance. Replacing the instance forces Glimmer's `{{#each}}` to
+  // destroy and re-mount the entire stack-item subtree — losing scroll
+  // position, DOM state, view transitions, and triggering
+  // prefersWideFormat to narrow then re-expand. In-place mutation lets
+  // shared-template formats (CardDef where `static isolated === static
+  // edit`) flip without remounting.
+  @tracked format: Format;
+  @tracked request?: Deferred<string>;
+  @tracked closeAfterSaving?: boolean;
+  @tracked useBaseTemplate?: boolean;
   stackIndex: number;
-  closeAfterSaving?: boolean;
-  useBaseTemplate?: boolean;
   type: StackItemType;
   #id: string;
   relationshipContext?:

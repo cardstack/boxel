@@ -277,6 +277,7 @@ export class Prerenderer {
     auth,
     opts,
     renderOptions,
+    priority,
     signal,
   }: {
     affinityType: AffinityType;
@@ -286,6 +287,10 @@ export class Prerenderer {
     auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
+    // CS-10976 wire format: priority threaded from the producer side.
+    // Stamped into `response.meta.diagnostics.priority` for telemetry;
+    // PagePool's queue/admission honors it starting in PR 4.
+    priority?: number;
     signal?: AbortSignal;
   }): Promise<{
     response: ModuleRenderResponse;
@@ -423,6 +428,7 @@ export class Prerenderer {
           result.timings,
           Date.now() - attemptStart,
           poller.currentPeak(),
+          priority,
         );
         return result;
       }
@@ -437,6 +443,7 @@ export class Prerenderer {
           lastResult.timings,
           Date.now() - attemptStart,
           poller.currentPeak(),
+          priority,
         );
         return lastResult;
       }
@@ -453,6 +460,7 @@ export class Prerenderer {
     command,
     commandInput,
     opts,
+    priority,
     signal,
   }: {
     userId: string;
@@ -460,6 +468,8 @@ export class Prerenderer {
     command: string;
     commandInput?: Record<string, unknown> | null;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    // CS-10976: see prerenderModule.
+    priority?: number;
     signal?: AbortSignal;
   }): Promise<{
     response: RunCommandResponse;
@@ -488,6 +498,8 @@ export class Prerenderer {
         result.response,
         result.timings,
         Date.now() - commandStart,
+        undefined,
+        priority,
       );
       return result;
     } catch (e) {
@@ -538,6 +550,7 @@ export class Prerenderer {
       fileData,
       types,
       opts,
+      priority,
     } = this.#gateClearCache(rawArgs);
     let signal = (rawArgs as { signal?: AbortSignal }).signal;
     let testOnTabAcquired = (
@@ -675,6 +688,7 @@ export class Prerenderer {
           result.timings,
           Date.now() - attemptStart,
           poller.currentPeak(),
+          priority,
         );
         return result;
       }
@@ -684,6 +698,7 @@ export class Prerenderer {
           lastResult.timings,
           Date.now() - attemptStart,
           poller.currentPeak(),
+          priority,
         );
         return lastResult;
       }

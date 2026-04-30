@@ -137,6 +137,7 @@ export async function runFactoryIssueLoop(
     packageRoot: PACKAGE_ROOT,
     targetRealmUrl,
     client,
+    debug: config.debug,
   });
 
   let darkfactoryModuleBase = new URL('software-factory/', realmServerUrl).href;

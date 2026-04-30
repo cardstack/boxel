@@ -1,10 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
-import {
-  restartableTask,
-  type EncapsulatedTaskDescriptor as Descriptor,
-} from 'ember-concurrency';
+import { restartableTask } from 'ember-concurrency';
 import {
   DefaultFormatsProvider,
   PermissionsConsumer,
@@ -87,10 +84,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
             />
           {{/if}}
           <DefaultFormatsProvider
-            @value={{hash
-              cardDef='fitted'
-              fieldDef='embedded'
-            }}
+            @value={{hash cardDef='fitted' fieldDef='embedded'}}
           >
             <this.linkedCard />
           </DefaultFormatsProvider>
@@ -143,7 +137,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
   </template>
 
   add = () => {
-    (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
+    this.chooseCard.perform();
   };
 
   remove = () => {

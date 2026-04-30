@@ -370,11 +370,49 @@ jobs:
           retention-days: 30
 
       - name: Publish test results
+        id: publish-tests
         uses: EnricoMi/publish-unit-test-result-action@170bf24d20d201b842d7a52403b73ed297e6645b # 2.18.0
         if: ${{ !cancelled() }}
         with:
           junit_files: host.xml
           check_name: Host Test Results
+          comment_mode: "off"
+          json_file: test-results.json
+
+      - name: Build host-tests slot
+        if: ${{ !cancelled() && hashFiles('test-results.json') != '' }}
+        run: |
+          set -euo pipefail
+          mkdir -p slot
+          {
+            echo "### Host Test Results"
+            echo
+            jq -r '.summary' test-results.json
+          } > slot/slot.md
+
+      - name: Upload host-tests slot
+        if: ${{ !cancelled() && hashFiles('slot/slot.md') != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pr-comment-slot-host-tests
+          path: slot/
+          retention-days: 7
+
+  post-pr-status:
+    name: Update PR status comment
+    needs:
+      - host-merge-reports-and-publish
+    if: ${{ !cancelled() && needs.host-merge-reports-and-publish.result == 'success' }}
+    uses: ./.github/workflows/pr-status-comment.yml
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      actions: read
+    with:
+      head-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      slots: host-tests
+    secrets: inherit
 
   host-memory-baseline:
     name: Host Memory Baseline

@@ -42,6 +42,7 @@
    has_error BOOLEAN DEFAULT false NOT NULL,
    last_known_good_deps BLOB,
    markdown TEXT,
+   timing_diagnostics BLOB,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
@@ -70,6 +71,7 @@
    has_error BOOLEAN DEFAULT false NOT NULL,
    last_known_good_deps BLOB,
    markdown TEXT,
+   timing_diagnostics BLOB,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 

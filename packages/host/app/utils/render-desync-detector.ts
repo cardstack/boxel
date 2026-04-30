@@ -144,19 +144,11 @@ export const DEFAULT_SETTLE_HOPS_MS: readonly number[] = [
 
 export const DESYNC_ERROR_TITLE = 'Render binding desync';
 export const DESYNC_ERROR_MESSAGE =
-  "Render route flipped model.status to 'ready' but the " +
-  '[data-prerender-status] DOM attribute never updated to match. ' +
-  "This means Glimmer's template binding for the prerender " +
-  'container did not re-render, which only happens when the ' +
-  "card's template threw during render and the Ember runloop " +
-  'caught the exception in a way that no JS-level event ' +
-  '(window.error / unhandledrejection / RSVP.on(error)) fires. ' +
-  "Chrome's DevTools console typically shows 'Uncaught (in " +
-  "promise) ...' for this class of failure, but that signal is " +
-  'browser-internal and invisible to JavaScript. Inspect the card ' +
-  "template — and any captured console errors in this doc's " +
-  '`additionalErrors` — for a getter, helper, or computed that ' +
-  'throws on the model state at render time.';
+  'Encountered an Ember rendering error while rendering this card. ' +
+  'The template threw during render and the runloop swallowed the ' +
+  'exception, so no JS-level error event fired. Browser console ' +
+  'errors captured during the render (if any) are listed in the ' +
+  'Additional Errors section below.';
 
 export interface DesyncDetectorContext {
   cardId: string;

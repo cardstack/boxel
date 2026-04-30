@@ -252,8 +252,14 @@ export function createVirtualNetwork() {
   return virtualNetwork;
 }
 
+let testDbCounter = 0;
 export function prepareTestDB(): void {
-  process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
+  // PID + monotonic counter rules out same-process collisions and makes
+  // cross-process collisions essentially impossible. The previous
+  // `Math.random() * 10_000_000` form had ~0.6% birthday-paradox collision
+  // probability across ~350 tests in a shard, which surfaced in CI as
+  // `database "test_db_<n>" already exists` from cloneTestDBFromTemplate.
+  process.env.PGDATABASE = `test_db_${process.pid}_${++testDbCounter}`;
 }
 
 function pgAdminConnectionConfig() {
@@ -354,6 +360,10 @@ async function cloneTestDBFromTemplate(
     );
   }
 
+  // Defensive: drop a same-named DB before creating. prepareTestDB() now
+  // produces unique names, but a stray DB from a crashed prior run or a
+  // shared cluster could otherwise resurface as "database already exists".
+  await dropDatabase(database);
   let client = new PgClient(pgAdminConnectionConfig());
   try {
     await client.connect();
@@ -655,9 +665,9 @@ export function setupDB(
     templateDatabase?: TestDatabaseTemplateProvider;
   } = {},
 ) {
-  let dbAdapter: PgAdapter;
-  let publisher: QueuePublisher;
-  let runner: QueueRunner;
+  let dbAdapter: PgAdapter | undefined;
+  let publisher: QueuePublisher | undefined;
+  let runner: QueueRunner | undefined;
 
   const runBeforeHook = async () => {
     prepareTestDB();
@@ -676,17 +686,47 @@ export function setupDB(
   };
 
   const runAfterHook = async () => {
-    await publisher?.destroy();
-    if (publisher) {
-      trackedQueuePublishers.delete(publisher);
+    // Snapshot and clear closure refs up front so that, regardless of
+    // how cleanup goes, the next test's beforeEach starts from a clean
+    // slate. A partial-setup beforeEach (e.g. the create-DB step throws
+    // after the previous test already closed its adapter) used to
+    // cascade into "Called end on pool more than once" when the next
+    // afterEach ran against stale closure state.
+    let p = publisher;
+    let r = runner;
+    let a = dbAdapter;
+    publisher = undefined;
+    runner = undefined;
+    dbAdapter = undefined;
+
+    // Each resource's cleanup is independent — a failure in one must
+    // not skip the others. Matches the best-effort pattern used by
+    // closeTrackedDbAdapters / destroyTrackedQueuePublishers / etc.
+    if (p) {
+      trackedQueuePublishers.delete(p);
+      try {
+        await p.destroy();
+      } catch {
+        // best-effort cleanup
+      }
     }
-    await runner?.destroy();
-    if (runner) {
-      trackedQueueRunners.delete(runner);
+    if (r) {
+      trackedQueueRunners.delete(r);
+      try {
+        await r.destroy();
+      } catch {
+        // best-effort cleanup
+      }
     }
-    await dbAdapter?.close();
-    if (dbAdapter) {
-      trackedDbAdapters.delete(dbAdapter);
+    if (a) {
+      trackedDbAdapters.delete(a);
+      if (!a.isClosed) {
+        try {
+          await a.close();
+        } catch {
+          // best-effort cleanup
+        }
+      }
     }
   };
 
@@ -702,11 +742,13 @@ export function setupDB(
     }
     hooks.before(async function () {
       await runBeforeHook();
-      await args.before!(dbAdapter, publisher, runner);
+      await args.before!(dbAdapter!, publisher!, runner!);
     });
 
     hooks.after(async function () {
-      await args.after?.(dbAdapter, publisher, runner);
+      if (dbAdapter && publisher && runner) {
+        await args.after?.(dbAdapter, publisher, runner);
+      }
       await runAfterHook();
     });
   }
@@ -719,11 +761,13 @@ export function setupDB(
     }
     hooks.beforeEach(async function () {
       await runBeforeHook();
-      await args.beforeEach!(dbAdapter, publisher, runner);
+      await args.beforeEach!(dbAdapter!, publisher!, runner!);
     });
 
     hooks.afterEach(async function () {
-      await args.afterEach?.(dbAdapter, publisher, runner);
+      if (dbAdapter && publisher && runner) {
+        await args.afterEach?.(dbAdapter, publisher, runner);
+      }
       await runAfterHook();
     });
   }

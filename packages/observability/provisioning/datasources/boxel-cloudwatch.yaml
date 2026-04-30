@@ -1,0 +1,26 @@
+# CloudWatch data source — env-agnostic. Auth uses the ECS task role
+# (`ec2_iam_role`); the role is the Grafana ECS task's role in
+# cardstack/infra:configs/grafana/, which already grants the CloudWatch
+# read actions Grafana needs (configured in CS-10907 and similar).
+#
+# Migrated from the AMG-era JSON manifest (CS-10978) so apply-datasources.sh
+# pushes it through the HTTP API alongside Loki. No env-specific values, so
+# nothing here needs `${VAR}` substitution.
+
+apiVersion: 1
+
+datasources:
+  - name: boxel-cloudwatch
+    uid: cef5x9o3yzawwf
+    type: cloudwatch
+    access: proxy
+    url: ""
+    isDefault: false
+    editable: false
+    jsonData:
+      # `default` makes the AWS SDK use its default credential chain, which
+      # on ECS picks up the task role. AMG's `ec2_iam_role` value is a
+      # legacy alias that newer Grafana refuses (see staging health check:
+      # "trying to use non-allowed auth method ec2_iam_role").
+      authType: default
+      defaultRegion: us-east-1
