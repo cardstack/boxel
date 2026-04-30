@@ -702,18 +702,20 @@ module(basename(__filename), function () {
           // Poll instead of sleeping a fixed duration: each tick is
           // bounded to one tab per cooldown window, but event-loop
           // scheduling under CI load can stretch the wall time.
-          let deadlineMs = Date.now() + 5000;
-          while (
-            pool.currentMaxPages > 2 &&
-            Date.now() < deadlineMs
-          ) {
-            await new Promise((r) => setTimeout(r, 20));
-          }
-          assert.strictEqual(
-            pool.currentMaxPages,
-            2,
-            'contraction reaches MIN even from HP tier',
-          );
+          let pollUntil = async (target: number, label: string) => {
+            let deadlineMs = Date.now() + 5000;
+            while (pool.currentMaxPages > target && Date.now() < deadlineMs) {
+              await new Promise((r) => setTimeout(r, 20));
+            }
+            assert.strictEqual(pool.currentMaxPages, target, label);
+          };
+          // Intermediate stop: contraction must walk through the
+          // burst-tier ceiling on its way down. From HP_MAX=6 the
+          // pool has to pass through MAX=4 before reaching MIN=2;
+          // verifying that step explicitly catches a regression
+          // where contraction would skip past tier boundaries.
+          await pollUntil(4, 'contraction passes through MAX on the way down');
+          await pollUntil(2, 'contraction reaches MIN even from HP tier');
         },
       );
     });
