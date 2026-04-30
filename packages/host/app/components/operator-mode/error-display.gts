@@ -318,10 +318,12 @@ export default class ErrorDisplay
                   data-test-error-additional-error
                   data-test-error-additional-error-index={{index}}
                 >
-                  <div
-                    class='additional-error-heading'
-                    data-test-error-additional-heading
-                  >{{if entry.title entry.title entry.message}}</div>
+                  {{#if entry.title}}
+                    <div
+                      class='additional-error-heading'
+                      data-test-error-additional-heading
+                    >{{entry.title}}</div>
+                  {{/if}}
                   {{#if entry.message}}
                     <p
                       class='additional-error-message'

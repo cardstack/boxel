@@ -307,6 +307,51 @@ module(
       );
     });
 
+    test('does not duplicate message when entry has no title', async function (assert) {
+      let error: CardErrorJSONAPI = {
+        id: 'https://example.com/x',
+        status: 500,
+        title: 'Render error',
+        message: 'boom',
+        realm: 'https://example.com/',
+        meta: {
+          lastKnownGoodHtml: null,
+          cardTitle: null,
+          scopedCssUrls: [],
+          stack: null,
+        },
+        additionalErrors: [
+          {
+            message: 'TypeError: only message, no title',
+            stack: 'TypeError\n  at template (foo.gts:10:5)',
+          } as any,
+        ],
+      };
+
+      await render(<template><CardErrorDetail @error={{error}} /></template>);
+      await click('[data-test-toggle-details]');
+      await waitFor('[data-test-error-additional-errors]');
+
+      assert
+        .dom('[data-test-error-additional-heading]')
+        .doesNotExist('no heading rendered when entry has no title');
+      assert
+        .dom('[data-test-error-additional-message]')
+        .hasText(
+          'TypeError: only message, no title',
+          'message body renders exactly once',
+        );
+      let entry = document.querySelector('[data-test-error-additional-error]');
+      let occurrences = (
+        entry?.textContent?.match(/TypeError: only message, no title/g) ?? []
+      ).length;
+      assert.strictEqual(
+        occurrences,
+        1,
+        'message text appears exactly once in the entry',
+      );
+    });
+
     test('omits Additional Errors block when array is empty/absent', async function (assert) {
       // absent
       let absent: CardErrorJSONAPI = {
