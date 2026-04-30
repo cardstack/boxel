@@ -14,8 +14,6 @@ import {
   type RunEvaluateInMemoryOptions,
   type RunEvaluateResult,
 } from './eval-execution';
-import type { ToolExecutor } from './factory-tool-executor';
-import type { ToolRegistry } from './factory-tool-registry';
 import {
   runInstantiateInMemory,
   type RunInstantiateInMemoryOptions,
@@ -33,6 +31,7 @@ import {
 } from './parse-execution';
 import { runTestsInMemory } from './test-run-execution';
 import type { RunTestsInMemoryOptions, RunTestsResult } from './test-run-types';
+import { readCard, writeCard } from './workspace-fs';
 
 // ---------------------------------------------------------------------------
 // Local helpers
@@ -133,12 +132,17 @@ export interface ClarificationResult {
  * Build the set of FactoryTool[] that the agent can call during its turn.
  * Each tool wraps a realm operation or script execution with auth + safety.
  */
-export function buildFactoryTools(
-  config: ToolBuilderConfig,
-  toolExecutor: ToolExecutor,
-  toolRegistry: ToolRegistry,
-): FactoryTool[] {
-  let tools: FactoryTool[] = [
+export function buildFactoryTools(config: ToolBuilderConfig): FactoryTool[] {
+  // The Claude Code agent ignores this catalog (it uses the SDK's
+  // built-in Read/Write/Edit/Glob/Grep/Bash plus a no-op `tools` arg).
+  // Every other backend (OpenRouter today, Codex / future ones) calls
+  // these as their primary surface, since plain LLM tool-use APIs have
+  // no built-in tools. So this list is the canonical multi-agent
+  // contract — it should stay aligned across backends.
+  return [
+    buildReadFileTool(config),
+    buildWriteFileTool(config),
+    buildEditFileTool(config),
     buildSearchRealmsTool(config),
     buildRunCommandTool(config),
     buildRunLintTool(config),
@@ -149,16 +153,6 @@ export function buildFactoryTools(
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
-
-  // Add registered script/realm-api tools as FactoryTool wrappers.
-  // Realm-api tools get the config so they can resolve per-realm JWTs.
-  for (let manifest of toolRegistry.getManifests()) {
-    if (manifest.category === 'script' || manifest.category === 'realm-api') {
-      tools.push(buildRegisteredTool(manifest, toolExecutor, config));
-    }
-  }
-
-  return tools;
 }
 
 // ---------------------------------------------------------------------------
@@ -193,6 +187,119 @@ export function requireStringArg(
 // ---------------------------------------------------------------------------
 // Factory-level tools
 // ---------------------------------------------------------------------------
+
+function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
+  return {
+    name: 'read_file',
+    description:
+      'Read a file from the target realm workspace. Returns the parsed ' +
+      'JSON document for `.json` cards, or raw text for any other file. ' +
+      'Use realm-relative paths (e.g. `Issues/foo.json`, `my-card.gts`).',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Realm-relative file path (e.g. `Issues/foo.json`).',
+        },
+      },
+      required: ['path'],
+    },
+    execute: async (args) => {
+      let path = requireStringArg(args, 'path', 'read_file');
+      return readCard(config.workspaceDir, path);
+    },
+  };
+}
+
+function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
+  return {
+    name: 'write_file',
+    description:
+      'Write a file to the target realm workspace, creating parent ' +
+      'directories as needed. Path must be realm-relative and include the ' +
+      'extension (e.g. `my-card.gts`, `Spec/foo.json`). The outer loop ' +
+      'syncs the workspace to the realm between iterations.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Realm-relative file path with extension (e.g. `my-card.gts`).',
+        },
+        content: { type: 'string', description: 'Full file content.' },
+      },
+      required: ['path', 'content'],
+    },
+    execute: async (args) => {
+      let path = requireStringArg(args, 'path', 'write_file');
+      let content = requireStringArg(args, 'content', 'write_file');
+      return writeCard(config.workspaceDir, path, content);
+    },
+  };
+}
+
+function buildEditFileTool(config: ToolBuilderConfig): FactoryTool {
+  return {
+    name: 'edit_file',
+    description:
+      'Replace exactly one occurrence of `old_string` with `new_string` in ' +
+      'an existing workspace file. Fails if the file is missing, if ' +
+      '`old_string` is not found, or if it appears more than once. For ' +
+      'whole-file rewrites use `write_file` instead.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Realm-relative file path to edit.',
+        },
+        old_string: {
+          type: 'string',
+          description:
+            'Exact substring to replace. Must appear exactly once in the file.',
+        },
+        new_string: {
+          type: 'string',
+          description: 'Replacement text.',
+        },
+      },
+      required: ['path', 'old_string', 'new_string'],
+    },
+    execute: async (args) => {
+      let path = requireStringArg(args, 'path', 'edit_file');
+      let oldString = requireStringArg(args, 'old_string', 'edit_file');
+      let newString = args.new_string;
+      if (typeof newString !== 'string') {
+        return { ok: false, error: '`new_string` must be a string' };
+      }
+      let read = await readCard(config.workspaceDir, path);
+      if (!read.ok) {
+        return { ok: false, error: `read failed: ${read.error ?? 'missing'}` };
+      }
+      let text =
+        read.content !== undefined
+          ? read.content
+          : JSON.stringify(read.document, null, 2);
+      if (text === undefined) {
+        return { ok: false, error: 'read returned no content' };
+      }
+      let occurrences = text.split(oldString).length - 1;
+      if (occurrences === 0) {
+        return { ok: false, error: '`old_string` not found in file' };
+      }
+      if (occurrences > 1) {
+        return {
+          ok: false,
+          error: `\`old_string\` found ${occurrences} times — must be unique`,
+        };
+      }
+      let updated = text.replace(oldString, newString);
+      return writeCard(config.workspaceDir, path, updated);
+    },
+  };
+}
 
 function buildSearchRealmsTool(config: ToolBuilderConfig): FactoryTool {
   return {
@@ -511,49 +618,4 @@ function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Registered tool wrappers (script + realm-api)
-// ---------------------------------------------------------------------------
-
-function buildRegisteredTool(
-  manifest: {
-    name: string;
-    description: string;
-    category: string;
-    args: {
-      name: string;
-      type: string;
-      required: boolean;
-      description: string;
-    }[];
-  },
-  toolExecutor: ToolExecutor,
-  _config: ToolBuilderConfig,
-): FactoryTool {
-  let properties: Record<string, unknown> = {};
-  let required: string[] = [];
-
-  for (let arg of manifest.args) {
-    properties[arg.name] = {
-      type: arg.type,
-      description: arg.description,
-    };
-    if (arg.required) {
-      required.push(arg.name);
-    }
-  }
-
-  return {
-    name: manifest.name,
-    description: manifest.description,
-    parameters: {
-      type: 'object',
-      properties,
-      ...(required.length > 0 ? { required } : {}),
-    },
-    execute: async (args) => {
-      return toolExecutor.execute(manifest.name, args);
-    },
-  };
-}
 

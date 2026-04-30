@@ -329,10 +329,39 @@ export class OpenRouterFactoryAgent implements LoopAgent {
       references: s.references ?? [],
     }));
 
-    return this.promptLoader.load('system', {
+    let base = this.promptLoader.load('system', {
       targetRealmUrl: context.targetRealmUrl,
+      workspaceDir: context.workspaceDir ?? '',
       skills,
     });
+
+    // The shared system prompt is written for the Claude Code agent,
+    // which uses native built-in tools (`Read`, `Write`, `Edit`, `Glob`,
+    // `Grep`, `Bash`). The OpenRouter agent has no built-ins — it only
+    // sees the FactoryTool[] catalog we expose. Append a tool-naming
+    // postscript that maps the prompt's references onto the actual
+    // OpenRouter tool surface.
+    let postscript = [
+      '',
+      '# Tool naming (OpenRouter backend)',
+      '',
+      'Your tool surface differs from what the prompt above describes:',
+      '',
+      '- `Read` (Claude built-in) → call `read_file({ path })`',
+      '- `Write` (Claude built-in) → call `write_file({ path, content })`',
+      '- `Edit` (Claude built-in) → call `edit_file({ path, old_string, new_string })`',
+      '- `Glob` / `Grep` (Claude built-ins) — NOT available; use `read_file` on known paths',
+      '- `Bash` (Claude built-in) — NOT available; the only network/realm-server',
+      '  access you have is `search_realms`. Boxel CLI commands like',
+      '  `npx boxel sync` are run by the outer loop, not by you.',
+      '- Card mutations (Project / Issue / KnowledgeArticle / Spec / comments):',
+      '  read the existing JSON with `read_file`, mutate it locally, write it',
+      '  back with `write_file`. Never modify an Issue\'s `description`.',
+      '- When you finish, call `signal_done` so the loop runs validation.',
+      '',
+    ].join('\n');
+
+    return base + postscript;
   }
 
   /**

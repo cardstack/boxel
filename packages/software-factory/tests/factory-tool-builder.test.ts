@@ -1,6 +1,5 @@
 import { module, test } from 'qunit';
 
-import type { ToolResult } from '../src/factory-agent';
 import {
   buildFactoryTools,
   DONE_SIGNAL,
@@ -10,8 +9,6 @@ import {
   type DoneResult,
   type ClarificationResult,
 } from '../src/factory-tool-builder';
-import type { ToolExecutor } from '../src/factory-tool-executor';
-import { ToolRegistry } from '../src/factory-tool-registry';
 import { createMockClient } from './helpers/mock-client';
 import {
   createTestWorkspace,
@@ -131,35 +128,6 @@ function createMockFetch(
   return { fetch: mockFetch, requests };
 }
 
-interface CapturedToolCall {
-  toolName: string;
-  toolArgs: Record<string, unknown>;
-}
-
-function createMockToolExecutor(results: Map<string, ToolResult>): {
-  executor: ToolExecutor;
-  calls: CapturedToolCall[];
-} {
-  let calls: CapturedToolCall[] = [];
-  let executor = {
-    execute: async (
-      toolName: string,
-      toolArgs: Record<string, unknown>,
-    ): Promise<ToolResult> => {
-      calls.push({
-        toolName: toolName as string,
-        toolArgs: toolArgs as Record<string, unknown>,
-      });
-      let result = results.get(toolName as string);
-      if (!result) {
-        throw new Error(`MockToolExecutor: no result for tool "${toolName}"`);
-      }
-      return result;
-    },
-  } as unknown as ToolExecutor;
-  return { executor, calls };
-}
-
 function findTool(tools: FactoryTool[], name: string): FactoryTool {
   let tool = tools.find((t) => t.name === name);
   if (!tool) {
@@ -174,14 +142,20 @@ function findTool(tools: FactoryTool[], name: string): FactoryTool {
 
 module('factory-tool-builder > tool building', function () {
   test('builds factory-level tools plus registered tools', function (assert) {
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
     let config = makeConfig();
-    let tools = buildFactoryTools(config, executor, registry);
+    let tools = buildFactoryTools(config);
 
     let toolNames = tools.map((t) => t.name);
 
     // Surviving factory-level tools after CS-10883.
+    // The Claude Code agent ignores the file-IO tools (it has built-in
+    // Read/Write/Edit), but the OpenRouter agent has no built-ins, so
+    // we ship `read_file`/`write_file`/`edit_file` to give it equivalent
+    // workspace access. Both backends share `search_realms`,
+    // `run_*`, `signal_done`, and `request_clarification`.
+    assert.true(toolNames.includes('read_file'));
+    assert.true(toolNames.includes('write_file'));
+    assert.true(toolNames.includes('edit_file'));
     assert.true(toolNames.includes('search_realms'));
     assert.true(toolNames.includes('run_command'));
     assert.true(toolNames.includes('run_lint'));
@@ -191,14 +165,14 @@ module('factory-tool-builder > tool building', function () {
     assert.true(toolNames.includes('run_instantiate'));
     assert.true(toolNames.includes('signal_done'));
     assert.true(toolNames.includes('request_clarification'));
-    // Script tools from registry
-    assert.true(toolNames.includes('search-realm'));
-    // Retired in CS-10883 — file I/O is native; mutations are
-    // read-patch-write via Read+Write; agent ends turn instead of
-    // signaling done from a wrapper tool.
-    assert.false(toolNames.includes('write_file'));
-    assert.false(toolNames.includes('read_file'));
+    // Retired in CS-10883: per-realm search wrappers, transpiled-source
+    // helper, compound card mutations, HTTP-direct realm I/O, the
+    // registered-tool dispatch (script + boxel-cli + realm-api).
+    // Agents read/write workspace JSON directly via Read/Write/Edit
+    // (Claude built-ins) or the corresponding factory tools above
+    // (other backends).
     assert.false(toolNames.includes('search_realm'));
+    assert.false(toolNames.includes('search-realm'));
     assert.false(toolNames.includes('fetch_transpiled_module'));
     assert.false(toolNames.includes('update_project'));
     assert.false(toolNames.includes('update_issue'));
@@ -208,13 +182,14 @@ module('factory-tool-builder > tool building', function () {
     assert.false(toolNames.includes('realm-read'));
     assert.false(toolNames.includes('realm-write'));
     assert.false(toolNames.includes('realm-delete'));
+    assert.false(toolNames.includes('realm-search'));
+    assert.false(toolNames.includes('realm-create'));
+    assert.false(toolNames.includes('boxel-sync'));
   });
 
   test('each tool has name, description, parameters, and execute', function (assert) {
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
     let config = makeConfig();
-    let tools = buildFactoryTools(config, executor, registry);
+    let tools = buildFactoryTools(config);
 
     for (let tool of tools) {
       assert.strictEqual(typeof tool.name, 'string');
@@ -255,10 +230,8 @@ module('factory-tool-builder > tool building', function () {
 module('factory-tool-builder > realm targeting', function () {
   test('search_realms passes through to client.search', async function (assert) {
     let { fetch: mockFetch, requests } = createMockFetch(200, { data: [] });
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
     let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
+    let tools = buildFactoryTools(config);
     let searchTool = findTool(tools, 'search_realms');
 
     let result = (await searchTool.execute({
@@ -280,10 +253,8 @@ module('factory-tool-builder > realm targeting', function () {
 
 module('factory-tool-builder > signal tools', function () {
   test('signal_done returns done signal', async function (assert) {
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
     let config = makeConfig();
-    let tools = buildFactoryTools(config, executor, registry);
+    let tools = buildFactoryTools(config);
     let doneTool = findTool(tools, 'signal_done');
 
     let result = (await doneTool.execute({})) as DoneResult;
@@ -292,10 +263,8 @@ module('factory-tool-builder > signal tools', function () {
   });
 
   test('request_clarification returns clarification signal with message', async function (assert) {
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
     let config = makeConfig();
-    let tools = buildFactoryTools(config, executor, registry);
+    let tools = buildFactoryTools(config);
     let clarifyTool = findTool(tools, 'request_clarification');
 
     let result = (await clarifyTool.execute({
@@ -307,35 +276,9 @@ module('factory-tool-builder > signal tools', function () {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Registered tool delegation
-// ---------------------------------------------------------------------------
-
-module('factory-tool-builder > registered tool delegation', function () {
-  test('delegates registered tool to ToolExecutor', async function (assert) {
-    let toolResult: ToolResult = {
-      tool: 'search-realm',
-      exitCode: 0,
-      output: { data: [{ id: '1' }] },
-      durationMs: 42,
-    };
-    let { executor } = createMockToolExecutor(
-      new Map([['search-realm', toolResult]]),
-    );
-    let registry = new ToolRegistry();
-    let config = makeConfig();
-    let tools = buildFactoryTools(config, executor, registry);
-    let searchRealmTool = findTool(tools, 'search-realm');
-
-    let result = (await searchRealmTool.execute({
-      realm: TARGET_REALM,
-    })) as ToolResult;
-
-    assert.strictEqual(result.tool, 'search-realm');
-    assert.strictEqual(result.exitCode, 0);
-    assert.deepEqual(result.output, { data: [{ id: '1' }] });
-  });
-});
+// Registered-tool delegation has been retired with
+// `factory-tool-executor.ts` / `factory-tool-registry.ts` — no scripted
+// (`search-realm`) or boxel-cli FactoryTools survive.
 
 // ---------------------------------------------------------------------------
 // run_tests tool (in-memory validation)
@@ -344,8 +287,7 @@ module('factory-tool-builder > registered tool delegation', function () {
 module('buildFactoryTools — run_tests', function () {
   test('registers run_tests with empty parameters', function (assert) {
     let config = makeConfig();
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runTests = tools.find((t) => t.name === 'run_tests');
     assert.ok(runTests, 'run_tests tool is registered');
     assert.deepEqual(
@@ -382,8 +324,7 @@ module('buildFactoryTools — run_tests', function () {
         return stubResult;
       },
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runTests = tools.find((t) => t.name === 'run_tests');
     assert.ok(runTests, 'run_tests tool is registered');
 
@@ -418,8 +359,7 @@ module('buildFactoryTools — run_tests', function () {
         };
       },
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runTests = tools.find((t) => t.name === 'run_tests');
     assert.ok(runTests, 'run_tests tool is registered');
 
@@ -440,8 +380,7 @@ module('buildFactoryTools — run_tests', function () {
 module('buildFactoryTools — run_lint', function () {
   test('registers run_lint with an optional path parameter', function (assert) {
     let config = makeConfig();
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runLint = tools.find((t) => t.name === 'run_lint')!;
     assert.ok(runLint, 'run_lint tool is registered');
     let params = runLint.parameters as {
@@ -483,8 +422,7 @@ module('buildFactoryTools — run_lint', function () {
         return stubResult;
       },
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runLint = tools.find((t) => t.name === 'run_lint')!;
 
     let result = await runLint.execute({});
@@ -534,8 +472,7 @@ module('buildFactoryTools — run_lint', function () {
         return stubResult;
       },
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runLint = tools.find((t) => t.name === 'run_lint')!;
 
     let result = (await runLint.execute({
@@ -568,8 +505,7 @@ module('buildFactoryTools — run_lint', function () {
         };
       },
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runLint = tools.find((t) => t.name === 'run_lint')!;
 
     await runLint.execute({ path: '   ' });
@@ -612,8 +548,7 @@ module('buildFactoryTools — run_lint', function () {
     let config = makeConfig({
       runLintInMemory: async () => stubResult,
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runLint = tools.find((t) => t.name === 'run_lint')!;
 
     let result = (await runLint.execute({})) as typeof stubResult;
@@ -632,8 +567,7 @@ module('buildFactoryTools — run_lint', function () {
 module('buildFactoryTools — run_evaluate', function () {
   test('registers run_evaluate with an optional path parameter', function (assert) {
     let config = makeConfig();
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runEvaluate = tools.find((t) => t.name === 'run_evaluate');
     assert.ok(runEvaluate, 'run_evaluate tool is registered');
     let params = runEvaluate!.parameters as {
@@ -675,8 +609,7 @@ module('buildFactoryTools — run_evaluate', function () {
         return stubResult;
       },
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runEvaluate = tools.find((t) => t.name === 'run_evaluate');
     assert.ok(runEvaluate, 'run_evaluate tool is registered');
 
@@ -727,8 +660,7 @@ module('buildFactoryTools — run_evaluate', function () {
         return stubResult;
       },
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runEvaluate = tools.find((t) => t.name === 'run_evaluate');
     assert.ok(runEvaluate, 'run_evaluate tool is registered');
 
@@ -765,8 +697,7 @@ module('buildFactoryTools — run_evaluate', function () {
         };
       },
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runEvaluate = tools.find((t) => t.name === 'run_evaluate');
     assert.ok(runEvaluate, 'run_evaluate tool is registered');
 
@@ -796,8 +727,7 @@ module('buildFactoryTools — run_evaluate', function () {
     let config = makeConfig({
       runEvaluateInMemory: async () => stubResult,
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runEvaluate = tools.find((t) => t.name === 'run_evaluate');
     assert.ok(runEvaluate, 'run_evaluate tool is registered');
 
@@ -816,8 +746,7 @@ module('buildFactoryTools — run_evaluate', function () {
 module('buildFactoryTools — run_parse', function () {
   test('registers run_parse with an optional path parameter', function (assert) {
     let config = makeConfig();
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runParse = tools.find((t) => t.name === 'run_parse')!;
     assert.ok(runParse, 'run_parse tool is registered');
     let params = runParse.parameters as {
@@ -858,8 +787,7 @@ module('buildFactoryTools — run_parse', function () {
         return stubResult;
       },
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runParse = tools.find((t) => t.name === 'run_parse')!;
 
     let result = await runParse.execute({});
@@ -906,8 +834,7 @@ module('buildFactoryTools — run_parse', function () {
         return stubResult;
       },
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runParse = tools.find((t) => t.name === 'run_parse')!;
 
     let result = (await runParse.execute({
@@ -939,8 +866,7 @@ module('buildFactoryTools — run_parse', function () {
         };
       },
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runParse = tools.find((t) => t.name === 'run_parse')!;
 
     await runParse.execute({ path: '   ' });
@@ -978,8 +904,7 @@ module('buildFactoryTools — run_parse', function () {
     let config = makeConfig({
       runParseInMemory: async () => stubResult,
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runParse = tools.find((t) => t.name === 'run_parse')!;
 
     let result = (await runParse.execute({})) as typeof stubResult;
@@ -998,8 +923,7 @@ module('buildFactoryTools — run_parse', function () {
 module('buildFactoryTools — run_instantiate', function () {
   test('registers run_instantiate with an optional path parameter', function (assert) {
     let config = makeConfig();
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runInstantiate = tools.find((t) => t.name === 'run_instantiate');
     assert.ok(runInstantiate, 'run_instantiate tool is registered');
     let params = runInstantiate!.parameters as {
@@ -1041,8 +965,7 @@ module('buildFactoryTools — run_instantiate', function () {
         return stubResult;
       },
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runInstantiate = tools.find((t) => t.name === 'run_instantiate');
     assert.ok(runInstantiate, 'run_instantiate tool is registered');
 
@@ -1094,8 +1017,7 @@ module('buildFactoryTools — run_instantiate', function () {
         return stubResult;
       },
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runInstantiate = tools.find((t) => t.name === 'run_instantiate');
     assert.ok(runInstantiate, 'run_instantiate tool is registered');
 
@@ -1133,8 +1055,7 @@ module('buildFactoryTools — run_instantiate', function () {
         };
       },
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runInstantiate = tools.find((t) => t.name === 'run_instantiate');
     assert.ok(runInstantiate, 'run_instantiate tool is registered');
 
@@ -1165,8 +1086,7 @@ module('buildFactoryTools — run_instantiate', function () {
     let config = makeConfig({
       runInstantiateInMemory: async () => stubResult,
     });
-    let { executor } = createMockToolExecutor(new Map());
-    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tools = buildFactoryTools(config);
     let runInstantiate = tools.find((t) => t.name === 'run_instantiate');
     assert.ok(runInstantiate, 'run_instantiate tool is registered');
 

@@ -12,7 +12,6 @@
  * - runIssueLoop() invocation
  */
 
-import { resolve } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
@@ -35,12 +34,6 @@ import {
   type FactoryTool,
   type ToolBuilderConfig,
 } from './factory-tool-builder';
-import { ToolExecutor } from './factory-tool-executor';
-import {
-  ToolRegistry,
-  SCRIPT_TOOLS,
-  REALM_API_TOOLS,
-} from './factory-tool-registry';
 import {
   runIssueLoop,
   createDefaultPipeline,
@@ -52,8 +45,6 @@ import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader'
 import { withStdoutRedirected } from './redirect-stdout';
 
 let log = logger('factory-issue-loop-wiring');
-
-const PACKAGE_ROOT = resolve(__dirname, '..');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -130,13 +121,6 @@ export async function runFactoryIssueLoop(
   });
 
   // 3. Tool infrastructure
-  let toolRegistry = new ToolRegistry([...SCRIPT_TOOLS, ...REALM_API_TOOLS]);
-  let toolExecutor = new ToolExecutor(toolRegistry, {
-    packageRoot: PACKAGE_ROOT,
-    targetRealmUrl,
-    client,
-  });
-
   let testResultsModuleUrl = new URL(
     'software-factory/test-results',
     realmServerUrl,
@@ -167,11 +151,7 @@ export async function runFactoryIssueLoop(
     hostAppUrl,
   };
 
-  let tools: FactoryTool[] = buildFactoryTools(
-    toolBuilderConfig,
-    toolExecutor,
-    toolRegistry,
-  );
+  let tools: FactoryTool[] = buildFactoryTools(toolBuilderConfig);
 
   // 4. Agent
   let provider: FactoryAgentProvider = config.agent ?? 'claude';
