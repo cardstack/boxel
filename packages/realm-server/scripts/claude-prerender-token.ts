@@ -14,10 +14,20 @@
 
 import * as readline from 'node:readline';
 import { Writable } from 'node:stream';
-import { writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
+import {
+  openSync,
+  writeSync,
+  closeSync,
+  mkdirSync,
+  constants as fsConstants,
+} from 'node:fs';
 import { dirname } from 'node:path';
 import jwt from 'jsonwebtoken';
-import { DEFAULT_PERMISSIONS } from '@cardstack/runtime-common';
+import {
+  DEFAULT_PERMISSIONS,
+  ensureTrailingSlash,
+} from '@cardstack/runtime-common';
+import type { TokenClaims } from '@cardstack/runtime-common';
 
 // Default file Claude reads to pick up the artifacts without the user
 // pasting anything. Bounded leak window — the JWT inside is 1d.
@@ -26,14 +36,6 @@ const DEFAULT_OUTPUT_PATH = '/tmp/claude-prerender.json';
 interface ParsedArgs {
   positional: string[];
   opts: { [k: string]: string | boolean };
-}
-
-interface TokenClaims {
-  user: string;
-  realm: string;
-  sessionRoom: string;
-  permissions: string[];
-  realmServerURL: string;
 }
 
 function usage(): void {
@@ -51,12 +53,15 @@ function usage(): void {
       `               If omitted, prompts interactively (paste-friendly, masked\n` +
       `               with '*' so you can see each char landed; the seed itself\n` +
       `               never echoes to the terminal or shell history).\n` +
+      `               WARNING: passing the seed positionally exposes it via\n` +
+      `               'ps' / /proc/<pid>/cmdline and may persist in shell\n` +
+      `               history. Prefer the prompt or piped stdin.\n` +
       `\n` +
       `Options:\n` +
       `  --user <matrix-id>     Override the Matrix user ID claim. Default: derived\n` +
       `                         from the realm URL path (e.g. /ctse/realm/ → @ctse:stack.cards).\n` +
       `                         REQUIRED for system realms (1-segment paths like /catalog/),\n` +
-      `                         where the owner is typically @realm:<matrix-domain>.\n` +
+      `                         where the owner is the realm-server bot @realm_server:<matrix-domain>.\n` +
       `                         The realm-server checks this against its permissions\n` +
       `                         DB, so it MUST be a user that actually has perms on\n` +
       `                         the target realm.\n` +
@@ -70,9 +75,12 @@ function usage(): void {
       `                           WHERE realm_url = '<url>' AND username = '<user>';\n` +
       `                         and pass exactly those columns as the list.\n` +
       `  --host-url <url>       Override the boxel-host base URL recorded in the artifact.\n` +
-      `                         Default: inferred from realm host (realms-staging.stack.cards →\n` +
-      `                         boxel-host-staging.stack.cards, realms.stack.cards →\n` +
-      `                         boxel-host.stack.cards, *.localhost → http://localhost:4200).\n` +
+      `                         Default: inferred from realm host —\n` +
+      `                           realms-staging.stack.cards         → boxel-host-staging.stack.cards\n` +
+      `                           realms.stack.cards                 → boxel-host.stack.cards\n` +
+      `                           realm-server.<slug>.localhost      → host.<slug>.localhost\n` +
+      `                                                                (BOXEL_ENVIRONMENT mode)\n` +
+      `                           localhost / *.localhost (standard) → http://localhost:4200\n` +
       `                         REQUIRED when the realm host doesn't match these patterns.\n` +
       `  --output <path>        Override output path. Default: ${DEFAULT_OUTPUT_PATH}.\n` +
       `  --no-output            Don't write the JSON artifact (stdout only).\n` +
@@ -109,22 +117,40 @@ function parseArgs(argv: string[]): ParsedArgs {
   return { positional, opts };
 }
 
+// Infer the boxel-host base URL from the realm host. Recognised patterns
+// (mirrors the deployed-env Caddy config + local dev / env-mode Traefik
+// labels in `mise-tasks/lib/env-vars.sh`):
+//
+//   • realms-staging.stack.cards         → boxel-host-staging.stack.cards
+//   • realms.stack.cards                 → boxel-host.stack.cards
+//   • realm-server.<slug>.localhost      → host.<slug>.localhost  (env mode)
+//   • localhost(:NNNN) / *.localhost     → http://localhost:4200  (standard mode)
+//
+// Returns null for anything else; main() then prompts the operator to
+// pass --host-url. Constrained to `.stack.cards` so any future deployment
+// using a `realms-` prefix on a different domain isn't silently mapped
+// to a wrong (and non-existent) host.
 function inferHost(realmURL: string): string | null {
   const u = new URL(realmURL);
-  if (u.hostname === 'localhost' || u.hostname.endsWith('.localhost')) {
+  const hostname = u.hostname;
+  // Env-mode local: realm-server.<slug>.localhost → host.<slug>.localhost
+  const envMatch = hostname.match(/^realm-server\.(.+)\.localhost$/);
+  if (envMatch) {
+    return `${u.protocol}//host.${envMatch[1]}.localhost`;
+  }
+  // Standard local: any *.localhost (including bare 'localhost'). Standard
+  // dev-server boxel-host is always on :4200.
+  if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
     return `${u.protocol}//localhost:4200`;
   }
-  if (u.hostname.startsWith('realms-')) {
-    return `${u.protocol}//${u.hostname.replace(/^realms-/, 'boxel-host-')}`;
+  // Deployed: realms-<env>.stack.cards → boxel-host-<env>.stack.cards
+  if (hostname.startsWith('realms-') && hostname.endsWith('.stack.cards')) {
+    return `${u.protocol}//${hostname.replace(/^realms-/, 'boxel-host-')}`;
   }
-  if (u.hostname === 'realms.stack.cards') {
+  if (hostname === 'realms.stack.cards') {
     return `${u.protocol}//boxel-host.stack.cards`;
   }
   return null;
-}
-
-function ensureTrailingSlash(s: string): string {
-  return s.endsWith('/') ? s : s + '/';
 }
 
 // Mirrors `userIdFromUsername` in
@@ -244,14 +270,99 @@ function promptSeedSilently(question: string): Promise<string> {
   });
 }
 
+const VALID_PERMISSIONS = new Set([
+  'read',
+  'write',
+  'realm-owner',
+  'assume-user',
+]);
+// Loose Matrix-ID validation — the realm-server has stricter rules but a
+// fail-fast here prevents typos like `@ctse-stack.cards` (missing colon)
+// from minting a token that produces a confusing 401 minutes later.
+const MATRIX_ID_RE = /^@[A-Za-z0-9._=\-/+]+:[A-Za-z0-9.\-:]+$/;
+
 async function main(): Promise<void> {
   const { positional, opts } = parseArgs(process.argv.slice(2));
   if (opts.help || positional.length < 1) {
     usage();
     process.exit(opts.help ? 0 : 2);
   }
-  const realmURL = ensureTrailingSlash(positional[0]);
+  // Validate the realm URL up front with an actionable error rather
+  // than letting `new URL()` throw bare "Invalid URL" deep in main.
+  let realmURL: string;
+  try {
+    realmURL = ensureTrailingSlash(new URL(positional[0]).href);
+  } catch {
+    process.stderr.write(
+      `error: <realm-url> is not a valid URL: ${positional[0]}\n` +
+        `       Expected something like https://realms-staging.stack.cards/ctse/myrealm/.\n`,
+    );
+    process.exit(2);
+  }
   const realmOrigin = ensureTrailingSlash(new URL(realmURL).origin);
+
+  // Resolve userId before requesting the seed: bad URL/system-realm/bad
+  // --user should fail fast without prompting (and discarding) a
+  // freshly-pasted seed.
+  let userId = opts.user as string | undefined;
+  if (userId) {
+    if (!MATRIX_ID_RE.test(userId)) {
+      process.stderr.write(
+        `error: --user must be a Matrix ID like '@user:host', got '${userId}'\n`,
+      );
+      process.exit(2);
+    }
+  } else {
+    const derived = deriveUserFromURL(realmURL);
+    if (!derived) {
+      process.stderr.write(
+        `error: cannot derive user from realm URL ${realmURL}.\n` +
+          `       This looks like a system realm (single-segment path).\n` +
+          `       Pass --user <matrix-id> explicitly. System realms are\n` +
+          `       owned by the realm-server bot, typically\n` +
+          `       @realm_server:${deriveMatrixDomain(realmURL)}.\n`,
+      );
+      process.exit(2);
+    }
+    userId = derived;
+  }
+
+  // Validate permissions before the seed prompt, same reasoning.
+  const permissionsOpt = opts.permissions as string | undefined;
+  const permissions = permissionsOpt
+    ? permissionsOpt
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [...DEFAULT_PERMISSIONS];
+  const invalidPerms = permissions.filter((p) => !VALID_PERMISSIONS.has(p));
+  if (invalidPerms.length) {
+    process.stderr.write(
+      `error: --permissions contains unknown values: ${invalidPerms.join(', ')}\n` +
+        `       Valid values: ${[...VALID_PERMISSIONS].join(', ')}\n`,
+    );
+    process.exit(2);
+  }
+
+  // Resolve hostUrl before signing/printing — failing here would leak a
+  // valid JWT to stdout while exiting with a usage error.
+  const hostUrl =
+    (opts['host-url'] as string | undefined) ?? inferHost(realmURL);
+  if (!hostUrl) {
+    process.stderr.write(
+      `error: cannot infer boxel-host URL from realm host '${new URL(realmURL).hostname}'.\n` +
+        `       Pass --host-url <url> explicitly. Recognised patterns:\n` +
+        `         realms-staging.stack.cards         → boxel-host-staging.stack.cards\n` +
+        `         realms.stack.cards                 → boxel-host.stack.cards\n` +
+        `         realm-server.<slug>.localhost      → host.<slug>.localhost\n` +
+        `                                              (BOXEL_ENVIRONMENT mode)\n` +
+        `         localhost / *.localhost (standard) → http://localhost:4200\n`,
+    );
+    process.exit(2);
+  }
+
+  // Seed last — by this point everything else has validated, so the seed
+  // is the final input we ask for.
   const rawSecret =
     positional.length >= 2
       ? positional[1]
@@ -266,36 +377,6 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  let userId = opts.user as string | undefined;
-  if (!userId) {
-    const derived = deriveUserFromURL(realmURL);
-    if (!derived) {
-      process.stderr.write(
-        `error: cannot derive user from realm URL ${realmURL}.\n` +
-          `       This looks like a system realm (single-segment path).\n` +
-          `       Pass --user <matrix-id> explicitly. For system realms\n` +
-          `       owned by the realm-server bot, that's typically\n` +
-          `       @realm:${deriveMatrixDomain(realmURL)}.\n`,
-      );
-      process.exit(2);
-    }
-    userId = derived;
-  }
-
-  // The realm-server's checkPermission (`packages/runtime-common/realm.ts:2308`)
-  // requires JSON.stringify(token.permissions.sort()) === JSON.stringify(
-  // userPermissions.sort()) — the token's permissions must EXACTLY match
-  // what the realm's DB has for this user. Default = DEFAULT_PERMISSIONS from
-  // runtime-common (the same shape new realms grant their owner); pass
-  // --permissions for non-owner users (read-only collaborator, etc.).
-  const permissionsOpt = opts.permissions as string | undefined;
-  const permissions = permissionsOpt
-    ? permissionsOpt
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [...DEFAULT_PERMISSIONS];
-
   const claims: TokenClaims = {
     user: userId,
     realm: realmURL,
@@ -308,23 +389,6 @@ async function main(): Promise<void> {
 
   process.stdout.write(`JWT=${token}\n`);
   process.stdout.write(`SESSION=${session}\n`);
-
-  // Resolve hostUrl: explicit --host-url override wins; otherwise infer
-  // from realm host. Fail fast (rather than emitting a `null` hostUrl
-  // into the artifact) when inference can't produce a usable value —
-  // every downstream consumer needs hostUrl to build the /render URL.
-  const hostUrl =
-    (opts['host-url'] as string | undefined) ?? inferHost(realmURL);
-  if (!hostUrl) {
-    process.stderr.write(
-      `error: cannot infer boxel-host URL from realm host '${new URL(realmURL).hostname}'.\n` +
-        `       Pass --host-url <url> explicitly. Recognised patterns:\n` +
-        `         realms-staging.stack.cards → boxel-host-staging.stack.cards\n` +
-        `         realms.stack.cards         → boxel-host.stack.cards\n` +
-        `         *.localhost / localhost    → http://localhost:4200\n`,
-    );
-    process.exit(2);
-  }
 
   if (opts['no-output']) return;
 
@@ -342,19 +406,30 @@ async function main(): Promise<void> {
   };
   try {
     mkdirSync(dirname(outputPath), { recursive: true });
-    // Open with mode 0o600 from the start — `writeFileSync(path, data,
-    // {mode})` honors mode only when the path doesn't already exist, so
-    // first delete any prior file. The unlink + create-with-mode dance
-    // closes the umask-window the chmod-after-write pattern leaves open
-    // on multi-user systems.
+    // The default output path is in /tmp, which is shared on multi-user
+    // hosts and the filename is predictable — defend against a prior
+    // attacker-planted symlink (which `writeFileSync` would follow,
+    // dumping the JWT into an attacker-controlled location).
+    //
+    // `O_NOFOLLOW` makes the kernel refuse the open if the final path
+    // component is a symlink. `O_TRUNC` clears any prior content;
+    // `O_CREAT` creates the file with `0o600` from the start (no umask
+    // window). The `unlink+writeFileSync` two-call pattern has a TOCTOU
+    // race in between; a single `openSync` with these flags is atomic.
+    const data = Buffer.from(JSON.stringify(artifact, null, 2) + '\n');
+    const fd = openSync(
+      outputPath,
+      fsConstants.O_WRONLY |
+        fsConstants.O_CREAT |
+        fsConstants.O_TRUNC |
+        fsConstants.O_NOFOLLOW,
+      0o600,
+    );
     try {
-      unlinkSync(outputPath);
-    } catch {
-      // not present, nothing to remove
+      writeSync(fd, data);
+    } finally {
+      closeSync(fd);
     }
-    writeFileSync(outputPath, JSON.stringify(artifact, null, 2) + '\n', {
-      mode: 0o600,
-    });
     process.stderr.write(`\nWrote artifact: ${outputPath}\n`);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

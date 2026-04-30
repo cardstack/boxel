@@ -861,7 +861,7 @@ Practical implications:
 
 - The `user` claim has to be a real Matrix ID — a made-up user passes signature verification but fails the lookup → 401. The script's default derivation (`realms-staging.stack.cards/ctse/realm/` → `@ctse:stack.cards`) hits the realm owner's row.
 - The `permissions` claim has to mirror the DB exactly. The script defaults to `['read','write','realm-owner']` because that's the standard realm-owner shape, but if the user has a non-default permission set on this realm (read-only collaborator, write-without-owner, etc.) you'll hit `PermissionMismatch`. The fix is `--permissions <list>` matching the DB row.
-- For system realms (`/catalog/`, `/experiments/`), the script errors and asks for `--user @realm:<matrix-domain>` (the realm-server bot).
+- For system realms (`/catalog/`, `/experiments/`), the script errors and asks for `--user @realm_server:<matrix-domain>` (the realm-server bot — `REALM_SERVER_MATRIX_USERNAME=realm_server` in `packages/realm-server/scripts/start-staging.sh`/`start-production.sh`).
 
 When the `instance-error` body says `User permissions in the JWT payload do not match the server's permissions`, it's specifically this check failing. Query the DB to see what the row actually is:
 
@@ -873,7 +873,12 @@ WHERE realm_url = '<realm-url>' AND username = '<user-from-artifact>';
 
 Then re-mint with `--permissions read,write,realm-owner` (or whatever the columns are). Booleans translate one-to-one to array entries; column `realm_owner` becomes `realm-owner` (note the dash).
 
-For local dev: matrix `server_name` is `localhost` (`packages/matrix/docker/synapse/dev/homeserver.yaml:1`), so user IDs are `@<username>:localhost`. The script auto-handles `*.localhost` hosts.
+For local dev: matrix `server_name` is `localhost` (`packages/matrix/docker/synapse/dev/homeserver.yaml:1`), so user IDs are `@<username>:localhost`. Two local-dev modes are supported:
+
+- **Standard mode** (no `BOXEL_ENVIRONMENT` set) — realm at `http://localhost:4201/...`, host at `http://localhost:4200`. The script's `inferHost` returns `http://localhost:4200`.
+- **Environment mode** (`BOXEL_ENVIRONMENT=<name>` set) — realm at `http://realm-server.<slug>.localhost/...`, host at `http://host.<slug>.localhost` (Traefik routing per `mise-tasks/lib/env-vars.sh`). The script's `inferHost` extracts `<slug>` from the realm host and emits the matching `host.<slug>.localhost`.
+
+Both modes share `@<user>:localhost` for the matrix-domain part of user IDs. If you've configured a non-default matrix `server_name`, pass `--host-url` (and `--user` if needed) explicitly.
 
 **Public realms (`'*': ['read']` in the permissions table) don't need a JWT.** Published realms always get this set (`packages/realm-server/handlers/handle-publish-realm.ts:326`). If you're rendering a published card, no token is needed — though minting still works, the request just doesn't depend on it.
 
