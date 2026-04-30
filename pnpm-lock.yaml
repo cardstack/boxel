@@ -2929,9 +2929,6 @@ importers:
       ember-source:
         specifier: 'catalog:'
         version: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.0.0)(rsvp@4.8.5)
-      es-module-lexer:
-        specifier: ^1.7.0
-        version: 1.7.0
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
@@ -3019,9 +3016,6 @@ importers:
       transform-modules-amd-plugin:
         specifier: workspace:*
         version: link:../../vendor/transform-modules-amd-plugin
-      ts-node:
-        specifier: ^10.9.1
-        version: 10.9.2(@types/node@25.0.8)(typescript@5.9.3)
       typescript-memoize:
         specifier: 'catalog:'
         version: 1.1.1
@@ -3065,12 +3059,18 @@ importers:
       ember-cli-htmlbars:
         specifier: ^6.3.0
         version: 6.3.0
+      es-module-lexer:
+        specifier: ^1.7.0
+        version: 1.7.0
       monaco-editor:
         specifier: 'catalog:'
         version: 0.52.2(patch_hash=bdefe071221b87c7c15e1add6739d24d486f543dbad0d714ae586085204626cd)
       statuses:
         specifier: 'catalog:'
         version: 2.0.2
+      ts-node:
+        specifier: ^10.9.1
+        version: 10.9.2(@types/node@25.0.8)(typescript@5.9.3)
 
   packages/skills-realm: {}
 
