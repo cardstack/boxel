@@ -391,4 +391,55 @@ module('Integration | preview', function (hooks) {
       'the same field DOM node is reused across the format toggle',
     );
   });
+
+  test('getComponent returns a stable BoxComponent reference for the same model across calls', async function (assert) {
+    // Regression test for the Box.create cache. `card-renderer.gts`'s
+    // `renderedCard` getter calls `getComponent(card)` on every reactive
+    // re-render. Without the WeakMap of root Boxes, each call constructs
+    // a fresh Box → `componentCache` (keyed on Box) misses → a brand-new
+    // FieldComponent class is returned. Glimmer's `<this.renderedCard />`
+    // then sees a different class reference and remounts the entire card
+    // tree, defeating the identity short-circuit downstream.
+    //
+    // This test fails (returns two different classes) if Box.create stops
+    // caching root boxes, regardless of any DOM-level Glimmer behavior.
+    let { field, contains, CardDef, Component, getComponent } = cardApi;
+    let { default: StringField } = string;
+
+    class StableCard extends CardDef {
+      @field name = contains(StringField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-stable><@fields.name /></div>
+        </template>
+      };
+    }
+    loader.shimModule(`${testRealmURL}stable-card`, { StableCard });
+
+    let card = new StableCard({ name: 'Mango' });
+
+    let firstCall = getComponent(card);
+    let secondCall = getComponent(card);
+    let thirdCall = getComponent(card);
+
+    assert.strictEqual(
+      firstCall,
+      secondCall,
+      'second getComponent call returns the same reference (cache hit)',
+    );
+    assert.strictEqual(
+      secondCall,
+      thirdCall,
+      'third getComponent call returns the same reference (cache hit)',
+    );
+
+    // Different model → different reference (sanity check that we are
+    // caching by model, not globally).
+    let other = new StableCard({ name: 'Pinto' });
+    assert.notStrictEqual(
+      getComponent(other),
+      firstCall,
+      'a different model returns a different component reference',
+    );
+  });
 });
