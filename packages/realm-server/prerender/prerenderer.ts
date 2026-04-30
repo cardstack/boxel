@@ -287,9 +287,10 @@ export class Prerenderer {
     auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
-    // CS-10976 wire format: priority threaded from the producer side.
-    // Stamped into `response.meta.diagnostics.priority` for telemetry;
-    // PagePool's queue/admission honors it starting in PR 4.
+    // Priority threaded from the producer side. Stamped into
+    // `response.meta.diagnostics.priority` for telemetry, and honored
+    // by PagePool's tab queue / per-affinity admission semaphore /
+    // global render semaphore for priority-aware dequeue.
     priority?: number;
     signal?: AbortSignal;
   }): Promise<{
@@ -473,7 +474,7 @@ export class Prerenderer {
     command: string;
     commandInput?: Record<string, unknown> | null;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
-    // CS-10976: see prerenderModule.
+    // See prerenderModule for the priority contract.
     priority?: number;
     signal?: AbortSignal;
   }): Promise<{
@@ -850,14 +851,14 @@ export class Prerenderer {
               a.admission.cap > 0 && a.admission.pending > 0
                 ? `, admission=pending=${a.admission.pending}/cap=${a.admission.cap}`
                 : '';
-            // CS-10976 PR 5: priority breakdown of *queued* waiters for
-            // this affinity (does NOT count the in-flight holder, which
-            // is what `pending=` above includes). Format:
+            // Priority breakdown of *queued* waiters for this affinity
+            // (does NOT count the in-flight holder, which is what
+            // `pending=` above includes). Format:
             // `priorities=<src>:<p>:<n>,<p>:<n>` where `<src>` is `tab`
-            // for tab-queue waiters or `adm` for file-admission waiters.
-            // Skipped when nothing is queued — idle affinities stay
-            // compact. Format chosen so a single grep can pull priority
-            // distributions out of the logs.
+            // for tab-queue waiters or `adm` for file-admission
+            // waiters. Skipped when nothing is queued — idle affinities
+            // stay compact. Format chosen so a single grep can pull
+            // priority distributions out of the logs.
             let priorityDetail = formatQueuedByPriority(
               a.tabQueuedByPriority,
               a.admissionQueuedByPriority,
@@ -881,10 +882,10 @@ export class Prerenderer {
 }
 
 // Format helper for the `prerender-queue-snapshot` log line's priority
-// breakdown (CS-10976 PR 5). Counts queued waiters only; the in-flight
-// holder is reflected separately in the `pending=` field on the same
-// log entry. Returns `, priorities=tab:10:3,0:1` when the affinity has
-// 3 priority-10 + 1 priority-0 tab-queue waiters and no admission
+// breakdown. Counts queued waiters only; the in-flight holder is
+// reflected separately in the `pending=` field on the same log entry.
+// Returns `, priorities=tab:10:3,0:1` when the affinity has 3
+// priority-10 + 1 priority-0 tab-queue waiters and no admission
 // waiters. Returns `, priorities=tab:10:3|adm:0:2` when the breakdown
 // also includes admission-queue waiters. Returns the empty string when
 // nothing is queued. Numeric keys sort descending within each source

@@ -3,9 +3,9 @@ import { basename } from 'path';
 import { AsyncSemaphore } from '../prerender/async-semaphore';
 import { TabQueue } from '../prerender/page-pool';
 
-// CS-10976 PR 4: priority-aware dequeue for both `AsyncSemaphore`
-// (the per-server render-cap + per-affinity file-admission) and
-// `TabQueue` (the per-tab serializer).
+// Priority-aware dequeue for both `AsyncSemaphore` (the per-server
+// render-cap + per-affinity file-admission) and `TabQueue` (the per-
+// tab serializer).
 //
 // Two contracts being pinned down:
 //   1. Higher priority dequeues first when capacity / the lease frees.

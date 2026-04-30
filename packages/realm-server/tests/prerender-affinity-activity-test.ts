@@ -155,7 +155,7 @@ module(basename(__filename), function () {
     );
   });
 
-  test('priority is captured on each entry and surfaced in snapshots (CS-10976 PR 5)', function (assert) {
+  test('priority is captured on each entry and surfaced in snapshots', function (assert) {
     let { tracker } = trackerAt(1_000_000);
     let outer = tracker.record(
       REALM_A,

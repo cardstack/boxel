@@ -8,8 +8,8 @@ import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel';
 //   - PagePool file-queue admission control (CS-10946)
 //
 // Capacity is mutable post-construction via `setCapacity(n)` so callers
-// (PagePool dynamic tab expansion / contraction in CS-10976) can grow
-// the concurrency cap without rebuilding the semaphore. In-flight slots
+// (PagePool dynamic tab expansion / contraction) can grow the
+// concurrency cap without rebuilding the semaphore. In-flight slots
 // are never preempted on shrink — `setCapacity(smaller)` just stops
 // admitting new waiters until `inUseCount` falls back under the new cap.
 export class AsyncSemaphore {
@@ -21,8 +21,8 @@ export class AsyncSemaphore {
   // `resolve` hands the acquirer the release function once a slot
   // frees. `onCancel` gives the cancellation path a way to splice
   // the entry out of the queue without racing #release. `priority`
-  // (CS-10976 PR 4) controls dequeue order: higher priority first,
-  // FIFO within the same priority. Default priority is `0`.
+  // controls dequeue order: higher priority first, FIFO within the
+  // same priority. Default priority is `0`.
   #queue: Array<{
     resolve: (release: () => void) => void;
     onCancel: () => void;
@@ -53,9 +53,9 @@ export class AsyncSemaphore {
     return this.#inUse;
   }
 
-  // Per-priority count of queued waiters (CS-10976 PR 5). Used to
-  // surface a priority breakdown of file-admission backpressure in
-  // the periodic `prerender-queue-snapshot` log line.
+  // Per-priority count of queued waiters. Used to surface a priority
+  // breakdown of file-admission backpressure in the periodic
+  // `prerender-queue-snapshot` log line.
   pendingByPriority(): Map<number, number> {
     let m = new Map<number, number>();
     for (let entry of this.#queue) {

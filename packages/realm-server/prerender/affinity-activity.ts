@@ -19,11 +19,11 @@ export interface ActivityEntry {
   queue: PrerenderQueue;
   state: ActivityState;
   startedAt: number;
-  // Worker-job priority of the call that produced this entry
-  // (CS-10976 PR 5). Surfaced in `sameAffinityActivity` so post-
-  // mortems can see what priorities were competing during a stall —
-  // e.g. a priority-10 file render stuck behind a priority-0 module
-  // call sticks out cleanly in the diagnostic snapshot.
+  // Worker-job priority of the call that produced this entry.
+  // Surfaced in `sameAffinityActivity` so post-mortems can see what
+  // priorities were competing during a stall — e.g. a priority-10
+  // file render stuck behind a priority-0 module call sticks out
+  // cleanly in the diagnostic snapshot.
   priority: number;
 }
 

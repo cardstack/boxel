@@ -19,10 +19,9 @@ type RenderSemaphore = {
 // Exported so cancellation-plumbing unit tests can drive it
 // directly — it's a per-tab serializer with no Chrome dependency.
 //
-// CS-10976 PR 4: replaces the prior FIFO promise-chain with a
-// priority-bucketed queue. Higher priority dequeues first, FIFO
-// within the same priority. Default priority is `0` so existing
-// callers that don't specify keep the old FIFO behaviour.
+// Priority-bucketed dequeue: higher priority first, FIFO within the
+// same priority. Default priority is `0` so callers that don't
+// specify get straight FIFO.
 export class TabQueue {
   // `held` is true while a caller holds the lease (post-acquire,
   // pre-release). Subsequent acquires queue rather than running.
@@ -118,7 +117,7 @@ export class TabQueue {
 
   // Per-priority count of *queued* waiters (excludes the holder).
   // Used by `getQueueDepthSnapshot` to build the per-priority breakdown
-  // surfaced in `prerender-queue-snapshot` logs (CS-10976 PR 5).
+  // surfaced in `prerender-queue-snapshot` logs.
   pendingByPriority(): Map<number, number> {
     let m = new Map<number, number>();
     for (let entry of this.#queue) {
@@ -471,18 +470,18 @@ export class PagePool {
       // slot. Both are 0 when the semaphore hasn't been lazily created
       // yet, or was deleted once it returned to idle.
       admission: { pending: number; cap: number };
-      // Per-priority breakdown of the affinity's *queued* waiters
-      // (CS-10976 PR 5). Counts waiters only — it deliberately does
-      // NOT include the in-flight render holding the tab right now.
-      // That's why the field is `*Queued*` rather than `*Pending*`:
-      // `pendingTotal` (above) does include the holder per legacy
-      // semantics, and the rename keeps the two from being read as
-      // synonyms in `prerender-queue-snapshot` triage. `tab*` is the
-      // per-tab queues; `admission*` is the per-affinity file-
-      // admission semaphore. Empty when no waiters are queued.
-      // Surfaced in the `prerender-queue-snapshot` log so operators
-      // can see whether a saturation event was dominated by user-
-      // priority work or background work.
+      // Per-priority breakdown of the affinity's *queued* waiters.
+      // Counts waiters only — it deliberately does NOT include the
+      // in-flight render holding the tab right now. That's why the
+      // field is `*Queued*` rather than `*Pending*`: `pendingTotal`
+      // (above) does include the holder per legacy semantics, and the
+      // rename keeps the two from being read as synonyms in
+      // `prerender-queue-snapshot` triage. `tab*` is the per-tab
+      // queues; `admission*` is the per-affinity file-admission
+      // semaphore. Empty when no waiters are queued. Surfaced in the
+      // `prerender-queue-snapshot` log so operators can see whether a
+      // saturation event was dominated by user-priority work or
+      // background work.
       tabQueuedByPriority: Record<number, number>;
       admissionQueuedByPriority: Record<number, number>;
     }>;
@@ -607,11 +606,11 @@ export class PagePool {
     release: () => void;
   }> {
     let signal = opts?.signal;
-    // CS-10976 PR 4: priority threaded from the producer side. Higher
-    // priority requests jump to the head of the per-server file
-    // admission semaphore, the per-affinity tab queue, and the global
-    // render semaphore — without preempting in-flight work. `0` is the
-    // back-compat default so callers that don't care continue to FIFO.
+    // Priority threaded from the producer side. Higher priority
+    // requests jump to the head of the per-server file admission
+    // semaphore, the per-affinity tab queue, and the global render
+    // semaphore — without preempting in-flight work. `0` is the back-
+    // compat default so callers that don't care continue to FIFO.
     let priority = opts?.priority ?? 0;
     throwIfAborted(signal);
     let t0 = Date.now();
