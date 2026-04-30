@@ -521,6 +521,7 @@ export function buildPrerenderApp(options: {
           auth: args.auth,
           command: args.command,
           commandInput: args.commandInput as Record<string, unknown> | null,
+          ...(args.priority !== undefined ? { priority: args.priority } : {}),
           signal,
         }),
       drainingPromise: options.drainingPromise,
