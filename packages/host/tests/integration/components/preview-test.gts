@@ -309,4 +309,86 @@ module('Integration | preview', function (hooks) {
         'distinct templates remount; tracked counter resets on each toggle',
       );
   });
+
+  test('toggling a card format keeps a contained field mounted when its embedded and edit slots are reference-equal', async function (assert) {
+    let { field, contains, CardDef, FieldDef, Component } = cardApi;
+    let { default: StringField } = string;
+
+    class SharedFieldTemplate extends GlimmerComponent<{
+      Args: { format: Format };
+    }> {
+      @tracked counter = 0;
+      bump = () => this.counter++;
+      <template>
+        <div data-test-shared-field>
+          <span data-test-shared-field-format>{{@format}}</span>
+          <span data-test-shared-field-counter>{{this.counter}}</span>
+          <button {{on 'click' this.bump}} data-test-shared-field-bump>
+            bump
+          </button>
+        </div>
+      </template>
+    }
+    class SharedFormatField extends FieldDef {
+      @field name = contains(StringField);
+      static embedded = SharedFieldTemplate;
+      static edit = SharedFieldTemplate;
+    }
+    class FieldHostTemplate extends Component<typeof FieldHostCard> {
+      <template>
+        <div data-test-field-host>
+          <@fields.detail />
+        </div>
+      </template>
+    }
+    class FieldHostCard extends CardDef {
+      @field detail = contains(SharedFormatField);
+      static isolated = FieldHostTemplate;
+      static edit = FieldHostTemplate;
+    }
+    loader.shimModule(`${testRealmURL}field-host-card`, {
+      SharedFormatField,
+      FieldHostCard,
+    });
+
+    let card = new FieldHostCard({
+      detail: new SharedFormatField({ name: 'Mango' }),
+    });
+
+    class TestDriver extends GlimmerComponent {
+      @tracked format: Format = 'isolated';
+      card = card;
+      flip = () => {
+        this.format = this.format === 'isolated' ? 'edit' : 'isolated';
+      };
+      <template>
+        <button {{on 'click' this.flip}} data-test-flip-format>flip</button>
+        <CardRenderer @card={{this.card}} @format={{this.format}} />
+      </template>
+    }
+
+    await renderComponent(TestDriver);
+    await waitFor('[data-test-shared-field]');
+
+    let initialNode = document.querySelector('[data-test-shared-field]');
+    assert.dom('[data-test-shared-field-format]').hasText('embedded');
+
+    await click('[data-test-shared-field-bump]');
+    assert.dom('[data-test-shared-field-counter]').hasText('1');
+
+    await click('[data-test-flip-format]');
+
+    assert.dom('[data-test-shared-field-format]').hasText('edit');
+    assert
+      .dom('[data-test-shared-field-counter]')
+      .hasText(
+        '1',
+        'tracked field state survives the format flip when embedded === edit',
+      );
+    assert.strictEqual(
+      document.querySelector('[data-test-shared-field]'),
+      initialNode,
+      'the same field DOM node is reused across the format toggle',
+    );
+  });
 });

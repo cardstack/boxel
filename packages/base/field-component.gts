@@ -213,17 +213,30 @@ export function getBoxComponent(
     // note that Fields do not have an "isolated" format--only Cards do,
     // the "any" cast is hiding that type warning
     let componentClass = effectiveCardOrFieldComponent as any;
-    // When `isolated` and `edit` resolve to the same component reference,
-    // pick the shared reference for both formats so toggling between them
-    // keeps the same component mounted instead of remounting an identical
-    // tree. Templates can branch on `@format` to render edit affordances
-    // in place. (CardDef defaults edit to DefaultCardDefTemplate, matching
-    // isolated, so this is the default for cards without a custom edit.)
-    let CardOrFieldFormatComponent: BaseDefComponent =
+    // When the view-format and edit slots resolve to the same component
+    // reference, pick the shared reference for both formats so toggling
+    // between them keeps the same component mounted instead of remounting
+    // an identical tree. Templates can branch on `@format` to render edit
+    // affordances in place. The view-format pair is `isolated`/`edit` for
+    // cards (CardDef defaults both to DefaultCardDefTemplate) and
+    // `embedded`/`edit` for fields (which have no isolated slot).
+    let viewSlot: 'isolated' | 'embedded' | undefined;
+    if (
       (effectiveFormat === 'isolated' || effectiveFormat === 'edit') &&
+      componentClass.isolated &&
       componentClass.isolated === componentClass.edit
-        ? componentClass.isolated
-        : componentClass[effectiveFormat];
+    ) {
+      viewSlot = 'isolated';
+    } else if (
+      (effectiveFormat === 'embedded' || effectiveFormat === 'edit') &&
+      componentClass.embedded &&
+      componentClass.embedded === componentClass.edit
+    ) {
+      viewSlot = 'embedded';
+    }
+    let CardOrFieldFormatComponent: BaseDefComponent = viewSlot
+      ? componentClass[viewSlot]
+      : componentClass[effectiveFormat];
     return {
       CardOrFieldFormatComponent,
       fields,
