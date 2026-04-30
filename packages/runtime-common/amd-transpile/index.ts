@@ -115,19 +115,6 @@ export function transpileAmd(
   // True if any `export *` (without `as ns`) is present.
   let hasExportStar = false;
 
-  // Synthesize a fresh top-level identifier for `__default$N` etc. that
-  // doesn't collide with any name already declared at the module level.
-  let defaultCounter = 0;
-  const freshDefaultName = (): string => {
-    for (;;) {
-      const candidate = `__default$${defaultCounter++}`;
-      if (!topLevelDeclaredNames.has(candidate)) {
-        topLevelDeclaredNames.add(candidate);
-        return candidate;
-      }
-    }
-  };
-
   // Helper: strip a top-level statement and a single trailing newline.
   const stripStatement = (node: Node) => {
     let end = node.end;
@@ -137,48 +124,13 @@ export function transpileAmd(
   };
 
   // -----------------------------------------------------------------
-  // Pass 1 — collect every `ImportDeclaration` binding into
-  // `importedAccess`, plus every top-level declared name into
-  // `topLevelDeclaredNames`. This makes export-handling and the
-  // identifier-rewrite walk both order-independent w.r.t. source
-  // statement order.
-  //
-  // We mirror pass 2's deps counter via `passOneDepCount` so the argName
-  // we record (`_foo$<index>`) matches what pass 2 will actually emit. It
-  // increments for every node that contributes a dep slot — that is, every
-  // `ImportDeclaration` and every export-from / `export *` declaration.
+  // Pass 1a — collect every name declared at module top level into
+  // `topLevelDeclaredNames`. Done first so that pass 1b's synthesized
+  // names (`__default$N`, `_<sanitized>$N`) can be checked for
+  // collisions against the FULL set of user names regardless of source
+  // order.
   // -----------------------------------------------------------------
-  let passOneDepCount = 1; // index 0 is reserved for `exports`
   for (const node of ast.body) {
-    if (node.type === 'ImportDeclaration') {
-      const source = node.source.value as string;
-      const argName = sanitize(source) + '$' + passOneDepCount;
-      passOneDepCount++;
-
-      for (const spec of node.specifiers) {
-        if (spec.type === 'ImportDefaultSpecifier') {
-          importedAccess.set(spec.local.name, `${argName}.default`);
-        } else if (spec.type === 'ImportNamespaceSpecifier') {
-          importedAccess.set(spec.local.name, argName);
-        } else {
-          const importedName =
-            spec.imported.type === 'Identifier'
-              ? spec.imported.name
-              : (spec.imported.value as string);
-          importedAccess.set(
-            spec.local.name,
-            memberAccess(argName, importedName),
-          );
-        }
-      }
-    } else if (
-      (node.type === 'ExportNamedDeclaration' && node.source) ||
-      node.type === 'ExportAllDeclaration'
-    ) {
-      // Export-from and `export *` also consume a dep slot in pass 2.
-      passOneDepCount++;
-    }
-    // Record top-level declared names for collision avoidance.
     switch (node.type) {
       case 'VariableDeclaration':
         for (const d of node.declarations) {
@@ -219,14 +171,107 @@ export function transpileAmd(
     }
   }
 
+  // The AMD wrapper hardcodes the parameter names `_exports` and
+  // `__import_meta__` and (when `export *` is used) declares
+  // `var _exportNames = {...}` in the wrapper body. If the user source
+  // declares any of these at top level, the emitted code is either a
+  // SyntaxError (let/const/class redeclares the parameter) or silently
+  // shadows the synthesized binding (var/function). Reject at transpile
+  // time with a clear error rather than emit broken AMD.
+  for (const reserved of ['_exports', '__import_meta__', '_exportNames']) {
+    if (topLevelDeclaredNames.has(reserved)) {
+      throw new Error(
+        `amd-transpile: source declares reserved name \`${reserved}\` at top level (${moduleId}); the AMD wrapper uses this name. Rename the local declaration.`,
+      );
+    }
+  }
+
+  // Synthesize a fresh top-level identifier for `__default$N` that
+  // doesn't collide with any name already declared at the module level.
+  let defaultCounter = 0;
+  const freshDefaultName = (): string => {
+    for (;;) {
+      const candidate = `__default$${defaultCounter++}`;
+      if (!topLevelDeclaredNames.has(candidate)) {
+        topLevelDeclaredNames.add(candidate);
+        return candidate;
+      }
+    }
+  };
+
+  // Synthesize a fresh dep arg name. Base form is `_<sanitized>$<index>`.
+  // If a user binding shadows that name (e.g. user has `var _foo$1 = ...`
+  // and we'd produce the same identifier), append `_2`, `_3`, ... until
+  // we find an uncollided name. Without this guard the user's `var`
+  // would shadow the AMD parameter inside the wrapper body and break
+  // every subsequent rewritten import access.
+  const freshDepArgName = (source: string, idx: number): string => {
+    const base = sanitize(source) + '$' + idx;
+    if (!topLevelDeclaredNames.has(base)) {
+      topLevelDeclaredNames.add(base);
+      return base;
+    }
+    for (let i = 2; ; i++) {
+      const candidate = `${base}_${i}`;
+      if (!topLevelDeclaredNames.has(candidate)) {
+        topLevelDeclaredNames.add(candidate);
+        return candidate;
+      }
+    }
+  };
+
+  // -----------------------------------------------------------------
+  // Pass 1b — build `importedAccess` using collision-avoided dep arg
+  // names. We pre-compute the full ordered list of dep arg names here
+  // so pass 2 can consume them by encounter order without re-deriving
+  // (and therefore can't drift out of sync with pass 1).
+  // -----------------------------------------------------------------
+  const passOneDepArgs: string[] = [];
+  for (const node of ast.body) {
+    if (node.type === 'ImportDeclaration') {
+      const source = node.source.value as string;
+      const argName = freshDepArgName(source, passOneDepArgs.length + 1);
+      passOneDepArgs.push(argName);
+
+      for (const spec of node.specifiers) {
+        if (spec.type === 'ImportDefaultSpecifier') {
+          importedAccess.set(spec.local.name, `${argName}.default`);
+        } else if (spec.type === 'ImportNamespaceSpecifier') {
+          importedAccess.set(spec.local.name, argName);
+        } else {
+          const importedName =
+            spec.imported.type === 'Identifier'
+              ? spec.imported.name
+              : (spec.imported.value as string);
+          importedAccess.set(
+            spec.local.name,
+            memberAccess(argName, importedName),
+          );
+        }
+      }
+    } else if (
+      (node.type === 'ExportNamedDeclaration' && node.source) ||
+      node.type === 'ExportAllDeclaration'
+    ) {
+      // Export-from and `export *` also consume a dep slot in pass 2;
+      // pre-compute the argName so pass 2 doesn't re-derive.
+      const source = node.source!.value as string;
+      passOneDepArgs.push(freshDepArgName(source, passOneDepArgs.length + 1));
+    }
+  }
+
   // -----------------------------------------------------------------
   // Pass 2 — emit dep parameters, strip imports, transform exports.
+  // Consumes pre-computed dep argNames from `passOneDepArgs` (in source
+  // encounter order) so the wire format always matches what pass 1
+  // recorded into `importedAccess`.
   // -----------------------------------------------------------------
+  let depArgIdx = 0;
   for (const node of ast.body) {
     switch (node.type) {
       case 'ImportDeclaration': {
         const source = node.source.value as string;
-        const argName = sanitize(source) + '$' + deps.length;
+        const argName = passOneDepArgs[depArgIdx++];
         deps.push(source);
         argNames.push(argName);
         stripStatement(node);
@@ -264,7 +309,7 @@ export function transpileAmd(
         } else if (node.source) {
           // `export { x, y as z } from 'foo'`
           const source = node.source.value as string;
-          const argName = sanitize(source) + '$' + deps.length;
+          const argName = passOneDepArgs[depArgIdx++];
           deps.push(source);
           argNames.push(argName);
           for (const spec of node.specifiers) {
@@ -378,7 +423,7 @@ export function transpileAmd(
       case 'ExportAllDeclaration': {
         // `export * from 'foo'`  |  `export * as ns from 'foo'`
         const source = node.source.value as string;
-        const argName = sanitize(source) + '$' + deps.length;
+        const argName = passOneDepArgs[depArgIdx++];
         deps.push(source);
         argNames.push(argName);
         if (node.exported) {

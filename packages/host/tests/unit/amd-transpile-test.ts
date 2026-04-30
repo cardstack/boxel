@@ -758,4 +758,62 @@ module('Unit | amd-transpile (CS-10977)', function () {
     let { exports } = runAmd(out, { src: { foo: 'BAR' } });
     assert.strictEqual(exports.r, 'BAR');
   });
+
+  test('user `var _<sanitized>$N` does NOT shadow the dep arg (regression P2)', function (assert) {
+    // The AMD wrapper's parameter name for `import { x } from 'a'` would
+    // normally be `_a$1`. If the user source ALSO declares `var _a$1` at
+    // top level the parameter would be shadowed and every rewritten
+    // import access would read the user's binding instead of the dep.
+    // Pass 1 must detect the collision and pick a fresh argName.
+    let out = transpileAmd(
+      `import { x } from 'a';
+       var _a$1 = { x: 'shadow-target' };
+       export function before() { return x; }
+       export function after() { var _a$1 = 'inner'; return x; }`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out, { a: { x: 'real-import' } });
+    assert.strictEqual(
+      (exports.before as () => string)(),
+      'real-import',
+      'top-level `var _a$1` does not break the import binding',
+    );
+    assert.strictEqual(
+      (exports.after as () => string)(),
+      'real-import',
+      'inner `var _a$1` does not break the import binding either',
+    );
+  });
+
+  test('user-declared `_exports` is rejected at transpile time (regression P2)', function (assert) {
+    assert.throws(
+      () =>
+        transpileAmd(`let _exports = {}; export const x = 1;`, { moduleId }),
+      /reserved name `_exports`/,
+      'rejects modules that redeclare the AMD exports parameter',
+    );
+  });
+
+  test('user-declared `__import_meta__` is rejected at transpile time (regression P2)', function (assert) {
+    assert.throws(
+      () =>
+        transpileAmd(`const __import_meta__ = 1; console.log(import.meta);`, {
+          moduleId,
+        }),
+      /reserved name `__import_meta__`/,
+      'rejects modules that redeclare the AMD import.meta parameter',
+    );
+  });
+
+  test('user-declared `_exportNames` is rejected at transpile time (regression P2)', function (assert) {
+    assert.throws(
+      () =>
+        transpileAmd(
+          `const _exportNames = {}; export * from 'foo'; export const x = 1;`,
+          { moduleId },
+        ),
+      /reserved name `_exportNames`/,
+      'rejects modules that redeclare the AMD export* lookup table',
+    );
+  });
 });
