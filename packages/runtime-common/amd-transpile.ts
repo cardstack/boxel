@@ -614,7 +614,12 @@ function rewriteIdentifierReferences(
     for (const stmt of stmts) {
       if (
         stmt.type === 'VariableDeclaration' &&
-        (stmt.kind === 'let' || stmt.kind === 'const')
+        // `let` / `const` plus the ES2024 explicit-resource-management
+        // forms `using` / `await using` are all block-scoped.
+        (stmt.kind === 'let' ||
+          stmt.kind === 'const' ||
+          stmt.kind === 'using' ||
+          stmt.kind === 'await using')
       ) {
         for (const d of stmt.declarations) {
           collectPatternBindings(d.id, declareInCurrent);
@@ -843,7 +848,12 @@ function rewriteIdentifierReferences(
           if (
             head &&
             head.type === 'VariableDeclaration' &&
-            (head.kind === 'let' || head.kind === 'const')
+            // `let` / `const` plus ES2024 `using` / `await using` are all
+            // block-scoped — the for-loop's pushed scope owns them.
+            (head.kind === 'let' ||
+              head.kind === 'const' ||
+              head.kind === 'using' ||
+              head.kind === 'await using')
           ) {
             for (const d of head.declarations) {
               collectPatternBindings(d.id, declareInCurrent);

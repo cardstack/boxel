@@ -292,6 +292,55 @@ module('Unit | amd-transpile (CS-10977)', function () {
     assert.strictEqual((exports.pick as (n: number) => string)(3), 'other');
   });
 
+  test('`using r = ...` shadows an imported `r` (regression P1)', function (assert) {
+    // ES2024 `using` declarations are block-scoped, just like let/const.
+    // The walker must add them to the current block scope so a same-named
+    // imported binding is shadowed; otherwise the reference inside the
+    // function body would be rewritten to `_foo$1.r` (silent wrong value).
+    let out = transpileAmd(
+      `import { r } from 'foo';
+       export function f() {
+         using r = { value: 'local', [Symbol.dispose]() {} };
+         return r.value;
+       }`,
+      { moduleId },
+    );
+    let { exports } = runAmd(out, {
+      foo: { r: { value: 'IMPORTED' } },
+    });
+    assert.strictEqual(
+      (exports.f as () => string)(),
+      'local',
+      '`using r` shadows the imported `r`',
+    );
+  });
+
+  test('`for (using r of src)` head binds r (regression P1)', function (assert) {
+    let out = transpileAmd(
+      `import { r } from 'foo';
+       export function f(src) {
+         let last;
+         for (using r of src) { last = r; }
+         return last;
+       }`,
+      { moduleId },
+    );
+    // Stub `Symbol.dispose` so the disposable iteration doesn't crash on
+    // browsers that don't yet have full sync-disposable support.
+    let { exports } = runAmd(out, {
+      foo: { r: { value: 'IMPORTED' } },
+    });
+    let dispose = (Symbol as any).dispose ?? Symbol.for('dispose');
+    let items = [
+      { id: 'a', [dispose]() {} },
+      { id: 'b', [dispose]() {} },
+    ];
+    assert.strictEqual(
+      (exports.f as (s: unknown[]) => unknown)(items),
+      items[1],
+    );
+  });
+
   test('top-level await is rejected at transpile time (regression P2)', function (assert) {
     // The AMD wrapper emits a non-async factory, so a top-level
     // `await` would become a SyntaxError at eval time. Reject up
