@@ -82,7 +82,7 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
       height: 0.625rem;
       border-radius: 50%;
       flex-shrink: 0;
-      background: var(--col-dot-bg, var(--muted-foreground, var(--boxel-450)));
+      background: var(--col-dot-bg, var(--_kanban-muted-fg));
       box-shadow: 0 0 0 1.5px
         color-mix(in oklch, var(--col-dot-bg) 30%, transparent);
     }
@@ -106,7 +106,7 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
       opacity: var(--_kanban-muted-opacity);
     }
     .col-wip.over {
-      color: var(--destructive, var(--boxel-danger));
+      color: var(--_kanban-destructive);
       font-weight: 700;
       opacity: 1;
     }

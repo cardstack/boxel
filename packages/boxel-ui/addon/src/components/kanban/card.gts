@@ -43,7 +43,7 @@ const KanbanCard: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     .card {
       flex-shrink: 0;
-      border-radius: var(--_kanban-radius, 0.5rem);
+      border-radius: var(--_kanban-radius);
       overflow: hidden;
       color: var(--_kanban-card-fg);
       background: var(--_kanban-card-bg);
@@ -70,10 +70,10 @@ const KanbanCard: TemplateOnlyComponent<Signature> = <template>
     }
     .card.dragging {
       opacity: 0;
-      height: 0;
-      min-height: 0;
+      height: 0 !important;
+      min-height: 0 !important;
       overflow: hidden;
-      margin: -0.1875rem 0;
+      margin: calc(-1 * var(--_kanban-col-gap) / 2) 0;
     }
     :deep(.boxel-card-container) {
       background: inherit;

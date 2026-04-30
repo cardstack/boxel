@@ -37,6 +37,7 @@ export class KanbanPlaneInner extends Component<{
     card: [KanbanPlacement];
     ghost: [number];
   };
+  Element: HTMLElement;
 }> {
   get manager(): KanbanDragManager {
     return this.args.manager;
@@ -87,9 +88,13 @@ export class KanbanPlaneInner extends Component<{
   };
 
   get isDragging(): boolean {
+    // Pointer-only drag state. Use this for the drag ghost and pointer-specific
+    // styling that should not appear during keyboard drag.
     return this.manager.isDragging;
   }
   get isActivelyMoving(): boolean {
+    // Any active repositioning state, whether driven by pointer drag or
+    // keyboard drag. Use this for shared insertion/target UI.
     return this.manager.isActivelyMoving;
   }
   get showGhost(): boolean {
@@ -116,8 +121,9 @@ export class KanbanPlaneInner extends Component<{
 
   cardShiftStyle = (p: KanbanPlacement): SafeString => {
     if (this.shouldShiftDown(p)) {
-      const gap = (this.manager.dragGhostHeight || this.cardFormat.height) + 8;
-      return sanitizeHtmlSafe(`transform: translateY(${gap}px)`);
+      const shift =
+        (this.manager.dragGhostHeight || this.cardFormat.height) + 8;
+      return sanitizeHtmlSafe(`transform: translateY(${shift}px)`);
     }
     return sanitizeHtmlSafe('');
   };
@@ -135,8 +141,9 @@ export class KanbanPlaneInner extends Component<{
       return sanitizeHtmlSafe('display: none');
     const off = this.manager.insertionBoxOffset;
     if (!off) return sanitizeHtmlSafe('display: none');
+    const height = off.height > 0 ? off.height : this.cardFormat.height;
     return sanitizeHtmlSafe(
-      `transform: translateY(${off.yOffset}px); height: ${off.height}px`,
+      `transform: translateY(${off.yOffset}px); height: ${height}px`,
     );
   };
 
@@ -179,6 +186,7 @@ export class KanbanPlaneInner extends Component<{
       {{on 'lostpointercapture' this.manager.onLostPointerCapture}}
       {{on 'keydown' this.manager.onKeyDown}}
       tabindex='0'
+      ...attributes
     >
       <div
         class='boxel-sr-only'
@@ -247,56 +255,6 @@ export class KanbanPlaneInner extends Component<{
 
     <style scoped>
       .board {
-        --_kanban-bg: var(
-          --boxel-kanban-bg,
-          var(--background, var(--boxel-100))
-        );
-        --_kanban-fg: var(
-          --boxel-kanban-fg,
-          var(--foreground, var(--boxel-700))
-        );
-        --_kanban-card-bg: var(
-          --boxel-kanban-card-bg,
-          var(--card, var(--boxel-light))
-        );
-        --_kanban-card-fg: var(
-          --boxel-kanban-card-fg,
-          var(--card-foreground, var(--boxel-dark))
-        );
-        --_kanban-col-bg: var(
-          --boxel-kanban-col-bg,
-          var(--sidebar, var(--boxel-200))
-        );
-        --_kanban-col-fg: var(
-          --boxel-kanban-col-fg,
-          var(--sidebar-foreground, var(--boxel-dark))
-        );
-        --_kanban-ring: var(
-          --boxel-kanban-ring,
-          var(--ring, var(--boxel-highlight))
-        );
-        --_kanban-destructive: var(
-          --boxel-kanban-destructive,
-          var(--destructive, var(--boxel-danger))
-        );
-        --_kanban-destructive-fg: var(
-          --boxel-kanban-destructive-fg,
-          var(--destructive-foreground, var(--boxel-light-100))
-        );
-        --_kanban-primary: var(
-          --boxel-kanban-primary,
-          var(--primary, var(--boxel-highlight))
-        );
-        --_kanban-primary-fg: var(
-          --boxel-kanban-primary-fg,
-          var(--primary-foreground, var(--boxel-dark))
-        );
-        --_kanban-radius: var(
-          --boxel-kanban-radius,
-          var(--radius, var(--boxel-border-radius-sm))
-        );
-        --_kanban-muted-opacity: var(--boxel-kanban-muted-opacity, 0.7);
-
         display: flex;
         gap: 0.5rem;
         height: 100%;
@@ -336,7 +294,7 @@ export class KanbanPlaneInner extends Component<{
         overflow-y: auto;
         display: flex;
         flex-direction: column;
-        gap: 0.375rem;
+        gap: var(--_kanban-col-gap);
         padding: 0.25rem 0.5rem 0.5rem;
         position: relative;
       }
@@ -353,7 +311,7 @@ export class KanbanPlaneInner extends Component<{
           var(--_kanban-bg)
         );
         border: 2px dashed var(--_kanban-primary);
-        color: var(--_kanban-primary-foreground);
+        color: var(--_kanban-primary-fg);
         z-index: 0;
         pointer-events: none;
         transition: transform 120ms ease-out;

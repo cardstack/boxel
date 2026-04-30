@@ -79,6 +79,7 @@ export class KanbanDragManager {
   private startClientX = 0;
   private startClientY = 0;
   private dragIndex: number | null = null;
+  // Long-press on touch can promote a pending interaction into a drag.
   private holdTask = restartableTask(async (container: HTMLElement) => {
     await timeout(HOLD_DELAY_MS);
     if (this.interactionMode === 'pending') {
@@ -93,6 +94,7 @@ export class KanbanDragManager {
   private rafTimer: Timer | null = null;
   private snapshotPlacements: KanbanPlacement[] | null = null;
   private suppressLostPointerCapture = false;
+  private activeCardHeight = 0;
 
   // ── Public container ref ───────────────────────────────────────────
   containerRef: HTMLElement | null = null;
@@ -157,6 +159,9 @@ export class KanbanDragManager {
     }
 
     const centerY = (dragRect.top + dragRect.bottom) / 2;
+    // Prefer pointer-based hit testing while the pointer is over a column.
+    // When it leaves the board horizontally, fall back to the dragged card's
+    // rect so we can preserve a sensible "last visible" target.
     if (this.getColumnAtClientX(clientX, container) !== null) {
       return findInsertionFromPointer(
         clientX,
@@ -215,6 +220,8 @@ export class KanbanDragManager {
     }
 
     const hitIndex = parseInt(cardEl.getAttribute('data-card-index')!, 10);
+    // Pointer interactions start in "pending" so a quick click can still open
+    // the card, while a move past the threshold or a hold becomes a drag.
     this.suppressLostPointerCapture = false;
     this.activePointerId = e.pointerId;
     this.startClientX = e.clientX;
@@ -279,7 +286,7 @@ export class KanbanDragManager {
             container,
             this.dragIndex!,
           );
-          this.updateInsertionBox();
+          scheduleOnce('afterRender', this, this.updateInsertionBox);
         }
       }
       return;
@@ -324,6 +331,8 @@ export class KanbanDragManager {
       return;
     }
 
+    // Recompute once on drop so the final insertion reflects the latest
+    // pointer position even if a throttled move frame has not run yet.
     const pendingInsertion = this.insertion;
     const pendingDragIndex = this.dragIndex;
     let finalInsertion = pendingInsertion;
@@ -364,7 +373,6 @@ export class KanbanDragManager {
     }
 
     if (container && finalInsertion) {
-      this.scrollInsertionTargetIntoView(container, finalInsertion);
       this.measureSettlePosition(container);
     }
 
@@ -465,15 +473,14 @@ export class KanbanDragManager {
     this.holdTask.cancelAll();
     this.interactionMode = 'drag';
     this.activeDragIndex = this.dragIndex;
+    // Snapshot the pre-drag placements so cancellation can restore them.
     this.snapshotPlacements = this.args.placements.map((p) => ({ ...p }));
 
-    const cardEl = container.querySelector(
-      `[data-card-index="${this.dragIndex}"]`,
-    ) as HTMLElement | null;
-    if (cardEl) {
-      const rect = cardEl.getBoundingClientRect();
+    const rect = this.measureActiveCardRect(container, this.dragIndex);
+    if (rect) {
       this.dragGhostWidth = rect.width;
       this.dragGhostHeight = rect.height;
+      this.activeCardHeight = rect.height;
       this.dragOffsetX = this.pointerClientX - rect.left;
       this.dragOffsetY = this.pointerClientY - rect.top;
     }
@@ -503,20 +510,17 @@ export class KanbanDragManager {
       return;
     }
 
-    let height = this.dragGhostHeight;
-    if (height <= 0) {
-      const dragEl = container.querySelector(
-        `[data-card-index="${this.activeDragIndex}"]`,
-      ) as HTMLElement | null;
-      height = dragEl?.getBoundingClientRect().height ?? 40;
-    }
+    const height = this.getInsertionBoxHeight(container);
 
     if (colCards.length === 0) {
       this.insertionBoxOffset = { yOffset: 0, height };
       return;
     }
 
+    // The insertion indicator is positioned in the board's untransformed flow,
+    // so remove any card transform offsets before measuring the gap.
     const bodyRect = bodyEl.getBoundingClientRect();
+    const scrollTop = bodyEl.scrollTop;
     const gap = parseFloat(getComputedStyle(bodyEl).gap) || 0;
     const insertIdx = Math.min(position - 1, colCards.length);
 
@@ -528,7 +532,8 @@ export class KanbanDragManager {
         const rect = lastEl.getBoundingClientRect();
         const matrix = new DOMMatrix(getComputedStyle(lastEl).transform);
         this.insertionBoxOffset = {
-          yOffset: rect.bottom - matrix.m42 - bodyRect.top + gap / 2,
+          yOffset:
+            rect.bottom - matrix.m42 - bodyRect.top + gap / 2 + scrollTop,
           height,
         };
       } else {
@@ -542,7 +547,7 @@ export class KanbanDragManager {
         const rect = beforeEl.getBoundingClientRect();
         const matrix = new DOMMatrix(getComputedStyle(beforeEl).transform);
         this.insertionBoxOffset = {
-          yOffset: rect.top - matrix.m42 - bodyRect.top - gap / 2,
+          yOffset: rect.top - matrix.m42 - bodyRect.top - gap / 2 + scrollTop,
           height,
         };
       } else {
@@ -551,55 +556,12 @@ export class KanbanDragManager {
     }
   }
 
-  private scrollInsertionTargetIntoView(
-    container: HTMLElement,
-    insertion: InsertionPoint,
-  ): void {
-    const { column, insertBeforeIndex } = insertion;
-    const colEl = container.querySelector(
-      `[data-kanban-column="${column}"]`,
-    ) as HTMLElement | null;
-    const bodyEl = colEl?.querySelector(
-      '[data-kanban-col-body]',
-    ) as HTMLElement | null;
-    if (!bodyEl) {
-      return;
-    }
-
-    let targetEl: HTMLElement | null = null;
-    if (insertBeforeIndex !== -1) {
-      targetEl = container.querySelector(
-        `[data-card-index="${insertBeforeIndex}"]`,
-      ) as HTMLElement | null;
-    } else {
-      const placements = this.args.placements;
-      const colCards = placements
-        .filter((p) => p.column === column && p.index !== this.dragIndex)
-        .sort((a, b) => a.sortOrder - b.sortOrder);
-      const last = colCards[colCards.length - 1];
-      if (last) {
-        targetEl = container.querySelector(
-          `[data-card-index="${last.index}"]`,
-        ) as HTMLElement | null;
-      }
-    }
-
-    if (targetEl) {
-      const targetRect = targetEl.getBoundingClientRect();
-      const bodyRect = bodyEl.getBoundingClientRect();
-      if (
-        targetRect.bottom > bodyRect.bottom ||
-        targetRect.top < bodyRect.top
-      ) {
-        targetEl.scrollIntoView({ block: 'nearest' });
-      }
-    }
-  }
-
   private measureSettlePosition(container: HTMLElement): void {
     if (!this.insertion) {
       return;
     }
+    // The settle animation moves the ghost to the exact slot it will resolve
+    // into before onChange updates the parent-owned placements.
     const { column, position } = this.insertion;
     const placements = this.args.placements;
     const colCards = placements
@@ -680,11 +642,18 @@ export class KanbanDragManager {
       (c) => c.sortOrder < placement.sortOrder,
     ).length;
 
+    // Keyboard dragging reuses the same insertion model as pointer dragging,
+    // but advances it in discrete slots instead of by pointer geometry.
     this.interactionMode = 'kb-drag';
     this.activeDragIndex = index;
     this.kbGrabIndex = index;
     this.selectedIndex = index;
     this.snapshotPlacements = placements.map((p) => ({ ...p }));
+    const rect = this.measureActiveCardRect(this.containerRef, index);
+    if (rect && rect.height > 0) {
+      this.dragGhostHeight = rect.height;
+      this.activeCardHeight = rect.height;
+    }
     this.insertion = this.slotToInsertion(placement.column, slot, colCards);
     this.updateInsertionBox();
     this.args.onSelect?.(index);
@@ -901,6 +870,8 @@ export class KanbanDragManager {
     if (this.interactionMode !== 'drag' || this.dragIndex === null) {
       return;
     }
+    // Pointer coordinates update on every event, but DOM measurement is batched
+    // here to avoid repeating layout work for each pointermove.
     const container = this.containerRef;
     if (!container) {
       return;
@@ -948,7 +919,43 @@ export class KanbanDragManager {
     }
   }
 
+  private measureActiveCardRect(
+    container: HTMLElement | null,
+    index: number | null,
+  ): DOMRect | null {
+    if (!container || index === null) {
+      return null;
+    }
+    const cardEl = container.querySelector(
+      `[data-card-index="${index}"]`,
+    ) as HTMLElement | null;
+    return cardEl?.getBoundingClientRect() ?? null;
+  }
+
+  private getInsertionBoxHeight(container: HTMLElement): number {
+    if (this.dragGhostHeight > 0) {
+      return this.dragGhostHeight;
+    }
+    if (this.activeCardHeight > 0) {
+      return this.activeCardHeight;
+    }
+    if (this.insertionBoxOffset && this.insertionBoxOffset.height > 0) {
+      this.activeCardHeight = this.insertionBoxOffset.height;
+      return this.insertionBoxOffset.height;
+    }
+
+    const rect = this.measureActiveCardRect(container, this.activeDragIndex);
+    if (rect && rect.height > 0) {
+      this.activeCardHeight = rect.height;
+      return rect.height;
+    }
+
+    return 40;
+  }
+
   private resetSession(): void {
+    // Clear every transient drag artifact so the next interaction starts from
+    // a fully neutral state, regardless of how this one ended.
     this.suppressLostPointerCapture = false;
     this.activePointerId = null;
     this.activeDragIndex = null;
@@ -965,6 +972,7 @@ export class KanbanDragManager {
     this.dragOffsetX = 0;
     this.dragOffsetY = 0;
     this.dragIndex = null;
+    this.activeCardHeight = 0;
     this.snapshotPlacements = null;
     this.interactionMode = 'idle';
     this.holdTask.cancelAll();
