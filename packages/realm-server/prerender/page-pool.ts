@@ -379,9 +379,13 @@ export class PagePool {
   // reservation: a same-affinity `prerenderModule` triggered by a
   // file render in flight no longer needs a pre-reserved tab slot —
   // saturation drives `#tryExpand`, which lifts `#maxPages` and
-  // unblocks the sub-render. The default becomes "no admission cap"
-  // (= `#highPriorityMaxPages`, effectively unlimited per affinity)
-  // so file callers can hold all the affinity's tabs concurrently.
+  // unblocks the sub-render. The default becomes "no reservation"
+  // (= `#affinityTabMax`, the per-affinity tab cap), so file callers
+  // can hold all the affinity's tabs concurrently. (Module / command
+  // sub-calls use the per-affinity escape hatch in
+  // `#selectEntryForAffinity` to spawn past `#affinityTabMax` when
+  // the pool can still grow — that's what actually breaks the
+  // self-referential deadlock under this default.)
   //
   // The `PRERENDER_AFFINITY_FILE_CONCURRENCY` knob still works as an
   // explicit operator override for cross-realm fairness — operators
