@@ -11,8 +11,6 @@
     "smoke:context": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/smoke-tests/factory-context-smoke.ts",
     "smoke:prompt": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/smoke-tests/factory-prompt-smoke.ts",
     "smoke:skill": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/smoke-tests/factory-skill-smoke.ts",
-    "smoke:issue-loop": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/smoke-tests/issue-loop-smoke.ts",
-    "smoke:tools": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/smoke-tests/factory-tools-smoke.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --report-unused-disable-directives --cache",
