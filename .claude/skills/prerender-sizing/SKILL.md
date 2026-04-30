@@ -164,7 +164,7 @@ From the peak snapshot — memory used, baseline, and active tabs:
 marginal_per_tab = (peak_memory_bytes − baseline_bytes) / N_at_peak
 ```
 
-`peak_memory_bytes` = `peak_memory_pct × allocated_memory`. If the task is 8 GB and peak is 98 %, that's 8.04 GB used.
+`peak_memory_bytes` = `peak_memory_pct × allocated_memory`. If the task is 8 GB and peak is 98 %, that's 7.84 GB used.
 
 `baseline_bytes` is approximately 2 GB on the current boxel prerender. If the workload changes substantially (Node major version, Chrome major version, observability instrumentation), measure it directly: tail the prerender server logs at idle and capture the `RSS` of the process after standby refresh has settled and the pool has 0 active tabs.
 
@@ -302,18 +302,9 @@ The 16 GB resize is what makes HP_MAX=8 safe. On the existing 8 GB task, MAX=6 i
 
 ## Where to set the values
 
-Two surfaces, both already wired:
+Two surfaces:
 
-- **SSM parameters** at `/<env>/boxel/PRERENDER_*` for the runtime envelope. Set via `packages/realm-server/scripts/set-prerender-pool-ssm.sh <staging|production>` (or directly via `aws ssm put-parameter --overwrite`).
-- **ECS task definition** in `cardstack/infra` at `configs/boxel-prerender/base/main.tf` for `cpu` and `memory`. Set via Terraform PR + apply.
-
-After SSM-value changes, force-deploy the ECS service so the new task instances pick up the new env vars:
-
-```sh
-aws --profile $PROFILE ecs update-service \
-  --cluster ${ENV} \
-  --service boxel-prerender-server-${ENV} \
-  --force-new-deployment
-```
+- **SSM parameters** at `/<env>/boxel/PRERENDER_*` drive the runtime envelope. The activation procedure (including the exact `aws ssm put-parameter` calls, the required force-deploy of the ECS service after, the validation gate, and the rollback path) lives in [`docs/aws-operations.md` → "Activate the dynamic-pool prerender server"](../../../docs/aws-operations.md#activate-the-dynamic-pool-prerender-server). Use that runbook rather than ad-hoc shell — it covers the pre-requisites that make the difference between a real activation and a runtime no-op.
+- **ECS task definition** is in `cardstack/infra` at `configs/boxel-prerender/base/main.tf` (`cpu` and `memory` properties). Resize via Terraform PR + apply.
 
 After applying values, re-run **Step 1** at +1 hour, +24 hours, +48 hours to validate. If memory stays under 80 % and tab-queue waits don't regress, promote to prod with the same values (or adjust per the projection if prod's load profile differs).
