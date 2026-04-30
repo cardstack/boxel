@@ -4961,13 +4961,21 @@ module(basename(__filename), function () {
             await pool.warmStandbys();
 
             let first = await pool.getPage('realm-a', 'file');
-            // Slack of a few ms: the admission acquire is async, and the
-            // microtask round-trip can register as 1–2ms on slow CI even
-            // when the semaphore has a slot immediately available. The
-            // test's assertion is "didn't queue", not "wall-clock zero".
-            assert.ok(
-              first.waits.admissionMs < 10,
-              `first file call does not wait for admission (slot available, actual: ${first.waits.admissionMs}ms)`,
+            // Semantic check: the first call did not queue, so the
+            // file-admission semaphore has no pending waiters. We use
+            // the queue-depth snapshot rather than asserting against
+            // first.waits.admissionMs — the latter is wall-clock and
+            // can register as 1–2ms on slow CI from microtask
+            // round-trip alone, even when the semaphore had a slot
+            // immediately available. The intent of the test is "didn't
+            // queue", which `admission.pending` answers directly.
+            let snapAfterFirst = pool
+              .getQueueDepthSnapshot()
+              .affinities.find((a) => a.affinityKey === 'realm-a');
+            assert.strictEqual(
+              snapAfterFirst?.admission.pending ?? 0,
+              0,
+              'first file call did not queue (no admission waiters)',
             );
 
             // Second file call blocks on the admission semaphore (cap=1
@@ -4975,6 +4983,20 @@ module(basename(__filename), function () {
             // second's admissionMs should reflect that hold.
             let holdMs = 20;
             let secondPromise = pool.getPage('realm-a', 'file');
+            // Yield once so the second call's `acquire` lands in the
+            // queue, then verify it's actually queued. Microtask flush
+            // is enough — `acquire` queues synchronously after the
+            // initial `await throwIfAborted` boundary.
+            await new Promise((r) => setImmediate(r));
+            let snapWhileQueued = pool
+              .getQueueDepthSnapshot()
+              .affinities.find((a) => a.affinityKey === 'realm-a');
+            assert.strictEqual(
+              snapWhileQueued?.admission.pending ?? 0,
+              1,
+              'second file call is queued behind admission',
+            );
+
             setTimeout(() => first.release(), holdMs);
             let second = await secondPromise;
             assert.ok(
