@@ -213,7 +213,8 @@ export default class ErrorDisplay
   // (full display bounds) and runs its own AI-prompt budget on top.
   getError(): BoxelErrorForContext {
     return {
-      message: truncate(this.args.message ?? '', CONTEXT_MESSAGE_MAX_CHARS) ?? '',
+      message:
+        truncate(this.args.message ?? '', CONTEXT_MESSAGE_MAX_CHARS) ?? '',
       stack: truncate(this.args.stack, CONTEXT_STACK_MAX_CHARS),
       additionalErrors: this.contextAdditionalErrors,
       diagnostics: this.args.diagnostics,
