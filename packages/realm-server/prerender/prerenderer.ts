@@ -431,9 +431,11 @@ export class Prerenderer {
           result.response,
           result.timings,
           Date.now() - attemptStart,
-          poller.currentPeak(),
-          priority,
-          result.pool?.reused,
+          {
+            affinitySnapshot: poller.currentPeak(),
+            priority,
+            tabReused: result.pool?.reused,
+          },
         );
         return result;
       }
@@ -447,9 +449,11 @@ export class Prerenderer {
           lastResult.response,
           lastResult.timings,
           Date.now() - attemptStart,
-          poller.currentPeak(),
-          priority,
-          lastResult.pool?.reused,
+          {
+            affinitySnapshot: poller.currentPeak(),
+            priority,
+            tabReused: lastResult.pool?.reused,
+          },
         );
         return lastResult;
       }
@@ -505,9 +509,7 @@ export class Prerenderer {
         result.response,
         result.timings,
         Date.now() - commandStart,
-        undefined,
-        priority,
-        result.pool?.reused,
+        { priority, tabReused: result.pool?.reused },
       );
       return result;
     } catch (e) {
@@ -698,9 +700,11 @@ export class Prerenderer {
           result.response,
           result.timings,
           Date.now() - attemptStart,
-          poller.currentPeak(),
-          priority,
-          result.pool?.reused,
+          {
+            affinitySnapshot: poller.currentPeak(),
+            priority,
+            tabReused: result.pool?.reused,
+          },
         );
         return result;
       }
@@ -709,9 +713,11 @@ export class Prerenderer {
           lastResult.response,
           lastResult.timings,
           Date.now() - attemptStart,
-          poller.currentPeak(),
-          priority,
-          lastResult.pool?.reused,
+          {
+            affinitySnapshot: poller.currentPeak(),
+            priority,
+            tabReused: lastResult.pool?.reused,
+          },
         );
         return lastResult;
       }
