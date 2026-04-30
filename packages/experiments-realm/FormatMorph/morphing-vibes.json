@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Morphing vibes",
+      "tagline": "Toggle the pencil — watch the layout transition instead of remount.",
+      "body": "This card's `static isolated` and `static edit` slots point at the same component class, so flipping format keeps the same component instance mounted. The CSS transitions on the wrapper element animate the layout change. The vibe field below is a custom FieldDef whose embedded and edit slots are also reference-equal — the emoji button stays mounted across the toggle and only the size class changes.",
+      "vibe": "🌊",
+      "cardInfo": {
+        "name": "Format Morph demo",
+        "summary": "Demonstrates CS-10979's identity short-circuit: shared isolated/edit slots → no remount → smooth layout animation between formats.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-morph",
+        "name": "FormatMorph"
+      }
+    }
+  }
+}
