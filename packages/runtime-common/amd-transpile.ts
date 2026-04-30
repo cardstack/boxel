@@ -1,6 +1,6 @@
 // Hand-rolled ES → AMD transpiler for the Loader. Replaces babel's
 // `transformAsync(... TransformModulesAmdPlugin ...)` in `Loader.fetchModule`.
-// ~10–15× faster than babel on real card sources (CS-10977).
+// ~10× faster than babel on real card sources (CS-10977).
 //
 // Input contract: post-realm-server-transpiled JS — TS, JSX, decorators,
 // glimmer templates and scoped CSS have already been lowered by
@@ -28,7 +28,13 @@
 //     This avoids the TDZ trap when `<expr>` is a forward reference and
 //     also avoids a magic-string overlap between the main statement
 //     rewrite and the identifier-rewrite walk.
-import { Parser, type Program, type Node } from 'acorn';
+import {
+  Parser,
+  type Program,
+  type Node,
+  type AnyNode,
+  type Pattern,
+} from 'acorn';
 import MagicString from 'magic-string';
 
 interface AmdTranspileOptions {
@@ -59,6 +65,105 @@ function memberAccess(obj: string, prop: string): string {
 
 function exportLValue(name: string): string {
   return memberAccess('_exports', name);
+}
+
+// Walk a binding pattern (the LHS of a `let`/`const`/`var`/parameter/
+// destructured-assignment) and call `cb` for every Identifier name bound
+// by the pattern. Pure — used by both `transpileAmd`'s pass 1 (top-level
+// declared names + destructured-export emission) and the
+// `IdentifierRewriter` (scope tracking).
+function collectPatternBindings(
+  pattern: Pattern | null | undefined,
+  cb: (name: string) => void,
+): void {
+  if (!pattern) return;
+  switch (pattern.type) {
+    case 'Identifier':
+      cb(pattern.name);
+      break;
+    case 'ObjectPattern':
+      for (const prop of pattern.properties) {
+        if (prop.type === 'RestElement') {
+          collectPatternBindings(prop.argument, cb);
+        } else {
+          collectPatternBindings(prop.value as Pattern, cb);
+        }
+      }
+      break;
+    case 'ArrayPattern':
+      for (const el of pattern.elements) {
+        if (el) collectPatternBindings(el, cb);
+      }
+      break;
+    case 'AssignmentPattern':
+      collectPatternBindings(pattern.left, cb);
+      break;
+    case 'RestElement':
+      collectPatternBindings(pattern.argument, cb);
+      break;
+    // MemberExpression can appear as a pattern in destructure-assignment
+    // (e.g. `[obj.x] = arr`) but binds no new name; nothing to do.
+  }
+}
+
+// Returns true iff an Identifier at the given position is a value
+// reference (not a binding LHS, property key, or label).
+function isReferencePosition(
+  parent: AnyNode | null,
+  parentKey: string,
+  parentArrayKey: string | null,
+): boolean {
+  if (!parent) return true;
+  switch (parent.type) {
+    case 'MemberExpression':
+      if (parentKey === 'property' && !parent.computed) return false;
+      return true;
+    case 'Property':
+      if (parentKey === 'key' && !parent.computed && !parent.shorthand) {
+        return false;
+      }
+      return true;
+    case 'MethodDefinition':
+    case 'PropertyDefinition':
+      if (parentKey === 'key' && !parent.computed) return false;
+      return true;
+    case 'LabeledStatement':
+    case 'BreakStatement':
+    case 'ContinueStatement':
+      if (parentKey === 'label') return false;
+      return true;
+    case 'ImportSpecifier':
+    case 'ImportDefaultSpecifier':
+    case 'ImportNamespaceSpecifier':
+      return false;
+    case 'ExportSpecifier':
+      return false;
+    case 'VariableDeclarator':
+      if (parentKey === 'id') return false;
+      return true;
+    case 'FunctionDeclaration':
+    case 'FunctionExpression':
+    case 'ClassDeclaration':
+    case 'ClassExpression':
+    case 'ArrowFunctionExpression':
+      if (parentKey === 'id') return false;
+      if (parentArrayKey === 'params') return false;
+      return true;
+    case 'CatchClause':
+      if (parentKey === 'param') return false;
+      return true;
+    case 'AssignmentPattern':
+      if (parentKey === 'left') return false;
+      return true;
+    case 'RestElement':
+      if (parentKey === 'argument') return false;
+      return true;
+    case 'ObjectPattern':
+    case 'ArrayPattern':
+      return false;
+    default:
+      return true;
+  }
 }
 
 export function transpileAmd(
@@ -135,40 +240,6 @@ export function transpileAmd(
     ms.remove(node.start, end);
   };
 
-  // Walk a binding pattern and call `cb` for every Identifier name bound
-  // by the pattern (used for destructured `export const { a, b } = obj`).
-  const collectPatternIdentifiers = (
-    pattern: any,
-    cb: (name: string) => void,
-  ) => {
-    if (!pattern) return;
-    switch (pattern.type) {
-      case 'Identifier':
-        cb(pattern.name);
-        break;
-      case 'ObjectPattern':
-        for (const prop of pattern.properties) {
-          if (prop.type === 'RestElement') {
-            collectPatternIdentifiers(prop.argument, cb);
-          } else if (prop.type === 'Property') {
-            collectPatternIdentifiers(prop.value, cb);
-          }
-        }
-        break;
-      case 'ArrayPattern':
-        for (const el of pattern.elements) {
-          if (el) collectPatternIdentifiers(el, cb);
-        }
-        break;
-      case 'AssignmentPattern':
-        collectPatternIdentifiers(pattern.left, cb);
-        break;
-      case 'RestElement':
-        collectPatternIdentifiers(pattern.argument, cb);
-        break;
-    }
-  };
-
   // -----------------------------------------------------------------
   // Pass 1 — collect every `ImportDeclaration` binding into
   // `importedAccess`, plus every top-level declared name into
@@ -215,7 +286,7 @@ export function transpileAmd(
     switch (node.type) {
       case 'VariableDeclaration':
         for (const d of node.declarations) {
-          collectPatternIdentifiers(d.id, (n) => topLevelDeclaredNames.add(n));
+          collectPatternBindings(d.id, (n) => topLevelDeclaredNames.add(n));
         }
         break;
       case 'FunctionDeclaration':
@@ -230,9 +301,7 @@ export function transpileAmd(
       case 'ExportNamedDeclaration':
         if (node.declaration?.type === 'VariableDeclaration') {
           for (const d of node.declaration.declarations) {
-            collectPatternIdentifiers(d.id, (n) =>
-              topLevelDeclaredNames.add(n),
-            );
+            collectPatternBindings(d.id, (n) => topLevelDeclaredNames.add(n));
           }
         } else if (
           (node.declaration?.type === 'FunctionDeclaration' ||
@@ -264,15 +333,6 @@ export function transpileAmd(
         const argName = sanitize(source) + '$' + deps.length;
         deps.push(source);
         argNames.push(argName);
-        // Pass 1 wrote the access expressions using `_foo$<index>` where
-        // `<index>` matches `deps.length` at pass-1 time; pass 2 pushes in
-        // the same order so the indices line up. Defensive:
-        for (const spec of node.specifiers) {
-          // The previously-recorded entry uses the same argName because
-          // pass 1 and pass 2 see ast.body in the same order.
-          // (No-op here; importedAccess is already populated.)
-          void spec;
-        }
         stripStatement(node);
         break;
       }
@@ -287,7 +347,7 @@ export function transpileAmd(
           if (decl.type === 'VariableDeclaration') {
             const isMutable = decl.kind !== 'const';
             for (const d of decl.declarations) {
-              collectPatternIdentifiers(d.id, (name) => {
+              collectPatternBindings(d.id, (name) => {
                 exportStatements.push(
                   isMutable
                     ? defineLocalGetter(name)
@@ -423,7 +483,7 @@ export function transpileAmd(
 
       default:
         // Other top-level node — leave alone. Identifiers inside are
-        // walked by `rewriteIdentifierReferences`.
+        // walked by `IdentifierRewriter`.
         break;
     }
   }
@@ -431,7 +491,7 @@ export function transpileAmd(
   // Rewrite `import.meta` references and every non-shadowed source-code
   // reference to an imported name. Single AST walk so each node is
   // visited at most once.
-  const usesImportMeta = rewriteIdentifierReferences(ast, ms, importedAccess);
+  const usesImportMeta = new IdentifierRewriter(ms, importedAccess).run(ast);
   if (usesImportMeta) {
     deps.push('__import_meta__');
     argNames.push('__import_meta__');
@@ -487,130 +547,136 @@ function reExportStarSnippet(argName: string): string {
   );
 }
 
-// Walk the AST and rewrite every non-shadowed reference to an imported
-// binding to its dep-arg property access. Also rewrites `import.meta` to
-// `__import_meta__`. Returns true if `import.meta` was seen anywhere.
-function rewriteIdentifierReferences(
-  ast: Program,
-  ms: MagicString,
-  importedAccess: Map<string, string>,
-): boolean {
-  type Scope = { kind: 'function' | 'block'; names: Set<string> };
-  const scopeChain: Scope[] = [];
-  let usesImportMeta = false;
+// One scope on the rewriter's scope stack. `function` scopes own `var` /
+// function-decl / parameter bindings; `block` scopes own let/const/class
+// declarations.
+type Scope = { kind: 'function' | 'block'; names: Set<string> };
 
-  const pushScope = (kind: 'function' | 'block') => {
-    scopeChain.push({ kind, names: new Set() });
-  };
-  const popScope = () => {
-    scopeChain.pop();
-  };
-  const declareInCurrent = (name: string) => {
-    if (scopeChain.length > 0) {
-      scopeChain[scopeChain.length - 1].names.add(name);
+// Loose alias for AST node parents — most of the walker's `parent`
+// argument can be any AST node, but generic recursion in the default arm
+// can also pass a Program/BlockStatement etc. Keep it as `AnyNode` since
+// every AST node we visit has a `type` discriminator.
+type WalkNode = AnyNode | null | undefined;
+
+// Rewrite AST identifiers in place via magic-string edits.
+//
+// For each non-shadowed source-code reference to an imported name, replace
+// it with `_dep.name`. Also rewrites `import.meta` to `__import_meta__`.
+// Maintains a scope chain so a `let x` (or function parameter, catch
+// param, etc.) inside a function/block correctly shadows an imported `x`.
+//
+// Construction is cheap; one IdentifierRewriter is used per `transpileAmd`
+// call. `run(ast)` returns true iff at least one `import.meta` usage was
+// rewritten (so the caller can declare the `__import_meta__` AMD dep).
+class IdentifierRewriter {
+  private readonly scopeChain: Scope[] = [];
+  private usesImportMeta = false;
+
+  constructor(
+    private readonly ms: MagicString,
+    private readonly importedAccess: ReadonlyMap<string, string>,
+  ) {}
+
+  run(ast: Program): boolean {
+    this.walk(ast, null, '', null);
+    return this.usesImportMeta;
+  }
+
+  // ---- scope helpers ----
+
+  private pushScope(kind: 'function' | 'block'): void {
+    this.scopeChain.push({ kind, names: new Set() });
+  }
+
+  private popScope(): void {
+    this.scopeChain.pop();
+  }
+
+  private declareInCurrent(name: string): void {
+    if (this.scopeChain.length > 0) {
+      this.scopeChain[this.scopeChain.length - 1].names.add(name);
     }
-  };
-  const declareInFunction = (name: string) => {
-    for (let i = scopeChain.length - 1; i >= 0; i--) {
-      if (scopeChain[i].kind === 'function') {
-        scopeChain[i].names.add(name);
+  }
+
+  private declareInFunction(name: string): void {
+    for (let i = this.scopeChain.length - 1; i >= 0; i--) {
+      if (this.scopeChain[i].kind === 'function') {
+        this.scopeChain[i].names.add(name);
         return;
       }
     }
-  };
-  const isShadowed = (name: string): boolean => {
-    for (const scope of scopeChain) {
+  }
+
+  private isShadowed(name: string): boolean {
+    for (const scope of this.scopeChain) {
       if (scope.names.has(name)) return true;
     }
     return false;
-  };
-
-  const collectPatternBindings = (
-    pattern: any,
-    declareFn: (name: string) => void,
-  ) => {
-    if (!pattern) return;
-    switch (pattern.type) {
-      case 'Identifier':
-        declareFn(pattern.name);
-        break;
-      case 'ObjectPattern':
-        for (const prop of pattern.properties) {
-          if (prop.type === 'RestElement') {
-            collectPatternBindings(prop.argument, declareFn);
-          } else if (prop.type === 'Property') {
-            collectPatternBindings(prop.value, declareFn);
-          }
-        }
-        break;
-      case 'ArrayPattern':
-        for (const el of pattern.elements) {
-          if (el) collectPatternBindings(el, declareFn);
-        }
-        break;
-      case 'AssignmentPattern':
-        collectPatternBindings(pattern.left, declareFn);
-        break;
-      case 'RestElement':
-        collectPatternBindings(pattern.argument, declareFn);
-        break;
-    }
-  };
+  }
 
   // Recurse into a function body and collect var + function declarations
   // into the current (function) scope. Doesn't cross into nested function
   // bodies (they have their own scope).
-  const collectFunctionScopeHoists = (body: any) => {
+  private collectFunctionScopeHoists(
+    body: WalkNode | readonly WalkNode[],
+  ): void {
     if (!body) return;
     if (Array.isArray(body)) {
-      for (const stmt of body) collectFunctionScopeHoists(stmt);
+      for (const stmt of body) this.collectFunctionScopeHoists(stmt);
       return;
     }
-    switch (body.type) {
+    const node = body as AnyNode;
+    switch (node.type) {
       case 'VariableDeclaration':
-        if (body.kind === 'var') {
-          for (const d of body.declarations) {
-            collectPatternBindings(d.id, declareInFunction);
+        if (node.kind === 'var') {
+          for (const d of node.declarations) {
+            collectPatternBindings(d.id, (n) => this.declareInFunction(n));
           }
         }
         break;
       case 'FunctionDeclaration':
-        if (body.id) declareInFunction(body.id.name);
+        if (node.id) this.declareInFunction(node.id.name);
         return;
       case 'BlockStatement':
-        for (const s of body.body) collectFunctionScopeHoists(s);
+        for (const s of node.body) this.collectFunctionScopeHoists(s);
         break;
       case 'IfStatement':
-        collectFunctionScopeHoists(body.consequent);
-        if (body.alternate) collectFunctionScopeHoists(body.alternate);
+        this.collectFunctionScopeHoists(node.consequent);
+        if (node.alternate) this.collectFunctionScopeHoists(node.alternate);
         break;
       case 'TryStatement':
-        collectFunctionScopeHoists(body.block);
-        if (body.handler) collectFunctionScopeHoists(body.handler.body);
-        if (body.finalizer) collectFunctionScopeHoists(body.finalizer);
+        this.collectFunctionScopeHoists(node.block);
+        if (node.handler) this.collectFunctionScopeHoists(node.handler.body);
+        if (node.finalizer) this.collectFunctionScopeHoists(node.finalizer);
         break;
       case 'SwitchStatement':
-        for (const c of body.cases) {
-          for (const s of c.consequent) collectFunctionScopeHoists(s);
+        for (const c of node.cases) {
+          for (const s of c.consequent) this.collectFunctionScopeHoists(s);
         }
         break;
       case 'WhileStatement':
       case 'DoWhileStatement':
-      case 'ForStatement':
-      case 'ForInStatement':
-      case 'ForOfStatement':
       case 'WithStatement':
       case 'LabeledStatement':
-        if (body.body) collectFunctionScopeHoists(body.body);
-        if (body.init) collectFunctionScopeHoists(body.init);
-        // for-in / for-of LHS can be `var x` — that var hoists to the
-        // enclosing function scope, same as any other var.
-        if (body.left) collectFunctionScopeHoists(body.left);
+        if (node.body) this.collectFunctionScopeHoists(node.body);
+        break;
+      case 'ForStatement':
+        if (node.init) this.collectFunctionScopeHoists(node.init);
+        if (node.body) this.collectFunctionScopeHoists(node.body);
+        break;
+      case 'ForInStatement':
+      case 'ForOfStatement':
+        // `var x` in the LHS hoists to function scope just like any other.
+        if (node.left) this.collectFunctionScopeHoists(node.left);
+        if (node.body) this.collectFunctionScopeHoists(node.body);
         break;
     }
-  };
+  }
 
-  const collectBlockScopeDecls = (stmts: any[]) => {
+  // Collect block-scoped declarations (let/const/using/await using/class/
+  // function decls in a block) from the given statement list into the
+  // current scope.
+  private collectBlockScopeDecls(stmts: readonly AnyNode[]): void {
     for (const stmt of stmts) {
       if (
         stmt.type === 'VariableDeclaration' &&
@@ -622,95 +688,107 @@ function rewriteIdentifierReferences(
           stmt.kind === 'await using')
       ) {
         for (const d of stmt.declarations) {
-          collectPatternBindings(d.id, declareInCurrent);
+          collectPatternBindings(d.id, (n) => this.declareInCurrent(n));
         }
       } else if (
         (stmt.type === 'ClassDeclaration' ||
           stmt.type === 'FunctionDeclaration') &&
         stmt.id
       ) {
-        declareInCurrent(stmt.id.name);
+        this.declareInCurrent(stmt.id.name);
       }
     }
-  };
+  }
 
-  // Returns true iff the Identifier at `node` is in a position where it's
-  // referenced as a value (not a binding LHS, property key, or label).
-  const isReferencePosition = (
-    parent: any,
-    parentKey: string,
-    parentArrayKey: string | null,
-  ): boolean => {
-    if (!parent) return true;
-    switch (parent.type) {
-      case 'MemberExpression':
-        if (parentKey === 'property' && !parent.computed) return false;
-        return true;
-      case 'Property':
-        if (parentKey === 'key' && !parent.computed && !parent.shorthand) {
-          return false;
-        }
-        return true;
-      case 'MethodDefinition':
-      case 'PropertyDefinition':
-        if (parentKey === 'key' && !parent.computed) return false;
-        return true;
-      case 'LabeledStatement':
-      case 'BreakStatement':
-      case 'ContinueStatement':
-        if (parentKey === 'label') return false;
-        return true;
-      case 'ImportSpecifier':
-      case 'ImportDefaultSpecifier':
-      case 'ImportNamespaceSpecifier':
-        return false;
-      case 'ExportSpecifier':
-        return false;
-      case 'VariableDeclarator':
-        if (parentKey === 'id') return false;
-        return true;
-      case 'FunctionDeclaration':
-      case 'FunctionExpression':
-      case 'ClassDeclaration':
-      case 'ClassExpression':
-      case 'ArrowFunctionExpression':
-        if (parentKey === 'id') return false;
-        if (parentArrayKey === 'params') return false;
-        return true;
-      case 'CatchClause':
-        if (parentKey === 'param') return false;
-        return true;
+  // Walk only the binding-default expressions (`= rhs`) and computed
+  // property keys inside a pattern. Used when entering a function/catch
+  // scope: parameter identifiers themselves are bindings (handled by
+  // collectPatternBindings), but defaults are reference-position
+  // expressions that need normal walking.
+  private walkPatternDefaults(pattern: WalkNode): void {
+    if (!pattern) return;
+    const node = pattern as AnyNode;
+    switch (node.type) {
       case 'AssignmentPattern':
-        if (parentKey === 'left') return false;
-        return true;
-      case 'RestElement':
-        if (parentKey === 'argument') return false;
-        return true;
+        this.walkPatternDefaults(node.left);
+        this.walk(node.right, node, 'right', null);
+        break;
       case 'ObjectPattern':
+        for (const prop of node.properties) {
+          if (prop.type === 'RestElement') {
+            this.walkPatternDefaults(prop.argument);
+          } else {
+            if (prop.computed) this.walk(prop.key, prop, 'key', null);
+            this.walkPatternDefaults(prop.value);
+          }
+        }
+        break;
       case 'ArrayPattern':
-        return false;
-      default:
-        return true;
+        for (const el of node.elements) {
+          if (el) this.walkPatternDefaults(el);
+        }
+        break;
+      case 'RestElement':
+        this.walkPatternDefaults(node.argument);
+        break;
     }
-  };
+  }
 
-  const walk = (
-    node: any,
-    parent: any,
+  // Walk only the computed-key expressions and assignment-pattern defaults
+  // inside a pattern. Used when the surrounding context is a binding LHS
+  // (variable declarator, destructure-assignment) — the binding identifiers
+  // themselves stay as-is, but `[expr]` keys and `= rhs` defaults are
+  // reference-position expressions that must be rewritten.
+  private walkPatternComputedKeys(pattern: WalkNode): void {
+    if (!pattern) return;
+    const node = pattern as AnyNode;
+    switch (node.type) {
+      case 'ObjectPattern':
+        for (const prop of node.properties) {
+          if (prop.type === 'Property') {
+            if (prop.computed) this.walk(prop.key, prop, 'key', null);
+            this.walkPatternComputedKeys(prop.value);
+          } else if (prop.type === 'RestElement') {
+            this.walkPatternComputedKeys(prop.argument);
+          }
+        }
+        break;
+      case 'ArrayPattern':
+        for (const el of node.elements) {
+          if (el) this.walkPatternComputedKeys(el);
+        }
+        break;
+      case 'AssignmentPattern':
+        this.walkPatternComputedKeys(node.left);
+        this.walk(node.right, node, 'right', null);
+        break;
+      case 'RestElement':
+        this.walkPatternComputedKeys(node.argument);
+        break;
+    }
+  }
+
+  // ---- the main visitor ----
+
+  private walk(
+    node: WalkNode,
+    parent: AnyNode | null,
     parentKey: string,
     parentArrayKey: string | null,
-  ) => {
+  ): void {
     if (!node || typeof node !== 'object') return;
 
     switch (node.type) {
       case 'Program': {
-        for (const stmt of node.body) walk(stmt, node, 'body', 'body');
+        for (const stmt of node.body) {
+          this.walk(stmt, node, 'body', 'body');
+        }
         return;
       }
 
       case 'ImportDeclaration':
-        // The whole declaration was stripped by the main pass; don't walk
-        // into its specifiers (they're bindings, not refs).
+        // Whole declaration was stripped by the main pass; don't walk
+        // into specifiers (they're bindings, not refs).
         return;
 
       case 'ExportNamedDeclaration':
@@ -723,11 +801,11 @@ function rewriteIdentifierReferences(
         if (node.declaration) {
           if (node.declaration.type === 'VariableDeclaration') {
             for (const d of node.declaration.declarations) {
-              walkPatternComputedKeys(d.id);
-              if (d.init) walk(d.init, d, 'init', null);
+              this.walkPatternComputedKeys(d.id);
+              if (d.init) this.walk(d.init, d, 'init', null);
             }
           } else {
-            walk(node.declaration, node, 'declaration', null);
+            this.walk(node.declaration, node, 'declaration', null);
           }
         }
         return;
@@ -739,7 +817,7 @@ function rewriteIdentifierReferences(
         // intact at its original AST positions, so walking the declaration
         // is safe and correctly rewrites imported names within it.
         if (node.declaration) {
-          walk(node.declaration, node, 'declaration', null);
+          this.walk(node.declaration, node, 'declaration', null);
         }
         return;
 
@@ -749,55 +827,59 @@ function rewriteIdentifierReferences(
       case 'FunctionDeclaration':
       case 'FunctionExpression':
       case 'ArrowFunctionExpression': {
-        pushScope('function');
+        this.pushScope('function');
         if (node.type === 'FunctionExpression' && node.id) {
-          declareInCurrent(node.id.name);
+          this.declareInCurrent(node.id.name);
         }
         for (const param of node.params) {
-          collectPatternBindings(param, declareInCurrent);
+          collectPatternBindings(param, (n) => this.declareInCurrent(n));
         }
         for (const param of node.params) {
-          walkPatternDefaults(param);
+          this.walkPatternDefaults(param);
         }
         if (node.body && node.body.type === 'BlockStatement') {
           // For function bodies, treat the block scope as the function
           // scope (don't push a separate block scope inside).
-          collectFunctionScopeHoists(node.body.body);
-          collectBlockScopeDecls(node.body.body);
-          for (const s of node.body.body) walk(s, node.body, 'body', 'body');
+          this.collectFunctionScopeHoists(node.body.body);
+          this.collectBlockScopeDecls(node.body.body);
+          for (const s of node.body.body) {
+            this.walk(s, node.body, 'body', 'body');
+          }
         } else if (node.body) {
-          walk(node.body, node, 'body', null);
+          this.walk(node.body, node, 'body', null);
         }
-        popScope();
+        this.popScope();
         return;
       }
 
       case 'BlockStatement': {
-        pushScope('block');
-        collectBlockScopeDecls(node.body);
-        for (const s of node.body) walk(s, node, 'body', 'body');
-        popScope();
+        this.pushScope('block');
+        this.collectBlockScopeDecls(node.body);
+        for (const s of node.body) this.walk(s, node, 'body', 'body');
+        this.popScope();
         return;
       }
 
       case 'ClassDeclaration':
       case 'ClassExpression': {
-        if (node.superClass) walk(node.superClass, node, 'superClass', null);
-        pushScope('block');
-        if (node.id) declareInCurrent(node.id.name);
-        if (node.body) walk(node.body, node, 'body', null);
-        popScope();
+        if (node.superClass) {
+          this.walk(node.superClass, node, 'superClass', null);
+        }
+        this.pushScope('block');
+        if (node.id) this.declareInCurrent(node.id.name);
+        if (node.body) this.walk(node.body, node, 'body', null);
+        this.popScope();
         return;
       }
 
       case 'CatchClause': {
-        pushScope('block');
+        this.pushScope('block');
         if (node.param) {
-          collectPatternBindings(node.param, declareInCurrent);
-          walkPatternDefaults(node.param);
+          collectPatternBindings(node.param, (n) => this.declareInCurrent(n));
+          this.walkPatternDefaults(node.param);
         }
-        if (node.body) walk(node.body, node, 'body', null);
-        popScope();
+        if (node.body) this.walk(node.body, node, 'body', null);
+        this.popScope();
         return;
       }
 
@@ -806,11 +888,11 @@ function rewriteIdentifierReferences(
         // It has its own var + lexical environment (like a function body)
         // so `let x` inside MUST shadow imports only within the block, not
         // in surrounding instance methods. Treat as function scope.
-        pushScope('function');
-        collectFunctionScopeHoists(node.body);
-        collectBlockScopeDecls(node.body);
-        for (const s of node.body) walk(s, node, 'body', 'body');
-        popScope();
+        this.pushScope('function');
+        this.collectFunctionScopeHoists(node.body);
+        this.collectBlockScopeDecls(node.body);
+        for (const s of node.body) this.walk(s, node, 'body', 'body');
+        this.popScope();
         return;
       }
 
@@ -820,60 +902,80 @@ function rewriteIdentifierReferences(
         // TDZ) during `case 2:`. Without this, a `let x` declared in a
         // case where `x` is also imported would let the walker rewrite
         // post-loop references to `_foo.x`.
-        pushScope('block');
-        const allCaseStmts: any[] = [];
+        this.pushScope('block');
+        const allCaseStmts: AnyNode[] = [];
         for (const c of node.cases) {
           for (const s of c.consequent) allCaseStmts.push(s);
         }
-        collectBlockScopeDecls(allCaseStmts);
-        walk(node.discriminant, node, 'discriminant', null);
+        this.collectBlockScopeDecls(allCaseStmts);
+        this.walk(node.discriminant, node, 'discriminant', null);
         for (const c of node.cases) {
-          if (c.test) walk(c.test, c, 'test', null);
-          for (const s of c.consequent) walk(s, c, 'consequent', 'consequent');
+          if (c.test) this.walk(c.test, c, 'test', null);
+          for (const s of c.consequent) {
+            this.walk(s, c, 'consequent', 'consequent');
+          }
         }
-        popScope();
+        this.popScope();
         return;
       }
 
       case 'ForStatement':
       case 'ForInStatement':
       case 'ForOfStatement': {
-        pushScope('block');
-        // Pull `let`/`const` bindings out of the for-head into the block
-        // scope BEFORE walking init/test/update/body — otherwise the loop
-        // variable would still be visible as a top-level (potentially
-        // imported) name and references inside the test/update/body would
-        // get rewritten to `_dep.x`.
-        for (const head of [node.init, node.left]) {
+        this.pushScope('block');
+        // Pull `let` / `const` / `using` / `await using` bindings out of
+        // the for-head into the block scope BEFORE walking init/test/
+        // update/body — otherwise the loop variable would still be
+        // visible as a top-level (potentially imported) name and
+        // references inside the body would get rewritten to `_dep.x`.
+        const heads: WalkNode[] =
+          node.type === 'ForStatement'
+            ? [node.init]
+            : [(node as { left: AnyNode }).left];
+        for (const head of heads) {
           if (
             head &&
             head.type === 'VariableDeclaration' &&
-            // `let` / `const` plus ES2024 `using` / `await using` are all
-            // block-scoped — the for-loop's pushed scope owns them.
             (head.kind === 'let' ||
               head.kind === 'const' ||
               head.kind === 'using' ||
               head.kind === 'await using')
           ) {
             for (const d of head.declarations) {
-              collectPatternBindings(d.id, declareInCurrent);
+              collectPatternBindings(d.id, (n) => this.declareInCurrent(n));
             }
           }
         }
-        if (node.init) walk(node.init, node, 'init', null);
-        if (node.left) walk(node.left, node, 'left', null);
-        if (node.test) walk(node.test, node, 'test', null);
-        if (node.update) walk(node.update, node, 'update', null);
-        if (node.right) walk(node.right, node, 'right', null);
-        if (node.body) walk(node.body, node, 'body', null);
-        popScope();
+        if (node.type === 'ForStatement') {
+          if (node.init) this.walk(node.init, node, 'init', null);
+          if (node.test) this.walk(node.test, node, 'test', null);
+          if (node.update) this.walk(node.update, node, 'update', null);
+        } else {
+          // `for (... of/in ...)` LHS without a declarator is a
+          // destructure-assignment to existing bindings — same Lvalue
+          // rule as `AssignmentExpression`. If the LHS is an
+          // ObjectPattern / ArrayPattern, walk only computed keys and
+          // assignment-pattern defaults so imported names in
+          // shorthand-property positions (e.g. `for ({ a } of items)`)
+          // aren't rewritten to `_dep.a`, which would silently mutate
+          // the dep namespace.
+          const left = node.left;
+          if (left.type === 'ObjectPattern' || left.type === 'ArrayPattern') {
+            this.walkPatternComputedKeys(left);
+          } else {
+            this.walk(left, node, 'left', null);
+          }
+          this.walk(node.right, node, 'right', null);
+        }
+        if (node.body) this.walk(node.body, node, 'body', null);
+        this.popScope();
         return;
       }
 
       case 'VariableDeclaration': {
         for (const d of node.declarations) {
-          walkPatternComputedKeys(d.id);
-          if (d.init) walk(d.init, d, 'init', null);
+          this.walkPatternComputedKeys(d.id);
+          if (d.init) this.walk(d.init, d, 'init', null);
         }
         return;
       }
@@ -885,33 +987,33 @@ function rewriteIdentifierReferences(
           node.property &&
           node.property.name === 'meta'
         ) {
-          usesImportMeta = true;
-          ms.overwrite(node.start, node.end, '__import_meta__');
+          this.usesImportMeta = true;
+          this.ms.overwrite(node.start, node.end, '__import_meta__');
         }
         return;
       }
 
       case 'MemberExpression': {
-        walk(node.object, node, 'object', null);
-        if (node.computed) walk(node.property, node, 'property', null);
+        this.walk(node.object, node, 'object', null);
+        if (node.computed) this.walk(node.property, node, 'property', null);
         return;
       }
 
       case 'Property': {
-        if (node.computed) walk(node.key, node, 'key', null);
-        walk(node.value, node, 'value', null);
+        if (node.computed) this.walk(node.key, node, 'key', null);
+        this.walk(node.value, node, 'value', null);
         return;
       }
 
       case 'MethodDefinition':
       case 'PropertyDefinition': {
-        if (node.computed) walk(node.key, node, 'key', null);
-        if (node.value) walk(node.value, node, 'value', null);
+        if (node.computed) this.walk(node.key, node, 'key', null);
+        if (node.value) this.walk(node.value, node, 'value', null);
         return;
       }
 
       case 'LabeledStatement': {
-        if (node.body) walk(node.body, node, 'body', null);
+        if (node.body) this.walk(node.body, node, 'body', null);
         return;
       }
       case 'BreakStatement':
@@ -930,15 +1032,15 @@ function rewriteIdentifierReferences(
           // Destructuring assignment, e.g. `({ x } = obj)`. Walk only
           // computed keys + assignment-pattern defaults; the binding
           // identifiers themselves stay as-is.
-          walkPatternComputedKeys(left);
+          this.walkPatternComputedKeys(left);
         } else if (left.type === 'Identifier') {
           // `imp = 1` — leave the LHS untouched.
         } else {
           // MemberExpression or other — walk normally so e.g.
           // `obj.x = imp` rewrites `imp` (it's a reference there).
-          walk(left, node, 'left', null);
+          this.walk(left, node, 'left', null);
         }
-        walk(node.right, node, 'right', null);
+        this.walk(node.right, node, 'right', null);
         return;
       }
 
@@ -948,10 +1050,8 @@ function rewriteIdentifierReferences(
         // reference. Leave Identifier arguments alone; walk
         // MemberExpression arguments normally.
         const arg = node.argument;
-        if (arg.type === 'Identifier') {
-          // leave it
-        } else {
-          walk(arg, node, 'argument', null);
+        if (arg.type !== 'Identifier') {
+          this.walk(arg, node, 'argument', null);
         }
         return;
       }
@@ -959,9 +1059,9 @@ function rewriteIdentifierReferences(
       case 'Identifier': {
         if (
           isReferencePosition(parent, parentKey, parentArrayKey) &&
-          !isShadowed(node.name)
+          !this.isShadowed(node.name)
         ) {
-          const accessor = importedAccess.get(node.name);
+          const accessor = this.importedAccess.get(node.name);
           if (accessor) {
             // Shorthand property `{ x }` where `x` is an imported name:
             // the AST has `key` and `value` both pointing at the same
@@ -974,9 +1074,13 @@ function rewriteIdentifierReferences(
               parent.shorthand &&
               parentKey === 'value'
             ) {
-              ms.overwrite(node.start, node.end, `${node.name}: ${accessor}`);
+              this.ms.overwrite(
+                node.start,
+                node.end,
+                `${node.name}: ${accessor}`,
+              );
             } else {
-              ms.overwrite(node.start, node.end, accessor);
+              this.ms.overwrite(node.start, node.end, accessor);
             }
           }
         }
@@ -984,7 +1088,11 @@ function rewriteIdentifierReferences(
       }
 
       default: {
-        for (const key of Object.keys(node)) {
+        // Generic recursion over child nodes — fallback for any AST type
+        // not handled explicitly above. Keys we know are non-AST metadata
+        // are skipped.
+        const fields = node as unknown as Record<string, unknown>;
+        for (const key of Object.keys(fields)) {
           if (
             key === 'type' ||
             key === 'start' ||
@@ -994,83 +1102,20 @@ function rewriteIdentifierReferences(
           ) {
             continue;
           }
-          const child = (node as any)[key];
+          const child = fields[key];
           if (Array.isArray(child)) {
             for (const c of child) {
               if (c && typeof c === 'object' && 'type' in c) {
-                walk(c, node, key, key);
+                this.walk(c as AnyNode, node, key, key);
               }
             }
           } else if (child && typeof child === 'object' && 'type' in child) {
-            walk(child, node, key, null);
+            this.walk(child as AnyNode, node, key, null);
           }
         }
       }
     }
-  };
-
-  const walkPatternDefaults = (pattern: any) => {
-    if (!pattern) return;
-    switch (pattern.type) {
-      case 'AssignmentPattern':
-        walkPatternDefaults(pattern.left);
-        walk(pattern.right, pattern, 'right', null);
-        break;
-      case 'ObjectPattern':
-        for (const prop of pattern.properties) {
-          if (prop.type === 'RestElement') {
-            walkPatternDefaults(prop.argument);
-          } else if (prop.type === 'Property') {
-            if (prop.computed) {
-              walk(prop.key, prop, 'key', null);
-            }
-            walkPatternDefaults(prop.value);
-          }
-        }
-        break;
-      case 'ArrayPattern':
-        for (const el of pattern.elements) {
-          if (el) walkPatternDefaults(el);
-        }
-        break;
-      case 'RestElement':
-        walkPatternDefaults(pattern.argument);
-        break;
-    }
-  };
-
-  const walkPatternComputedKeys = (pattern: any) => {
-    if (!pattern) return;
-    switch (pattern.type) {
-      case 'ObjectPattern':
-        for (const prop of pattern.properties) {
-          if (prop.type === 'Property' && prop.computed) {
-            walk(prop.key, prop, 'key', null);
-          }
-          if (prop.type === 'Property') {
-            walkPatternComputedKeys(prop.value);
-          } else if (prop.type === 'RestElement') {
-            walkPatternComputedKeys(prop.argument);
-          }
-        }
-        break;
-      case 'ArrayPattern':
-        for (const el of pattern.elements) {
-          if (el) walkPatternComputedKeys(el);
-        }
-        break;
-      case 'AssignmentPattern':
-        walkPatternComputedKeys(pattern.left);
-        walk(pattern.right, pattern, 'right', null);
-        break;
-      case 'RestElement':
-        walkPatternComputedKeys(pattern.argument);
-        break;
-    }
-  };
-
-  walk(ast, null, '', null);
-  return usesImportMeta;
+  }
 }
 
 // Detect a top-level form that requires an async enclosing scope:
@@ -1082,7 +1127,7 @@ function rewriteIdentifierReferences(
 // Used to reject TLA at transpile time — see `transpileAmd`.
 function hasTopLevelAwait(ast: Program): boolean {
   let found = false;
-  const visit = (node: any) => {
+  const visit = (node: WalkNode): void => {
     if (found || !node || typeof node !== 'object') return;
     // Don't cross function boundaries — `await` inside a regular or
     // async function is a non-issue for the AMD wrapper.
@@ -1105,7 +1150,8 @@ function hasTopLevelAwait(ast: Program): boolean {
       found = true;
       return;
     }
-    for (const key of Object.keys(node)) {
+    const fields = node as unknown as Record<string, unknown>;
+    for (const key of Object.keys(fields)) {
       if (
         key === 'type' ||
         key === 'start' ||
@@ -1115,11 +1161,11 @@ function hasTopLevelAwait(ast: Program): boolean {
       ) {
         continue;
       }
-      const child = (node as any)[key];
+      const child = fields[key];
       if (Array.isArray(child)) {
-        for (const c of child) visit(c);
+        for (const c of child) visit(c as WalkNode);
       } else if (child && typeof child === 'object' && 'type' in child) {
-        visit(child);
+        visit(child as WalkNode);
       }
     }
   };
