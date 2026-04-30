@@ -81,6 +81,12 @@ export interface RenderTimeoutDiagnostics {
   // through manager and prerender-server. Paste into a log search to
   // join all three stacks for this call.
   requestId?: string;
+  // Worker-job priority of the request that produced this render
+  // (CS-10976). Plumbed from the producer side via `Job.priority`.
+  // `0` is the system-initiated default; `10` is user-initiated. Read
+  // in post-mortems and in `prerender-queue-snapshot` triage to tell
+  // whether a stalled render was background or user-priority work.
+  priority?: number;
   // Total wall time spent in `PagePool.getPage` before render work
   // began. The three `waits` sub-fields below each cover a specific
   // await; `launchMs` is measured around the full method and so is
@@ -314,6 +320,12 @@ export type ModulePrerenderArgs = {
   url: string;
   auth: string;
   renderOptions?: RenderRouteOptions;
+  // Worker-job priority threaded through from the producer side
+  // (CS-10976). Higher priority requests jump server-side queues
+  // ahead of lower-priority pending work in PR 4. Wire format only
+  // in PR 3 — server reads + logs but doesn't act on it yet.
+  // Defaults to 0 when absent.
+  priority?: number;
 };
 
 export type PrerenderCardArgs = ModulePrerenderArgs;
@@ -346,6 +358,9 @@ export type PrerenderVisitArgs = {
   // protecting the indexer's warm loader from being wiped by incidental
   // callers.
   batchId?: string;
+  // Worker-job priority threaded through from the producer side
+  // (CS-10976). See ModulePrerenderArgs for the contract.
+  priority?: number;
 };
 
 // Arguments for releasing an indexing batch's ownership of an affinity,
@@ -381,6 +396,9 @@ export type RunCommandArgs = {
   auth: string;
   command: string;
   commandInput?: Record<string, any> | null;
+  // Worker-job priority threaded through from the producer side
+  // (CS-10976). See ModulePrerenderArgs for the contract.
+  priority?: number;
 };
 
 export type RunCommandResponse = {
