@@ -215,8 +215,11 @@ async function resolveRealmPath({
   realmURL: string;
   realmsRootPath: string;
 }): Promise<string | null> {
+  // Phase 4: read from realm_registry. published_realms.id and
+  // realm_registry.disk_id hold the same UUID for kind='published' rows
+  // by design (see migration 1776960113000).
   let published = (await query(dbAdapter, [
-    'SELECT id FROM published_realms WHERE published_realm_url =',
+    "SELECT disk_id AS id FROM realm_registry WHERE kind = 'published' AND url =",
     param(realmURL),
   ])) as PublishedRealmRow[];
   if (published.length > 0) {

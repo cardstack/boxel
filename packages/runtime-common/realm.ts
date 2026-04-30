@@ -4544,8 +4544,9 @@ export class Realm {
     last_published_at: string;
   } | null> {
     try {
+      // Phase 4: read from realm_registry instead of published_realms.
       let results = (await query(this.#dbAdapter, [
-        `SELECT last_published_at FROM published_realms WHERE published_realm_url =`,
+        `SELECT last_published_at FROM realm_registry WHERE kind = 'published' AND url =`,
         param(this.url),
       ])) as { last_published_at: string }[];
 
@@ -4560,8 +4561,9 @@ export class Realm {
     { published_realm_url: string; last_published_at: string }[]
   > {
     try {
+      // Phase 4: read from realm_registry; aliases keep callers stable.
       let results = (await query(this.#dbAdapter, [
-        `SELECT published_realm_url, last_published_at FROM published_realms WHERE source_realm_url =`,
+        `SELECT url AS published_realm_url, last_published_at FROM realm_registry WHERE kind = 'published' AND source_url =`,
         param(this.url),
       ])) as { published_realm_url: string; last_published_at: string }[];
 
