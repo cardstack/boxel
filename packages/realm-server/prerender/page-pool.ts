@@ -454,7 +454,9 @@ export class PagePool {
     > = {};
     for (let [affinityKey, entries] of this.#affinityPages) {
       let tabCount = entries.size;
-      let idle = [...entries].every((entry) => entry.queue.pendingCount === 0);
+      let tabsIdle = [...entries].every(
+        (entry) => entry.queue.pendingCount === 0,
+      );
       let maxPendingPriority: number | undefined;
       for (let entry of entries) {
         for (let prio of entry.queue.pendingByPriority().keys()) {
@@ -464,13 +466,23 @@ export class PagePool {
         }
       }
       let sem = this.#fileAdmission.get(affinityKey);
+      let admissionIdle = true;
       if (sem) {
+        if (sem.pendingCount > 0) admissionIdle = false;
         for (let prio of sem.pendingByPriority().keys()) {
           if (maxPendingPriority === undefined || prio > maxPendingPriority) {
             maxPendingPriority = prio;
           }
         }
       }
+      // `idle` must mean "an arriving request can run immediately on
+      // this affinity" — true only when no queueing layer has waiters.
+      // Folding admission-semaphore queue depth in here matches the
+      // semantics `maxPendingPriority` uses (which incorporates both
+      // layers): otherwise an affinity with admission waiters would
+      // report `idle: true` and the manager would route to it as
+      // bucket-0 even though new work would queue behind admission.
+      let idle = tabsIdle && admissionIdle;
       let snapshotEntry: {
         idle: boolean;
         tabCount: number;

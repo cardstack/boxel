@@ -468,8 +468,16 @@ export function buildPrerenderManagerApp(options?: {
             // incoming request. Tolerate older heartbeats by leaving
             // the field unset when missing or malformed —
             // scoreCandidate falls back to the warmth-only logic.
+            // Only accept non-negative safe integers: priority buckets
+            // are integer-keyed (`pendingByPriority()`), and floats /
+            // negatives / Numbers larger than 2^53 would all produce
+            // misleading routing comparisons.
             let mpp = (value as AffinityVacancy).maxPendingPriority;
-            if (typeof mpp === 'number' && Number.isFinite(mpp)) {
+            if (
+              typeof mpp === 'number' &&
+              Number.isSafeInteger(mpp) &&
+              mpp >= 0
+            ) {
               entry.maxPendingPriority = mpp;
             }
             parsed[key] = entry;
@@ -976,9 +984,13 @@ export function buildPrerenderManagerApp(options?: {
       // scoreCandidate so a high-priority request prefers servers
       // without higher-priority pending work. Defaults to 0 (system
       // priority) when absent for back-compat with older callers /
-      // direct curl.
+      // direct curl. Only accept non-negative safe integers — priority
+      // buckets are integer-keyed, and floats / negatives / values
+      // beyond 2^53 would produce misleading routing comparisons.
       let incomingPriority =
-        typeof attrs.priority === 'number' && Number.isFinite(attrs.priority)
+        typeof attrs.priority === 'number' &&
+        Number.isSafeInteger(attrs.priority) &&
+        attrs.priority >= 0
           ? attrs.priority
           : 0;
       if (!affinityType) {
