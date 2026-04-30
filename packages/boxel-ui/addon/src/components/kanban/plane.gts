@@ -152,7 +152,7 @@ export class KanbanPlane extends Component<{
           --boxel-kanban-radius,
           var(--radius, var(--boxel-border-radius-sm))
         );
-        --_kanban-col-gap: 0.5rem;
+        --_kanban-col-gap: 0.5rem; /* KANBAN_INSERTION_GAP_PX (8px) in JS calculations */
       }
     </style>
   </template>

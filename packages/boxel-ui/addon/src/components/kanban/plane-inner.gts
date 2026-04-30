@@ -23,6 +23,9 @@ import {
 import { KanbanGhost } from './ghost.gts';
 import { BindPointerDown, CaptureElement } from './modifiers.gts';
 
+const KANBAN_COLUMN_HORIZONTAL_PADDING_PX = 16;
+const KANBAN_INSERTION_GAP_PX = 8;
+
 export class KanbanPlaneInner extends Component<{
   Args: {
     boardLabel?: string;
@@ -59,7 +62,7 @@ export class KanbanPlaneInner extends Component<{
   }
 
   get columnStyle(): SafeString {
-    let width = this.cardFormat.width + 16;
+    let width = this.cardFormat.width + KANBAN_COLUMN_HORIZONTAL_PADDING_PX;
     return sanitizeHtmlSafe(`flex-basis: ${width}px; min-width: ${width}px;`);
   }
 
@@ -122,7 +125,8 @@ export class KanbanPlaneInner extends Component<{
   cardShiftStyle = (p: KanbanPlacement): SafeString => {
     if (this.shouldShiftDown(p)) {
       const shift =
-        (this.manager.dragGhostHeight || this.cardFormat.height) + 8;
+        (this.manager.dragGhostHeight || this.cardFormat.height) +
+        KANBAN_INSERTION_GAP_PX;
       return sanitizeHtmlSafe(`transform: translateY(${shift}px)`);
     }
     return sanitizeHtmlSafe('');

@@ -532,8 +532,7 @@ export class KanbanDragManager {
         const rect = lastEl.getBoundingClientRect();
         const matrix = new DOMMatrix(getComputedStyle(lastEl).transform);
         this.insertionBoxOffset = {
-          yOffset:
-            rect.bottom - matrix.m42 - bodyRect.top + gap / 2 + scrollTop,
+          yOffset: rect.bottom - matrix.m42 - bodyRect.top + gap + scrollTop,
           height,
         };
       } else {
@@ -547,7 +546,7 @@ export class KanbanDragManager {
         const rect = beforeEl.getBoundingClientRect();
         const matrix = new DOMMatrix(getComputedStyle(beforeEl).transform);
         this.insertionBoxOffset = {
-          yOffset: rect.top - matrix.m42 - bodyRect.top - gap / 2 + scrollTop,
+          yOffset: rect.top - matrix.m42 - bodyRect.top + scrollTop,
           height,
         };
       } else {
