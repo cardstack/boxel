@@ -192,22 +192,31 @@ module(basename(__filename), function () {
         // Tight deadlock-detection budget. The non-deadlocked path
         // returns in milliseconds; with the reservation removed and no
         // expansion (the PR 10 → revert case), this hangs forever.
+        // Clear the timer when the work resolves so it doesn't keep the
+        // node event loop alive after the test exits — addresses
+        // Copilot review on PR 4590.
         let deadlockBudgetMs = 3000;
-        let raceWithDeadlock = (label: string) =>
-          Promise.race([
-            runFileRenderWithModuleSubCall(label),
-            new Promise<never>((_, reject) =>
-              setTimeout(
-                () =>
-                  reject(
-                    new Error(
-                      `deadlock-prevention-failed: file render '${label}' did not complete within ${deadlockBudgetMs}ms`,
-                    ),
-                  ),
-                deadlockBudgetMs,
-              ),
-            ),
-          ]);
+        let raceWithDeadlock = async (label: string) => {
+          let timer: NodeJS.Timeout | undefined;
+          let timerPromise = new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              reject(
+                new Error(
+                  `deadlock-prevention-failed: file render '${label}' did not complete within ${deadlockBudgetMs}ms`,
+                ),
+              );
+            }, deadlockBudgetMs);
+            timer.unref?.();
+          });
+          try {
+            return await Promise.race([
+              runFileRenderWithModuleSubCall(label),
+              timerPromise,
+            ]);
+          } finally {
+            if (timer) clearTimeout(timer);
+          }
+        };
 
         let results = await Promise.all([
           raceWithDeadlock('A'),
@@ -255,22 +264,30 @@ module(basename(__filename), function () {
 
         // Module call should bypass admission entirely and get the
         // reserved tab. If the reservation invariant is broken, this
-        // call queues behind tab availability instead.
+        // call queues behind tab availability instead. Same timer
+        // hygiene as above — clear on completion so a leaked handle
+        // doesn't keep the event loop alive (Copilot review).
         let moduleStart = Date.now();
-        let moduleLease = await Promise.race([
-          pool.getPage('realm-a', 'module'),
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () =>
-                reject(
-                  new Error(
-                    'reservation-failed: module call did not get a tab while file admission was held',
-                  ),
-                ),
-              2000,
-            ),
-          ),
-        ]);
+        let raceTimer: NodeJS.Timeout | undefined;
+        let moduleTimerPromise = new Promise<never>((_, reject) => {
+          raceTimer = setTimeout(() => {
+            reject(
+              new Error(
+                'reservation-failed: module call did not get a tab while file admission was held',
+              ),
+            );
+          }, 2000);
+          raceTimer.unref?.();
+        });
+        let moduleLease;
+        try {
+          moduleLease = await Promise.race([
+            pool.getPage('realm-a', 'module'),
+            moduleTimerPromise,
+          ]);
+        } finally {
+          if (raceTimer) clearTimeout(raceTimer);
+        }
         let moduleAcquireMs = Date.now() - moduleStart;
         assert.ok(
           moduleAcquireMs < 1000,
