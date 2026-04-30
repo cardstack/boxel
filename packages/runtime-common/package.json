@@ -88,13 +88,13 @@
     "ember-cli-htmlbars": "^6.3.0",
     "monaco-editor": "catalog:",
     "statuses": "catalog:",
-    "@glint/ember-tsc": "catalog:"
+    "@glint/ember-tsc": "catalog:",
+    "es-module-lexer": "^1.7.0",
+    "ts-node": "^10.9.1"
   },
   "peerDependencies": {
     "@babel/core": "catalog:",
-    "ember-cli-htmlbars": "^6.3.0",
-    "es-module-lexer": "^1.7.0",
-    "ts-node": "^10.9.1"
+    "ember-cli-htmlbars": "^6.3.0"
   },
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
