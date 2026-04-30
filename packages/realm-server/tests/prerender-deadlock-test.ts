@@ -307,6 +307,94 @@ module(basename(__filename), function () {
       }
     });
 
+    test('dynamic-pool mode: deadlock-safety reservation removed; expansion resolves the deadlock', async function (assert) {
+      // PR 11 verification: same wait-shape as the first regression
+      // test in this file, but the pool is configured for dynamic
+      // expansion (MIN=2, MAX=4) and the file-admission default is
+      // raised to `affinityTabMax` (no reservation). Two concurrent
+      // file renders fire same-affinity module sub-calls; with no
+      // reservation, the only way both pairs complete inside the
+      // budget is if `#tryExpand` lifts `#maxPages` to absorb the
+      // saturating module sub-calls (one per concurrent file render
+      // in flight, so MAX needs ≥ 2 + 2 = 4 to cover the worst case).
+      //
+      // If this test ever fails, the deadlock-prevention contract is
+      // broken — the reservation removal in PR 11 was unsafe.
+      process.env.PRERENDER_PAGE_POOL_MIN = '2';
+      process.env.PRERENDER_PAGE_POOL_MAX = '4';
+      try {
+        let semaphore = new AsyncSemaphore(2);
+        let { pool } = makeStubPagePool({
+          maxPages: 2,
+          renderSemaphore: semaphore,
+        });
+        try {
+          await pool.warmStandbys();
+          assert.strictEqual(
+            pool.minPages,
+            2,
+            'dynamic-pool mode active (minPages=2)',
+          );
+          assert.strictEqual(
+            pool.maxBurstPages,
+            4,
+            'dynamic-pool mode active (maxBurstPages=4)',
+          );
+
+          let runFileRenderWithModuleSubCall = async (
+            tag: string,
+          ): Promise<{ tag: string; phase: string }> => {
+            let fileLease = await pool.getPage('realm-a', 'file');
+            try {
+              let moduleLease = await pool.getPage('realm-a', 'module');
+              moduleLease.release();
+            } finally {
+              fileLease.release();
+            }
+            return { tag, phase: 'done' };
+          };
+
+          let deadlockBudgetMs = 3000;
+          let raceWithDeadlock = async (label: string) => {
+            let timer: NodeJS.Timeout | undefined;
+            let timerPromise = new Promise<never>((_, reject) => {
+              timer = setTimeout(() => {
+                reject(
+                  new Error(
+                    `deadlock-prevention-failed: file render '${label}' did not complete within ${deadlockBudgetMs}ms`,
+                  ),
+                );
+              }, deadlockBudgetMs);
+              timer.unref?.();
+            });
+            try {
+              return await Promise.race([
+                runFileRenderWithModuleSubCall(label),
+                timerPromise,
+              ]);
+            } finally {
+              if (timer) clearTimeout(timer);
+            }
+          };
+
+          let results = await Promise.all([
+            raceWithDeadlock('A'),
+            raceWithDeadlock('B'),
+          ]);
+          assert.deepEqual(
+            results.map((r) => r.tag).sort(),
+            ['A', 'B'],
+            'both concurrent file+module pairs completed via expansion',
+          );
+        } finally {
+          await pool.closeAll();
+        }
+      } finally {
+        delete process.env.PRERENDER_PAGE_POOL_MIN;
+        delete process.env.PRERENDER_PAGE_POOL_MAX;
+      }
+    });
+
     test('deadlock-safety warning fires when affinityTabMax < 2', async function (assert) {
       // Sanity check: the page-pool startup warning that flagged the
       // degenerate config also lives in this code path. Once PR 10

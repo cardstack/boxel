@@ -357,11 +357,28 @@ export class PagePool {
   // call per affinity; lifecycle is tied to the affinity itself,
   // cleared in `closeAll`.
   #fileAdmission = new Map<string, AsyncSemaphore>();
-  // Effective per-affinity file-admission capacity. Defaults to the
-  // deadlock-safety ceiling `max(1, #affinityTabMax − 1)` (same as
-  // before the operator knob existed). When
-  // `PRERENDER_AFFINITY_FILE_CONCURRENCY` is set and ≥ 1, the value is
-  // clamped at the ceiling to preserve the deadlock-safety invariant.
+  // Effective per-affinity file-admission capacity.
+  //
+  // Under the legacy fixed-pool config (MIN === MAX), the default is
+  // the deadlock-safety ceiling `max(1, #affinityTabMax − 1)` — one
+  // tab is reserved for module/command work that file renders may be
+  // waiting on, preventing the self-referential prerender deadlock.
+  //
+  // Under the dynamic-pool config (MIN < MAX), expansion subsumes the
+  // reservation: a same-affinity `prerenderModule` triggered by a
+  // file render in flight no longer needs a pre-reserved tab slot —
+  // saturation drives `#tryExpand`, which lifts `#maxPages` and
+  // unblocks the sub-render. The default becomes "no admission cap"
+  // (= `#highPriorityMaxPages`, effectively unlimited per affinity)
+  // so file callers can hold all the affinity's tabs concurrently.
+  //
+  // The `PRERENDER_AFFINITY_FILE_CONCURRENCY` knob still works as an
+  // explicit operator override for cross-realm fairness — operators
+  // who want to cap one realm's file workload can still set it. The
+  // override is clamped to `#affinityTabMax` (not the
+  // deadlock-safety ceiling) under dynamic mode, preserving the
+  // operator's intent without re-introducing the reservation.
+  //
   // Resolved once at construction so tests that mutate env vars see
   // the value frozen against the pool they're driving.
   #fileAdmissionCap: number;
@@ -469,17 +486,19 @@ export class PagePool {
       Math.max(1, envTabMax),
       this.#highPriorityMaxPages,
     );
-    if (this.#affinityTabMax < 2) {
-      // Degenerate configuration: with only one tab per affinity, the
-      // file-queue admission cap clamps to 1 (see `#acquireFileAdmission`)
-      // and no tab slot can be held back for module / command work.
-      // A card render that triggers a same-affinity `.gts` extraction
-      // will still deadlock — there's no room to run the extraction
-      // while the render occupies the sole tab. Bump
+    if (this.#maxBurstPages <= this.#minPages && this.#affinityTabMax < 2) {
+      // Degenerate legacy-pool configuration: with only one tab per
+      // affinity AND no expansion budget, the file-queue admission
+      // cap clamps to 1 and no tab slot can be held back for
+      // module / command work. A card render that triggers a same-
+      // affinity `.gts` extraction will deadlock. Bump
       // `PRERENDER_AFFINITY_TAB_MAX` to at least 2 for the deadlock-
-      // free guarantee.
+      // free guarantee, OR opt into the dynamic-pool envelope by
+      // setting `PRERENDER_PAGE_POOL_MIN` < `PRERENDER_PAGE_POOL_MAX`
+      // — expansion replaces the reservation as the deadlock-
+      // prevention mechanism in that mode.
       log.warn(
-        `PRERENDER_AFFINITY_TAB_MAX=${this.#affinityTabMax} below 2; file-queue admission can't reserve a slot for module/command work and the self-referential prerender deadlock is not prevented`,
+        `PRERENDER_AFFINITY_TAB_MAX=${this.#affinityTabMax} below 2 with no dynamic-pool expansion budget; file-queue admission can't reserve a slot for module/command work and the self-referential prerender deadlock is not prevented`,
       );
     }
     // Cap on total shared contexts (active + orphaned). Default
@@ -506,11 +525,34 @@ export class PagePool {
     this.#disableStandbyRefill = options.disableStandbyRefill ?? false;
     this.#onAffinityDisposed = options.onAffinityDisposed;
     this.#disableFileAdmission = options.disableFileAdmission ?? false;
-    // Resolve the per-affinity file-admission cap. Ceiling is the
-    // deadlock-safety `max(1, affinityTabMax − 1)`. Operator override
-    // via `PRERENDER_AFFINITY_FILE_CONCURRENCY`; invalid or missing
-    // values fall through to the ceiling — i.e. the pre-knob behavior.
-    let ceiling = Math.max(1, this.#affinityTabMax - 1);
+    // Resolve the per-affinity file-admission cap.
+    //
+    // Two ceilings depending on whether the dynamic-pool envelope is
+    // active:
+    //
+    // - Legacy fixed pool (MIN === MAX): the default cap is the
+    //   deadlock-safety reservation `max(1, affinityTabMax − 1)` —
+    //   one tab is held back for the module/command work a file
+    //   render may be waiting on. Operator override via
+    //   `PRERENDER_AFFINITY_FILE_CONCURRENCY` is clamped at this
+    //   ceiling so the deadlock-safety invariant can never be lost.
+    //
+    // - Dynamic pool (MIN < MAX): the default cap is "no
+    //   reservation" (= `#affinityTabMax`). Pool expansion replaces
+    //   the reservation as the deadlock-prevention mechanism — when
+    //   a file render's same-affinity sub-`prerenderModule` arrives
+    //   and the pool is saturated, `#tryExpand` lifts `#maxPages`
+    //   and unblocks the sub-render. Operator override is clamped to
+    //   `#affinityTabMax` only (no deadlock-safety floor needed) and
+    //   stays available as a cross-realm fairness lever.
+    let isDynamicPool = this.#maxBurstPages > this.#minPages;
+    let deadlockSafetyCeiling = Math.max(1, this.#affinityTabMax - 1);
+    let defaultCap = isDynamicPool
+      ? this.#affinityTabMax
+      : deadlockSafetyCeiling;
+    let overrideCeiling = isDynamicPool
+      ? this.#affinityTabMax
+      : deadlockSafetyCeiling;
     let raw = process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
     let override: number | undefined;
     if (raw !== undefined && raw !== '') {
@@ -519,23 +561,23 @@ export class PagePool {
         override = parsed;
       } else {
         log.warn(
-          `PRERENDER_AFFINITY_FILE_CONCURRENCY=${raw} invalid (must be an integer ≥ 1); falling back to deadlock-safety ceiling=${ceiling}`,
+          `PRERENDER_AFFINITY_FILE_CONCURRENCY=${raw} invalid (must be an integer ≥ 1); falling back to default cap=${defaultCap}`,
         );
       }
     }
     this.#fileAdmissionCap =
-      override === undefined ? ceiling : Math.min(override, ceiling);
+      override === undefined ? defaultCap : Math.min(override, overrideCeiling);
     if (
       !this.#disableFileAdmission &&
       override !== undefined &&
-      this.#fileAdmissionCap < ceiling
+      this.#fileAdmissionCap < defaultCap
     ) {
-      // Operator has explicitly lowered the cap below the ceiling.
+      // Operator has explicitly lowered the cap below the default.
       // Log so the effective value is visible without grepping env.
       // No log line when the env is unset (common case) — nothing
       // changed.
       log.info(
-        `file-queue admission: cap=${this.#fileAdmissionCap} (affinityTabMax=${this.#affinityTabMax}, deadlock-safety ceiling=${ceiling})`,
+        `file-queue admission: cap=${this.#fileAdmissionCap} (affinityTabMax=${this.#affinityTabMax}, default=${defaultCap}${isDynamicPool ? '' : `, deadlock-safety ceiling=${deadlockSafetyCeiling}`})`,
       );
     }
     // Sync the injected render semaphore's capacity to the resolved
@@ -890,6 +932,7 @@ export class PagePool {
     try {
       ({ entry, reused, releaseTab } = await this.#selectEntryForAffinity(
         affinityKey,
+        queue,
         signal,
         priority,
       ));
@@ -1559,6 +1602,7 @@ export class PagePool {
 
   async #selectEntryForAffinity(
     affinityKey: string,
+    queue: PrerenderQueue,
     signal?: AbortSignal,
     priority: number = 0,
   ): Promise<{ entry: PoolEntry; reused: boolean; releaseTab: () => void }> {
@@ -1572,7 +1616,29 @@ export class PagePool {
       let releaseTab = await entry.queue.acquire(signal, priority);
       return { entry, reused: true, releaseTab };
     }
-    if (entryList.length < this.#affinityTabMax) {
+    // Per-affinity spawn gate. Two paths to admission here:
+    //
+    // 1. Headroom under the per-affinity cap: standard fairness rule
+    //    — one realm can't claim more than `#affinityTabMax` tabs at
+    //    once. Spawn into the affinity's shared context or commandeer
+    //    a dormant standby.
+    //
+    // 2. The pool can still expand AND the request is `module` or
+    //    `command`. This is the dynamic-pool deadlock escape hatch:
+    //    `module` / `command` calls bypass file admission, so they
+    //    can land on an affinity that's already at `#affinityTabMax`
+    //    via in-flight file renders — the wait-shape that produces
+    //    the self-referential deadlock if no tab can be conjured.
+    //    Allowing the spawn here lets `#tryExpand` lift the global
+    //    cap and the standby refill / commandeer path produce a tab
+    //    for the queued sub-render. File renders still respect the
+    //    per-affinity cap (via the admission semaphore upstream) so
+    //    cross-realm fairness for the file workload is preserved.
+    let canExpandPastAffinityCap =
+      this.#highPriorityMaxPages > this.#minPages &&
+      this.#maxPages < this.#highPriorityMaxPages &&
+      queue !== 'file';
+    if (entryList.length < this.#affinityTabMax || canExpandPastAffinityCap) {
       // Prefer spawning into the affinity's shared context over
       // adopting a fresh standby — whether that context is orphan
       // (carries the realm's warm HTTP cache from before eviction)
@@ -1590,6 +1656,19 @@ export class PagePool {
       if (commandeered) {
         let releaseTab = await commandeered.queue.acquire(signal, priority);
         return { entry: commandeered, reused: false, releaseTab };
+      }
+      // No orphan, no commandeer-able tab/standby. If we got here
+      // through the dynamic-expansion escape hatch, drive an
+      // expansion + fresh spawn so the saturated module/command
+      // sub-render isn't forced to queue behind the file render
+      // it's blocking.
+      if (canExpandPastAffinityCap && this.#tryExpand(priority)) {
+        await this.#ensureStandbyPool();
+        let after = this.#commandeerDormantTab(affinityKey);
+        if (after) {
+          let releaseTab = await after.queue.acquire(signal, priority);
+          return { entry: after, reused: false, releaseTab };
+        }
       }
     }
     if (entryList.length > 0) {
