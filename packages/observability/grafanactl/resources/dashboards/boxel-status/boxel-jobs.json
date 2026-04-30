@@ -27,7 +27,6 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
-    "id": 27,
     "links": [
       {
         "asDropdown": false,
@@ -543,8 +542,6 @@
     "timepicker": {},
     "timezone": "browser",
     "title": "Boxel Jobs",
-    "uid": "aetquzjcf2znke",
-    "version": 5,
     "weekStart": ""
   }
 }

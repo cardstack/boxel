@@ -27,7 +27,6 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
-    "id": 24,
     "links": [
       {
         "asDropdown": false,
@@ -299,8 +298,6 @@
     "timepicker": {},
     "timezone": "browser",
     "title": "User Credits",
-    "uid": "eetquziy9np4wa",
-    "version": 1,
     "weekStart": ""
   }
 }
