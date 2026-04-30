@@ -120,16 +120,21 @@ normalize folders Folder
 # four classes of noise that have nothing to do with what an apply would
 # actually change:
 #
-#   1. Unicode-escape style. `jq` writes `&` as `&` and `>` as `>`;
-#      our committed JSON has them as `&` / `>` (an artefact of
-#      the original extract pipeline in CS-10922). Every URL / query
-#      string with `&` becomes a diff line. Re-emitting both sides
-#      through `jq` collapses them.
+#   1. Unicode-escape style. The committed JSON encodes `&` as the
+#      6-byte escape sequence `&` and `>` as `>` (an artefact
+#      of CS-10922's original extract pipeline). `jq` decodes both back
+#      to literal `&` and `>` on re-emit, while the live API returns
+#      them already decoded. Every URL / query-string with `&` becomes
+#      a diff line. Re-emitting both sides through `jq` collapses them.
 #   2. App Platform server-injected metadata. Pulled state has
 #      `metadata.id` (server-assigned int), an empty `metadata.labels`,
 #      `metadata.namespace: "default"`, and may grow
 #      resourceVersion/creationTimestamp/uid. Our committed JSON omits
-#      all of these because they don't round-trip on push.
+#      all of these because they don't round-trip on push. Note:
+#      `metadata.uid` is the App Platform's server-assigned UUID — a
+#      Kubernetes-style resource id, distinct from `metadata.name`
+#      (the user-facing identifier we ship in committed JSON). Stripping
+#      it cannot hide a real diff.
 #   3. Key order inside `metadata`. `--sort-keys` makes order stable on
 #      both sides.
 #   4. (Not handled here.) Default values like `"value": null` injected
@@ -152,15 +157,18 @@ JQ_NORMALIZE='
 
 normalize_json_content() {  # $1: src dir, $2: dest dir
   local src="$1" dest="$2"
-  shopt -s nullglob globstar
+  # `find -print0` + a NUL-delimited read loop rather than `**/*.json` —
+  # macOS's default bash 3.2 doesn't support `shopt -s globstar`, and
+  # enabling shell options inside a function leaks them back to the
+  # caller anyway. This pattern is portable across bash 3.2 / 4.x / 5.x
+  # and zsh and has no shell-state side effects.
   local f rel target
-  for f in "$src"/**/*.json "$src"/*.json; do
-    [[ -f "$f" ]] || continue
+  while IFS= read -r -d '' f; do
     rel="${f#$src/}"
     target="$dest/$rel"
     mkdir -p "$(dirname "$target")"
     jq --sort-keys "$JQ_NORMALIZE" "$f" > "$target"
-  done
+  done < <(find "$src" -type f -name '*.json' -print0)
 }
 
 # Re-process both trees through jq into matching canonicalized layouts.
@@ -173,7 +181,9 @@ normalize_json_content "./grafanactl/resources" "$committed_canon"
 # Diff: <remote-current-state, canonicalized> → <committed-target,
 # canonicalized>. Reading top-to-bottom shows what would CHANGE on apply.
 # Pulled resources that aren't in our committed set are deliberately
-# absent from remote_norm (push won't touch them).
+# absent from remote_canon (the layout-normalize step in `normalize`
+# drops them from remote_norm, and remote_canon is just remote_norm
+# re-canonicalized — push won't touch them).
 #
 # Color is disabled because the diff is consumed by GitHub Actions or
 # piped to a PR comment (terminal escapes don't render in either).
