@@ -82,10 +82,9 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
+import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 import { runWhileActive } from '@cardstack/host/utils/run-while-active';
-
-import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
 import type {
   CardDef,
