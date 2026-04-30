@@ -337,18 +337,35 @@ export function transpileAmd(
           // matches native ESM, where `export default foo; const foo =
           // ...` is also a TDZ error.
           //
-          // Replace just the `export default ` keyword (15 chars) with the
-          // var capture, then append `)` before any trailing `;`. We do
-          // NOT trim to `decl.start..decl.end` because acorn's positions
-          // SKIP source-level parens — for `export default (foo);`, decl
+          // Replace `export <ws/comments> default` with the var capture,
+          // then append `)` before any trailing `;`. We do NOT trim to
+          // `decl.start..decl.end` because acorn's positions SKIP
+          // source-level parens — for `export default (foo);`, decl
           // points at `foo` (inside the parens), so consuming
           // `[node.start..decl.start]` would eat the source `(` while
           // leaving the source `)` untouched, producing `var X = (foo));`
-          // (double-paren SyntaxError). Replacing only the keyword and
-          // appending before `;` leaves source-level parens intact, which
-          // is harmless: `var X = ((foo));` parses fine.
+          // (double-paren SyntaxError). Replacing only the keyword
+          // sequence (no trailing whitespace) and appending before `;`
+          // leaves source-level parens, comments and whitespace intact.
+          //
+          // Compute the keyword end by regex-scanning from `node.start`:
+          // `export` + (whitespace | block-comment | line-comment)+ +
+          // `default`. Tolerates `export\ndefault`,
+          // `export /* c */ default`, etc. Hardcoding 15 chars (the
+          // length of `'export default '`) was fragile — any non-canonical
+          // whitespace or comment between the two keywords would mis-align
+          // the rewrite.
           const tempName = freshDefaultName();
-          const headEnd = node.start + 'export default '.length;
+          const kwMatch =
+            /^export(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)+default\b/.exec(
+              src.slice(node.start, decl.start),
+            );
+          if (!kwMatch) {
+            throw new Error(
+              `amd-transpile: could not locate \`default\` keyword at offset ${node.start} in ${moduleId}`,
+            );
+          }
+          const headEnd = node.start + kwMatch[0].length;
           ms.overwrite(node.start, headEnd, `var ${tempName} = (`);
           let tail = node.end;
           if (src[tail - 1] === ';') tail -= 1;

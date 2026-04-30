@@ -46,12 +46,15 @@ interface Result extends Stats {
 
 const stats = (samples: number[]): Stats => {
   const sorted = [...samples].sort((a, b) => a - b);
+  const n = sorted.length;
   const sum = sorted.reduce((a, b) => a + b, 0);
-  const mean = sum / sorted.length;
-  const median = sorted[Math.floor(sorted.length / 2)];
-  const p95 =
-    sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))];
-  return { mean, median, p95, min: sorted[0], max: sorted[sorted.length - 1] };
+  const mean = sum / n;
+  // Standard median: average the two middle elements for even n.
+  const median =
+    n % 2 === 0 ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2 : sorted[(n - 1) / 2];
+  // Standard nearest-rank p95: index `ceil(0.95 * n) - 1` (zero-based).
+  const p95 = sorted[Math.min(n - 1, Math.ceil(0.95 * n) - 1)];
+  return { mean, median, p95, min: sorted[0], max: sorted[n - 1] };
 };
 
 const fmt = (ms: number) => `${ms.toFixed(2).padStart(8)}ms`;
