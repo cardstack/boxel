@@ -62,6 +62,11 @@ export class IndexRunner {
   #realmOwnerUserId: string;
   #definitionLookup: DefinitionLookup;
   #jobInfo: JobInfo;
+  // Worker-job priority threaded from `pg-queue` → `tasks/indexer.ts`
+  // → here (CS-10976). Forwarded into every prerenderer call site so
+  // the prerender server can route by priority. Defaults to `0` for
+  // tests / non-job callers that don't carry job context.
+  #jobPriority: number;
   #dependencyResolver: IndexRunnerDependencyManager;
   #reportStatus?: (
     jobInfo: JobInfo | undefined,
@@ -91,6 +96,7 @@ export class IndexRunner {
     definitionLookup,
     ignoreData = {},
     jobInfo,
+    jobPriority,
     reportStatus,
     onProgress,
     prerenderer,
@@ -108,6 +114,11 @@ export class IndexRunner {
     fetch: typeof globalThis.fetch;
     realmOwnerUserId: string;
     jobInfo?: JobInfo;
+    // Optional override of `jobInfo.priority`. When both are present,
+    // `jobPriority` wins — this is the path the worker handler takes
+    // so non-`JobInfo` callers (tests) can still set priority
+    // explicitly.
+    jobPriority?: number;
     reportStatus?(
       jobInfo: JobInfo | undefined,
       status: 'start' | 'finish',
@@ -119,7 +130,8 @@ export class IndexRunner {
     this.#reader = reader;
     this.#realmURL = realmURL;
     this.#ignoreData = ignoreData;
-    this.#jobInfo = jobInfo ?? { jobId: -1, reservationId: -1 };
+    this.#jobInfo = jobInfo ?? { jobId: -1, reservationId: -1, priority: 0 };
+    this.#jobPriority = jobPriority ?? jobInfo?.priority ?? 0;
     this.#batchId = `${this.#jobInfo.jobId}-${uuidv4().slice(0, 8)}`;
     this.#reportStatus = reportStatus;
     this.#onProgress = onProgress;
@@ -378,6 +390,7 @@ export class IndexRunner {
         reader: this.#reader,
         batch: this.batch,
         jobInfo: this.#jobInfo,
+        jobPriority: this.#jobPriority,
         auth: this.#auth,
         batchId: this.#batchId,
         prerenderer: this.#prerenderer,
