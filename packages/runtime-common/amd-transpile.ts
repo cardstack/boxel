@@ -916,10 +916,7 @@ function rewriteIdentifierReferences(
         // identifier alone. At runtime the unbound name will throw
         // ReferenceError under strict mode (AMD modules ARE strict).
         const left = node.left;
-        if (
-          left.type === 'ObjectPattern' ||
-          left.type === 'ArrayPattern'
-        ) {
+        if (left.type === 'ObjectPattern' || left.type === 'ArrayPattern') {
           // Destructuring assignment, e.g. `({ x } = obj)`. Walk only
           // computed keys + assignment-pattern defaults; the binding
           // identifiers themselves stay as-is.
