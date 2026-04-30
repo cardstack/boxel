@@ -291,10 +291,18 @@ export class PagePool {
   // → drop one slot. Reset every time pending appears or expansion
   // fires; see `#contractionLoop`.
   #idleContractionMs: number;
-  // Background tick that drives contraction. Created lazily on the
-  // first expansion (no point ticking when the pool is statically at
-  // `#minPages`); cleared on `closeAll` for test isolation.
+  // Background tick that drives contraction. Started in the
+  // constructor whenever the dynamic-pool envelope can grow
+  // (`#maxBurstPages > #minPages`), even before the first expansion;
+  // cleared on `closeAll` for test isolation.
   #contractionInterval: NodeJS.Timeout | undefined;
+  // Re-entrancy guard for the contraction tick. `setInterval` fires
+  // ticks regardless of whether the previous async tick has resolved,
+  // so two slow ticks could otherwise both pass the cooldown gate and
+  // double-decrement `#maxPages` (or double-shrink the render
+  // semaphore). The flag is held across the awaited `#contractByOne`
+  // call and cleared in `finally`.
+  #contractionInFlight = false;
   // Wall-clock timestamp the pool last became fully idle (no pending
   // waiters on any tab queue or admission semaphore, no in-flight
   // operations the contraction loop should respect). Updated by
@@ -1330,11 +1338,16 @@ export class PagePool {
   // doesn't itself create a tab.
   #tryExpand(): boolean {
     if (this.#maxPages >= this.#maxBurstPages) return false;
+    // Require a resize-capable render semaphore. Otherwise `#maxPages`
+    // would drift away from the actual global concurrency gate (the
+    // semaphore's fixed capacity), and the saturation heuristic would
+    // misreport state. Test stubs that supply only `acquire` keep
+    // working by skipping expansion — same as legacy fixed-pool
+    // mode for them.
+    if (!this.#renderSemaphore?.setCapacity) return false;
     let prev = this.#maxPages;
     this.#maxPages = prev + 1;
-    if (this.#renderSemaphore?.setCapacity) {
-      this.#renderSemaphore.setCapacity(this.#maxPages);
-    }
+    this.#renderSemaphore.setCapacity(this.#maxPages);
     this.#idleObservedAt = undefined;
     log.info(
       `pool expansion: maxPages=${prev}→${this.#maxPages} (burst=${this.#maxBurstPages})`,
@@ -1362,6 +1375,8 @@ export class PagePool {
   // next cooldown window if conditions still hold, walking the pool
   // back to `#minPages` over multiple ticks instead of all at once.
   async #contractionTick(): Promise<void> {
+    if (this.#contractionInFlight) return;
+    this.#contractionInFlight = true;
     try {
       if (this.#maxPages <= this.#minPages) return;
       let idle = this.#observeIdleness();
@@ -1381,15 +1396,18 @@ export class PagePool {
       await this.#contractByOne();
     } catch (e) {
       log.warn('contraction tick failed:', e);
+    } finally {
+      this.#contractionInFlight = false;
     }
   }
 
   // Returns true when the pool has no work in flight and no waiters
   // queued — the precondition for considering contraction. Folds in
   // every queueing layer: per-tab queues, per-affinity file-admission
-  // semaphores, and (when wired) the global render semaphore.
-  // Standbys are not pool entries and do not block idleness — they're
-  // the resource we may be about to drop.
+  // semaphores, and (when wired) the global render semaphore in both
+  // its in-flight and queued-waiter dimensions. Standbys are not pool
+  // entries and do not block idleness — they're the resource we may
+  // be about to drop.
   #observeIdleness(): boolean {
     for (let entries of this.#affinityPages.values()) {
       for (let entry of entries) {
@@ -1402,13 +1420,17 @@ export class PagePool {
       if (sem.inUseCount > 0) return false;
     }
     let renderSem = this.#renderSemaphore;
-    if (
-      renderSem &&
-      'inUseCount' in renderSem &&
-      typeof (renderSem as AsyncSemaphore).inUseCount === 'number' &&
-      (renderSem as AsyncSemaphore).inUseCount > 0
-    ) {
-      return false;
+    if (renderSem) {
+      let asAsync = renderSem as Partial<AsyncSemaphore>;
+      if (typeof asAsync.inUseCount === 'number' && asAsync.inUseCount > 0) {
+        return false;
+      }
+      if (
+        typeof asAsync.pendingCount === 'number' &&
+        asAsync.pendingCount > 0
+      ) {
+        return false;
+      }
     }
     return true;
   }
@@ -1423,6 +1445,57 @@ export class PagePool {
   // `#closeEntry` behaviour), so an immediate re-burst can re-warm
   // via `#tryClaimOrphanContext` without re-fetching.
   async #contractByOne(): Promise<void> {
+    // Pick a victim BEFORE shrinking the cap. If no eligible target
+    // exists (no standby, no fully-idle affinity), abort the tick —
+    // shrinking `#maxPages` without disposing anything would leave
+    // the live cap inconsistent with the actual tab count and
+    // artificially throttle concurrency.
+    let standbyVictim: StandbyEntry | undefined;
+    let oldestAffinity: string | undefined;
+    if (this.#standbys.size > 0) {
+      standbyVictim = this.#selectLRUTab([...this.#standbys]);
+    } else {
+      let oldestStamp = Infinity;
+      for (let [affinityKey, entries] of this.#affinityPages.entries()) {
+        let allIdle = [...entries].every(
+          (entry) =>
+            !entry.closing &&
+            !entry.transitioning &&
+            entry.queue.pendingCount === 0,
+        );
+        if (!allIdle) continue;
+        let lastUsedAt = Math.max(
+          ...[...entries].map((entry) => entry.lastUsedAt),
+        );
+        if (lastUsedAt < oldestStamp) {
+          oldestStamp = lastUsedAt;
+          oldestAffinity = affinityKey;
+        }
+      }
+    }
+    let actualTabs = this.#poolEntryCount() + this.#standbys.size;
+    // Three cases allow shrinking the cap by one:
+    //   1. A standby exists → drop it.
+    //   2. A fully-idle affinity exists → dispose it.
+    //   3. No standbys and no eligible affinity, but the cap is
+    //      over-provisioned vs the actual resource count
+    //      (`#maxPages - 1 >= actualTabs`) → shrink alone. This case
+    //      handles a fully-quiet pool where contraction can drop
+    //      headroom without dropping any resource.
+    // Any other state — there are tabs / standbys but none eligible
+    // (closing, transitioning, pending) — leaves `#maxPages` alone;
+    // the next tick retries once an idle window opens.
+    let canShrinkCapAlone =
+      !standbyVictim && !oldestAffinity && this.#maxPages - 1 >= actualTabs;
+    if (!standbyVictim && !oldestAffinity && !canShrinkCapAlone) {
+      return;
+    }
+
+    // Now shrink the cap and forward the resize to the render
+    // semaphore. Doing the dispose first then the shrink would race
+    // any expand call that observes the still-current cap; doing the
+    // shrink first (after the victim is picked) keeps the visible
+    // state consistent.
     let prev = this.#maxPages;
     this.#maxPages = prev - 1;
     if (this.#renderSemaphore?.setCapacity) {
@@ -1431,48 +1504,28 @@ export class PagePool {
     log.info(
       `pool contraction: maxPages=${prev}→${this.#maxPages} (min=${this.#minPages})`,
     );
-    // Prefer dropping a standby first — it has no affinity warmth.
-    // Use the canonical `#closeEntry` teardown path (rather than just
-    // `context.close()`) so per-page diagnostic state
-    // (`#consoleErrorsByPageId`, `#exceptionKeysByPageId`,
-    // `#affinityKeyByPageId`) is cleaned up; otherwise repeated
-    // expand/contract cycles would leak stale entries for dead
-    // standby pages.
-    if (this.#standbys.size > 0) {
-      let standby = this.#selectLRUTab([...this.#standbys]);
-      this.#standbys.delete(standby);
+    // Standby drop preferred first — it has no affinity warmth. Use
+    // the canonical `#closeEntry` teardown path so per-page
+    // diagnostic state (`#consoleErrorsByPageId`,
+    // `#exceptionKeysByPageId`, `#affinityKeyByPageId`) is cleaned
+    // up; otherwise repeated expand/contract cycles would leak stale
+    // entries for dead standby pages.
+    if (standbyVictim) {
+      this.#standbys.delete(standbyVictim);
       try {
-        await this.#closeEntry(standby);
+        await this.#closeEntry(standbyVictim);
       } catch (e) {
         log.debug('error closing standby during contraction:', e);
       }
       return;
     }
-    // No standby available — pick the affinity whose currently-idle
-    // tabs have the oldest LRU touch. We dispose the whole affinity
-    // (one affinity may own one tab in a typical small pool) — its
-    // BrowserContext is kept in `#sharedContexts` as an orphan for
-    // re-warming.
-    let oldestAffinity: string | undefined;
-    let oldestStamp = Infinity;
-    for (let [affinityKey, entries] of this.#affinityPages.entries()) {
-      let allIdle = [...entries].every(
-        (entry) =>
-          !entry.closing &&
-          !entry.transitioning &&
-          entry.queue.pendingCount === 0,
-      );
-      if (!allIdle) continue;
-      let lastUsedAt = Math.max(
-        ...[...entries].map((entry) => entry.lastUsedAt),
-      );
-      if (lastUsedAt < oldestStamp) {
-        oldestStamp = lastUsedAt;
-        oldestAffinity = affinityKey;
-      }
+    // Otherwise dispose the whole affinity whose tabs are oldest in
+    // LRU touch. The affinity's BrowserContext is kept in
+    // `#sharedContexts` as an orphan for re-warming on the next
+    // burst.
+    if (oldestAffinity) {
+      await this.disposeAffinity(oldestAffinity);
     }
-    if (!oldestAffinity) return;
-    await this.disposeAffinity(oldestAffinity);
   }
 
   async #selectEntryForAffinity(

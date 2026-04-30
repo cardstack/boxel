@@ -77,10 +77,10 @@ function makeStubPool(opts: StubOptions) {
   };
 }
 
-function withEnv(
+async function withEnv(
   vars: Record<string, string | undefined>,
-  fn: () => void,
-): void {
+  fn: () => void | Promise<void>,
+): Promise<void> {
   let prev: Record<string, string | undefined> = {};
   for (let key of Object.keys(vars)) {
     prev[key] = process.env[key];
@@ -93,7 +93,7 @@ function withEnv(
         process.env[key] = value;
       }
     }
-    fn();
+    await fn();
   } finally {
     for (let [key, value] of Object.entries(prev)) {
       if (value === undefined) {
@@ -124,8 +124,8 @@ module(basename(__filename), function () {
       return stub;
     }
 
-    test('legacy fixed-pool config: MIN === MAX === options.maxPages when env vars unset', function (assert) {
-      withEnv(
+    test('legacy fixed-pool config: MIN === MAX === options.maxPages when env vars unset', async function (assert) {
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: undefined,
           PRERENDER_PAGE_POOL_MAX: undefined,
@@ -152,8 +152,8 @@ module(basename(__filename), function () {
       );
     });
 
-    test('dynamic-pool config: MIN/MAX env vars set the envelope', function (assert) {
-      withEnv(
+    test('dynamic-pool config: MIN/MAX env vars set the envelope', async function (assert) {
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '2',
           PRERENDER_PAGE_POOL_MAX: '6',
@@ -172,8 +172,8 @@ module(basename(__filename), function () {
       );
     });
 
-    test('dynamic-pool config: INITIAL is respected and clamped to [MIN, MAX]', function (assert) {
-      withEnv(
+    test('dynamic-pool config: INITIAL is respected and clamped to [MIN, MAX]', async function (assert) {
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '2',
           PRERENDER_PAGE_POOL_MAX: '6',
@@ -186,7 +186,7 @@ module(basename(__filename), function () {
       );
 
       // Clamped above MAX
-      withEnv(
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '2',
           PRERENDER_PAGE_POOL_MAX: '6',
@@ -203,7 +203,7 @@ module(basename(__filename), function () {
       );
 
       // Clamped below MIN
-      withEnv(
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '3',
           PRERENDER_PAGE_POOL_MAX: '6',
@@ -220,8 +220,8 @@ module(basename(__filename), function () {
       );
     });
 
-    test('dynamic-pool config: MAX < MIN is clamped to MIN with a warning', function (assert) {
-      withEnv(
+    test('dynamic-pool config: MAX < MIN is clamped to MIN with a warning', async function (assert) {
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '6',
           PRERENDER_PAGE_POOL_MAX: '2',
@@ -239,8 +239,8 @@ module(basename(__filename), function () {
       );
     });
 
-    test('only one env var set: MIN xor MAX falls back to legacy config', function (assert) {
-      withEnv(
+    test('only one env var set: MIN xor MAX falls back to legacy config', async function (assert) {
+      await withEnv(
         { PRERENDER_PAGE_POOL_MIN: '2', PRERENDER_PAGE_POOL_MAX: undefined },
         () => {
           let { pool } = track(makeStubPool({ maxPages: 4 }));
@@ -253,7 +253,7 @@ module(basename(__filename), function () {
         },
       );
 
-      withEnv(
+      await withEnv(
         { PRERENDER_PAGE_POOL_MIN: undefined, PRERENDER_PAGE_POOL_MAX: '6' },
         () => {
           let { pool } = track(makeStubPool({ maxPages: 4 }));
@@ -263,11 +263,11 @@ module(basename(__filename), function () {
       );
     });
 
-    test('invalid env values fall back to legacy config', function (assert) {
+    test('invalid env values fall back to legacy config', async function (assert) {
       // "0" is the SSM placeholder used by the operational rollout — must be
       // treated as "unset" to keep PR 7's apply a no-op.
       for (let invalid of ['0', '-1', '', ' ', '1.5', 'abc', 'null']) {
-        withEnv(
+        await withEnv(
           {
             PRERENDER_PAGE_POOL_MIN: invalid,
             PRERENDER_PAGE_POOL_MAX: '6',
@@ -304,7 +304,7 @@ module(basename(__filename), function () {
     }
 
     test('saturation expansion: render-semaphore at capacity triggers `#tryExpand`', async function (assert) {
-      withEnv(
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '2',
           PRERENDER_PAGE_POOL_MAX: '4',
@@ -347,7 +347,7 @@ module(basename(__filename), function () {
     });
 
     test('expansion is bounded by maxBurstPages', async function (assert) {
-      withEnv(
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '2',
           PRERENDER_PAGE_POOL_MAX: '3',
@@ -383,7 +383,7 @@ module(basename(__filename), function () {
     });
 
     test('contraction respects cooldown: no shrink within idle window', async function (assert) {
-      withEnv(
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '2',
           PRERENDER_PAGE_POOL_MAX: '4',
@@ -416,7 +416,7 @@ module(basename(__filename), function () {
     });
 
     test('contraction shrinks one tab per tick after cooldown elapses', async function (assert) {
-      withEnv(
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '2',
           PRERENDER_PAGE_POOL_MAX: '4',
@@ -455,8 +455,8 @@ module(basename(__filename), function () {
       );
     });
 
-    test('contraction is blocked while waiters are pending on the render semaphore', async function (assert) {
-      withEnv(
+    test('contraction is blocked while a render semaphore slot is in use', async function (assert) {
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: '2',
           PRERENDER_PAGE_POOL_MAX: '4',
@@ -497,7 +497,7 @@ module(basename(__filename), function () {
     });
 
     test('legacy fixed pool: contraction loop never starts (no timer leak)', async function (assert) {
-      withEnv(
+      await withEnv(
         {
           PRERENDER_PAGE_POOL_MIN: undefined,
           PRERENDER_PAGE_POOL_MAX: undefined,
