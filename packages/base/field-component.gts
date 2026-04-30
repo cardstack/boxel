@@ -210,12 +210,22 @@ export function getBoxComponent(
       fields = fieldsComponentsFor({}, model);
       internalFieldsCache = { fields, format: effectiveFormat };
     }
+    // note that Fields do not have an "isolated" format--only Cards do,
+    // the "any" cast is hiding that type warning
+    let componentClass = effectiveCardOrFieldComponent as any;
+    // When `isolated` and `edit` resolve to the same component reference,
+    // pick the shared reference for both formats so toggling between them
+    // keeps the same component mounted instead of remounting an identical
+    // tree. Templates can branch on `@format` to render edit affordances
+    // in place. (CardDef defaults edit to DefaultCardDefTemplate, matching
+    // isolated, so this is the default for cards without a custom edit.)
+    let CardOrFieldFormatComponent: BaseDefComponent =
+      (effectiveFormat === 'isolated' || effectiveFormat === 'edit') &&
+      componentClass.isolated === componentClass.edit
+        ? componentClass.isolated
+        : componentClass[effectiveFormat];
     return {
-      // note that Fields do not have an "isolated" format--only Cards do,
-      // the "any" cast is hiding that type warning
-      CardOrFieldFormatComponent: (effectiveCardOrFieldComponent as any)[
-        effectiveFormat
-      ],
+      CardOrFieldFormatComponent,
       fields,
     };
   }

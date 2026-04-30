@@ -1,6 +1,8 @@
+import { on } from '@ember/modifier';
 import Service from '@ember/service';
-import { waitFor } from '@ember/test-helpers';
+import { click, waitFor } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -171,5 +173,140 @@ module('Integration | preview', function (hooks) {
     assert
       .dom('[data-test-head-markup]')
       .includesText('<meta property="og:type" content="article">');
+  });
+
+  test('toggling between isolated and edit reuses the component instance when the templates are reference-equal', async function (assert) {
+    let { field, contains, CardDef } = cardApi;
+    let { default: StringField } = string;
+
+    class SharedTemplate extends GlimmerComponent<{
+      Args: { format: Format };
+    }> {
+      @tracked counter = 0;
+      bump = () => this.counter++;
+      <template>
+        <div data-test-shared>
+          <span data-test-shared-format>{{@format}}</span>
+          <span data-test-shared-counter>{{this.counter}}</span>
+          <button {{on 'click' this.bump}} data-test-shared-bump>bump</button>
+        </div>
+      </template>
+    }
+    class SharedTemplateCard extends CardDef {
+      @field firstName = contains(StringField);
+      static isolated = SharedTemplate;
+      static edit = SharedTemplate;
+    }
+    loader.shimModule(`${testRealmURL}shared-template-card`, {
+      SharedTemplateCard,
+    });
+
+    let card = new SharedTemplateCard({ firstName: 'Mango' });
+
+    class TestDriver extends GlimmerComponent {
+      @tracked format: Format = 'isolated';
+      card = card;
+      flip = () => {
+        this.format = this.format === 'isolated' ? 'edit' : 'isolated';
+      };
+      <template>
+        <button {{on 'click' this.flip}} data-test-flip-format>flip</button>
+        <CardRenderer @card={{this.card}} @format={{this.format}} />
+      </template>
+    }
+
+    await renderComponent(TestDriver);
+    await waitFor('[data-test-shared]');
+
+    let initialNode = document.querySelector('[data-test-shared]');
+    assert.dom('[data-test-shared-format]').hasText('isolated');
+    assert.dom('[data-test-shared-counter]').hasText('0');
+
+    await click('[data-test-shared-bump]');
+    assert.dom('[data-test-shared-counter]').hasText('1');
+
+    await click('[data-test-flip-format]');
+
+    assert.dom('[data-test-shared-format]').hasText('edit');
+    assert
+      .dom('[data-test-shared-counter]')
+      .hasText(
+        '1',
+        'tracked component state survives the format flip (no remount)',
+      );
+    assert.strictEqual(
+      document.querySelector('[data-test-shared]'),
+      initialNode,
+      'the same DOM node is reused across the format toggle',
+    );
+
+    await click('[data-test-flip-format]');
+    assert.dom('[data-test-shared-format]').hasText('isolated');
+    assert
+      .dom('[data-test-shared-counter]')
+      .hasText('1', 'state still survives flipping back to isolated');
+  });
+
+  test('toggling between isolated and edit remounts when the templates are different', async function (assert) {
+    let { field, contains, CardDef } = cardApi;
+    let { default: StringField } = string;
+
+    class IsolatedTemplate extends GlimmerComponent {
+      @tracked counter = 0;
+      bump = () => this.counter++;
+      <template>
+        <div data-test-isolated-template>
+          <span data-test-isolated-counter>{{this.counter}}</span>
+          <button {{on 'click' this.bump}} data-test-isolated-bump>bump</button>
+        </div>
+      </template>
+    }
+    const EditTemplate = <template>
+      <div data-test-edit-template>edit mode</div>
+    </template>;
+    class DistinctTemplateCard extends CardDef {
+      @field firstName = contains(StringField);
+      static isolated = IsolatedTemplate;
+      static edit = EditTemplate;
+    }
+    loader.shimModule(`${testRealmURL}distinct-template-card`, {
+      DistinctTemplateCard,
+    });
+
+    let card = new DistinctTemplateCard({ firstName: 'Mango' });
+
+    class TestDriver extends GlimmerComponent {
+      @tracked format: Format = 'isolated';
+      card = card;
+      flip = () => {
+        this.format = this.format === 'isolated' ? 'edit' : 'isolated';
+      };
+      <template>
+        <button {{on 'click' this.flip}} data-test-flip-format>flip</button>
+        <CardRenderer @card={{this.card}} @format={{this.format}} />
+      </template>
+    }
+
+    await renderComponent(TestDriver);
+    await waitFor('[data-test-isolated-template]');
+
+    await click('[data-test-isolated-bump]');
+    assert.dom('[data-test-isolated-counter]').hasText('1');
+
+    await click('[data-test-flip-format]');
+
+    assert.dom('[data-test-isolated-template]').doesNotExist();
+    assert.dom('[data-test-edit-template]').exists();
+
+    await click('[data-test-flip-format]');
+
+    assert.dom('[data-test-edit-template]').doesNotExist();
+    assert.dom('[data-test-isolated-template]').exists();
+    assert
+      .dom('[data-test-isolated-counter]')
+      .hasText(
+        '0',
+        'distinct templates remount; tracked counter resets on each toggle',
+      );
   });
 });
