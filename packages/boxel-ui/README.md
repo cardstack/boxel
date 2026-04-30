@@ -1,4 +1,4 @@
-## How to build this addon!
+## How to build this addon
 
 ### `pnpm build` in the addon/ dir
 
