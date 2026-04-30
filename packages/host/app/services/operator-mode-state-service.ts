@@ -482,6 +482,9 @@ export default class OperatorModeStateService extends Service {
     opts?: { useBaseTemplate?: boolean },
   ): void {
     let item = this.findCardInStack(card, stackIndex);
+    if (item.type === 'file') {
+      return;
+    }
     this.setItemFormat(item, 'edit', {
       request: new Deferred(),
       useBaseTemplate: opts?.useBaseTemplate,
@@ -494,6 +497,9 @@ export default class OperatorModeStateService extends Service {
     opts?: { useBaseTemplate?: boolean },
   ): void {
     let item = this.findCardInStack(card, stackIndex);
+    if (item.type === 'file') {
+      return;
+    }
     this.setItemFormat(item, 'isolated', {
       request: new Deferred(),
       useBaseTemplate: opts?.useBaseTemplate,
