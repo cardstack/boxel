@@ -87,6 +87,13 @@ export interface RenderTimeoutDiagnostics {
   // in post-mortems and in `prerender-queue-snapshot` triage to tell
   // whether a stalled render was background or user-priority work.
   priority?: number;
+  // Whether this render landed on a tab that was already bound to its
+  // affinity (CS-10976 PR 5). `true` = warm tab, fast launch + cached
+  // BrowserContext fetches. `false` = a freshly spawned or commandeered
+  // tab — pays the cold-start cost. Triage signal: a slow render with
+  // `tabReused=false` is a cold-start tax (look at `tabStartupMs`);
+  // with `tabReused=true` it's a real render-side stall.
+  tabReused?: boolean;
   // Total wall time spent in `PagePool.getPage` before render work
   // began. The three `waits` sub-fields below each cover a specific
   // await; `launchMs` is measured around the full method and so is
@@ -185,6 +192,11 @@ export interface RenderTimeoutDiagnostics {
       queue?: PrerenderQueue;
       state: 'queued' | 'running';
       ageMs: number;
+      // Worker-job priority of the call that produced this entry
+      // (CS-10976 PR 5). Surfaced so post-mortems can see what
+      // priorities were competing — e.g. a priority-10 file render
+      // stuck behind a priority-0 module call sticks out cleanly.
+      priority?: number;
     }>;
   };
 }

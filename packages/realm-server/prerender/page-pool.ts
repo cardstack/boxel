@@ -115,6 +115,17 @@ export class TabQueue {
   get pendingCount(): number {
     return (this.#held ? 1 : 0) + this.#queue.length;
   }
+
+  // Per-priority count of *queued* waiters (excludes the holder).
+  // Used by `getQueueDepthSnapshot` to build the per-priority breakdown
+  // surfaced in `prerender-queue-snapshot` logs (CS-10976 PR 5).
+  pendingByPriority(): Map<number, number> {
+    let m = new Map<number, number>();
+    for (let entry of this.#queue) {
+      m.set(entry.priority, (m.get(entry.priority) ?? 0) + 1);
+    }
+    return m;
+  }
 }
 
 type PoolEntry = {
@@ -460,6 +471,15 @@ export class PagePool {
       // slot. Both are 0 when the semaphore hasn't been lazily created
       // yet, or was deleted once it returned to idle.
       admission: { pending: number; cap: number };
+      // Per-priority breakdown of the affinity's pending work
+      // (CS-10976 PR 5). Aggregates queued waiters across all of the
+      // affinity's tabs (`tabPendingByPriority`) plus its file-
+      // admission semaphore (`admissionPendingByPriority`). Empty when
+      // nothing is pending. Surfaced in the `prerender-queue-snapshot`
+      // log line so operators can see whether a saturation event was
+      // dominated by user-priority work or background work.
+      tabPendingByPriority: Record<number, number>;
+      admissionPendingByPriority: Record<number, number>;
     }>;
   } {
     let totalTabs = 0;
@@ -472,22 +492,38 @@ export class PagePool {
       idle: boolean;
       byQueue: { file: number; module: number; command: number };
       admission: { pending: number; cap: number };
+      tabPendingByPriority: Record<number, number>;
+      admissionPendingByPriority: Record<number, number>;
     }> = [];
     for (let [affinityKey, entries] of this.#affinityPages) {
       let tabCount = entries.size;
       let pendingTotal = 0;
       let maxPending = 0;
       let byQueue = { file: 0, module: 0, command: 0 };
+      let tabPendingByPriority: Record<number, number> = {};
       for (let entry of entries) {
         let p = entry.queue.pendingCount;
         pendingTotal += p;
         if (p > maxPending) maxPending = p;
         if (entry.currentQueue) byQueue[entry.currentQueue]++;
+        // Aggregate per-priority pending counts across all of this
+        // affinity's tabs. `pendingByPriority` returns queued waiters
+        // only (excludes the holder); summing those is the right
+        // signal for "what's backlogged behind these tabs".
+        for (let [prio, n] of entry.queue.pendingByPriority()) {
+          tabPendingByPriority[prio] = (tabPendingByPriority[prio] ?? 0) + n;
+        }
       }
       let sem = this.#fileAdmission.get(affinityKey);
       let admission = sem
         ? { pending: sem.pendingCount, cap: sem.capacity }
         : { pending: 0, cap: 0 };
+      let admissionPendingByPriority: Record<number, number> = {};
+      if (sem) {
+        for (let [prio, n] of sem.pendingByPriority()) {
+          admissionPendingByPriority[prio] = n;
+        }
+      }
       totalTabs += tabCount;
       totalPending += pendingTotal;
       affinities.push({
@@ -498,6 +534,8 @@ export class PagePool {
         idle: pendingTotal === 0,
         byQueue,
         admission,
+        tabPendingByPriority,
+        admissionPendingByPriority,
       });
     }
     return { totalTabs, totalPending, affinities };

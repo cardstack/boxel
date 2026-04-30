@@ -183,6 +183,13 @@ export function decorateRenderErrorsWithTimings(
   // the indexer persists it on `boxel_index.timing_diagnostics`. `0`
   // means system-priority / undefined caller (default).
   priority?: number,
+  // Whether this render landed on a reused / warm tab vs a freshly
+  // created one (CS-10976 PR 5). `true` means PagePool returned a tab
+  // that was already bound to this affinity (warm cache, fast launch);
+  // `false` means a fresh tab was spawned or commandeered (cold).
+  // Useful for triage: a slow render with `tabReused=false` is a cold-
+  // start tax; with `tabReused=true` it's a real render-side stall.
+  tabReused?: boolean,
 ): void {
   if (!response || typeof response !== 'object') {
     return;
@@ -216,6 +223,7 @@ export function decorateRenderErrorsWithTimings(
     totalElapsedMs: totalMs,
     ...(affinitySnapshot ? { affinitySnapshot } : {}),
     ...(priority !== undefined ? { priority } : {}),
+    ...(tabReused !== undefined ? { tabReused } : {}),
   };
   let existingMeta = (r.meta as PrerenderResponseMeta | undefined) ?? {};
   r.meta = {

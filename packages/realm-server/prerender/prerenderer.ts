@@ -306,6 +306,7 @@ export class Prerenderer {
       url,
       'module',
       'module',
+      priority,
     );
     // Declared before the try so the finally releases both even if the
     // register call itself throws synchronously (e.g. setInterval
@@ -431,6 +432,7 @@ export class Prerenderer {
           Date.now() - attemptStart,
           poller.currentPeak(),
           priority,
+          result.pool?.reused,
         );
         return result;
       }
@@ -446,6 +448,7 @@ export class Prerenderer {
           Date.now() - attemptStart,
           poller.currentPeak(),
           priority,
+          lastResult.pool?.reused,
         );
         return lastResult;
       }
@@ -503,6 +506,7 @@ export class Prerenderer {
         Date.now() - commandStart,
         undefined,
         priority,
+        result.pool?.reused,
       );
       return result;
     } catch (e) {
@@ -565,6 +569,7 @@ export class Prerenderer {
       url,
       'visit',
       'file',
+      priority,
     );
     let onTabAcquired = (info: { pageId: string }) => {
       activity.markRunning();
@@ -694,6 +699,7 @@ export class Prerenderer {
           Date.now() - attemptStart,
           poller.currentPeak(),
           priority,
+          result.pool?.reused,
         );
         return result;
       }
@@ -704,6 +710,7 @@ export class Prerenderer {
           Date.now() - attemptStart,
           poller.currentPeak(),
           priority,
+          lastResult.pool?.reused,
         );
         return lastResult;
       }
@@ -843,7 +850,17 @@ export class Prerenderer {
               a.admission.cap > 0 && a.admission.pending > 0
                 ? `, admission=pending=${a.admission.pending}/cap=${a.admission.cap}`
                 : '';
-            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail}${admissionDetail})`;
+            // CS-10976 PR 5: priority breakdown of pending work for
+            // this affinity. Format: `priorities=<src>:<p>:<n>,<p>:<n>`
+            // where `<src>` is `tab` for tab-queue waiters or `adm` for
+            // file-admission waiters. Skipped when nothing is pending —
+            // idle affinities stay compact. Format chosen so a single
+            // grep can pull priority distributions out of the logs.
+            let priorityDetail = formatPendingByPriority(
+              a.tabPendingByPriority,
+              a.admissionPendingByPriority,
+            );
+            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail}${admissionDetail}${priorityDetail})`;
           })
           .join(' ');
         log.info(
@@ -859,4 +876,32 @@ export class Prerenderer {
     }, intervalMs);
     this.#queueSnapshotInterval.unref?.();
   }
+}
+
+// Format helper for the `prerender-queue-snapshot` log line's priority
+// breakdown (CS-10976 PR 5). Returns `, priorities=tab:10:3,0:1` when
+// the affinity has 3 priority-10 + 1 priority-0 tab-queue waiters and
+// no admission waiters. Returns `, priorities=tab:10:3,adm:0:2` when
+// the breakdown also includes admission-queue waiters. Returns the
+// empty string when nothing is pending. Numeric keys sort descending
+// within each source (highest priority first), matching dequeue order.
+function formatPendingByPriority(
+  tab: Record<number, number>,
+  admission: Record<number, number>,
+): string {
+  let segments: string[] = [];
+  let tabSegment = formatPriorityCounts(tab);
+  if (tabSegment) segments.push(`tab:${tabSegment}`);
+  let admSegment = formatPriorityCounts(admission);
+  if (admSegment) segments.push(`adm:${admSegment}`);
+  if (segments.length === 0) return '';
+  return `, priorities=${segments.join('|')}`;
+}
+
+function formatPriorityCounts(counts: Record<number, number>): string {
+  let entries = Object.entries(counts)
+    .map(([k, v]) => [Number(k), v] as [number, number])
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[0] - a[0]);
+  return entries.map(([prio, n]) => `${prio}:${n}`).join(',');
 }

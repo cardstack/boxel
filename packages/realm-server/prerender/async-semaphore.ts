@@ -53,6 +53,17 @@ export class AsyncSemaphore {
     return this.#inUse;
   }
 
+  // Per-priority count of queued waiters (CS-10976 PR 5). Used to
+  // surface a priority breakdown of file-admission backpressure in
+  // the periodic `prerender-queue-snapshot` log line.
+  pendingByPriority(): Map<number, number> {
+    let m = new Map<number, number>();
+    for (let entry of this.#queue) {
+      m.set(entry.priority, (m.get(entry.priority) ?? 0) + 1);
+    }
+    return m;
+  }
+
   async acquire(
     signal?: AbortSignal,
     priority: number = 0,
