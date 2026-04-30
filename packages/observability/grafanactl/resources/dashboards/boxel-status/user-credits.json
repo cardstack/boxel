@@ -286,7 +286,7 @@
         {
           "hide": 2,
           "name": "realm_server",
-          "query": "https://realms-staging.stack.cards/",
+          "query": "__REALM_SERVER_URL__",
           "skipUrlSync": false,
           "type": "constant"
         }
