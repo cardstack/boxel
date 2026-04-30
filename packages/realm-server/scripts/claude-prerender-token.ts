@@ -177,13 +177,14 @@ function promptSeedSilently(question: string): Promise<string> {
         stdin.setRawMode(false);
       }
       rl.close();
-      // `readableFlowing` is `true | false | null` (Node stream API):
-      // `null` means "no flow mode chosen yet" — i.e. the stream
-      // hasn't been read from. Only pause if we know the prior state
-      // was explicitly non-flowing (`false`); leaving `null` alone
-      // matches the "we found no flow mode, leave none" semantics
-      // and avoids unexpectedly pausing stdin after the prompt.
-      if (wasFlowing === false) {
+      // `readableFlowing` is `true | false | null` (Node stream API).
+      // We call `stdin.resume()` for the prompt, so by the time
+      // cleanup runs stdin is in flowing mode. Restore it to its
+      // prior non-flowing state unless the caller had it actively
+      // flowing (`true`). Pausing on `null` matches upstream
+      // `packages/boxel-cli/src/lib/prompt.ts` and ensures the
+      // script's event loop can exit after the prompt completes.
+      if (wasFlowing !== true) {
         stdin.pause();
       }
     };
