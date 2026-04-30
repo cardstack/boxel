@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="Mint a realm-scoped JWT + /render URL the way the indexer does, for live browser repro"
+#MISE description="Mint a realm-scoped boxel-session JWT (the way the indexer does) for live browser repro"
 #MISE dir="packages/realm-server"
 
 exec ts-node --transpileOnly ./scripts/claude-prerender-token.ts "$@"

@@ -14,9 +14,10 @@
 
 import * as readline from 'node:readline';
 import { Writable } from 'node:stream';
-import { writeFileSync, chmodSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
 import { dirname } from 'node:path';
 import jwt from 'jsonwebtoken';
+import { DEFAULT_PERMISSIONS } from '@cardstack/runtime-common';
 
 // Default file Claude reads to pick up the artifacts without the user
 // pasting anything. Bounded leak window — the JWT inside is 1d.
@@ -60,13 +61,19 @@ function usage(): void {
       `                         DB, so it MUST be a user that actually has perms on\n` +
       `                         the target realm.\n` +
       `  --permissions <list>   Comma-separated permissions for the JWT claim. Default:\n` +
-      `                         'read,write,realm-owner' (the realm-owner shape).\n` +
+      `                         DEFAULT_PERMISSIONS from runtime-common — the same shape new\n` +
+      `                         realms grant their owner ('${DEFAULT_PERMISSIONS.join(',')}').\n` +
       `                         The realm-server requires this to EXACTLY match the user's\n` +
       `                         row in realm_user_permissions — not a subset. If the default\n` +
       `                         fails with PermissionMismatch (401), query the DB:\n` +
       `                           SELECT read, write, realm_owner FROM realm_user_permissions\n` +
       `                           WHERE realm_url = '<url>' AND username = '<user>';\n` +
       `                         and pass exactly those columns as the list.\n` +
+      `  --host-url <url>       Override the boxel-host base URL recorded in the artifact.\n` +
+      `                         Default: inferred from realm host (realms-staging.stack.cards →\n` +
+      `                         boxel-host-staging.stack.cards, realms.stack.cards →\n` +
+      `                         boxel-host.stack.cards, *.localhost → http://localhost:4200).\n` +
+      `                         REQUIRED when the realm host doesn't match these patterns.\n` +
       `  --output <path>        Override output path. Default: ${DEFAULT_OUTPUT_PATH}.\n` +
       `  --no-output            Don't write the JSON artifact (stdout only).\n` +
       `  --help                 Show this help.\n`,
@@ -245,10 +252,19 @@ async function main(): Promise<void> {
   }
   const realmURL = ensureTrailingSlash(positional[0]);
   const realmOrigin = ensureTrailingSlash(new URL(realmURL).origin);
-  const secret =
+  const rawSecret =
     positional.length >= 2
       ? positional[1]
       : await promptSeedSilently('Paste seed: ');
+  const secret = rawSecret.trim();
+  if (!secret) {
+    process.stderr.write(
+      `error: empty seed. Pass the seed as the second positional argument or\n` +
+        `       paste it at the prompt (Ctrl+C cancels). An empty seed would mint\n` +
+        `       a JWT that fails signature verification on the server.\n`,
+    );
+    process.exit(2);
+  }
 
   let userId = opts.user as string | undefined;
   if (!userId) {
@@ -269,15 +285,16 @@ async function main(): Promise<void> {
   // The realm-server's checkPermission (`packages/runtime-common/realm.ts:2308`)
   // requires JSON.stringify(token.permissions.sort()) === JSON.stringify(
   // userPermissions.sort()) — the token's permissions must EXACTLY match
-  // what the realm's DB has for this user. Default ['read','write','realm-owner']
-  // matches the standard realm-owner shape; pass --permissions for other
-  // users (e.g. read-only collaborator, write-without-owner).
-  const permissionsRaw =
-    (opts.permissions as string | undefined) ?? 'read,write,realm-owner';
-  const permissions = permissionsRaw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  // what the realm's DB has for this user. Default = DEFAULT_PERMISSIONS from
+  // runtime-common (the same shape new realms grant their owner); pass
+  // --permissions for non-owner users (read-only collaborator, etc.).
+  const permissionsOpt = opts.permissions as string | undefined;
+  const permissions = permissionsOpt
+    ? permissionsOpt
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [...DEFAULT_PERMISSIONS];
 
   const claims: TokenClaims = {
     user: userId,
@@ -292,6 +309,23 @@ async function main(): Promise<void> {
   process.stdout.write(`JWT=${token}\n`);
   process.stdout.write(`SESSION=${session}\n`);
 
+  // Resolve hostUrl: explicit --host-url override wins; otherwise infer
+  // from realm host. Fail fast (rather than emitting a `null` hostUrl
+  // into the artifact) when inference can't produce a usable value —
+  // every downstream consumer needs hostUrl to build the /render URL.
+  const hostUrl =
+    (opts['host-url'] as string | undefined) ?? inferHost(realmURL);
+  if (!hostUrl) {
+    process.stderr.write(
+      `error: cannot infer boxel-host URL from realm host '${new URL(realmURL).hostname}'.\n` +
+        `       Pass --host-url <url> explicitly. Recognised patterns:\n` +
+        `         realms-staging.stack.cards → boxel-host-staging.stack.cards\n` +
+        `         realms.stack.cards         → boxel-host.stack.cards\n` +
+        `         *.localhost / localhost    → http://localhost:4200\n`,
+    );
+    process.exit(2);
+  }
+
   if (opts['no-output']) return;
 
   const outputPath = (opts.output as string | undefined) ?? DEFAULT_OUTPUT_PATH;
@@ -302,14 +336,25 @@ async function main(): Promise<void> {
       decoded?.exp != null ? new Date(decoded.exp * 1000).toISOString() : null,
     user: userId,
     realmUrl: realmURL,
-    hostUrl: inferHost(realmURL),
+    hostUrl,
     jwt: token,
     session,
   };
   try {
     mkdirSync(dirname(outputPath), { recursive: true });
-    writeFileSync(outputPath, JSON.stringify(artifact, null, 2) + '\n');
-    chmodSync(outputPath, 0o600);
+    // Open with mode 0o600 from the start — `writeFileSync(path, data,
+    // {mode})` honors mode only when the path doesn't already exist, so
+    // first delete any prior file. The unlink + create-with-mode dance
+    // closes the umask-window the chmod-after-write pattern leaves open
+    // on multi-user systems.
+    try {
+      unlinkSync(outputPath);
+    } catch {
+      // not present, nothing to remove
+    }
+    writeFileSync(outputPath, JSON.stringify(artifact, null, 2) + '\n', {
+      mode: 0o600,
+    });
     process.stderr.write(`\nWrote artifact: ${outputPath}\n`);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
