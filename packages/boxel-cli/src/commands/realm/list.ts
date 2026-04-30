@@ -1,10 +1,14 @@
 import type { Command } from 'commander';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from '../../lib/profile-manager';
 import { BOLD, DIM, FG_CYAN, FG_RED, RESET } from '../../lib/colors';
+
+const MUTUALLY_EXCLUSIVE_FLAGS_ERROR =
+  '--all-accessible and --hidden are mutually exclusive';
 
 export interface RealmSummary {
   url: string;
@@ -41,6 +45,10 @@ interface ListCliOptions {
 export async function listRealms(
   options: ListRealmsOptions = {},
 ): Promise<ListRealmsResult> {
+  if (options.allAccessible && options.hidden) {
+    return { realms: [], error: MUTUALLY_EXCLUSIVE_FLAGS_ERROR };
+  }
+
   let pm = options.profileManager ?? getProfileManager();
   let active = pm.getActiveProfile();
   if (!active) {
@@ -52,7 +60,10 @@ export async function listRealms(
     `${realmServerUrl}/_realm-auth`,
     {
       method: 'POST',
-      headers: { Accept: 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
     },
   );
   if (!response.ok) {
@@ -63,15 +74,20 @@ export async function listRealms(
     };
   }
   let tokens = (await response.json()) as Record<string, string>;
-  let accessibleUrls = Object.keys(tokens);
+  let accessibleUrls = Object.keys(tokens).map(ensureTrailingSlash);
 
   let userRealms: string[];
   try {
     userRealms = await pm.getUserRealms();
-  } catch {
-    userRealms = [];
+  } catch (err) {
+    return {
+      realms: [],
+      error: `Failed to load UI realm list: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    };
   }
-  let userRealmsSet = new Set(userRealms);
+  let userRealmsSet = new Set(userRealms.map(ensureTrailingSlash));
 
   let summaries: RealmSummary[] = accessibleUrls.map((url) => ({
     url,
@@ -102,13 +118,6 @@ export function registerListCommand(realm: Command): void {
     )
     .option('--hidden', "Show only realms not in the user's UI realm list")
     .action(async (opts: ListCliOptions) => {
-      if (opts.allAccessible && opts.hidden) {
-        console.error(
-          `${FG_RED}Error:${RESET} --all-accessible and --hidden are mutually exclusive`,
-        );
-        process.exit(1);
-      }
-
       let result: ListRealmsResult;
       try {
         result = await listRealms({

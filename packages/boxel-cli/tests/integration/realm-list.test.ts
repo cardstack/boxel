@@ -59,10 +59,21 @@ describe('realm list (integration)', () => {
       profileManager,
     });
     expect(result.error).toBeUndefined();
+    expect(result.realms).toHaveLength(3);
     let byUrl = new Map(result.realms.map((r) => [r.url, r]));
     expect(byUrl.get(visibleUrl)).toEqual({ url: visibleUrl, hidden: false });
     expect(byUrl.get(hiddenUrl)).toEqual({ url: hiddenUrl, hidden: true });
     expect(byUrl.get(pendingUrl)).toEqual({ url: pendingUrl, hidden: true });
+  });
+
+  it('returns an error when --all-accessible and --hidden are both set', async () => {
+    let result = await listRealms({
+      allAccessible: true,
+      hidden: true,
+      profileManager,
+    });
+    expect(result.realms).toEqual([]);
+    expect(result.error).toContain('mutually exclusive');
   });
 
   it('default mode lists only the realm in account data', async () => {
