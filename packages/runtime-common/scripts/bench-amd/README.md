@@ -138,3 +138,39 @@ intentional human action — that's the whole point. If we let CI
 auto-bump after each merge, sub-tolerance regressions would silently
 accumulate (a 25% gate that re-anchors after each merge can drift the
 baseline 2× over ten merges without ever tripping).
+
+## Verifying the gate's failure path
+
+Two tests confirm the gate actually fails when it should — i.e. that
+a green CI run means "the gate accepts the current code AND would
+trip on a regression," not just "the gate ran without error."
+
+### `pnpm bench:amd:check:trip-test` (synthetic, ~10s)
+
+Runs in CI on every PR right after the main gate. Spawns `check.ts`
+against a temp synthetic baseline (every fixture pinned at 0.001ms via
+`BENCH_AMD_BASELINE_OVERRIDE`), asserts:
+
+- Exit code 1.
+- stderr matches the canonical
+  `production median for X is Yms, exceeds baseline Zms × T tolerance (= Wms)`
+  format.
+- Every fixture appears in the breach list.
+
+Doesn't touch the real `baseline.json`. Cheap enough to run on every
+PR; proves the gate's exit-code, message format, and fixture-coverage
+paths still work.
+
+### `mise run bench:amd-trip-drill` (faithful, ~30s, manual)
+
+Out-of-band drill. Wraps the real `transpileAmd` with an artificial
+per-call delay (`TRIP_DRILL_DELAY_MS=5` by default), runs the bench,
+compares against the committed `baseline.json`, asserts every fixture
+trips. This is the literal "introduce a `setTimeout` in the rewriter
+and watch the gate fail" drill the ticket calls out — the real
+transpiler is invoked, just slowed down.
+
+Not in CI by default — running it on every PR is wasteful (the cheap
+synthetic test covers the same correctness assertion). Use the drill
+when you touch the gate itself, or when you want hands-on confirmation
+that a real perf regression in `transpileAmd` would be caught.

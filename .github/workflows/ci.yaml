@@ -721,6 +721,14 @@ jobs:
         run: pnpm bench:amd:check
         working-directory: packages/runtime-common
 
+      - name: Trip-test (proves gate's failure path)
+        # Synthetic stingy baseline → confirms exit 1, FAIL-message
+        # format intact, every fixture appears in breach list. Runs
+        # only after the real gate passes so a green pipeline means
+        # "real gate accepts current code AND failure path still works."
+        run: pnpm bench:amd:check:trip-test
+        working-directory: packages/runtime-common
+
   post-pr-status:
     name: Update PR status comment
     needs:

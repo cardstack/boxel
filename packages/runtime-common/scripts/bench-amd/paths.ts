@@ -15,4 +15,10 @@ export const fixturesDir = path.join(
 
 export const candidatesDir = path.join(__dirname, 'candidates');
 
-export const baselinePath = path.join(__dirname, 'baseline.json');
+// `BENCH_AMD_BASELINE_OVERRIDE` redirects the gate to read a synthetic
+// baseline from somewhere else on disk. Used by the trip-test to prove
+// the gate's failure path works without ever mutating the real
+// `baseline.json`. Default unchanged.
+export const baselinePath =
+  process.env.BENCH_AMD_BASELINE_OVERRIDE ??
+  path.join(__dirname, 'baseline.json');
