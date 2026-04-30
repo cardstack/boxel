@@ -228,6 +228,17 @@ export class IdentifierRewriter {
       case 'RestElement':
         this.walkPatternComputedKeys(node.argument);
         break;
+      case 'MemberExpression':
+        // Destructure-assignment to a member of an existing binding,
+        // e.g. `({ x: obj.field } = src)` or `[obj.field] = src`. The
+        // MemberExpression's `object` is a reference position — if
+        // `obj` names an import we must rewrite it, otherwise the
+        // emitted AMD body references an undeclared name. Walk the
+        // MemberExpression normally (the regular `MemberExpression`
+        // arm of `walk()` only rewrites `object`, plus `property` if
+        // computed — which is what we want).
+        this.walk(node, null, '', null);
+        break;
     }
   }
 

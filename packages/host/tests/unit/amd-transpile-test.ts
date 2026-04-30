@@ -491,6 +491,57 @@ module('Unit | amd-transpile (CS-10977)', function () {
     assert.strictEqual(exports.chosen, 'value!');
   });
 
+  test('object destructure-assignment to a member of an imported namespace (regression P1)', function (assert) {
+    // `({ x: obj.field } = src)` where `obj` is imported. `obj` is a
+    // reference position (we read it to assign to its `.field`), so it
+    // must be rewritten to the dep-arg accessor — otherwise the emitted
+    // AMD body references an undeclared `obj` and throws ReferenceError.
+    let out = transpileAmd(
+      `import * as ns from 'foo';
+       export function bad(src) { ({ x: ns.field } = src); return ns.field; }`,
+      { moduleId },
+    );
+    let nsObj: Record<string, unknown> = {};
+    let { exports } = runAmd(out, { foo: nsObj });
+    let result = (
+      exports.bad as (src: Record<string, unknown>) => unknown
+    )({ x: 42 });
+    assert.strictEqual(result, 42, 'destructure-assigned ns.field is 42');
+    assert.strictEqual(nsObj.field, 42, 'mutation reached the dep arg');
+  });
+
+  test('array destructure-assignment to a member of an imported namespace (regression P1)', function (assert) {
+    // `[ns.field] = src` — array variant of the same bug.
+    let out = transpileAmd(
+      `import * as ns from 'foo';
+       export function bad(src) { [ns.field] = src; return ns.field; }`,
+      { moduleId },
+    );
+    let nsObj: Record<string, unknown> = {};
+    let { exports } = runAmd(out, { foo: nsObj });
+    let result = (exports.bad as (src: unknown[]) => unknown)(['hi']);
+    assert.strictEqual(result, 'hi');
+    assert.strictEqual(nsObj.field, 'hi');
+  });
+
+  test('for-of head with destructure-assignment to imported namespace member (regression P1)', function (assert) {
+    // `for ({ x: ns.field } of items) {}` — for-of head variant.
+    let out = transpileAmd(
+      `import * as ns from 'foo';
+       export function collect(items) {
+         for ({ x: ns.field } of items) {}
+         return ns.field;
+       }`,
+      { moduleId },
+    );
+    let nsObj: Record<string, unknown> = {};
+    let { exports } = runAmd(out, { foo: nsObj });
+    let result = (
+      exports.collect as (items: { x: number }[]) => unknown
+    )([{ x: 1 }, { x: 2 }, { x: 3 }]);
+    assert.strictEqual(result, 3, 'last iteration mutated ns.field');
+  });
+
   test('named import binds via destructuring', function (assert) {
     let out = transpileAmd(
       `import { a, b as c } from 'foo'; export const r = a + c;`,
