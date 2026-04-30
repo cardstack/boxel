@@ -96,10 +96,12 @@ extract_uid() {  # $1: path to a committed manifest
 
 normalize() {  # $1: subdir under grafanactl/resources, $2: pulled-kind dirname
   local subdir="$1" kind="$2"
-  shopt -s nullglob globstar
-  for committed in ./grafanactl/resources/${subdir}/**/*.json ./grafanactl/resources/${subdir}/*.json; do
-    [[ -f "$committed" ]] || continue
-    local uid pulled rel target
+  # `find -print0` + a NUL-delimited read loop rather than a `**/*.json` glob —
+  # macOS's default bash 3.2 doesn't support `shopt -s globstar` and `set -eo`
+  # would abort diff.sh before it could produce output. Portable across
+  # bash 3.2 / 4.x / 5.x and zsh.
+  local committed uid pulled rel target
+  while IFS= read -r -d '' committed; do
     uid="$(extract_uid "$committed")"
     [[ -n "$uid" ]] || continue
     pulled="${remote}/${kind}/${uid}.json"
@@ -108,7 +110,7 @@ normalize() {  # $1: subdir under grafanactl/resources, $2: pulled-kind dirname
     target="${remote_norm}/${rel}"
     mkdir -p "$(dirname "$target")"
     cp "$pulled" "$target"
-  done
+  done < <(find "./grafanactl/resources/${subdir}" -type f -name '*.json' -print0 2>/dev/null)
 }
 
 normalize dashboards Dashboard
