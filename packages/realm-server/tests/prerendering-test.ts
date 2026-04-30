@@ -4961,10 +4961,13 @@ module(basename(__filename), function () {
             await pool.warmStandbys();
 
             let first = await pool.getPage('realm-a', 'file');
-            assert.strictEqual(
-              first.waits.admissionMs,
-              0,
-              'first file call does not wait for admission (slot available)',
+            // Slack of a few ms: the admission acquire is async, and the
+            // microtask round-trip can register as 1–2ms on slow CI even
+            // when the semaphore has a slot immediately available. The
+            // test's assertion is "didn't queue", not "wall-clock zero".
+            assert.ok(
+              first.waits.admissionMs < 10,
+              `first file call does not wait for admission (slot available, actual: ${first.waits.admissionMs}ms)`,
             );
 
             // Second file call blocks on the admission semaphore (cap=1
