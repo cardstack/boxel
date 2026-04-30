@@ -283,6 +283,88 @@ module(basename(__filename), function () {
         );
       }
     });
+
+    test('high-priority tier: tier dormant by default (HIGH_PRIORITY_MAX/THRESHOLD unset)', function (assert) {
+      withEnv(
+        {
+          PRERENDER_PAGE_POOL_MIN: '2',
+          PRERENDER_PAGE_POOL_MAX: '6',
+          PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX: undefined,
+          PRERENDER_HIGH_PRIORITY_THRESHOLD: undefined,
+        },
+        () => {
+          let { pool } = track(makeStubPool({ maxPages: 4 }));
+          assert.strictEqual(
+            pool.highPriorityMaxPages,
+            6,
+            'HP ceiling collapses to MAX when tier is dormant',
+          );
+          assert.strictEqual(
+            pool.highPriorityThreshold,
+            Number.POSITIVE_INFINITY,
+            'threshold is +Infinity so no priority value can satisfy it',
+          );
+        },
+      );
+    });
+
+    test('high-priority tier: env vars set the upper ceiling and threshold', function (assert) {
+      withEnv(
+        {
+          PRERENDER_PAGE_POOL_MIN: '2',
+          PRERENDER_PAGE_POOL_MAX: '6',
+          PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX: '8',
+          PRERENDER_HIGH_PRIORITY_THRESHOLD: '5',
+        },
+        () => {
+          let { pool } = track(makeStubPool({ maxPages: 4 }));
+          assert.strictEqual(pool.highPriorityMaxPages, 8);
+          assert.strictEqual(pool.highPriorityThreshold, 5);
+        },
+      );
+    });
+
+    test('high-priority tier: HIGH_PRIORITY_MAX < MAX is clamped to MAX', function (assert) {
+      withEnv(
+        {
+          PRERENDER_PAGE_POOL_MIN: '2',
+          PRERENDER_PAGE_POOL_MAX: '6',
+          PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX: '4',
+          PRERENDER_HIGH_PRIORITY_THRESHOLD: '5',
+        },
+        () => {
+          let { pool } = track(makeStubPool({ maxPages: 4 }));
+          assert.strictEqual(
+            pool.highPriorityMaxPages,
+            6,
+            'HP ceiling can never be below MAX',
+          );
+        },
+      );
+    });
+
+    test('high-priority tier: dormant when single-tier dynamic config (MIN === MAX) — no expansion possible', function (assert) {
+      withEnv(
+        {
+          PRERENDER_PAGE_POOL_MIN: '4',
+          PRERENDER_PAGE_POOL_MAX: '4',
+          PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX: '8',
+          PRERENDER_HIGH_PRIORITY_THRESHOLD: '5',
+        },
+        () => {
+          let { pool } = track(makeStubPool({ maxPages: 4 }));
+          assert.strictEqual(
+            pool.highPriorityMaxPages,
+            4,
+            'tier disabled because base pool has no expansion budget',
+          );
+          assert.strictEqual(
+            pool.highPriorityThreshold,
+            Number.POSITIVE_INFINITY,
+          );
+        },
+      );
+    });
   });
 
   module('PagePool expansion / contraction', function (hooks) {
@@ -491,6 +573,134 @@ module(basename(__filename), function () {
             pool.currentMaxPages,
             2,
             'contraction resumes after slot is released',
+          );
+        },
+      );
+    });
+
+    test('high-priority tier: low-priority caller stops expanding at MAX', async function (assert) {
+      withEnv(
+        {
+          PRERENDER_PAGE_POOL_MIN: '2',
+          PRERENDER_PAGE_POOL_MAX: '4',
+          PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX: '6',
+          PRERENDER_HIGH_PRIORITY_THRESHOLD: '5',
+        },
+        async () => {
+          let semaphore = new AsyncSemaphore(2);
+          let { pool } = track(
+            makeStubPool({
+              maxPages: 4,
+              renderSemaphore: semaphore,
+            }),
+          );
+          // Expand all the way using priority 0 (background) — should
+          // stop at MAX=4 even though HP_MAX=6.
+          for (let i = 0; i < 10; i++) {
+            pool.__test_tryExpand(0);
+          }
+          assert.strictEqual(
+            pool.currentMaxPages,
+            4,
+            'priority-0 caller capped at MAX',
+          );
+          assert.strictEqual(semaphore.capacity, 4);
+        },
+      );
+    });
+
+    test('high-priority tier: high-priority caller can expand past MAX into HIGH_PRIORITY_MAX', async function (assert) {
+      withEnv(
+        {
+          PRERENDER_PAGE_POOL_MIN: '2',
+          PRERENDER_PAGE_POOL_MAX: '4',
+          PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX: '6',
+          PRERENDER_HIGH_PRIORITY_THRESHOLD: '5',
+        },
+        async () => {
+          let semaphore = new AsyncSemaphore(2);
+          let { pool } = track(
+            makeStubPool({
+              maxPages: 4,
+              renderSemaphore: semaphore,
+            }),
+          );
+          for (let i = 0; i < 10; i++) {
+            pool.__test_tryExpand(10);
+          }
+          assert.strictEqual(
+            pool.currentMaxPages,
+            6,
+            'priority-10 caller can reach HP_MAX',
+          );
+          assert.strictEqual(semaphore.capacity, 6);
+        },
+      );
+    });
+
+    test('high-priority tier: caller AT threshold qualifies; caller below does not', async function (assert) {
+      withEnv(
+        {
+          PRERENDER_PAGE_POOL_MIN: '2',
+          PRERENDER_PAGE_POOL_MAX: '3',
+          PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX: '5',
+          PRERENDER_HIGH_PRIORITY_THRESHOLD: '5',
+        },
+        async () => {
+          let { pool } = track(makeStubPool({ maxPages: 4 }));
+          // Exhaust the burst tier with priority-4 (below threshold).
+          // Should stop at MAX=3.
+          for (let i = 0; i < 5; i++) {
+            pool.__test_tryExpand(4);
+          }
+          assert.strictEqual(
+            pool.currentMaxPages,
+            3,
+            'priority=4 (below threshold=5) capped at MAX=3',
+          );
+          // Now drive with priority-5 (at threshold) — should go to HP_MAX=5.
+          for (let i = 0; i < 5; i++) {
+            pool.__test_tryExpand(5);
+          }
+          assert.strictEqual(
+            pool.currentMaxPages,
+            5,
+            'priority=5 (at threshold=5) reaches HP_MAX',
+          );
+        },
+      );
+    });
+
+    test('high-priority tier: contraction returns to MIN regardless of which tier expansion reached', async function (assert) {
+      withEnv(
+        {
+          PRERENDER_PAGE_POOL_MIN: '2',
+          PRERENDER_PAGE_POOL_MAX: '4',
+          PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX: '6',
+          PRERENDER_HIGH_PRIORITY_THRESHOLD: '5',
+          PRERENDER_POOL_IDLE_CONTRACTION_MS: '20',
+        },
+        async () => {
+          let semaphore = new AsyncSemaphore(2);
+          let { pool } = track(
+            makeStubPool({
+              maxPages: 4,
+              renderSemaphore: semaphore,
+              contractionTickMs: 10,
+            }),
+          );
+          // Expand into the HP tier.
+          for (let i = 0; i < 10; i++) {
+            pool.__test_tryExpand(10);
+          }
+          assert.strictEqual(pool.currentMaxPages, 6, 'expanded to HP_MAX');
+
+          // Contraction should walk us back to MIN regardless of tier.
+          await new Promise((r) => setTimeout(r, 400));
+          assert.strictEqual(
+            pool.currentMaxPages,
+            2,
+            'contraction reaches MIN even from HP tier',
           );
         },
       );
