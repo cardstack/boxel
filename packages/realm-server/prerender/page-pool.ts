@@ -493,14 +493,29 @@ export class PagePool {
     if (!Number.isFinite(envTabMax) || envTabMax <= 0) {
       envTabMax = 1;
     }
-    // Cap by the high-priority tier ceiling (the largest the pool can
-    // grow to under any priority) rather than the live `#maxPages`.
-    // When the tier is dormant `#highPriorityMaxPages === #maxBurstPages`
-    // and this collapses to "cap by the burst ceiling" — same as the
-    // single-tier PR's behaviour.
+    // Cap by the burst ceiling (`#maxBurstPages`), NOT the high-
+    // priority tier ceiling. Capping at `#highPriorityMaxPages`
+    // would let the per-affinity tab budget exceed the burst-tier
+    // capacity (e.g. envTabMax=5, MAX=4, HP_MAX=8 →
+    // affinityTabMax=5), and the legacy reservation formula
+    // `max(1, affinityTabMax − 1)` would yield fileAdmissionCap=4.
+    // Low-priority file workload could fill all 4 burst slots with
+    // no slot left for the module/command sub-call the file render
+    // is waiting on, re-introducing the self-referential prerender
+    // deadlock the reservation is meant to prevent. Capping at
+    // `#maxBurstPages` keeps `affinityTabMax − 1 < #maxBurstPages`,
+    // preserving the deadlock-safety invariant for low/medium-
+    // priority workload.
+    //
+    // The per-affinity cap *intentionally* doesn't track HP_MAX —
+    // the tier exists to give the global pool burst budget for
+    // high-priority traffic, not to multiply the per-realm tab
+    // budget. Operators wanting more per-realm headroom raise
+    // `PRERENDER_AFFINITY_TAB_MAX` and `PRERENDER_PAGE_POOL_MAX`
+    // together.
     this.#affinityTabMax = Math.min(
       Math.max(1, envTabMax),
-      this.#highPriorityMaxPages,
+      this.#maxBurstPages,
     );
     if (this.#maxBurstPages <= this.#minPages && this.#affinityTabMax < 2) {
       // Degenerate legacy-pool configuration: with only one tab per
