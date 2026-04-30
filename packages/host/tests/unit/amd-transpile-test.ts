@@ -305,6 +305,43 @@ module('Unit | amd-transpile (CS-10977)', function () {
     );
   });
 
+  test('top-level `for await` is rejected at transpile time', function (assert) {
+    // `for await (... of ...)` is a `ForOfStatement` with `await: true`
+    // — there's NO `AwaitExpression` child, so the naive AwaitExpression
+    // walk would let it through. Same async-context requirement as TLA.
+    assert.throws(
+      () =>
+        transpileAmd(`for await (const x of foo) {}`, {
+          moduleId,
+        }),
+      /top-level await is not supported/,
+    );
+  });
+
+  test('top-level `await using` is rejected at transpile time', function (assert) {
+    // ES2024 `await using r = res;` — VariableDeclaration with kind
+    // `'await using'`. Like TLA, requires an async enclosing scope.
+    assert.throws(
+      () =>
+        transpileAmd(`import { res } from 'foo'; await using r = res;`, {
+          moduleId,
+        }),
+      /top-level await is not supported/,
+    );
+  });
+
+  test('`for await` inside an async function is fine', function (assert) {
+    // Sanity: `for await ... of ...` inside an async function does NOT
+    // trigger the top-level-await rejection.
+    transpileAmd(
+      `export async function consume(stream) {
+         for await (const chunk of stream) { console.log(chunk); }
+       }`,
+      { moduleId },
+    );
+    assert.ok(true, 'no throw');
+  });
+
   test('top-level await inside an async function is fine', function (assert) {
     // Sanity check: `await` inside an async function (regular or
     // arrow) must NOT trigger the top-level-await rejection.

@@ -1063,8 +1063,13 @@ function rewriteIdentifierReferences(
   return usesImportMeta;
 }
 
-// Detect a top-level `AwaitExpression` (i.e. one not inside any function
-// body). Used to reject TLA at transpile time — see `transpileAmd`.
+// Detect a top-level form that requires an async enclosing scope:
+//   - `AwaitExpression` (the obvious case)
+//   - `for await (...) {}` — `ForOfStatement` with `await: true`, NOT an
+//     AwaitExpression child, but still requires async context
+//   - `await using r = ...` — `VariableDeclaration` with kind `'await using'`
+//     (ES2024 explicit-resource-management proposal)
+// Used to reject TLA at transpile time — see `transpileAmd`.
 function hasTopLevelAwait(ast: Program): boolean {
   let found = false;
   const visit = (node: any) => {
@@ -1079,6 +1084,14 @@ function hasTopLevelAwait(ast: Program): boolean {
       return;
     }
     if (node.type === 'AwaitExpression') {
+      found = true;
+      return;
+    }
+    if (node.type === 'ForOfStatement' && node.await) {
+      found = true;
+      return;
+    }
+    if (node.type === 'VariableDeclaration' && node.kind === 'await using') {
       found = true;
       return;
     }
