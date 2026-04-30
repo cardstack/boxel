@@ -747,16 +747,125 @@ If `renderStage` says `buildModel:fetching-source` but `cardDocsInFlight` is emp
 
 ## Reproducing a render interactively
 
-Sometimes the written diagnostics aren't enough — you want to replay the exact render the indexer saw in a real browser (Chrome MCP, Puppeteer, or your own tab) to step through it, watch network, edit source and reload, etc. Every ingredient is already in the system; you just have to wire them up.
+Sometimes the written diagnostics aren't enough — you want to replay the exact render the indexer saw in a real browser (Chrome MCP, Puppeteer, or your own tab) to step through it, watch network, edit source and reload, etc.
 
-Two separate tokens are involved; keep them straight up front:
+There are two paths, depending on what you have access to:
 
-- **User JWT** — a *realm-scoped* token you mint yourself, used to call the authenticated reindex endpoint (`POST <realm-url>_full-reindex` or `_reindex`). Without this you can't trigger the reindex, which means you don't get the artifacts below. This is the only reason you'll do the Matrix dance by hand.
-- **Indexer `boxel-session` value** — the full `boxel-session` localStorage value the indexer's prerender tab uses. You never construct this yourself; you read it verbatim out of the `prerenderer-reproduce` log for the card you want to replay, and paste it into `localStorage['boxel-session']` so the prerender tab authenticates as the indexer did. Format: a JSON-stringified map `{ <realmUrl>: <realm-scoped-JWT>, … }`, one entry per realm the indexer has auth for — the host reads it with `JSON.parse(...)` and picks the right JWT per cross-realm fetch. **Copy the whole string from the log**, not just one of the inner JWTs.
+- **Path A — direct token mint via `mise run claude-prerender-token`** (preferred for staging/prod when you have the realm secret seed). Skip the Matrix login and reindex steps; the script mints the same shape of token the indexer mints, then you drive Chrome MCP straight at the `/render` route. Works for any card on a server you have the seed for, without changing server config or triggering a reindex.
+- **Path B — the `prerenderer-reproduce` log channel** (local dev, or when you need the indexer's exact historical session). Turn on a debug log level on the realm server, trigger a reindex, and copy the URL + session value verbatim from the log line.
 
-So the end-to-end flow is: mint user JWT → call `_full-reindex` with it → indexer runs → log emits render URLs + session values → paste into browser. Mint-your-own-JWT and read-value-from-log are *both* needed; they're not alternatives.
+Path A is faster, doesn't require server config changes, and works against staging/prod without touching the running fleet. Path B captures the indexer's exact multi-realm session at a point in time — the right choice when you suspect cross-realm fetch auth or want to replay a render that already happened. The "Visiting a render page" / Chrome MCP / `__boxelRenderDiagnostics()` recipe below is shared between the two paths.
 
-### The `prerenderer-reproduce` log channel
+### Path A — direct token mint (the common case)
+
+The user runs `mise run claude-prerender-token <realm-url> [<seed>]`. The script (`packages/realm-server/scripts/claude-prerender-token.ts`, executed via `ts-node --transpileOnly` from inside `packages/realm-server`) mints a `boxel-session` JWT the same way the indexer does — same claims, same HS256/1d, same `JSON.stringify({ <realmUrl>: <jwt> })` map shape that lands in `localStorage['boxel-session']`. Faithful CLI port of `buildCreatePrerenderAuth` (`packages/realm-server/prerender/auth.ts`).
+
+**The CLI is intentionally minimal: just `<realm-url>` and an optional `<seed>` positional.** If `<seed>` is omitted the script silently prompts on `/dev/tty` (paste-friendly, no shell history). Optional flags: `--user <matrix-id>` (required only for system realms), `--output <path>`, `--no-output`. That's it. The token is realm-scoped, not card-scoped — Claude builds the `/render` URL itself for whichever card it's investigating.
+
+#### Hard rule: Claude never sees the seed
+
+- Do NOT ask the user for the seed.
+- Do NOT propose pasting the seed into the conversation, into a file Claude can read, or via any other channel.
+- Do NOT call `aws ssm get-parameter` against `REALM_SECRET_SEED` — Claude's `boxel-claude-readonly` role rejects it anyway, but don't try.
+
+The user fetches the seed however they like (SSM, dev-env, prompt) and runs the script in their own shell. Claude consumes only the artifact below.
+
+Why: the seed mints arbitrary user-impersonating tokens with arbitrary permissions. A 1-day JWT for one user is a bounded leak; the seed is unbounded.
+
+#### The artifact Claude reads
+
+`/tmp/claude-prerender.json` (chmod 600), written by the script:
+
+```json
+{
+  "mintedAt":   "<iso>",
+  "expiresAt":  "<iso>",  // 1d from mintedAt
+  "user":       "@ctse:stack.cards",
+  "realmUrl":   "https://realms-staging.stack.cards/ctse/concrete-mockingbird/",
+  "hostUrl":    "https://boxel-host-staging.stack.cards",
+  "jwt":        "eyJ...",
+  "session":    "{\"<realmUrl>\":\"eyJ...\"}"
+}
+```
+
+Before using it, Claude must check:
+
+- `expiresAt` is in the future
+- `mintedAt` is recent enough that this is for the *current* investigation (not a leftover artifact)
+- `realmUrl` matches the realm of the card you're rendering — different realm = ask for re-mint
+
+If any check fails, ask the user to re-run. Do not reuse stale artifacts.
+
+#### Building the `/render` URL (Claude's responsibility)
+
+Once Claude has the artifact, it constructs the URL the prerender uses, mirroring `packages/realm-server/prerender/render-runner.ts:832`:
+
+```
+<hostUrl>/render/<encodeURIComponent(cardUrl)>/<nonce>/<encodeURIComponent(JSON.stringify(options))>/html/<format>/0
+```
+
+Slot-by-slot:
+
+- **`<hostUrl>`** — straight from the artifact's `hostUrl` field.
+- **`<encodeURIComponent(cardUrl)>`** — the card you're investigating, NO trailing `.json`. `https://realms-staging.stack.cards/ctse/concrete-mockingbird/Environment/demo` → `https%3A%2F%2Frealms-staging.stack.cards%2Fctse%2Fconcrete-mockingbird%2FEnvironment%2Fdemo`.
+- **`<nonce>`** — any string. The indexer uses a monotonic counter; for manual replays `1` is fine.
+- **`<encodeURIComponent(JSON.stringify(options))>`** — the render-route options object, JSON-encoded then URL-encoded. The shape lives in `packages/runtime-common/render-route-options.ts`. Common values:
+  - `{"cardRender":true}` → `%7B%22cardRender%22%3Atrue%7D` (the indexer's card-render pass — what you want for a card desync repro)
+  - `{}` → `%7B%7D` (no special pass)
+  - `{"cardRender":true,"clearCache":true}` (drops the loader cache before the render — helpful when stale modules might be the cause)
+- **`<format>`** — `isolated` (matches the indexer for card-render), `embedded`, `fitted`, or `atom`. Default to `isolated`.
+- **`/0`** — recursion-depth segment. Always `0` for card render.
+
+Worked example for the demo card:
+
+```
+https://boxel-host-staging.stack.cards/render/https%3A%2F%2Frealms-staging.stack.cards%2Fctse%2Fconcrete-mockingbird%2FEnvironment%2Fdemo/1/%7B%22cardRender%22%3Atrue%7D/html/isolated/0
+```
+
+The Chrome MCP recipe (set `localStorage['boxel-session']` first, then navigate, then poll status / call `__boxelRenderDiagnostics()`) is shared with Path B — see [Chrome MCP / headful replay recipe](#chrome-mcp--headful-replay-recipe) below.
+
+#### How auth actually clears the realm-server
+
+The realm-server's `checkPermission` (`packages/runtime-common/realm.ts:2249`) does two things in order:
+
+1. **Verify the JWT signature** against `REALM_SECRET_SEED`. Anyone with the seed can mint a valid signature — that's the diagnostic gate.
+2. **Look up the token's `user` claim in the realm's permission table** via `RealmPermissionChecker.for(username)` (`packages/runtime-common/realm-permission-checker.ts`). The `permissions` array in the JWT is advisory; the checker actually reads `realm_user_permissions[realm][username]` plus the `'*'` wildcard.
+
+So the `user` claim has to be a real Matrix ID with real DB permissions on the target realm. A made-up user passes signature verification but fails the checker → 401. The script's default derivation (`realms-staging.stack.cards/ctse/realm/` → `@ctse:stack.cards`) hits the realm owner's row — works for any 2-segment user-realm URL. For system realms (`/catalog/`, `/experiments/`), the script errors and asks for `--user @realm:<matrix-domain>` (the realm-server bot).
+
+For local dev: matrix `server_name` is `localhost` (`packages/matrix/docker/synapse/dev/homeserver.yaml:1`), so user IDs are `@<username>:localhost`. The script auto-handles `*.localhost` hosts.
+
+**Public realms (`'*': ['read']` in the permissions table) don't need a JWT.** Published realms always get this set (`packages/realm-server/handlers/handle-publish-realm.ts:326`). If you're rendering a published card, no token is needed — though minting still works, the request just doesn't depend on it.
+
+#### Cross-realm linksTo (when the simple flow isn't enough)
+
+The default session map has only the target realm. If the card pulls private cross-realm `linksTo`, the host's loader will 401 those fetches.
+
+For now this isn't auto-handled; if you hit a cross-realm 401, the user can extend the session map themselves by minting tokens for the additional realms (same secret signs them all) and merging the maps. The DB has the answer for which realms a user owns — query `realm_user_permissions` excluding published realms:
+
+```sql
+SELECT rup.realm_url
+FROM realm_user_permissions rup
+LEFT JOIN published_realms pr ON pr.published_realm_url = rup.realm_url
+WHERE rup.username = '@ctse:stack.cards'
+  AND rup.read = TRUE
+  AND pr.published_realm_url IS NULL
+ORDER BY rup.realm_url;
+```
+
+This matches the indexer's `fetchUserPermissions` (`packages/runtime-common/db-queries/realm-permission-queries.ts:127`) → `buildCreatePrerenderAuth` chain. Auto-discovery is a follow-up — for now, ask the user if cross-realm support is needed for a specific repro.
+
+#### When this is the right path
+
+- A specific card is failing in indexing on staging/prod and you want unminified Chrome stack frames + a `__boxelRenderDiagnostics()` snapshot.
+- You're iterating on a card template locally and want to skip the reindex step entirely.
+- You want to compare a render under different `RenderRouteOptions` (e.g. with vs without `clearCache`).
+
+When this is **not** the right path:
+- You need the indexer's exact session at the moment of a *historical* render (cross-realm auth that's since changed, etc.) — use Path B.
+- You're triaging a stall during the indexer's own pass and want diagnostics on the *real* indexer's tab — Path A reproduces in a fresh tab; the indexer's tab is its own thing.
+
+### Path B — the `prerenderer-reproduce` log channel
 
 `packages/realm-server/prerender/render-runner.ts` defines a dedicated logger `prerenderer-reproduce` that emits a line **per card render** with a ready-to-use URL and the exact `boxel-session` value the indexer used (a JSON-stringified map from realm URL to realm-scoped JWT):
 
