@@ -27,7 +27,6 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
-    "id": 26,
     "links": [],
     "panels": [
       {
@@ -71,8 +70,6 @@
     "timepicker": {},
     "timezone": "browser",
     "title": "Worker Status",
-    "uid": "aetquzj0mdb7kb",
-    "version": 1,
     "weekStart": ""
   }
 }

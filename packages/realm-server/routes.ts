@@ -64,6 +64,7 @@ import {
 import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver';
 import handleRunCommand from './handlers/handle-run-command';
 import { buildCreatePrerenderAuth } from './prerender/auth';
+import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -76,6 +77,7 @@ export type CreateRoutesArgs = {
   virtualNetwork: VirtualNetwork;
   queue: QueuePublisher;
   realms: Realm[];
+  reconciler: RealmRegistryReconciler;
   realmsRootPath: string;
   getMatrixRegistrationSecret: () => Promise<string>;
   createAndMountRealm: (
