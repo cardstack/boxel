@@ -224,6 +224,21 @@ export async function performCardIndexing({
     return;
   }
 
+  {
+    let ogTitleMatch =
+      typeof headHTML === 'string'
+        ? (headHTML.match(
+            /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']*)["']/i,
+          ) ??
+          headHTML.match(
+            /<meta[^>]+content=["']([^"']*)["'][^>]+property=["']og:title["']/i,
+          ))
+        : null;
+    let ogTitle = ogTitleMatch ? ogTitleMatch[1] : null;
+    console.log(
+      `[ogtitle-diag] event=cardIndexer-updateEntry realmURL=${realmURL.href} jobId=${jobInfo.jobId} instanceURL=${instanceURL.href} lastModified=${lastModified} headHtmlLength=${typeof headHTML === 'string' ? headHTML.length : -1} headHtmlOgTitle=${JSON.stringify(ogTitle)}`,
+    );
+  }
   await updateEntry(instanceURL, {
     type: 'instance',
     resource: serialized!.data as CardResource,

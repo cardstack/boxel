@@ -56,6 +56,22 @@ export async function retrieveHeadHTML({
   } else {
     log?.debug(`No head HTML returned from database for ${cardURL.href}`);
   }
+  {
+    let head = headRow?.head_html ?? null;
+    let ogTitleMatch =
+      head != null
+        ? (head.match(
+            /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']*)["']/i,
+          ) ??
+          head.match(
+            /<meta[^>]+content=["']([^"']*)["'][^>]+property=["']og:title["']/i,
+          ))
+        : null;
+    let ogTitle = ogTitleMatch ? ogTitleMatch[1] : null;
+    console.log(
+      `[ogtitle-diag] event=retrieveHeadHTML-row cardURL=${cardURL.href} candidates=${JSON.stringify(candidates)} found=${String(headRow != null)} realmVersion=${JSON.stringify(headRow?.realm_version ?? null)} headHtmlLength=${head != null ? head.length : -1} ogTitleInRow=${JSON.stringify(ogTitle)}`,
+    );
+  }
   return headRow?.head_html ?? null;
 }
 

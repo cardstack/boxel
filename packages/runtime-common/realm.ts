@@ -522,6 +522,11 @@ export class Realm {
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
   #cachedRealmInfo: RealmInfo | null = null;
+  // Per-instance marker for diagnostic logs so we can confirm a single
+  // Realm instance is the same across publish + serve. Combination of
+  // process pid and a high-resolution constructor timestamp is unique
+  // enough for log correlation.
+  #diagInstanceId: string = `${process.pid}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
@@ -541,6 +546,12 @@ export class Realm {
 
   get url(): string {
     return this.paths.url;
+  }
+
+  // Per-instance marker exposed for diagnostic logs that need to
+  // confirm a given Realm instance is the same across publish + serve.
+  get diagInstanceId(): string {
+    return this.#diagInstanceId;
   }
 
   get dir(): string | undefined {
@@ -791,6 +802,9 @@ export class Realm {
         });
       }
     });
+    console.log(
+      `[ogtitle-diag] event=realm-constructed realmURL=${this.url} instanceId=${this.#diagInstanceId} pid=${process.pid}`,
+    );
   }
 
   async logInToMatrix() {
@@ -1074,6 +1088,9 @@ export class Realm {
   }
 
   async fullIndex(priority?: number, opts?: { clearLastModified?: boolean }) {
+    console.log(
+      `[ogtitle-diag] event=fullIndex-enter realmURL=${this.url} instanceId=${this.#diagInstanceId} priority=${String(priority)} clearLastModified=${String(opts?.clearLastModified)} cachedRealmInfoNameBefore=${JSON.stringify(this.#cachedRealmInfo?.name ?? null)}`,
+    );
     // Clear the realmInfo cache before re-indexing so cards rendered
     // during this pass read /realm.json from the now-populated index
     // rather than a stale "Unnamed Workspace" cached during an earlier
@@ -1082,12 +1099,18 @@ export class Realm {
     // baked into the prerendered HTML — clearing only after the pass
     // would be too late.
     this.#cachedRealmInfo = null;
+    console.log(
+      `[ogtitle-diag] event=fullIndex-cleared-cache-before-pass realmURL=${this.url} instanceId=${this.#diagInstanceId}`,
+    );
     let { completed } = this.#realmIndexUpdater.publishFullIndex(
       priority ?? systemInitiatedPriority,
       { clearLastModified: opts?.clearLastModified },
     );
     await completed;
     this.#cachedRealmInfo = null;
+    console.log(
+      `[ogtitle-diag] event=fullIndex-exit realmURL=${this.url} instanceId=${this.#diagInstanceId}`,
+    );
   }
 
   async flushUpdateEvents() {
@@ -4572,9 +4595,13 @@ export class Realm {
   }
 
   async getRealmInfo(): Promise<RealmInfo> {
+    let wasCached = this.#cachedRealmInfo != null;
     if (!this.#cachedRealmInfo) {
       this.#cachedRealmInfo = await this.parseRealmInfo();
     }
+    console.log(
+      `[ogtitle-diag] event=getRealmInfo realmURL=${this.url} instanceId=${this.#diagInstanceId} wasCached=${String(wasCached)} resolvedName=${JSON.stringify(this.#cachedRealmInfo.name)}`,
+    );
     return this.#cachedRealmInfo;
   }
 
@@ -4582,6 +4609,9 @@ export class Realm {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath, undefined);
+    console.log(
+      `[ogtitle-diag] event=parseRealmInfo-read-hidden realmURL=${this.url} instanceId=${this.#diagInstanceId} hiddenPath=${localPath} hiddenFileFound=${String(realmConfig != null)} hiddenContentPreview=${JSON.stringify((realmConfig?.content ?? '').slice(0, 200))}`,
+    );
     let lastPublishedAt = await this.getLastPublishedAt();
     let realmInfo: RealmInfo = {
       name: 'Unnamed Workspace',
@@ -4599,9 +4629,13 @@ export class Realm {
       lastPublishedAt,
     };
 
+    let nameSource = 'fallback-unnamed-workspace';
     if (realmConfig) {
       try {
         let realmConfigJson = JSON.parse(realmConfig.content);
+        if (realmConfigJson.name != null) {
+          nameSource = 'hidden-realm-json';
+        }
         realmInfo.name = realmConfigJson.name ?? realmInfo.name;
         realmInfo.backgroundURL =
           realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
@@ -4633,6 +4667,9 @@ export class Realm {
         this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
       );
       let indexEntry = await this.#realmIndexQueryEngine.instance(cardURL);
+      console.log(
+        `[ogtitle-diag] event=parseRealmInfo-overlay-lookup realmURL=${this.url} instanceId=${this.#diagInstanceId} cardURL=${cardURL.href} indexEntryType=${JSON.stringify(indexEntry?.type ?? null)}`,
+      );
       if (indexEntry?.type === 'instance') {
         let attrs = (indexEntry.instance.attributes ?? {}) as Record<
           string,
@@ -4641,6 +4678,7 @@ export class Realm {
         let cardInfo = (attrs.cardInfo ?? {}) as Record<string, unknown>;
         if (typeof cardInfo.name === 'string') {
           realmInfo.name = cardInfo.name;
+          nameSource = 'index-realm-config-card';
         }
         if ('backgroundURL' in attrs) {
           realmInfo.backgroundURL =
@@ -4657,6 +4695,9 @@ export class Realm {
       this.#log.warn(`failed to read RealmConfig card from index: ${e}`);
     }
 
+    console.log(
+      `[ogtitle-diag] event=parseRealmInfo-result realmURL=${this.url} instanceId=${this.#diagInstanceId} resolvedName=${JSON.stringify(realmInfo.name)} nameSource=${nameSource}`,
+    );
     return realmInfo;
   }
 
@@ -4884,6 +4925,9 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<Response> {
     let realmInfo = await this.parseRealmInfo();
+    console.log(
+      `[ogtitle-diag] event=realmInfo-koa-served realmURL=${this.url} instanceId=${this.#diagInstanceId} servedName=${JSON.stringify(realmInfo.name)}`,
+    );
 
     let doc = {
       data: {

@@ -501,6 +501,9 @@ export default function handlePublishRealm({
           `expected published realm ${publishedRealmURL} to be mounted after publish — registry row missing or mount failed`,
         );
       }
+      console.log(
+        `[ogtitle-diag] event=publish-handler-mounted publishedRealmURL=${publishedRealmURL} instanceId=${publishedRealm.diagInstanceId}`,
+      );
       // Re-run a full index after start()'s pass so the RealmConfig card
       // at /realm.json is queryable by parseRealmInfo before /index is
       // re-rendered. start()'s from-scratch pass walks files in order and
@@ -519,9 +522,15 @@ export default function handlePublishRealm({
       // first attachRealmInfo call re-reads parseRealmInfo against the
       // now-populated index and bakes the correct realm name into the
       // re-rendered prerendered HTML.
+      console.log(
+        `[ogtitle-diag] event=publish-handler-pass2-enter publishedRealmURL=${publishedRealmURL} instanceId=${publishedRealm.diagInstanceId}`,
+      );
       await publishedRealm.fullIndex(userInitiatedPriority, {
         clearLastModified: true,
       });
+      console.log(
+        `[ogtitle-diag] event=publish-handler-pass2-exit publishedRealmURL=${publishedRealmURL} instanceId=${publishedRealm.diagInstanceId}`,
+      );
       let publishedPermissions = await fetchRealmPermissions(
         dbAdapter,
         new URL(publishedRealmURL),

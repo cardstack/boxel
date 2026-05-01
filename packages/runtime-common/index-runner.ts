@@ -177,6 +177,17 @@ export class IndexRunner {
     let invalidations: URL[] = [];
     let mtimesStart = Date.now();
     let mtimes = await current.batch.getModifiedTimes();
+    {
+      let total = 0;
+      let nullCount = 0;
+      for (let entry of mtimes.values()) {
+        total++;
+        if (entry.lastModified == null) nullCount++;
+      }
+      console.log(
+        `[ogtitle-diag] event=fromScratch-mtimes-snapshot realmURL=${current.realmURL.href} jobId=${current.#jobInfo.jobId} totalIndexRows=${total} rowsWithNullLastModified=${nullCount}`,
+      );
+    }
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
     );
@@ -194,6 +205,9 @@ export class IndexRunner {
       await current.#dependencyResolver.orderInvalidationsByDependencies(
         invalidations,
       );
+    console.log(
+      `[ogtitle-diag] event=fromScratch-visit-order realmURL=${current.realmURL.href} jobId=${current.#jobInfo.jobId} count=${invalidations.length} order=${JSON.stringify(invalidations.map((u) => u.href))}`,
+    );
     current.#onProgress?.({
       type: 'indexing-started',
       realmURL: current.realmURL.href,
@@ -205,7 +219,14 @@ export class IndexRunner {
     try {
       let filesCompleted = 0;
       for (let invalidation of invalidations) {
+        let perRowStart = Date.now();
+        console.log(
+          `[ogtitle-diag] event=fromScratch-visit-begin realmURL=${current.realmURL.href} jobId=${current.#jobInfo.jobId} index=${filesCompleted} url=${invalidation.href}`,
+        );
         await current.tryToVisit(invalidation);
+        console.log(
+          `[ogtitle-diag] event=fromScratch-visit-end realmURL=${current.realmURL.href} jobId=${current.#jobInfo.jobId} index=${filesCompleted} url=${invalidation.href} elapsedMs=${Date.now() - perRowStart}`,
+        );
         filesCompleted++;
         current.#onProgress?.({
           type: 'file-visited',

@@ -578,6 +578,20 @@ export class RealmServer {
       ctxt.vary('Accept');
     }
 
+    {
+      let ogTitleMatch =
+        responseHTML.match(
+          /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']*)["']/i,
+        ) ??
+        responseHTML.match(
+          /<meta[^>]+content=["']([^"']*)["'][^>]+property=["']og:title["']/i,
+        );
+      let ogTitle = ogTitleMatch ? ogTitleMatch[1] : null;
+      console.log(
+        `[ogtitle-diag] event=publishedHTML-served requestURL=${requestURL.href} cardURL=${cardURL.href} headHtmlLength=${headHTML != null ? headHTML.length : -1} ogTitleInResponse=${JSON.stringify(ogTitle)} lastPublishedAt=${JSON.stringify(lastPublishedAt ?? null)}`,
+      );
+    }
+
     ctxt.body = responseHTML;
     return;
   };

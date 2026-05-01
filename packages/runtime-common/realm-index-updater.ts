@@ -102,6 +102,9 @@ export class RealmIndexUpdater {
     let startedAt = performance.now();
 
     this.#log.info(`Realm ${this.realmURL.href} is starting indexing`);
+    console.log(
+      `[ogtitle-diag] event=publishFullIndex-enqueue realmURL=${this.realmURL.href} priority=${String(priority)} clearLastModified=${String(opts?.clearLastModified)}`,
+    );
     let published = (async () =>
       await enqueueReindexRealmJob(
         this.#realm.url,
