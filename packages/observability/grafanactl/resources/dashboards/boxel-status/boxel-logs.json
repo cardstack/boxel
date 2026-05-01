@@ -2,10 +2,10 @@
   "apiVersion": "dashboard.grafana.app/v1beta1",
   "kind": "Dashboard",
   "metadata": {
-    "name": "fetquzizsej28b",
     "annotations": {
       "grafana.app/folder": "defd2d156sav4d"
-    }
+    },
+    "name": "fetquzizsej28b"
   },
   "spec": {
     "annotations": {
@@ -95,7 +95,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "{service=\"worker\"} |~ \"^\\\\[worker $worker_id \"",
+            "expr": "{service=\"worker\", worker_id=\"$worker_id\"}",
             "queryType": "range",
             "refId": "A"
           }
@@ -142,7 +142,7 @@
       }
     ],
     "refresh": "",
-    "schemaVersion": 39,
+    "schemaVersion": 42,
     "tags": [],
     "templating": {
       "list": [

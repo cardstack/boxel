@@ -63,9 +63,9 @@ export class IndexRunner {
   #definitionLookup: DefinitionLookup;
   #jobInfo: JobInfo;
   // Worker-job priority threaded from `pg-queue` → `tasks/indexer.ts`
-  // → here (CS-10976). Forwarded into every prerenderer call site so
-  // the prerender server can route by priority. Defaults to `0` for
-  // tests / non-job callers that don't carry job context.
+  // → here. Forwarded into every prerenderer call site so the
+  // prerender server can route by priority. Defaults to `0` for tests
+  // / non-job callers that don't carry job context.
   #jobPriority: number;
   #dependencyResolver: IndexRunnerDependencyManager;
   #reportStatus?: (
