@@ -15,6 +15,7 @@ module(basename(__filename), function () {
       let server = new RealmServer({
         serverURL: new URL('http://127.0.0.1:4448'),
         realms: [],
+        reconciler: {} as any,
         virtualNetwork: {} as any,
         matrixClient: {
           matrixURL: new URL('http://localhost:8008/'),

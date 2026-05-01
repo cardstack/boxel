@@ -89,10 +89,11 @@ jobs:
             echo "${var}=${val}" >> "$GITHUB_ENV"
           }
 
-          fetch GRAFANA_TOKEN          /staging/grafana/grafanactl_token   --with-decryption
+          fetch GRAFANA_TOKEN          /staging/grafana/grafanactl_token       --with-decryption
           fetch LOKI_URL               /staging/loki/internal_url
           fetch BOXEL_DB_HOST          /staging/boxel-grafana/db_host
           fetch SYNAPSE_PROMETHEUS_URL /staging/boxel-grafana/prometheus_url
+          fetch REALM_SERVER_URL       /staging/boxel-grafana/realm_server_url
           fetch BOXEL_DB_NAME          /staging/boxel/PGDATABASE
           fetch BOXEL_DB_USER          /staging/boxel/GRAFANA_DB_USER
           fetch BOXEL_DB_PASSWORD      /staging/boxel/GRAFANA_DB_PASSWORD  --with-decryption

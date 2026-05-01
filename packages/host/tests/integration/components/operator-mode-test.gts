@@ -272,6 +272,62 @@ module('Integration | operator-mode | basics', function (hooks) {
       .exists('last known good state is displayed in isolated mode');
   });
 
+  test('toggling edit format mutates the StackItem in place (no remount)', async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor('[data-test-stack-item-content]');
+
+    let stackBefore = ctx.operatorModeStateService.state.stacks[0];
+    let itemBefore = stackBefore[0];
+    assert.strictEqual(itemBefore.format, 'isolated', 'starts in isolated');
+    let wrapperBefore = document.querySelector(
+      '[data-test-stack-item-content]',
+    );
+
+    await click('[data-test-edit-button]');
+    await waitFor('[data-test-field="firstName"]');
+
+    let stackAfter = ctx.operatorModeStateService.state.stacks[0];
+    let itemAfter = stackAfter[0];
+    assert.strictEqual(
+      itemAfter,
+      itemBefore,
+      'StackItem instance is preserved (mutated in place, not replaced)',
+    );
+    assert.strictEqual(itemAfter.format, 'edit', 'format is now edit');
+
+    let wrapperAfter = document.querySelector('[data-test-stack-item-content]');
+    assert.strictEqual(
+      wrapperAfter,
+      wrapperBefore,
+      'stack-item content wrapper is the same DOM node (no remount)',
+    );
+
+    await click('[data-test-edit-button]');
+    await waitFor('[data-test-person]');
+
+    let stackBack = ctx.operatorModeStateService.state.stacks[0];
+    assert.strictEqual(
+      stackBack[0],
+      itemBefore,
+      'StackItem identity preserved across edit → isolated round-trip',
+    );
+    assert.strictEqual(
+      stackBack[0].format,
+      'isolated',
+      'format is back to isolated',
+    );
+    assert.strictEqual(
+      document.querySelector('[data-test-stack-item-content]'),
+      wrapperBefore,
+      'wrapper still the same DOM node after round-trip',
+    );
+  });
+
   test('a 403 from Web Application Firewall is handled gracefully when auto-saving', async function (assert) {
     let networkService = getService('network');
     networkService.virtualNetwork.mount(
