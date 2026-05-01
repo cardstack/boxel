@@ -1073,8 +1073,25 @@ export class Realm {
     await this.#startedUp.promise;
   }
 
-  async fullIndex(priority?: number) {
-    await this.realmIndexUpdater.fullIndex(priority);
+  async fullIndex(priority?: number, opts?: { clearLastModified?: boolean }) {
+    // Clear the realmInfo cache before re-indexing so cards rendered
+    // during this pass read /realm.json from the now-populated index
+    // rather than a stale "Unnamed Workspace" cached during an earlier
+    // from-scratch pass that processed /index before /realm.json.
+    // CardsGrid.cardTitle → realmInfo.name drives og:title, which is
+    // baked into the prerendered HTML — clearing only after the pass
+    // would be too late.
+    this.#cachedRealmInfo = null;
+    let { completed } = this.#realmIndexUpdater.publishFullIndex(
+      priority ?? systemInitiatedPriority,
+      { clearLastModified: opts?.clearLastModified },
+    );
+    try {
+      await completed;
+    } catch (e: any) {
+      this.#log.error(`Error running from-scratch-index: ${e.message}`);
+    }
+    this.#cachedRealmInfo = null;
   }
 
   async flushUpdateEvents() {
