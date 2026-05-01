@@ -30,6 +30,6 @@ export default class GetRealmOfUrlCommand extends HostBaseCommand<
     let commandModule = await this.loadCommandModule();
     const { GetRealmOfUrlResult } = commandModule;
     const realmUrl = this.realm.realmOf(rri(input.url));
-    return new GetRealmOfUrlResult({ realmUrl: realmUrl?.href ?? '' });
+    return new GetRealmOfUrlResult({ realmUrl: realmUrl ?? '' });
   }
 }

@@ -191,7 +191,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
 
   private moduleInfoFromFile(
     targetRef: string,
-  ): { moduleURL: URL; realmURL: URL; fileURL: URL } | undefined {
+  ): { moduleURL: URL; realmURL: string; fileURL: URL } | undefined {
     try {
       let fileURL = new URL(targetRef);
       let realmURL = this.realm.realmOf(fileURL);
@@ -209,7 +209,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
 
   private async prerenderModule(
     moduleURL: URL,
-    realmURL: URL,
+    realmURL: string,
   ): Promise<string | undefined> {
     try {
       let prerenderURL = new URL('/_prerender-module', this.realmServer.url);
@@ -224,7 +224,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
           data: {
             type: 'prerender-module-request',
             attributes: {
-              realm: realmURL.href,
+              realm: realmURL,
               url: moduleURL.href,
             },
           },

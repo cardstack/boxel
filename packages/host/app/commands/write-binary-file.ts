@@ -69,7 +69,7 @@ export default class WriteBinaryFileCommand extends HostBaseCommand<
       path = path.slice(1);
     }
 
-    let url = new URL(path, realm?.href);
+    let url = new URL(path, realm);
     let finalUrl = url;
 
     if (input.useNonConflictingFilename) {

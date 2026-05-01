@@ -1604,7 +1604,7 @@ export default class StoreService extends Service implements StoreInterface {
           // Source-mode loads in render context don't include realm metadata.
           // Query-backed relationship fields require realmURL to build their
           // fallback search query.
-          let realmURL = this.realm.realmOf(rri(url))?.href;
+          let realmURL = this.realm.realmOf(rri(url));
           if (realmURL) {
             json.data.meta = {
               ...(json.data.meta ?? {}),
@@ -2103,11 +2103,10 @@ export default class StoreService extends Service implements StoreInterface {
       );
       return;
     }
-    let realm = realmURL.href;
-    let subscription = this.subscriptions.get(realm);
+    let subscription = this.subscriptions.get(realmURL);
     if (!subscription) {
-      this.subscriptions.set(realm, {
-        unsubscribe: this.messageService.subscribe(realm, (event) =>
+      this.subscriptions.set(realmURL, {
+        unsubscribe: this.messageService.subscribe(realmURL, (event) =>
           this.handleInvalidations(event),
         ),
       });

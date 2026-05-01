@@ -555,7 +555,7 @@ export default class OperatorModeStateService extends Service {
 
   private getRealmURLFromItemId(itemId: string): string {
     try {
-      return this.realm.realmOf(rri(itemId))?.href ?? this.realmURL;
+      return this.realm.realmOf(rri(itemId)) ?? this.realmURL;
     } catch (error) {
       return this.realmURL;
     }

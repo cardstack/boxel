@@ -318,7 +318,7 @@ export class RoomResource extends Resource<Args> {
     for (let skillCard of this.allSkillFileDefs) {
       result.push({
         cardId: skillCard.sourceUrl,
-        realmURL: this.realm.realmOf(rri(skillCard.sourceUrl))?.href,
+        realmURL: this.realm.realmOf(rri(skillCard.sourceUrl)),
         fileDef: skillCard,
         isActive:
           this.matrixRoom?.skillsConfig.enabledSkillCards

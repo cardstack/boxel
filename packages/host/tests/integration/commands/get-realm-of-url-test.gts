@@ -4,6 +4,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { ri } from '@cardstack/runtime-common';
+
 import GetRealmOfUrlCommand from '@cardstack/host/commands/get-realm-of-url';
 import RealmService from '@cardstack/host/services/realm';
 
@@ -28,11 +30,11 @@ class StubRealmService extends RealmService {
       info: testRealmInfo,
     };
   }
-  realmOf = (input: URL | string): URL | undefined => {
+  realmOf = (input: URL | string) => {
     let str = input instanceof URL ? input.href : input;
     for (const [prefix, realmUrl] of realmOfURLMap) {
       if (str.startsWith(prefix)) {
-        return realmUrl;
+        return realmUrl ? ri(realmUrl.href) : undefined;
       }
     }
     return undefined;

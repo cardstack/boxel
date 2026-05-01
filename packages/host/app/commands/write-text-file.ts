@@ -48,7 +48,7 @@ export default class WriteTextFileCommand extends HostBaseCommand<
     if (path.startsWith('/')) {
       path = path.slice(1);
     }
-    let url = new URL(path, realm?.href);
+    let url = new URL(path, realm);
     let finalUrl = url;
     let shouldWrite = true;
     if (!input.overwrite) {

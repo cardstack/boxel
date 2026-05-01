@@ -156,7 +156,7 @@ export default class CommandService extends Service {
       : fileUrl;
     let key = `${roomId}::${normalizedTarget}`;
 
-    let realmURL: URL | undefined;
+    let realmURL: string | undefined;
     try {
       realmURL = this.realm.realmOf(rri(fileUrl)) ?? undefined;
     } catch (_e) {
@@ -176,7 +176,7 @@ export default class CommandService extends Service {
       deferred,
     });
 
-    let unsubscribe = this.messageService.subscribe(realmURL.href, (event) => {
+    let unsubscribe = this.messageService.subscribe(realmURL, (event) => {
       if (
         !(
           event &&

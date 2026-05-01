@@ -97,7 +97,7 @@ export default class CreateListingModal extends Component<Signature> {
   private get selectedExampleRealms(): string[] {
     let realms = this.selectedExampleURLs.flatMap((cardUrl) => {
       try {
-        let realmURL = this.realm.realmOf(rri(cardUrl))?.href;
+        let realmURL = this.realm.realmOf(rri(cardUrl));
         return realmURL ? [realmURL] : [];
       } catch (_error) {
         return [];

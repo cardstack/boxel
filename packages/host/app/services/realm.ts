@@ -25,6 +25,7 @@ import { TrackedSet, TrackedObject, TrackedArray } from 'tracked-built-ins';
 import type {
   Permissions,
   JWTPayload,
+  RealmIdentifier,
   RealmPermissions,
   RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
@@ -34,6 +35,7 @@ import {
   isRegisteredPrefix,
   cardIdToURL,
   logger,
+  ri,
   SupportedMimeType,
   type RealmInfo,
   RealmPaths,
@@ -932,11 +934,10 @@ export default class RealmService extends Service {
     return realmsMeta;
   }
 
-  realmOf(input: RealmResourceIdentifier | URL): URL | undefined {
+  realmOf(input: RealmResourceIdentifier | URL): RealmIdentifier | undefined {
     for (const realm of this.realms.keys()) {
-      let realmURL = new URL(realm);
-      if (new RealmPaths(realmURL).inRealm(input)) {
-        return new URL(realmURL);
+      if (new RealmPaths(new URL(realm)).inRealm(input)) {
+        return ri(realm);
       }
     }
     return undefined;

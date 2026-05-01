@@ -32,7 +32,7 @@ import type { CardDocFiles } from '../../helpers';
 
 class StubRealmService extends RealmService {
   realmOf(_input: URL | string) {
-    return new URL(testRealmURL);
+    return testRealmURL;
   }
 }
 
