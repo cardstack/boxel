@@ -64,7 +64,10 @@ import {
   injectIsolatedHTML,
   ensureSingleTitle,
 } from './lib/index-html-injection';
-import { sanitizeHeadHTMLToString } from '@cardstack/runtime-common';
+import {
+  sanitizeHeadHTMLToString,
+  extractOgTitle,
+} from '@cardstack/runtime-common';
 import { JSDOM } from 'jsdom';
 
 export class RealmServer {
@@ -579,14 +582,7 @@ export class RealmServer {
     }
 
     {
-      let ogTitleMatch =
-        responseHTML.match(
-          /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']*)["']/i,
-        ) ??
-        responseHTML.match(
-          /<meta[^>]+content=["']([^"']*)["'][^>]+property=["']og:title["']/i,
-        );
-      let ogTitle = ogTitleMatch ? ogTitleMatch[1] : null;
+      let ogTitle = extractOgTitle(responseHTML);
       console.log(
         `[ogtitle-diag] event=publishedHTML-served requestURL=${requestURL.href} cardURL=${cardURL.href} headHtmlLength=${headHTML != null ? headHTML.length : -1} ogTitleInResponse=${JSON.stringify(ogTitle)} lastPublishedAt=${JSON.stringify(lastPublishedAt ?? null)}`,
       );

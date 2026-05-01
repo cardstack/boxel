@@ -1,5 +1,5 @@
 import type { DBAdapter } from '@cardstack/runtime-common';
-import { query } from '@cardstack/runtime-common';
+import { query, extractOgTitle } from '@cardstack/runtime-common';
 import {
   indexURLCandidates,
   indexCandidateExpressions,
@@ -58,16 +58,7 @@ export async function retrieveHeadHTML({
   }
   {
     let head = headRow?.head_html ?? null;
-    let ogTitleMatch =
-      head != null
-        ? (head.match(
-            /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']*)["']/i,
-          ) ??
-          head.match(
-            /<meta[^>]+content=["']([^"']*)["'][^>]+property=["']og:title["']/i,
-          ))
-        : null;
-    let ogTitle = ogTitleMatch ? ogTitleMatch[1] : null;
+    let ogTitle = extractOgTitle(head);
     console.log(
       `[ogtitle-diag] event=retrieveHeadHTML-row cardURL=${cardURL.href} candidates=${JSON.stringify(candidates)} found=${String(headRow != null)} realmVersion=${JSON.stringify(headRow?.realm_version ?? null)} headHtmlLength=${head != null ? head.length : -1} ogTitleInRow=${JSON.stringify(ogTitle)}`,
     );

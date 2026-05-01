@@ -26,14 +26,8 @@ export async function enqueueReindexRealmJob(
       `UPDATE boxel_index SET last_modified = NULL WHERE realm_url =`,
       param(realmUrl),
     ]);
-    let countRows = await query(dbAdapter, [
-      `SELECT COUNT(*)::int AS n FROM boxel_index WHERE realm_url =`,
-      param(realmUrl),
-      `AND last_modified IS NULL`,
-    ]);
-    let count = (countRows[0] as { n?: number } | undefined)?.n ?? -1;
     console.log(
-      `[ogtitle-diag] event=clearLastModified-applied realmURL=${realmUrl} rowsWithNullLastModified=${count}`,
+      `[ogtitle-diag] event=clearLastModified-applied realmURL=${realmUrl}`,
     );
   } else {
     console.log(

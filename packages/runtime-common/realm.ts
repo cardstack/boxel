@@ -524,8 +524,8 @@ export class Realm {
   #cachedRealmInfo: RealmInfo | null = null;
   // Per-instance marker for diagnostic logs so we can confirm a single
   // Realm instance is the same across publish + serve. Combination of
-  // process pid and a high-resolution constructor timestamp is unique
-  // enough for log correlation.
+  // process pid and a constructor timestamp is unique enough for log
+  // correlation.
   #diagInstanceId: string = `${process.pid}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
   // This loader is not meant to be used operationally, rather it serves as a
@@ -4609,8 +4609,21 @@ export class Realm {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath, undefined);
+    let hiddenContentLength = realmConfig?.content?.length ?? -1;
+    let hiddenName: unknown = null;
+    if (realmConfig?.content != null) {
+      try {
+        let parsed = JSON.parse(realmConfig.content);
+        if (parsed && typeof parsed === 'object') {
+          hiddenName = (parsed as { name?: unknown }).name ?? null;
+        }
+      } catch {
+        // ignore parse errors here; the existing parseRealmInfo flow below
+        // handles malformed JSON.
+      }
+    }
     console.log(
-      `[ogtitle-diag] event=parseRealmInfo-read-hidden realmURL=${this.url} instanceId=${this.#diagInstanceId} hiddenPath=${localPath} hiddenFileFound=${String(realmConfig != null)} hiddenContentPreview=${JSON.stringify((realmConfig?.content ?? '').slice(0, 200))}`,
+      `[ogtitle-diag] event=parseRealmInfo-read-hidden realmURL=${this.url} instanceId=${this.#diagInstanceId} hiddenPath=${localPath} hiddenFileFound=${String(realmConfig != null)} hiddenContentLength=${hiddenContentLength} hiddenName=${JSON.stringify(hiddenName)}`,
     );
     let lastPublishedAt = await this.getLastPublishedAt();
     let realmInfo: RealmInfo = {
