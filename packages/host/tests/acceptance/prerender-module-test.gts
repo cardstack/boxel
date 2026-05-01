@@ -103,9 +103,7 @@ module('Acceptance | prerender | module', function (hooks) {
     assert.ok(model.lastModified > 0, 'lastModified recorded');
     assert.ok(model.createdAt > 0, 'createdAt recorded');
 
-    let personKey = `${
-      trimExecutableExtension(rri(moduleURL))
-    }/Person`;
+    let personKey = `${trimExecutableExtension(rri(moduleURL))}/Person`;
     assert.ok(personKey in model.definitions, 'includes person definition');
 
     let personEntry = model.definitions[personKey];
@@ -294,9 +292,7 @@ module('Acceptance | prerender | module', function (hooks) {
     await visit(modulePath(moduleURL));
     let initial = captureModuleResult();
 
-    let definitionKey = `${
-      trimExecutableExtension(rri(moduleURL))
-    }/Person`;
+    let definitionKey = `${trimExecutableExtension(rri(moduleURL))}/Person`;
     let initialEntry = initial.model.definitions[definitionKey];
     assert.ok(initialEntry, 'initial definition exists');
     assert.strictEqual(
