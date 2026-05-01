@@ -13,7 +13,7 @@ import type RealmService from '../services/realm';
 
 export default class WriteTextFileCommand extends HostBaseCommand<
   typeof BaseCommandModule.WriteTextFileInput,
-  typeof BaseCommandModule.FileUrlCard
+  typeof BaseCommandModule.FileIdentifierCard
 > {
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
@@ -31,7 +31,7 @@ export default class WriteTextFileCommand extends HostBaseCommand<
 
   protected async run(
     input: BaseCommandModule.WriteTextFileInput,
-  ): Promise<BaseCommandModule.FileUrlCard> {
+  ): Promise<BaseCommandModule.FileIdentifierCard> {
     if (input.overwrite && input.useNonConflictingFilename) {
       throw new Error(
         'Cannot use both overwrite and useNonConflictingFilename.',
@@ -93,8 +93,8 @@ export default class WriteTextFileCommand extends HostBaseCommand<
     }
 
     let commandModule = await this.loadCommandModule();
-    const { FileUrlCard } = commandModule;
-    return new FileUrlCard({ fileUrl: finalUrl.href });
+    const { FileIdentifierCard } = commandModule;
+    return new FileIdentifierCard({ fileUrl: finalUrl.href });
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {

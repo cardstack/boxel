@@ -215,10 +215,10 @@ export default class GenerateThumbnailCommand extends HostBaseCommand<
       useNonConflictingFilename: true,
     });
 
-    if (!writeResult?.fileUrl) {
+    if (!writeResult?.fileIdentifier) {
       throw new Error('Failed to write binary file to realm.');
     }
-    const imageDefUrl = writeResult.fileUrl;
+    const imageDefUrl = writeResult.fileIdentifier;
 
     // If a targetCardId is provided, patch cardInfo.cardThumbnail to link the ImageDef
     if (targetCardId?.trim()) {

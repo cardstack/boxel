@@ -55,10 +55,10 @@ export default class ListingCreateCommand extends HostBaseCommand<
   description = 'Create a catalog listing for an example card';
 
   private async getCatalogRealm(): Promise<string> {
-    const { urls } = await new GetCatalogRealmUrlsCommand(
+    const { realmIdentifiers } = await new GetCatalogRealmUrlsCommand(
       this.commandContext,
     ).execute();
-    let catalogRealm = urls.find((realm: string) =>
+    let catalogRealm = realmIdentifiers.find((realm: string) =>
       realm.endsWith('/catalog/'),
     );
     if (!catalogRealm) {
@@ -80,10 +80,10 @@ export default class ListingCreateCommand extends HostBaseCommand<
   private async sanitizeModuleList(
     modulesToCreate: Iterable<string>,
   ): Promise<string[]> {
-    const { moduleUrls } = await new SanitizeModuleListCommand(
+    const { moduleIdentifiers } = await new SanitizeModuleListCommand(
       this.commandContext,
-    ).execute({ moduleUrls: Array.from(modulesToCreate) });
-    return moduleUrls;
+    ).execute({ moduleIdentifiers: Array.from(modulesToCreate) });
+    return moduleIdentifiers;
   }
 
   protected async run(

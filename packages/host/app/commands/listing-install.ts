@@ -113,7 +113,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
         let { sourceCard } = copyInstanceMeta;
         let { document: doc } = await new FetchCardJsonCommand(
           this.commandContext,
-        ).execute({ url: sourceCard.id });
+        ).execute({ cardIdentifier: sourceCard.id });
         if (!doc || !('data' in doc)) {
           throw new Error('We are only expecting single documents returned');
         }
@@ -132,7 +132,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
     try {
       ({ results: atomicResults } = await new ExecuteAtomicOperationsCommand(
         this.commandContext,
-      ).execute({ realmUrl: realmIdentifier, operations }));
+      ).execute({ realmIdentifier, operations }));
     } catch (e: any) {
       if (
         typeof e?.message === 'string' &&

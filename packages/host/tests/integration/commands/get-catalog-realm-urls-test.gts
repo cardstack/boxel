@@ -67,6 +67,6 @@ module('Integration | commands | get-catalog-realm-urls', function (hooks) {
     let commandService = getService('command-service');
     let command = new GetCatalogRealmUrlsCommand(commandService.commandContext);
     let result = await command.execute();
-    assert.deepEqual(result.urls, ['https://example.com/catalog/']);
+    assert.deepEqual(result.realmIdentifiers, ['https://example.com/catalog/']);
   });
 });

@@ -8,7 +8,7 @@ import type RealmServerService from '../services/realm-server';
 
 export default class GetCatalogRealmUrlsCommand extends HostBaseCommand<
   undefined,
-  typeof BaseCommandModule.GetCatalogRealmUrlsResult
+  typeof BaseCommandModule.GetCatalogRealmIdentifiersResult
 > {
   @service declare private realmServer: RealmServerService;
 
@@ -19,11 +19,11 @@ export default class GetCatalogRealmUrlsCommand extends HostBaseCommand<
     return undefined;
   }
 
-  protected async run(): Promise<BaseCommandModule.GetCatalogRealmUrlsResult> {
+  protected async run(): Promise<BaseCommandModule.GetCatalogRealmIdentifiersResult> {
     let commandModule = await this.loadCommandModule();
-    const { GetCatalogRealmUrlsResult } = commandModule;
-    return new GetCatalogRealmUrlsResult({
-      urls: this.realmServer.catalogRealmURLs,
+    const { GetCatalogRealmIdentifiersResult } = commandModule;
+    return new GetCatalogRealmIdentifiersResult({
+      realmIdentifiers: this.realmServer.catalogRealmURLs,
     });
   }
 }

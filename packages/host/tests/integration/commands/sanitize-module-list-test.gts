@@ -75,24 +75,24 @@ module('Integration | commands | sanitize-module-list', function (hooks) {
     let commandService = getService('command-service');
     let command = new SanitizeModuleListCommand(commandService.commandContext);
     let result = await command.execute({
-      moduleUrls: [
+      moduleIdentifiers: [
         `${testRealmURL}my-module.gts`,
         'https://cardstack.com/base/card-api',
         'https://packages/some-pkg',
         'https://boxel-icons.boxel.ai/icons/star',
       ],
     });
-    assert.deepEqual(result.moduleUrls, [`${testRealmURL}my-module.gts`]);
+    assert.deepEqual(result.moduleIdentifiers, [`${testRealmURL}my-module.gts`]);
   });
 
   test('deduplicates modules by normalized URL', async function (assert) {
     let commandService = getService('command-service');
     let command = new SanitizeModuleListCommand(commandService.commandContext);
     let result = await command.execute({
-      moduleUrls: [`${testRealmURL}my-module.gts`, `${testRealmURL}my-module`],
+      moduleIdentifiers: [`${testRealmURL}my-module.gts`, `${testRealmURL}my-module`],
     });
-    assert.strictEqual(result.moduleUrls.length, 1);
-    assert.strictEqual(result.moduleUrls[0], `${testRealmURL}my-module.gts`);
+    assert.strictEqual(result.moduleIdentifiers.length, 1);
+    assert.strictEqual(result.moduleIdentifiers[0], `${testRealmURL}my-module.gts`);
   });
 
   test('excludes modules from unreadable realms', async function (assert) {
@@ -100,11 +100,11 @@ module('Integration | commands | sanitize-module-list', function (hooks) {
     let commandService = getService('command-service');
     let command = new SanitizeModuleListCommand(commandService.commandContext);
     let result = await command.execute({
-      moduleUrls: [
+      moduleIdentifiers: [
         `${testRealmURL}my-module.gts`,
         'https://other-realm.example.com/module.gts',
       ],
     });
-    assert.deepEqual(result.moduleUrls, [`${testRealmURL}my-module.gts`]);
+    assert.deepEqual(result.moduleIdentifiers, [`${testRealmURL}my-module.gts`]);
   });
 });

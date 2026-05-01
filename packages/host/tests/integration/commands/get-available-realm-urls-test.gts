@@ -72,7 +72,7 @@ module('Integration | commands | get-available-realm-urls', function (hooks) {
       commandService.commandContext,
     );
     let result = await command.execute();
-    assert.deepEqual(result.urls, [
+    assert.deepEqual(result.realmIdentifiers, [
       'https://example.com/realm-a/',
       'https://example.com/realm-b/',
     ]);

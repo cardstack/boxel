@@ -25,11 +25,11 @@ export default class ValidateRealmCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.ValidateRealmResult> {
     let realmIdentifier = new RealmPaths(new URL(input.realmIdentifier)).url;
 
-    let { urls: realmUrls } = await new GetAvailableRealmUrlsCommand(
+    let { realmIdentifiers } = await new GetAvailableRealmUrlsCommand(
       this.commandContext,
     ).execute();
 
-    if (!realmUrls.includes(realmIdentifier)) {
+    if (!realmIdentifiers.includes(realmIdentifier)) {
       throw new Error(`Invalid realm: ${realmIdentifier}`);
     }
 

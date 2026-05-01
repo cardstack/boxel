@@ -125,7 +125,7 @@ ${SEPARATOR_MARKER}
 ${REPLACE_MARKER}`;
 
     let result = await patchCodeCommand.execute({
-      fileUrl,
+      fileIdentifier: fileUrl,
       codeBlocks: [codeBlock],
     });
 
@@ -199,7 +199,7 @@ ${REPLACE_MARKER}`;
 
     try {
       await patchCodeCommand.execute({
-        fileUrl,
+        fileIdentifier: fileUrl,
         codeBlocks: [codeBlock],
       });
       let maybeLatestResource = operatorModeStateService.openFile?.current;
@@ -244,11 +244,11 @@ ${SEPARATOR_MARKER}
 ${REPLACE_MARKER}`;
 
     let result = await patchCodeCommand.execute({
-      fileUrl: emptyFileUrl,
+      fileIdentifier: emptyFileUrl,
       codeBlocks: [codeBlock],
     });
 
-    assert.strictEqual(result.finalFileUrl, emptyFileUrl);
+    assert.strictEqual(result.finalFileIdentifier, emptyFileUrl);
     assert.strictEqual(result.patchedContent, '');
     assert.strictEqual(result.results[0]?.status, 'applied');
   });
@@ -269,7 +269,7 @@ ${SEPARATOR_MARKER}
 ${REPLACE_MARKER}`;
 
     let result = await patchCodeCommand.execute({
-      fileUrl: jsonFileUrl,
+      fileIdentifier: jsonFileUrl,
       codeBlocks: [codeBlock],
     });
 

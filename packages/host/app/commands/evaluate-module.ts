@@ -26,13 +26,13 @@ export default class EvaluateModuleCommand extends HostBaseCommand<
     return commandModule.EvaluateModuleInput;
   }
 
-  requireInputFields = ['moduleUrl'];
+  requireInputFields = ['moduleIdentifier'];
 
   protected async run(
     input: BaseCommandModule.EvaluateModuleInput,
   ): Promise<BaseCommandModule.EvaluateModuleResult> {
-    let moduleUrl = input.moduleUrl;
-    let realmUrl = input.realmUrl;
+    let moduleUrl = input.moduleIdentifier;
+    let realmUrl = input.realmIdentifier;
 
     if (!moduleUrl) {
       throw new Error('moduleUrl is required');

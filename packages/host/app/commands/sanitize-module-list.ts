@@ -28,7 +28,7 @@ export default class SanitizeModuleListCommand extends HostBaseCommand<
     return SanitizeModuleListInput;
   }
 
-  requireInputFields = ['moduleUrls'];
+  requireInputFields = ['moduleIdentifiers'];
 
   protected async run(
     input: BaseCommandModule.SanitizeModuleListInput,
@@ -36,7 +36,7 @@ export default class SanitizeModuleListCommand extends HostBaseCommand<
     // Normalize to extensionless URLs before deduplication so that e.g.
     // "https://…/foo.gts" and "https://…/foo" don't produce separate entries.
     const seen = new Map<string, string>(); // normalized → original
-    for (const m of input.moduleUrls) {
+    for (const m of input.moduleIdentifiers) {
       const normalized = trimExecutableExtension(rri(m));
       if (!seen.has(normalized)) {
         seen.set(normalized, m);
@@ -70,10 +70,12 @@ export default class SanitizeModuleListCommand extends HostBaseCommand<
       }),
     );
 
-    const moduleUrls = results.filter((dep): dep is string => dep !== null);
+    const moduleIdentifiers = results.filter(
+      (dep): dep is string => dep !== null,
+    );
 
     let commandModule = await this.loadCommandModule();
     const { SanitizeModuleListResult } = commandModule;
-    return new SanitizeModuleListResult({ moduleUrls });
+    return new SanitizeModuleListResult({ moduleIdentifiers });
   }
 }
