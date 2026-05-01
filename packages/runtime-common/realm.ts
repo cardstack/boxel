@@ -1086,11 +1086,7 @@ export class Realm {
       priority ?? systemInitiatedPriority,
       { clearLastModified: opts?.clearLastModified },
     );
-    try {
-      await completed;
-    } catch (e: any) {
-      this.#log.error(`Error running from-scratch-index: ${e.message}`);
-    }
+    await completed;
     this.#cachedRealmInfo = null;
   }
 
