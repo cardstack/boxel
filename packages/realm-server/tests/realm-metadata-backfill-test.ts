@@ -1,11 +1,7 @@
 import { module, test } from 'qunit';
 import { basename, join } from 'path';
 import { dirSync, type DirResult } from 'tmp';
-import {
-  ensureDirSync,
-  readFileSync,
-  writeFileSync,
-} from 'fs-extra';
+import { ensureDirSync, readFileSync, writeFileSync } from 'fs-extra';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   param,
@@ -89,12 +85,8 @@ module(basename(__filename), function () {
       const url = 'http://localhost:4201/luke/my-realm/';
       const row = await metadataRowFor(dbAdapter, url);
       assert.ok(row, 'metadata row inserted');
-      assert.strictEqual(row?.publishable, true, 'publishable copied');
-      assert.strictEqual(
-        row?.show_as_catalog,
-        false,
-        'show_as_catalog copied',
-      );
+      assert.true(row?.publishable, 'publishable copied');
+      assert.false(row?.show_as_catalog, 'show_as_catalog copied');
       assert.deepEqual(
         readSidecar(realmDir),
         { name: 'My Realm', hostHome: 'https://hosted.example.com/' },
@@ -121,9 +113,12 @@ module(basename(__filename), function () {
         ],
       });
 
-      const row = await metadataRowFor(dbAdapter, 'https://cardstack.com/base/');
+      const row = await metadataRowFor(
+        dbAdapter,
+        'https://cardstack.com/base/',
+      );
       assert.ok(row, 'metadata row inserted for bootstrap');
-      assert.strictEqual(row?.show_as_catalog, false);
+      assert.false(row?.show_as_catalog);
       assert.strictEqual(row?.publishable, null, 'publishable absent → null');
       assert.deepEqual(
         readSidecar(bootstrapDir),
@@ -162,7 +157,7 @@ module(basename(__filename), function () {
 
       const row = await metadataRowFor(dbAdapter, publishedRealmUrl);
       assert.ok(row, 'metadata row inserted for published realm');
-      assert.strictEqual(row?.publishable, false);
+      assert.false(row?.publishable);
     });
 
     test('skips realms whose sidecar has no migratable keys', async function (assert) {
@@ -211,9 +206,8 @@ module(basename(__filename), function () {
       });
 
       const row = await metadataRowFor(dbAdapter, url);
-      assert.strictEqual(
+      assert.false(
         row?.publishable,
-        false,
         'existing DB row preserved; sidecar value did not overwrite',
       );
       assert.deepEqual(
@@ -230,7 +224,7 @@ module(basename(__filename), function () {
         bootstrapRealms: [],
       });
       const rowAgain = await metadataRowFor(dbAdapter, url);
-      assert.strictEqual(rowAgain?.publishable, false);
+      assert.false(rowAgain?.publishable);
       assert.deepEqual(readSidecar(realmDir), {});
     });
 

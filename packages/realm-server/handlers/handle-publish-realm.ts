@@ -428,10 +428,7 @@ export default function handlePublishRealm({
           );
           if (rewrittenHostHome) {
             newlyPublishedRealmConfig.hostHome = rewrittenHostHome;
-            writeJsonSync(
-              publishedRealmConfigPath,
-              newlyPublishedRealmConfig,
-            );
+            writeJsonSync(publishedRealmConfigPath, newlyPublishedRealmConfig);
           }
 
           // Clear stale modules cache for the published realm so that

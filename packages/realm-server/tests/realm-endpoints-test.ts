@@ -500,9 +500,8 @@ module(basename(__filename), function () {
           });
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assert.strictEqual(
+        assert.true(
           response.body.data.attributes.publishable,
-          true,
           'response includes publishable: true (sourced from realm_metadata)',
         );
         // publishable lives in realm_metadata now, not the sidecar.

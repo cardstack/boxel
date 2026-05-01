@@ -598,8 +598,7 @@ module(basename(__filename), function () {
           'hostHome points at published realm',
         );
         // CS-10053: publishable lives in realm_metadata.
-        let publishedRealmURL =
-          response.body.data.attributes.publishedRealmURL;
+        let publishedRealmURL = response.body.data.attributes.publishedRealmURL;
         let metaRows = (await dbAdapter.execute(
           `SELECT publishable FROM realm_metadata WHERE url = '${publishedRealmURL}'`,
         )) as { publishable: boolean | null }[];

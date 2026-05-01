@@ -96,11 +96,7 @@ async function migrateOne(
     log.warn(`could not parse ${sidecarPath}: ${String(err)}`);
     return false;
   }
-  if (
-    parsed === null ||
-    typeof parsed !== 'object' ||
-    Array.isArray(parsed)
-  ) {
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return false;
   }
   const sidecar = parsed as Record<string, unknown>;
