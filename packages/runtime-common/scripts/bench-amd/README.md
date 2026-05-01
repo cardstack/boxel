@@ -101,7 +101,7 @@ above baseline) per CS-10983.
   "iterations": 100,
   "warmup": 10,
   "tolerance": 1.25,
-  "noise_floor_ms": 0.3,
+  "noise_floor_ms": 1.5,
   "candidate": "production",
   "fixtures": {
     "enum.js": { "median_ms": 0.65 },
@@ -119,18 +119,41 @@ allowed = max(baseline × tolerance, baseline + noise_floor_ms)
 ```
 
 The relative `tolerance` (×1.25) handles regression detection for
-mid-to-large fixtures. The absolute `noise_floor_ms` handles the
-small-fixture case: at sub-ms baselines, GH-runner jitter (observed up
-to ~0.21ms across runs) can swamp the relative tolerance. With a 0.3ms
-floor, a 0.65ms baseline gets `max(0.81ms, 0.95ms) = 0.95ms` allowed —
-absorbs the noise without losing 2× regression sensitivity. For a 10ms
-baseline, relative dominates: `max(12.55ms, 10.34ms) = 12.55ms`. Same
-relative+absolute pattern as `check-memory-baseline.mjs` uses for the
-host-memory gate.
+larger fixtures. The absolute `noise_floor_ms` handles smaller fixtures
+where GH-runner jitter is similar in absolute ms terms regardless of
+fixture size — observed up to ~0.92ms for `spec.js` and ~0.21ms for
+`enum.js` across a handful of runs. A flat absolute floor matches that
+shape: every fixture gets a budget that absorbs sub-1.5ms jitter, while
+larger fixtures fall through to the relative tolerance.
 
-Bump `noise_floor_ms` higher if a fixture keeps tripping on noise.
-Lower (or remove) once you have a fixture that's consistently larger
-and the absolute jitter no longer dominates.
+| Fixture        | Baseline | × 1.25  | Baseline + 1.5ms | Allowed (max) |
+| -------------- | -------- | ------- | ---------------- | ------------- |
+| `enum.js`      | 0.65ms   | 0.81ms  | 2.15ms           | **2.15ms**    |
+| `skill-set.js` | 1.85ms   | 2.31ms  | 3.35ms           | **3.35ms**    |
+| `spec.js`      | 2.14ms   | 2.68ms  | 3.64ms           | **3.64ms**    |
+| `card-api.js`  | 10.04ms  | 12.55ms | 11.54ms          | **12.55ms**   |
+
+**Regression-detection trade-off.** A 1.5ms floor means the gate
+can't distinguish sub-1.5ms regressions from runner noise on the
+smaller fixtures. Concretely:
+
+- `enum.js` (0.65ms): catches > 3.3× regressions (a 2× regression at
+  1.30ms falls under the 2.15ms ceiling and would not trip).
+- `skill-set.js` (1.85ms): catches > 1.8× regressions.
+- `spec.js` (2.14ms): catches > 1.7× regressions.
+- `card-api.js` (10.04ms): catches > 1.25× regressions (relative
+  dominates).
+
+We accept the lower sensitivity on the tiny fixtures as the cost of
+stable CI; the bench primarily exists to catch the 2×+ class of
+regressions (e.g. an accidental `setTimeout` in the rewriter, an
+O(N²) where O(N) suffices, a redundant pass added to the pipeline) on
+the larger fixtures, where the gate still catches them comfortably.
+
+If a future fixture refresh produces a baseline where 1.5ms over-
+relaxes the relative tolerance (i.e. the fixture is large enough that
+the absolute floor is dead weight), drop `noise_floor_ms` lower so
+`× 1.25` resumes as the binding constraint.
 
 ### When the gate trips
 
