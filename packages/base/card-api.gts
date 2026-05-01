@@ -4137,18 +4137,57 @@ export type SignatureFor<CardT extends BaseDefConstructor> = {
   };
 };
 
+// Cache top-level BoxComponents by (model, componentCodeRef). CardRenderer's
+// `renderedCard` getter runs on every reactive re-render, and without this
+// cache it would call `Box.create(model)` + `getBoxComponent(...)` afresh
+// each time — producing a brand-new FieldComponent class that Glimmer's
+// `<this.renderedCard />` would treat as a new component, remounting the
+// entire card tree on every reactive update. Cache key includes the
+// codeRef so that toggling `useBaseTemplate` (which threads a different
+// codeRef into `getComponent`) still produces a fresh component, since
+// the captured `opts` lives in the FieldComponent's closure and can't be
+// mutated. Field invocations (field !== undefined) go through `fieldComponent`
+// → `Box.field(name)` (already cached on the parent Box), so they bypass
+// this cache.
+const componentByModel = new WeakMap<
+  object,
+  Map<string, BoxComponent>
+>();
+
+function codeRefCacheKey(codeRef: CodeRef | undefined): string {
+  return codeRef ? JSON.stringify(codeRef) : '';
+}
+
 export function getComponent(
   model: BaseDef,
   field?: Field,
   opts?: { componentCodeRef?: CodeRef },
 ): BoxComponent {
-  let box = Box.create(model);
+  if (field) {
+    return getBoxComponent(
+      model.constructor as BaseDefConstructor,
+      Box.create(model),
+      field,
+      opts,
+    );
+  }
+  let perModel = componentByModel.get(model);
+  if (!perModel) {
+    perModel = new Map();
+    componentByModel.set(model, perModel);
+  }
+  let key = codeRefCacheKey(opts?.componentCodeRef);
+  let cached = perModel.get(key);
+  if (cached) {
+    return cached;
+  }
   let boxComponent = getBoxComponent(
     model.constructor as BaseDefConstructor,
-    box,
+    Box.create(model),
     field,
     opts,
   );
+  perModel.set(key, boxComponent);
   return boxComponent;
 }
 
