@@ -43,6 +43,27 @@ Every slow or timed-out render falls into one of:
 
 If you pick the wrong category you waste a day. The diagnostic fields in the [Classify in one pass](#classify-in-one-pass) table below pick it for you.
 
+## Prerender priorities
+
+Every prerender request — visit, module, run-command — carries a numeric `priority` that flows from the originating worker job all the way to the per-tab queue, the per-affinity file-admission semaphore, and the per-server render semaphore. Two priorities are in production today:
+
+- **`0` — `systemInitiatedPriority`**. Background indexing work: scheduled full-reindex sweeps, `_full-reindex` runs, the worker's continuous reindex queue. The default for any code path that doesn't explicitly opt in.
+- **`10` — `userInitiatedPriority`**. Anything a user kicked off: the `_reindex` endpoint, ad-hoc card publishes, manual UI-driven reindex actions.
+
+Higher priority dequeues first; FIFO is preserved within a priority bucket. There is **no preemption** — an in-flight low-priority render runs to completion. The next free slot goes to the highest-priority queued waiter.
+
+Why this matters for triage:
+
+1. **Reading a stuck render**: a `priority=10` row is a user request. If it's stuck on `waits.tabQueueMs` or `waits.semaphoreMs`, that's the UX-visible saturation event the priority routing was designed to mitigate. A `priority=0` row stuck on the same wait is background work — operationally less urgent and often expected during a deliberate reindex burst.
+
+2. **Distinguishing capacity issues from priority misrouting**: a `priority=10` row that waited >1s in `tabQueueMs` while the affinity's `prerender-queue-snapshot` shows `priorities=tab:10:N` (queued behind other priority-10 work) is a **capacity** problem — the user-priority workload exceeded the fleet. A `priority=10` row queued behind `priorities=tab:0:N` (queued behind background work, with manager-side priority routing live in the build) is a **routing** failure — the manager picked the wrong server, or the file render the row was queued behind isn't releasing. These need different fixes.
+
+3. **Confirming priority routing actually fired**: if a known-user `_reindex` shows up in `timing_diagnostics` with `priority=0`, the producer-side threading (job → IndexRunner → `prerenderVisit`) regressed somewhere. Most-likely place is a new task type that didn't pick up `jobInfo.priority`.
+
+4. **Sharpening the deadlock fingerprint**: `affinitySnapshot.sameAffinityActivity[*].priority` lets you tell a self-referential prerender deadlock apart from priority-driven queuing. Same-priority queued module sub-render on a stuck same-priority file render → deadlock. Higher-priority queued sibling → priority routing working as intended.
+
+The priority value lives on the `timing_diagnostics.priority` field and on every `sameAffinityActivity` entry. The periodic `prerender-queue-snapshot` log line carries per-affinity priority breakdowns. See [Classify in one pass](#classify-in-one-pass) and the field-by-field section below for the exact triage rules.
+
 ## Mode A — a render timed out
 
 Pull the diagnostic JSON for the erroring row:
@@ -549,6 +570,19 @@ A short rubric for the most common shapes:
   "requestId": "b14e…",          // single ID across client/manager/prerender-server
   "invalidationId": "a3e1…",     // single ID across every row written by the same Batch.invalidate()
   "indexedAt": 1776964391615,    // wall-clock ms when IndexWriter.updateEntry ran
+  "priority": 10,                // worker-job priority that produced this render.
+                                 // 0 = system-initiated background (default); 10 =
+                                 // userInitiatedPriority. Read in post-mortems alongside
+                                 // `tabQueueMs` to tell whether priority routing put a
+                                 // high-priority render at the head of the queue. May be
+                                 // absent on older rows that predate the threading.
+  "tabReused": false,            // did this render land on a warm same-affinity tab (true)
+                                 // or a freshly spawned / commandeered tab (false)?
+                                 // Triage signal: a slow render with `tabReused: false`
+                                 // is the cold-start tax — look at `tabStartupMs` and the
+                                 // `prerender-queue-snapshot` for that affinity. With
+                                 // `tabReused: true` it's a real render-side stall, walk
+                                 // [Classify in one pass](#classify-in-one-pass) instead.
   "launchMs": 18720,             // waiting-in-page-pool time (server-side)
   "waits": {
     "semaphoreMs": 18500,        //   └ of that, waiting on the global render semaphore
@@ -604,9 +638,20 @@ A short rubric for the most common shapes:
                                  // regression signal — see the
                                  // "Classify in one pass" table row
                                  // below.
-      { "url": "…/customer.gts", "kind": "module", "queue": "module", "state": "running", "ageMs": 68000 },
-      { "url": "…/order.gts",    "kind": "module", "queue": "module", "state": "running", "ageMs": 66500 }
+      { "url": "…/customer.gts", "kind": "module", "queue": "module", "state": "running", "ageMs": 68000, "priority": 0 },
+      { "url": "…/order.gts",    "kind": "module", "queue": "module", "state": "running", "ageMs": 66500, "priority": 10 }
     ]
+    // Each `sameAffinityActivity` entry carries the worker-job
+    // `priority` of the call that produced it. On a stuck-render
+    // post-mortem this disambiguates two regression shapes that look
+    // identical without priority:
+    //   • Same-priority pending entries on a `waiting-stability` stall →
+    //     classic self-referential prerender deadlock (the row in
+    //     "Classify in one pass" below).
+    //   • Higher-priority pending entries → priority routing is working
+    //     as intended, this render is queued behind legitimately-
+    //     prioritized work. Investigate the queued entry, not the queue
+    //     mechanism.
   },
   "recentQueryLoads": [          // top-N slowest completed query loads
     {
@@ -655,7 +700,8 @@ Walk the fields top-down. The *first* positive signal wins; stop there.
 | `inFlightModuleImports.length > 0` | **Loader stall** | Each URL is a `.gts` / `.ts` we'd already started a `fetchModule(...)` for. Confirm the realm serves those URLs and that there's no import cycle. Often resolves with `clearCache: true` on retry (already in place) — if that's failing check for 500s on the module URL. |
 | `queryLoadsInFlight.length > 0` with `fieldName` set | **Query-field stall** | This is the CS-10820 field-driven hot path. Look at the `query`/`realms` fields — is the search hitting a remote realm server that's slow? Check `_federated-search` latency for that realm on the realm-server side. |
 | `cardDocsInFlight.length > 0` or `fileMetaDocsInFlight.length > 0` (no query fields) | **Data stall** | Usually linksTo targets that the template pulled on. Prefer `cardDocLoadsInFlight[*].ageMs` / `fileMetaDocLoadsInFlight[*].ageMs` — they tell you which individual URL is the slow one vs. a fan-out. If it's a card from a different realm, that realm may be slow or misconfigured. Also check `recentCardDocLoads` for loads that completed just before the timer fired but still dominated the budget. |
-| `renderStage` = `waiting-stability` **AND** `queryLoadsInFlight` has a `search-resource:*` entry **AND** `affinitySnapshot.sameAffinityActivity` contains `{ queue: 'module', state: 'queued' }` entries **on the same affinity as the stuck render** | **Self-referential prerender deadlock — admission invariant broken** | A search that can't resolve a `_cardType` filter without a card definition causes `CachingDefinitionLookup` to fire a same-affinity `prerenderModule` to extract it. The queue-split + admission cap in PagePool is supposed to reserve at least one tab per affinity for `module` / `command` work precisely to prevent this sub-prerender from queuing behind the render that needs it. **Seeing this fingerprint means the invariant didn't hold**: check `PRERENDER_AFFINITY_TAB_MAX >= 2` (PagePool logs a warning at startup if not), verify the admission semaphore is acquired on `'file'` calls (`PagePool.#acquireFileAdmission`), and confirm `disposeAffinity` isn't dropping the admission semaphore mid-flight. |
+| `renderStage` = `waiting-stability` **AND** `queryLoadsInFlight` has a `search-resource:*` entry **AND** `affinitySnapshot.sameAffinityActivity` contains `{ queue: 'module', state: 'queued' }` entries **on the same affinity as the stuck render** | **Self-referential prerender deadlock — admission invariant broken** | A search that can't resolve a `_cardType` filter without a card definition causes `CachingDefinitionLookup` to fire a same-affinity `prerenderModule` to extract it. The queue-split + admission cap in PagePool is supposed to reserve at least one tab per affinity for `module` / `command` work precisely to prevent this sub-prerender from queuing behind the render that needs it. **Seeing this fingerprint means the invariant didn't hold**: check `PRERENDER_AFFINITY_TAB_MAX >= 2` (PagePool logs a warning at startup if not), verify the admission semaphore is acquired on `'file'` calls (`PagePool.#acquireFileAdmission`), and confirm `disposeAffinity` isn't dropping the admission semaphore mid-flight. The `priority` field on each `sameAffinityActivity` entry sharpens triage: a stuck `priority=10` file render with a queued `priority=10` module sibling on the same affinity is the actual deadlock signature; a `priority=10` file render queued behind `priority>=10` module work that's running on a different tab is just legitimate priority routing — investigate the queued module entry, not the queue mechanism. |
+| `tabReused: false` AND `tabStartupMs` ≈ `launchMs` | **Cold-start tax** | This render paid for spawning a fresh tab + warming a BrowserContext rather than reusing an existing same-affinity tab. Common causes: first request on the affinity after a deploy / restart; affinity was evicted by LRU pressure; `disposeAffinity` ran for an unrelated reason. Look at `prerender-queue-snapshot` from the same minute — if many other affinities are also fresh-tab-spawning, the LRU cap (`PRERENDER_SHARED_CONTEXT_CAP`) may be too tight relative to the active affinity count. May be absent on older rows that predate the field. |
 | `renderStage` = `waiting-stability` with empty in-flight arrays | **Render stall** | Nothing is loading but settlement never finishes. Classic Glimmer tracking loop — template is invalidating itself. `capturedDom` usually shows the partially-rendered component. `blockedTimerSummary` will list swallowed timers that may hint at a scheduling loop. |
 | `currentlyEvaluatingModule` non-null, or `stageAgeMs` large with empty in-flight arrays | **Synchronous browser stall (typically Glimmer compile during module eval)** | `recentModuleEvaluations` shows the worst offenders. A single URL with `ms > 5000` usually means "this module has a giant template that takes forever to compile". Many small entries (say 50+ at 100–500 ms each) summing into the stall budget mean card fan-out where each dependent card contributes a compile. Split the module, lazy-load the template, or reduce the component fan-out. |
 | `blockedTimerSummary` populated | Supplementary. Tells you which timer-driven code is fighting the render. Not a root cause on its own. |
@@ -708,8 +754,14 @@ grep "requestId=b14e" realm-server.log
 The periodic `prerender-queue-snapshot` line does NOT carry requestId (it's a fleet snapshot):
 
 ```
-prerender-queue-snapshot totalTabs=5 totalPending=7 affinities=3 | realm:acme(tabs=2, pending=5, max=5, busy=file:1/module:1/command:0) realm:lib(tabs=2, pending=2, max=1, busy=file:1/module:0/command:0) user:u-123(tabs=1, pending=0, max=0)
+prerender-queue-snapshot totalTabs=5 totalPending=7 affinities=3 | realm:acme(tabs=2, pending=5, max=5, busy=file:1/module:1/command:0, priorities=tab:10:1,0:3|adm:0:1) realm:lib(tabs=2, pending=2, max=1, busy=file:1/module:0/command:0, priorities=tab:0:2) user:u-123(tabs=1, pending=0, max=0)
 ```
+
+Each affinity with queued waiters gets a `priorities=` segment (skipped when no waiters are queued, even if a render is in flight, to keep the log compact). Format: `<source>:<priority>:<count>` pairs, comma-separated within a source, sources separated by `|`. `tab:` is the per-tab queue's *queued* waiters; `adm:` is the per-affinity file-admission semaphore's *queued* waiters. Priorities listed highest-first, matching dequeue order — so `tab:10:1,0:3` means "1 priority-10 waiter at the head of the queue, 3 priority-0 waiters behind it."
+
+The `pending=` count on the same line includes the in-flight render holding the tab (legacy `pendingCount = held + queued` semantics), but `priorities=` counts queued waiters only. So `pending=4` with `priorities=tab:10:1,0:2` is consistent: 1 in-flight render + 1 priority-10 waiter + 2 priority-0 waiters = 4. Don't expect the priority counts to sum to `pending`.
+
+Read with `priority` on the per-render `timing_diagnostics`: a priority-10 row stuck on `waits.tabQueueMs` while the snapshot for its affinity shows `priorities=tab:10:N` is the smoking gun for an over-saturated user-priority workload (capacity issue, not priority misrouting). A priority-10 row stuck behind `priorities=tab:0:N` (with manager-side priority routing live in the build) is a priority-routing failure — manager picked the wrong server, or the file render the row was queued behind isn't releasing. Investigate the manager log for `requestId=…` to see where the manager-side scoring went.
 
 Read this alongside a timeout when `waits.semaphoreMs` is large. A snapshot with `totalPending >> totalTabs` near the timestamp confirms saturation.
 
