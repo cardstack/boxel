@@ -1401,7 +1401,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               }),
             );
 
-          if (createResponse.status !== 201) {
+          if (createResponse.status !== 202) {
             throw new Error(
               `/_create-realm failed with status ${createResponse.status}: ` +
                 (createResponse.text ||
@@ -1505,7 +1505,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 publishedRealmURL: publishedRealmURLString,
               }),
             );
-          if (publishResponse.status !== 201) {
+          if (publishResponse.status !== 202) {
             throw new Error(
               `Failed to publish realm: ${publishResponse.status} ${publishResponse.text}`,
             );

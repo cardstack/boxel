@@ -66,21 +66,19 @@ export default function handleCreateRealmRequest({
       return;
     }
 
+    let url: string | undefined;
     let realm: Realm | undefined;
     let info: Partial<RealmInfo> | undefined;
     let start = Date.now();
-    let indexStart: number | undefined;
     try {
       let result = await createRealm({
         ownerUserId,
         ...json.data.attributes,
       });
+      url = result.url;
       realm = result.realm;
       info = result.info;
-      log.debug(`created new realm ${realm.url} in ${Date.now() - start} ms`);
-      log.debug(`indexing new realm ${realm.url}`);
-      indexStart = Date.now();
-      await realm.start();
+      log.debug(`created new realm ${url} in ${Date.now() - start} ms`);
     } catch (e: any) {
       if ('status' in e && e.status === 400) {
         await sendResponseForBadRequest(ctxt, e.message);
@@ -93,14 +91,6 @@ export default function handleCreateRealmRequest({
       }
       return;
     } finally {
-      if (realm != null && indexStart != null) {
-        log.debug(
-          `indexing of new realm ${realm.url} ended in ${
-            Date.now() - indexStart
-          } ms`,
-        );
-      }
-
       let creationTimeMs = Date.now() - start;
       if (creationTimeMs > 30_000) {
         let msg = `it took a long time, ${creationTimeMs} ms, to create realm for ${ownerUserId}, ${JSON.stringify(
@@ -111,20 +101,31 @@ export default function handleCreateRealmRequest({
       }
     }
 
+    // Phase 3 PR 2: createRealm wrote the realm directory + the
+    // realm_registry row, then mounted + started the realm via the
+    // reconciler so it's fully indexed on this instance. The 202 +
+    // status:'pending' is for sibling instances — they pick up the
+    // realm via NOTIFY realm_registry and lazy-mount on first
+    // request. Clients should poll /<url>/_readiness-check before
+    // treating the realm as ready globally.
     let response = createResponse({
       body: JSON.stringify(
         {
           data: {
             type: 'realm',
-            id: realm.url,
-            attributes: { ...json.data.attributes, ...info },
+            id: url,
+            attributes: {
+              ...json.data.attributes,
+              ...info,
+              status: 'pending',
+            },
           },
         },
         null,
         2,
       ),
       init: {
-        status: 201,
+        status: 202,
         headers: {
           'content-type': SupportedMimeType.JSONAPI,
         },

@@ -64,6 +64,7 @@ import {
 import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver';
 import handleRunCommand from './handlers/handle-run-command';
 import { buildCreatePrerenderAuth } from './prerender/auth';
+import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -76,15 +77,9 @@ export type CreateRoutesArgs = {
   virtualNetwork: VirtualNetwork;
   queue: QueuePublisher;
   realms: Realm[];
+  reconciler: RealmRegistryReconciler;
   realmsRootPath: string;
   getMatrixRegistrationSecret: () => Promise<string>;
-  createAndMountRealm: (
-    path: string,
-    url: string,
-    copiedFromRealm?: URL,
-    enableFileWatcher?: boolean,
-    fromScratchIndexPriority?: number,
-  ) => Realm;
   createRealm: ({
     ownerUserId,
     endpoint,
@@ -97,7 +92,7 @@ export type CreateRoutesArgs = {
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-  }) => Promise<{ realm: Realm; info: Partial<RealmInfo> }>;
+  }) => Promise<{ url: string; realm: Realm; info: Partial<RealmInfo> }>;
   serveHostApp: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;

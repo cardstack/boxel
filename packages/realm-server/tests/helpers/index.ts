@@ -47,6 +47,11 @@ import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { RealmServer } from '../../server';
+import { sign as jwtSign } from 'jsonwebtoken';
+import {
+  RealmRegistryReconciler,
+  type RealmRegistryRow,
+} from '../../lib/realm-registry-reconciler';
 
 import {
   PgAdapter,
@@ -253,6 +258,90 @@ export function createVirtualNetwork() {
 }
 
 let testDbCounter = 0;
+
+// Build a reconciler suitable for tests. Pre-constructed realms (passed
+// via `realms`) are registered into `mounted` so subsequent
+// lookupOrMount() calls resolve from the fast path.
+//
+// When `dynamicMountDeps` is provided, prepareRealmFromRow constructs a
+// real Realm from a registry row — required by Phase 3 stateless
+// handler tests where /_create-realm + /_publish-realm only write to
+// realm_registry and rely on the reconciler / lazy mount to mount on
+// first request. Without these deps, lookupOrMount on an
+// unpre-mounted URL throws (used by tests that don't exercise the
+// dynamic-creation path).
+//
+// unmount on the test reconciler calls realm.unsubscribe() (matches
+// production) and removes the realm from realms[] / virtualNetwork so
+// the deletion-path assertions about file-watcher cleanup work the
+// same way they did pre-Phase 3.
+export function makeTestReconciler(
+  dbAdapter: PgAdapter,
+  realms: Realm[],
+  dynamicMountDeps?: {
+    realmsRootPath: string;
+    virtualNetwork: VirtualNetwork;
+    queue: QueuePublisher;
+    matrixClient: MatrixClient;
+    serverURL: URL;
+    definitionLookup: CachingDefinitionLookup;
+    enableFileWatcher?: boolean;
+  },
+): RealmRegistryReconciler {
+  let reconciler = new RealmRegistryReconciler({
+    dbAdapter,
+    prepareRealmFromRow: (row: RealmRegistryRow) => {
+      if (!dynamicMountDeps) {
+        throw new Error(
+          `test reconciler cannot construct realms; URL not pre-mounted: ${row.url}`,
+        );
+      }
+      let diskPath: string;
+      if (row.kind === 'bootstrap') {
+        diskPath = row.disk_id;
+      } else if (row.kind === 'source') {
+        diskPath = join(dynamicMountDeps.realmsRootPath, row.disk_id);
+      } else {
+        diskPath = join(
+          dynamicMountDeps.realmsRootPath,
+          PUBLISHED_DIRECTORY_NAME,
+          row.disk_id,
+        );
+      }
+      let adapter = new NodeAdapter(
+        diskPath,
+        dynamicMountDeps.enableFileWatcher,
+      );
+      let reconciledRealm = new Realm({
+        url: row.url,
+        adapter,
+        secretSeed: realmSecretSeed,
+        virtualNetwork: dynamicMountDeps.virtualNetwork,
+        dbAdapter,
+        queue: dynamicMountDeps.queue,
+        matrixClient: dynamicMountDeps.matrixClient,
+        realmServerURL: dynamicMountDeps.serverURL.href,
+        definitionLookup: dynamicMountDeps.definitionLookup,
+      });
+      realms.push(reconciledRealm);
+      dynamicMountDeps.virtualNetwork.mount(reconciledRealm.handle);
+      return reconciledRealm;
+    },
+    unmount: async (realm) => {
+      realm.unsubscribe();
+      if (dynamicMountDeps) {
+        dynamicMountDeps.virtualNetwork.unmount(realm.handle);
+      }
+      let idx = realms.findIndex((r) => r.url === realm.url);
+      if (idx !== -1) {
+        realms.splice(idx, 1);
+      }
+    },
+  });
+  reconciler.registerExistingMounts(realms);
+  return reconciler;
+}
+
 export function prepareTestDB(): void {
   // PID + monotonic counter rules out same-process collisions and makes
   // cross-process collisions essentially impossible. The previous
@@ -973,8 +1062,18 @@ export async function runTestRealmServer({
     seed: realmSecretSeed,
   });
 
+  let reconciler = makeTestReconciler(dbAdapter, realms, {
+    realmsRootPath,
+    virtualNetwork,
+    queue: publisher,
+    matrixClient,
+    serverURL: new URL(realmURL.origin),
+    definitionLookup,
+    enableFileWatcher,
+  });
   let testRealmServer = new RealmServer({
     realms,
+    reconciler,
     virtualNetwork,
     matrixClient,
     realmServerSecretSeed,
@@ -1111,8 +1210,18 @@ export async function runTestRealmServerWithRealms({
   });
 
   let serverURL = new URL(realms[0].realmURL.origin);
+  let reconciler = makeTestReconciler(dbAdapter, createdRealms, {
+    realmsRootPath,
+    virtualNetwork,
+    queue: publisher,
+    matrixClient,
+    serverURL,
+    definitionLookup,
+    enableFileWatcher,
+  });
   let testRealmServer = new RealmServer({
     realms: createdRealms,
+    reconciler,
     virtualNetwork,
     matrixClient,
     realmServerSecretSeed,
@@ -2109,6 +2218,36 @@ export function createJWT(
       realmServerURL: realm.realmServerURL,
     },
     '7d',
+  );
+}
+
+// Variant that builds a realm JWT from URL + seed instead of a Realm
+// instance. Useful when the realm hasn't been mounted yet (Phase 3 lazy
+// mount): the request that carries this JWT is the trigger that mounts
+// the realm. Auth verification on the server side uses the same shared
+// realmSecretSeed regardless of which Realm instance handles the
+// request, so the token is accepted as long as the URL claim matches.
+export function createJWTForRealmURL({
+  realmURL,
+  realmServerURL,
+  user,
+  permissions = [],
+}: {
+  realmURL: string;
+  realmServerURL: string;
+  user: string;
+  permissions?: RealmPermissions['user'];
+}) {
+  return jwtSign(
+    {
+      user,
+      realm: realmURL,
+      permissions,
+      sessionRoom: `test-session-room-for-${user}`,
+      realmServerURL,
+    },
+    realmSecretSeed,
+    { expiresIn: '7d' },
   );
 }
 

@@ -72,7 +72,6 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
-    "id": 28,
     "links": [
       {
         "asDropdown": false,
@@ -13472,8 +13471,6 @@
     },
     "timezone": "",
     "title": "Synapse",
-    "uid": "000000012",
-    "version": 1,
     "weekStart": ""
   }
 }

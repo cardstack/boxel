@@ -8,8 +8,16 @@ import {
   query,
   type DBAdapter,
 } from '@cardstack/runtime-common';
+import type { PgAdapter } from '@cardstack/postgres';
 
 const log = logger('realm-server:registry-backfill');
+
+// Constant, arbitrarily chosen, stable across deployments. Only one process
+// at a time can hold this advisory lock against a given database, so only
+// one process performs the boot-time backfill per startup wave in a
+// multi-instance deployment. Single-instance: uncontended acquisition, no
+// behavioral effect.
+export const REGISTRY_BACKFILL_LOCK_ID = 7331011;
 
 // Sentinel used as owner_username for kind='bootstrap' rows. Bootstrap realms
 // (base, catalog, etc.) are not user-owned, but the column is NOT NULL, so we
@@ -303,4 +311,47 @@ async function warnOnStaleBootstrapRows(
       );
     }
   }
+}
+
+// Runs runRegistryBackfill under a pg advisory lock so that, in a multi-
+// instance deployment, only one realm-server performs the backfill per
+// startup wave. Acquired via `withConnection` so the lock (session-scoped)
+// is pinned to a dedicated connection; explicitly released before that
+// connection returns to the pool so the lock doesn't leak.
+//
+// If the lock is held by a peer, this function logs and returns without
+// running the backfill. The reconciler (CS-10890) still starts on this
+// process and picks up the registry state that the peer populated.
+export async function runRegistryBackfillWithAdvisoryLock(
+  dbAdapter: PgAdapter,
+  opts: RegistryBackfillOpts,
+): Promise<void> {
+  await dbAdapter.withConnection(async (queryFn) => {
+    const rows = (await queryFn([
+      `SELECT pg_try_advisory_lock(`,
+      param(REGISTRY_BACKFILL_LOCK_ID),
+      `) AS acquired`,
+    ])) as [{ acquired: boolean }];
+    if (!rows[0]?.acquired) {
+      log.info(
+        'peer process holds the registry backfill advisory lock; skipping backfill on this instance',
+      );
+      return;
+    }
+    try {
+      await runRegistryBackfill(opts);
+    } finally {
+      try {
+        await queryFn([
+          `SELECT pg_advisory_unlock(`,
+          param(REGISTRY_BACKFILL_LOCK_ID),
+          `)`,
+        ]);
+      } catch (err: unknown) {
+        log.warn(
+          `failed to release registry backfill advisory lock: ${String(err)}`,
+        );
+      }
+    }
+  });
 }

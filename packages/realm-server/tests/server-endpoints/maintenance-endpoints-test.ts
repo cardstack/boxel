@@ -481,7 +481,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               }),
             );
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
           realmURL = response.body.data.id;
         }
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
@@ -606,7 +606,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               }),
             );
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
           realmURL = response.body.data.id;
         }
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
@@ -840,7 +840,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               }),
             );
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
           realmURL = response.body.data.id;
         }
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
@@ -932,7 +932,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               }),
             );
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
           botRealmURL = response.body.data.id;
         }
 

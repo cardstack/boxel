@@ -7,11 +7,18 @@
 // Run from `packages/runtime-common`:
 //   pnpm bench:amd:prep
 //
-// Fixtures land in `scripts/bench-amd/fixtures/` (gitignored).
-import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
+// This is an INTENTIONAL-REFRESH operation: it overwrites the committed
+// fixtures at `<repo>/bench-fixtures/runtime-common/amd-transpile/`. The
+// bench gate compares against these frozen fixtures so that an unrelated
+// change to a card source or the upstream `transpile.ts` pipeline cannot
+// silently move the perf numbers. Re-run this only when you intentionally
+// want to re-anchor the bench inputs — and remember to regenerate
+// `baseline.json` in the same commit.
+import { writeFileSync, readFileSync, mkdirSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
-const repoRoot = path.resolve(__dirname, '../../../..');
+import { fixturesDir, repoRoot } from './paths';
+
 const baseDir = path.join(repoRoot, 'packages/base');
 
 const fixtures: { name: string; file: string }[] = [
@@ -34,17 +41,43 @@ const fixtures: { name: string; file: string }[] = [
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     require('../../transpile') as typeof import('../../transpile');
 
-  mkdirSync(path.join(__dirname, 'fixtures'), { recursive: true });
+  mkdirSync(fixturesDir, { recursive: true });
+
+  // Babel resolves a relative `filename` against cwd, which leaks
+  // absolute worktree paths into the output (glimmer template
+  // manifests embed it as `moduleName`). Strip anything that looks
+  // like an absolute repo-root prefix so the committed fixtures are
+  // deterministic across contributors.
+  const absolutePathPrefixes = [
+    repoRoot + path.sep,
+    // Workspaces and worktrees can resolve symlinked paths differently;
+    // also strip a realpath-resolved prefix when it diverges from the
+    // logical repoRoot.
+    realpathSync(repoRoot) + path.sep,
+  ];
+  const sanitize = (s: string): string => {
+    let out = s;
+    for (const prefix of absolutePathPrefixes) {
+      if (prefix && prefix !== path.sep) {
+        out = out.split(prefix).join('');
+      }
+    }
+    return out;
+  };
 
   for (const { name, file } of fixtures) {
     const src = readFileSync(path.join(baseDir, file), 'utf8');
-    const transpiled = await transpileJS(src, file);
-    const outPath = path.join(__dirname, 'fixtures', `${name}.js`);
+    const transpiled = sanitize(await transpileJS(src, file));
+    const outPath = path.join(fixturesDir, `${name}.js`);
     writeFileSync(outPath, transpiled, 'utf8');
     console.log(
       `${name.padEnd(12)}  in: ${src.length.toString().padStart(7)} bytes  →  out: ${transpiled.length.toString().padStart(7)} bytes`,
     );
   }
+
+  console.log(
+    `\nWrote fixtures to ${path.relative(repoRoot, fixturesDir)}/. Commit them along with any baseline.json updates.`,
+  );
 })().catch((err) => {
   console.error(err);
   process.exit(1);

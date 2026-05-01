@@ -1,0 +1,8 @@
+#!/bin/sh
+#MISE description="AMD-transpile bench gate trip drill. Wraps transpileAmd with an artificial delay and confirms every fixture trips the committed baseline (CS-10983)."
+
+set -eu
+
+cd "$(dirname "$0")/../.."
+
+pnpm --filter @cardstack/runtime-common bench:amd:trip-drill "$@"

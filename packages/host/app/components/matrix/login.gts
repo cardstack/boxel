@@ -45,6 +45,7 @@ export default class Login extends Component<Signature> {
           data-test-username-field
           type='text'
           id='boxel-login-username'
+          name='username'
           autocomplete='username'
           @value={{this.username}}
           @onInput={{this.setUsername}}
@@ -61,6 +62,7 @@ export default class Login extends Component<Signature> {
           data-test-password-field
           type='password'
           id='boxel-login-password'
+          name='password'
           autocomplete='current-password'
           @value={{this.password}}
           @onInput={{this.setPassword}}

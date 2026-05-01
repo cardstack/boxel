@@ -44,11 +44,17 @@ cd "$(dirname "$0")/.."
 # shellcheck source=./grafanactl-env.sh
 source ./scripts/grafanactl-env.sh "$env_name"
 
+# `jq` is needed for the dashboard render step below in every env (including
+# local), so always check it. The other dependencies are only needed for the
+# hosted-env data-source push; check them inside the env-specific block.
+command -v jq >/dev/null \
+  || { echo "error: missing dependency: jq" >&2; exit 1; }
+
 # Pre-flight prereqs for hosted envs BEFORE grafanactl pushes anything.
 # Otherwise a missing env var or absent yq would surface only after
 # dashboards/folders had already been re-pushed, leaving a partial apply.
 if [[ "$env_name" != "local" ]]; then
-  for cmd in yq jq curl envsubst; do
+  for cmd in yq curl envsubst; do
     command -v "$cmd" >/dev/null \
       || { echo "error: missing dependency: ${cmd}" >&2; exit 1; }
   done
@@ -62,6 +68,9 @@ if [[ "$env_name" != "local" ]]; then
     BOXEL_DB_USER
     BOXEL_DB_PASSWORD
     SYNAPSE_PROMETHEUS_URL
+    # Per-env realm-server base URL substituted into dashboards' realm_server
+    # constant template variable — CS-10923
+    REALM_SERVER_URL
   )
   for v in "${required_env_vars[@]}"; do
     [[ -n "${!v:-}" ]] \
@@ -70,13 +79,51 @@ if [[ "$env_name" != "local" ]]; then
 fi
 
 cfg="$(./scripts/render-config.sh "$env_name")"
-trap 'rm -f "$cfg"' EXIT
+
+# Render dashboards: copy the committed grafanactl/resources/ tree to a
+# tempdir and substitute env-specific values into each dashboard's
+# `templating.list[].query` for matching constant variables. Currently
+# substitutes:
+#   __REALM_SERVER_URL__  → REALM_SERVER_URL  (CS-10923)
+# Local mode uses a hardcoded http://localhost:4201/ default so devs
+# don't need any extra setup.
+rendered="$(mktemp -d -t grafanactl-render.XXXXXX)"
+trap 'rm -f "$cfg"; rm -rf "$rendered"' EXIT
+cp -R ./grafanactl/resources/. "$rendered/"
+
+case "$env_name" in
+  local) realm_server_url="${REALM_SERVER_URL:-http://localhost:4201/}" ;;
+  *)     realm_server_url="$REALM_SERVER_URL" ;;
+esac
+
+# `find -print0` + a NUL-delimited read loop rather than a `**/*.json` glob —
+# macOS's default bash 3.2 doesn't support `shopt -s globstar` and `set -eo`
+# would abort apply.sh before any push. This pattern is portable across bash
+# 3.2 / 4.x / 5.x and zsh.
+while IFS= read -r -d '' f; do
+  # `set -e` aborts on a non-zero exit, but only for "simple commands" — a
+  # `jq ... > out && mv ...` chain swallows jq's failure inside the &&,
+  # leaving the script to continue with an unrendered file. Run as two
+  # separate statements so a jq error fails the script.
+  jq --arg url "$realm_server_url" '
+    walk(
+      if type == "object"
+         and .name? == "realm_server"
+         and .type? == "constant"
+      then
+        .query = $url
+        | (if .current then .current.value = $url | .current.text = $url else . end)
+      else . end
+    )
+  ' "$f" > "$f.tmp"
+  mv "$f.tmp" "$f"
+done < <(find "$rendered/dashboards" -type f -name '*.json' -print0)
 
 grafanactl \
   --config "$cfg" \
   --context "$env_name" \
   resources push \
-  --path ./grafanactl/resources \
+  --path "$rendered" \
   "${forwarded_args[@]}"
 
 # Data sources — grafanactl doesn't manage them, so push via HTTP API.

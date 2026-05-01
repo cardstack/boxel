@@ -99,7 +99,7 @@ you change it, change it everywhere — `alloy/config.alloy` (local) and
 | `env`       | constant `local` (Alloy relabel rule)                 | constant `staging` / `production` (Fluent Bit static `Labels`)     | always                            |
 | `service`   | Docker container name, leading `/` stripped           | ECS task family — `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse` | always |
 | `realm`     | opt-in via Docker label `boxel.realm=<name>`          | task env when the task pins a single realm (omitted on multi-realm workloads) | when meaningful |
-| `worker_id` | not set locally                                       | per-Fargate-task `ecs_task_id` injected by FireLens (worker only)  | worker tasks only                 |
+| `worker_id` | not set locally                                       | per-process worker id (`<runtime-id>-pid-<pid>`), parsed from `[worker <id> priority N]:` log line prefixes by a Fluent Bit Lua filter. Matches `job_reservations.worker_id`. | worker tasks only, lines with the prefix |
 
 The local Alloy scraper drops the observability stack's own Compose
 services (`grafana`, `loki`, `alloy`) so `{env="local"}` queries don't
@@ -180,8 +180,9 @@ window, not the query window.
 # Lines for one realm across all services
 {env="<env>", realm="example_realm"}
 
-# Per-worker tail
-{env="<env>", service="worker", worker_id="abc123def456"}
+# Per-worker tail (worker_id matches job_reservations.worker_id —
+# look it up there, e.g. for the worker that ran a specific job).
+{env="<env>", service="worker", worker_id="abc123-3236013547-pid-42"}
 
 # Logs around a specific job id (LogQL line-filter, not regex)
 {env="<env>", service="worker"} |= "job_id=42"

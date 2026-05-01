@@ -30,6 +30,7 @@ import HeaderUsage from './components/header/usage.gts';
 import IconButtonUsage from './components/icon-button/usage.gts';
 import InputGroupUsage from './components/input-group/usage.gts';
 import InputUsage from './components/input/usage.gts';
+import KanbanUsage from './components/kanban/usage.gts';
 import LoadingIndicatorUsage from './components/loading-indicator/usage.gts';
 import MenuUsage from './components/menu/usage.gts';
 import MessageUsage from './components/message/usage.gts';
@@ -84,6 +85,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['IconButton', IconButtonUsage],
   ['InputGroup', InputGroupUsage],
   ['Input', InputUsage],
+  ['Kanban', KanbanUsage],
   ['LoadingIndicator', LoadingIndicatorUsage],
   ['Menu', MenuUsage],
   ['Message', MessageUsage],

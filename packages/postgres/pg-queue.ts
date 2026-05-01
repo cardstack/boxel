@@ -79,7 +79,7 @@ async function acquireConcurrencyGroupLock(
 }
 
 // Tracks a task that should loop with a timeout and an interruptible sleep.
-class WorkLoop {
+export class WorkLoop {
   private internalWaker: Deferred<void> | undefined;
   private timeout: NodeJS.Timeout | undefined;
   private _shuttingDown = false;
