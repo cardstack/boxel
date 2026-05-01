@@ -46,6 +46,20 @@ cd "$(dirname "$0")/.."
 # shellcheck source=./grafanactl-env.sh
 source ./scripts/grafanactl-env.sh "$env_name"
 
+# Mirror apply.sh's per-env REALM_SERVER_URL handling so the
+# `__REALM_SERVER_URL__` placeholder substitution below produces the
+# same value diff.sh expects to find in the live (pulled) state. CI
+# sources REALM_SERVER_URL from SSM in observability-diff.yml; locally
+# we default to apply.sh's hardcoded http://localhost:4201/.
+case "$env_name" in
+  local) realm_server_url="${REALM_SERVER_URL:-http://localhost:4201/}" ;;
+  *)
+    [[ -n "${REALM_SERVER_URL:-}" ]] \
+      || { echo "error: REALM_SERVER_URL not set; required for diff.sh --env ${env_name}" >&2; exit 1; }
+    realm_server_url="$REALM_SERVER_URL"
+    ;;
+esac
+
 cfg="$(./scripts/render-config.sh "$env_name")"
 remote="$(mktemp -d -t grafanactl-pull.XXXXXX)"
 remote_norm="$(mktemp -d -t grafanactl-norm.XXXXXX)"
@@ -118,9 +132,9 @@ normalize() {  # $1: subdir under grafanactl/resources, $2: pulled-kind dirname
 normalize dashboards Dashboard
 normalize folders Folder
 
-# Normalize JSON content (CS-10988). Without this, `git diff` surfaces
-# four classes of noise that have nothing to do with what an apply would
-# actually change:
+# Normalize JSON content (CS-10988 + CS-10990 + CS-10991). Without
+# this, `git diff` surfaces several classes of noise that have nothing
+# to do with what an apply would actually change:
 #
 #   1. Unicode-escape style. The committed JSON encodes `&` as the
 #      6-byte escape sequence `&` and `>` as `>` (an artefact
@@ -139,22 +153,52 @@ normalize folders Folder
 #      it cannot hide a real diff.
 #   3. Key order inside `metadata`. `--sort-keys` makes order stable on
 #      both sides.
-#   4. (Not handled here.) Default values like `"value": null` injected
-#      into threshold step arrays. The acceptance criteria flagged this
-#      as optional, and a generic null-strip risks dropping legitimate
-#      explicit nulls. Deferred to a follow-up if it dominates a future
-#      diff.
+#   4. `__REALM_SERVER_URL__` placeholder (CS-10923 / CS-10990). apply.sh
+#      walks the committed JSON and substitutes the per-env realm-server
+#      URL into the `realm_server` constant template variable's `query`
+#      before pushing. Pulled state therefore always shows the substituted
+#      value. We mirror the same walk here so the committed side ends up
+#      with the same value pre-diff. Substitution is a no-op when run on
+#      the pulled side (the placeholder isn't there).
+#   5. Default `"value": null` on threshold step zero (CS-10991). Grafana
+#      fills in `value: null` on the lowest threshold step (the implicit
+#      `-Infinity` floor) when it stores a dashboard. AMG-era exports
+#      and humans omit the key. The match is scoped to objects that
+#      look like a thresholds container (`mode` + `steps`) at index 0
+#      so a `value: null` higher up the steps array (a malformed
+#      threshold worth surfacing) still shows in the diff.
 JQ_NORMALIZE='
-  if type == "object" and has("metadata") and (.metadata | type) == "object" then
-    .metadata |= (
-      del(.id)
-      | del(.resourceVersion)
-      | del(.creationTimestamp)
-      | del(.uid)
-      | (if has("labels") and (.labels | type) == "object" and (.labels | length) == 0 then del(.labels) else . end)
-      | (if .namespace == "default" then del(.namespace) else . end)
+  walk(
+    if type == "object"
+       and .name? == "realm_server"
+       and .type? == "constant"
+    then
+      .query = $url
+      | (if .current then .current.value = $url | .current.text = $url else . end)
+    else . end
+  )
+  | walk(
+      if type == "object"
+         and has("mode")
+         and (.steps? | type) == "array"
+         and (.steps | length) > 0
+         and (.steps[0] | type) == "object"
+         and (.steps[0] | has("value"))
+         and (.steps[0].value == null)
+      then
+        .steps[0] |= del(.value)
+      else . end
     )
-  else . end
+  | (if type == "object" and has("metadata") and (.metadata | type) == "object" then
+      .metadata |= (
+        del(.id)
+        | del(.resourceVersion)
+        | del(.creationTimestamp)
+        | del(.uid)
+        | (if has("labels") and (.labels | type) == "object" and (.labels | length) == 0 then del(.labels) else . end)
+        | (if .namespace == "default" then del(.namespace) else . end)
+      )
+    else . end)
 '
 
 normalize_json_content() {  # $1: src dir, $2: dest dir
@@ -169,7 +213,7 @@ normalize_json_content() {  # $1: src dir, $2: dest dir
     rel="${f#$src/}"
     target="$dest/$rel"
     mkdir -p "$(dirname "$target")"
-    jq --sort-keys "$JQ_NORMALIZE" "$f" > "$target"
+    jq --sort-keys --arg url "$realm_server_url" "$JQ_NORMALIZE" "$f" > "$target"
   done < <(find "$src" -type f -name '*.json' -print0)
 }
 
