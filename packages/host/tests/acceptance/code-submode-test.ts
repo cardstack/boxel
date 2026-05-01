@@ -1046,11 +1046,16 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
 
       await waitFor('[data-test-card-error]');
+      // drain pending card-type priming async before navigating again — otherwise
+      // an in-flight fetch from the first navigation can reject after teardown
+      // and surface as an unowned "A network error occurred." rejection.
+      await settled();
 
       await click('[data-test-toggle-details]');
       assert
         .dom('[data-test-error-details]')
         .includesText(`${testRealmURL}non-card not found`);
+      await settled();
 
       await visitOperatorMode({
         submode: 'code',
@@ -1058,6 +1063,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
 
       await waitFor('[data-test-card-error]');
+      await settled();
 
       await click('[data-test-toggle-details]');
       assert
