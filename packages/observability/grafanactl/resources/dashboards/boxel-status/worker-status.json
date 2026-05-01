@@ -2,10 +2,10 @@
   "apiVersion": "dashboard.grafana.app/v1beta1",
   "kind": "Dashboard",
   "metadata": {
-    "name": "aetquzj0mdb7kb",
     "annotations": {
       "grafana.app/folder": "defd2d156sav4d"
-    }
+    },
+    "name": "aetquzj0mdb7kb"
   },
   "spec": {
     "annotations": {
@@ -27,7 +27,6 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
-    "id": 26,
     "links": [],
     "panels": [
       {
@@ -59,7 +58,8 @@
         "type": "alertlist"
       }
     ],
-    "schemaVersion": 39,
+    "refresh": "",
+    "schemaVersion": 42,
     "tags": [],
     "templating": {
       "list": []
@@ -71,8 +71,6 @@
     "timepicker": {},
     "timezone": "browser",
     "title": "Worker Status",
-    "uid": "aetquzj0mdb7kb",
-    "version": 1,
     "weekStart": ""
   }
 }

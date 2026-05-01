@@ -3,7 +3,7 @@
 // fixture, plus a speedup-vs-babel-current table at the bottom.
 //
 // Run from `packages/runtime-common`:
-//   pnpm bench:amd:prep    # generates fixtures
+//   pnpm bench:amd:prep    # regenerates committed fixtures
 //   pnpm bench:amd         # runs the bench
 //
 // Tunables via env vars:
@@ -13,25 +13,17 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 
-const ITERATIONS = Number(process.env.ITER ?? 50);
-const WARMUP = Number(process.env.WARMUP ?? 5);
+import { candidatesDir, fixturesDir } from './paths';
 
-const fixturesDir = path.join(__dirname, 'fixtures');
-const candidatesDir = path.join(__dirname, 'candidates');
+export const DEFAULT_ITERATIONS = 50;
+export const DEFAULT_WARMUP = 5;
 
-const fixtures = readdirSync(fixturesDir)
-  .filter((f) => f.endsWith('.js') && !f.startsWith('_'))
-  .sort();
-const candidateFiles = readdirSync(candidatesDir)
-  .filter((f) => f.endsWith('.ts'))
-  .sort();
-
-interface Candidate {
+export interface Candidate {
   name: string;
   transform: (src: string, moduleId: string) => Promise<string>;
 }
 
-interface Stats {
+export interface Stats {
   mean: number;
   median: number;
   p95: number;
@@ -39,12 +31,13 @@ interface Stats {
   max: number;
 }
 
-interface Result extends Stats {
+export interface Result extends Stats {
   candidate: string;
   fixture: string;
+  iterations: number;
 }
 
-const stats = (samples: number[]): Stats => {
+export const stats = (samples: number[]): Stats => {
   const sorted = [...samples].sort((a, b) => a - b);
   const n = sorted.length;
   const sum = sorted.reduce((a, b) => a + b, 0);
@@ -57,12 +50,26 @@ const stats = (samples: number[]): Stats => {
   return { mean, median, p95, min: sorted[0], max: sorted[n - 1] };
 };
 
-const fmt = (ms: number) => `${ms.toFixed(2).padStart(8)}ms`;
+export interface RunBenchOptions {
+  iterations?: number;
+  warmup?: number;
+  // Restrict to a subset of candidate names. Default: all candidates.
+  candidates?: string[];
+}
 
-(async () => {
-  // ts-node intercepts `.ts` so `require()` returns the compiled module.
+export function listFixtures(): string[] {
+  return readdirSync(fixturesDir)
+    .filter((f) => f.endsWith('.js') && !f.startsWith('_'))
+    .sort();
+}
+
+export async function loadCandidates(): Promise<Candidate[]> {
+  const candidateFiles = readdirSync(candidatesDir)
+    .filter((f) => f.endsWith('.ts'))
+    .sort();
   const candidates: Candidate[] = [];
   for (const f of candidateFiles) {
+    // ts-node intercepts `.ts` so `require()` returns the compiled module.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod = require(path.join(candidatesDir, f));
     if (typeof mod.transform === 'function') {
@@ -72,10 +79,54 @@ const fmt = (ms: number) => `${ms.toFixed(2).padStart(8)}ms`;
       });
     }
   }
+  return candidates;
+}
 
-  console.log(
-    `iterations=${ITERATIONS} warmup=${WARMUP} candidates=${candidates.length} fixtures=${fixtures.length}\n`,
-  );
+export async function runBench(
+  options: RunBenchOptions = {},
+): Promise<Result[]> {
+  const iterations = options.iterations ?? DEFAULT_ITERATIONS;
+  const warmup = options.warmup ?? DEFAULT_WARMUP;
+  const filter = options.candidates;
+
+  if (!Number.isInteger(iterations) || iterations < 1) {
+    throw new Error(
+      `runBench: iterations must be a positive integer, got ${iterations}`,
+    );
+  }
+  if (!Number.isInteger(warmup) || warmup < 0) {
+    throw new Error(
+      `runBench: warmup must be a non-negative integer, got ${warmup}`,
+    );
+  }
+
+  const fixtures = listFixtures();
+  if (fixtures.length === 0) {
+    throw new Error(
+      `runBench: no fixtures found in ${fixturesDir}. Run \`pnpm bench:amd:prep\` to generate them.`,
+    );
+  }
+
+  const allCandidates = await loadCandidates();
+  const candidates = filter
+    ? allCandidates.filter((c) => filter.includes(c.name))
+    : allCandidates;
+  if (candidates.length === 0) {
+    const want = filter ? `[${filter.join(', ')}]` : 'any';
+    const have = allCandidates.map((c) => c.name).join(', ') || '<none>';
+    throw new Error(
+      `runBench: no candidates matched (wanted=${want}, available=${have}).`,
+    );
+  }
+  if (filter) {
+    const matchedNames = candidates.map((c) => c.name);
+    const missing = filter.filter((n) => !matchedNames.includes(n));
+    if (missing.length > 0) {
+      throw new Error(
+        `runBench: requested candidates not found: ${missing.join(', ')}. Available: ${allCandidates.map((c) => c.name).join(', ')}.`,
+      );
+    }
+  }
 
   const fixtureSrc: Record<string, string> = {};
   for (const f of fixtures) {
@@ -83,9 +134,47 @@ const fmt = (ms: number) => `${ms.toFixed(2).padStart(8)}ms`;
   }
 
   const results: Result[] = [];
-
   for (const fixture of fixtures) {
-    console.log(`=== ${fixture} (${fixtureSrc[fixture].length} bytes) ===`);
+    for (const c of candidates) {
+      const moduleId = `http://example.com/${fixture}`;
+      for (let i = 0; i < warmup; i++) {
+        await c.transform(fixtureSrc[fixture], moduleId);
+      }
+      const samples: number[] = [];
+      for (let i = 0; i < iterations; i++) {
+        const t0 = performance.now();
+        await c.transform(fixtureSrc[fixture], moduleId);
+        samples.push(performance.now() - t0);
+      }
+      const s = stats(samples);
+      results.push({ candidate: c.name, fixture, iterations, ...s });
+    }
+  }
+  return results;
+}
+
+const fmt = (ms: number) => `${ms.toFixed(2).padStart(8)}ms`;
+
+async function main() {
+  const iterations = Number(process.env.ITER ?? DEFAULT_ITERATIONS);
+  const warmup = Number(process.env.WARMUP ?? DEFAULT_WARMUP);
+
+  const fixtures = listFixtures();
+  const candidates = await loadCandidates();
+
+  console.log(
+    `iterations=${iterations} warmup=${warmup} candidates=${candidates.length} fixtures=${fixtures.length}\n`,
+  );
+
+  const results = await runBench({ iterations, warmup });
+
+  // Per-fixture detail table (preserves the original UX).
+  for (const fixture of fixtures) {
+    const fixtureBytes = readFileSync(
+      path.join(fixturesDir, fixture),
+      'utf8',
+    ).length;
+    console.log(`=== ${fixture} (${fixtureBytes} bytes) ===`);
     console.log(
       [
         'candidate'.padEnd(22),
@@ -96,29 +185,19 @@ const fmt = (ms: number) => `${ms.toFixed(2).padStart(8)}ms`;
         'max'.padStart(10),
       ].join('  '),
     );
-
     for (const c of candidates) {
-      const moduleId = `http://example.com/${fixture}`;
-      // Warmup
-      for (let i = 0; i < WARMUP; i++) {
-        await c.transform(fixtureSrc[fixture], moduleId);
-      }
-      const samples: number[] = [];
-      for (let i = 0; i < ITERATIONS; i++) {
-        const t0 = performance.now();
-        await c.transform(fixtureSrc[fixture], moduleId);
-        samples.push(performance.now() - t0);
-      }
-      const s = stats(samples);
-      results.push({ candidate: c.name, fixture, ...s });
+      const r = results.find(
+        (x) => x.fixture === fixture && x.candidate === c.name,
+      );
+      if (!r) continue;
       console.log(
         [
           c.name.padEnd(22),
-          fmt(s.mean),
-          fmt(s.median),
-          fmt(s.p95),
-          fmt(s.min),
-          fmt(s.max),
+          fmt(r.mean),
+          fmt(r.median),
+          fmt(r.p95),
+          fmt(r.min),
+          fmt(r.max),
         ].join('  '),
       );
     }
@@ -148,7 +227,11 @@ const fmt = (ms: number) => `${ms.toFixed(2).padStart(8)}ms`;
     }
     console.log(row.join('  '));
   }
-})().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+}
+
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
