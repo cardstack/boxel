@@ -1,6 +1,8 @@
 import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
+import { rri } from '@cardstack/runtime-common';
+
 import type { Ready } from '@cardstack/host/resources/file';
 import type { State } from '@cardstack/host/resources/module-contents';
 
@@ -9,7 +11,7 @@ import type CodeSemanticsService from '@cardstack/host/services/code-semantics-s
 
 const mockFile: Ready = {
   state: 'ready',
-  url: 'test://example.ts',
+  url: rri('test://example.ts'),
   content: 'export class TestClass {}',
   lastModified: Date.now().toString(),
   name: 'example.ts',
@@ -95,7 +97,7 @@ module('Unit | Service | code-semantics', function (hooks) {
 
     // Simulate module edit by calling the private method
     let testState: State = {
-      url: 'test://example.ts',
+      url: rri('test://example.ts'),
       declarations: [],
     };
 

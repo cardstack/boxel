@@ -1,6 +1,7 @@
 import { Deferred } from './deferred';
 import {
   resolveCardReference,
+  rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
 } from './card-reference-resolver';
@@ -83,7 +84,7 @@ import {
   type Query,
   type PrerenderedHtmlFormat,
   codeRefFromInternalKey,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   userInitiatedPriority,
   systemInitiatedPriority,
   userIdFromUsername,
@@ -620,7 +621,7 @@ export class Realm {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
       },
       async (request, next) => {
-        if (!this.paths.inRealm(new URL(request.url))) {
+        if (!this.paths.inRealm(rri(request.url))) {
           return next(request);
         }
         return await this.internalHandle(request, true);
@@ -1043,7 +1044,7 @@ export class Realm {
           requestContext,
         });
       }
-      if (!this.paths.inRealm(parsedURL)) {
+      if (!this.paths.inRealm(rri(parsedURL.href))) {
         return badRequest({
           message: `URL is not in realm: ${parsedURL.href}`,
           requestContext,
@@ -1782,14 +1783,14 @@ export class Realm {
   maybeHandle = async (
     request: Request,
   ): Promise<ResponseWithNodeStream | null> => {
-    if (!this.paths.inRealm(new URL(request.url))) {
+    if (!this.paths.inRealm(rri(request.url))) {
       return null;
     }
     return await this.internalHandle(request, true);
   };
 
   handle = async (request: Request): Promise<ResponseWithNodeStream | null> => {
-    if (!this.paths.inRealm(new URL(request.url))) {
+    if (!this.paths.inRealm(rri(request.url))) {
       return null;
     }
     return await this.internalHandle(request, false);
@@ -4990,7 +4991,7 @@ export class Realm {
     doc: LooseSingleCardDocument,
     relativeTo: URL,
   ): Promise<LooseSingleCardDocument> {
-    let absoluteCodeRef = codeRefWithAbsoluteURL(
+    let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
       doc.data.meta.adoptsFrom,
       relativeTo,
     ) as ResolvedCodeRef;
@@ -5041,7 +5042,7 @@ export class Realm {
       if (Array.isArray(fieldValue)) {
         for (const item of fieldValue) {
           if (item.adoptsFrom) {
-            let absoluteCodeRef = codeRefWithAbsoluteURL(
+            let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
               item.adoptsFrom,
               relativeTo,
             ) as ResolvedCodeRef;
@@ -5066,7 +5067,7 @@ export class Realm {
           }
         }
       } else if (fieldValue.adoptsFrom) {
-        let absoluteCodeRef = codeRefWithAbsoluteURL(
+        let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
           fieldValue.adoptsFrom,
           relativeTo,
         ) as ResolvedCodeRef;
@@ -5312,7 +5313,7 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
   ) {
     return true;
   }
-  return baseRealm.inRealm(parsed);
+  return baseRealm.inRealm(rri(parsed.href));
 }
 
 function lastModifiedHeader(

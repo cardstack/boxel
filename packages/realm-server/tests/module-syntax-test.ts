@@ -435,7 +435,7 @@ module(basename(__filename), function () {
         },
         fieldType: 'linksTo',
         fieldDefinitionType: 'card',
-        incomingRelativeTo: new URL(`http://localhost:4202/node-test/spec/1`), // hypothethical spec that lives at this id
+        incomingRelativeTo: rri(`http://localhost:4202/node-test/spec/1`), // hypothethical spec that lives at this id
         outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
         outgoingRealmURL: new URL('http://localhost:4202/node-test/'), // the realm that the spec lives in
       });
@@ -477,7 +477,7 @@ module(basename(__filename), function () {
         },
         fieldType: 'linksTo',
         fieldDefinitionType: 'card',
-        incomingRelativeTo: new URL(`http://localhost:4202/test/spec/1`), // hypothethical spec that lives at this id
+        incomingRelativeTo: rri(`http://localhost:4202/test/spec/1`), // hypothethical spec that lives at this id
         outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
         outgoingRealmURL: new URL('http://localhost:4202/node-test/'), // the realm that thel spec lives in
       });

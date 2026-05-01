@@ -12,6 +12,7 @@ import {
 import { clampSerializedError, type SerializedError } from './error';
 import {
   fetchUserPermissions,
+  flattenPrerenderMeta,
   internalKeyFor,
   type Definition,
   type ErrorEntry,
@@ -21,6 +22,7 @@ import {
   type Realm,
   type RealmPermissions,
   type ResolvedCodeRef,
+  type TimingDiagnostics,
   executableExtensions,
   hasExecutableExtension,
   trimExecutableExtension,
@@ -29,6 +31,7 @@ import {
   isRegisteredPrefix,
   cardIdToURL,
   resolveCardReference,
+  rri,
   type RealmResourceIdentifier,
 } from './card-reference-resolver';
 import type { VirtualNetwork } from './virtual-network';
@@ -67,15 +70,7 @@ function canonicalURL(url: string, relativeTo?: string): string {
 }
 
 function normalizeExecutableURL(url: string): string {
-  if (!hasExecutableExtension(url)) {
-    return url;
-  }
-  try {
-    return trimExecutableExtension(new URL(url)).href;
-  } catch (_e) {
-    // Fallback for non-URL identifiers
-    return url.replace(/\.(gts|ts|js|gjs)$/, '');
-  }
+  return trimExecutableExtension(rri(url));
 }
 
 // Application-level dedup key. Coalesces two concurrent lookups only when
@@ -139,6 +134,11 @@ interface WriteToDatabaseCacheParams {
   resolvedRealmURL: string;
   cacheScope: CacheScope;
   authUserId: string;
+  // Server-observed render timings + host-side breadcrumbs flattened from
+  // the prerender response's `meta` block (same shape as
+  // `boxel_index.timing_diagnostics`). Lets operators query slow / hung
+  // module renders the same way they query slow / hung card renders.
+  timingDiagnostics?: TimingDiagnostics;
 }
 
 export class FilterRefersToNonexistentTypeError extends Error {
@@ -828,6 +828,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     resolvedRealmURL,
     cacheScope,
     authUserId,
+    timingDiagnostics,
   }: WriteToDatabaseCacheParams): Promise<void> {
     await this.query([
       'INSERT INTO',
@@ -843,6 +844,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           ['resolved_realm_url'],
           ['cache_scope'],
           ['auth_user_id'],
+          ['timing_diagnostics'],
         ]),
       ) as Expression),
       'VALUES',
@@ -866,6 +868,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           [param(resolvedRealmURL)],
           [param(cacheScope)],
           [param(authUserId)],
+          [param(timingDiagnostics ? JSON.stringify(timingDiagnostics) : null)],
         ]),
       ) as Expression),
       'ON CONFLICT ON CONSTRAINT modules_pkey DO UPDATE SET',
@@ -876,6 +879,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         ['error_doc = excluded.error_doc'],
         ['created_at = excluded.created_at'],
         ['resolved_realm_url = excluded.resolved_realm_url'],
+        ['timing_diagnostics = excluded.timing_diagnostics'],
       ]) as Expression),
     ]);
   }
@@ -931,6 +935,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolvedRealmURL,
       cacheScope,
       authUserId: cacheScope === 'public' ? '' : userId,
+      timingDiagnostics: flattenPrerenderMeta(response.meta),
     });
     return cacheEntry;
   }
@@ -947,7 +952,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     try {
       let url = new URL(canonical);
       if (hasExecutableExtension(url.href)) {
-        return trimExecutableExtension(url).href;
+        return trimExecutableExtension(rri(url.href));
       }
       return url.href;
     } catch (_err) {
