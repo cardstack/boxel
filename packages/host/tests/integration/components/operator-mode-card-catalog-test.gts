@@ -564,12 +564,15 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       count: 1,
     });
 
-    // The section block is keyed by realm name, but `realm.info()` returns a
-    // "Unknown Workspace" placeholder until `fetchInfo` resolves. Selecting
-    // the section by its stable URL avoids racing the info fetch, then we
-    // wait for the human-visible name before asserting on it.
+    // The section block is keyed by realm name, but `realm.info()` returns
+    // a "Unknown Workspace" placeholder until `fetchInfo` resolves.
+    // Selecting on the stable URL alongside the human-visible name avoids
+    // racing the info fetch. Default `waitFor` timeout (1s) can be tight
+    // on a loaded CI shard, so use the file's long-running cap (10s)
+    // consistent with `displays searching results` above.
     await waitFor(
       `[data-test-realm-url="${baseRealm.url}"][data-test-realm="Base Workspace"]`,
+      { timeout: 10000 },
     );
 
     assert
@@ -722,12 +725,15 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     // fetch hasn't resolved yet, `realm.info()` returns a "Unknown
     // Workspace" placeholder and the section briefly carries that name
     // until fetchInfo resolves. Anchor on the stable `data-test-realm-url`
-    // first so subsequent name-based assertions don't race the info fetch.
+    // first so subsequent name-based assertions don't race the info
+    // fetch. Bump past the default 1s so a loaded CI shard isn't tight.
     await waitFor(
       `[data-test-realm-url="${testRealmURL}"][data-test-realm="Operator Mode Workspace"]`,
+      { timeout: 10000 },
     );
     await waitFor(
       `[data-test-realm-url="${baseRealm.url}"][data-test-realm="Base Workspace"]`,
+      { timeout: 10000 },
     );
     assert
       .dom(
@@ -750,9 +756,11 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     // can re-open if a section is destroyed and recreated.
     await waitFor(
       `[data-test-realm-url="${testRealmURL}"][data-test-realm="Operator Mode Workspace"]`,
+      { timeout: 10000 },
     );
     await waitFor(
       `[data-test-realm-url="${baseRealm.url}"][data-test-realm="Base Workspace"]`,
+      { timeout: 10000 },
     );
 
     assert
@@ -806,9 +814,11 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     // Same realm-name placeholder race as above — anchor on the URL.
     await waitFor(
       `[data-test-realm-url="${testRealmURL}"][data-test-realm="Operator Mode Workspace"]`,
+      { timeout: 10000 },
     );
     await waitFor(
       `[data-test-realm-url="${baseRealm.url}"][data-test-realm="Base Workspace"]`,
+      { timeout: 10000 },
     );
 
     assert.dom('[data-test-realm="Operator Mode Workspace"]').exists();
