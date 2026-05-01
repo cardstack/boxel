@@ -162,7 +162,6 @@ export default class InteractSubmode extends Component {
     opts?: {
       realmURL?: URL;
       localDir?: LocalPath;
-      closeAfterCreating?: boolean;
       doc?: LooseSingleCardDocument; // fill in card data with values
       cardModeAfterCreation?: Format;
     },
@@ -192,7 +191,6 @@ export default class InteractSubmode extends Component {
       id: localId,
       format: opts?.cardModeAfterCreation ?? 'edit',
       request: new Deferred(),
-      closeAfterSaving: opts?.closeAfterCreating,
       stackIndex,
       type: 'card',
     });

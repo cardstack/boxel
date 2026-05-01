@@ -64,6 +64,12 @@ export interface ToolExecutorConfig {
   timeoutMs?: number;
   /** Optional log function for auditability. */
   log?: (entry: ToolExecutionLogEntry) => void;
+  /**
+   * When true, boxel-cli invocations skip the `--quiet` flag so their
+   * normal info/log output surfaces in the factory's tool output. Wired
+   * to the factory's own `--debug` flag (see `factory-issue-loop-wiring`).
+   */
+  debug?: boolean;
 }
 
 export interface ToolExecutionLogEntry {
@@ -394,8 +400,11 @@ export class ToolExecutor {
     }
 
     let cliArgs = buildBoxelCliArgs(toolName, subcommand, toolArgs);
+    let invocation = composeBoxelCliInvocation(cliArgs, {
+      debug: this.config.debug,
+    });
 
-    return this.spawnProcess(toolName, 'npx', ['boxel', ...cliArgs], 'text');
+    return this.spawnProcess(toolName, 'npx', invocation, 'text');
   }
 
   private async executeRealmApi(
@@ -636,6 +645,27 @@ export class ToolExecutor {
 // ---------------------------------------------------------------------------
 // Helpers: CLI arg building
 // ---------------------------------------------------------------------------
+
+/**
+ * Compose the full `npx boxel ...` argument vector for an `executeBoxelCli`
+ * call. Prepends `--quiet` to silence boxel-cli's chatty per-step progress
+ * logs ("Starting sync …", "Downloaded: …", "Checkpoint created: …") so they
+ * don't surface in the factory's tool output or CI logs. Errors, warnings,
+ * and the command's actual result payload still come through — see
+ * `packages/boxel-cli/src/lib/cli-log.ts`.
+ *
+ * When `debug` is true (factory itself is running with `--debug`), `--quiet`
+ * is omitted so the full boxel-cli logs surface for debugging.
+ */
+export function composeBoxelCliInvocation(
+  cliArgs: string[],
+  options: { debug?: boolean } = {},
+): string[] {
+  if (options.debug) {
+    return ['boxel', ...cliArgs];
+  }
+  return ['boxel', '--quiet', ...cliArgs];
+}
 
 function buildCliArgs(toolArgs: Record<string, unknown>): string[] {
   let args: string[] = [];

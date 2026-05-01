@@ -53,4 +53,12 @@ module('Integration | Component | InputGroup', function (hooks) {
 
     assert.dom('[data-test-override-icon]').exists();
   });
+
+  test('forwards the @name arg to the inner input element', async function (assert) {
+    await render(
+      <template><BoxelInputGroup @name='username' @value='' /></template>,
+    );
+
+    assert.dom('input').hasAttribute('name', 'username');
+  });
 });

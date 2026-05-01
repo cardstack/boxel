@@ -66,7 +66,12 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Source GRAFANA_TOKEN from SSM
+      - name: Source diff-time secrets from SSM
+        # GRAFANA_TOKEN: pull-from-staging auth.
+        # REALM_SERVER_URL: needed by diff.sh's __REALM_SERVER_URL__
+        # substitution (CS-10990); committed JSON carries the placeholder
+        # and apply.sh substitutes per-env, so diff.sh has to know the
+        # same per-env value to compare apples-to-apples.
         run: |
           GRAFANA_TOKEN="$(aws ssm get-parameter \
             --name /staging/grafana/grafanactl_token \
@@ -75,6 +80,12 @@ jobs:
             --output text)"
           echo "::add-mask::$GRAFANA_TOKEN"
           echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
+
+          REALM_SERVER_URL="$(aws ssm get-parameter \
+            --name /staging/boxel-grafana/realm_server_url \
+            --query 'Parameter.Value' \
+            --output text)"
+          echo "REALM_SERVER_URL=$REALM_SERVER_URL" >> "$GITHUB_ENV"
 
       - name: Compute diff
         id: diff

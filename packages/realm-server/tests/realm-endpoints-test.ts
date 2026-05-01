@@ -38,6 +38,7 @@ import {
   matrixURL,
   closeServer,
   getIndexHTML,
+  makeTestReconciler,
   matrixRegistrationSecret,
   testRealmInfo,
   waitUntil,
@@ -412,10 +413,70 @@ module(basename(__filename), function () {
           },
           'response includes updated realm info',
         );
-        assert.deepEqual(
-          readJSONSync(realmConfigPath),
-          { ...(initialConfig ?? {}), backgroundURL: 'new-bg' },
-          '.realm.json contains the updated property',
+        // backgroundURL is owned by the RealmConfig card, not the sidecar.
+        let cardPath = join(dir.name, 'realm_server_1', 'test', 'realm.json');
+        let cardDoc = readJSONSync(cardPath);
+        assert.strictEqual(
+          cardDoc.data.attributes.backgroundURL,
+          'new-bg',
+          'realm.json card contains the updated backgroundURL',
+        );
+      });
+
+      test('can clear card-owned URL fields by patching null', async function (assert) {
+        let auth = `Bearer ${createJWT(testRealm, 'user', [
+          'read',
+          'write',
+          'realm-owner',
+        ])}`;
+
+        // First set non-null values so we have something to clear.
+        let setResponse = await request
+          .patch('/_config')
+          .set('Accept', SupportedMimeType.JSON)
+          .set('Authorization', auth)
+          .send({
+            data: {
+              type: 'realm-config',
+              attributes: {
+                backgroundURL: 'http://example.com/bg.jpg',
+                iconURL: 'http://example.com/icon.png',
+              },
+            },
+          });
+        assert.strictEqual(setResponse.status, 200, 'set HTTP 200 status');
+        assert.strictEqual(
+          setResponse.body.data.attributes.backgroundURL,
+          'http://example.com/bg.jpg',
+          'backgroundURL set in overlay',
+        );
+        assert.strictEqual(
+          setResponse.body.data.attributes.iconURL,
+          'http://example.com/icon.png',
+          'iconURL set in overlay',
+        );
+
+        // Now clear them.
+        let clearResponse = await request
+          .patch('/_config')
+          .set('Accept', SupportedMimeType.JSON)
+          .set('Authorization', auth)
+          .send({
+            data: {
+              type: 'realm-config',
+              attributes: { backgroundURL: null, iconURL: null },
+            },
+          });
+        assert.strictEqual(clearResponse.status, 200, 'clear HTTP 200 status');
+        assert.strictEqual(
+          clearResponse.body.data.attributes.backgroundURL,
+          null,
+          'backgroundURL is null after patching null',
+        );
+        assert.strictEqual(
+          clearResponse.body.data.attributes.iconURL,
+          null,
+          'iconURL is null after patching null',
         );
       });
 
@@ -698,6 +759,10 @@ module(basename(__filename), function () {
         writeFileSync(realmConfigPath, invalidContent);
 
         try {
+          // publishable is sidecar-owned, so this exercises the sidecar
+          // JSON-parse error path. Card-owned fields (name, backgroundURL,
+          // iconURL, hostRoutingRules) go to realm.json and would not
+          // surface an error from a malformed .realm.json.
           let response = await request
             .patch('/_config')
             .set('Accept', SupportedMimeType.JSON)
@@ -712,7 +777,7 @@ module(basename(__filename), function () {
             .send({
               data: {
                 type: 'realm-config',
-                attributes: { backgroundURL: 'updated-bg' },
+                attributes: { publishable: false },
               },
             });
 
@@ -1856,6 +1921,14 @@ module(basename(__filename), function () {
                   kind: 'file',
                 },
               },
+              'realm.json': {
+                links: {
+                  related: `${testRealmHref}realm.json`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
               'sample.md': {
                 links: {
                   related: `${testRealmHref}sample.md`,
@@ -1907,6 +1980,7 @@ module(basename(__filename), function () {
     const basePath = resolve(join(__dirname, '..', '..', 'base'));
     const demoFileSystem: Record<string, string | LooseSingleCardDocument> = {
       '.realm.json': readJSONSync(join(__dirname, 'cards', '.realm.json')),
+      'realm.json': readJSONSync(join(__dirname, 'cards', 'realm.json')),
       'person.gts': readFileSync(
         join(__dirname, 'cards', 'person.gts'),
         'utf8',
@@ -1966,6 +2040,7 @@ module(basename(__filename), function () {
         });
         testRealmServer = new RealmServer({
           realms: [base, testRealm],
+          reconciler: makeTestReconciler(dbAdapter, [base, testRealm]),
           virtualNetwork,
           matrixClient,
           realmServerSecretSeed,

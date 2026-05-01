@@ -1,0 +1,32 @@
+# Postgres data source pointing at the boxel realm-server RDS. Per-env
+# values (host + creds) come from SSM and are substituted by
+# `apply-datasources.sh` at apply time:
+#
+#   ${BOXEL_DB_HOST}      ← /<env>/boxel-grafana/db_host
+#   ${BOXEL_DB_NAME}      ← /<env>/boxel/PGDATABASE
+#   ${BOXEL_DB_USER}      ← /<env>/boxel/GRAFANA_DB_USER
+#   ${BOXEL_DB_PASSWORD}  ← /<env>/boxel/GRAFANA_DB_PASSWORD  (SecureString)
+#
+# Migrated from the AMG-era JSON manifest in CS-10978. Replaces the
+# `grafana_data_source.postgres` resource in
+# cardstack/infra:configs/boxel-dashboard/ which Phase 7 (CS-10942)
+# decommissions.
+
+apiVersion: 1
+
+datasources:
+  - name: boxel-db
+    uid: cef5v5sl9k7i8f
+    type: grafana-postgresql-datasource
+    access: proxy
+    url: ${BOXEL_DB_HOST}
+    database: ${BOXEL_DB_NAME}
+    user: ${BOXEL_DB_USER}
+    isDefault: true
+    editable: false
+    jsonData:
+      database: ${BOXEL_DB_NAME}
+      user: ${BOXEL_DB_USER}
+      postgresVersion: 1300
+    secureJsonData:
+      password: ${BOXEL_DB_PASSWORD}

@@ -19,9 +19,9 @@ There are **two source-of-truth trees** in this package, because Grafana 12 mana
 | `grafanactl/resources/` | `grafanactl resources push` | Dashboards, folders                       | API push (CI on merge)                            |
 | `provisioning/`        | Grafana built-in file provisioning | Data sources, alert rules, contact points | Files mounted at `/etc/grafana/provisioning/`, read at startup |
 
-**Why two trees?** `grafanactl` (Grafana Labs' official CLI replacing the archived Grizzly) only manages App Platform resources — `grafanactl resources list` shows dashboards, folders, playlists, snapshots, but **not data sources or alert rules**. Those still live behind the legacy HTTP API and are best managed via Grafana's built-in file provisioning, which natively supports `${ENV_VAR}` substitution at startup.
+**Why two trees?** `grafanactl` (Grafana Labs' official CLI replacing the archived Grizzly) only manages App Platform resources — `grafanactl resources list` shows dashboards, folders, playlists, snapshots, but **not data sources or alert rules**. Those still live behind the legacy HTTP API.
 
-For staging and production, the `provisioning/` tree gets delivered to the ECS Grafana container (via image bake, S3-init, or EFS mount — TBD in a separate infra ticket). Container restart picks up changes; a Grafana admin API endpoint (`/api/admin/provisioning/datasources/reload`) can refresh without restart if needed.
+Locally, `provisioning/` files are mounted into the Grafana container by `docker-compose.yml` and read at startup with `${ENV_VAR}` substitution. **For staging and production, `apply-datasources.sh` reads the same YAML files, env-var-substitutes them (e.g. `${LOKI_URL}` from SSM `/<env>/loki/internal_url`), and upserts each entry through Grafana's `/api/datasources` HTTP API** — a small bridge that gives us file-as-source-of-truth without needing image bakes or EFS mounts on the hosted side.
 
 ## Layout
 
@@ -43,6 +43,8 @@ loki/
                        # historical Docker logs)
 scripts/
   apply.sh             # ./scripts/apply.sh --env <local|staging|production>
+  apply-datasources.sh # internal — pushes provisioning/datasources/* via HTTP API
+                       # (called by apply.sh; staging/production only)
   pull.sh              # ./scripts/pull.sh  --env <name> --path <dir>
   check.sh             # ./scripts/check.sh --env <name>  (connectivity smoke test)
   tail-logs.sh         # ./scripts/tail-logs.sh --env <name> --service <task family>
@@ -97,7 +99,7 @@ you change it, change it everywhere — `alloy/config.alloy` (local) and
 | `env`       | constant `local` (Alloy relabel rule)                 | constant `staging` / `production` (Fluent Bit static `Labels`)     | always                            |
 | `service`   | Docker container name, leading `/` stripped           | ECS task family — `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse` | always |
 | `realm`     | opt-in via Docker label `boxel.realm=<name>`          | task env when the task pins a single realm (omitted on multi-realm workloads) | when meaningful |
-| `worker_id` | not set locally                                       | per-Fargate-task `ecs_task_id` injected by FireLens (worker only)  | worker tasks only                 |
+| `worker_id` | not set locally                                       | per-process worker id (`<runtime-id>-pid-<pid>`), parsed from `[worker <id> priority N]:` log line prefixes by a Fluent Bit Lua filter. Matches `job_reservations.worker_id`. | worker tasks only, lines with the prefix |
 
 The local Alloy scraper drops the observability stack's own Compose
 services (`grafana`, `loki`, `alloy`) so `{env="local"}` queries don't
@@ -178,8 +180,9 @@ window, not the query window.
 # Lines for one realm across all services
 {env="<env>", realm="example_realm"}
 
-# Per-worker tail
-{env="<env>", service="worker", worker_id="abc123def456"}
+# Per-worker tail (worker_id matches job_reservations.worker_id —
+# look it up there, e.g. for the worker that ran a specific job).
+{env="<env>", service="worker", worker_id="abc123-3236013547-pid-42"}
 
 # Logs around a specific job id (LogQL line-filter, not regex)
 {env="<env>", service="worker"} |= "job_id=42"
@@ -301,7 +304,7 @@ CI will run `apply.sh --env staging` on merge to main once Phase 4 (CS-10932) la
 | CS-10917  | 2.5   | landed      | FireLens dual-ship (5 task families × 2 envs) |
 | CS-10920  | 2.5   | this PR     | `tail-logs.sh` + Claude agent skill      |
 | CS-10921  | 2.5   | landed      | Loki + tail-logs README                  |
-| CS-10968  | 2.5   | not started | Hosted Grafana → Loki data source wiring |
+| CS-10968  | 2.5   | this PR     | Hosted Grafana → Loki data source wiring |
 | CS-10922  | 3     | landed      | AMG export and reformat                  |
 | CS-10932  | 4     | landed      | CI: apply to staging on merge            |
 | CS-10933  | 4     | not started | CI: post diff comment on PRs             |
@@ -313,8 +316,6 @@ CI will run `apply.sh --env staging` on merge to main once Phase 4 (CS-10932) la
 
 ## Known cleanups (deferred)
 
-- **Hosted Grafana → Loki data source wiring.** The staging / production ECS Grafana tasks don't yet have `LOKI_URL` set or `provisioning/datasources/loki.yaml` mounted, so Grafana → Explore → Loki returns "no data source" against the hosted environments even though Loki itself is up. Direct curl / `logcli` against `/<env>/loki/public_url` works today.
-- **`provisioning/` delivery to staging/production ECS.** The provisioning files (data sources + alert rules) need to land on the ECS Grafana container — image bake, S3-init, or EFS mount. Decide and ship as a separate infra ticket.
-- **Secret env-var wiring for data sources.** `provisioning/datasources/*.json` omits `secureJsonData` (passwords, API keys). The staging/production ECS Grafana task needs those env vars set from SSM (`GRAFANA_DB_PASSWORD` etc.) and the provisioning files updated to reference them via `${ENV_VAR}`.
+- **Decommission the AMG-era `boxel-dashboard/` Terraform** in `cardstack/infra` once a full release cycle has gone by on the new flow. Tracked as CS-10942. After it lands, `configs/boxel-grafana-data-sources/` (in cardstack/infra) becomes the sole owner of the per-env data the boxel CI workflow reads.
 - **Drop the dual-ship to CloudWatch** once Loki has been load-bearing for a release cycle. Until then both backends receive identical lines through the FireLens config in `cardstack/infra:modules/aws/ecs/firelens/templates/extra.conf.tftpl`.
 - **CODEOWNERS.** No file in the repo today — if the team wants observability-specific reviewer requirements, file a separate ticket.

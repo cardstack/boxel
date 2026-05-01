@@ -456,6 +456,30 @@ export default class OperatorModeStateService extends Service {
     return item;
   }
 
+  // Mutate a stack item's format in place (and any related transient
+  // fields) instead of replacing the item. The StackItem class marks
+  // format/request/useBaseTemplate as @tracked, so consumers re-render
+  // reactively. Crucially, the item's IDENTITY is preserved — Glimmer's
+  // {{#each}} keeps the same stack-item component instance, so the
+  // CardRenderer (and the user's CardDef component beneath it) are NOT
+  // remounted on a format swap. CardDefs whose `static isolated ===
+  // static edit` keep DOM state, scroll position, and view-transition
+  // continuity across the toggle.
+  setItemFormat(
+    item: StackItem,
+    format: Format,
+    opts?: { request?: Deferred<string>; useBaseTemplate?: boolean },
+  ): void {
+    if (item.type === 'file') {
+      return;
+    }
+    item.format = format;
+    if (opts && 'request' in opts) item.request = opts.request;
+    if (opts && 'useBaseTemplate' in opts)
+      item.useBaseTemplate = opts.useBaseTemplate;
+    this.schedulePersist();
+  }
+
   editCardOnStack(
     stackIndex: number,
     card: CardDef,
@@ -465,14 +489,10 @@ export default class OperatorModeStateService extends Service {
     if (item.type === 'file') {
       return;
     }
-    this.replaceItemInStack(
-      item,
-      item.clone({
-        request: new Deferred(),
-        format: 'edit',
-        useBaseTemplate: opts?.useBaseTemplate,
-      }),
-    );
+    this.setItemFormat(item, 'edit', {
+      request: new Deferred(),
+      useBaseTemplate: opts?.useBaseTemplate,
+    });
   }
 
   viewCardOnStack(
@@ -484,14 +504,10 @@ export default class OperatorModeStateService extends Service {
     if (item.type === 'file') {
       return;
     }
-    this.replaceItemInStack(
-      item,
-      item.clone({
-        request: new Deferred(),
-        format: 'isolated',
-        useBaseTemplate: opts?.useBaseTemplate,
-      }),
-    );
+    this.setItemFormat(item, 'isolated', {
+      request: new Deferred(),
+      useBaseTemplate: opts?.useBaseTemplate,
+    });
   }
 
   clearStackAndAdd(stackIndex: number, newItem: StackItem) {

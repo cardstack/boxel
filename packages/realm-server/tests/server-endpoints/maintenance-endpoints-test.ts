@@ -481,7 +481,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               }),
             );
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
           realmURL = response.body.data.id;
         }
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
@@ -527,10 +527,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             .set('Content-Type', 'application/json');
           assert.deepEqual(response.body, {
             fileErrors: 0,
-            filesIndexed: 1,
+            filesIndexed: 2,
             instanceErrors: 0,
-            instancesIndexed: 1,
-            totalIndexEntries: 2,
+            instancesIndexed: 2,
+            totalIndexEntries: 4,
           });
         }
         let seededTargetRowsAfter = await context.dbAdapter.execute(
@@ -606,7 +606,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               }),
             );
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
           realmURL = response.body.data.id;
         }
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
@@ -840,7 +840,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               }),
             );
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
           realmURL = response.body.data.id;
         }
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
@@ -932,7 +932,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               }),
             );
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
           botRealmURL = response.body.data.id;
         }
 

@@ -99,6 +99,7 @@ import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
+import isPlainObject from 'lodash/isPlainObject';
 import { z } from 'zod';
 import { inferContentType } from './infer-content-type';
 import type { CardFields } from './resource-types';
@@ -203,6 +204,16 @@ export type RealmInfo = {
 
 const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
 
+// Fields owned by the RealmConfig card instance at /realm.json. Anything not
+// in this set is still written to the legacy .realm.json sidecar until
+// CS-10053 / CS-10055 move the remaining flags off-file.
+const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
+  'name',
+  'backgroundURL',
+  'iconURL',
+  'hostRoutingRules',
+]);
+
 export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
@@ -216,6 +227,13 @@ const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
+
+// Postgres NOTIFY channel for cross-instance invalidation of #sourceCache /
+// #moduleCache entries on file writes. Payload shape is `<realmURL>:<path>`.
+// See docs/db-authoritative-realm-registry.md §6 "Cache invalidation channel"
+// and §9 "Cache-invalidation NOTIFY missed" for the semantics (best-effort,
+// missed-NOTIFY is a cache-staleness window, not data corruption).
+export const REALM_FILE_CHANGES_CHANNEL = 'realm_file_changes';
 export const FILE_META_RESERVED_KEYS = new Set([
   'name',
   'url',
@@ -1056,8 +1074,21 @@ export class Realm {
     await this.#startedUp.promise;
   }
 
-  async fullIndex(priority?: number) {
-    await this.realmIndexUpdater.fullIndex(priority);
+  async fullIndex(priority?: number, opts?: { clearLastModified?: boolean }) {
+    // Clear the realmInfo cache before re-indexing so cards rendered
+    // during this pass read /realm.json from the now-populated index
+    // rather than a stale "Unnamed Workspace" cached during an earlier
+    // from-scratch pass that processed /index before /realm.json.
+    // CardsGrid.cardTitle → realmInfo.name drives og:title, which is
+    // baked into the prerendered HTML — clearing only after the pass
+    // would be too late.
+    this.#cachedRealmInfo = null;
+    let { completed } = this.#realmIndexUpdater.publishFullIndex(
+      priority ?? systemInitiatedPriority,
+      { clearLastModified: opts?.clearLastModified },
+    );
+    await completed;
+    this.#cachedRealmInfo = null;
   }
 
   async flushUpdateEvents() {
@@ -1067,6 +1098,41 @@ export class Realm {
   __testOnlyClearCaches() {
     this.#sourceCache.clear();
     this.#moduleCache.clear();
+  }
+
+  // Invalidate the in-memory byte caches for a single path. Called by the
+  // realm_file_changes LISTEN handler on peer instances after a write lands
+  // somewhere else in the fleet. The shape matches the file-watcher receiver
+  // below — invalidate source always, invalidate module only for executable
+  // extensions. Public so the realm-server process can wire a NOTIFY listener
+  // without reaching into private state.
+  invalidateCache(path: LocalPath): void {
+    this.#sourceCache.invalidate(path);
+    if (hasExecutableExtension(path)) {
+      this.#moduleCache.invalidate(path);
+    }
+  }
+
+  // Broadcast a file-change notification to peer realm-server instances so
+  // they can invalidate their own #sourceCache / #moduleCache entries for the
+  // same path. Best-effort — failures are logged and swallowed because the
+  // local write already succeeded and a missed NOTIFY is a bounded cache-
+  // staleness window (see docs §9 "Cache-invalidation NOTIFY missed"), not
+  // a correctness failure.
+  async #notifyFileChange(path: LocalPath): Promise<void> {
+    try {
+      await query(this.#dbAdapter, [
+        `SELECT pg_notify(`,
+        param(REALM_FILE_CHANGES_CHANNEL),
+        `,`,
+        param(`${this.url}:${path}`),
+        `)`,
+      ]);
+    } catch (err: unknown) {
+      this.#log.warn(
+        `pg_notify ${REALM_FILE_CHANGES_CHANNEL} failed for ${this.url}:${path}: ${String(err)}`,
+      );
+    }
   }
 
   createJWT(claims: TokenClaims, expiration: ms.StringValue): string {
@@ -1208,6 +1274,7 @@ export class Realm {
       if (hasExecutableExtension(path)) {
         this.#moduleCache.invalidate(path);
       }
+      await this.#notifyFileChange(path);
       results.push({ path, lastModified });
       fileMetaRows.push({ path, contentHash, contentSize });
       urls.push(url);
@@ -1216,7 +1283,9 @@ export class Realm {
 
     if (addedFiles.length > 0 || updatedFiles.length > 0) {
       if (
-        [...addedFiles, ...updatedFiles].some((f) => f.endsWith('.realm.json'))
+        [...addedFiles, ...updatedFiles].some(
+          (f) => f === '.realm.json' || f === 'realm.json',
+        )
       ) {
         this.#cachedRealmInfo = null;
       }
@@ -1614,6 +1683,7 @@ export class Realm {
     if (hasExecutableExtension(path)) {
       this.#moduleCache.invalidate(path);
     }
+    await this.#notifyFileChange(path);
     // Remove file meta for this path
     await this.removeFileMeta([path]);
     let invalidations = await this.updateIndexAndCollectInvalidations([url], {
@@ -1641,6 +1711,7 @@ export class Realm {
 
     await Promise.all(trackPromises);
     await Promise.all(removePromises);
+    await Promise.all(paths.map((path) => this.#notifyFileChange(path)));
     this.broadcastRealmEvent({
       eventName: 'update',
       removed: paths,
@@ -4513,7 +4584,7 @@ export class Realm {
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath, undefined);
     let lastPublishedAt = await this.getLastPublishedAt();
-    let realmInfo = {
+    let realmInfo: RealmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,
       iconURL: null,
@@ -4528,9 +4599,6 @@ export class Realm {
       publishable: null,
       lastPublishedAt,
     };
-    if (!realmConfig) {
-      return realmInfo;
-    }
 
     if (realmConfig) {
       try {
@@ -4557,6 +4625,39 @@ export class Realm {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
     }
+
+    // Overlay from the RealmConfig card instance at /realm.json when it has
+    // been indexed. Uses instance() rather than cardDocument() to avoid
+    // recursing through attachRealmInfo → getRealmInfo → parseRealmInfo.
+    try {
+      let cardURL = new URL(
+        this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+      );
+      let indexEntry = await this.#realmIndexQueryEngine.instance(cardURL);
+      if (indexEntry?.type === 'instance') {
+        let attrs = (indexEntry.instance.attributes ?? {}) as Record<
+          string,
+          unknown
+        >;
+        let cardInfo = (attrs.cardInfo ?? {}) as Record<string, unknown>;
+        if (typeof cardInfo.name === 'string') {
+          realmInfo.name = cardInfo.name;
+        }
+        if ('backgroundURL' in attrs) {
+          realmInfo.backgroundURL =
+            typeof attrs.backgroundURL === 'string'
+              ? attrs.backgroundURL
+              : null;
+        }
+        if ('iconURL' in attrs) {
+          realmInfo.iconURL =
+            typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
+        }
+      }
+    } catch (e) {
+      this.#log.warn(`failed to read RealmConfig card from index: ${e}`);
+    }
+
     return realmInfo;
   }
 
@@ -4619,24 +4720,147 @@ export class Realm {
       });
     }
 
-    let fileURL = this.paths.fileURL(`.realm.json`);
-    let realmConfigPath: LocalPath = this.paths.local(fileURL);
-    let realmConfig: Record<string, unknown> = {};
-    let existingConfig = await this.readFileAsText(realmConfigPath, undefined);
-    if (existingConfig?.content) {
-      try {
-        realmConfig = JSON.parse(existingConfig.content);
-      } catch (e: any) {
-        return systemError({
-          requestContext,
-          message: `Unable to parse existing realm config: ${e.message}`,
-        });
+    let cardAttrs: Record<string, unknown> = {};
+    let sidecarAttrs: Record<string, unknown> = {};
+    for (let [key, value] of Object.entries(attributes)) {
+      if (REALM_CONFIG_CARD_PROPERTIES.has(key)) {
+        cardAttrs[key] = value;
+      } else {
+        sidecarAttrs[key] = value;
       }
     }
 
-    Object.assign(realmConfig, attributes);
-    let serializedConfig = JSON.stringify(realmConfig, null, 2) + '\n';
-    await this.write(realmConfigPath, serializedConfig);
+    // Read and merge BOTH files before writing either. A mixed PATCH like
+    // { name, publishable } touches both the card and the sidecar, and we
+    // don't want a malformed sidecar to surface 500 *after* the card has
+    // already been mutated.
+    let cardPath: LocalPath | undefined;
+    let cardDoc:
+      | {
+          data: {
+            type: string;
+            attributes?: Record<string, unknown>;
+            meta: { adoptsFrom: { module: string; name: string } };
+          };
+        }
+      | undefined;
+    if (Object.keys(cardAttrs).length > 0) {
+      cardPath = this.paths.local(this.paths.fileURL('realm.json'));
+      cardDoc = {
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      };
+      let existingCard = await this.readFileAsText(cardPath, undefined);
+      if (existingCard?.content) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(existingCard.content);
+        } catch (e: any) {
+          return systemError({
+            requestContext,
+            message: `Unable to parse existing realm config card: ${e.message}`,
+          });
+        }
+        if (!isPlainObject(parsed)) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config card is not a JSON object`,
+          });
+        }
+        cardDoc = parsed as typeof cardDoc;
+        cardDoc!.data = cardDoc!.data ?? ({} as any);
+        if (!isPlainObject(cardDoc!.data)) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config card data is not a JSON object`,
+          });
+        }
+        let adoptsFrom = (cardDoc!.data as any).meta?.adoptsFrom;
+        if (
+          !isPlainObject(adoptsFrom) ||
+          adoptsFrom.module !== 'https://cardstack.com/base/realm-config' ||
+          adoptsFrom.name !== 'RealmConfig'
+        ) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config card does not adopt from RealmConfig`,
+          });
+        }
+        let existingAttrs = cardDoc!.data.attributes;
+        if (existingAttrs != null && !isPlainObject(existingAttrs)) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config card attributes is not a JSON object`,
+          });
+        }
+        cardDoc!.data.attributes = existingAttrs ?? {};
+      }
+      // `name` is exposed on the public RealmInfo shape but stored on the
+      // RealmConfig card under cardInfo.name (the standard CardDef slot
+      // that drives cardTitle). Translate so PATCH /_config callers can
+      // keep sending { name: ... } unchanged.
+      for (let [key, value] of Object.entries(cardAttrs)) {
+        if (key === 'name') {
+          let existingCardInfo = (cardDoc!.data.attributes!.cardInfo ??
+            {}) as Record<string, unknown>;
+          cardDoc!.data.attributes!.cardInfo = {
+            ...existingCardInfo,
+            name: value,
+          };
+        } else {
+          cardDoc!.data.attributes![key] = value;
+        }
+      }
+    }
+
+    let realmConfigPath: LocalPath | undefined;
+    let realmConfig: Record<string, unknown> | undefined;
+    if (Object.keys(sidecarAttrs).length > 0) {
+      realmConfigPath = this.paths.local(this.paths.fileURL('.realm.json'));
+      realmConfig = {};
+      let existingConfig = await this.readFileAsText(
+        realmConfigPath,
+        undefined,
+      );
+      if (existingConfig?.content) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(existingConfig.content);
+        } catch (e: any) {
+          return systemError({
+            requestContext,
+            message: `Unable to parse existing realm config: ${e.message}`,
+          });
+        }
+        if (!isPlainObject(parsed)) {
+          return systemError({
+            requestContext,
+            message: `Existing realm config is not a JSON object`,
+          });
+        }
+        realmConfig = parsed as Record<string, unknown>;
+      }
+      Object.assign(realmConfig!, sidecarAttrs);
+    }
+
+    if (cardPath !== undefined && cardDoc !== undefined) {
+      await this.write(cardPath, JSON.stringify(cardDoc, null, 2) + '\n');
+    }
+    if (realmConfigPath !== undefined && realmConfig !== undefined) {
+      await this.write(
+        realmConfigPath,
+        JSON.stringify(realmConfig, null, 2) + '\n',
+      );
+    }
+
     this.#cachedRealmInfo = null;
 
     let realmInfo = await this.parseRealmInfo();

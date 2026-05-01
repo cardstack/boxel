@@ -1,5 +1,4 @@
-import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
-import { transformAsync } from '@babel/core';
+import { transpileAmd } from './amd-transpile';
 import { Deferred } from './deferred';
 import { cachedFetch, type MaybeCachedResponse } from './cached-fetch';
 import { executableExtensions, logger } from './index';
@@ -828,20 +827,10 @@ export class Loader {
       return;
     }
 
-    let src: string | null | undefined = loaded.source;
+    let src: string;
 
     try {
-      const transformed = await transformAsync(src, {
-        plugins: [
-          [
-            TransformModulesAmdPlugin,
-            { noInterop: true, moduleId: moduleIdentifier },
-          ],
-        ],
-        sourceMaps: 'inline',
-        filename: moduleIdentifier,
-      });
-      src = transformed?.code;
+      src = transpileAmd(loaded.source, { moduleId: moduleIdentifier });
     } catch (exception) {
       this.setModule(moduleIdentifier, {
         state: 'broken',
@@ -850,10 +839,6 @@ export class Loader {
       });
       module.deferred.fulfill();
       throw exception;
-    }
-
-    if (!src) {
-      throw new Error(`bug: should never get here`);
     }
 
     let dependencyList: UnregisteredDep[];
@@ -882,7 +867,12 @@ export class Loader {
     };
 
     try {
-      eval(src); // + "\n//# sourceURL=" + moduleIdentifier);
+      // Append `sourceURL` so stack traces from inside the eval-ed AMD
+      // module name the original module URL instead of `<anonymous>`.
+      // Strip any CR/LF from the identifier so a maliciously-crafted
+      // module URL can't terminate the comment and inject extra source
+      // text into the eval-ed program.
+      eval(src + '\n//# sourceURL=' + moduleIdentifier.replace(/[\r\n]/g, ''));
     } catch (exception) {
       this.setModule(moduleIdentifier, {
         state: 'broken',

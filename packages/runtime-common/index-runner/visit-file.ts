@@ -29,6 +29,11 @@ interface VisitFileFusedOptions {
   reader: Reader;
   batch: Batch;
   jobInfo: JobInfo;
+  // Worker-job priority threaded from `IndexRunner` (CS-10976).
+  // Forwarded into the `prerenderVisit` request so the prerender
+  // server can route by priority. `0` for system-priority indexing,
+  // `10` for user-initiated; defaults to `0` when not provided.
+  jobPriority?: number;
   auth: string;
   // Indexing batch identifier (CS-10758 step 3). Threaded into
   // PrerenderVisitArgs so the server-side gate honors `clearCache: true`
@@ -92,6 +97,7 @@ export async function visitFileForIndexingFused({
   reader,
   batch,
   jobInfo,
+  jobPriority,
   auth,
   batchId,
   prerenderer,
@@ -184,6 +190,7 @@ export async function visitFileForIndexingFused({
       auth,
       renderOptions,
       batchId,
+      ...(jobPriority !== undefined ? { priority: jobPriority } : {}),
     });
   } catch (err) {
     logWarn(

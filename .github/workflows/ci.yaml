@@ -33,6 +33,7 @@ jobs:
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
       workspace-sync-cli: ${{ steps.filter.outputs.workspace-sync-cli }}
       boxel-cli: ${{ steps.filter.outputs.boxel-cli }}
+      bench-amd: ${{ steps.filter.outputs.bench-amd }}
       # Force all tests to run when on ci-bisect* branches
       run_all: ${{ steps.force-run-all.outputs.run_all }}
     steps:
@@ -110,6 +111,13 @@ jobs:
             boxel-cli:
               - *shared
               - 'packages/boxel-cli/**'
+            bench-amd:
+              # The AMD transpiler is a runtime-common module with no
+              # cross-workspace deps that affect its wall-time, so the
+              # bench only needs to fire for runtime-common edits and
+              # the committed bench fixtures.
+              - 'packages/runtime-common/**'
+              - 'bench-fixtures/runtime-common/amd-transpile/**'
       - name: Force run all jobs on ci-bisect branches
         id: force-run-all
         shell: bash
@@ -660,11 +668,82 @@ jobs:
           path: realm-server.xml
           retention-days: 30
       - name: Publish test results
+        id: publish-tests
         uses: EnricoMi/publish-unit-test-result-action@170bf24d20d201b842d7a52403b73ed297e6645b # 2.18.0
         if: ${{ !cancelled() }}
         with:
           junit_files: realm-server.xml
           check_name: Realm Server Test Results
+          comment_mode: "off"
+          json_file: test-results.json
+
+      - name: Build realm-tests slot
+        if: ${{ !cancelled() && hashFiles('test-results.json') != '' }}
+        run: |
+          set -euo pipefail
+          mkdir -p slot
+          {
+            echo "### Realm Server Test Results"
+            echo
+            jq -r '.summary' test-results.json
+          } > slot/slot.md
+
+      - name: Upload realm-tests slot
+        if: ${{ !cancelled() && hashFiles('slot/slot.md') != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pr-comment-slot-realm-tests
+          path: slot/
+          retention-days: 7
+
+  amd-transpile-bench:
+    name: AMD Transpile Bench
+    needs: change-check
+    # Parallel-independent bench of the loader's ES → AMD transpiler.
+    # Compares production-candidate medians against
+    # `packages/runtime-common/scripts/bench-amd/baseline.json`. When
+    # baseline.json is absent the script runs in report-only mode and
+    # exits 0 — used to anchor the initial baseline from real CI numbers
+    # before enforcement is turned on. See CS-10983.
+    if: needs.change-check.outputs.bench-amd == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: amd-transpile-bench-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    env:
+      # Doubled vs. the local default (50/5) to dampen GH-runner noise.
+      ITER: 100
+      WARMUP: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Run bench gate
+        run: pnpm bench:amd:check
+        working-directory: packages/runtime-common
+
+      - name: Trip-test (proves gate's failure path)
+        # Synthetic stingy baseline → confirms exit 1, FAIL-message
+        # format intact, every fixture appears in breach list. Runs
+        # only after the real gate passes so a green pipeline means
+        # "real gate accepts current code AND failure path still works."
+        run: pnpm bench:amd:check:trip-test
+        working-directory: packages/runtime-common
+
+  post-pr-status:
+    name: Update PR status comment
+    needs:
+      - realm-server-merge-reports
+    if: ${{ !cancelled() && needs.realm-server-merge-reports.result == 'success' }}
+    uses: ./.github/workflows/pr-status-comment.yml
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      actions: read
+    with:
+      head-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      slots: realm-tests
+    secrets: inherit
 
   vscode-boxel-tools-package:
     name: Boxel Tools VS Code Extension package

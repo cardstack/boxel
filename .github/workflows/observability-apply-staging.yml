@@ -33,12 +33,13 @@ jobs:
 
     env:
       AWS_REGION: us-east-1
-      # Dedicated, narrowly-scoped role created in cardstack/infra#665
-      # (configs/boxel-observability-apply/staging). Has exactly one
-      # permission: ssm:GetParameter on /staging/grafana/grafanactl_token.
-      # If the role doesn't exist yet (infra PR not applied), the
-      # configure-aws-credentials step below will fail with "InvalidIdentityToken"
-      # or similar — apply the infra config first.
+      # Dedicated, narrowly-scoped role at configs/boxel-observability-apply/staging
+      # in cardstack/infra. Permissions are ssm:GetParameter on:
+      #   /staging/grafana/grafanactl_token  (added in cardstack/infra#665)
+      #   /staging/loki/internal_url         (added in cardstack/infra#674, CS-10968)
+      # If the role doesn't exist or is missing one of those grants, the
+      # configure-aws-credentials step below will succeed but the SSM
+      # fetch step will fail with AccessDenied — apply the infra config first.
       AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
       # Server URL deliberately NOT set here. The committed
       # packages/observability/grafanactl/config.yaml is the single source of
@@ -67,20 +68,35 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Source GRAFANA_TOKEN from SSM
-        # Mirrors what packages/observability/scripts/grafanactl-env.sh does
-        # locally. Inline here so the workflow doesn't depend on bash from
-        # the repo working dir before checkout-related env vars are stable.
+      - name: Source data-source secrets from SSM
+        # Each provisioning/datasources/*.yaml has placeholders that get
+        # substituted by apply-datasources.sh at push time. The IAM grants
+        # for these specific SSM paths live in cardstack/infra at
+        # configs/boxel-observability-apply/ — adding a new env var here
+        # without the matching grant gets a hard AccessDenied.
         run: |
-          GRAFANA_TOKEN="$(aws ssm get-parameter \
-            --name /staging/grafana/grafanactl_token \
-            --with-decryption \
-            --query 'Parameter.Value' \
-            --output text)"
-          # Mask the token so it doesn't leak into job logs even if a
-          # downstream tool echoes it. Then export to subsequent steps.
-          echo "::add-mask::$GRAFANA_TOKEN"
-          echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
+          fetch() {  # name path [--with-decryption]
+            local var="$1" path="$2"
+            shift 2
+            local val
+            val="$(aws ssm get-parameter --name "$path" "$@" \
+              --query 'Parameter.Value' --output text)"
+            # Mask SecureString-shaped values (token, password) so they
+            # can't leak into job logs even if a downstream step echoes them.
+            if [[ " $* " == *" --with-decryption "* ]]; then
+              echo "::add-mask::$val"
+            fi
+            echo "${var}=${val}" >> "$GITHUB_ENV"
+          }
+
+          fetch GRAFANA_TOKEN          /staging/grafana/grafanactl_token       --with-decryption
+          fetch LOKI_URL               /staging/loki/internal_url
+          fetch BOXEL_DB_HOST          /staging/boxel-grafana/db_host
+          fetch SYNAPSE_PROMETHEUS_URL /staging/boxel-grafana/prometheus_url
+          fetch REALM_SERVER_URL       /staging/boxel-grafana/realm_server_url
+          fetch BOXEL_DB_NAME          /staging/boxel/PGDATABASE
+          fetch BOXEL_DB_USER          /staging/boxel/GRAFANA_DB_USER
+          fetch BOXEL_DB_PASSWORD      /staging/boxel/GRAFANA_DB_PASSWORD  --with-decryption
 
       - name: Apply
         # apply.sh sources its own grafanactl-env.sh helper, which for

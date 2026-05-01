@@ -6,7 +6,7 @@ import {
   DEFAULT_BASE_REALM_PERMISSIONS,
   DEFAULT_MIGRATED_TEMPLATE_DB,
   DEFAULT_SOURCE_REALM_PERMISSIONS,
-  findAvailablePort,
+  findAndHoldAvailablePort,
   logTimed,
   pgAdminConnectionConfig,
   quotePgIdentifier,
@@ -418,11 +418,6 @@ export async function rewriteClonedRealmServerUrls(
                published_realm_url = replace(published_realm_url, $1, $2)`,
           [fromURL, toURL],
         );
-        await client.query(
-          `UPDATE session_rooms
-           SET realm_url = replace(realm_url, $1, $2)`,
-          [fromURL, toURL],
-        );
         // Without this, lookupDefinition misses every cached module on the
         // first request after clone and pays a full prerender (~45s for a
         // module with deep transitive imports), which can blow past the
@@ -550,9 +545,16 @@ interface IndexingStatus {
 async function queryIndexingStatus(
   workerManagerPort: number,
 ): Promise<IndexingStatus | undefined> {
+  // Bound the fetch so a hung connection (the worker-manager hasn't bound
+  // yet, or is wedged) can't pin `polling = true` in the progress reporter
+  // and freeze it. The reporter retries every 2s, so 1.5s is comfortably
+  // under one polling interval.
+  let abort = new AbortController();
+  let timeout = setTimeout(() => abort.abort(), 1500);
   try {
     let response = await fetch(
       `http://localhost:${workerManagerPort}/_indexing-status`,
+      { signal: abort.signal },
     );
     if (!response.ok) {
       return undefined;
@@ -560,6 +562,8 @@ async function queryIndexingStatus(
     return (await response.json()) as IndexingStatus;
   } catch {
     return undefined;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -778,10 +782,17 @@ export async function buildCombinedTemplateDatabase({
         username: `additional_realm_${i}`,
       }));
 
-      let wmPort = await findAvailablePort();
+      // Hold the worker-manager port across the gap between allocation and
+      // the actual child bind inside startIsolatedRealmStack — without the
+      // hold, sibling findAvailablePort() calls (for the realm-server,
+      // prerender, etc) can be handed back the same port number by the OS
+      // and the worker-manager later races them and dies with EADDRINUSE.
+      // startIsolatedRealmStack releases the holder right before spawning
+      // the worker-manager child.
+      let wmReservation = await findAndHoldAvailablePort();
       // base + source + each fixture realm
       let progress = startIndexingProgressReporter(
-        wmPort,
+        wmReservation.port,
         2 + realmFixtures.length,
       );
 
@@ -796,10 +807,13 @@ export async function buildCombinedTemplateDatabase({
           migrateDB: !hasMigratedTemplate,
           fullIndexOnStartup: true,
           additionalRealms,
-          workerManagerPort: wmPort,
+          workerManagerPort: wmReservation,
         });
       } catch (error) {
         progress.stop();
+        // startIsolatedRealmStack releases its own holders on failure, but
+        // be defensive in case the throw happened before it took ownership.
+        await wmReservation.release().catch(() => undefined);
         throw error;
       }
 
@@ -875,9 +889,11 @@ export async function buildTemplateDatabase({
         DEFAULT_SOURCE_REALM_PERMISSIONS,
       );
 
-      let wmPort = await findAvailablePort();
+      // See buildCombinedTemplateDatabase above for why this is a holder
+      // reservation rather than a bare findAvailablePort.
+      let wmReservation = await findAndHoldAvailablePort();
       // base + source + test realm
-      let progress = startIndexingProgressReporter(wmPort, 3);
+      let progress = startIndexingProgressReporter(wmReservation.port, 3);
 
       let stack;
       try {
@@ -889,10 +905,11 @@ export async function buildTemplateDatabase({
           context,
           migrateDB: !hasMigratedTemplate,
           fullIndexOnStartup: true,
-          workerManagerPort: wmPort,
+          workerManagerPort: wmReservation,
         });
       } catch (error) {
         progress.stop();
+        await wmReservation.release().catch(() => undefined);
         throw error;
       }
 

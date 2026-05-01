@@ -79,7 +79,7 @@ async function acquireConcurrencyGroupLock(
 }
 
 // Tracks a task that should loop with a timeout and an interruptible sleep.
-class WorkLoop {
+export class WorkLoop {
   private internalWaker: Deferred<void> | undefined;
   private timeout: NodeJS.Timeout | undefined;
   private _shuttingDown = false;
@@ -599,6 +599,7 @@ export class PgQueueRunner implements QueueRunner {
               this.runJob(jobToRun.job_type, jobToRun.args, {
                 jobId: jobToRun.id,
                 reservationId: jobReservationId,
+                priority: jobToRun.priority,
               }),
               // we race the job so that it doesn't hold this worker hostage if
               // the job's promise never resolves

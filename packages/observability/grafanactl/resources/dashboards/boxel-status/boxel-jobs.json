@@ -2,6 +2,9 @@
   "apiVersion": "dashboard.grafana.app/v1beta1",
   "kind": "Dashboard",
   "metadata": {
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    },
     "name": "aetquzjcf2znke"
   },
   "spec": {
@@ -24,7 +27,6 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
-    "id": 27,
     "links": [
       {
         "asDropdown": false,
@@ -76,8 +78,7 @@
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "green",
-                  "value": null
+                  "color": "green"
                 },
                 {
                   "color": "red",
@@ -211,8 +212,7 @@
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "green",
-                  "value": null
+                  "color": "green"
                 },
                 {
                   "color": "red",
@@ -379,8 +379,7 @@
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "green",
-                  "value": null
+                  "color": "green"
                 },
                 {
                   "color": "red",
@@ -494,7 +493,7 @@
       }
     ],
     "refresh": "5s",
-    "schemaVersion": 39,
+    "schemaVersion": 42,
     "tags": [],
     "templating": {
       "list": [
@@ -520,7 +519,7 @@
         {
           "hide": 2,
           "name": "realm_server",
-          "query": "https://realms-staging.stack.cards/",
+          "query": "__REALM_SERVER_URL__",
           "skipUrlSync": false,
           "type": "constant"
         },
@@ -540,8 +539,6 @@
     "timepicker": {},
     "timezone": "browser",
     "title": "Boxel Jobs",
-    "uid": "aetquzjcf2znke",
-    "version": 5,
     "weekStart": ""
   }
 }

@@ -132,6 +132,8 @@ export default class RegisterUser extends Component<Signature> {
         >
           <BoxelInput
             data-test-email-field
+            name='email'
+            autocomplete='email'
             @state={{this.emailInputState}}
             @value={{this.email}}
             @errorMessage={{this.emailError}}
@@ -148,6 +150,7 @@ export default class RegisterUser extends Component<Signature> {
           <BoxelInputGroup
             data-test-username-field
             id='boxel-register-username'
+            @name='username'
             autocomplete='username'
             @state={{this.usernameInputState}}
             @value={{this.username}}
@@ -173,6 +176,7 @@ export default class RegisterUser extends Component<Signature> {
           <BoxelInput
             data-test-password-field
             id='boxel-register-password'
+            name='password'
             autocomplete='new-password'
             @type='password'
             @value={{this.password}}
@@ -191,6 +195,7 @@ export default class RegisterUser extends Component<Signature> {
           <BoxelInput
             data-test-confirm-password-field
             id='boxel-register-confirm-password'
+            name='confirm-password'
             autocomplete='new-password'
             @type='password'
             @value={{this.confirmPassword}}

@@ -32,7 +32,7 @@ import {
   dbExpression,
   upsertMultipleRows,
 } from './expression';
-import type { SerializedError } from './error';
+import { clampSerializedError, type SerializedError } from './error';
 import type { DBAdapter } from './db';
 import type { RealmMetaTable } from './index-structure';
 import type { FileMetaResource } from './resource-types';
@@ -1147,11 +1147,14 @@ export class Batch {
           ),
         ]
       : undefined;
-    return {
+    // Clamp before persistence so a runaway `additionalErrors` tree
+    // (or an oversized stack/message) can't trip Postgres's 256 MiB
+    // jsonb-array container limit on upsert.
+    return clampSerializedError({
       ...error,
       id: error.id ?? entryURL.href,
       ...(deps ? { deps } : {}),
-    };
+    });
   }
 
   private normalizeDependency(
