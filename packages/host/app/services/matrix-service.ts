@@ -1334,16 +1334,15 @@ export default class MatrixService extends Service {
           () => roomId,
           () => {
             let data = this.getRoomData(roomId);
-            // Track _roomState alongside _events so the resource re-runs
-            // when room state changes too. processRoomTask returns early
-            // if the aiBot isn't in memberIds, and memberIds is derived
-            // from _roomState (set by drainRoomState) independently from
-            // _events (updated by drainTimeline). Without this dependency,
-            // if drainTimeline drains a state event before drainRoomState
-            // runs, processRoomTask runs with empty memberIds, exits early,
-            // and never re-runs because _events alone doesn't change again.
-            void data?.hasRoomState;
-            return data?.events;
+            // Return both _events and _roomState (via hasRoomState) so the
+            // resource re-runs when either changes. processRoomTask returns
+            // early if the aiBot isn't in memberIds, and memberIds is
+            // derived from _roomState (set by drainRoomState) independently
+            // from _events (updated by drainTimeline). Encoding both as the
+            // returned arg ensures invalidation regardless of whether
+            // ember-resources reacts to consumed-but-unreturned tracked deps
+            // or only to argument value changes.
+            return [data?.events, data?.hasRoomState] as const;
           },
         ),
       );

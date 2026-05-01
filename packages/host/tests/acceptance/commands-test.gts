@@ -669,25 +669,31 @@ module('Acceptance | Commands tests', function (hooks) {
       let renderedRoomResource = matrixService.roomResources?.get?.(
         matrixService.currentRoomId,
       );
+      // Coerce every field to a JSON-native type up front (string/boolean/
+      // number/array). JSON.stringify silently drops Sets/Maps to "{}", which
+      // would throw away the diagnostic if a service field's underlying type
+      // ever changes.
       let serviceState = {
-        currentRoomId: matrixService.currentRoomId,
-        isLoadingTimeline: matrixService.isLoadingTimeline,
-        isPreparingSession: aiAssistantPanelService.isPreparingSession,
-        loadingRooms: aiAssistantPanelService.loadingRooms,
+        currentRoomId: String(matrixService.currentRoomId ?? ''),
+        isLoadingTimeline: Boolean(matrixService.isLoadingTimeline),
+        isPreparingSession: Boolean(aiAssistantPanelService.isPreparingSession),
+        loadingRooms: Boolean(aiAssistantPanelService.loadingRooms),
         aiSessionRoomIds: (aiAssistantPanelService.aiSessionRooms ?? []).map(
-          (r: any) => r.roomId,
+          (r: any) => String(r.roomId ?? ''),
         ),
       };
       let resourceState = (label: string, r: any) => ({
         label,
         present: Boolean(r),
-        roomId: r?.roomId,
+        roomId: String(r?.roomId ?? ''),
         hasMatrixRoom: Boolean(r?.matrixRoom),
-        memberIds: r?.matrixRoom?.memberIds,
-        hasRoomState: r?.matrixRoom?.hasRoomState,
-        eventsCount: r?.matrixRoom?.events?.length,
-        messagesCount: r?.messages?.length,
-        isProcessing: r?.isProcessing,
+        memberIds: Array.isArray(r?.matrixRoom?.memberIds)
+          ? r.matrixRoom.memberIds.map((m: any) => String(m))
+          : [],
+        hasRoomState: Boolean(r?.matrixRoom?.hasRoomState),
+        eventsCount: Number(r?.matrixRoom?.events?.length ?? 0),
+        messagesCount: Number(r?.messages?.length ?? 0),
+        isProcessing: Boolean(r?.isProcessing),
       });
       let roomEventsSummary = getRoomEvents(roomId).map((e) => ({
         eventId: e.event_id,
