@@ -819,6 +819,12 @@ module(basename(__filename), function () {
           );
         }
 
+        let versionBeforeUnpublish = (
+          await dbAdapter.execute(
+            `SELECT current_version FROM realm_versions WHERE realm_url = '${publishedRealmURL}'`,
+          )
+        )[0]?.current_version as number | undefined;
+
         // Now unpublish the realm
         let unpublishResponse = await request
           .post('/_unpublish-realm')
@@ -880,10 +886,14 @@ module(basename(__filename), function () {
           await dbAdapter.execute(
             `SELECT current_version FROM realm_versions WHERE realm_url = '${publishedRealmURL}'`,
           )
-        )[0];
-        assert.strictEqual(
-          realmVersion.current_version,
-          3,
+        )[0] as { current_version: number };
+        assert.notStrictEqual(
+          versionBeforeUnpublish,
+          undefined,
+          'realm version of published realm is set before unpublish',
+        );
+        assert.ok(
+          realmVersion.current_version > (versionBeforeUnpublish ?? 0),
           'realm version of published realm is increased',
         );
 

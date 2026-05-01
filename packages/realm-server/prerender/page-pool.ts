@@ -13,76 +13,121 @@ import { AsyncSemaphore } from './async-semaphore';
 import { attachRuntimeExceptionCapture } from './runtime-exception-capture';
 
 type RenderSemaphore = {
-  acquire(signal?: AbortSignal): Promise<() => void>;
+  acquire(signal?: AbortSignal, priority?: number): Promise<() => void>;
+  // Optional resize hook used by dynamic pool expansion / contraction.
+  // Concrete `AsyncSemaphore` injections always provide it; legacy
+  // tests that stub a minimal acquire-only object are still accepted.
+  setCapacity?: (n: number) => void;
 };
 
 // Exported so cancellation-plumbing unit tests can drive it
-// directly — it's a pure in-memory FIFO with no Chrome dependency.
+// directly — it's a per-tab serializer with no Chrome dependency.
+//
+// Priority-bucketed dequeue: higher priority first, FIFO within the
+// same priority. Default priority is `0` so callers that don't
+// specify get straight FIFO.
 export class TabQueue {
-  #pending: Promise<void> = Promise.resolve();
-  #depth = 0;
+  // `held` is true while a caller holds the lease (post-acquire,
+  // pre-release). Subsequent acquires queue rather than running.
+  #held = false;
+  #queue: Array<{
+    resolve: () => void;
+    reject: (err: unknown) => void;
+    priority: number;
+    settled: boolean;
+  }> = [];
 
-  async acquire(signal?: AbortSignal): Promise<() => void> {
+  async acquire(
+    signal?: AbortSignal,
+    priority: number = 0,
+  ): Promise<() => void> {
     throwIfAborted(signal);
-    let release!: () => void;
-    let next = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let prev = this.#pending;
-    this.#pending = prev.catch(() => {}).then(() => next);
-    this.#depth++;
-    // Race the prior-slot wait against the caller's abort signal.
-    // If the signal fires first, release our slot immediately so
-    // downstream waiters aren't blocked on a cancelled holder,
-    // then throw so `getPage` can bail out.
-    let onAbortPromise: Promise<never> | null = null;
-    let onAbortCleanup: (() => void) | undefined;
-    if (signal) {
-      onAbortPromise = new Promise<never>((_, reject) => {
-        let onAbort = () => {
-          reject(
-            new PrerenderCancelledError({
-              state: 'queued',
-              reason:
-                typeof signal.reason === 'string' ? signal.reason : undefined,
-            }),
-          );
-        };
-        signal.addEventListener('abort', onAbort, { once: true });
-        onAbortCleanup = () => signal.removeEventListener('abort', onAbort);
-      });
+    if (!this.#held) {
+      this.#held = true;
+      return this.#makeRelease();
     }
+    // Queue and wait for the lease. On abort while queued, splice the
+    // entry out so downstream waiters aren't blocked on a cancelled
+    // holder; throw a `'queued'`-state cancellation so `getPage` can
+    // bail out cleanly.
+    let entry: {
+      resolve: () => void;
+      reject: (err: unknown) => void;
+      priority: number;
+      settled: boolean;
+    };
+    let onAbort: (() => void) | undefined;
     try {
-      if (onAbortPromise) {
-        await Promise.race([prev.catch(() => {}), onAbortPromise]);
-      } else {
-        await prev.catch(() => {});
-      }
-    } catch (e) {
-      this.#depth--;
-      release();
-      throw e;
+      await new Promise<void>((resolve, reject) => {
+        entry = { resolve, reject, priority, settled: false };
+        // Priority-ordered insertion (matches `AsyncSemaphore`):
+        // highest priority first, FIFO within priority.
+        let insertIdx = this.#queue.findIndex((e) => e.priority < priority);
+        if (insertIdx === -1) {
+          this.#queue.push(entry);
+        } else {
+          this.#queue.splice(insertIdx, 0, entry);
+        }
+        if (signal) {
+          onAbort = () => {
+            if (entry.settled) return;
+            entry.settled = true;
+            let idx = this.#queue.indexOf(entry);
+            if (idx !== -1) this.#queue.splice(idx, 1);
+            reject(
+              new PrerenderCancelledError({
+                state: 'queued',
+                reason:
+                  typeof signal.reason === 'string' ? signal.reason : undefined,
+              }),
+            );
+          };
+          signal.addEventListener('abort', onAbort, { once: true });
+        }
+      });
     } finally {
-      onAbortCleanup?.();
+      if (signal && onAbort) signal.removeEventListener('abort', onAbort);
     }
-    // A late abort between Promise.race resolving and us returning
-    // — treat as the same cancellation.
-    if (signal?.aborted) {
-      this.#depth--;
-      release();
-      throwIfAborted(signal);
-    }
+    // Lease handed off — `#held` was already true before our resolve.
+    return this.#makeRelease();
+  }
+
+  #makeRelease(): () => void {
     let released = false;
     return () => {
       if (released) return;
       released = true;
-      this.#depth--;
-      release();
+      // Highest-priority oldest waiter (front of queue) gets the lease.
+      // Skip already-settled (cancelled) entries — they were spliced
+      // by `onAbort` but for safety we tolerate stale entries here.
+      while (this.#queue.length > 0) {
+        let next = this.#queue.shift()!;
+        if (next.settled) continue;
+        next.settled = true;
+        // `#held` stays true: the lease just transferred.
+        next.resolve();
+        return;
+      }
+      this.#held = false;
     };
   }
 
+  // Live count = (active holder ? 1 : 0) + queued waiters. Matches the
+  // pre-PR-4 semantics: callers use `pendingCount === 0` to mean "idle"
+  // and `pendingCount > 1` to mean "queue is forming behind the holder".
   get pendingCount(): number {
-    return this.#depth;
+    return (this.#held ? 1 : 0) + this.#queue.length;
+  }
+
+  // Per-priority count of *queued* waiters (excludes the holder).
+  // Used by `getQueueDepthSnapshot` to build the per-priority breakdown
+  // surfaced in `prerender-queue-snapshot` logs.
+  pendingByPriority(): Map<number, number> {
+    let m = new Map<number, number>();
+    for (let entry of this.#queue) {
+      m.set(entry.priority, (m.get(entry.priority) ?? 0) + 1);
+    }
+    return m;
   }
 }
 
@@ -177,6 +222,18 @@ const CONSOLE_ERROR_LIMIT = 50;
 
 export class StandbyTargetNotReadyError extends Error {}
 
+// Strict positive-integer env-var parser used by the dynamic-pool
+// configuration. Returns `undefined` for unset, empty, or otherwise
+// invalid input — including `0` and negatives — which is what the
+// MIN/MAX/INITIAL plumbing expects so it can fall back to the legacy
+// fixed-size path.
+function parsePositiveInt(raw: string | undefined): number | undefined {
+  if (raw === undefined || raw === '') return undefined;
+  let n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) return undefined;
+  return n;
+}
+
 function isExpectedStandbyTargetNotReadyError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
@@ -212,7 +269,64 @@ export class PagePool {
   // `#maybeEvictOrphanContexts`. Bounded by `#sharedContextCap`.
   #sharedContexts = new Map<string, SharedContext>();
   #sharedContextCap: number;
+  // Live tab-pool capacity. Mutable across the pool's lifetime: starts
+  // at `#minPages` (or `PRERENDER_PAGE_POOL_INITIAL` if set), grows up
+  // to `#maxBurstPages` under saturation, contracts back to `#minPages`
+  // after sustained idle. The standby ceiling tracks `#maxPages + 1`,
+  // and the render semaphore's capacity is kept in sync via
+  // `setCapacity` whenever this changes.
   #maxPages: number;
+  // Idle floor — `#maxPages` never goes below this on contraction. When
+  // `PRERENDER_PAGE_POOL_MIN` is unset and the legacy
+  // `PRERENDER_PAGE_POOL_SIZE` (or `options.maxPages`) drives the
+  // configuration, `#minPages === #maxBurstPages === options.maxPages`
+  // → no expansion or contraction, identical to the pre-dynamic
+  // behaviour.
+  #minPages: number;
+  // Burst ceiling reachable by any priority on saturation. Equal to
+  // `#minPages` when the legacy fixed-size config drives the pool.
+  #maxBurstPages: number;
+  // High-priority ceiling. Reachable only when the saturating request's
+  // own priority is at or above `#highPriorityThreshold`. Defaults to
+  // `#maxBurstPages` (no separate tier) so deployments that don't set
+  // the env var see the single-tier behaviour from the previous PR.
+  // The value is the structural guarantee that a low-priority workload
+  // cannot consume the entire memory envelope: there is always
+  // expansion budget that only a high-priority request can claim.
+  #highPriorityMaxPages: number;
+  // Priority value at or above which an arriving request can drive
+  // expansion past `#maxBurstPages` into the high-priority tier.
+  // Defaults to `Infinity` when the tier is unset; the upstream
+  // `parsePositiveInt` validation rejects non-integers so no real-
+  // world priority value can satisfy `priority >= +Infinity`. (Note:
+  // a literal `Number.POSITIVE_INFINITY` *would* satisfy it, but no
+  // production code path produces that value — priorities arrive as
+  // integers from the worker queue.)
+  #highPriorityThreshold: number;
+  // Wall-time threshold for the contraction tick: `#maxPages > #minPages`
+  // AND no pending waiters anywhere on the pool for at least this long
+  // → drop one slot. Reset every time pending appears or expansion
+  // fires; see `#contractionLoop`.
+  #idleContractionMs: number;
+  // Background tick that drives contraction. Started in the
+  // constructor whenever the dynamic-pool envelope can grow
+  // (`#maxBurstPages > #minPages`), even before the first expansion;
+  // cleared on `closeAll` for test isolation.
+  #contractionInterval: NodeJS.Timeout | undefined;
+  // Re-entrancy guard for the contraction tick. `setInterval` fires
+  // ticks regardless of whether the previous async tick has resolved,
+  // so two slow ticks could otherwise both pass the cooldown gate and
+  // double-decrement `#maxPages` (or double-shrink the render
+  // semaphore). The flag is held across the awaited `#contractByOne`
+  // call and cleared in `finally`.
+  #contractionInFlight = false;
+  // Wall-clock timestamp the pool last became fully idle (no pending
+  // waiters on any tab queue or admission semaphore, no in-flight
+  // operations the contraction loop should respect). Updated by
+  // `#observeIdleness` and consumed by `#contractionLoop`. `undefined`
+  // means we're either non-idle right now or haven't observed an idle
+  // tick yet since the last burst.
+  #idleObservedAt: number | undefined;
   #affinityTabMax: number;
   #serverURL: string;
   #browserManager: BrowserManager;
@@ -279,13 +393,109 @@ export class PagePool {
     disableStandbyRefill?: boolean;
     onAffinityDisposed?: (affinityKey: string) => void;
     disableFileAdmission?: boolean;
+    // Test-only override: when set, the contraction loop ticks at this
+    // interval (in ms) instead of `#idleContractionMs`. Production
+    // callers leave this undefined and the loop period equals the
+    // contraction wall-time threshold.
+    contractionTickMs?: number;
   }) {
-    this.#maxPages = options.maxPages;
+    // Resolve the dynamic-pool envelope. `PRERENDER_PAGE_POOL_MIN` and
+    // `_MAX` are the new dynamic knobs; when either is unset the pool
+    // collapses to a single fixed size (legacy `PRERENDER_PAGE_POOL_SIZE`
+    // / `options.maxPages` behaviour) — `#minPages === #maxBurstPages`
+    // means no expansion or contraction can fire. `_INITIAL` only
+    // matters when MIN < MAX; it's the boot-time count and defaults to
+    // MIN.
+    let envMin = parsePositiveInt(process.env.PRERENDER_PAGE_POOL_MIN);
+    let envMax = parsePositiveInt(process.env.PRERENDER_PAGE_POOL_MAX);
+    let envInitial = parsePositiveInt(process.env.PRERENDER_PAGE_POOL_INITIAL);
+    if (envMin !== undefined && envMax !== undefined) {
+      if (envMax < envMin) {
+        log.warn(
+          `PRERENDER_PAGE_POOL_MAX=${envMax} < PRERENDER_PAGE_POOL_MIN=${envMin}; clamping MAX to MIN`,
+        );
+        envMax = envMin;
+      }
+      this.#minPages = envMin;
+      this.#maxBurstPages = envMax;
+      this.#maxPages =
+        envInitial !== undefined
+          ? Math.min(Math.max(envInitial, envMin), envMax)
+          : envMin;
+    } else {
+      // Legacy fixed pool. Drives both the floor and the ceiling from
+      // the same value, so contraction and expansion are no-ops.
+      this.#minPages = options.maxPages;
+      this.#maxBurstPages = options.maxPages;
+      this.#maxPages = options.maxPages;
+    }
+    // High-priority tier. Reachable only when the saturating request's
+    // own priority is at or above `PRERENDER_HIGH_PRIORITY_THRESHOLD`.
+    // The defaults pin the tier to `#maxBurstPages` (no separate tier)
+    // so the previous PR's single-tier behaviour is preserved when the
+    // env vars are unset — even with the dynamic-pool envelope active,
+    // expansion stops at `#maxBurstPages`. Operators opt in by setting
+    // both env vars; partial config (one of the pair) keeps the tier
+    // dormant on the conservative assumption that a missing knob is a
+    // misconfiguration, not an opt-in.
+    let envHighPriorityMax = parsePositiveInt(
+      process.env.PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX,
+    );
+    let envHighPriorityThreshold = parsePositiveInt(
+      process.env.PRERENDER_HIGH_PRIORITY_THRESHOLD,
+    );
+    if (
+      envHighPriorityMax !== undefined &&
+      envHighPriorityThreshold !== undefined &&
+      this.#maxBurstPages > this.#minPages
+    ) {
+      if (envHighPriorityMax < this.#maxBurstPages) {
+        log.warn(
+          `PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX=${envHighPriorityMax} < PRERENDER_PAGE_POOL_MAX=${this.#maxBurstPages}; clamping HIGH_PRIORITY_MAX to MAX`,
+        );
+        envHighPriorityMax = this.#maxBurstPages;
+      }
+      this.#highPriorityMaxPages = envHighPriorityMax;
+      this.#highPriorityThreshold = envHighPriorityThreshold;
+    } else {
+      // Tier dormant: real-world (integer) priority values can never
+      // satisfy `priority >= +Infinity`, so `#tryExpand` will stop at
+      // `#maxBurstPages`.
+      this.#highPriorityMaxPages = this.#maxBurstPages;
+      this.#highPriorityThreshold = Number.POSITIVE_INFINITY;
+    }
+    let envContractionMs = parsePositiveInt(
+      process.env.PRERENDER_POOL_IDLE_CONTRACTION_MS,
+    );
+    this.#idleContractionMs = envContractionMs ?? 60_000;
     let envTabMax = Number(process.env.PRERENDER_AFFINITY_TAB_MAX ?? 5);
     if (!Number.isFinite(envTabMax) || envTabMax <= 0) {
       envTabMax = 1;
     }
-    this.#affinityTabMax = Math.min(Math.max(1, envTabMax), this.#maxPages);
+    // Cap by the burst ceiling (`#maxBurstPages`), NOT the high-
+    // priority tier ceiling. Capping at `#highPriorityMaxPages`
+    // would let the per-affinity tab budget exceed the burst-tier
+    // capacity (e.g. envTabMax=5, MAX=4, HP_MAX=8 →
+    // affinityTabMax=5), and the legacy reservation formula
+    // `max(1, affinityTabMax − 1)` would yield fileAdmissionCap=4.
+    // Low-priority file workload could fill all 4 burst slots with
+    // no slot left for the module/command sub-call the file render
+    // is waiting on, re-introducing the self-referential prerender
+    // deadlock the reservation is meant to prevent. Capping at
+    // `#maxBurstPages` keeps `affinityTabMax − 1 < #maxBurstPages`,
+    // preserving the deadlock-safety invariant for low/medium-
+    // priority workload.
+    //
+    // The per-affinity cap *intentionally* doesn't track HP_MAX —
+    // the tier exists to give the global pool burst budget for
+    // high-priority traffic, not to multiply the per-realm tab
+    // budget. Operators wanting more per-realm headroom raise
+    // `PRERENDER_AFFINITY_TAB_MAX` and `PRERENDER_PAGE_POOL_MAX`
+    // together.
+    this.#affinityTabMax = Math.min(
+      Math.max(1, envTabMax),
+      this.#maxBurstPages,
+    );
     if (this.#affinityTabMax < 2) {
       // Degenerate configuration: with only one tab per affinity, the
       // file-queue admission cap clamps to 1 (see `#acquireFileAdmission`)
@@ -299,15 +509,20 @@ export class PagePool {
         `PRERENDER_AFFINITY_TAB_MAX=${this.#affinityTabMax} below 2; file-queue admission can't reserve a slot for module/command work and the self-referential prerender deadlock is not prevented`,
       );
     }
-    // Cap on total shared contexts (active + orphaned). Default to
-    // 2× maxPages so there's headroom for a handful of recently-
-    // evicted contexts to survive as orphans for reuse. Enforced by
-    // `#maybeEvictOrphanContexts` on each release.
+    // Cap on total shared contexts (active + orphaned). Default
+    // scales by the high-priority tier ceiling (the largest the pool
+    // can grow to under any priority) rather than the live `#maxPages`,
+    // so the cap stays stable across expansion / contraction —
+    // otherwise it would balloon during a burst and evict during
+    // contraction, defeating the warm-cache benefit of keeping orphan
+    // contexts. Enforced by `#maybeEvictOrphanContexts` on each
+    // release.
     let envSharedCap = Number(
-      process.env.PRERENDER_SHARED_CONTEXT_CAP ?? this.#maxPages * 2,
+      process.env.PRERENDER_SHARED_CONTEXT_CAP ??
+        this.#highPriorityMaxPages * 2,
     );
     if (!Number.isFinite(envSharedCap) || envSharedCap <= 0) {
-      envSharedCap = this.#maxPages * 2;
+      envSharedCap = this.#highPriorityMaxPages * 2;
     }
     this.#sharedContextCap = Math.max(1, envSharedCap);
     this.#serverURL = options.serverURL;
@@ -349,6 +564,32 @@ export class PagePool {
       log.info(
         `file-queue admission: cap=${this.#fileAdmissionCap} (affinityTabMax=${this.#affinityTabMax}, deadlock-safety ceiling=${ceiling})`,
       );
+    }
+    // Sync the injected render semaphore's capacity to the resolved
+    // `#maxPages`. Prerenderer constructs `AsyncSemaphore(options.
+    // maxPages)` and hands it in; under the dynamic-pool config the
+    // pool's live cap may be smaller (MIN < legacy maxPages) or
+    // larger (INITIAL > legacy maxPages) than that initial value, and
+    // without this sync the saturation trigger
+    // (`inUseCount >= capacity`) reads the wrong cap — expansion
+    // either never fires (live cap < semaphore cap, so the semaphore
+    // never saturates) or global concurrency is silently floored
+    // below `#minPages`.
+    if (this.#renderSemaphore?.setCapacity) {
+      this.#renderSemaphore.setCapacity(this.#maxPages);
+    }
+    // Contraction loop is only useful when expansion is reachable —
+    // i.e. when the pool is configured to grow beyond `#minPages`.
+    // Pools running on the legacy fixed-size config skip the timer
+    // entirely so test isolation and process exit cleanup don't have
+    // to chase a ticker that does nothing.
+    if (this.#maxBurstPages > this.#minPages) {
+      let tickMs = options.contractionTickMs ?? this.#idleContractionMs;
+      this.#contractionInterval = setInterval(
+        () => this.#contractionTick(),
+        tickMs,
+      );
+      this.#contractionInterval.unref?.();
     }
   }
 
@@ -394,12 +635,63 @@ export class PagePool {
   // currently owned by this affinity has an empty render queue — the next
   // visit can run without waiting. `tabCount` tracks how many pages the
   // affinity has claimed (bounded by PRERENDER_AFFINITY_TAB_MAX).
-  getVacancySnapshot(): Record<string, { idle: boolean; tabCount: number }> {
-    let snapshot: Record<string, { idle: boolean; tabCount: number }> = {};
+  //
+  // `maxPendingPriority` is the highest priority across all queued
+  // waiters for this affinity (per-tab queues + the per-affinity file-
+  // admission semaphore). It excludes in-flight holders because the
+  // queue tracks only what's still waiting. The manager's
+  // scoreCandidate uses it to route an arriving high-priority request
+  // away from servers whose existing waiters would still leapfrog it.
+  // Omitted when no waiters are queued — a strictly-idle affinity has
+  // no priority bar to clear.
+  getVacancySnapshot(): Record<
+    string,
+    { idle: boolean; tabCount: number; maxPendingPriority?: number }
+  > {
+    let snapshot: Record<
+      string,
+      { idle: boolean; tabCount: number; maxPendingPriority?: number }
+    > = {};
     for (let [affinityKey, entries] of this.#affinityPages) {
       let tabCount = entries.size;
-      let idle = [...entries].every((entry) => entry.queue.pendingCount === 0);
-      snapshot[affinityKey] = { idle, tabCount };
+      let tabsIdle = [...entries].every(
+        (entry) => entry.queue.pendingCount === 0,
+      );
+      let maxPendingPriority: number | undefined;
+      for (let entry of entries) {
+        for (let prio of entry.queue.pendingByPriority().keys()) {
+          if (maxPendingPriority === undefined || prio > maxPendingPriority) {
+            maxPendingPriority = prio;
+          }
+        }
+      }
+      let sem = this.#fileAdmission.get(affinityKey);
+      let admissionIdle = true;
+      if (sem) {
+        if (sem.pendingCount > 0) admissionIdle = false;
+        for (let prio of sem.pendingByPriority().keys()) {
+          if (maxPendingPriority === undefined || prio > maxPendingPriority) {
+            maxPendingPriority = prio;
+          }
+        }
+      }
+      // `idle` must mean "an arriving request can run immediately on
+      // this affinity" — true only when no queueing layer has waiters.
+      // Folding admission-semaphore queue depth in here matches the
+      // semantics `maxPendingPriority` uses (which incorporates both
+      // layers): otherwise an affinity with admission waiters would
+      // report `idle: true` and the manager would route to it as
+      // bucket-0 even though new work would queue behind admission.
+      let idle = tabsIdle && admissionIdle;
+      let snapshotEntry: {
+        idle: boolean;
+        tabCount: number;
+        maxPendingPriority?: number;
+      } = { idle, tabCount };
+      if (maxPendingPriority !== undefined) {
+        snapshotEntry.maxPendingPriority = maxPendingPriority;
+      }
+      snapshot[affinityKey] = snapshotEntry;
     }
     return snapshot;
   }
@@ -429,6 +721,20 @@ export class PagePool {
       // slot. Both are 0 when the semaphore hasn't been lazily created
       // yet, or was deleted once it returned to idle.
       admission: { pending: number; cap: number };
+      // Per-priority breakdown of the affinity's *queued* waiters.
+      // Counts waiters only — it deliberately does NOT include the
+      // in-flight render holding the tab right now. That's why the
+      // field is `*Queued*` rather than `*Pending*`: `pendingTotal`
+      // (above) does include the holder per legacy semantics, and the
+      // rename keeps the two from being read as synonyms in
+      // `prerender-queue-snapshot` triage. `tab*` is the per-tab
+      // queues; `admission*` is the per-affinity file-admission
+      // semaphore. Empty when no waiters are queued. Surfaced in the
+      // `prerender-queue-snapshot` log so operators can see whether a
+      // saturation event was dominated by user-priority work or
+      // background work.
+      tabQueuedByPriority: Record<number, number>;
+      admissionQueuedByPriority: Record<number, number>;
     }>;
   } {
     let totalTabs = 0;
@@ -441,22 +747,38 @@ export class PagePool {
       idle: boolean;
       byQueue: { file: number; module: number; command: number };
       admission: { pending: number; cap: number };
+      tabQueuedByPriority: Record<number, number>;
+      admissionQueuedByPriority: Record<number, number>;
     }> = [];
     for (let [affinityKey, entries] of this.#affinityPages) {
       let tabCount = entries.size;
       let pendingTotal = 0;
       let maxPending = 0;
       let byQueue = { file: 0, module: 0, command: 0 };
+      let tabQueuedByPriority: Record<number, number> = {};
       for (let entry of entries) {
         let p = entry.queue.pendingCount;
         pendingTotal += p;
         if (p > maxPending) maxPending = p;
         if (entry.currentQueue) byQueue[entry.currentQueue]++;
+        // Aggregate per-priority pending counts across all of this
+        // affinity's tabs. `pendingByPriority` returns queued waiters
+        // only (excludes the holder); summing those is the right
+        // signal for "what's backlogged behind these tabs".
+        for (let [prio, n] of entry.queue.pendingByPriority()) {
+          tabQueuedByPriority[prio] = (tabQueuedByPriority[prio] ?? 0) + n;
+        }
       }
       let sem = this.#fileAdmission.get(affinityKey);
       let admission = sem
         ? { pending: sem.pendingCount, cap: sem.capacity }
         : { pending: 0, cap: 0 };
+      let admissionQueuedByPriority: Record<number, number> = {};
+      if (sem) {
+        for (let [prio, n] of sem.pendingByPriority()) {
+          admissionQueuedByPriority[prio] = n;
+        }
+      }
       totalTabs += tabCount;
       totalPending += pendingTotal;
       affinities.push({
@@ -467,6 +789,8 @@ export class PagePool {
         idle: pendingTotal === 0,
         byQueue,
         admission,
+        tabQueuedByPriority,
+        admissionQueuedByPriority,
       });
     }
     return { totalTabs, totalPending, affinities };
@@ -513,7 +837,7 @@ export class PagePool {
   async getPage(
     affinityKey: string,
     queue: PrerenderQueue = 'file',
-    opts?: { signal?: AbortSignal },
+    opts?: { signal?: AbortSignal; priority?: number },
   ): Promise<{
     page: Page;
     reused: boolean;
@@ -533,6 +857,12 @@ export class PagePool {
     release: () => void;
   }> {
     let signal = opts?.signal;
+    // Priority threaded from the producer side. Higher priority
+    // requests jump to the head of the per-server file admission
+    // semaphore, the per-affinity tab queue, and the global render
+    // semaphore — without preempting in-flight work. `0` is the back-
+    // compat default so callers that don't care continue to FIFO.
+    let priority = opts?.priority ?? 0;
     throwIfAborted(signal);
     let t0 = Date.now();
     // File-queue admission control. Acquired BEFORE tab selection so
@@ -544,12 +874,28 @@ export class PagePool {
     let admissionMs = 0;
     if (queue === 'file') {
       let admissionStart = Date.now();
-      releaseAdmission = await this.#acquireFileAdmission(affinityKey, signal);
+      releaseAdmission = await this.#acquireFileAdmission(
+        affinityKey,
+        signal,
+        priority,
+      );
       admissionMs = Date.now() - admissionStart;
     }
     // Every release path (success + the error paths below) funnels
     // through `releaseAdmission?.()`, which already runs idle cleanup
     // via the wrapper installed in `#acquireFileAdmission`.
+    //
+    // Saturation expansion: if the render semaphore is full, the
+    // request will queue. Try to grow the pool first so the standby
+    // refill kicked off by `#ensureStandbyPool` below has a slot to
+    // create into. Bumps the semaphore's capacity in lockstep, which
+    // also un-blocks the `#renderSemaphore.acquire` call further down
+    // for this caller. No-op once `#maxPages` has reached its tier
+    // ceiling (`#maxBurstPages` for low/medium priority,
+    // `#highPriorityMaxPages` for callers at or above the threshold),
+    // and a no-op when the pool is configured at a legacy fixed size
+    // (`#minPages === #maxBurstPages === #highPriorityMaxPages`).
+    this.#maybeExpandUnderSaturation(priority);
     let startupStart = Date.now();
     try {
       await this.#ensureStandbyPool();
@@ -572,6 +918,7 @@ export class PagePool {
       ({ entry, reused, releaseTab } = await this.#selectEntryForAffinity(
         affinityKey,
         signal,
+        priority,
       ));
     } catch (e) {
       releaseAdmission?.();
@@ -599,7 +946,7 @@ export class PagePool {
     let releaseGlobal: (() => void) | undefined;
     try {
       releaseGlobal = this.#renderSemaphore
-        ? await this.#renderSemaphore.acquire(signal)
+        ? await this.#renderSemaphore.acquire(signal, priority)
         : undefined;
     } catch (e) {
       // Semaphore cancelled before we got a slot. Release the tab
@@ -724,6 +1071,10 @@ export class PagePool {
   }
 
   async closeAll(): Promise<void> {
+    if (this.#contractionInterval) {
+      clearInterval(this.#contractionInterval);
+      this.#contractionInterval = undefined;
+    }
     let ensuring = this.#ensuringStandbys;
     this.#ensuringStandbys = null;
     if (ensuring) {
@@ -963,6 +1314,7 @@ export class PagePool {
   async #acquireFileAdmission(
     affinityKey: string,
     signal?: AbortSignal,
+    priority: number = 0,
   ): Promise<() => void> {
     if (this.#disableFileAdmission) {
       // Test opt-out — existing tab-routing unit tests predate the
@@ -976,7 +1328,7 @@ export class PagePool {
       semaphore = new AsyncSemaphore(this.#fileAdmissionCap);
       this.#fileAdmission.set(affinityKey, semaphore);
     }
-    let rawRelease = await semaphore.acquire(signal);
+    let rawRelease = await semaphore.acquire(signal, priority);
     // Wrap the raw release so every release path (success or any of
     // `getPage`'s mid-setup error bailouts) also attempts idle cleanup
     // of the semaphore map entry. Without this, an erroring file call
@@ -1011,9 +1363,277 @@ export class PagePool {
     return count;
   }
 
+  // Live pool capacity. Equal to the static `maxPages` when the pool
+  // is configured at a legacy fixed size; mutates between `#minPages`
+  // and `#maxBurstPages` under the dynamic-pool config. Exposed for
+  // diagnostics and tests; production routing reads it indirectly via
+  // the render semaphore's `capacity`.
+  get currentMaxPages(): number {
+    return this.#maxPages;
+  }
+
+  get minPages(): number {
+    return this.#minPages;
+  }
+
+  get maxBurstPages(): number {
+    return this.#maxBurstPages;
+  }
+
+  get highPriorityMaxPages(): number {
+    return this.#highPriorityMaxPages;
+  }
+
+  get highPriorityThreshold(): number {
+    return this.#highPriorityThreshold;
+  }
+
+  // Inspect the render-semaphore state and trigger expansion when the
+  // arriving caller would otherwise queue on a saturated cap. Hot-path
+  // hook off `getPage` — kept defensively narrow (only acts when the
+  // semaphore is a concrete `AsyncSemaphore` with the expected fields)
+  // so test stubs don't get unexpected expansion behaviour. The
+  // arriving caller's `priority` is threaded through so the high-
+  // priority tier can be unlocked when the caller qualifies.
+  #maybeExpandUnderSaturation(priority: number = 0): void {
+    if (this.#highPriorityMaxPages <= this.#minPages) return;
+    let renderSem = this.#renderSemaphore;
+    if (
+      !renderSem ||
+      !('inUseCount' in renderSem) ||
+      typeof (renderSem as AsyncSemaphore).inUseCount !== 'number' ||
+      typeof (renderSem as AsyncSemaphore).capacity !== 'number'
+    ) {
+      return;
+    }
+    let sem = renderSem as AsyncSemaphore;
+    if (sem.inUseCount >= sem.capacity) {
+      this.#tryExpand(priority);
+    }
+  }
+
+  // Best-effort synchronous expansion of the live pool capacity. Bumps
+  // `#maxPages` by one, forwards the resize to the render semaphore,
+  // and resets the contraction loop's idle observation. Returns true
+  // if `#maxPages` grew. Caller is expected to follow up with whatever
+  // spawn / refill path it was about to take — expansion just lifts
+  // the ceiling, it doesn't itself create a tab.
+  //
+  // Two-tier ceiling:
+  //   - up to `#maxBurstPages`: any priority can drive expansion
+  //     (default tier, available to background and user work alike)
+  //   - past `#maxBurstPages` and up to `#highPriorityMaxPages`: only
+  //     callers with `priority >= #highPriorityThreshold` can drive
+  //     the expansion. The structural guarantee: a low-priority
+  //     workload cannot consume the entire memory envelope on its own
+  //     — there's always reserved expansion budget that requires a
+  //     qualifying priority to claim.
+  //
+  // The defaults (`#highPriorityMaxPages === #maxBurstPages` and
+  // `#highPriorityThreshold === +Infinity`) collapse this into the
+  // single-tier behaviour from the previous PR.
+  //
+  // Requires a resize-capable render semaphore. Without `setCapacity`,
+  // `#maxPages` would drift away from the actual global concurrency
+  // gate (the semaphore's fixed capacity), and the saturation
+  // heuristic would misreport state. Test stubs that supply only
+  // `acquire` keep working by skipping expansion — same as legacy
+  // fixed-pool mode for them.
+  #tryExpand(priority: number = 0): boolean {
+    let cap =
+      priority >= this.#highPriorityThreshold
+        ? this.#highPriorityMaxPages
+        : this.#maxBurstPages;
+    if (this.#maxPages >= cap) return false;
+    if (!this.#renderSemaphore?.setCapacity) return false;
+    let prev = this.#maxPages;
+    this.#maxPages = prev + 1;
+    this.#renderSemaphore.setCapacity(this.#maxPages);
+    this.#idleObservedAt = undefined;
+    let tier = this.#maxPages > this.#maxBurstPages ? 'high-priority' : 'burst';
+    log.info(
+      `pool expansion: maxPages=${prev}→${this.#maxPages} tier=${tier} (burst=${this.#maxBurstPages}, hp=${this.#highPriorityMaxPages}, priority=${priority})`,
+    );
+    return true;
+  }
+
+  // Periodic check that drives contraction. Runs on a `setInterval`
+  // started in the constructor only when the pool is configured to
+  // grow (`#maxBurstPages > #minPages`). All gates have to pass on a
+  // single tick before any tab is dropped:
+  //
+  //   - the live cap must be above `#minPages` (room to shrink),
+  //   - no waiters anywhere on the pool (per-tab queues, file-
+  //     admission semaphores, render semaphore) — checked via
+  //     `#observeIdleness`,
+  //   - the idle state must have held continuously for at least
+  //     `#idleContractionMs` (hysteresis),
+  //   - at least two idle pool entries OR an idle standby exist
+  //     (don't contract through saturation; the warmth-preserving
+  //     drop rule below will pick one).
+  //
+  // Bounded rate: at most one tab is dropped per tick. When a drop
+  // happens the loop continues running and will fire again after the
+  // next cooldown window if conditions still hold, walking the pool
+  // back to `#minPages` over multiple ticks instead of all at once.
+  async #contractionTick(): Promise<void> {
+    if (this.#contractionInFlight) return;
+    this.#contractionInFlight = true;
+    try {
+      if (this.#maxPages <= this.#minPages) return;
+      let idle = this.#observeIdleness();
+      if (!idle) {
+        this.#idleObservedAt = undefined;
+        return;
+      }
+      let now = Date.now();
+      if (this.#idleObservedAt === undefined) {
+        this.#idleObservedAt = now;
+        return;
+      }
+      if (now - this.#idleObservedAt < this.#idleContractionMs) return;
+      // All gates passed: shrink. Reset the observation so the next
+      // contraction respects the cooldown window from this point.
+      this.#idleObservedAt = now;
+      await this.#contractByOne();
+    } catch (e) {
+      log.warn('contraction tick failed:', e);
+    } finally {
+      this.#contractionInFlight = false;
+    }
+  }
+
+  // Returns true when the pool has no work in flight and no waiters
+  // queued — the precondition for considering contraction. Folds in
+  // every queueing layer: per-tab queues, per-affinity file-admission
+  // semaphores, and (when wired) the global render semaphore in both
+  // its in-flight and queued-waiter dimensions. Standbys are not pool
+  // entries and do not block idleness — they're the resource we may
+  // be about to drop.
+  #observeIdleness(): boolean {
+    for (let entries of this.#affinityPages.values()) {
+      for (let entry of entries) {
+        if (entry.closing) continue;
+        if (entry.queue.pendingCount !== 0) return false;
+      }
+    }
+    for (let sem of this.#fileAdmission.values()) {
+      if (sem.pendingCount > 0) return false;
+      if (sem.inUseCount > 0) return false;
+    }
+    let renderSem = this.#renderSemaphore;
+    if (renderSem) {
+      let asAsync = renderSem as Partial<AsyncSemaphore>;
+      if (typeof asAsync.inUseCount === 'number' && asAsync.inUseCount > 0) {
+        return false;
+      }
+      if (
+        typeof asAsync.pendingCount === 'number' &&
+        asAsync.pendingCount > 0
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Drop one slot. Warmth-preserving rule: prefer a standby (no
+  // affinity warmth to lose) over an active pool entry. When dropping
+  // an active entry, pick the affinity whose tabs have the oldest LRU
+  // touch among currently-idle entries — that affinity has been
+  // quietest, so dropping it sacrifices the least warm-routing
+  // value. The dropped entry's BrowserContext is preserved as an
+  // orphan in `#sharedContexts` (existing `disposeAffinity` /
+  // `#closeEntry` behaviour), so an immediate re-burst can re-warm
+  // via `#tryClaimOrphanContext` without re-fetching.
+  async #contractByOne(): Promise<void> {
+    // Pick a victim BEFORE shrinking the cap. If no eligible target
+    // exists (no standby, no fully-idle affinity), abort the tick —
+    // shrinking `#maxPages` without disposing anything would leave
+    // the live cap inconsistent with the actual tab count and
+    // artificially throttle concurrency.
+    let standbyVictim: StandbyEntry | undefined;
+    let oldestAffinity: string | undefined;
+    if (this.#standbys.size > 0) {
+      standbyVictim = this.#selectLRUTab([...this.#standbys]);
+    } else {
+      let oldestStamp = Infinity;
+      for (let [affinityKey, entries] of this.#affinityPages.entries()) {
+        let allIdle = [...entries].every(
+          (entry) =>
+            !entry.closing &&
+            !entry.transitioning &&
+            entry.queue.pendingCount === 0,
+        );
+        if (!allIdle) continue;
+        let lastUsedAt = Math.max(
+          ...[...entries].map((entry) => entry.lastUsedAt),
+        );
+        if (lastUsedAt < oldestStamp) {
+          oldestStamp = lastUsedAt;
+          oldestAffinity = affinityKey;
+        }
+      }
+    }
+    let actualTabs = this.#poolEntryCount() + this.#standbys.size;
+    // Three cases allow shrinking the cap by one:
+    //   1. A standby exists → drop it.
+    //   2. A fully-idle affinity exists → dispose it.
+    //   3. No standbys and no eligible affinity, but the cap is
+    //      over-provisioned vs the actual resource count
+    //      (`#maxPages - 1 >= actualTabs`) → shrink alone. This case
+    //      handles a fully-quiet pool where contraction can drop
+    //      headroom without dropping any resource.
+    // Any other state — there are tabs / standbys but none eligible
+    // (closing, transitioning, pending) — leaves `#maxPages` alone;
+    // the next tick retries once an idle window opens.
+    let canShrinkCapAlone =
+      !standbyVictim && !oldestAffinity && this.#maxPages - 1 >= actualTabs;
+    if (!standbyVictim && !oldestAffinity && !canShrinkCapAlone) {
+      return;
+    }
+
+    // Now shrink the cap and forward the resize to the render
+    // semaphore. Doing the dispose first then the shrink would race
+    // any expand call that observes the still-current cap; doing the
+    // shrink first (after the victim is picked) keeps the visible
+    // state consistent.
+    let prev = this.#maxPages;
+    this.#maxPages = prev - 1;
+    if (this.#renderSemaphore?.setCapacity) {
+      this.#renderSemaphore.setCapacity(this.#maxPages);
+    }
+    log.info(
+      `pool contraction: maxPages=${prev}→${this.#maxPages} (min=${this.#minPages})`,
+    );
+    // Standby drop preferred first — it has no affinity warmth. Use
+    // the canonical `#closeEntry` teardown path so per-page
+    // diagnostic state (`#consoleErrorsByPageId`,
+    // `#exceptionKeysByPageId`, `#affinityKeyByPageId`) is cleaned
+    // up; otherwise repeated expand/contract cycles would leak stale
+    // entries for dead standby pages.
+    if (standbyVictim) {
+      this.#standbys.delete(standbyVictim);
+      try {
+        await this.#closeEntry(standbyVictim);
+      } catch (e) {
+        log.debug('error closing standby during contraction:', e);
+      }
+      return;
+    }
+    // Otherwise dispose the whole affinity whose tabs are oldest in
+    // LRU touch. The affinity's BrowserContext is kept in
+    // `#sharedContexts` as an orphan for re-warming on the next
+    // burst.
+    if (oldestAffinity) {
+      await this.disposeAffinity(oldestAffinity);
+    }
+  }
+
   async #selectEntryForAffinity(
     affinityKey: string,
     signal?: AbortSignal,
+    priority: number = 0,
   ): Promise<{ entry: PoolEntry; reused: boolean; releaseTab: () => void }> {
     let entries = this.#affinityPages.get(affinityKey);
     let entryList = entries
@@ -1022,7 +1642,7 @@ export class PagePool {
     let idle = entryList.filter((entry) => entry.queue.pendingCount === 0);
     if (idle.length > 0) {
       let entry = this.#selectLRUTab(idle);
-      let releaseTab = await entry.queue.acquire(signal);
+      let releaseTab = await entry.queue.acquire(signal, priority);
       return { entry, reused: true, releaseTab };
     }
     if (entryList.length < this.#affinityTabMax) {
@@ -1041,13 +1661,13 @@ export class PagePool {
       }
       let commandeered = this.#commandeerDormantTab(affinityKey);
       if (commandeered) {
-        let releaseTab = await commandeered.queue.acquire(signal);
+        let releaseTab = await commandeered.queue.acquire(signal, priority);
         return { entry: commandeered, reused: false, releaseTab };
       }
     }
     if (entryList.length > 0) {
       let entry = this.#selectLeastPendingTab(entryList);
-      let releaseTab = await entry.queue.acquire(signal);
+      let releaseTab = await entry.queue.acquire(signal, priority);
       return { entry, reused: true, releaseTab };
     }
     let fallbackShared = this.#tryClaimOrphanContext(affinityKey);
@@ -1062,7 +1682,7 @@ export class PagePool {
     }
     let fallback = this.#commandeerDormantTab(affinityKey);
     if (fallback) {
-      let releaseTab = await fallback.queue.acquire(signal);
+      let releaseTab = await fallback.queue.acquire(signal, priority);
       return { entry: fallback, reused: false, releaseTab };
     }
     if (entryList.length === 0) {
@@ -1079,7 +1699,7 @@ export class PagePool {
         let entry = this.#selectLeastPendingTab(crossAffinityEntries);
         entry.transitioning = true;
         try {
-          let releaseTab = await entry.queue.acquire(signal);
+          let releaseTab = await entry.queue.acquire(signal, priority);
           return { entry, reused: false, releaseTab };
         } catch (error) {
           entry.transitioning = false;
@@ -1578,6 +2198,25 @@ export class PagePool {
     // Keep the exceptionKeys mapping — there's no further follow-up
     // event to dispatch, but a stale-but-harmless entry is better
     // than a phantom remove if V8 ever re-fires for the same id.
+  }
+
+  // Test-only seam: drives one expansion tick. Production callers go
+  // through `getPage` → `#maybeExpandUnderSaturation`, but unit tests
+  // exercising the dynamic-pool envelope shouldn't need a real Chrome
+  // round-trip. Returns `true` if `#maxPages` grew on this call.
+  // `priority` selects which tier the expansion can reach:
+  // `priority >= #highPriorityThreshold` unlocks the high-priority
+  // ceiling; lower (or omitted) priorities stop at `#maxBurstPages`.
+  __test_tryExpand(priority?: number): boolean {
+    return this.#tryExpand(priority ?? 0);
+  }
+
+  // Test-only seam: invokes the saturation-detection hook the way
+  // `getPage` does, so unit tests can assert that expansion fires
+  // when the render semaphore is at capacity. Forwards `priority` so
+  // the high-priority tier path can be exercised in unit tests too.
+  __test_maybeExpandUnderSaturation(priority?: number): void {
+    this.#maybeExpandUnderSaturation(priority ?? 0);
   }
 
   // Test-only seam: writes a `source: 'exception'` entry directly
