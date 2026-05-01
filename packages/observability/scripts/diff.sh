@@ -166,7 +166,7 @@ normalize_json_content() {  # $1: src dir, $2: dest dir
   # and zsh and has no shell-state side effects.
   local f rel target
   while IFS= read -r -d '' f; do
-    rel="${f#$src/}"
+    rel="${f#"$src"/}"
     target="$dest/$rel"
     mkdir -p "$(dirname "$target")"
     jq --sort-keys "$JQ_NORMALIZE" "$f" > "$target"

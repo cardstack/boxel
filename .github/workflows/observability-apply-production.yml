@@ -142,14 +142,26 @@ jobs:
             echo "${var}=${val}" >> "$GITHUB_ENV"
           }
 
-          fetch GRAFANA_TOKEN          /production/grafana/grafanactl_token       --with-decryption
+          fetch GRAFANA_TOKEN          /production/grafana/grafanactl_token   --with-decryption
           fetch LOKI_URL               /production/loki/internal_url
           fetch BOXEL_DB_HOST          /production/boxel-grafana/db_host
           fetch SYNAPSE_PROMETHEUS_URL /production/boxel-grafana/prometheus_url
-          fetch REALM_SERVER_URL       /production/boxel-grafana/realm_server_url
           fetch BOXEL_DB_NAME          /production/boxel/PGDATABASE
           fetch BOXEL_DB_USER          /production/boxel/GRAFANA_DB_USER
           fetch BOXEL_DB_PASSWORD      /production/boxel/GRAFANA_DB_PASSWORD  --with-decryption
+
+      - name: Lint
+        # Belt-and-suspenders: ci-lint.yaml runs the same lint at PR time
+        # without a token. Here, with the production token already sourced
+        # from SSM, GRAFANACTL_VALIDATE_ENV adds a "validate against the
+        # live production Grafana" step. PRETTIER_SKIP avoids duplicating
+        # ci-lint's YAML format check (which requires pnpm install —
+        # overkill for this focused workflow).
+        working-directory: packages/observability
+        env:
+          GRAFANACTL_VALIDATE_ENV: production
+          PRETTIER_SKIP: "1"
+        run: ./scripts/lint.sh
 
       - name: Apply
         working-directory: packages/observability
