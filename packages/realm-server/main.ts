@@ -32,6 +32,7 @@ import {
 } from './lib/dev-service-registry';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
 import { runRegistryBackfillWithAdvisoryLock } from './lib/realm-registry-backfill';
+import { runRealmMetadataBackfillWithAdvisoryLock } from './lib/realm-metadata-backfill';
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
@@ -327,6 +328,19 @@ const getIndexHTML = async () => {
   // Guarded by a pg advisory lock so, in a future multi-instance deployment,
   // only one process does the disk scan per startup wave (CS-10890).
   await runRegistryBackfillWithAdvisoryLock(dbAdapter, {
+    dbAdapter,
+    realmsRootPath,
+    serverURL: new URL(String(serverURL)),
+    bootstrapRealms: paths.map((p, i) => ({
+      diskPath: String(p),
+      url: hrefs[i][0],
+    })),
+  });
+
+  // CS-10053: copy showAsCatalog/publishable from .realm.json into the
+  // realm_metadata table on first boot, then trim those keys from the
+  // sidecar. Idempotent on subsequent boots.
+  await runRealmMetadataBackfillWithAdvisoryLock(dbAdapter, {
     dbAdapter,
     realmsRootPath,
     serverURL: new URL(String(serverURL)),
