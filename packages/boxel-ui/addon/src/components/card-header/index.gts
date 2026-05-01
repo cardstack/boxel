@@ -1,5 +1,6 @@
 import type { MenuDivider } from '@cardstack/boxel-ui/helpers.ts';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
+import Maximize from '@cardstack/boxel-icons/maximize';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
@@ -32,12 +33,14 @@ interface Signature {
     editShortcutHint?: string;
     finishEditingShortcutHint?: string;
     headerColor?: string;
+    isExpanded?: boolean;
     isSaving?: boolean;
     isTopCard?: boolean;
     lastSavedMessage?: string;
     moreOptionsMenuItems?: MenuItem[];
     onClose?: () => void;
     onEdit?: () => void;
+    onExpand?: () => void;
     onFinishEditing?: () => void;
     realmInfo?: RealmDisplayInfo;
     utilityMenu?: CardHeaderUtilityMenu;
@@ -144,6 +147,22 @@ export default class CardHeader extends Component<Signature> {
                 </:content>
               </BoxelDropdown>
             </div>
+          {{/if}}
+          {{#if @onExpand}}
+            <Tooltip @placement='top'>
+              <:trigger>
+                <ContextButton
+                  class={{cn 'icon-button icon-button--maximize' is-active=@isExpanded}}
+                  @icon={{Maximize}}
+                  @label={{if @isExpanded 'Restore' 'Expand'}}
+                  {{on 'click' @onExpand}}
+                  data-test-expand-button
+                />
+              </:trigger>
+              <:content>
+                {{if @isExpanded 'Restore' 'Expand to full width'}}
+              </:content>
+            </Tooltip>
           {{/if}}
           {{#if @onEdit}}
             <Tooltip @placement='top'>
@@ -279,6 +298,10 @@ export default class CardHeader extends Component<Signature> {
           font: var(--boxel-card-header-font-weight, 600)
             var(--boxel-card-header-text-font, var(--boxel-font-sm));
         }
+        /* In a stacked (non-expanded) card, the whole header bar
+           goes green when editing — original behavior. The expanded-
+           card-header-pill in the host's top bar overrides this so
+           only the pencil lights up (see submode-layout CSS). */
         header.is-editing {
           background-color: var(--boxel-highlight);
           color: var(--boxel-dark);
@@ -345,14 +368,33 @@ export default class CardHeader extends Component<Signature> {
           justify-content: right;
         }
 
-        .icon-button,
-        .icon-save {
-          z-index: 1;
-        }
+        /* (z-index removed from icon-button + icon-save — was z-index: 1
+           which created a stacking context that trapped Tooltip's
+           floating-ui popover beneath the pill. Tooltips now escape
+           to #tooltip-overlay (z-index: 10000) and render above the
+           pill cleanly.) */
         .icon-button :deep(svg) {
           stroke-width: 2.5;
         }
+        /* Maximize icon has a 24-unit viewBox vs the pencil's 18.75
+           unit viewBox; same stroke-width renders thinner. Bump it
+           up so the expand icon visually matches the pencil weight. */
+        .icon-button--maximize :deep(svg) {
+          stroke-width: 3.2;
+        }
+        /* Active expand button — solid green pill with dark icon
+           for contrast. Toggle via @isExpanded on CardHeader. */
+        .icon-button.is-active,
+        .icon-button.is-active:hover {
+          background-color: var(--boxel-highlight);
+          color: var(--boxel-dark);
+        }
 
+        /* Pencil button in a stacked (non-expanded) editing card.
+           The header behind it is already green (header.is-editing
+           rule above), so the pencil sits white/light for contrast.
+           Original behavior — the expanded pill overrides this in
+           submode-layout CSS to make the pencil green-on-white. */
         .icon-save {
           background-color: var(--boxel-light);
         }

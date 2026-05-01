@@ -121,6 +121,12 @@ export default class SubmodeLayout extends Component<Signature> {
   declare private doSearch: (term: string, typeRef?: ResolvedCodeRef) => void;
 
   @action
+  private storeExpandedCardHeaderElement(element: Element) {
+    this.operatorModeStateService.expandedCardHeaderElement =
+      element as HTMLElement;
+  }
+
+  @action
   private storeTopBarCenterElement(element: Element) {
     this.topBarCenterElement = element;
   }
@@ -401,7 +407,9 @@ export default class SubmodeLayout extends Component<Signature> {
   <template>
     <div
       {{handleWindowResizeModifier this.onWindowResize}}
-      class='submode-layout {{this.aiAssistantVisibilityClass}}'
+      class='submode-layout
+        {{this.aiAssistantVisibilityClass}}
+        {{if this.operatorModeStateService.hasAnyStackItemExpanded "has-expanded-card"}}'
       data-test-submode-layout
       ...attributes
     >
@@ -447,6 +455,11 @@ export default class SubmodeLayout extends Component<Signature> {
                   }}
                 />
               {{/if}}
+              <div
+                class='expanded-card-header-slot'
+                data-test-expanded-card-header-slot
+                {{captureElement this.storeExpandedCardHeaderElement}}
+              ></div>
               {{yield to='topBar'}}
             {{/if}}
 
@@ -595,6 +608,17 @@ export default class SubmodeLayout extends Component<Signature> {
         position: relative;
         width: 100%;
         max-width: 100%;
+        /* Lock outer box to exactly var(--stack-padding-top) — the
+           same value .operator-mode-stack uses for its padding-top
+           offset. Any content the bar contains (workspace button,
+           submode switcher, portaled expanded-card-header pill,
+           etc.) renders WITHIN this fixed height; nothing the slot
+           contents do can push the bar taller. This is what lets
+           interact-expanded card positioning match host-mode pixel
+           for pixel — both card-tops sit at y = stack-padding-top
+           and the bar is guaranteed to occupy that exact space. */
+        height: var(--stack-padding-top);
+        box-sizing: border-box;
         padding: var(--operator-mode-spacing);
         z-index: var(--host-top-bar-z-index);
 
@@ -602,12 +626,81 @@ export default class SubmodeLayout extends Component<Signature> {
         align-items: center;
         gap: var(--operator-mode-spacing);
       }
+      /* Subtle glass-morphism behind the top bar when a card is
+         expanded: blurs what's behind, slight white tint, and casts
+         a small drop shadow onto the card's top edge so the toolbar
+         area reads as a distinct layer above the expanded surface. */
+      .submode-layout.has-expanded-card .submode-layout-top-bar {
+        background-color: rgba(255, 255, 255, 0.35);
+        backdrop-filter: blur(10px) saturate(160%);
+        -webkit-backdrop-filter: blur(10px) saturate(160%);
+        box-shadow: 0 2px 6px -2px rgba(15, 23, 42, 0.12);
+      }
 
       .submode-layout-top-bar-center {
         flex: 1;
         display: flex;
         justify-content: center;
         min-width: 0;
+      }
+
+      /* Slot for the expanded stack-item's CardHeader pill. When a
+         card is expanded, stack-item portals its CardHeader here via
+         the in-element block helper. The slot grows to take available
+         space (so the pill can stretch to ~800px) and centers the
+         pill horizontally — same horizontal position the stack card
+         would occupy below. When no card is expanded, the slot is
+         empty (zero rendered children). */
+      .expanded-card-header-slot {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 0;
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      /* The portaled CardHeader inside takes pill styling — white
+         rounded box, realm icon left-docked, actions right-docked,
+         left-justified type/title. Reuses CardHeader's existing
+         actions structure; just re-skinned via this class. */
+      :global(.expanded-card-header-pill) {
+        --inner-boxel-card-header-padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+        --boxel-card-header-actions-min-width: max-content;
+        --boxel-card-header-icon-container-min-width: max-content;
+        height: var(--container-button-size);
+        max-width: 100%;
+        width: 100%;
+        gap: var(--boxel-sp-xxs);
+        background: var(--boxel-light);
+        /* Match the other floating-bar elements (Interact, +New,
+           profile avatar): full pill shape (radius: 999px), submode-
+           bar shadow + outline. */
+        border-radius: 999px;
+        box-shadow: var(--submode-bar-item-box-shadow);
+        outline: var(--submode-bar-item-outline);
+      }
+      /* Title in the expanded pill stays left-justified inside the
+         center column (overrides CardHeader's default text-align: center). */
+      :global(.expanded-card-header-pill .card-type-display-name) {
+        text-align: left;
+        padding-left: var(--boxel-sp-xs);
+      }
+      /* Expanded mode editing — DO NOT flip the whole pill green;
+         only the pencil button lights up (rule below). Overrides
+         CardHeader's default header.is-editing green-bar treatment,
+         which is correct for stacked cards but not for the expanded
+         pill (we want the pill to stay white in the bar). */
+      :global(.expanded-card-header-pill.is-editing) {
+        background-color: var(--boxel-light);
+        color: var(--boxel-dark);
+      }
+      /* Pencil button in expanded edit mode — solid green with dark
+         icon for contrast (matches the active expand button). */
+      :global(.expanded-card-header-pill .icon-save),
+      :global(.expanded-card-header-pill .icon-save:hover) {
+        background-color: var(--boxel-highlight);
+        color: var(--boxel-dark);
       }
 
       .submode-switcher {

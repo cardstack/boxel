@@ -228,6 +228,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
     const isLastCard = this.args.index === numberOfCards - 1;
     const isSecondLastCard = this.args.index === numberOfCards - 2;
 
+    // Expanded mode opts out of stacked-layout sizing — let natural
+    // flow size the card so .item.expanded CSS rules apply cleanly
+    // without fighting inline !important overrides. Mirrors host-mode
+    // pattern: parent constrains height, children inherit.
+    if (this.isExpanded) {
+      return htmlSafe(`z-index: calc(${this.args.index} + 1);`);
+    }
+
     let marginTopPx = 0;
 
     if (invertedIndex > 2) {
@@ -253,8 +261,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
       max-width: ${maxWidthPercent}%;
       z-index: calc(${this.args.index} + 1);
       margin-top: ${marginTopPx}px;
-      transition: margin-top var(--boxel-transition), width var(--boxel-transition);
     `; // using margin-top instead of padding-top to hide scrolled content from view
+    // Transition (280ms ease-out, all geometric props) is on the .item
+    // CSS rule below — no inline override here, so expand/collapse
+    // morph + stacked-layout shifts all use the same curve.
 
     return htmlSafe(styles);
   }
@@ -271,6 +281,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return isRealmIndexCardId(this.url, this.realmURL);
   }
 
+  // Element ref captured by submode-layout's expanded-card-header-slot.
+  // Only used when isExpanded — projects the CardHeader into the top
+  // bar pill, replacing the inline card header for the expanded mode.
+  // Returns null when not expanded so the inline header renders as
+  // usual (and the if/else branch picks the inline path).
+  private get expandedCardHeaderSlot() {
+    if (!this.isExpanded) return null;
+    return this.operatorModeStateService.expandedCardHeaderElement;
+  }
+
   @provide(CardContextName)
   // @ts-ignore "context" is declared but not used
   private get context(): StackItemCardContext {
@@ -282,7 +302,136 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private closeItem = () => this._closeItem.perform();
 
+  // Per-card expanded state. Persisted on operatorModeStateService
+  // (keyed by stack-item id) so the user's expand intent survives:
+  //   - When this card is buried (pushed deeper in the stack),
+  //     isExpanded reads as false (we render normally), but the
+  //     stored intent is preserved.
+  //   - When the card pops back to the top, isExpanded reads true
+  //     again from storage and the card re-expands.
+  // Only available when the card opts in via `prefersWideFormat`.
+  private get itemExpandKey(): string {
+    return this.args.item.id;
+  }
+  private get isExpandedIntent(): boolean {
+    return this.operatorModeStateService.isStackItemExpanded(this.itemExpandKey);
+  }
+  private get isExpanded(): boolean {
+    return this.isTopCard && this.canExpand && this.isExpandedIntent;
+  }
+  private get canExpand(): boolean {
+    return this.isTopCard && !this.isCardsGridCard;
+  }
+  // Cards-grid (the Workspace's "All Cards" view) opts out of expand
+  // mode — its grid layout assumes scrollable, non-fullscreen content;
+  // forcing it into expanded mode causes child card tiles to overlap.
+  private get isCardsGridCard(): boolean {
+    const ctor = this.card?.constructor as
+      | { displayName?: string }
+      | undefined;
+    return ctor?.displayName === 'Cards Grid';
+  }
+  private toggleExpanded = () => {
+    if (!this.canExpand) return;
+    const cardEl = this.itemEl;
+    const cardFrom = cardEl?.getBoundingClientRect();
+
+    this.operatorModeStateService.setStackItemExpanded(
+      this.itemExpandKey,
+      !this.isExpandedIntent,
+    );
+
+    // FLIP via Web Animations on the card body: measure rect before
+    // state change, animate inverse transform back to identity after
+    // re-render. Works around CSS transitions not firing when changing
+    // properties cross from inline-style to CSS-rule sources mid-frame.
+    if (!cardEl || !cardFrom) return;
+    scheduleOnce('afterRender', this, () => {
+      this.playFlip(cardEl, cardFrom, {
+        duration: 280,
+        easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+      });
+      // Header gets a lightweight fade + small Y slide — suggests
+      // direction without the full FLIP's visual noise. Expand: pill
+      // slides UP into the bar (starts 10px below). Restore: header
+      // slides DOWN onto the card (starts 10px above). One rAF to let
+      // {{#in-element}} settle before measuring.
+      requestAnimationFrame(() => {
+        const headerTo = this.findHeaderEl();
+        if (!headerTo) return;
+        const fromOffsetY = this.isExpandedIntent ? 28 : -28;
+        headerTo.animate(
+          [
+            { opacity: 0, transform: `translateY(${fromOffsetY}px)` },
+            { opacity: 1, transform: 'translateY(0)' },
+          ],
+          {
+            duration: 280,
+            easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+            fill: 'none',
+          },
+        );
+      });
+    });
+  };
+
+  private findHeaderEl(): HTMLElement | null {
+    // After expand: the portaled .expanded-card-header-pill in the bar.
+    // Before expand (or after restore): the inline .stack-item-header
+    // inside this stack-item's DOM.
+    const slot = this.operatorModeStateService.expandedCardHeaderElement;
+    const portaled = slot?.querySelector(
+      '.expanded-card-header-pill',
+    ) as HTMLElement | null;
+    if (portaled) return portaled;
+    return (
+      (this.itemEl?.querySelector(
+        '.stack-item-header',
+      ) as HTMLElement | null) ?? null
+    );
+  }
+
+  private playFlip(
+    el: HTMLElement,
+    fromRect: DOMRect,
+    opts: { duration: number; easing: string },
+  ) {
+    const toRect = el.getBoundingClientRect();
+    const dx = fromRect.left - toRect.left;
+    const dy = fromRect.top - toRect.top;
+    // Guard against zero target dimensions (e.g., during unmount or
+    // before layout settles) — Web Animations would NaN out otherwise.
+    if (toRect.width === 0 || toRect.height === 0) return;
+    const sx = fromRect.width / toRect.width;
+    const sy = fromRect.height / toRect.height;
+    el.animate(
+      [
+        {
+          transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`,
+          transformOrigin: 'top left',
+        },
+        {
+          transform: 'translate(0, 0) scale(1, 1)',
+          transformOrigin: 'top left',
+        },
+      ],
+      {
+        duration: opts.duration,
+        easing: opts.easing,
+        fill: 'none',
+      },
+    );
+  }
+
   private _closeItem = dropTask(async () => {
+    // Clear any persisted expand intent for this item — the item is
+    // about to be removed from the stack, so the entry on the
+    // service map should not linger (would re-apply if a card with
+    // the same id ever returned).
+    this.operatorModeStateService.setStackItemExpanded(
+      this.itemExpandKey,
+      false,
+    );
     await this.args.dismissStackedCardsAbove(this.args.index - 1);
   });
 
@@ -755,6 +904,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     <div
       class='item
         {{if this.isBuried "buried"}}
+        {{if this.isExpanded "expanded"}}
         {{if this.doOpeningAnimation "opening-animation"}}
         {{if this.doClosingAnimation "closing-animation"}}
         {{if this.doMovingForwardAnimation "move-forward-animation"}}
@@ -816,6 +966,31 @@ export default class OperatorModeStackItem extends Component<Signature> {
         {{else if this.card}}
           {{this.setWindowTitle}}
           {{#let (this.realm.info this.urlForRealmLookup) as |realmInfo|}}
+            {{#if this.expandedCardHeaderSlot}}
+              {{#in-element this.expandedCardHeaderSlot}}
+                <CardHeader
+                  @cardTypeDisplayName={{this.headerType}}
+                  @cardTypeIcon={{cardTypeIcon this.card}}
+                  @cardTitle={{this.headerTitle}}
+                  @isSaving={{this.cardResource.autoSaveState.isSaving}}
+                  @isTopCard={{this.isTopCard}}
+                  @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}
+                  @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
+                  @realmInfo={{realmInfo}}
+                  @utilityMenu={{this.utilityMenu}}
+                  @onEdit={{if
+                    this.canEdit
+                    (fn this.cardCrudFunctions.editCard this.card)
+                  }}
+                  @onExpand={{if this.canExpand this.toggleExpanded}}
+                  @isExpanded={{this.isExpanded}}
+                  @onFinishEditing={{if this.isEditing this.doneEditing}}
+                  @onClose={{unless this.isBuried this.closeItem}}
+                  class='expanded-card-header-pill'
+                  data-test-stack-card-header
+                />
+              {{/in-element}}
+            {{else}}
             <CardHeader
               @cardTypeDisplayName={{this.headerType}}
               @cardTypeIcon={{cardTypeIcon this.card}}
@@ -830,6 +1005,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 this.canEdit
                 (fn this.cardCrudFunctions.editCard this.card)
               }}
+              @onExpand={{if this.canExpand this.toggleExpanded}}
+              @isExpanded={{this.isExpanded}}
               @onFinishEditing={{if this.isEditing this.doneEditing}}
               @onClose={{unless this.isBuried this.closeItem}}
               @editShortcutHint={{this.keyboardShortcutLabels.edit}}
@@ -861,6 +1038,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               }}
               data-test-stack-card-header
             />
+            {{/if}}
           {{/let}}
           <div
             class='stack-item-content'
@@ -955,6 +1133,64 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --realm-icon-border-radius: 4px;
       }
 
+      /* Expanded mode — pinned to all edges of .inner (the stack's
+         positioned content box). .operator-mode-stack supplies
+         padding-top: var(--stack-padding-top) so .inner's top edge
+         already sits flush below the floating bar — same offset host-
+         mode gets from its in-flow bar above. inset: 0 inherits that
+         offset; no calc, no !important, no measurement. The :has
+         rule in stack.gts zeroes inline + bottom padding so the
+         card's right/bottom edges land at viewport edges. z-index
+         250 sits above stack background + workspace chooser (200),
+         below search sheet (300) and the floating bar (700). */
+      .item.expanded {
+        top: 0;
+        left: 0;
+        width: 100%;
+        max-width: 100%;
+        height: 100%;
+        margin-top: 0;
+        z-index: 250;
+        pointer-events: auto;
+      }
+      /* Propagate height through the chain so bottom-docked chrome
+         lands at the viewport's bottom edge. .stack-item-content
+         and .stack-item-preview default to overflow: auto with no
+         height — without min-height: 0 the chain breaks and the
+         studio's flex: 1 has no defined parent height. Keep
+         overflow: auto (matches host-mode pattern) so isolated
+         content longer than the viewport can scroll. */
+      .item.expanded .stack-item-content,
+      .item.expanded .stack-item-preview {
+        min-height: 0;
+      }
+      .item.expanded .stack-item-card {
+        border-radius: 0;
+        box-shadow: none;
+        /* Tray "chrome" (rounded corners, shadow, white background)
+           all dissolve at end of morph — the tray becomes a
+           positioning anchor only. Body content (.stack-item-content)
+           inside renders normally without inheriting transparency
+           because background, not opacity, is what's faded. */
+        background: transparent;
+        /* Header is portaled into the top bar pill (see
+           expanded-card-header-slot in submode-layout); the inline
+           CardHeader is not rendered for expanded cards (the if/else
+           in the template picks the in-element branch). Drop the
+           grid header row so the body fills the entire card. */
+        grid-template-rows: 1fr;
+      }
+      /* When the top card is expanded, fade out the underlying
+         buried cards so the user isn't visually distracted by the
+         stack history behind the expanded surface. Sibling selector
+         within .operator-mode-stack > .inner; uses :has() to match
+         buried items that have an expanded sibling AFTER them in the
+         DOM (top card = last in DOM order). */
+      .item:not(.expanded):has(~ .item.expanded) {
+        opacity: 0;
+        transition: opacity 380ms ease;
+      }
+
       .stack-item-card {
         position: relative;
         height: 100%;
@@ -965,7 +1201,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         pointer-events: auto;
         overflow: hidden;
       }
-
       .stack-item-header {
         --boxel-card-header-padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
         --boxel-card-header-background-color: var(--boxel-light);

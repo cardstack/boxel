@@ -170,6 +170,56 @@ export default class OperatorModeStateService extends Service {
   @tracked profileSettingsOpen = false;
   @tracked createListingModalPayload?: CreateListingModalPayload;
 
+  // Per-card expanded-mode intent. Keyed by stack-item id so the
+  // user's expand intent survives bury/pop cycles within a stack:
+  // when a card is pushed deeper, stack-item reads isTopCard=false
+  // and renders normally; when it pops back to the top, the stored
+  // intent re-applies and the card re-expands. Only set/read when
+  // the card opts in via `prefersWideFormat`.
+  private expandedStackItems: TrackedMap<string, boolean> = new TrackedMap();
+  isStackItemExpanded(itemKey: string): boolean {
+    return this.expandedStackItems.get(itemKey) ?? false;
+  }
+  setStackItemExpanded(itemKey: string, value: boolean) {
+    if (value) {
+      this.expandedStackItems.set(itemKey, true);
+    } else {
+      this.expandedStackItems.delete(itemKey);
+    }
+  }
+  // Drop ALL expand intents — called when a new card lands on any
+  // stack so the expanded surface doesn't end up under the new card
+  // (which would otherwise overlap awkwardly on the workspace
+  // background, see addItemToStack).
+  clearAllStackItemExpanded() {
+    this.expandedStackItems.clear();
+  }
+  // True when at least one stack's TOP card has expand intent — used
+  // to drive the bar's glass-morphism + .has-expanded-card class. Only
+  // top cards count: when a card with expand intent gets buried under
+  // a new stack item, the intent is retained (so it auto-re-expands
+  // on return) but the bar should drop its frost so the new top card
+  // stacks normally without a frosted scrim. Same per-level: A
+  // expanded → push B → A buried + intent kept, frost off → B top
+  // (no intent yet) → expand B → frost on → push C → B buried +
+  // intent kept, frost off; close C → B top again, intent fires,
+  // frost back on; close B → A top again, intent fires, frost on.
+  get hasAnyStackItemExpanded(): boolean {
+    if (this.expandedStackItems.size === 0) return false;
+    return this._state.stacks.some((stack) => {
+      const top = stack[stack.length - 1];
+      return top && this.expandedStackItems.has(top.id);
+    });
+  }
+
+  // Slot in submode-layout's top bar where an EXPANDED stack item's
+  // CardHeader portals itself. Captured by submode-layout via
+  // captureElement modifier on insert. Stack-item reads this and uses
+  // {{#in-element}} to project its header pill into the bar when
+  // isExpanded — replacing the inline card header for the expanded
+  // mode only. When collapsed, the inline header reappears.
+  @tracked expandedCardHeaderElement: HTMLElement | null = null;
+
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
   @service declare private errorDisplay: ErrorDisplayService;
@@ -299,6 +349,11 @@ export default class OperatorModeStateService extends Service {
       // this card to the top instead?)
       return;
     }
+    // Note: expand intent is retained on the buried card so that
+    // when the topping card closes and the previously-expanded card
+    // returns to top, it auto-re-expands. The visual collapse is
+    // already handled by isExpanded = isTopCard && isExpandedIntent
+    // — a buried card never renders as expanded.
     this._state.stacks[stackIndex].push(item);
     if (item.id) {
       this.recentCardsService.add(item.id);

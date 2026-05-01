@@ -141,7 +141,28 @@ export default class OperatorModeStack extends Component<Signature> {
         padding-inline: var(--operator-mode-spacing);
         padding-bottom: var(--stack-padding-bottom);
         position: relative;
-        transition: padding-top var(--boxel-transition);
+      }
+      /* When an item is expanded, drop the stack's inline + bottom
+         padding so the expanded card fills the area below the bar
+         edge-to-edge. Top padding is FORCED back to var(--stack-
+         padding-top) — the .stack-item-card "tray" anchors at this
+         offset (right below the floating bar), with its other three
+         edges flush to viewport edges. This is the magic-move target:
+         every animation tick keeps tray-edges aligned with the inner
+         content. */
+      .operator-mode-stack:has(.item.expanded) {
+        padding-top: var(--stack-padding-top);
+        padding-inline: 0;
+        padding-bottom: 0;
+      }
+      /* .inner is display: flex with no explicit width — when its
+         flex children are all position: absolute (the .item rules),
+         flex sees an empty row and collapses .inner to width 0. The
+         expanded .item using inset: 0 then resolves to a 0-width
+         box (containing-block width = 0). Force .inner to fill the
+         stack so inset: 0 spans the viewport. */
+      .operator-mode-stack:has(.item.expanded) .inner {
+        width: 100%;
       }
       .operator-mode-stack
         :deep(.field-component-card.fitted-format .missing-template) {

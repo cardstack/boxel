@@ -851,7 +851,11 @@ export default class InteractSubmode extends Component {
       as |search|
     >
       <div
-        class='interact-submode'
+        class='interact-submode
+          {{if
+            this.operatorModeStateService.hasAnyStackItemExpanded
+            "has-expanded-card"
+          }}'
         style={{this.backgroundImageStyle}}
         {{onKeyMod 'Escape' this.handleEscape}}
         {{! Bind Ctrl+E on every platform — Mac users get Ctrl+E too,
@@ -1000,6 +1004,26 @@ export default class InteractSubmode extends Component {
         flex-basis: var(--container-button-size);
         position: absolute;
         z-index: var(--boxel-layer-floating-button);
+      }
+      /* Hide neighbor-stack-trigger arrows when any card is expanded
+         — the focused expanded view shouldn't be cluttered with stack-
+         creation chrome at the edges. */
+      .interact-submode.has-expanded-card .neighbor-stack-trigger {
+        display: none;
+      }
+      /* Drop the edge padding the .stacks container applies to its
+         first/last stack so an expanded card spans viewport edge to
+         edge — pixel-identical to host-mode's .host-mode-content.is-wide
+         (padding: 0). */
+      .interact-submode.has-expanded-card
+        .stacks
+        > :deep(.operator-mode-stack:first-child) {
+        padding-left: 0;
+      }
+      .interact-submode.has-expanded-card
+        .stacks
+        > :deep(.operator-mode-stack:last-child) {
+        padding-right: 0;
       }
       .stack-trigger-right {
         right: 2px;
