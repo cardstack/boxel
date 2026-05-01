@@ -95,7 +95,11 @@ module('Integration | commands | invalidate-realm-urls', function (hooks) {
 
     let result = await command.execute({
       realmIdentifier: realmURL,
-      resourceIdentifiers: [`${realmURL}mango`, `${realmURL}mango`, `${realmURL}person.gts`],
+      resourceIdentifiers: [
+        `${realmURL}mango`,
+        `${realmURL}mango`,
+        `${realmURL}person.gts`,
+      ],
     });
 
     assert.strictEqual(result, undefined, 'command has no result card');

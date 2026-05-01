@@ -165,7 +165,9 @@ export class GenerateExampleCardsOneShotCommand extends HostBaseCommand<
       userPrompt,
       llmModel: 'anthropic/claude-3-haiku',
       attachedFileIdentifiers:
-        attachedFileIdentifiers.length > 0 ? attachedFileIdentifiers : undefined,
+        attachedFileIdentifiers.length > 0
+          ? attachedFileIdentifiers
+          : undefined,
     });
 
     const { payload: examplePayload } = parseExamplePayloadFromOutput(

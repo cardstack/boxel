@@ -74,7 +74,9 @@ export default class GenerateThemeExampleCommand extends HostBaseCommand<
       systemPrompt: ONE_SHOT_SYSTEM_PROMPT,
       userPrompt,
       llmModel,
-      attachedFileIdentifiers: attachedFileIdentifiers.length ? attachedFileIdentifiers : undefined,
+      attachedFileIdentifiers: attachedFileIdentifiers.length
+        ? attachedFileIdentifiers
+        : undefined,
       skillCardIds,
     });
 

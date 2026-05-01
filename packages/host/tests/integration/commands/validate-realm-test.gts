@@ -67,7 +67,9 @@ module('Integration | commands | validate-realm', function (hooks) {
     let commandService = getService('command-service');
     let command = new ValidateRealmCommand(commandService.commandContext);
     try {
-      await command.execute({ realmIdentifier: 'https://invalid.example.com/realm/' });
+      await command.execute({
+        realmIdentifier: 'https://invalid.example.com/realm/',
+      });
       assert.ok(false, 'should have thrown');
     } catch (e: any) {
       assert.ok(

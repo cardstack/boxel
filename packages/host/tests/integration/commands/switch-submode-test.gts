@@ -195,7 +195,9 @@ module('Integration | commands | switch-submode', function (hooks) {
       newFileIdentifier,
     );
 
-    let { status, content } = await cardService.getSource(new URL(newFileIdentifier));
+    let { status, content } = await cardService.getSource(
+      new URL(newFileIdentifier),
+    );
     assert.strictEqual(status, 200);
     assert.strictEqual(content, '');
   });

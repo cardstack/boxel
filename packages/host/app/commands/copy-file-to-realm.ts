@@ -70,7 +70,9 @@ export default class CopyFileToRealmCommand extends HostBaseCommand<
 
     let commandModule = await this.loadCommandModule();
     const { CopyFileToRealmResult } = commandModule;
-    return new CopyFileToRealmResult({ newFileIdentifier: destinationUrl.href });
+    return new CopyFileToRealmResult({
+      newFileIdentifier: destinationUrl.href,
+    });
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {

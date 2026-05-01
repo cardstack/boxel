@@ -75,7 +75,10 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
 
       // Read attached file contents
       let attachedFilesContent = '';
-      if (input.attachedFileIdentifiers && input.attachedFileIdentifiers.length > 0) {
+      if (
+        input.attachedFileIdentifiers &&
+        input.attachedFileIdentifiers.length > 0
+      ) {
         const readTextFileCommand = new ReadTextFileCommand(
           this.commandService.commandContext,
         );

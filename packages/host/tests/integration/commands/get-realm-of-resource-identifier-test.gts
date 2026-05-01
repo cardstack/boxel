@@ -44,53 +44,53 @@ class StubRealmService extends RealmService {
 module(
   'Integration | commands | get-realm-of-resource-identifier',
   function (hooks) {
-  setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
-  setupLocalIndexing(hooks);
+    setupRenderingTest(hooks);
+    setupBaseRealm(hooks);
+    setupLocalIndexing(hooks);
 
-  let mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-    activeRealms: [testRealmURL],
-    autostart: true,
-  });
-
-  hooks.beforeEach(function (this: RenderingTestContext) {
-    getOwner(this)!.register('service:realm', StubRealmService);
-  });
-
-  setupRealmCacheTeardown(hooks);
-
-  hooks.beforeEach(async function () {
-    await withCachedRealmSetup(async () =>
-      setupIntegrationTestRealm({
-        mockMatrixUtils,
-        contents: {},
-      }),
-    );
-  });
-
-  test('returns the realm identifier containing a given resource', async function (assert) {
-    realmOfURLMap = new Map([[testRealmURL, new URL(testRealmURL)]]);
-    let commandService = getService('command-service');
-    let command = new GetRealmOfResourceIdentifierCommand(
-      commandService.commandContext,
-    );
-    let result = await command.execute({
-      resourceIdentifier: `${testRealmURL}some-card`,
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+      autostart: true,
     });
-    assert.strictEqual(result.realmIdentifier, testRealmURL);
-  });
 
-  test('returns empty string when resource is not in any realm', async function (assert) {
-    realmOfURLMap = new Map();
-    let commandService = getService('command-service');
-    let command = new GetRealmOfResourceIdentifierCommand(
-      commandService.commandContext,
-    );
-    let result = await command.execute({
-      resourceIdentifier: 'https://unknown.example.com/card',
+    hooks.beforeEach(function (this: RenderingTestContext) {
+      getOwner(this)!.register('service:realm', StubRealmService);
     });
-    assert.strictEqual(result.realmIdentifier, '');
-  });
+
+    setupRealmCacheTeardown(hooks);
+
+    hooks.beforeEach(async function () {
+      await withCachedRealmSetup(async () =>
+        setupIntegrationTestRealm({
+          mockMatrixUtils,
+          contents: {},
+        }),
+      );
+    });
+
+    test('returns the realm identifier containing a given resource', async function (assert) {
+      realmOfURLMap = new Map([[testRealmURL, new URL(testRealmURL)]]);
+      let commandService = getService('command-service');
+      let command = new GetRealmOfResourceIdentifierCommand(
+        commandService.commandContext,
+      );
+      let result = await command.execute({
+        resourceIdentifier: `${testRealmURL}some-card`,
+      });
+      assert.strictEqual(result.realmIdentifier, testRealmURL);
+    });
+
+    test('returns empty string when resource is not in any realm', async function (assert) {
+      realmOfURLMap = new Map();
+      let commandService = getService('command-service');
+      let command = new GetRealmOfResourceIdentifierCommand(
+        commandService.commandContext,
+      );
+      let result = await command.execute({
+        resourceIdentifier: 'https://unknown.example.com/card',
+      });
+      assert.strictEqual(result.realmIdentifier, '');
+    });
   },
 );
