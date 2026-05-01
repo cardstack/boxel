@@ -1332,7 +1332,19 @@ export default class MatrixService extends Service {
         getRoom(
           this,
           () => roomId,
-          () => this.getRoomData(roomId)?.events,
+          () => {
+            let data = this.getRoomData(roomId);
+            // Track _roomState alongside _events so the resource re-runs
+            // when room state changes too. processRoomTask returns early
+            // if the aiBot isn't in memberIds, and memberIds is derived
+            // from _roomState (set by drainRoomState) independently from
+            // _events (updated by drainTimeline). Without this dependency,
+            // if drainTimeline drains a state event before drainRoomState
+            // runs, processRoomTask runs with empty memberIds, exits early,
+            // and never re-runs because _events alone doesn't change again.
+            void data?.hasRoomState;
+            return data?.events;
+          },
         ),
       );
     }
