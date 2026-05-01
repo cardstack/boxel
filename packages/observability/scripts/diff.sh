@@ -196,6 +196,7 @@ JQ_NORMALIZE='
         | del(.creationTimestamp)
         | del(.uid)
         | (if has("labels") and (.labels | type) == "object" and (.labels | length) == 0 then del(.labels) else . end)
+        | (if has("annotations") and (.annotations | type) == "object" and (.annotations | length) == 0 then del(.annotations) else . end)
         | (if .namespace == "default" then del(.namespace) else . end)
       )
     else . end)
