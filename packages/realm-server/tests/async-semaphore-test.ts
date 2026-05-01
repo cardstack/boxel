@@ -24,7 +24,7 @@ module(basename(__filename), function () {
   module('AsyncSemaphore basic state', function () {
     test('reports correct counts at construction', function (assert) {
       let sem = new AsyncSemaphore(3);
-      assert.strictEqual(sem.capacity, 3);
+      assert.strictEqual(sem.capacity, 2);
       assert.strictEqual(sem.inUseCount, 0);
       assert.strictEqual(sem.pendingCount, 0);
     });
