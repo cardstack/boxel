@@ -256,16 +256,18 @@ module(basename(__filename), function () {
           'published realm has index.json',
         );
 
-        let publishedRealmConfig = readJsonSync(
-          join(publishedRealmPath, '.realm.json'),
-        );
-        assert.notOk(
-          publishedRealmConfig.publishable,
-          'published realm config should have publishable: false',
+        // CS-10053: publishable is in realm_metadata, not the sidecar.
+        let publishedRealmURL = response.body.data.attributes.publishedRealmURL;
+        let metaRows = (await dbAdapter.execute(
+          `SELECT publishable FROM realm_metadata WHERE url = '${publishedRealmURL}'`,
+        )) as { publishable: boolean | null }[];
+        assert.deepEqual(
+          metaRows,
+          [{ publishable: false }],
+          'realm_metadata for published realm has publishable: false',
         );
 
         // Verify that boxel_index entries exist for the published realm
-        let publishedRealmURL = response.body.data.attributes.publishedRealmURL;
         let indexResults = await dbAdapter.execute(
           `SELECT * FROM boxel_index WHERE realm_url = '${publishedRealmURL}'`,
         );
@@ -595,9 +597,16 @@ module(basename(__filename), function () {
           `${response.body.data.attributes.publishedRealmURL}${hostHomePath}`,
           'hostHome points at published realm',
         );
-        assert.notOk(
-          publishedRealmConfig.publishable,
-          'published realm config should have publishable: false',
+        // CS-10053: publishable lives in realm_metadata.
+        let publishedRealmURL =
+          response.body.data.attributes.publishedRealmURL;
+        let metaRows = (await dbAdapter.execute(
+          `SELECT publishable FROM realm_metadata WHERE url = '${publishedRealmURL}'`,
+        )) as { publishable: boolean | null }[];
+        assert.deepEqual(
+          metaRows,
+          [{ publishable: false }],
+          'realm_metadata for published realm has publishable: false',
         );
       });
 
@@ -663,17 +672,16 @@ module(basename(__filename), function () {
           'Timestamp is updated on republish',
         );
 
-        let publishedRealmId = secondResponse.body.data.id;
-        let publishedDir = join(dir.name, 'realm_server_3', '_published');
-        let publishedRealmPath = join(publishedDir, publishedRealmId);
-
-        let publishedRealmConfig = readJsonSync(
-          join(publishedRealmPath, '.realm.json'),
-        );
-
-        assert.notOk(
-          publishedRealmConfig.publishable,
-          'published realm config should have publishable: false',
+        // CS-10053: publishable lives in realm_metadata.
+        let publishedRealmURL =
+          secondResponse.body.data.attributes.publishedRealmURL;
+        let metaRows = (await dbAdapter.execute(
+          `SELECT publishable FROM realm_metadata WHERE url = '${publishedRealmURL}'`,
+        )) as { publishable: boolean | null }[];
+        assert.deepEqual(
+          metaRows,
+          [{ publishable: false }],
+          'realm_metadata for republished realm has publishable: false',
         );
       });
 

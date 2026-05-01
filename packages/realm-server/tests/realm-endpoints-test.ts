@@ -500,11 +500,19 @@ module(basename(__filename), function () {
           });
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assert.deepEqual(
-          readJSONSync(realmConfigPath),
-          { ...(initialConfig ?? {}), publishable: true },
-          '.realm.json contains the updated property',
+        assert.strictEqual(
+          response.body.data.attributes.publishable,
+          true,
+          'response includes publishable: true (sourced from realm_metadata)',
         );
+        // publishable lives in realm_metadata now, not the sidecar.
+        if (initialConfig) {
+          assert.deepEqual(
+            readJSONSync(realmConfigPath),
+            initialConfig,
+            '.realm.json sidecar is untouched by a publishable PATCH',
+          );
+        }
 
         let showAsCatalogResponse = await request
           .patch('/_config')
@@ -529,11 +537,13 @@ module(basename(__filename), function () {
           400,
           'HTTP 400 status when attempting to set showAsCatalog',
         );
-        assert.deepEqual(
-          readJSONSync(realmConfigPath),
-          { ...(initialConfig ?? {}), publishable: true },
-          '.realm.json remains unchanged after disallowed property',
-        );
+        if (initialConfig) {
+          assert.deepEqual(
+            readJSONSync(realmConfigPath),
+            initialConfig,
+            '.realm.json remains unchanged after disallowed property',
+          );
+        }
       });
 
       test('realm-owner can patch multiple properties including interactHome and hostHome', async function (assert) {
@@ -759,9 +769,10 @@ module(basename(__filename), function () {
         writeFileSync(realmConfigPath, invalidContent);
 
         try {
-          // publishable is sidecar-owned, so this exercises the sidecar
+          // interactHome is sidecar-owned, so this exercises the sidecar
           // JSON-parse error path. Card-owned fields (name, backgroundURL,
-          // iconURL, hostRoutingRules) go to realm.json and would not
+          // iconURL, hostRoutingRules) go to realm.json and metadata-owned
+          // fields (publishable) go to realm_metadata; neither would
           // surface an error from a malformed .realm.json.
           let response = await request
             .patch('/_config')
@@ -777,7 +788,7 @@ module(basename(__filename), function () {
             .send({
               data: {
                 type: 'realm-config',
-                attributes: { publishable: false },
+                attributes: { interactHome: 'card://realm/home' },
               },
             });
 

@@ -396,10 +396,31 @@ export default function handlePublishRealm({
             throw swapError;
           }
 
-          let newlyPublishedRealmConfig = readJsonSync(
-            join(publishedRealmPath, '.realm.json'),
+          // CS-10053: publishable lives in realm_metadata now. Mark the
+          // published realm not-publishable via UPSERT after the swap
+          // succeeds so a failed swap doesn't leave a metadata row
+          // pointing at a rolled-back URL.
+          await query(dbAdapter, [
+            `INSERT INTO realm_metadata (url, publishable) VALUES (`,
+            param(publishedRealmURL),
+            `,`,
+            param(false),
+            `) ON CONFLICT (url) DO UPDATE SET publishable = false, updated_at = now()`,
+          ]);
+
+          // hostHome rewrite still goes via the sidecar — CS-10055 will
+          // move it to the card. Read what was copied over (may be
+          // missing if the source realm has no sidecar), rewrite if
+          // necessary, write back only when something changed.
+          let publishedRealmConfigPath = join(
+            publishedRealmPath,
+            '.realm.json',
           );
-          newlyPublishedRealmConfig.publishable = false;
+          let newlyPublishedRealmConfig: Record<string, unknown> = existsSync(
+            publishedRealmConfigPath,
+          )
+            ? readJsonSync(publishedRealmConfigPath)
+            : {};
           let rewrittenHostHome = rewriteHostHomeForPublishedRealm(
             newlyPublishedRealmConfig.hostHome,
             sourceRealmURL,
@@ -407,11 +428,11 @@ export default function handlePublishRealm({
           );
           if (rewrittenHostHome) {
             newlyPublishedRealmConfig.hostHome = rewrittenHostHome;
+            writeJsonSync(
+              publishedRealmConfigPath,
+              newlyPublishedRealmConfig,
+            );
           }
-          writeJsonSync(
-            join(publishedRealmPath, '.realm.json'),
-            newlyPublishedRealmConfig,
-          );
 
           // Clear stale modules cache for the published realm so that
           // error entries from a previous publish don't persist
