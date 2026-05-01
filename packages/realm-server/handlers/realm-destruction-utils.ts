@@ -188,8 +188,4 @@ export async function removeRealmDatabaseArtifacts(args: {
     `DELETE FROM realm_file_meta WHERE realm_url =`,
     param(realmURL),
   ]);
-  await query(dbAdapter, [
-    `DELETE FROM session_rooms WHERE realm_url =`,
-    param(realmURL),
-  ]);
 }
