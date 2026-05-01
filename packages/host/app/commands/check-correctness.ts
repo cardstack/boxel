@@ -3,6 +3,7 @@ import { service } from '@ember/service';
 import {
   isCardDocumentString,
   isCardErrorJSONAPI,
+  rri,
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
@@ -190,10 +191,10 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
 
   private moduleInfoFromFile(
     targetRef: string,
-  ): { moduleURL: URL; realmURL: URL; fileURL: URL } | undefined {
+  ): { moduleURL: URL; realmURL: string; fileURL: URL } | undefined {
     try {
       let fileURL = new URL(targetRef);
-      let realmURL = this.realm.realmOfURL(fileURL);
+      let realmURL = this.realm.realmOf(fileURL);
       if (!realmURL) {
         return undefined;
       }
@@ -208,7 +209,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
 
   private async prerenderModule(
     moduleURL: URL,
-    realmURL: URL,
+    realmURL: string,
   ): Promise<string | undefined> {
     try {
       let prerenderURL = new URL('/_prerender-module', this.realmServer.url);
@@ -223,7 +224,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
           data: {
             type: 'prerender-module-request',
             attributes: {
-              realm: realmURL.href,
+              realm: realmURL,
               url: moduleURL.href,
             },
           },
@@ -263,8 +264,9 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
 
   private async isEmptyFileContent(targetRef: string): Promise<boolean> {
     try {
-      let fileUrl = new URL(targetRef);
-      let { status, content } = await this.cardService.getSource(fileUrl);
+      let { status, content } = await this.cardService.getSource(
+        rri(targetRef),
+      );
       return status === 200 && content.trim() === '';
     } catch {
       return false;
@@ -288,9 +290,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     fileUrl: string,
   ): Promise<string | undefined> {
     try {
-      let { status, content } = await this.cardService.getSource(
-        new URL(fileUrl),
-      );
+      let { status, content } = await this.cardService.getSource(rri(fileUrl));
       if (status !== 200) {
         return undefined;
       }

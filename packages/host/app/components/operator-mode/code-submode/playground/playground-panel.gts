@@ -26,6 +26,7 @@ import {
   cardTypeDisplayName,
   getMenuItems,
   isSpecCard,
+  rri,
   type Permissions,
   PermissionsContextName,
   type RealmIdentifier,
@@ -432,8 +433,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       return undefined;
     }
     try {
-      let cardURL = new URL(selectedCardId);
-      return this.realm.realmOfURL(cardURL)?.href;
+      return this.realm.realmOf(rri(selectedCardId));
     } catch {
       return undefined;
     }

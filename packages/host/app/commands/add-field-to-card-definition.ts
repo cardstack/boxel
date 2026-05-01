@@ -1,5 +1,6 @@
 import { service } from '@ember/service';
 
+import { rri } from '@cardstack/runtime-common';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import type { FieldType } from 'https://cardstack.com/base/card-api';
@@ -35,14 +36,12 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
     input: BaseCommandModule.AddFieldToCardDefinitionInput,
   ): Promise<undefined> {
     let moduleSource = (
-      await this.cardService.getSource(
-        new URL(input.cardDefinitionToModify.module),
-      )
+      await this.cardService.getSource(input.cardDefinitionToModify.module)
     ).content;
 
     let moduleSyntax = new ModuleSyntax(
       moduleSource,
-      new URL(input.cardDefinitionToModify.module),
+      input.cardDefinitionToModify.module,
     );
 
     moduleSyntax.addField({
@@ -52,7 +51,7 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
       fieldType: input.fieldType as FieldType,
       fieldDefinitionType: input.fieldDefinitionType as 'field' | 'card',
       incomingRelativeTo: input.incomingRelativeTo
-        ? new URL(input.incomingRelativeTo)
+        ? rri(input.incomingRelativeTo)
         : undefined,
       outgoingRelativeTo: input.outgoingRelativeTo
         ? new URL(input.outgoingRelativeTo)

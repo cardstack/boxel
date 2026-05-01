@@ -29,6 +29,7 @@ import {
   isRegisteredPrefix,
   cardIdToURL,
   resolveCardReference,
+  rri,
   type RealmResourceIdentifier,
 } from './card-reference-resolver';
 import type { VirtualNetwork } from './virtual-network';
@@ -67,15 +68,7 @@ function canonicalURL(url: string, relativeTo?: string): string {
 }
 
 function normalizeExecutableURL(url: string): string {
-  if (!hasExecutableExtension(url)) {
-    return url;
-  }
-  try {
-    return trimExecutableExtension(new URL(url)).href;
-  } catch (_e) {
-    // Fallback for non-URL identifiers
-    return url.replace(/\.(gts|ts|js|gjs)$/, '');
-  }
+  return trimExecutableExtension(rri(url));
 }
 
 // Application-level dedup key. Coalesces two concurrent lookups only when
@@ -947,7 +940,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     try {
       let url = new URL(canonical);
       if (hasExecutableExtension(url.href)) {
-        return trimExecutableExtension(url).href;
+        return trimExecutableExtension(rri(url.href));
       }
       return url.href;
     } catch (_err) {

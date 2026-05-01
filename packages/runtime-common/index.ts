@@ -14,6 +14,7 @@ import {
   resolveCardReference,
   unresolveCardReference,
   isRegisteredPrefix,
+  rri,
   type RealmResourceIdentifier,
 } from './card-reference-resolver';
 
@@ -948,13 +949,18 @@ export function hasExecutableExtension(path: string): boolean {
   return false;
 }
 
-export function trimExecutableExtension(url: URL): URL {
+export function trimExecutableExtension(
+  input: RealmResourceIdentifier,
+): RealmResourceIdentifier {
   for (let extension of executableExtensions) {
-    if (url.href.endsWith(extension)) {
-      return new URL(url.href.replace(new RegExp(`\\${extension}$`), ''));
+    if (input.endsWith(extension)) {
+      return input.replace(
+        new RegExp(`\\${extension}$`),
+        '',
+      ) as RealmResourceIdentifier;
     }
   }
-  return url;
+  return input;
 }
 
 export function internalKeyFor(
@@ -963,7 +969,7 @@ export function internalKeyFor(
 ): string {
   if (!('type' in ref)) {
     let resolved = resolveCardReference(ref.module, relativeTo);
-    let module = trimExecutableExtension(new URL(resolved)).href;
+    let module: string = trimExecutableExtension(rri(resolved));
     // Use the prefix form (e.g. @cardstack/catalog/foo) as the canonical
     // internal key when a registered prefix mapping matches
     module = unresolveCardReference(module);
