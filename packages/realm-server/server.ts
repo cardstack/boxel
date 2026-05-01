@@ -629,7 +629,7 @@ export class RealmServer {
     for (const url of this.reconciler.knownByUrl.keys()) {
       let realmURL = new URL(url);
       realmURL.protocol = requestURL.protocol;
-      if (new RealmPaths(realmURL).inRealm(requestURL)) {
+      if (new RealmPaths(realmURL).inRealm(rri(requestURL.href))) {
         return await this.reconciler.lookupOrMount(url);
       }
     }
