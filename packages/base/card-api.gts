@@ -2330,7 +2330,6 @@ export type CreateCardFn = (
   ref: CodeRef,
   relativeTo: URL | undefined,
   opts?: {
-    closeAfterCreating?: boolean;
     realmURL?: URL; // the realm to create the card in
     localDir?: LocalPath; // the local directory path within the realm to create the card file
     doc?: LooseSingleCardDocument; // initial data for the card
