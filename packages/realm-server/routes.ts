@@ -80,13 +80,6 @@ export type CreateRoutesArgs = {
   reconciler: RealmRegistryReconciler;
   realmsRootPath: string;
   getMatrixRegistrationSecret: () => Promise<string>;
-  createAndMountRealm: (
-    path: string,
-    url: string,
-    copiedFromRealm?: URL,
-    enableFileWatcher?: boolean,
-    fromScratchIndexPriority?: number,
-  ) => Realm;
   createRealm: ({
     ownerUserId,
     endpoint,
@@ -99,7 +92,7 @@ export type CreateRoutesArgs = {
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-  }) => Promise<{ realm: Realm; info: Partial<RealmInfo> }>;
+  }) => Promise<{ url: string; realm: Realm; info: Partial<RealmInfo> }>;
   serveHostApp: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;

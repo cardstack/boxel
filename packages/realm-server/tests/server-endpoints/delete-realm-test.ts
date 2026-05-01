@@ -43,7 +43,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
         }),
       );
 
-    if (response.status !== 201) {
+    if (response.status !== 202) {
       throw new Error(
         `/_create-realm failed: ${JSON.stringify(response.body)}`,
       );
@@ -128,8 +128,13 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
         }),
       );
 
-    assert.strictEqual(publishResponse.status, 201, 'published realm created');
+    assert.strictEqual(publishResponse.status, 202, 'published realm created');
     let publishedRealmId = publishResponse.body.data.id as string;
+
+    // Phase 3: publish only writes registry + NOTIFY; drive a reconcile
+    // pass to mount the published realm so the spy assertions below
+    // observe its post-DELETE unmount.
+    await context.testRealmServer.testingOnlyReconcile();
 
     let sourceIndexURL = `${realmURL}cleanup-${uuidv4()}.json`;
     let publishedIndexURL = `${publishedRealmURL}cleanup-${uuidv4()}.json`;
@@ -277,6 +282,9 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
     );
 
+    // Phase 3: source realm is mounted lazily. The publish handler
+    // above called reconciler.lookupOrMount(sourceRealmURL), so by now
+    // the source realm is in realms[].
     let sourceRealm = context.testRealmServer.testingOnlyRealms.find(
       (realm) => realm.url === realmURL,
     )!;
@@ -308,6 +316,10 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       );
 
     assert.strictEqual(deleteResponse.status, 204, 'realm deleted');
+    // Phase 3: unmount is reconciler-driven (NOTIFY → reconcile()).
+    // Force a reconcile pass synchronously so the assertion below
+    // doesn't race the LISTEN callback.
+    await context.testRealmServer.testingOnlyReconcile();
     assert.true(
       unsubscribeCalled,
       'file watcher was unsubscribed during realm destruction',
@@ -665,8 +677,10 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
         }),
       );
 
-    assert.strictEqual(publishResponse.status, 201, 'published realm created');
+    assert.strictEqual(publishResponse.status, 202, 'published realm created');
     let publishedRealmId = publishResponse.body.data.id as string;
+    // Phase 3: drive reconcile so the published realm shows up in realms[].
+    await context.testRealmServer.testingOnlyReconcile();
     let publishedRealmPath = join(
       context.dir.name,
       'realm_server_1',
@@ -720,6 +734,8 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       );
 
     assert.strictEqual(deleteResponse.status, 204, 'realm deleted');
+    // Phase 3: unmount is reconciler-driven.
+    await context.testRealmServer.testingOnlyReconcile();
     assert.false(
       existsSync(publishedRealmPath),
       'published realm directory is removed even when unmounted',

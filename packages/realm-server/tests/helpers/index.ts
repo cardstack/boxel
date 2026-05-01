@@ -259,26 +259,84 @@ export function createVirtualNetwork() {
 
 let testDbCounter = 0;
 
-// Build a reconciler suitable for tests that already construct Realms via
-// the test helpers. The realms are pre-mounted by the helper, so we just
-// register them with the reconciler so subsequent lookupOrMount() calls
-// resolve from `mounted`. mountFromRow throws if the request path ever asks
-// the reconciler to mount a URL it wasn't told about — that would indicate
-// a test reaching for a realm the helper didn't construct. unmount is a
-// no-op because tests tear down via closeServer(); the reconciler itself
-// has no row-deletion path to exercise here.
+// Build a reconciler suitable for tests. Pre-constructed realms (passed
+// via `realms`) are registered into `mounted` so subsequent
+// lookupOrMount() calls resolve from the fast path.
+//
+// When `dynamicMountDeps` is provided, prepareRealmFromRow constructs a
+// real Realm from a registry row — required by Phase 3 stateless
+// handler tests where /_create-realm + /_publish-realm only write to
+// realm_registry and rely on the reconciler / lazy mount to mount on
+// first request. Without these deps, lookupOrMount on an
+// unpre-mounted URL throws (used by tests that don't exercise the
+// dynamic-creation path).
+//
+// unmount on the test reconciler calls realm.unsubscribe() (matches
+// production) and removes the realm from realms[] / virtualNetwork so
+// the deletion-path assertions about file-watcher cleanup work the
+// same way they did pre-Phase 3.
 export function makeTestReconciler(
   dbAdapter: PgAdapter,
   realms: Realm[],
+  dynamicMountDeps?: {
+    realmsRootPath: string;
+    virtualNetwork: VirtualNetwork;
+    queue: QueuePublisher;
+    matrixClient: MatrixClient;
+    serverURL: URL;
+    definitionLookup: CachingDefinitionLookup;
+    enableFileWatcher?: boolean;
+  },
 ): RealmRegistryReconciler {
   let reconciler = new RealmRegistryReconciler({
     dbAdapter,
     prepareRealmFromRow: (row: RealmRegistryRow) => {
-      throw new Error(
-        `test reconciler cannot construct realms; URL not pre-mounted: ${row.url}`,
+      if (!dynamicMountDeps) {
+        throw new Error(
+          `test reconciler cannot construct realms; URL not pre-mounted: ${row.url}`,
+        );
+      }
+      let diskPath: string;
+      if (row.kind === 'bootstrap') {
+        diskPath = row.disk_id;
+      } else if (row.kind === 'source') {
+        diskPath = join(dynamicMountDeps.realmsRootPath, row.disk_id);
+      } else {
+        diskPath = join(
+          dynamicMountDeps.realmsRootPath,
+          PUBLISHED_DIRECTORY_NAME,
+          row.disk_id,
+        );
+      }
+      let adapter = new NodeAdapter(
+        diskPath,
+        dynamicMountDeps.enableFileWatcher,
       );
+      let reconciledRealm = new Realm({
+        url: row.url,
+        adapter,
+        secretSeed: realmSecretSeed,
+        virtualNetwork: dynamicMountDeps.virtualNetwork,
+        dbAdapter,
+        queue: dynamicMountDeps.queue,
+        matrixClient: dynamicMountDeps.matrixClient,
+        realmServerURL: dynamicMountDeps.serverURL.href,
+        definitionLookup: dynamicMountDeps.definitionLookup,
+      });
+      realms.push(reconciledRealm);
+      dynamicMountDeps.virtualNetwork.mount(reconciledRealm.handle);
+      return reconciledRealm;
     },
-    unmount: async () => {},
+    unmount: async (realm) => {
+      realm.unsubscribe();
+      if (dynamicMountDeps) {
+        dynamicMountDeps.virtualNetwork.unmount(realm.handle);
+      }
+      let idx = realms.findIndex((r) => r.url === realm.url);
+      if (idx !== -1) {
+        realms.splice(idx, 1);
+      }
+    },
   });
   reconciler.registerExistingMounts(realms);
   return reconciler;
@@ -1004,7 +1062,15 @@ export async function runTestRealmServer({
     seed: realmSecretSeed,
   });
 
-  let reconciler = makeTestReconciler(dbAdapter, realms);
+  let reconciler = makeTestReconciler(dbAdapter, realms, {
+    realmsRootPath,
+    virtualNetwork,
+    queue: publisher,
+    matrixClient,
+    serverURL: new URL(realmURL.origin),
+    definitionLookup,
+    enableFileWatcher,
+  });
   let testRealmServer = new RealmServer({
     realms,
     reconciler,
@@ -1144,7 +1210,15 @@ export async function runTestRealmServerWithRealms({
   });
 
   let serverURL = new URL(realms[0].realmURL.origin);
-  let reconciler = makeTestReconciler(dbAdapter, createdRealms);
+  let reconciler = makeTestReconciler(dbAdapter, createdRealms, {
+    realmsRootPath,
+    virtualNetwork,
+    queue: publisher,
+    matrixClient,
+    serverURL,
+    definitionLookup,
+    enableFileWatcher,
+  });
   let testRealmServer = new RealmServer({
     realms: createdRealms,
     reconciler,

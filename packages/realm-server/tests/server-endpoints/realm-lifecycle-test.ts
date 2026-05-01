@@ -14,7 +14,7 @@ import type { CardCollectionDocument } from '@cardstack/runtime-common/document-
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
 import {
   closeServer,
-  createJWT,
+  createJWTForRealmURL,
   matrixURL,
   realmSecretSeed,
   runTestRealmServer,
@@ -63,7 +63,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             }),
           );
 
-        assert.strictEqual(response.status, 201, 'HTTP 201 status');
+        assert.strictEqual(response.status, 202, 'HTTP 202 status');
         let json = response.body;
         assert.deepEqual(
           json,
@@ -77,6 +77,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 backgroundURL: 'http://example.com/background.jpg',
                 iconURL: 'http://example.com/icon.jpg',
                 publishable: true,
+                status: 'pending',
               },
             },
           },
@@ -142,9 +143,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         });
 
         let id: string;
-        let realm = context.testRealmServer.testingOnlyRealms.find(
-          (r) => r.url === json.data.id,
-        )!;
+        // Phase 3 lazy mount: the realm isn't in realms[] yet — the
+        // follow-up POST/GET below triggers findOrMountRealm.
+        let realmURL = json.data.id as string;
+        let realmServerURL = testRealmURL.origin + '/';
         {
           // owner can create an instance
           let response = await context.request
@@ -164,11 +166,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             .set('Accept', 'application/vnd.card+json')
             .set(
               'Authorization',
-              `Bearer ${createJWT(realm, ownerUserId, [
-                'read',
-                'write',
-                'realm-owner',
-              ])}`,
+              `Bearer ${createJWTForRealmURL({
+                realmURL,
+                realmServerURL,
+                user: ownerUserId,
+                permissions: ['read', 'write', 'realm-owner'],
+              })}`,
             );
 
           assert.strictEqual(response.status, 201, 'HTTP 201 status');
@@ -183,11 +186,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             .set('Accept', 'application/vnd.card+json')
             .set(
               'Authorization',
-              `Bearer ${createJWT(realm, ownerUserId, [
-                'read',
-                'write',
-                'realm-owner',
-              ])}`,
+              `Bearer ${createJWTForRealmURL({
+                realmURL,
+                realmServerURL,
+                user: ownerUserId,
+                permissions: ['read', 'write', 'realm-owner'],
+              })}`,
             );
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -202,16 +206,17 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         {
           // owner can search in the realm
           let response = await context.request
-            .post(`${new URL(realm.url).pathname}_search`)
+            .post(`${new URL(realmURL).pathname}_search`)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .set(
               'Authorization',
-              `Bearer ${createJWT(realm, ownerUserId, [
-                'read',
-                'write',
-                'realm-owner',
-              ])}`,
+              `Bearer ${createJWTForRealmURL({
+                realmURL,
+                realmServerURL,
+                user: ownerUserId,
+                permissions: ['read', 'write', 'realm-owner'],
+              })}`,
             )
             .send({
               filter: {
@@ -257,17 +262,22 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           );
 
         let realmURL = response.body.data.id;
-        assert.strictEqual(response.status, 201, 'HTTP 201 status');
-        let realm = context.testRealmServer.testingOnlyRealms.find(
-          (r) => r.url === realmURL,
-        )!;
+        assert.strictEqual(response.status, 202, 'HTTP 202 status');
+        let realmServerURL = testRealmURL.origin + '/';
 
         {
           let response = await context.request
             .post(`${new URL(realmURL).pathname}_search`)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
-            .set('Authorization', `Bearer ${createJWT(realm, 'rando')}`)
+            .set(
+              'Authorization',
+              `Bearer ${createJWTForRealmURL({
+                realmURL,
+                realmServerURL,
+                user: 'rando',
+              })}`,
+            )
             .send({
               filter: {
                 on: baseCardRef,
@@ -296,7 +306,14 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
             })
             .set('Accept', 'application/vnd.card+json')
-            .set('Authorization', `Bearer ${createJWT(realm, 'rando')}`);
+            .set(
+              'Authorization',
+              `Bearer ${createJWTForRealmURL({
+                realmURL,
+                realmServerURL,
+                user: 'rando',
+              })}`,
+            );
 
           assert.strictEqual(response.status, 403, 'HTTP 403 status');
         }
@@ -333,13 +350,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               }),
             );
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
           realmURL = response.body.data.id;
         }
 
-        let realm = context.testRealmServer.testingOnlyRealms.find(
-          (r) => r.url === realmURL,
-        )!;
+        let realmServerURL = testRealmURL.origin + '/';
         {
           let response = await context.request
             .post(`/${owner}/${endpoint}/`)
@@ -358,11 +373,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             .set('Accept', 'application/vnd.card+json')
             .set(
               'Authorization',
-              `Bearer ${createJWT(realm, ownerUserId, [
-                'read',
-                'write',
-                'realm-owner',
-              ])}`,
+              `Bearer ${createJWTForRealmURL({
+                realmURL,
+                realmServerURL,
+                user: ownerUserId,
+                permissions: ['read', 'write', 'realm-owner'],
+              })}`,
             );
 
           assert.strictEqual(response.status, 201, 'HTTP 201 status');
@@ -608,7 +624,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
             }),
           );
-        assert.strictEqual(response.status, 201, 'HTTP 201 status');
+        assert.strictEqual(response.status, 202, 'HTTP 202 status');
         {
           let response = await context.request
             .post('/_create-realm')
@@ -736,12 +752,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               }),
             );
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
           providerRealmURL = response.body.data.id;
         }
-        let providerRealm = context.testRealmServer.testingOnlyRealms.find(
-          (r) => r.url === providerRealmURL,
-        )!;
+        let realmServerURL = testRealmURL.origin + '/';
         {
           // create a card def
           let response = await context.request
@@ -749,11 +763,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             .set('Accept', 'application/vnd.card+source')
             .set(
               'Authorization',
-              `Bearer ${createJWT(providerRealm, ownerUserId, [
-                'read',
-                'write',
-                'realm-owner',
-              ])}`,
+              `Bearer ${createJWTForRealmURL({
+                realmURL: providerRealmURL,
+                realmServerURL,
+                user: ownerUserId,
+                permissions: ['read', 'write', 'realm-owner'],
+              })}`,
             )
             .send(cardSrc);
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
@@ -787,13 +802,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               }),
             );
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
           consumerRealmURL = response.body.data.id;
         }
 
-        let consumerRealm = context.testRealmServer.testingOnlyRealms.find(
-          (r) => r.url === consumerRealmURL,
-        )!;
         let id: string;
         {
           // create an instance using card def in different private realm
@@ -816,11 +828,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             .set('Accept', 'application/vnd.card+json')
             .set(
               'Authorization',
-              `Bearer ${createJWT(consumerRealm, ownerUserId, [
-                'read',
-                'write',
-                'realm-owner',
-              ])}`,
+              `Bearer ${createJWTForRealmURL({
+                realmURL: consumerRealmURL,
+                realmServerURL,
+                user: ownerUserId,
+                permissions: ['read', 'write', 'realm-owner'],
+              })}`,
             );
 
           assert.strictEqual(response.status, 201, 'HTTP 201 status');
@@ -835,11 +848,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             .set('Accept', 'application/vnd.card+json')
             .set(
               'Authorization',
-              `Bearer ${createJWT(consumerRealm, ownerUserId, [
-                'read',
-                'write',
-                'realm-owner',
-              ])}`,
+              `Bearer ${createJWTForRealmURL({
+                realmURL: consumerRealmURL,
+                realmServerURL,
+                user: ownerUserId,
+                permissions: ['read', 'write', 'realm-owner'],
+              })}`,
             );
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
