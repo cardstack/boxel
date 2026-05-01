@@ -1,9 +1,9 @@
 import type Koa from 'koa';
 import {
+  createResponse,
   query,
   SupportedMimeType,
   logger,
-  createResponse,
   param,
   removeRealmPermissions,
   type PublishedRealmTable,
@@ -22,7 +22,11 @@ import {
 } from '../middleware';
 import type { CreateRoutesArgs } from '../routes';
 import type { RealmServerTokenClaim } from '../utils/jwt';
-import { removeMountedRealm } from './realm-destruction-utils';
+import type { Realm } from '@cardstack/runtime-common';
+import {
+  collectAllFilePaths,
+  removeRealmFiles,
+} from './realm-destruction-utils';
 import { deleteFromRegistryByUrl } from '../lib/realm-registry-writes';
 import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
@@ -30,9 +34,8 @@ const log = logger('handle-unpublish');
 
 export default function handleUnpublishRealm({
   dbAdapter,
-  virtualNetwork,
-  realms,
   realmsRootPath,
+  reconciler,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -102,41 +105,53 @@ export default function handleUnpublishRealm({
         return;
       }
 
-      let existingPublishedRealm = realms.find(
-        (r) => r.url === publishedRealmURL,
-      );
-      if (!existingPublishedRealm) {
-        throw new Error(
-          `No realm instance found for published realm ${publishedRealmURL}`,
-        );
-      }
-
       let publishedRealmPath = join(
         realmsRootPath,
         PUBLISHED_DIRECTORY_NAME,
         publishedRealmInfo.id,
       );
-      // Serialize concurrent writers for this realm URL (publish/unpublish/
-      // realm.write). Lock released on callback exit.
+
+      // Mount the published realm on this instance (no-op if already
+      // mounted) so we have a Realm instance to drive the tombstone
+      // path before deleting files. Phase 3 sibling-instance behavior
+      // is unchanged: those instances see deleteFromRegistryByUrl's
+      // NOTIFY realm_registry and unmount via the reconciler.
+      let publishedRealm = await reconciler.lookupOrMount(publishedRealmURL);
+
+      // Serialize concurrent writers for this realm URL via the per-
+      // URL advisory lock, then drive tombstones via realm.deleteAll
+      // (bumps realm_version + marks every boxel_index entry as
+      // deleted, matching the legacy unpublish behavior), then do FS
+      // + DB cleanup. realms[] / virtualNetwork mutation stays in the
+      // reconciler's hands — it reacts to the registry DELETE +
+      // NOTIFY below.
       await withRealmWriteLock(dbAdapter, publishedRealmURL, async () => {
-        await removeMountedRealm({
-          realm: existingPublishedRealm,
-          realmPath: publishedRealmPath,
-          realms,
-          virtualNetwork,
-        });
+        if (publishedRealm) {
+          let allFilePaths = collectAllFilePaths(publishedRealmPath);
+          if (allFilePaths.length > 0) {
+            await publishedRealm.deleteAll(allFilePaths);
+          }
+        }
+        removeRealmFiles(publishedRealmPath);
 
         await query(dbAdapter, [
           `DELETE FROM published_realms WHERE published_realm_url =`,
           param(publishedRealmURL),
         ]);
 
-        // Phase 1 dual-write: mirror the delete into realm_registry.
         await deleteFromRegistryByUrl(dbAdapter, publishedRealmURL);
 
         await removeRealmPermissions(dbAdapter, new URL(publishedRealmURL));
       });
 
+      // Permissions for the published realm were removed inside the
+      // write lock above, so fetchRealmPermissions(publishedRealmURL)
+      // would return nothing useful for X-Boxel-Realm-Public-Readable.
+      // Pass an empty permissions map — createResponse just needs
+      // realm.url for X-Boxel-Realm-Url.
+      let realmForResponse = publishedRealm ?? {
+        url: publishedRealmURL,
+      };
       let response = createResponse({
         body: JSON.stringify(
           {
@@ -159,22 +174,10 @@ export default function handleUnpublishRealm({
             'content-type': SupportedMimeType.JSONAPI,
           },
         },
-        requestContext: existingPublishedRealm
-          ? {
-              realm: existingPublishedRealm,
-              permissions: {
-                [ownerUserId]: ['read'],
-              },
-            }
-          : {
-              realm:
-                realms.find(
-                  (r) => r.url === publishedRealmInfo.source_realm_url,
-                ) || realms[0],
-              permissions: {
-                [ownerUserId]: ['read'],
-              },
-            },
+        requestContext: {
+          realm: realmForResponse as Realm,
+          permissions: {},
+        },
       });
       await setContextResponse(ctxt, response);
       return;
