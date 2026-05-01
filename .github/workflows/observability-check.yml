@@ -1,0 +1,35 @@
+name: Observability — secret scan
+
+# Per-PR sanity check that nothing committed under packages/observability/**
+# matches a credential-shaped pattern (Grafana auth-in-querystring, baked
+# data-source passwords, hard-coded Bearer tokens, AWS access keys, literal
+# password / api_key values). The patterns and allowlist live in
+# packages/observability/scripts/check-no-secrets.sh — keeping the rules
+# next to the resources they guard means changes to one are reviewed
+# alongside changes to the other.
+#
+# History: CS-10924 stripped `?authHeader=${grafana_secret}` from every
+# operator-action URL after that pattern leaked into committed dashboard
+# JSON. This workflow is the regression guard.
+
+on:
+  pull_request:
+    paths:
+      - "packages/observability/**"
+      - ".github/workflows/observability-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  no-secrets:
+    name: Observability — secret scan
+    runs-on: ubuntu-latest
+    concurrency:
+      group: observability-check-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: check-no-secrets
+        working-directory: packages/observability
+        run: ./scripts/check-no-secrets.sh
