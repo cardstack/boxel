@@ -564,6 +564,14 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       count: 1,
     });
 
+    // The section block is keyed by realm name, but `realm.info()` returns a
+    // "Unknown Workspace" placeholder until `fetchInfo` resolves. Selecting
+    // the section by its stable URL avoids racing the info fetch, then we
+    // wait for the human-visible name before asserting on it.
+    await waitFor(
+      `[data-test-realm-url="${baseRealm.url}"][data-test-realm="Base Workspace"]`,
+    );
+
     assert
       .dom(`[data-test-realm="Base Workspace"] [data-test-results-count]`)
       .hasText('1 result');
@@ -709,6 +717,18 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
     await waitFor('[data-test-card-catalog-item]');
+    // The section block's `data-test-realm` attribute is keyed by realm
+    // name (rendered from `realm.info(url).name`). When the realm info
+    // fetch hasn't resolved yet, `realm.info()` returns a "Unknown
+    // Workspace" placeholder and the section briefly carries that name
+    // until fetchInfo resolves. Anchor on the stable `data-test-realm-url`
+    // first so subsequent name-based assertions don't race the info fetch.
+    await waitFor(
+      `[data-test-realm-url="${testRealmURL}"][data-test-realm="Operator Mode Workspace"]`,
+    );
+    await waitFor(
+      `[data-test-realm-url="${baseRealm.url}"][data-test-realm="Base Workspace"]`,
+    );
     assert
       .dom(
         `[data-test-realm="Operator Mode Workspace"] [data-test-card-catalog-item]`,
@@ -723,6 +743,16 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}Spec/pet-card"]`,
       { count: 0 },
+    );
+
+    // Re-anchor after the search query mutates the section list — Glimmer
+    // will rebuild the realm sections, and the placeholder-name race window
+    // can re-open if a section is destroyed and recreated.
+    await waitFor(
+      `[data-test-realm-url="${testRealmURL}"][data-test-realm="Operator Mode Workspace"]`,
+    );
+    await waitFor(
+      `[data-test-realm-url="${baseRealm.url}"][data-test-realm="Base Workspace"]`,
     );
 
     assert
@@ -772,6 +802,14 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     // Switch to All Realms by clicking All Realms option
     await click('[data-test-boxel-picker-option-row="select-all"]');
+
+    // Same realm-name placeholder race as above — anchor on the URL.
+    await waitFor(
+      `[data-test-realm-url="${testRealmURL}"][data-test-realm="Operator Mode Workspace"]`,
+    );
+    await waitFor(
+      `[data-test-realm-url="${baseRealm.url}"][data-test-realm="Base Workspace"]`,
+    );
 
     assert.dom('[data-test-realm="Operator Mode Workspace"]').exists();
     assert.dom('[data-test-realm="Base Workspace"]').exists();

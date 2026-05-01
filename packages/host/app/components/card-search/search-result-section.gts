@@ -31,6 +31,17 @@ import { SECTION_SHOW_MORE_INCREMENT } from './constants';
 import ItemButton from './item-button';
 import SearchSheetSectionHeader from './section-header';
 
+// Matches the placeholder returned by RealmService#info while fetchInfo
+// is in flight. When a section renders this name, the realm-info fetch
+// hasn't resolved yet — see the diagnostic warning below.
+const PLACEHOLDER_REALM_NAME = 'Unknown Workspace';
+
+// Tracks which realm URLs we've already warned about to keep the warning
+// to one-per-realm-per-page-lifetime. This intentionally lives at module
+// scope so it survives component teardown across test reruns; a leak of a
+// few strings is fine.
+const placeholderWarnedFor = new Set<string>();
+
 interface Signature {
   Element: HTMLElement;
   Args: {
@@ -79,6 +90,50 @@ export default class SearchResultSection extends Component<Signature> {
       return this.urlSection.realmInfo.name;
     }
     return undefined;
+  }
+
+  // Stable identifier for the realm section regardless of whether
+  // `realm.info()` has resolved the user-visible name yet. When
+  // `data-test-realm` (the name) is still showing the placeholder
+  // ("Unknown Workspace"), this attribute pins the section to a known
+  // URL so failures are diagnosable and tests can wait reliably.
+  get sectionRealmUrl(): string | undefined {
+    if (this.realmSection) {
+      return this.realmSection.realmUrl;
+    }
+    if (this.urlSection) {
+      return this.urlSection.realmUrl;
+    }
+    return undefined;
+  }
+
+  // True when the section header is showing the placeholder name returned
+  // by `RealmService#info()` before its fetchInfo resolves. Surfaced as a
+  // data-test attribute and consumed by `maybeWarnPlaceholder` so future
+  // CI failures involving `[data-test-realm="<Name>"]` selectors are
+  // immediately diagnosable (the browser log will show which realm URL
+  // raced its info fetch).
+  get sectionRealmInfoIsPlaceholder(): boolean {
+    return this.sectionRealmName === PLACEHOLDER_REALM_NAME;
+  }
+
+  // Reading this getter from the template emits a one-shot warning per
+  // realm URL when the section is rendered with a placeholder name. The
+  // warning lands in the browser log captured by Ember Exam, so a future
+  // recurrence of the realm-info race shows up in CI logs even without
+  // a DOM dump.
+  get maybeWarnPlaceholder(): null {
+    if (
+      this.sectionRealmInfoIsPlaceholder &&
+      this.sectionRealmUrl &&
+      !placeholderWarnedFor.has(this.sectionRealmUrl)
+    ) {
+      placeholderWarnedFor.add(this.sectionRealmUrl);
+      console.warn(
+        `search-result-section: rendering with placeholder realm name for ${this.sectionRealmUrl} — realm.info() returned "${PLACEHOLDER_REALM_NAME}" because fetchInfo has not resolved yet. If a test failed selecting on data-test-realm here, this is the race.`,
+      );
+    }
+    return null;
   }
 
   @action
@@ -238,8 +293,17 @@ export default class SearchResultSection extends Component<Signature> {
         search-result-block--collapsed=@isCollapsed
       }}
       data-test-realm={{this.sectionRealmName}}
+      data-test-realm-url={{this.sectionRealmUrl}}
+      data-test-realm-info-placeholder={{if
+        this.sectionRealmInfoIsPlaceholder
+        'true'
+      }}
       ...attributes
     >
+      {{! Reading `maybeWarnPlaceholder` is a side effect that emits a
+          one-shot console.warn when the section renders with a placeholder
+          realm name. The warning is the diagnostic; the value is always null. }}
+      {{this.maybeWarnPlaceholder}}
       {{#if this.realmSection}}
         <SearchSheetSectionHeader
           @realmInfo={{this.realmSection.realmInfo}}
