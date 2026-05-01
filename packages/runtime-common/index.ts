@@ -307,11 +307,12 @@ export function flattenPrerenderMeta(
 ): TimingDiagnostics | undefined {
   if (!meta) return undefined;
   let diagnostics = meta.diagnostics ?? {};
-  let hasAny = Object.keys(diagnostics).length > 0 || meta.requestId != null;
+  let hasRequestId = meta.requestId != null;
+  let hasAny = Object.keys(diagnostics).length > 0 || hasRequestId;
   if (!hasAny) return undefined;
   return {
     ...diagnostics,
-    ...(meta.requestId ? { requestId: meta.requestId } : {}),
+    ...(hasRequestId ? { requestId: meta.requestId } : {}),
   };
 }
 
