@@ -106,11 +106,13 @@ export default function handleDeleteRealm({
       let sourceRealmPath = join(realmsRootPath, sourceRow[0].disk_id);
 
       // Phase 4: existence check on realm_registry (kind='published')
-      // instead of the legacy published_realms table.
+      // instead of the legacy published_realms table. SELECT 1 is aliased
+      // to AS found rather than relying on Postgres's default `?column?`
+      // unnamed-column label, which isn't portable across SQL adapters.
       let publishedRealmMatch = (await query(dbAdapter, [
-        `SELECT 1 FROM realm_registry WHERE kind = 'published' AND url =`,
+        `SELECT 1 AS found FROM realm_registry WHERE kind = 'published' AND url =`,
         param(realmURL),
-      ])) as { '?column?': number }[];
+      ])) as { found: number }[];
       if (publishedRealmMatch.length > 0) {
         await sendResponseForUnprocessableEntity(
           ctxt,
