@@ -28,7 +28,7 @@ import CreateSpecCommand from './create-specs';
 import GenerateThumbnailCommand from './generate-thumbnail';
 import GetCardCommand from './get-card';
 import GetCatalogRealmUrlsCommand from './get-catalog-realm-urls';
-import GetRealmOfUrlCommand from './get-realm-of-url';
+import GetRealmOfResourceIdentifierCommand from './get-realm-of-resource-identifier';
 import OneShotLlmRequestCommand from './one-shot-llm-request';
 import SanitizeModuleListCommand from './sanitize-module-list';
 import SearchAndChooseCommand from './search-and-choose';
@@ -239,10 +239,11 @@ export default class ListingCreateCommand extends HostBaseCommand<
     moduleUrl: string, // the module URL of the card type being listed
     codeRef: ResolvedCodeRef, // the specific export being listed
   ): Promise<Spec[]> {
-    const { realmUrl: resourceRealmUrl } = await new GetRealmOfUrlCommand(
-      this.commandContext,
-    ).execute({ url: resourceUrl });
-    const resourceRealm = resourceRealmUrl || targetRealm;
+    const { realmIdentifier: resourceRealmIdentifier } =
+      await new GetRealmOfResourceIdentifierCommand(
+        this.commandContext,
+      ).execute({ resourceIdentifier: resourceUrl });
+    const resourceRealm = resourceRealmIdentifier || targetRealm;
     const depUrl = `${resourceRealm}_dependencies?url=${encodeURIComponent(resourceUrl)}`;
     const { ok, body: jsonApiResponse } = await new AuthedFetchCommand(
       this.commandContext,

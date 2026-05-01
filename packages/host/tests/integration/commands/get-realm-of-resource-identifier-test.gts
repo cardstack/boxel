@@ -6,7 +6,7 @@ import { module, test } from 'qunit';
 
 import { ri } from '@cardstack/runtime-common';
 
-import GetRealmOfUrlCommand from '@cardstack/host/commands/get-realm-of-url';
+import GetRealmOfResourceIdentifierCommand from '@cardstack/host/commands/get-realm-of-resource-identifier';
 import RealmService from '@cardstack/host/services/realm';
 
 import {
@@ -41,7 +41,9 @@ class StubRealmService extends RealmService {
   };
 }
 
-module('Integration | commands | get-realm-of-url', function (hooks) {
+module(
+  'Integration | commands | get-realm-of-resource-identifier',
+  function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
@@ -67,23 +69,28 @@ module('Integration | commands | get-realm-of-url', function (hooks) {
     );
   });
 
-  test('returns the realm URL containing a given URL', async function (assert) {
+  test('returns the realm identifier containing a given resource', async function (assert) {
     realmOfURLMap = new Map([[testRealmURL, new URL(testRealmURL)]]);
     let commandService = getService('command-service');
-    let command = new GetRealmOfUrlCommand(commandService.commandContext);
+    let command = new GetRealmOfResourceIdentifierCommand(
+      commandService.commandContext,
+    );
     let result = await command.execute({
-      url: `${testRealmURL}some-card`,
+      resourceIdentifier: `${testRealmURL}some-card`,
     });
-    assert.strictEqual(result.realmUrl, testRealmURL);
+    assert.strictEqual(result.realmIdentifier, testRealmURL);
   });
 
-  test('returns empty string when URL is not in any realm', async function (assert) {
+  test('returns empty string when resource is not in any realm', async function (assert) {
     realmOfURLMap = new Map();
     let commandService = getService('command-service');
-    let command = new GetRealmOfUrlCommand(commandService.commandContext);
+    let command = new GetRealmOfResourceIdentifierCommand(
+      commandService.commandContext,
+    );
     let result = await command.execute({
-      url: 'https://unknown.example.com/card',
+      resourceIdentifier: 'https://unknown.example.com/card',
     });
-    assert.strictEqual(result.realmUrl, '');
+    assert.strictEqual(result.realmIdentifier, '');
   });
-});
+  },
+);

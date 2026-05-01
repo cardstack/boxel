@@ -36,7 +36,7 @@ import * as GetCardTypeSchemaCommandModule from './get-card-type-schema';
 import * as GetCatalogRealmUrlsCommandModule from './get-catalog-realm-urls';
 import * as GetDefaultWritableRealmCommandModule from './get-default-writable-realm';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
-import * as GetRealmOfUrlCommandModule from './get-realm-of-url';
+import * as GetRealmOfResourceIdentifierCommandModule from './get-realm-of-resource-identifier';
 import * as GetUserSystemCardCommandModule from './get-user-system-card';
 import * as InstantiateCardCommandModule from './instantiate-card';
 import * as InvalidateRealmUrlsCommandModule from './invalidate-realm-urls';
@@ -443,8 +443,8 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GetDefaultWritableRealmCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-realm-of-url',
-    GetRealmOfUrlCommandModule,
+    '@cardstack/boxel-host/commands/get-realm-of-resource-identifier',
+    GetRealmOfResourceIdentifierCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/sanitize-module-list',
@@ -507,7 +507,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   GetDefaultWritableRealmCommandModule.default,
   GetCatalogRealmUrlsCommandModule.default,
   GetCardCommandModule.default,
-  GetRealmOfUrlCommandModule.default,
+  GetRealmOfResourceIdentifierCommandModule.default,
   GetCardTypeSchemaCommandModule.default,
   GetUserSystemCardCommandModule.default,
   GetEventsFromRoomCommandModule.default,

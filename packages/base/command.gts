@@ -114,12 +114,12 @@ export class FileUrlCard extends CardDef {
   @field fileUrl = contains(StringField);
 }
 
-export class RealmUrlCard extends CardDef {
-  @field realmUrl = contains(StringField);
+export class RealmIdentifierCard extends CardDef {
+  @field realmIdentifier = contains(StringField);
 }
 
-export class InvalidateRealmUrlsInput extends RealmUrlCard {
-  @field urls = containsMany(StringField);
+export class InvalidateRealmIdentifiersInput extends RealmIdentifierCard {
+  @field resourceIdentifiers = containsMany(StringField);
 }
 
 export class ReadTextFileInput extends CardDef {
@@ -606,16 +606,16 @@ export class StoreAddInput extends CardDef {
   @field realm = contains(StringField);
 }
 
-export class GetRealmOfUrlInput extends CardDef {
-  @field url = contains(StringField);
+export class GetRealmOfResourceIdentifierInput extends CardDef {
+  @field resourceIdentifier = contains(StringField);
 }
 
-export class GetRealmOfUrlResult extends CardDef {
-  @field realmUrl = contains(StringField); // empty string if not found
+export class GetRealmOfResourceIdentifierResult extends CardDef {
+  @field realmIdentifier = contains(StringField); // empty string if not found
 }
 
 export class CanReadRealmInput extends CardDef {
-  @field realmUrl = contains(StringField);
+  @field realmIdentifier = contains(StringField);
 }
 
 export class CanReadRealmResult extends CardDef {
@@ -635,15 +635,15 @@ export class AuthedFetchResult extends CardDef {
 }
 
 export class GetDefaultWritableRealmResult extends CardDef {
-  @field realmUrl = contains(StringField); // empty string if no writable realm found
+  @field realmIdentifier = contains(StringField); // empty string if no writable realm found
 }
 
 export class ValidateRealmInput extends CardDef {
-  @field realmUrl = contains(StringField);
+  @field realmIdentifier = contains(StringField);
 }
 
 export class ValidateRealmResult extends CardDef {
-  @field realmUrl = contains(StringField); // normalized with trailing slash
+  @field realmIdentifier = contains(StringField); // normalized with trailing slash
 }
 
 export class SanitizeModuleListInput extends CardDef {

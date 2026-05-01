@@ -20,7 +20,7 @@ export default class CanReadRealmCommand extends HostBaseCommand<
     return CanReadRealmInput;
   }
 
-  requireInputFields = ['realmUrl'];
+  requireInputFields = ['realmIdentifier'];
 
   protected async run(
     input: BaseCommandModule.CanReadRealmInput,
@@ -28,7 +28,7 @@ export default class CanReadRealmCommand extends HostBaseCommand<
     let commandModule = await this.loadCommandModule();
     const { CanReadRealmResult } = commandModule;
     return new CanReadRealmResult({
-      canRead: this.realm.canRead(input.realmUrl),
+      canRead: this.realm.canRead(input.realmIdentifier),
     });
   }
 }

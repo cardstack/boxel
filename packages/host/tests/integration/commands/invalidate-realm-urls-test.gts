@@ -94,8 +94,8 @@ module('Integration | commands | invalidate-realm-urls', function (hooks) {
     let realmURL = new URL('test/', realmServer.url).href;
 
     let result = await command.execute({
-      realmUrl: realmURL,
-      urls: [`${realmURL}mango`, `${realmURL}mango`, `${realmURL}person.gts`],
+      realmIdentifier: realmURL,
+      resourceIdentifiers: [`${realmURL}mango`, `${realmURL}mango`, `${realmURL}person.gts`],
     });
 
     assert.strictEqual(result, undefined, 'command has no result card');
@@ -154,8 +154,8 @@ module('Integration | commands | invalidate-realm-urls', function (hooks) {
 
     await assert.rejects(
       command.execute({
-        realmUrl: realmURL,
-        urls: [`${realmURL}mango`],
+        realmIdentifier: realmURL,
+        resourceIdentifiers: [`${realmURL}mango`],
       }),
       /Invalidate urls failed: 500 - boom/,
       'propagates non-204 failure as an error',
