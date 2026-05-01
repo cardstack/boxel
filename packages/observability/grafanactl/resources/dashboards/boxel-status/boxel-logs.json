@@ -2,10 +2,10 @@
   "apiVersion": "dashboard.grafana.app/v1beta1",
   "kind": "Dashboard",
   "metadata": {
-    "name": "fetquzizsej28b",
     "annotations": {
       "grafana.app/folder": "defd2d156sav4d"
-    }
+    },
+    "name": "fetquzizsej28b"
   },
   "spec": {
     "annotations": {
@@ -31,8 +31,8 @@
     "panels": [
       {
         "datasource": {
-          "type": "cloudwatch",
-          "uid": "cef5x9o3yzawwf"
+          "type": "loki",
+          "uid": "loki"
         },
         "description": "This panel displays the logs for the job selected in the drop down above. Make sure to set the date range wide enough to capture the selected logs.",
         "gridPos": {
@@ -55,32 +55,12 @@
         "targets": [
           {
             "datasource": {
-              "type": "cloudwatch",
-              "uid": "cef5x9o3yzawwf"
+              "type": "loki",
+              "uid": "loki"
             },
-            "dimensions": {},
-            "expression": "fields @timestamp, @message |\n parse @message /\\[job: (?<jobId>.*?)\\]/ |\n filter (jobId = \"$job_id\") |\n sort @timestamp asc",
-            "id": "",
-            "label": "",
-            "logGroups": [
-              {
-                "accountId": "680542703984",
-                "arn": "arn:aws:logs:us-east-1:680542703984:log-group:ecs-boxel-worker-staging",
-                "name": "ecs-boxel-worker-staging"
-              }
-            ],
-            "matchExact": true,
-            "metricEditorMode": 0,
-            "metricName": "",
-            "metricQueryType": 0,
-            "namespace": "",
-            "period": "",
-            "queryMode": "Logs",
-            "refId": "A",
-            "region": "default",
-            "sqlExpression": "",
-            "statistic": "Average",
-            "statsGroups": []
+            "expr": "{service=~\"realm-server|worker|prerender|prerender-manager\"} |= \"[job: $job_id]\"",
+            "queryType": "range",
+            "refId": "A"
           }
         ],
         "title": "Job Logs",
@@ -88,8 +68,8 @@
       },
       {
         "datasource": {
-          "type": "cloudwatch",
-          "uid": "cef5x9o3yzawwf"
+          "type": "loki",
+          "uid": "loki"
         },
         "description": "This panel displays the logs for the selected worker. Make sure to set the date range wide enough to capture the selected logs.",
         "gridPos": {
@@ -112,32 +92,12 @@
         "targets": [
           {
             "datasource": {
-              "type": "cloudwatch",
-              "uid": "cef5x9o3yzawwf"
+              "type": "loki",
+              "uid": "loki"
             },
-            "dimensions": {},
-            "expression": "fields @timestamp, @message |\n parse @message /^\\[worker (?<workerId>.*?) / |\n filter (workerId = \"$worker_id\") |\n sort @timestamp asc",
-            "id": "4",
-            "label": "",
-            "logGroups": [
-              {
-                "accountId": "680542703984",
-                "arn": "arn:aws:logs:us-east-1:680542703984:log-group:ecs-boxel-worker-staging",
-                "name": "ecs-boxel-worker-staging"
-              }
-            ],
-            "matchExact": true,
-            "metricEditorMode": 0,
-            "metricName": "",
-            "metricQueryType": 0,
-            "namespace": "",
-            "period": "",
-            "queryMode": "Logs",
-            "refId": "A",
-            "region": "default",
-            "sqlExpression": "",
-            "statistic": "Average",
-            "statsGroups": []
+            "expr": "{service=\"worker\", worker_id=\"$worker_id\"}",
+            "queryType": "range",
+            "refId": "A"
           }
         ],
         "title": "Worker Logs",
@@ -145,8 +105,8 @@
       },
       {
         "datasource": {
-          "type": "cloudwatch",
-          "uid": "cef5x9o3yzawwf"
+          "type": "loki",
+          "uid": "loki"
         },
         "description": "The realm server logs. Make sure to set the duration to the value that encapsulates time frame for the logs that you want. Note that these logs have been truncated to 1000 lines.",
         "gridPos": {
@@ -169,32 +129,12 @@
         "targets": [
           {
             "datasource": {
-              "type": "cloudwatch",
-              "uid": "cef5x9o3yzawwf"
+              "type": "loki",
+              "uid": "loki"
             },
-            "dimensions": {},
-            "expression": "fields @timestamp, @message |\n sort @timestamp desc |\n limit 1000",
-            "id": "",
-            "label": "",
-            "logGroups": [
-              {
-                "accountId": "680542703984",
-                "arn": "arn:aws:logs:us-east-1:680542703984:log-group:ecs-boxel-realm-server-staging",
-                "name": "ecs-boxel-realm-server-staging"
-              }
-            ],
-            "matchExact": true,
-            "metricEditorMode": 0,
-            "metricName": "",
-            "metricQueryType": 0,
-            "namespace": "",
-            "period": "",
-            "queryMode": "Logs",
-            "refId": "A",
-            "region": "default",
-            "sqlExpression": "",
-            "statistic": "Average",
-            "statsGroups": []
+            "expr": "{service=\"realm-server\"}",
+            "queryType": "range",
+            "refId": "A"
           }
         ],
         "title": "Realm Server Logs",
@@ -202,7 +142,7 @@
       }
     ],
     "refresh": "",
-    "schemaVersion": 39,
+    "schemaVersion": 42,
     "tags": [],
     "templating": {
       "list": [

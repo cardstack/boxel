@@ -38,6 +38,7 @@ import {
   matrixURL,
   closeServer,
   getIndexHTML,
+  makeTestReconciler,
   matrixRegistrationSecret,
   testRealmInfo,
   waitUntil,
@@ -2039,6 +2040,7 @@ module(basename(__filename), function () {
         });
         testRealmServer = new RealmServer({
           realms: [base, testRealm],
+          reconciler: makeTestReconciler(dbAdapter, [base, testRealm]),
           virtualNetwork,
           matrixClient,
           realmServerSecretSeed,
