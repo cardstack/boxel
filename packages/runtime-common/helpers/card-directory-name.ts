@@ -52,10 +52,8 @@ function directoryNameFromModule(
   } catch {
     try {
       segment = lastMeaningfulSegment(
-        new URL(
-          trimExecutableExtension(rri(moduleIdentifier)),
-          paths.url,
-        ).pathname,
+        new URL(trimExecutableExtension(rri(moduleIdentifier)), paths.url)
+          .pathname,
       );
     } catch {
       segment = undefined;
