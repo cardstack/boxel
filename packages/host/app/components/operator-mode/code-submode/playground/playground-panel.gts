@@ -87,7 +87,6 @@ import type { Spec } from 'https://cardstack.com/base/spec';
 
 import PrerenderedCardSearch from '../../../prerendered-card-search';
 import CardError from '../../card-error';
-import FormatChooser from '../format-chooser';
 import PillFormatChooser from '../pill-format-chooser';
 
 import FieldPickerModal from './field-chooser-modal';
@@ -159,7 +158,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   ];
   private fileDefFormats: Format[] = ['isolated', 'embedded', 'fitted', 'atom'];
 
-  /* Insert 'form' (toggle standard view) right after 'edit' whenever
+  /* Insert 'form-edit' (toggle standard view) right after 'edit' whenever
      the card defines its own custom edit template — even if that
      custom edit is the SAME component as isolated (e.g. Polymorph).
      The trigger is `hasCustomEditTemplate` (= edit !== CardDef.edit),
@@ -172,7 +171,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     for (const f of allFormats) {
       result.push(f);
       if (f === 'edit' && ctor.hasCustomEditTemplate) {
-        result.push('form' as Format);
+        result.push('form-edit');
       }
     }
     return result;
@@ -673,17 +672,17 @@ export default class PlaygroundPanel extends Component<Signature> {
     );
   }
 
-  // 'form' is a synthetic chooser option for "auto-generated standard
+  // 'form-edit' is a synthetic chooser option for "auto-generated standard
   // view" — same mechanism as interact mode's "Toggle Standard View".
   // The renderer doesn't know about 'form', so we render it as 'edit'
   // and pin @codeRef to baseCardRef, which makes getComponent fall back
   // to CardDef's auto-generated template instead of the subclass's
   // custom edit template. Chooser-facing logic still uses `this.format`.
   private get effectiveFormat(): Format {
-    return this.format === ('form' as Format) ? 'edit' : this.format;
+    return this.format === 'form-edit' ? 'edit' : this.format;
   }
   private get effectiveCodeRef(): ResolvedCodeRef | undefined {
-    return this.format === ('form' as Format) ? baseCardRef : undefined;
+    return this.format === 'form-edit' ? baseCardRef : undefined;
   }
 
   private persistSelections = (
@@ -1115,7 +1114,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                         editing for header (green bar + X button to
                         return to default format). }}
                     @onFinishEditing={{if
-                      (or (eq this.format 'edit') (eq this.format 'form'))
+                      (or (eq this.format 'edit') (eq this.format 'form-edit'))
                       (fn this.setFormat this.defaultFormat)
                     }}
                     @isFieldDef={{@isFieldDef}}

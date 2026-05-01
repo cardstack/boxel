@@ -51,7 +51,6 @@ import type {
   ViewCardFn,
 } from 'https://cardstack.com/base/card-api';
 
-import FormatChooser from '../code-submode/format-chooser';
 import PillFormatChooser from '../code-submode/pill-format-chooser';
 
 import FittedFormatGallery from './fitted-format-gallery';
@@ -178,8 +177,7 @@ export default class PreviewPanel extends Component<Signature> {
 
   private get availableFormats() {
     if (this.isCard) {
-      const ctor = (this.args.card as CardDef)
-        .constructor as typeof CardDef;
+      const ctor = (this.args.card as CardDef).constructor as typeof CardDef;
       const hasCustomEdit = ctor.hasCustomEditTemplate;
       // Insert 'form' (toggle standard view) right after 'edit' ONLY
       // when this card has a custom edit template. Note: a card that
@@ -393,8 +391,6 @@ export default class PreviewPanel extends Component<Signature> {
         pointer-events: none;
       }
       .card-renderer-format-chooser :deep(.pill-format-chooser) {
-        background-color: var(--boxel-dark);
-        border-radius: 999px;
         pointer-events: auto;
       }
       :deep(.fitted-format-gallery) {

@@ -6,7 +6,12 @@ import Component from '@glimmer/component';
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
-import { formats, type Format } from '@cardstack/runtime-common';
+import {
+  // formats,
+  formatsWithIcons,
+  type Format,
+  type FormatWithIcon,
+} from '@cardstack/runtime-common';
 
 interface Signature {
   Args: {
@@ -14,6 +19,7 @@ interface Signature {
     setFormat: (format: Format) => void;
     additionalClass?: string;
     formats?: Format[];
+    formatsWithIcons?: FormatWithIcon[];
   };
   Element: HTMLElement;
 }
@@ -22,16 +28,21 @@ export default class FormatChooser extends Component<Signature> {
   <template>
     <div class='format-chooser' ...attributes>
       <div class='format-chooser__buttons'>
-        {{#each this.formats as |format|}}
-          {{#if (eq format 'metadata')}}
+        {{#each this.formatsWithIcons as |f|}}
+          {{#if (eq f.format 'metadata')}}
             <span class='format-chooser__divider'></span>
           {{/if}}
           <Button
-            class={{cn 'format-chooser__button' active=(eq @format format)}}
-            {{on 'click' (fn @setFormat format)}}
-            data-test-format-chooser={{format}}
+            class={{cn 'format-chooser__button' active=(eq @format f.format)}}
+            {{on 'click' (fn @setFormat f.format)}}
+            data-test-format-chooser={{f.format}}
           >
-            {{format}}
+            {{#if f.icon}}
+              <f.icon />
+              <span class='format-name'>{{f.format}}</span>
+            {{else}}
+              {{f.format}}
+            {{/if}}
           </Button>
           {{! TODO in CS-8701: show indicator when custom template exists }}
         {{/each}}
@@ -77,13 +88,26 @@ export default class FormatChooser extends Component<Signature> {
       .format-chooser__divider {
         width: 1px;
         align-self: stretch;
-        margin: var(--boxel-sp-xxxs) var(--boxel-sp-xxxs);
+        margin: var(--boxel-sp-3xs);
         background-color: var(--boxel-400);
+      }
+
+      .format-name {
+        display: none;
+      }
+
+      .format-chooser__button:hover .format-name,
+      .format-chooser__button.active .format-name {
+        display: inline-block;
       }
     </style>
   </template>
 
-  private get formats() {
-    return this.args.formats ?? formats;
+  // private get formats() {
+  //   return this.args.formats ?? formats;
+  // }
+
+  private get formatsWithIcons() {
+    return this.args.formatsWithIcons ?? formatsWithIcons;
   }
 }
