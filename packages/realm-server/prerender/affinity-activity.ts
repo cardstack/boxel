@@ -19,6 +19,12 @@ export interface ActivityEntry {
   queue: PrerenderQueue;
   state: ActivityState;
   startedAt: number;
+  // Worker-job priority of the call that produced this entry.
+  // Surfaced in `sameAffinityActivity` so post-mortems can see what
+  // priorities were competing during a stall — e.g. a priority-10
+  // file render stuck behind a priority-0 module call sticks out
+  // cleanly in the diagnostic snapshot.
+  priority: number;
 }
 
 export interface SameAffinityActivity {
@@ -27,6 +33,7 @@ export interface SameAffinityActivity {
   queue: PrerenderQueue;
   state: ActivityState;
   ageMs: number;
+  priority: number;
 }
 
 export interface ActivityHandle {
@@ -48,6 +55,7 @@ export class AffinityActivityTracker {
     url: string,
     kind: ActivityKind,
     queue: PrerenderQueue,
+    priority: number = 0,
   ): ActivityHandle {
     let handle = Symbol(`activity:${kind}:${url}`);
     let entries = this.#entries.get(affinityKey);
@@ -61,6 +69,7 @@ export class AffinityActivityTracker {
       queue,
       state: 'queued',
       startedAt: this.#now(),
+      priority,
     });
     return {
       handle,
@@ -96,6 +105,7 @@ export class AffinityActivityTracker {
         queue: e.queue,
         state: e.state,
         ageMs: now - e.startedAt,
+        priority: e.priority,
       });
     }
     return out;
