@@ -16,17 +16,22 @@ import { clearRemoteRealmCache } from './realm-server-mock/routes';
 
 import { cleanupMonacoEditorModels } from './index';
 
-// Per-test set of fetch URLs currently in flight. Snapshotted by the
-// unhandled-rejection diagnostics helper so we can see what was outstanding
-// when an unowned rejection surfaced. Cleared in beforeEach.
-let inFlightFetches = new Set<string>();
+// Map of fetch calls currently in flight, keyed by a globally-unique per-call
+// id so overlapping identical requests each occupy their own slot, and so a
+// late `finally` from a prior test can never collide with the current test's
+// ids. The map reference is constant; we `clear()` it between tests rather
+// than reassigning, otherwise late-resolving fetches would mutate the next
+// test's tracking container. Snapshotted by the unhandled-rejection
+// diagnostics helper to surface what was outstanding when a rejection fired.
+const inFlightFetches = new Map<number, string>();
+let nextFetchId = 0;
 
 function setupFetchDebugging(hooks: NestedHooks) {
   let originalFetch: typeof globalThis.fetch | undefined;
   let wrappedFetch: typeof globalThis.fetch | undefined;
 
   hooks.beforeEach(function () {
-    inFlightFetches = new Set<string>();
+    inFlightFetches.clear();
     if (!globalThis.fetch) {
       return;
     }
@@ -34,8 +39,8 @@ function setupFetchDebugging(hooks: NestedHooks) {
     let boundFetch = globalThis.fetch.bind(globalThis);
     wrappedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       let { method, url } = describeFetchRequest(input, init);
-      let tag = `${method} ${url}`;
-      inFlightFetches.add(tag);
+      let id = nextFetchId++;
+      inFlightFetches.set(id, `${method} ${url}`);
       try {
         return await boundFetch(input, init);
       } catch (error) {
@@ -44,7 +49,7 @@ function setupFetchDebugging(hooks: NestedHooks) {
         );
         throw error;
       } finally {
-        inFlightFetches.delete(tag);
+        inFlightFetches.delete(id);
       }
     };
     globalThis.fetch = wrappedFetch;
@@ -56,29 +61,30 @@ function setupFetchDebugging(hooks: NestedHooks) {
     }
     originalFetch = undefined;
     wrappedFetch = undefined;
-    inFlightFetches = new Set<string>();
+    inFlightFetches.clear();
   });
 }
 
 // surface unhandled rejections during tests with full stacks + in-flight URLs
 function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
   let handler: ((event: PromiseRejectionEvent) => void) | undefined;
-  let target: EventTarget | undefined;
+  let target: Window | undefined;
 
   hooks.beforeEach(function () {
+    // Host tests run in the browser; if `window` is missing or doesn't expose
+    // an event listener API for some reason, skip rather than throw.
     target =
-      typeof window !== 'undefined'
-        ? (window as unknown as EventTarget)
-        : typeof globalThis !== 'undefined'
-          ? (globalThis as unknown as EventTarget)
-          : undefined;
+      typeof window !== 'undefined' &&
+      typeof window.addEventListener === 'function'
+        ? window
+        : undefined;
     if (!target) {
       return;
     }
     handler = (event: PromiseRejectionEvent) => {
       // Observation only — do NOT call event.preventDefault(). QUnit's own
       // unhandled-rejection handling must still run and fail the test.
-      let inFlightSnapshot = Array.from(inFlightFetches);
+      let inFlightSnapshot = Array.from(inFlightFetches.values());
       console.error(
         [
           '[test-unhandled-rejection]',
@@ -89,18 +95,12 @@ function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
         ].join('\n'),
       );
     };
-    target.addEventListener(
-      'unhandledrejection',
-      handler as unknown as EventListener,
-    );
+    target.addEventListener('unhandledrejection', handler);
   });
 
   hooks.afterEach(function () {
     if (target && handler) {
-      target.removeEventListener(
-        'unhandledrejection',
-        handler as unknown as EventListener,
-      );
+      target.removeEventListener('unhandledrejection', handler);
     }
     handler = undefined;
     target = undefined;
