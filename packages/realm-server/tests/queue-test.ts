@@ -637,7 +637,7 @@ module(basename(__filename), function () {
       let [{ id: jobId }] = (await adapter.execute(
         `INSERT INTO jobs (job_type, args, status, timeout)
          VALUES ('logJob', '{}'::jsonb, 'unfulfilled', 1) RETURNING id`,
-      )) as { id: string }[];
+      )) as unknown as { id: number }[];
 
       for (let workerId of ['dead-worker-A', 'dead-worker-B']) {
         await adapter.execute(
@@ -658,6 +658,12 @@ module(basename(__filename), function () {
         return null;
       });
       await runner.start();
+      // PgQueueRunner.start() returns before the internal `LISTEN jobs`
+      // subscription is guaranteed established. Give it a beat so the
+      // first NOTIFY isn't lost; otherwise the first wake would have to
+      // wait for the 10s poll fallback and the 5s assertion loop below
+      // could miss it intermittently.
+      await new Promise((r) => setTimeout(r, 250));
       // Wake the runner so it picks the job up immediately rather than
       // waiting for the 10s poll interval.
       await adapter.execute(`NOTIFY jobs`);
@@ -694,7 +700,7 @@ module(basename(__filename), function () {
       let [{ count }] = (await adapter.execute(
         `SELECT COUNT(*)::int as count FROM job_reservations WHERE job_id = $1`,
         { bind: [jobId] },
-      )) as { count: number }[];
+      )) as unknown as { count: number }[];
       assert.strictEqual(count, 2, 'no new reservation was created');
     });
 
