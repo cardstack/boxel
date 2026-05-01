@@ -18,6 +18,7 @@ import { eq, toMenuItems } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode } from '@cardstack/boxel-ui/icons';
 
 import {
+  baseCardRef,
   cardTypeDisplayName,
   cardTypeIcon,
   formats as allFormats,
@@ -26,6 +27,7 @@ import {
   isCardInstance,
   isFileDefInstance,
   isResolvedCodeRef,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import { CardContextName } from '@cardstack/runtime-common';
@@ -50,6 +52,7 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 
 import FormatChooser from '../code-submode/format-chooser';
+import PillFormatChooser from '../code-submode/pill-format-chooser';
 
 import FittedFormatGallery from './fitted-format-gallery';
 import MarkdownPreview from './markdown-preview';
@@ -89,6 +92,19 @@ export default class PreviewPanel extends Component<Signature> {
       return 'isolated';
     }
     return format;
+  }
+
+  // 'form' is a synthetic chooser option for "auto-generated standard
+  // view" — same mechanism as interact mode's "Toggle Standard View".
+  // The renderer doesn't know about 'form', so we render it as 'edit'
+  // and pin @codeRef to baseCardRef, which makes getComponent fall back
+  // to CardDef's auto-generated template instead of the subclass's
+  // custom edit template. Chooser-facing logic still uses `this.format`.
+  private get effectiveFormat(): Format {
+    return this.format === ('form' as Format) ? 'edit' : this.format;
+  }
+  private get effectiveCodeRef(): ResolvedCodeRef | undefined {
+    return this.format === ('form' as Format) ? baseCardRef : undefined;
   }
 
   private get cardId(): string | undefined {
@@ -162,7 +178,23 @@ export default class PreviewPanel extends Component<Signature> {
 
   private get availableFormats() {
     if (this.isCard) {
-      return allFormats;
+      const ctor = (this.args.card as CardDef)
+        .constructor as typeof CardDef;
+      const hasCustomEdit = ctor.hasCustomEditTemplate;
+      // Insert 'form' (toggle standard view) right after 'edit' ONLY
+      // when this card has a custom edit template. Note: a card that
+      // shares the same component for edit and isolated (e.g.
+      // Polymorph: `static edit = PolymorphIsolated`) still counts as
+      // having a custom edit — `hasCustomEditTemplate` is `edit !==
+      // CardDef.edit`, regardless of whether it equals isolated.
+      const result: Format[] = [];
+      for (const f of allFormats) {
+        result.push(f);
+        if (f === 'edit' && hasCustomEdit) {
+          result.push('form' as Format);
+        }
+      }
+      return result;
     }
     let formats = allFormats.filter((f) => f !== 'edit');
     if (this.isFileDef) {
@@ -273,7 +305,8 @@ export default class PreviewPanel extends Component<Signature> {
             <CardRenderer
               class='preview'
               @card={{@card}}
-              @format={{this.format}}
+              @format={{this.effectiveFormat}}
+              @codeRef={{this.effectiveCodeRef}}
             />
           {{/if}}
         </CardContainer>
@@ -281,7 +314,7 @@ export default class PreviewPanel extends Component<Signature> {
     </div>
 
     <div class='card-renderer-format-chooser'>
-      <FormatChooser
+      <PillFormatChooser
         @format={{this.format}}
         @setFormat={{@setFormat}}
         @formats={{this.availableFormats}}
@@ -333,14 +366,26 @@ export default class PreviewPanel extends Component<Signature> {
       .card-renderer-content > :deep(.boxel-card-container.boundaries) {
         overflow: hidden;
       }
+      /* Full-width centering shell for the floating chooser. Its
+         width tracks the card preview area so the chooser inside can
+         measure available width honestly (a `width: max-content`
+         shell would hug the chooser and create a stuck-compact loop
+         when room becomes available again). The dark capsule +
+         radius lives on the chooser itself in this layout. */
       .card-renderer-format-chooser {
-        background-color: var(--boxel-dark);
-        right: 50%;
-        transform: translateX(50%);
         position: absolute;
         bottom: var(--boxel-sp-sm);
-        width: 460px;
-        border-radius: var(--boxel-border-radius);
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: center;
+        padding: 0 var(--boxel-sp-sm);
+        pointer-events: none;
+      }
+      .card-renderer-format-chooser :deep(.pill-format-chooser) {
+        background-color: var(--boxel-dark);
+        border-radius: 999px;
+        pointer-events: auto;
       }
       :deep(.fitted-format-gallery) {
         padding: var(--boxel-sp-sm);

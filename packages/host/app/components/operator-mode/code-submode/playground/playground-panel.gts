@@ -42,6 +42,7 @@ import {
   type getCards,
   chooseCard,
   chooseFile,
+  formats as allFormats,
   loadCardDef,
   specRef,
   trimJsonExtension,
@@ -87,6 +88,7 @@ import type { Spec } from 'https://cardstack.com/base/spec';
 import PrerenderedCardSearch from '../../../prerendered-card-search';
 import CardError from '../../card-error';
 import FormatChooser from '../format-chooser';
+import PillFormatChooser from '../pill-format-chooser';
 
 import FieldPickerModal from './field-chooser-modal';
 
@@ -156,6 +158,25 @@ export default class PlaygroundPanel extends Component<Signature> {
     'markdown',
   ];
   private fileDefFormats: Format[] = ['isolated', 'embedded', 'fitted', 'atom'];
+
+  /* Insert 'form' (toggle standard view) right after 'edit' whenever
+     the card defines its own custom edit template — even if that
+     custom edit is the SAME component as isolated (e.g. Polymorph).
+     The trigger is `hasCustomEditTemplate` (= edit !== CardDef.edit),
+     not whether edit === isolated. If no custom edit, omit form. */
+  private get cardAvailableFormats(): Format[] | undefined {
+    if (this.args.isFieldDef || this.args.isFileDef) return undefined;
+    const ctor = this.card?.constructor as typeof CardDef | undefined;
+    if (!ctor) return undefined;
+    const result: Format[] = [];
+    for (const f of allFormats) {
+      result.push(f);
+      if (f === 'edit' && ctor.hasCustomEditTemplate) {
+        result.push('form' as Format);
+      }
+    }
+    return result;
+  }
   #creationError = false;
   #currentModuleId: string | undefined;
 
@@ -652,6 +673,19 @@ export default class PlaygroundPanel extends Component<Signature> {
     );
   }
 
+  // 'form' is a synthetic chooser option for "auto-generated standard
+  // view" — same mechanism as interact mode's "Toggle Standard View".
+  // The renderer doesn't know about 'form', so we render it as 'edit'
+  // and pin @codeRef to baseCardRef, which makes getComponent fall back
+  // to CardDef's auto-generated template instead of the subclass's
+  // custom edit template. Chooser-facing logic still uses `this.format`.
+  private get effectiveFormat(): Format {
+    return this.format === ('form' as Format) ? 'edit' : this.format;
+  }
+  private get effectiveCodeRef(): ResolvedCodeRef | undefined {
+    return this.format === ('form' as Format) ? baseCardRef : undefined;
+  }
+
   private persistSelections = (
     selectedCardId: string,
     selectedFormat = this.format,
@@ -1066,7 +1100,8 @@ export default class PlaygroundPanel extends Component<Signature> {
                   {{/if}}
                   <PlaygroundPreview
                     @card={{card}}
-                    @format={{this.format}}
+                    @format={{this.effectiveFormat}}
+                    @codeRef={{this.effectiveCodeRef}}
                     @realmInfo={{this.realmInfo}}
                     @contextMenuItems={{unless
                       @isFileDef
@@ -1086,17 +1121,24 @@ export default class PlaygroundPanel extends Component<Signature> {
                 </div>
                 <section class='instance-chooser-container'>
                   <InstanceChooser />
-                  <FormatChooser
-                    class='format-chooser'
-                    @formats={{if
-                      @isFileDef
-                      this.fileDefFormats
-                      (if @isFieldDef this.fieldFormats)
-                    }}
-                    @format={{this.format}}
-                    @setFormat={{this.setFormat}}
+                  <div
+                    class='format-chooser pill-format-chooser-wrap'
                     data-test-playground-format-chooser
-                  />
+                  >
+                    <PillFormatChooser
+                      @formats={{if
+                        @isFileDef
+                        this.fileDefFormats
+                        (if
+                          @isFieldDef
+                          this.fieldFormats
+                          this.cardAvailableFormats
+                        )
+                      }}
+                      @format={{this.format}}
+                      @setFormat={{this.setFormat}}
+                    />
+                  </div>
                 </section>
               {{else if this.createNewIsRunning}}
                 <div class='loading'>
@@ -1171,6 +1213,16 @@ export default class PlaygroundPanel extends Component<Signature> {
       .format-chooser {
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
+      }
+      /* Centers the pill chooser inside the existing dark format-
+         chooser bar — keeps the rounded box / instance chooser
+         layout above unchanged, only the picker swaps. */
+      .pill-format-chooser-wrap {
+        background-color: var(--boxel-dark);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 0;
       }
       .error-container {
         flex-grow: 1;
