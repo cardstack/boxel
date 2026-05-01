@@ -96,9 +96,11 @@ case "$env_name" in
   *)     realm_server_url="$REALM_SERVER_URL" ;;
 esac
 
-shopt -s globstar nullglob
-for f in "$rendered"/dashboards/**/*.json; do
-  [[ -f "$f" ]] || continue
+# `find -print0` + a NUL-delimited read loop rather than a `**/*.json` glob —
+# macOS's default bash 3.2 doesn't support `shopt -s globstar` and `set -eo`
+# would abort apply.sh before any push. This pattern is portable across bash
+# 3.2 / 4.x / 5.x and zsh.
+while IFS= read -r -d '' f; do
   # `set -e` aborts on a non-zero exit, but only for "simple commands" — a
   # `jq ... > out && mv ...` chain swallows jq's failure inside the &&,
   # leaving the script to continue with an unrendered file. Run as two
@@ -115,8 +117,7 @@ for f in "$rendered"/dashboards/**/*.json; do
     )
   ' "$f" > "$f.tmp"
   mv "$f.tmp" "$f"
-done
-shopt -u globstar nullglob
+done < <(find "$rendered/dashboards" -type f -name '*.json' -print0)
 
 grafanactl \
   --config "$cfg" \

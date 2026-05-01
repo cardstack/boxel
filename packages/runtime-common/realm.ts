@@ -226,6 +226,13 @@ const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
+
+// Postgres NOTIFY channel for cross-instance invalidation of #sourceCache /
+// #moduleCache entries on file writes. Payload shape is `<realmURL>:<path>`.
+// See docs/db-authoritative-realm-registry.md §6 "Cache invalidation channel"
+// and §9 "Cache-invalidation NOTIFY missed" for the semantics (best-effort,
+// missed-NOTIFY is a cache-staleness window, not data corruption).
+export const REALM_FILE_CHANGES_CHANNEL = 'realm_file_changes';
 export const FILE_META_RESERVED_KEYS = new Set([
   'name',
   'url',
@@ -1066,8 +1073,21 @@ export class Realm {
     await this.#startedUp.promise;
   }
 
-  async fullIndex(priority?: number) {
-    await this.realmIndexUpdater.fullIndex(priority);
+  async fullIndex(priority?: number, opts?: { clearLastModified?: boolean }) {
+    // Clear the realmInfo cache before re-indexing so cards rendered
+    // during this pass read /realm.json from the now-populated index
+    // rather than a stale "Unnamed Workspace" cached during an earlier
+    // from-scratch pass that processed /index before /realm.json.
+    // CardsGrid.cardTitle → realmInfo.name drives og:title, which is
+    // baked into the prerendered HTML — clearing only after the pass
+    // would be too late.
+    this.#cachedRealmInfo = null;
+    let { completed } = this.#realmIndexUpdater.publishFullIndex(
+      priority ?? systemInitiatedPriority,
+      { clearLastModified: opts?.clearLastModified },
+    );
+    await completed;
+    this.#cachedRealmInfo = null;
   }
 
   async flushUpdateEvents() {
@@ -1077,6 +1097,41 @@ export class Realm {
   __testOnlyClearCaches() {
     this.#sourceCache.clear();
     this.#moduleCache.clear();
+  }
+
+  // Invalidate the in-memory byte caches for a single path. Called by the
+  // realm_file_changes LISTEN handler on peer instances after a write lands
+  // somewhere else in the fleet. The shape matches the file-watcher receiver
+  // below — invalidate source always, invalidate module only for executable
+  // extensions. Public so the realm-server process can wire a NOTIFY listener
+  // without reaching into private state.
+  invalidateCache(path: LocalPath): void {
+    this.#sourceCache.invalidate(path);
+    if (hasExecutableExtension(path)) {
+      this.#moduleCache.invalidate(path);
+    }
+  }
+
+  // Broadcast a file-change notification to peer realm-server instances so
+  // they can invalidate their own #sourceCache / #moduleCache entries for the
+  // same path. Best-effort — failures are logged and swallowed because the
+  // local write already succeeded and a missed NOTIFY is a bounded cache-
+  // staleness window (see docs §9 "Cache-invalidation NOTIFY missed"), not
+  // a correctness failure.
+  async #notifyFileChange(path: LocalPath): Promise<void> {
+    try {
+      await query(this.#dbAdapter, [
+        `SELECT pg_notify(`,
+        param(REALM_FILE_CHANGES_CHANNEL),
+        `,`,
+        param(`${this.url}:${path}`),
+        `)`,
+      ]);
+    } catch (err: unknown) {
+      this.#log.warn(
+        `pg_notify ${REALM_FILE_CHANGES_CHANNEL} failed for ${this.url}:${path}: ${String(err)}`,
+      );
+    }
   }
 
   createJWT(claims: TokenClaims, expiration: ms.StringValue): string {
@@ -1218,6 +1273,7 @@ export class Realm {
       if (hasExecutableExtension(path)) {
         this.#moduleCache.invalidate(path);
       }
+      await this.#notifyFileChange(path);
       results.push({ path, lastModified });
       fileMetaRows.push({ path, contentHash, contentSize });
       urls.push(url);
@@ -1626,6 +1682,7 @@ export class Realm {
     if (hasExecutableExtension(path)) {
       this.#moduleCache.invalidate(path);
     }
+    await this.#notifyFileChange(path);
     // Remove file meta for this path
     await this.removeFileMeta([path]);
     let invalidations = await this.updateIndexAndCollectInvalidations([url], {
@@ -1653,6 +1710,7 @@ export class Realm {
 
     await Promise.all(trackPromises);
     await Promise.all(removePromises);
+    await Promise.all(paths.map((path) => this.#notifyFileChange(path)));
     this.broadcastRealmEvent({
       eventName: 'update',
       removed: paths,
