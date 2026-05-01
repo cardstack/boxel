@@ -4972,8 +4972,11 @@ module(basename(__filename), function () {
             let snapAfterFirst = pool
               .getQueueDepthSnapshot()
               .affinities.find((a) => a.affinityKey === 'realm-a');
+            let pendingAfterFirst = snapAfterFirst
+              ? snapAfterFirst.admission.pending
+              : 0;
             assert.strictEqual(
-              snapAfterFirst?.admission.pending ?? 0,
+              pendingAfterFirst,
               0,
               'first file call did not queue (no admission waiters)',
             );
@@ -4991,8 +4994,11 @@ module(basename(__filename), function () {
             let snapWhileQueued = pool
               .getQueueDepthSnapshot()
               .affinities.find((a) => a.affinityKey === 'realm-a');
+            let pendingWhileQueued = snapWhileQueued
+              ? snapWhileQueued.admission.pending
+              : 0;
             assert.strictEqual(
-              snapWhileQueued?.admission.pending ?? 0,
+              pendingWhileQueued,
               1,
               'second file call is queued behind admission',
             );
