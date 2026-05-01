@@ -8,8 +8,8 @@ import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel';
 //   - PagePool file-queue admission control (CS-10946)
 //
 // Capacity is mutable post-construction via `setCapacity(n)` so callers
-// (PagePool dynamic tab expansion / contraction in CS-10976) can grow
-// the concurrency cap without rebuilding the semaphore. In-flight slots
+// (PagePool dynamic tab expansion / contraction) can grow the
+// concurrency cap without rebuilding the semaphore. In-flight slots
 // are never preempted on shrink — `setCapacity(smaller)` just stops
 // admitting new waiters until `inUseCount` falls back under the new cap.
 export class AsyncSemaphore {
@@ -20,10 +20,13 @@ export class AsyncSemaphore {
   #inUse: number;
   // `resolve` hands the acquirer the release function once a slot
   // frees. `onCancel` gives the cancellation path a way to splice
-  // the entry out of the queue without racing #release.
+  // the entry out of the queue without racing #release. `priority`
+  // controls dequeue order: higher priority first, FIFO within the
+  // same priority. Default priority is `0`.
   #queue: Array<{
     resolve: (release: () => void) => void;
     onCancel: () => void;
+    priority: number;
   }> = [];
 
   constructor(max: number) {
@@ -50,7 +53,21 @@ export class AsyncSemaphore {
     return this.#inUse;
   }
 
-  async acquire(signal?: AbortSignal): Promise<() => void> {
+  // Per-priority count of queued waiters. Used to surface a priority
+  // breakdown of file-admission backpressure in the periodic
+  // `prerender-queue-snapshot` log line.
+  pendingByPriority(): Map<number, number> {
+    let m = new Map<number, number>();
+    for (let entry of this.#queue) {
+      m.set(entry.priority, (m.get(entry.priority) ?? 0) + 1);
+    }
+    return m;
+  }
+
+  async acquire(
+    signal?: AbortSignal,
+    priority: number = 0,
+  ): Promise<() => void> {
     throwIfAborted(signal);
     if (this.#inUse < this.#capacity) {
       this.#inUse++;
@@ -85,9 +102,20 @@ export class AsyncSemaphore {
             }),
           );
         },
+        priority,
       };
       let onAbort = entry.onCancel;
-      this.#queue.push(entry);
+      // Priority-ordered insertion: highest priority first, FIFO within
+      // the same priority. Find the first existing entry with strictly
+      // lower priority and insert before it; if none, append. Same-
+      // priority entries land after all existing same-priority entries
+      // → FIFO preserved.
+      let insertIdx = this.#queue.findIndex((e) => e.priority < priority);
+      if (insertIdx === -1) {
+        this.#queue.push(entry);
+      } else {
+        this.#queue.splice(insertIdx, 0, entry);
+      }
       signal?.addEventListener('abort', onAbort, { once: true });
     });
   }

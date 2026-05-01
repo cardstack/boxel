@@ -154,4 +154,34 @@ module(basename(__filename), function () {
       'both entries listed when no selfHandle is provided',
     );
   });
+
+  test('priority is captured on each entry and surfaced in snapshots', function (assert) {
+    let { tracker } = trackerAt(1_000_000);
+    let outer = tracker.record(
+      REALM_A,
+      'http://localhost/i.json',
+      'visit',
+      'file',
+      10,
+    );
+    tracker.record(REALM_A, 'http://localhost/bg.gts', 'module', 'module', 0);
+    tracker.record(
+      REALM_A,
+      'http://localhost/refresh.gts',
+      'module',
+      'module',
+      5,
+    );
+
+    let snap = tracker.sameAffinityActivity(REALM_A, outer.handle);
+    let priorities = snap.map((s) => s.priority).sort((a, b) => a - b);
+    assert.deepEqual(priorities, [0, 5], 'sibling priorities surfaced');
+  });
+
+  test('priority defaults to 0 when not provided', function (assert) {
+    let { tracker } = trackerAt(1_000_000);
+    tracker.record(REALM_A, 'http://localhost/x', 'visit', 'file');
+    let snap = tracker.sameAffinityActivity(REALM_A);
+    assert.strictEqual(snap[0]!.priority, 0, 'default priority is 0');
+  });
 });

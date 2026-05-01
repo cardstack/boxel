@@ -3,10 +3,10 @@ import { basename } from 'path';
 import { AsyncSemaphore } from '../prerender/async-semaphore';
 import { isPrerenderCancellation } from '../prerender/prerender-cancel';
 
-// Tests for AsyncSemaphore's resize-aware behaviour added in CS-10976.
-// The cancellation tests live in prerender-cancellation-test.ts; this
-// file owns the contract of `setCapacity(n)` plus the in-flight
-// tracking the resize requires.
+// Tests for AsyncSemaphore's resize-aware behaviour. The cancellation
+// tests live in prerender-cancellation-test.ts; this file owns the
+// contract of `setCapacity(n)` plus the in-flight tracking the resize
+// requires.
 //
 // What we pin down here:
 //   1. The basic invariants (capacity / inUseCount / pendingCount)

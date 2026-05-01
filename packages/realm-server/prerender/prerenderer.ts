@@ -132,7 +132,10 @@ export class Prerenderer {
     return this.#pagePool.getWarmAffinities();
   }
 
-  getVacancySnapshot(): Record<string, { idle: boolean; tabCount: number }> {
+  getVacancySnapshot(): Record<
+    string,
+    { idle: boolean; tabCount: number; maxPendingPriority?: number }
+  > {
     return this.#pagePool.getVacancySnapshot();
   }
 
@@ -287,9 +290,10 @@ export class Prerenderer {
     auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
-    // CS-10976 wire format: priority threaded from the producer side.
-    // Stamped into `response.meta.diagnostics.priority` for telemetry;
-    // PagePool's queue/admission honors it starting in PR 4.
+    // Priority threaded from the producer side. Stamped into
+    // `response.meta.diagnostics.priority` for telemetry, and honored
+    // by PagePool's tab queue / per-affinity admission semaphore /
+    // global render semaphore for priority-aware dequeue.
     priority?: number;
     signal?: AbortSignal;
   }): Promise<{
@@ -306,6 +310,7 @@ export class Prerenderer {
       url,
       'module',
       'module',
+      priority,
     );
     // Declared before the try so the finally releases both even if the
     // register call itself throws synchronously (e.g. setInterval
@@ -346,6 +351,7 @@ export class Prerenderer {
             auth,
             opts,
             renderOptions: attemptOptions,
+            priority,
             signal,
             onTabAcquired: activity.markRunning,
           });
@@ -375,6 +381,7 @@ export class Prerenderer {
               auth,
               opts,
               renderOptions: attemptOptions,
+              priority,
               signal,
               onTabAcquired: activity.markRunning,
             });
@@ -427,8 +434,11 @@ export class Prerenderer {
           result.response,
           result.timings,
           Date.now() - attemptStart,
-          poller.currentPeak(),
-          priority,
+          {
+            affinitySnapshot: poller.currentPeak(),
+            priority,
+            tabReused: result.pool?.reused,
+          },
         );
         return result;
       }
@@ -442,8 +452,11 @@ export class Prerenderer {
           lastResult.response,
           lastResult.timings,
           Date.now() - attemptStart,
-          poller.currentPeak(),
-          priority,
+          {
+            affinitySnapshot: poller.currentPeak(),
+            priority,
+            tabReused: lastResult.pool?.reused,
+          },
         );
         return lastResult;
       }
@@ -468,7 +481,7 @@ export class Prerenderer {
     command: string;
     commandInput?: Record<string, unknown> | null;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
-    // CS-10976: see prerenderModule.
+    // See prerenderModule for the priority contract.
     priority?: number;
     signal?: AbortSignal;
   }): Promise<{
@@ -492,14 +505,14 @@ export class Prerenderer {
         command,
         commandInput,
         opts,
+        priority,
         signal,
       });
       Prerenderer.decorateRenderErrorsWithTimings(
         result.response,
         result.timings,
         Date.now() - commandStart,
-        undefined,
-        priority,
+        { priority, tabReused: result.pool?.reused },
       );
       return result;
     } catch (e) {
@@ -562,6 +575,7 @@ export class Prerenderer {
       url,
       'visit',
       'file',
+      priority,
     );
     let onTabAcquired = (info: { pageId: string }) => {
       activity.markRunning();
@@ -606,6 +620,7 @@ export class Prerenderer {
             renderOptions: attemptOptions,
             fileData,
             types,
+            priority,
             signal,
             onTabAcquired,
           });
@@ -637,6 +652,7 @@ export class Prerenderer {
               renderOptions: attemptOptions,
               fileData,
               types,
+              priority,
               signal,
               onTabAcquired,
             });
@@ -687,8 +703,11 @@ export class Prerenderer {
           result.response,
           result.timings,
           Date.now() - attemptStart,
-          poller.currentPeak(),
-          priority,
+          {
+            affinitySnapshot: poller.currentPeak(),
+            priority,
+            tabReused: result.pool?.reused,
+          },
         );
         return result;
       }
@@ -697,8 +716,11 @@ export class Prerenderer {
           lastResult.response,
           lastResult.timings,
           Date.now() - attemptStart,
-          poller.currentPeak(),
-          priority,
+          {
+            affinitySnapshot: poller.currentPeak(),
+            priority,
+            tabReused: lastResult.pool?.reused,
+          },
         );
         return lastResult;
       }
@@ -838,7 +860,19 @@ export class Prerenderer {
               a.admission.cap > 0 && a.admission.pending > 0
                 ? `, admission=pending=${a.admission.pending}/cap=${a.admission.cap}`
                 : '';
-            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail}${admissionDetail})`;
+            // Priority breakdown of *queued* waiters for this affinity
+            // (does NOT count the in-flight holder, which is what
+            // `pending=` above includes). Format:
+            // `priorities=<src>:<p>:<n>,<p>:<n>` where `<src>` is `tab`
+            // for tab-queue waiters or `adm` for file-admission
+            // waiters. Skipped when nothing is queued — idle affinities
+            // stay compact. Format chosen so a single grep can pull
+            // priority distributions out of the logs.
+            let priorityDetail = formatQueuedByPriority(
+              a.tabQueuedByPriority,
+              a.admissionQueuedByPriority,
+            );
+            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail}${admissionDetail}${priorityDetail})`;
           })
           .join(' ');
         log.info(
@@ -854,4 +888,34 @@ export class Prerenderer {
     }, intervalMs);
     this.#queueSnapshotInterval.unref?.();
   }
+}
+
+// Format helper for the `prerender-queue-snapshot` log line's priority
+// breakdown. Counts queued waiters only; the in-flight holder is
+// reflected separately in the `pending=` field on the same log entry.
+// Returns `, priorities=tab:10:3,0:1` when the affinity has 3
+// priority-10 + 1 priority-0 tab-queue waiters and no admission
+// waiters. Returns `, priorities=tab:10:3|adm:0:2` when the breakdown
+// also includes admission-queue waiters. Returns the empty string when
+// nothing is queued. Numeric keys sort descending within each source
+// (highest priority first), matching dequeue order.
+function formatQueuedByPriority(
+  tab: Record<number, number>,
+  admission: Record<number, number>,
+): string {
+  let segments: string[] = [];
+  let tabSegment = formatPriorityCounts(tab);
+  if (tabSegment) segments.push(`tab:${tabSegment}`);
+  let admSegment = formatPriorityCounts(admission);
+  if (admSegment) segments.push(`adm:${admSegment}`);
+  if (segments.length === 0) return '';
+  return `, priorities=${segments.join('|')}`;
+}
+
+function formatPriorityCounts(counts: Record<number, number>): string {
+  let entries = Object.entries(counts)
+    .map(([k, v]) => [Number(k), v] as [number, number])
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[0] - a[0]);
+  return entries.map(([prio, n]) => `${prio}:${n}`).join(',');
 }

@@ -109,8 +109,10 @@ export function buildPrerenderApp(options: {
   type RouteBaseArgs = {
     auth: string;
     renderOptions: RenderRouteOptions;
-    // Worker-job priority threaded from the producer side (CS-10976).
-    // Read + logged here in PR 3; PR 4 adds the routing/dequeue effect.
+    // Worker-job priority threaded from the producer side. Stamped
+    // onto the diagnostics blob and used by the per-tab queue / per-
+    // affinity admission semaphore / global render semaphore for
+    // priority-aware dequeue.
     priority?: number;
   };
 
@@ -160,9 +162,9 @@ export function buildPrerenderApp(options: {
       ? (attrs.renderOptions as RenderRouteOptions)
       : {};
 
-  // Optional `priority` from the wire format (CS-10976). Coerce to a
-  // finite number; reject non-numeric values silently (defaults to
-  // undefined, server treats as 0).
+  // Optional `priority` from the wire format. Coerce to a finite
+  // number; reject non-numeric values silently (defaults to undefined,
+  // server treats as 0).
   let parsePriority = (attrs: any): number | undefined => {
     let raw = attrs?.priority;
     if (raw === undefined || raw === null) return undefined;

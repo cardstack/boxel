@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-04-28",
+  "generated": "2026-05-01",
   "threshold": {
     "relative": 0.1,
     "absolute_mb": 5
@@ -519,6 +519,9 @@
     "Unit | ai-function-generation-test": {
       "delta_mb": 9.8
     },
+    "Unit | amd-transpile (CS-10977)": {
+      "delta_mb": 0.1
+    },
     "Unit | auth-error-guard": {
       "delta_mb": 0
     },
@@ -593,6 +596,12 @@
     },
     "Unit | loader": {
       "delta_mb": -8.7
+    },
+    "Unit | loader prefetch": {
+      "delta_mb": 9.5
+    },
+    "Unit | Loader transient 5xx retry (CS-10820)": {
+      "delta_mb": 0
     },
     "Unit | markdown-helpers | card link helpers": {
       "delta_mb": 4.2

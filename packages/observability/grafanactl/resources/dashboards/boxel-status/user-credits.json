@@ -2,10 +2,10 @@
   "apiVersion": "dashboard.grafana.app/v1beta1",
   "kind": "Dashboard",
   "metadata": {
-    "name": "eetquziy9np4wa",
     "annotations": {
       "grafana.app/folder": "defd2d156sav4d"
-    }
+    },
+    "name": "eetquziy9np4wa"
   },
   "spec": {
     "annotations": {
@@ -88,8 +88,7 @@
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "yellow",
-                  "value": null
+                  "color": "yellow"
                 }
               ]
             }
@@ -252,7 +251,7 @@
       }
     ],
     "refresh": "5s",
-    "schemaVersion": 39,
+    "schemaVersion": 42,
     "tags": [],
     "templating": {
       "list": [

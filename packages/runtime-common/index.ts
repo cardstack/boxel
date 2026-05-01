@@ -81,12 +81,19 @@ export interface RenderTimeoutDiagnostics {
   // through manager and prerender-server. Paste into a log search to
   // join all three stacks for this call.
   requestId?: string;
-  // Worker-job priority of the request that produced this render
-  // (CS-10976). Plumbed from the producer side via `Job.priority`.
-  // `0` is the system-initiated default; `10` is user-initiated. Read
-  // in post-mortems and in `prerender-queue-snapshot` triage to tell
-  // whether a stalled render was background or user-priority work.
+  // Worker-job priority of the request that produced this render.
+  // Plumbed from the producer side via `Job.priority`. `0` is the
+  // system-initiated default; `10` is user-initiated. Read in post-
+  // mortems and in `prerender-queue-snapshot` triage to tell whether a
+  // stalled render was background or user-priority work.
   priority?: number;
+  // Whether this render landed on a tab that was already bound to its
+  // affinity. `true` = warm tab, fast launch + cached BrowserContext
+  // fetches. `false` = a freshly spawned or commandeered tab — pays
+  // the cold-start cost. Triage signal: a slow render with
+  // `tabReused=false` is a cold-start tax (look at `tabStartupMs`);
+  // with `tabReused=true` it's a real render-side stall.
+  tabReused?: boolean;
   // Total wall time spent in `PagePool.getPage` before render work
   // began. The three `waits` sub-fields below each cover a specific
   // await; `launchMs` is measured around the full method and so is
@@ -185,6 +192,15 @@ export interface RenderTimeoutDiagnostics {
       queue?: PrerenderQueue;
       state: 'queued' | 'running';
       ageMs: number;
+      // Worker-job priority of the call that produced this entry.
+      // Surfaced so post-mortems can see what priorities were competing
+      // — e.g. a priority-10 file render stuck behind a priority-0
+      // module call sticks out cleanly. Optional in the schema even
+      // though fresh producers always emit a value: the same shape is
+      // deserialized from `boxel_index.timing_diagnostics`, where rows
+      // persisted before priority threading landed will lack the
+      // field. Consumers should treat absent as `0`.
+      priority?: number;
     }>;
   };
 }
@@ -320,11 +336,12 @@ export type ModulePrerenderArgs = {
   url: string;
   auth: string;
   renderOptions?: RenderRouteOptions;
-  // Worker-job priority threaded through from the producer side
-  // (CS-10976). Higher priority requests jump server-side queues
-  // ahead of lower-priority pending work in PR 4. Wire format only
-  // in PR 3 — server reads + logs but doesn't act on it yet.
-  // Defaults to 0 when absent.
+  // Worker-job priority threaded through from the producer side.
+  // Higher priority requests dequeue ahead of lower-priority pending
+  // work on the prerender server (per-tab queues + per-affinity file-
+  // admission semaphore + global render semaphore). No preemption: an
+  // in-flight low-priority render runs to completion. Defaults to 0
+  // when absent (system-priority).
   priority?: number;
 };
 
@@ -358,8 +375,8 @@ export type PrerenderVisitArgs = {
   // protecting the indexer's warm loader from being wiped by incidental
   // callers.
   batchId?: string;
-  // Worker-job priority threaded through from the producer side
-  // (CS-10976). See ModulePrerenderArgs for the contract.
+  // Worker-job priority threaded through from the producer side. See
+  // ModulePrerenderArgs for the contract.
   priority?: number;
 };
 
@@ -396,8 +413,8 @@ export type RunCommandArgs = {
   auth: string;
   command: string;
   commandInput?: Record<string, any> | null;
-  // Worker-job priority threaded through from the producer side
-  // (CS-10976). See ModulePrerenderArgs for the contract.
+  // Worker-job priority threaded through from the producer side. See
+  // ModulePrerenderArgs for the contract.
   priority?: number;
 };
 

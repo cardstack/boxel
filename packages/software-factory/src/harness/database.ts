@@ -418,11 +418,6 @@ export async function rewriteClonedRealmServerUrls(
                published_realm_url = replace(published_realm_url, $1, $2)`,
           [fromURL, toURL],
         );
-        await client.query(
-          `UPDATE session_rooms
-           SET realm_url = replace(realm_url, $1, $2)`,
-          [fromURL, toURL],
-        );
         // Without this, lookupDefinition misses every cached module on the
         // first request after clone and pays a full prerender (~45s for a
         // module with deep transitive imports), which can blow past the

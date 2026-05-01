@@ -501,6 +501,27 @@ export default function handlePublishRealm({
           `expected published realm ${publishedRealmURL} to be mounted after publish — registry row missing or mount failed`,
         );
       }
+      // Re-run a full index after start()'s pass so the RealmConfig card
+      // at /realm.json is queryable by parseRealmInfo before /index is
+      // re-rendered. start()'s from-scratch pass walks files in order and
+      // typically renders /index before /realm.json — at which point
+      // attachRealmInfo → getRealmInfo → parseRealmInfo finds /realm.json
+      // not yet indexed, falls back to "Unnamed Workspace", and caches
+      // that. The prerendered head HTML for /index is baked with the
+      // stale value, surfacing as og:title="Unnamed Workspace" on the
+      // published page.
+      //
+      // clearLastModified: true forces every row to re-render on this
+      // pass even though copySync preserves mtimes — without it, the
+      // indexer's mtime-cache check would skip the already-rendered
+      // /index and the stale prerendered HTML would persist.
+      // Realm.fullIndex clears #cachedRealmInfo before this pass so the
+      // first attachRealmInfo call re-reads parseRealmInfo against the
+      // now-populated index and bakes the correct realm name into the
+      // re-rendered prerendered HTML.
+      await publishedRealm.fullIndex(userInitiatedPriority, {
+        clearLastModified: true,
+      });
       let publishedPermissions = await fetchRealmPermissions(
         dbAdapter,
         new URL(publishedRealmURL),
