@@ -4513,6 +4513,34 @@ export class Realm {
     }
   }
 
+  // Reads showAsCatalog / publishable from realm_metadata. Both columns
+  // are nullable; missing rows or query failures return null/null,
+  // matching the pre-CS-10053 behavior of "absent in sidecar".
+  private async getRealmMetadata(): Promise<{
+    showAsCatalog: boolean | null;
+    publishable: boolean | null;
+  }> {
+    try {
+      let results = (await query(this.#dbAdapter, [
+        `SELECT show_as_catalog, publishable FROM realm_metadata WHERE url =`,
+        param(this.url),
+      ])) as {
+        show_as_catalog: boolean | null;
+        publishable: boolean | null;
+      }[];
+      if (results.length === 0) {
+        return { showAsCatalog: null, publishable: null };
+      }
+      return {
+        showAsCatalog: results[0].show_as_catalog,
+        publishable: results[0].publishable,
+      };
+    } catch (error) {
+      this.#log.warn(`Failed to query realm metadata: ${error}`);
+      return { showAsCatalog: null, publishable: null };
+    }
+  }
+
   async getRealmInfo(): Promise<RealmInfo> {
     if (!this.#cachedRealmInfo) {
       this.#cachedRealmInfo = await this.parseRealmInfo();
@@ -4523,8 +4551,11 @@ export class Realm {
   private async parseRealmInfo(): Promise<RealmInfo> {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
-    let realmConfig = await this.readFileAsText(localPath, undefined);
-    let lastPublishedAt = await this.getLastPublishedAt();
+    let [realmConfig, lastPublishedAt, metadata] = await Promise.all([
+      this.readFileAsText(localPath, undefined),
+      this.getLastPublishedAt(),
+      this.getRealmMetadata(),
+    ]);
     let realmInfo: RealmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,
@@ -4565,6 +4596,18 @@ export class Realm {
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
+    }
+
+    // Overlay from realm_metadata table when present. DB values win over
+    // sidecar values; null DB columns leave whatever the sidecar wrote
+    // (or the null default) in place. After CS-10053's backfill runs,
+    // sidecar copies of these flags are dead; until then, the sidecar
+    // is still the source of truth for unmigrated realms.
+    if (metadata.showAsCatalog !== null) {
+      realmInfo.showAsCatalog = metadata.showAsCatalog;
+    }
+    if (metadata.publishable !== null) {
+      realmInfo.publishable = metadata.publishable;
     }
 
     // Overlay from the RealmConfig card instance at /realm.json when it has
