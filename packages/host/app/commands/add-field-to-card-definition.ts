@@ -1,5 +1,6 @@
 import { service } from '@ember/service';
 
+import { rri } from '@cardstack/runtime-common';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import type { FieldType } from 'https://cardstack.com/base/card-api';
@@ -50,7 +51,7 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
       fieldType: input.fieldType as FieldType,
       fieldDefinitionType: input.fieldDefinitionType as 'field' | 'card',
       incomingRelativeTo: input.incomingRelativeTo
-        ? new URL(input.incomingRelativeTo)
+        ? rri(input.incomingRelativeTo)
         : undefined,
       outgoingRelativeTo: input.outgoingRelativeTo
         ? new URL(input.outgoingRelativeTo)
