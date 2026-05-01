@@ -14,6 +14,7 @@ import {
   resolveCardReference,
   unresolveCardReference,
   isRegisteredPrefix,
+  rri,
   type RealmResourceIdentifier,
 } from './card-reference-resolver';
 
@@ -310,6 +311,26 @@ export interface PrerenderResponseMeta {
 export interface TimingDiagnostics extends RenderTimeoutDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
+}
+
+// Flatten a prerender `response.meta` block into the shape persisted to
+// `*.timing_diagnostics` columns. Keeps the rich host-side payload (from
+// `meta.diagnostics`) at the top level and promotes the HTTP `requestId`
+// alongside it for jsonb-path querying. Returns `undefined` when there's
+// nothing to persist. Used by both the indexer (boxel_index rows) and the
+// definition-lookup module-cache writer (modules rows).
+export function flattenPrerenderMeta(
+  meta: PrerenderResponseMeta | undefined,
+): TimingDiagnostics | undefined {
+  if (!meta) return undefined;
+  let diagnostics = meta.diagnostics ?? {};
+  let hasRequestId = meta.requestId != null;
+  let hasAny = Object.keys(diagnostics).length > 0 || hasRequestId;
+  if (!hasAny) return undefined;
+  return {
+    ...diagnostics,
+    ...(hasRequestId ? { requestId: meta.requestId } : {}),
+  };
 }
 
 export type AffinityType = 'realm' | 'user';
@@ -948,13 +969,18 @@ export function hasExecutableExtension(path: string): boolean {
   return false;
 }
 
-export function trimExecutableExtension(url: URL): URL {
+export function trimExecutableExtension(
+  input: RealmResourceIdentifier,
+): RealmResourceIdentifier {
   for (let extension of executableExtensions) {
-    if (url.href.endsWith(extension)) {
-      return new URL(url.href.replace(new RegExp(`\\${extension}$`), ''));
+    if (input.endsWith(extension)) {
+      return input.replace(
+        new RegExp(`\\${extension}$`),
+        '',
+      ) as RealmResourceIdentifier;
     }
   }
-  return url;
+  return input;
 }
 
 export function internalKeyFor(
@@ -963,7 +989,7 @@ export function internalKeyFor(
 ): string {
   if (!('type' in ref)) {
     let resolved = resolveCardReference(ref.module, relativeTo);
-    let module = trimExecutableExtension(new URL(resolved)).href;
+    let module: string = trimExecutableExtension(rri(resolved));
     // Use the prefix form (e.g. @cardstack/catalog/foo) as the canonical
     // internal key when a registered prefix mapping matches
     module = unresolveCardReference(module);

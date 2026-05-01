@@ -1,7 +1,7 @@
 import type { LooseCardResource, FileMetaResource } from './index';
 import { relationshipEntries } from './relationship-utils';
 import { RealmPaths } from './paths';
-import { unresolveCardReference } from './card-reference-resolver';
+import { rri, unresolveCardReference } from './card-reference-resolver';
 
 export function maybeURL(
   possibleURL: string,
@@ -28,7 +28,10 @@ export function relativeURL(
   if (realmURL) {
     let realmPath = new RealmPaths(realmURL);
     // don't return a relative URL for URL that is outside of our realm
-    if (realmPath.inRealm(relativeTo) && !realmPath.inRealm(url)) {
+    if (
+      realmPath.inRealm(rri(relativeTo.href)) &&
+      !realmPath.inRealm(rri(url.href))
+    ) {
       return undefined;
     }
   }

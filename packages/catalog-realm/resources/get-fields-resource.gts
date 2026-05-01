@@ -3,7 +3,7 @@ import { Resource } from 'ember-modify-based-class-resource';
 import {
   type CodeRef,
   getClass,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   isResolvedCodeRef,
   isBaseDef,
 } from '@cardstack/runtime-common';
@@ -67,7 +67,7 @@ class GetFieldsResource extends Resource<GetFieldsResourceArgs> {
       const loader = (import.meta as any).loader;
       const relativeTo = realm ? new URL(realm) : undefined;
       // Prefer getClass for unbound constructor when ref is simple
-      const resolved = codeRefWithAbsoluteURL(cardTypeRef, relativeTo);
+      const resolved = codeRefWithAbsoluteIdentifier(cardTypeRef, relativeTo);
       if (isResolvedCodeRef(resolved)) {
         const exported = await getClass(resolved, loader);
         if (!isBaseDef(exported)) {

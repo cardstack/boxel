@@ -50,7 +50,7 @@ import {
   type RealmIdentifier,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
-import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
+import { codeRefWithAbsoluteIdentifier } from '@cardstack/runtime-common/code-ref';
 
 import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
 
@@ -832,7 +832,7 @@ export default class CreateFileModal extends Component<Signature> {
     } = (this.definitionClass ?? spec)!; // we just checked above to make sure one of these exists
     let className = convertToClassName(this.displayName);
     const absoluteModuleHref = (
-      codeRefWithAbsoluteURL(
+      codeRefWithAbsoluteIdentifier(
         {
           module: (spec?.moduleHref ?? module) as RealmResourceIdentifier,
           name: exportName,
@@ -947,7 +947,7 @@ export class ${className} extends ${exportName} {
     // we make the code ref use an absolute URL for safety in
     // the case it's being created in a different realm than where the card
     // definition comes from. The server will make relative URL if appropriate after creation
-    let maybeRef = codeRefWithAbsoluteURL(ref, relativeTo);
+    let maybeRef = codeRefWithAbsoluteIdentifier(ref, relativeTo);
     if ('name' in maybeRef && 'module' in maybeRef) {
       ref = maybeRef;
     }

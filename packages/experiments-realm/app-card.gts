@@ -36,7 +36,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 
 import {
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   type Loader,
   LooseSingleCardDocument,
   isSingleCardDocument,
@@ -290,7 +290,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
     if (!this.args.activeTab?.ref?.name || !this.args.activeTab.ref.module) {
       return;
     }
-    return codeRefWithAbsoluteURL(
+    return codeRefWithAbsoluteIdentifier(
       this.args.activeTab.ref,
       this.args.currentRealm,
     );

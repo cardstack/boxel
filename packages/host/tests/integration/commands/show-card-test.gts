@@ -51,7 +51,7 @@ class MockOperatorModeStateService extends Service {
   @tracked codePathString: string | undefined;
 
   addedStackItems: StackItem[] = [];
-  updatedCodePaths: URL[] = [];
+  updatedCodePaths: (URL | string)[] = [];
 
   numberOfStacks() {
     return 2;
@@ -74,9 +74,9 @@ class MockOperatorModeStateService extends Service {
     this.addedStackItems.push(stackItem);
   }
 
-  updateCodePath(url: URL) {
+  updateCodePath(url: URL | string) {
     this.updatedCodePaths.push(url);
-    this.codePathString = url.href;
+    this.codePathString = url instanceof URL ? url.href : url;
   }
 
   reset() {
@@ -432,7 +432,7 @@ module('Integration | Command | show-card', function (hooks) {
       );
       const updatedPath = mockOperatorModeStateService.updatedCodePaths[0];
       assert.strictEqual(
-        updatedPath.href,
+        updatedPath instanceof URL ? updatedPath.href : updatedPath,
         `${testRealmURL}person.gts`,
         'Code path points to person.gts module',
       );
@@ -476,7 +476,7 @@ module('Integration | Command | show-card', function (hooks) {
       );
       const updatedPath = mockOperatorModeStateService.updatedCodePaths[0];
       assert.strictEqual(
-        updatedPath.href,
+        updatedPath instanceof URL ? updatedPath.href : updatedPath,
         `${testRealmURL}pet.gts`,
         'Code path was updated to pet.gts module',
       );

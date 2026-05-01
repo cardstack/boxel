@@ -380,7 +380,7 @@ module(basename(__filename), function () {
         second.pool.pageId,
         'same page reused',
       );
-      let key = `${trimExecutableExtension(new URL(moduleURL)).href}/Person`;
+      let key = `${trimExecutableExtension(rri(moduleURL))}/Person`;
       let entry = second.response.definitions[key];
       assert.ok(entry, 'updated module definition entry present');
       assert.strictEqual(
@@ -1054,7 +1054,7 @@ module(basename(__filename), function () {
           'ready',
           'module marked ready',
         );
-        let key = `${trimExecutableExtension(new URL(moduleURL)).href}/Person`;
+        let key = `${trimExecutableExtension(rri(moduleURL))}/Person`;
         let entry = result.response.definitions[key];
         assert.ok(entry, 'definition captured');
         assert.strictEqual(

@@ -80,9 +80,7 @@ export function getDefaultFileMenuItems(
       action: async () => {
         await new SwitchSubmodeCommand(params.commandContext).execute({
           submode: 'code',
-          codePath: fileDefInstanceId
-            ? new URL(fileDefInstanceId).href
-            : undefined,
+          codePath: fileDefInstanceId,
         });
       },
       icon: CodeIcon,

@@ -133,24 +133,26 @@ export function isSpecCard(def: any) {
   return isBaseDef(def) && isSpec in def;
 }
 
-export function codeRefWithAbsoluteURL(
+export function codeRefWithAbsoluteIdentifier(
   ref: CodeRef,
-  relativeTo?: URL | undefined,
+  relativeTo?: RealmResourceIdentifier | URL | undefined,
   opts?: { trimExecutableExtension?: true },
 ): CodeRef {
   if (!('type' in ref)) {
     try {
-      let moduleHref = resolveCardReference(ref.module, relativeTo);
-      let moduleURL = new URL(moduleHref);
+      let moduleHref = resolveCardReference(
+        ref.module,
+        relativeTo,
+      ) as RealmResourceIdentifier;
       if (opts?.trimExecutableExtension) {
-        moduleURL = trimExecutableExtension(moduleURL);
+        moduleHref = trimExecutableExtension(moduleHref);
       }
-      return { ...ref, module: moduleURL.href as RealmResourceIdentifier };
+      return { ...ref, module: moduleHref };
     } catch {
       return { ...ref };
     }
   }
-  return { ...ref, card: codeRefWithAbsoluteURL(ref.card, relativeTo) };
+  return { ...ref, card: codeRefWithAbsoluteIdentifier(ref.card, relativeTo) };
 }
 
 export async function getClass(ref: ResolvedCodeRef, loader: Loader) {
@@ -162,7 +164,7 @@ export async function loadCardDef(
   ref: CodeRef,
   opts: {
     loader: Loader;
-    relativeTo?: URL;
+    relativeTo?: RealmResourceIdentifier | URL;
     dependencyTrackingContext?: RuntimeDependencyTrackingContext;
   },
 ): Promise<typeof BaseDef> {
@@ -391,7 +393,7 @@ export function resolveAdoptedCodeRef(instance: CardDef) {
   if (!adoptsFrom) {
     throw new Error('Instance missing adoptsFrom');
   }
-  let resolved = codeRefWithAbsoluteURL(
+  let resolved = codeRefWithAbsoluteIdentifier(
     adoptsFrom,
     instance[relativeTo] || cardIdToURL(instance.id),
   );
@@ -419,7 +421,7 @@ export function resolveAdoptsFrom(card: CardDef): ResolvedCodeRef | undefined {
     if (!baseURL) {
       return undefined;
     }
-    let resolved = codeRefWithAbsoluteURL(ref, baseURL);
+    let resolved = codeRefWithAbsoluteIdentifier(ref, baseURL);
     return isResolvedCodeRef(resolved) ? resolved : undefined;
   };
   if (isResolvedCodeRef(adoptsFrom)) {

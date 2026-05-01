@@ -15,11 +15,12 @@ Both use cases read from the same data. The difference is the query you start wi
 
 ## Where the diagnostics live
 
-Three places, all correlated:
+Four places, all correlated:
 
-1. **`boxel_index.timing_diagnostics` (and `boxel_index_working.timing_diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth. Carries the full `RenderTimeoutDiagnostics` payload plus three write-side stamps: `invalidationId`, `indexedAt`, `requestId`.
-2. **`error_doc.diagnostics`** — derived copy of `timing_diagnostics`, written only for error rows. Exists so the existing UI read path (`error_doc` → `CardErrorJSONAPI.meta.diagnostics` via `formattedError`) keeps working without a schema rename. Non-error rows have `error_doc = null`; go to `timing_diagnostics` directly.
-3. **Logs** — `prerender-server`, `manager`, and `remote-prerenderer` lines all carry `requestId=…`. `grep requestId=<uuid>` collates one call across all three processes. For saturation incidents there's also the periodic `prerender-queue-snapshot` line on each prerender server.
+1. **`boxel_index.timing_diagnostics` (and `boxel_index_working.timing_diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth for **card** renders. Carries the full `RenderTimeoutDiagnostics` payload plus three write-side stamps: `invalidationId`, `indexedAt`, `requestId`.
+2. **`modules.timing_diagnostics`** — JSONB column, populated for every row `persistModuleCacheEntry` writes (success and error paths). Source of truth for **module** renders (`prerenderModule` → definition extraction). Same `RenderTimeoutDiagnostics` shape with `requestId` flattened in; no `invalidationId` (modules don't go through `Batch.invalidate`). The row's existing `created_at` column is the wall-clock stamp for cross-table joins. See [Mode D](#mode-d--a-module-render-was-slow-or-hung) below.
+3. **`error_doc.diagnostics`** — derived copy of `timing_diagnostics`, written only for error rows on `boxel_index`. Exists so the existing UI read path (`error_doc` → `CardErrorJSONAPI.meta.diagnostics` via `formattedError`) keeps working without a schema rename. Non-error rows have `error_doc = null`; go to `timing_diagnostics` directly.
+4. **Logs** — `prerender-server`, `manager`, and `remote-prerenderer` lines all carry `requestId=…`. `grep requestId=<uuid>` collates one call across all three processes. The same `requestId` lands on both `boxel_index.timing_diagnostics->>'requestId'` and `modules.timing_diagnostics->>'requestId'`, so a hung card render and the module renders it triggered (via `getDefinition`) can be joined back to one investigation. For saturation incidents there's also the periodic `prerender-queue-snapshot` line on each prerender server.
 
 For UI triage you'll typically read the JSON error response (which surfaces `error_doc.diagnostics` as `meta.diagnostics`). For operator / SQL triage — especially slow non-failing reindexes — query the `timing_diagnostics` column directly.
 
@@ -561,6 +562,67 @@ A short rubric for the most common shapes:
 - The `timing_diagnostics` for partial-progress rows is the **per-render** capture for that row's prerender call. It won't tell you why the *next* render froze. If the bottom-row's diagnostic is clean (low `renderElapsedMs`, no in-flight loads), the stall is between renders — usually `Batch.invalidate` recursion against a tightly-cycled module graph, or DB contention on the `boxel_index_working` upsert. The `index-perf` `time to determine items that reference …` lines are the only fingerprints of that loop.
 - A `boxel_index` row's `timing_diagnostics` reflects the **last successful** indexing pass, not the in-flight one. Don't confuse a stale `boxel_index` `indexedAt` with the stuck job — always cross-reference against the matching `boxel_index_working` row (same `(url, realm_url)`) before drawing conclusions.
 
+## Mode D — a module render was slow or hung
+
+Module renders (`prerenderModule`, used by `getDefinition` to convert filter JSON into SQL on `_federated-search`, plus everywhere else a card definition is needed without a card render) go through the same prerender pipeline as card renders, but they land in the `modules` table — not `boxel_index`. The `timing_diagnostics` JSONB column on `modules` carries the same `RenderTimeoutDiagnostics`-with-`requestId` shape, so the field-by-field reading and the [Classify in one pass](#classify-in-one-pass) table apply unchanged. Only the lookup queries differ.
+
+**When to use this mode:** a card render hung waiting on `getDefinition` (Mode A captured `cardDocLoadsInFlight = 0`, `queryLoadsInFlight = 0`, but the realm-server's reply to `_federated-search` itself was slow); an investigation needs to attribute time across both card renders and the module renders they triggered; or you want to find the slowest module renders fleet-wide. Same payload shape, queryable via SQL.
+
+**Step 1 — slowest module renders in a realm.**
+
+```sql
+SELECT m.url,
+       (m.timing_diagnostics->>'renderElapsedMs')::int AS render_ms,
+       m.timing_diagnostics->>'renderStage'            AS stage,
+       m.timing_diagnostics->>'requestId'              AS request_id,
+       to_timestamp(m.created_at::bigint / 1000)       AS created_at,
+       m.error_doc IS NOT NULL                         AS has_error
+FROM modules m
+WHERE m.resolved_realm_url = '<realm-url>'
+  AND m.timing_diagnostics IS NOT NULL
+ORDER BY render_ms DESC NULLS LAST
+LIMIT 20;
+```
+
+**Step 2 — find module renders correlated with a known time window.** Useful when a card render timed out at wall-clock T and you want to know whether a slow module render was happening at the same moment.
+
+```sql
+SELECT m.url,
+       (m.timing_diagnostics->>'renderElapsedMs')::int AS render_ms,
+       m.timing_diagnostics->>'requestId'              AS request_id,
+       to_timestamp(m.created_at::bigint / 1000)       AS created_at
+FROM modules m
+WHERE m.resolved_realm_url = '<realm-url>'
+  AND (m.timing_diagnostics->>'renderElapsedMs')::int > 5000
+  AND m.created_at BETWEEN <window_start_ms> AND <window_end_ms>
+ORDER BY render_ms DESC;
+```
+
+`window_start_ms` and `window_end_ms` are epoch milliseconds bracketing the suspect period (e.g. the 90s before and including the hung card render's `indexedAt`).
+
+**Step 3 — join card hang to its triggering module render via `requestId`.** When the realm-server's `getDefinition` round-trip is in scope of a single card render, the `requestId` propagates from card → manager → module-extract round-trip, so both rows carry the same value.
+
+```sql
+-- Full diagnostic picture for one requestId — card + module(s) that
+-- the same investigation should walk together.
+SELECT 'card'   AS kind, url, jsonb_pretty(timing_diagnostics) AS diagnostics
+FROM boxel_index
+WHERE timing_diagnostics->>'requestId' = '<request-id>'
+UNION ALL
+SELECT 'module' AS kind, url, jsonb_pretty(timing_diagnostics) AS diagnostics
+FROM modules
+WHERE timing_diagnostics->>'requestId' = '<request-id>';
+```
+
+(In practice the card-side `requestId` is the original outer call. Internal sub-prerenders fired by `CachingDefinitionLookup` typically mint their own `requestId` per `_prerender-module` call, so the time-window join in step 2 is usually the one that catches them. The `requestId` join here works for the rarer in-line case.)
+
+**Step 4 — classify the module render with the same rubric.** Once you have a slow module's `timing_diagnostics`, walk it through the [Classify in one pass](#classify-in-one-pass) table the same way you would a card render. The interpretation is identical: `waiting-stability + queryLoadsInFlight=N` is a data stall on a `_search` (rare for module renders but possible for query-field driven module-extract paths), `model:start + inFlightModuleImports>0` is the loader stall, etc. The only field that's not present on module rows is `invalidationId` (modules don't go through `Batch.invalidate`), so any Mode B-style cross-row grouping has to use `requestId` or `created_at` windows instead.
+
+### What Mode D can't tell you
+
+- **No partial-progress equivalent.** `modules` has no working-table sibling; the row only lands on `persistModuleCacheEntry` after the prerender returns. If a `prerenderModule` call hangs forever and the worker is killed, no row is written and Mode D has nothing to query. Cross-reference against the prerender server logs for `requestId=…` directly, same as a hung card render before the host's withTimeout fires.
+- **No invalidationId, so no Mode B fan-out.** Module renders are independent units; they don't belong to a "batch" that you can group by. If you need to attribute a slow `getDefinition` storm across many concurrent searches, you're stuck doing it via `created_at` time windows + the `#inFlight` dedupe behavior in `CachingDefinitionLookup` — i.e. one slow row may have been the bottleneck for many in-flight callers, but the `modules` table doesn't record those waiters.
+
 ## Field-by-field reading
 
 `timing_diagnostics` carries `RenderTimeoutDiagnostics` (defined in `packages/runtime-common/index.ts`) plus `invalidationId` / `indexedAt` / `requestId`. Every render-side field is optional — absent means the hook wasn't available in that build or the page died before the capture could read it.
@@ -812,7 +874,7 @@ Path A is faster, doesn't require server config changes, and works against stagi
 
 The user runs `mise run claude-prerender-token <realm-url> [<seed>]`. The script (`packages/realm-server/scripts/claude-prerender-token.ts`, executed via `ts-node --transpileOnly` from inside `packages/realm-server`) mints a `boxel-session` JWT the same way the indexer does — same claims, same HS256/1d, same `JSON.stringify({ <realmUrl>: <jwt> })` map shape that lands in `localStorage['boxel-session']`. Faithful CLI port of `buildCreatePrerenderAuth` (`packages/realm-server/prerender/auth.ts`).
 
-**The CLI is intentionally minimal: just `<realm-url>` and an optional `<seed>` positional.** If `<seed>` is omitted the script reads from `process.stdin` — interactively that's a masked TTY paste prompt (each char echoes as `*`, paste-friendly, no shell history); piped/redirected stdin is read in full and trimmed. Optional flags: `--user <matrix-id>` (required only for system realms), `--permissions <list>`, `--host-url <url>`, `--output <path>`, `--no-output`. That's it. The token is realm-scoped, not card-scoped — Claude builds the `/render` URL itself for whichever card it's investigating.
+**The CLI is intentionally minimal: just `<realm-url>` and an optional `<seed>` positional.** If `<seed>` is omitted the script reads from `process.stdin` — interactively that's a masked TTY paste prompt (each char echoes as `*`, paste-friendly, no shell history); piped/redirected stdin is read in full and trimmed. Optional flags: `--user <matrix-id>` (required only for system realms), `--permissions <list>`, `--output <path>`, `--no-output`. That's it. The token is realm-scoped, not card-scoped — Claude builds the `/render` URL itself for whichever card it's investigating.
 
 #### Hard rule: Claude never sees the seed
 

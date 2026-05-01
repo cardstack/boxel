@@ -1,5 +1,6 @@
 import {
   isScopedCSSRequest,
+  rri,
   trimExecutableExtension,
 } from '@cardstack/runtime-common';
 
@@ -38,7 +39,7 @@ export default class SanitizeModuleListCommand extends HostBaseCommand<
     // "https://…/foo.gts" and "https://…/foo" don't produce separate entries.
     const seen = new Map<string, string>(); // normalized → original
     for (const m of input.moduleUrls) {
-      const normalized = trimExecutableExtension(new URL(m)).href;
+      const normalized = trimExecutableExtension(rri(m));
       if (!seen.has(normalized)) {
         seen.set(normalized, m);
       }

@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 
 import type { LooseCardResource } from '@cardstack/runtime-common';
-import { codeRefWithAbsoluteURL, rri } from '@cardstack/runtime-common';
+import { codeRefWithAbsoluteIdentifier, rri } from '@cardstack/runtime-common';
 import {
   getValueForResourcePath,
   normalizeQueryDefinition,
@@ -47,7 +47,7 @@ module('normalizeQueryDefinition', function () {
     });
 
     assert.ok(normalized, 'normalization succeeded');
-    let targetRef = codeRefWithAbsoluteURL(
+    let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       new URL(resource.id!),
     );
@@ -61,7 +61,7 @@ module('normalizeQueryDefinition', function () {
   test('injects on into leaf filter inside not', function (assert) {
     let realmURL = new URL('https://realm.example/');
     let relativeTo = new URL('https://realm.example/cards/1');
-    let targetRef = codeRefWithAbsoluteURL(
+    let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
     );
@@ -86,7 +86,7 @@ module('normalizeQueryDefinition', function () {
   test('injects on into each leaf filter inside any', function (assert) {
     let realmURL = new URL('https://realm.example/');
     let relativeTo = new URL('https://realm.example/cards/1');
-    let targetRef = codeRefWithAbsoluteURL(
+    let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
     );
@@ -116,7 +116,7 @@ module('normalizeQueryDefinition', function () {
   test('injects on into each leaf filter inside every', function (assert) {
     let realmURL = new URL('https://realm.example/');
     let relativeTo = new URL('https://realm.example/cards/1');
-    let targetRef = codeRefWithAbsoluteURL(
+    let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
     );
@@ -146,7 +146,7 @@ module('normalizeQueryDefinition', function () {
   test('injects on into deeply nested combinator filters', function (assert) {
     let realmURL = new URL('https://realm.example/');
     let relativeTo = new URL('https://realm.example/cards/1');
-    let targetRef = codeRefWithAbsoluteURL(
+    let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
     );
@@ -186,7 +186,7 @@ module('normalizeQueryDefinition', function () {
   test('skips type filters inside combinators', function (assert) {
     let realmURL = new URL('https://realm.example/');
     let relativeTo = new URL('https://realm.example/cards/1');
-    let targetRef = codeRefWithAbsoluteURL(
+    let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
     );
@@ -239,7 +239,7 @@ module('normalizeQueryDefinition', function () {
     });
 
     assert.ok(normalized, 'normalization succeeded');
-    let targetRef = codeRefWithAbsoluteURL(
+    let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
     );
@@ -267,7 +267,7 @@ module('normalizeQueryDefinition', function () {
       relativeTo,
     });
 
-    let targetRef = codeRefWithAbsoluteURL(
+    let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
     );
@@ -316,7 +316,7 @@ module('normalizeQueryDefinition', function () {
       relativeTo,
     });
 
-    let targetRef = codeRefWithAbsoluteURL(
+    let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
     );

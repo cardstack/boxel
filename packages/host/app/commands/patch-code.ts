@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { hasExecutableExtension } from '@cardstack/runtime-common';
+import { hasExecutableExtension, rri } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -150,7 +150,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
   }
 
   private async getFileInfo(fileUrl: string): Promise<FileInfo> {
-    let getSourceResult = await this.cardService.getSource(new URL(fileUrl));
+    let getSourceResult = await this.cardService.getSource(rri(fileUrl));
     let exists = getSourceResult.status !== 404;
     let content = exists ? getSourceResult.content : '';
     let hasContent = exists && content.trim() !== '';
@@ -237,7 +237,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {
-    let getSourceResult = await this.cardService.getSource(new URL(fileUrl));
+    let getSourceResult = await this.cardService.getSource(rri(fileUrl));
     return getSourceResult.status !== 404;
   }
 }

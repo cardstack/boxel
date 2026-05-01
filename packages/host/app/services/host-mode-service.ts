@@ -238,7 +238,7 @@ export default class HostModeService extends Service {
   ): Promise<string | null | undefined> {
     let card = new URL(cardURL);
     let realmRoot =
-      this.realm.realmOfURL(card)?.href ??
+      this.realm.realmOf(card) ??
       new URL(
         card.pathname.replace(/[^/]+$/, ''),
         `${card.protocol}//${card.host}`,

@@ -8,7 +8,12 @@ import { parse } from 'date-fns';
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
-import { SupportedMimeType, logger } from '@cardstack/runtime-common';
+import {
+  SupportedMimeType,
+  logger,
+  rri,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type { SaveType } from '@cardstack/host/services/card-service';
@@ -89,19 +94,19 @@ export interface Loading {
 
 export interface ServerError {
   state: 'server-error';
-  url: string;
+  url: RealmResourceIdentifier;
 }
 
 export interface NotFound {
   state: 'not-found';
-  url: string;
+  url: RealmResourceIdentifier;
 }
 
 export interface Ready {
   state: 'ready';
   content: string;
   name: string;
-  url: string;
+  url: RealmResourceIdentifier;
   lastModified: string | undefined;
   realmURL: string;
   size: number; // size in bytes
@@ -206,15 +211,15 @@ class _FileResource extends Resource<Args> {
           } - ${await response.text()}`,
         );
         if (response.status === 404) {
-          this.updateState({ state: 'not-found', url: this._url });
+          this.updateState({ state: 'not-found', url: rri(this._url) });
         } else {
-          this.updateState({ state: 'server-error', url: this._url });
+          this.updateState({ state: 'server-error', url: rri(this._url) });
         }
         return;
       }
     } catch (err: any) {
       log.error(`Could not get file ${this._url}, err: ${err.message}`);
-      this.updateState({ state: 'not-found', url: this._url });
+      this.updateState({ state: 'not-found', url: rri(this._url) });
       return;
     }
 
@@ -248,7 +253,7 @@ class _FileResource extends Resource<Args> {
       content,
       name: rawName ? decodeURIComponent(rawName) : rawName!,
       size,
-      url: response.url,
+      url: rri(response.url),
       write(
         content: string,
         opts?: {

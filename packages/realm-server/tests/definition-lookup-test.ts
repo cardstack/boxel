@@ -15,6 +15,8 @@ import {
 import {
   setupPermissionedRealmsCached,
   createVirtualNetwork,
+  createTestPgAdapter,
+  prepareTestDB,
   testCreatePrerenderAuth,
 } from './helpers';
 import type { PgAdapter } from '@cardstack/postgres/pg-adapter';
@@ -23,7 +25,7 @@ function buildDefinition(
   moduleURL: string,
   name: string,
 ): ModuleDefinitionResult {
-  let moduleAlias = trimExecutableExtension(new URL(moduleURL)).href;
+  let moduleAlias = trimExecutableExtension(rri(moduleURL));
   return {
     type: 'definition',
     moduleURL: moduleAlias,
@@ -329,7 +331,7 @@ module(basename(__filename), function () {
         },
         async prerenderModule(args: ModulePrerenderArgs) {
           calls++;
-          let moduleAlias = trimExecutableExtension(new URL(args.url)).href;
+          let moduleAlias = trimExecutableExtension(rri(args.url));
           let definitionId = internalKeyFor(
             { module: rri(args.url), name: 'Person' },
             undefined,
@@ -475,10 +477,10 @@ module(basename(__filename), function () {
       let middleModule = `${realmURL}middle-field.gts`;
       let leafModule = `${realmURL}leaf-field.gts`;
       let otherModule = `${realmURL}other-card.gts`;
-      let deepAlias = trimExecutableExtension(new URL(deepModule)).href;
-      let middleAlias = trimExecutableExtension(new URL(middleModule)).href;
-      let leafAlias = trimExecutableExtension(new URL(leafModule)).href;
-      let otherAlias = trimExecutableExtension(new URL(otherModule)).href;
+      let deepAlias = trimExecutableExtension(rri(deepModule));
+      let middleAlias = trimExecutableExtension(rri(middleModule));
+      let leafAlias = trimExecutableExtension(rri(leafModule));
+      let otherAlias = trimExecutableExtension(rri(otherModule));
       let calls = new Map<string, number>();
 
       let prerenderer: Prerenderer = {
@@ -615,13 +617,11 @@ module(basename(__filename), function () {
       let blogPostModule = `${realmURL}blog-post.gts`;
       let otherModule = `${realmURL}other-card.gts`;
 
-      let blogAppAlias = trimExecutableExtension(new URL(blogAppModule)).href;
-      let authorAlias = trimExecutableExtension(new URL(authorModule)).href;
-      let blogCategoryAlias = trimExecutableExtension(
-        new URL(blogCategoryModule),
-      ).href;
-      let blogPostAlias = trimExecutableExtension(new URL(blogPostModule)).href;
-      let otherAlias = trimExecutableExtension(new URL(otherModule)).href;
+      let blogAppAlias = trimExecutableExtension(rri(blogAppModule));
+      let authorAlias = trimExecutableExtension(rri(authorModule));
+      let blogCategoryAlias = trimExecutableExtension(rri(blogCategoryModule));
+      let blogPostAlias = trimExecutableExtension(rri(blogPostModule));
+      let otherAlias = trimExecutableExtension(rri(otherModule));
 
       let calls = new Map<string, number>();
       let prerenderer: Prerenderer = {
@@ -1539,7 +1539,7 @@ module(basename(__filename), function () {
             { module: rri(args.url), name: 'CoalesceInvalidate' },
             undefined,
           );
-          let moduleAlias = trimExecutableExtension(new URL(args.url)).href;
+          let moduleAlias = trimExecutableExtension(rri(args.url));
           return {
             id: args.url,
             status: 'ready',
@@ -1611,6 +1611,144 @@ module(basename(__filename), function () {
       );
       assert.strictEqual(dA?.displayName, 'CoalesceInvalidate v1');
       assert.strictEqual(dB?.displayName, 'CoalesceInvalidate v2');
+    });
+  });
+
+  // Lightweight tests for the modules-table diagnostics persistence.
+  // Uses createTestPgAdapter + an in-memory CachingDefinitionLookup directly
+  // rather than the heavier setupPermissionedRealmsCached fixture, because
+  // we only need a working pg adapter + a registered fake realm. Spinning
+  // up the real realm-server / prerender-server / Chromium for a SQL-shape
+  // assertion would dwarf the test's actual cost (and was timing out the
+  // outer 60s qunit budget on cold runs).
+  module('module-cache timing diagnostics', function (hooks) {
+    let adapter: PgAdapter;
+    let definitionLookup: CachingDefinitionLookup;
+    let realmURL = 'http://127.0.0.1:4451/';
+    let testUserId = '@user1:localhost';
+    let nextPrerenderMeta:
+      | import('@cardstack/runtime-common').PrerenderResponseMeta
+      | undefined;
+
+    hooks.beforeEach(async function () {
+      prepareTestDB();
+      adapter = await createTestPgAdapter();
+      let virtualNetwork = createVirtualNetwork();
+      let mockPrerenderer: Prerenderer = {
+        async prerenderModule(args: ModulePrerenderArgs) {
+          let moduleURL = new URL(args.url);
+          let modulePathWithoutExtension = moduleURL.href.replace(/\.gts$/, '');
+          return Promise.resolve({
+            id: 'example-id',
+            status: 'ready',
+            nonce: '12345',
+            isShimmed: false,
+            lastModified: +new Date(),
+            createdAt: +new Date(),
+            deps: ['dep/a'],
+            definitions: {
+              [`${modulePathWithoutExtension}/Person`]: {
+                type: 'definition',
+                moduleURL: moduleURL.href,
+                definition: {
+                  type: 'card-def',
+                  codeRef: { module: rri(moduleURL.href), name: 'Person' },
+                  displayName: 'Person',
+                  fields: {},
+                },
+                types: [],
+              },
+            },
+            ...(nextPrerenderMeta ? { meta: nextPrerenderMeta } : {}),
+          });
+        },
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+      };
+      definitionLookup = new CachingDefinitionLookup(
+        adapter,
+        mockPrerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      definitionLookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+      // Insert the user permission row required by the lookup's
+      // permission probe — the row connects userId → realm so the lookup's
+      // cache scope resolves cleanly.
+      await adapter.execute(
+        `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+         VALUES ($1, $2, true, true, true)`,
+        { bind: [realmURL, testUserId] },
+      );
+    });
+
+    hooks.afterEach(async function () {
+      await adapter.close();
+      nextPrerenderMeta = undefined;
+    });
+
+    test('persists timing_diagnostics from prerender meta on module rows', async function (assert) {
+      nextPrerenderMeta = {
+        requestId: 'req-test-123',
+        diagnostics: {
+          renderStage: 'waiting-stability',
+          launchMs: 12,
+          renderElapsedMs: 4321,
+          totalElapsedMs: 4334,
+        },
+      };
+      let definition = await definitionLookup.lookupDefinition({
+        module: rri(`${realmURL}person.gts`),
+        name: 'Person',
+      });
+      assert.strictEqual(definition?.displayName, 'Person');
+
+      let rows = (await adapter.execute(
+        `SELECT timing_diagnostics FROM modules WHERE url = $1`,
+        { bind: [`${realmURL}person.gts`] },
+      )) as { timing_diagnostics: unknown }[];
+      assert.strictEqual(rows.length, 1, 'one modules row was written');
+      let raw = rows[0].timing_diagnostics;
+      let persisted =
+        typeof raw === 'string'
+          ? (JSON.parse(raw) as Record<string, any>)
+          : (raw as Record<string, any>);
+      assert.strictEqual(persisted?.requestId, 'req-test-123');
+      assert.strictEqual(persisted?.renderStage, 'waiting-stability');
+      assert.strictEqual(persisted?.renderElapsedMs, 4321);
+      assert.strictEqual(persisted?.launchMs, 12);
+      assert.strictEqual(persisted?.totalElapsedMs, 4334);
+    });
+
+    test('persists null timing_diagnostics when prerender returns no meta', async function (assert) {
+      let definition = await definitionLookup.lookupDefinition({
+        module: rri(`${realmURL}person.gts`),
+        name: 'Person',
+      });
+      assert.strictEqual(definition?.displayName, 'Person');
+
+      let rows = (await adapter.execute(
+        `SELECT timing_diagnostics FROM modules WHERE url = $1`,
+        { bind: [`${realmURL}person.gts`] },
+      )) as { timing_diagnostics: unknown }[];
+      assert.strictEqual(rows.length, 1, 'one modules row was written');
+      assert.strictEqual(
+        rows[0].timing_diagnostics,
+        null,
+        'timing_diagnostics is null when meta is absent',
+      );
     });
   });
 });

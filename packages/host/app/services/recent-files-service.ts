@@ -7,7 +7,7 @@ import { tracked } from '@glimmer/tracking';
 import window from 'ember-window-mock';
 import { TrackedArray } from 'tracked-built-ins';
 
-import { RealmPaths } from '@cardstack/runtime-common';
+import { RealmPaths, rri } from '@cardstack/runtime-common';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 
 import { RecentFiles } from '../utils/local-storage-keys';
@@ -90,7 +90,7 @@ export default class RecentFilesService extends Service {
       let realmPaths = new RealmPaths(new URL(realmURL));
       let url = new URL(urlString);
 
-      if (realmPaths.inRealm(url)) {
+      if (realmPaths.inRealm(rri(url.href))) {
         this.addRecentFile(realmPaths.local(url));
       }
     }

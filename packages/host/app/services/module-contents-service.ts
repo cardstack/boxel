@@ -6,6 +6,7 @@ import {
   getAncestor,
   getField,
   isBaseDef,
+  rri,
 } from '@cardstack/runtime-common';
 
 import {
@@ -104,13 +105,13 @@ export default class ModuleContentsService extends Service {
       this.loaderService.loader,
       this.network.authedFetch,
     );
-    const moduleUrl = new URL(url);
-    let r = await this.cardService.getSource(moduleUrl);
+    let moduleId = rri(url);
+    let r = await this.cardService.getSource(moduleId);
     if (r.status !== 200) {
       throw new Error(`Failed to fetch module source from ${url}: ${r.status}`);
     }
     let source = r.content;
-    let moduleSyntax = new ModuleSyntax(source, moduleUrl);
+    let moduleSyntax = new ModuleSyntax(source, moduleId);
     if ('error' in result) {
       throw new Error(
         `Error loading module at ${url}: ${result.error.message}`,

@@ -6,6 +6,7 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
+  rri,
   trimExecutableExtension,
   type RenderRouteOptions,
   type RealmPermissions,
@@ -102,9 +103,7 @@ module('Acceptance | prerender | module', function (hooks) {
     assert.ok(model.lastModified > 0, 'lastModified recorded');
     assert.ok(model.createdAt > 0, 'createdAt recorded');
 
-    let personKey = `${
-      trimExecutableExtension(new URL(moduleURL)).href
-    }/Person`;
+    let personKey = `${trimExecutableExtension(rri(moduleURL))}/Person`;
     assert.ok(personKey in model.definitions, 'includes person definition');
 
     let personEntry = model.definitions[personKey];
@@ -120,7 +119,7 @@ module('Acceptance | prerender | module', function (hooks) {
     );
     assert.strictEqual(
       personEntry.moduleURL,
-      trimExecutableExtension(new URL(moduleURL)).href,
+      trimExecutableExtension(rri(moduleURL)),
       'moduleURL exposes trimmed module path',
     );
     assert.ok(
@@ -212,17 +211,17 @@ module('Acceptance | prerender | module', function (hooks) {
     assert.strictEqual(model.createdAt, 0, 'shimmed module createdAt zeroed');
     assert.deepEqual(
       model.deps,
-      [trimExecutableExtension(new URL(shimURL)).href],
+      [trimExecutableExtension(rri(shimURL))],
       'deps limited to shimmed file',
     );
 
-    let shimKey = `${trimExecutableExtension(new URL(shimURL)).href}/Shimmed`;
+    let shimKey = `${trimExecutableExtension(rri(shimURL))}/Shimmed`;
     let shimEntry = model.definitions[shimKey];
     assert.ok(shimEntry, 'definition generated for shimmed export');
     assert.strictEqual(shimEntry.type, 'definition', 'shim definition entry');
     assert.strictEqual(
       shimEntry.moduleURL,
-      trimExecutableExtension(new URL(shimURL)).href,
+      trimExecutableExtension(rri(shimURL)),
       'moduleURL always omits executable extension',
     );
   });
@@ -249,7 +248,7 @@ module('Acceptance | prerender | module', function (hooks) {
       'module prerender reports ready',
     );
     assert.strictEqual(response.id, moduleURL, 'module id echoed back');
-    let key = `${trimExecutableExtension(new URL(moduleURL)).href}/Person`;
+    let key = `${trimExecutableExtension(rri(moduleURL))}/Person`;
     assert.ok(response.definitions[key], 'definition captured');
     assert.strictEqual(
       response.definitions[key]?.type,
@@ -293,9 +292,7 @@ module('Acceptance | prerender | module', function (hooks) {
     await visit(modulePath(moduleURL));
     let initial = captureModuleResult();
 
-    let definitionKey = `${
-      trimExecutableExtension(new URL(moduleURL)).href
-    }/Person`;
+    let definitionKey = `${trimExecutableExtension(rri(moduleURL))}/Person`;
     let initialEntry = initial.model.definitions[definitionKey];
     assert.ok(initialEntry, 'initial definition exists');
     assert.strictEqual(

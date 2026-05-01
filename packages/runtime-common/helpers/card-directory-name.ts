@@ -1,6 +1,7 @@
 import camelCase from 'camelcase';
 
 import type { CodeRef, ResolvedCodeRef } from '../code-ref';
+import { rri } from '../card-reference-resolver';
 import { trimExecutableExtension } from '../index';
 import type { RealmPaths } from '../paths';
 
@@ -46,12 +47,13 @@ function directoryNameFromModule(
   let segment: string | undefined;
   try {
     segment = lastMeaningfulSegment(
-      trimExecutableExtension(new URL(moduleIdentifier)).pathname,
+      new URL(trimExecutableExtension(rri(moduleIdentifier))).pathname,
     );
   } catch {
     try {
       segment = lastMeaningfulSegment(
-        trimExecutableExtension(new URL(moduleIdentifier, paths.url)).pathname,
+        new URL(trimExecutableExtension(rri(moduleIdentifier)), paths.url)
+          .pathname,
       );
     } catch {
       segment = undefined;

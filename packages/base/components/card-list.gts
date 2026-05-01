@@ -11,6 +11,7 @@ import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   removeFileExtension,
+  rri,
   CardCrudFunctionsContextName,
   type Query,
 } from '@cardstack/runtime-common';
@@ -43,7 +44,7 @@ export default class CardList extends Component<Signature> {
   handleCardClick(cardUrl: string, event?: Event) {
     if (this.cardCrudFunctions?.viewCard) {
       event?.preventDefault();
-      this.cardCrudFunctions.viewCard(new URL(cardUrl));
+      this.cardCrudFunctions.viewCard(rri(cardUrl));
     }
   }
 

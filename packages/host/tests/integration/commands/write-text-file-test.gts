@@ -30,10 +30,10 @@ class StubRealmService extends RealmService {
     };
   }
 
-  realmOfURL(url: URL) {
-    // Recognize only the test realm URL as valid
-    if (url.href === testRealmURL) {
-      return url;
+  realmOf(input: URL | string) {
+    let str = input instanceof URL ? input.href : input;
+    if (str === testRealmURL) {
+      return testRealmURL;
     }
     return undefined;
   }

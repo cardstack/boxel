@@ -24,13 +24,18 @@ import {
   baseRealm,
   maybeRelativeURL,
   trimExecutableExtension,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   baseCardRef,
   baseFieldRef,
   type CodeRef,
+  type RealmResourceIdentifier,
   type ResolvedCodeRef,
 } from './index';
-import { resolveCardReference } from './card-reference-resolver';
+import {
+  cardIdToURL,
+  resolveCardReference,
+  rri,
+} from './card-reference-resolver';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
@@ -60,8 +65,9 @@ export class ModuleSyntax {
   declare private ast: t.File;
   private url: URL;
 
-  constructor(src: string, url: URL) {
-    this.url = trimExecutableExtension(url);
+  constructor(src: string, url: RealmResourceIdentifier | URL) {
+    let normalized = url instanceof URL ? url : cardIdToURL(url);
+    this.url = new URL(trimExecutableExtension(rri(normalized.href)));
     this.analyze(src);
   }
 
@@ -121,7 +127,7 @@ export class ModuleSyntax {
     fieldRef: ResolvedCodeRef; // module could be a relative path
     fieldType: FieldType;
     fieldDefinitionType: 'card' | 'field';
-    incomingRelativeTo: URL | undefined; // can be undefined when you know the url is not going to be relative
+    incomingRelativeTo: RealmResourceIdentifier | undefined; // can be undefined when you know the path is not going to be relative
     outgoingRelativeTo: URL | undefined; // can be undefined when you know url is not going to be relative
     outgoingRealmURL: URL | undefined; // should be provided when the other 2 params are provided
     addFieldAtIndex?: number; // if provided, the field will be added at the specified index in the card's possibleFields map
@@ -317,8 +323,8 @@ export class ModuleSyntax {
     if (classRef.type === 'external') {
       if (
         trimExecutableExtension(
-          new URL(resolveCardReference(classRef.module, this.url)),
-        ) === this.url
+          rri(resolveCardReference(classRef.module, this.url)),
+        ) === this.url.href
       ) {
         return this.possibleCardsOrFields.find(
           (c) => c.exportName === classRef.name,
@@ -393,7 +399,7 @@ function makeNewField({
   fieldType: FieldType;
   fieldName: string;
   cardBeingModified: CodeRef;
-  incomingRelativeTo: URL | undefined;
+  incomingRelativeTo: RealmResourceIdentifier | undefined;
   outgoingRelativeTo: URL | undefined;
   outgoingRealmURL: URL | undefined;
   moduleURL: URL;
@@ -420,10 +426,10 @@ function makeNewField({
   if (
     (fieldType === 'linksTo' || fieldType === 'linksToMany') &&
     isEqual(
-      codeRefWithAbsoluteURL(fieldRef, moduleURL, {
+      codeRefWithAbsoluteIdentifier(fieldRef, moduleURL, {
         trimExecutableExtension: true,
       }),
-      codeRefWithAbsoluteURL(cardBeingModified, moduleURL, {
+      codeRefWithAbsoluteIdentifier(cardBeingModified, moduleURL, {
         trimExecutableExtension: true,
       }),
     )

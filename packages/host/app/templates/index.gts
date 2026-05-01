@@ -41,6 +41,8 @@ import type HostModeStateService from '@cardstack/host/services/host-mode-state-
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
+import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
+
 import type {
   CardContext,
   CardDef,
@@ -121,7 +123,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
   }
 
   private viewCard: ViewCardFn = (cardOrURL) => {
-    let cardId = cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id;
+    let cardId = idFromCardOrURL(cardOrURL);
     if (!cardId) {
       return;
     }
