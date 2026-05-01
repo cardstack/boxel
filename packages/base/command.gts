@@ -183,7 +183,7 @@ export class ReadBinaryFileResult extends CardDef {
 export class GenerateThumbnailInput extends CardDef {
   @field prompt = contains(StringField);
   @field sourceImageUrl = contains(StringField);
-  @field targetRealmUrl = contains(StringField);
+  @field targetRealmIdentifier = contains(StringField);
   @field targetPath = contains(StringField); // optional: subfolder within realm, e.g. "thumbnails"
   @field targetCardId = contains(StringField);
   @field cardName = contains(StringField); // card name for filename generation
@@ -191,7 +191,7 @@ export class GenerateThumbnailInput extends CardDef {
 }
 
 export class GenerateThumbnailOutput extends CardDef {
-  @field imageDefUrl = contains(StringField);
+  @field imageDefIdentifier = contains(StringField);
 }
 
 export class CreateInstanceInput extends CardDef {

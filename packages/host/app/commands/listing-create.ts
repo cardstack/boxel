@@ -565,7 +565,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
     await new GenerateThumbnailCommand(this.commandContext).execute({
       prompt,
-      targetRealmUrl: targetRealm,
+      targetRealmIdentifier: targetRealm,
       targetPath: 'ListingThumbnails', // Wrap all thumbnails in a "ListingThumbnails" folder to keep the realm tidy
       targetCardId: listing.id,
       cardName: codeRef.name,
