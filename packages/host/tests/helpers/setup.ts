@@ -16,11 +16,17 @@ import { clearRemoteRealmCache } from './realm-server-mock/routes';
 
 import { cleanupMonacoEditorModels } from './index';
 
+// Per-test set of fetch URLs currently in flight. Snapshotted by the
+// unhandled-rejection diagnostics helper so we can see what was outstanding
+// when an unowned rejection surfaced. Cleared in beforeEach.
+let inFlightFetches = new Set<string>();
+
 function setupFetchDebugging(hooks: NestedHooks) {
   let originalFetch: typeof globalThis.fetch | undefined;
   let wrappedFetch: typeof globalThis.fetch | undefined;
 
   hooks.beforeEach(function () {
+    inFlightFetches = new Set<string>();
     if (!globalThis.fetch) {
       return;
     }
@@ -28,6 +34,8 @@ function setupFetchDebugging(hooks: NestedHooks) {
     let boundFetch = globalThis.fetch.bind(globalThis);
     wrappedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       let { method, url } = describeFetchRequest(input, init);
+      let tag = `${method} ${url}`;
+      inFlightFetches.add(tag);
       try {
         return await boundFetch(input, init);
       } catch (error) {
@@ -35,6 +43,8 @@ function setupFetchDebugging(hooks: NestedHooks) {
           `[test-fetch] ${method} ${url} failed: ${formatErrorForLog(error)}`,
         );
         throw error;
+      } finally {
+        inFlightFetches.delete(tag);
       }
     };
     globalThis.fetch = wrappedFetch;
@@ -46,7 +56,92 @@ function setupFetchDebugging(hooks: NestedHooks) {
     }
     originalFetch = undefined;
     wrappedFetch = undefined;
+    inFlightFetches = new Set<string>();
   });
+}
+
+// surface unhandled rejections during tests with full stacks + in-flight URLs
+function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
+  let handler: ((event: PromiseRejectionEvent) => void) | undefined;
+  let target: EventTarget | undefined;
+
+  hooks.beforeEach(function () {
+    target =
+      typeof window !== 'undefined'
+        ? (window as unknown as EventTarget)
+        : typeof globalThis !== 'undefined'
+          ? (globalThis as unknown as EventTarget)
+          : undefined;
+    if (!target) {
+      return;
+    }
+    handler = (event: PromiseRejectionEvent) => {
+      // Observation only — do NOT call event.preventDefault(). QUnit's own
+      // unhandled-rejection handling must still run and fail the test.
+      let inFlightSnapshot = Array.from(inFlightFetches);
+      console.error(
+        [
+          '[test-unhandled-rejection]',
+          formatRejectionReason(event.reason),
+          inFlightSnapshot.length
+            ? `in-flight fetches at rejection time (${inFlightSnapshot.length}):\n  ${inFlightSnapshot.join('\n  ')}`
+            : 'in-flight fetches at rejection time: <none>',
+        ].join('\n'),
+      );
+    };
+    target.addEventListener(
+      'unhandledrejection',
+      handler as unknown as EventListener,
+    );
+  });
+
+  hooks.afterEach(function () {
+    if (target && handler) {
+      target.removeEventListener(
+        'unhandledrejection',
+        handler as unknown as EventListener,
+      );
+    }
+    handler = undefined;
+    target = undefined;
+  });
+}
+
+function formatRejectionReason(reason: unknown): string {
+  let lines: string[] = [];
+  let seen = new Set<unknown>();
+  let current: unknown = reason;
+  let depth = 0;
+  while (current && !seen.has(current) && depth < 5) {
+    seen.add(current);
+    let prefix = depth === 0 ? 'reason' : `cause[${depth}]`;
+    if (current instanceof Error) {
+      let header = current.name
+        ? `${current.name}: ${current.message}`
+        : current.message;
+      let stack = current.stack?.trim();
+      lines.push(`${prefix}: ${header}`);
+      if (stack) {
+        lines.push(stack);
+      }
+      current = (current as { cause?: unknown }).cause;
+    } else if (typeof current === 'string') {
+      lines.push(`${prefix}: ${current}`);
+      current = undefined;
+    } else {
+      try {
+        lines.push(`${prefix}: ${JSON.stringify(current)}`);
+      } catch (_e) {
+        lines.push(`${prefix}: ${String(current)}`);
+      }
+      current = undefined;
+    }
+    depth++;
+  }
+  if (lines.length === 0) {
+    lines.push(`reason: ${String(reason)}`);
+  }
+  return lines.join('\n');
 }
 
 function describeFetchRequest(input: RequestInfo | URL, init?: RequestInit) {
@@ -85,6 +180,7 @@ export function setupApplicationTest(hooks: NestedHooks) {
   emberSetupApplicationTest(hooks);
   setupWindowMock(hooks);
   setupFetchDebugging(hooks);
+  setupUnhandledRejectionDiagnostics(hooks);
   hooks.afterEach(async function () {
     resetServiceIfPresent(this.owner, 'service:ai-assistant-panel-service');
     resetServiceIfPresent(this.owner, 'service:matrix-service');
@@ -103,6 +199,7 @@ export function setupRenderingTest(hooks: NestedHooks) {
   emberSetupRenderingTest(hooks);
   setupWindowMock(hooks);
   setupFetchDebugging(hooks);
+  setupUnhandledRejectionDiagnostics(hooks);
   hooks.afterEach(async function () {
     await settled();
     (
