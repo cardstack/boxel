@@ -23,7 +23,7 @@ function buildDefinition(
   moduleURL: string,
   name: string,
 ): ModuleDefinitionResult {
-  let moduleAlias = trimExecutableExtension(new URL(moduleURL)).href;
+  let moduleAlias = trimExecutableExtension(rri(moduleURL));
   return {
     type: 'definition',
     moduleURL: moduleAlias,
@@ -329,7 +329,7 @@ module(basename(__filename), function () {
         },
         async prerenderModule(args: ModulePrerenderArgs) {
           calls++;
-          let moduleAlias = trimExecutableExtension(new URL(args.url)).href;
+          let moduleAlias = trimExecutableExtension(rri(args.url));
           let definitionId = internalKeyFor(
             { module: rri(args.url), name: 'Person' },
             undefined,
@@ -475,10 +475,10 @@ module(basename(__filename), function () {
       let middleModule = `${realmURL}middle-field.gts`;
       let leafModule = `${realmURL}leaf-field.gts`;
       let otherModule = `${realmURL}other-card.gts`;
-      let deepAlias = trimExecutableExtension(new URL(deepModule)).href;
-      let middleAlias = trimExecutableExtension(new URL(middleModule)).href;
-      let leafAlias = trimExecutableExtension(new URL(leafModule)).href;
-      let otherAlias = trimExecutableExtension(new URL(otherModule)).href;
+      let deepAlias = trimExecutableExtension(rri(deepModule));
+      let middleAlias = trimExecutableExtension(rri(middleModule));
+      let leafAlias = trimExecutableExtension(rri(leafModule));
+      let otherAlias = trimExecutableExtension(rri(otherModule));
       let calls = new Map<string, number>();
 
       let prerenderer: Prerenderer = {
@@ -615,13 +615,11 @@ module(basename(__filename), function () {
       let blogPostModule = `${realmURL}blog-post.gts`;
       let otherModule = `${realmURL}other-card.gts`;
 
-      let blogAppAlias = trimExecutableExtension(new URL(blogAppModule)).href;
-      let authorAlias = trimExecutableExtension(new URL(authorModule)).href;
-      let blogCategoryAlias = trimExecutableExtension(
-        new URL(blogCategoryModule),
-      ).href;
-      let blogPostAlias = trimExecutableExtension(new URL(blogPostModule)).href;
-      let otherAlias = trimExecutableExtension(new URL(otherModule)).href;
+      let blogAppAlias = trimExecutableExtension(rri(blogAppModule));
+      let authorAlias = trimExecutableExtension(rri(authorModule));
+      let blogCategoryAlias = trimExecutableExtension(rri(blogCategoryModule));
+      let blogPostAlias = trimExecutableExtension(rri(blogPostModule));
+      let otherAlias = trimExecutableExtension(rri(otherModule));
 
       let calls = new Map<string, number>();
       let prerenderer: Prerenderer = {
@@ -1539,7 +1537,7 @@ module(basename(__filename), function () {
             { module: rri(args.url), name: 'CoalesceInvalidate' },
             undefined,
           );
-          let moduleAlias = trimExecutableExtension(new URL(args.url)).href;
+          let moduleAlias = trimExecutableExtension(rri(args.url));
           return {
             id: args.url,
             status: 'ready',

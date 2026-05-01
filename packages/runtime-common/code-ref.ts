@@ -140,12 +140,14 @@ export function codeRefWithAbsoluteIdentifier(
 ): CodeRef {
   if (!('type' in ref)) {
     try {
-      let moduleHref = resolveCardReference(ref.module, relativeTo);
-      let moduleURL = new URL(moduleHref);
+      let moduleHref = resolveCardReference(
+        ref.module,
+        relativeTo,
+      ) as RealmResourceIdentifier;
       if (opts?.trimExecutableExtension) {
-        moduleURL = trimExecutableExtension(moduleURL);
+        moduleHref = trimExecutableExtension(moduleHref);
       }
-      return { ...ref, module: moduleURL.href as RealmResourceIdentifier };
+      return { ...ref, module: moduleHref };
     } catch {
       return { ...ref };
     }

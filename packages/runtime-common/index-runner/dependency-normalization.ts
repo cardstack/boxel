@@ -1,3 +1,4 @@
+import { rri } from '../card-reference-resolver';
 import { trimExecutableExtension } from '../index';
 import {
   isRegisteredPrefix,
@@ -77,5 +78,5 @@ export function normalizeDependencyForLookup(
   relativeTo: URL,
 ): string {
   let canonical = canonicalURL(dep, relativeTo.href);
-  return trimExecutableExtension(canonical);
+  return trimExecutableExtension(rri(canonical));
 }

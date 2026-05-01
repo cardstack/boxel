@@ -13,6 +13,7 @@ import {
 } from './index';
 import {
   isRegisteredPrefix,
+  rri,
   unresolveCardReference,
   type RealmResourceIdentifier,
   type RealmIdentifier,
@@ -204,7 +205,9 @@ export class Batch {
 
   @Memoize()
   private get nodeResolvedInvalidations() {
-    return [...this.invalidations].map((href) => trimExecutableExtension(href));
+    return [...this.invalidations].map((href) =>
+      trimExecutableExtension(rri(href)),
+    );
   }
 
   async getModifiedTimes(): Promise<LastModifiedTimes> {
@@ -430,7 +433,7 @@ export class Batch {
     }
     let preparedEntry = {
       url: href,
-      file_alias: trimExecutableExtension(url).href.replace(/\.json$/, ''),
+      file_alias: trimExecutableExtension(rri(url.href)).replace(/\.json$/, ''),
       realm_version: this.realmVersion,
       realm_url: this.realmURL.href,
       is_deleted: false,
@@ -714,7 +717,7 @@ export class Batch {
       return types.map((type) =>
         [
           id,
-          trimExecutableExtension(id),
+          trimExecutableExtension(rri(id)),
           type,
           this.realmVersion,
           this.realmURL.href,
@@ -834,7 +837,7 @@ export class Batch {
     let invalidations: string[] = [];
     for (let url of urls) {
       for (let seed of await this.invalidationSeeds(url)) {
-        let alias = trimExecutableExtension(seed);
+        let alias = trimExecutableExtension(rri(seed));
         let workingInvalidations = [
           ...new Set([
             ...(!this.nodeResolvedInvalidations.includes(alias) ? [seed] : []),
@@ -1065,7 +1068,7 @@ export class Batch {
   ): Promise<string[]> {
     if (
       visited.has(resolvedPath) ||
-      this.nodeResolvedInvalidations.includes(resolvedPath)
+      this.nodeResolvedInvalidations.includes(rri(resolvedPath))
     ) {
       return [];
     }
@@ -1161,7 +1164,7 @@ export class Batch {
       resolved.search = '';
       resolved.hash = '';
       resolved = depMapper ? depMapper(resolved) : resolved;
-      return trimExecutableExtension(resolved).href;
+      return trimExecutableExtension(rri(resolved.href));
     } catch (_err) {
       return dep;
     }

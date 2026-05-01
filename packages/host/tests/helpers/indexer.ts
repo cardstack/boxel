@@ -20,6 +20,7 @@ import {
   trimExecutableExtension,
   query,
   coerceTypes,
+  rri,
 } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -251,7 +252,7 @@ async function indexedCardsExpressions({
             ? `${row.url}.json`
             : row.url
           : row.url;
-      row.file_alias = trimExecutableExtension(new URL(row.url)).href.replace(
+      row.file_alias = trimExecutableExtension(rri(row.url)).replace(
         /\.json$/,
         '',
       );

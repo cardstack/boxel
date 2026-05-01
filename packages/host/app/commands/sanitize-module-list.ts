@@ -1,6 +1,6 @@
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
-import { trimExecutableExtension } from '@cardstack/runtime-common';
+import { rri, trimExecutableExtension } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -37,7 +37,7 @@ export default class SanitizeModuleListCommand extends HostBaseCommand<
     // "https://…/foo.gts" and "https://…/foo" don't produce separate entries.
     const seen = new Map<string, string>(); // normalized → original
     for (const m of input.moduleUrls) {
-      const normalized = trimExecutableExtension(m);
+      const normalized = trimExecutableExtension(rri(m));
       if (!seen.has(normalized)) {
         seen.set(normalized, m);
       }

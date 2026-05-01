@@ -30,7 +30,11 @@ import {
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
 } from './index';
-import { cardIdToURL, resolveCardReference } from './card-reference-resolver';
+import {
+  cardIdToURL,
+  resolveCardReference,
+  rri,
+} from './card-reference-resolver';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
@@ -62,7 +66,7 @@ export class ModuleSyntax {
 
   constructor(src: string, url: RealmResourceIdentifier | URL) {
     let normalized = url instanceof URL ? url : cardIdToURL(url);
-    this.url = trimExecutableExtension(normalized);
+    this.url = new URL(trimExecutableExtension(rri(normalized.href)));
     this.analyze(src);
   }
 
@@ -318,8 +322,8 @@ export class ModuleSyntax {
     if (classRef.type === 'external') {
       if (
         trimExecutableExtension(
-          new URL(resolveCardReference(classRef.module, this.url)),
-        ) === this.url
+          rri(resolveCardReference(classRef.module, this.url)),
+        ) === this.url.href
       ) {
         return this.possibleCardsOrFields.find(
           (c) => c.exportName === classRef.name,
