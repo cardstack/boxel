@@ -991,7 +991,7 @@ export default class Workspace extends Component<Signature> {
         this.operatorModeStateService.realmURL === this.args.realmURL ||
         this.operatorModeStateService
           .getOpenCardIds()
-          .some((cardId) => cardId.startsWith(this.args.realmURL)) ||
+          .some((cardId) => this.realm.contains(this.args.realmURL, cardId)) ||
         this.operatorModeStateService.codePathString?.startsWith(
           this.args.realmURL,
         );

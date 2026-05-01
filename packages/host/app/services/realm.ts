@@ -945,6 +945,27 @@ export default class RealmService extends Service {
     return undefined;
   }
 
+  // Cross-form realm-membership check.
+  //
+  // Both `realm` and `resource` may be in URL form (`http://...`) or
+  // registered-prefix form (`@cardstack/...`). Internally both sides are
+  // resolved to URL form via `cardIdToURL` before comparison, so a URL-form
+  // realm correctly matches a prefix-form resource (and vice versa) as long
+  // as the prefix is registered in `prefixMappings`. Returns `false` if
+  // either side fails to resolve.
+  contains(realm: string | URL, resource: string | URL): boolean {
+    let realmHref: string;
+    let resourceHref: string;
+    try {
+      realmHref = realm instanceof URL ? realm.href : cardIdToURL(realm).href;
+      resourceHref =
+        resource instanceof URL ? resource.href : cardIdToURL(resource).href;
+    } catch {
+      return false;
+    }
+    return new RealmPaths(new URL(realmHref)).inRealm(rri(resourceHref));
+  }
+
   realmForSessionRoomId(sessionRoomId: string) {
     return Array.from(this.realms.values()).find(
       (r) => r.claims?.sessionRoom === sessionRoomId,

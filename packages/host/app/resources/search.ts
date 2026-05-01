@@ -32,6 +32,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
+import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
@@ -67,6 +68,7 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
 export class SearchResource<
   T extends CardDef | FileDef = CardDef,
 > extends Resource<Args<T>> {
+  @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
   #storeServiceOverride: StoreService | undefined;
@@ -299,7 +301,9 @@ export class SearchResource<
   get instancesByRealm() {
     return this.realmsToSearch
       .map((realm) => {
-        let cards = this.instances.filter((card) => card.id.startsWith(realm));
+        let cards = this.instances.filter((card) =>
+          this.realm.contains(realm, card.id),
+        );
         return { realm, cards };
       })
       .filter((r) => r.cards.length > 0);
