@@ -50,12 +50,15 @@ source ./scripts/grafanactl-env.sh "$env_name"
 # `__REALM_SERVER_URL__` placeholder substitution below produces the
 # same value diff.sh expects to find in the live (pulled) state. CI
 # sources REALM_SERVER_URL from SSM in observability-diff.yml; locally
-# we default to apply.sh's hardcoded http://localhost:4201/.
+# we default to apply.sh's hardcoded http://localhost:4201/. For
+# staging/production ad-hoc runs, the operator must export the same
+# value apply.sh uses (CI fetches it from /<env>/boxel-grafana/realm_server_url
+# — see observability-apply-${env_name}.yml).
 case "$env_name" in
   local) realm_server_url="${REALM_SERVER_URL:-http://localhost:4201/}" ;;
   *)
     [[ -n "${REALM_SERVER_URL:-}" ]] \
-      || { echo "error: REALM_SERVER_URL not set; required for diff.sh --env ${env_name}" >&2; exit 1; }
+      || { echo "error: REALM_SERVER_URL not set; CI fetches it from /${env_name}/boxel-grafana/realm_server_url in observability-diff.yml — for a local hosted run, export it manually first (same SSM path apply-${env_name}.yml uses)" >&2; exit 1; }
     realm_server_url="$REALM_SERVER_URL"
     ;;
 esac
@@ -158,8 +161,12 @@ normalize folders Folder
 #      URL into the `realm_server` constant template variable's `query`
 #      before pushing. Pulled state therefore always shows the substituted
 #      value. We mirror the same walk here so the committed side ends up
-#      with the same value pre-diff. Substitution is a no-op when run on
-#      the pulled side (the placeholder isn't there).
+#      with the same value pre-diff. The match is GUARDED by
+#      `.query == "__REALM_SERVER_URL__"` so the substitution only
+#      rewrites the committed side; the pulled side always carries the
+#      live URL (never the placeholder), so leaving it untouched lets
+#      real drift between $REALM_SERVER_URL and what's actually
+#      provisioned in Grafana surface in the diff.
 #   5. Default `"value": null` on threshold step zero (CS-10991). Grafana
 #      fills in `value: null` on the lowest threshold step (the implicit
 #      `-Infinity` floor) when it stores a dashboard. AMG-era exports
@@ -172,6 +179,7 @@ JQ_NORMALIZE='
     if type == "object"
        and .name? == "realm_server"
        and .type? == "constant"
+       and .query? == "__REALM_SERVER_URL__"
     then
       .query = $url
       | (if .current then .current.value = $url | .current.text = $url else . end)
