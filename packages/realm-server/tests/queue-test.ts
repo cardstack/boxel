@@ -620,6 +620,84 @@ module(basename(__filename), function () {
       },
     );
 
+    test('abandons a job after the per-job reservation cap is hit', async function (assert) {
+      // Simulates the staging stuck-job pattern: two prior workers each
+      // claimed the job and died without finalizing the reservation. Both
+      // reservations are expired (locked_until in the past) so the next
+      // claim is eligible to grab the job — but the per-job reservation
+      // count is already at the cap, so the runner abandons the job by
+      // marking it 'rejected' with a diagnostic message. The handler
+      // should never run.
+      //
+      // Destroy the beforeEach-spawned runner first so its 10s poller
+      // can't race ahead of our DB seed and create a third reservation
+      // before we've inserted the two orphans we want to test against.
+      await runner.destroy();
+
+      let [{ id: jobId }] = (await adapter.execute(
+        `INSERT INTO jobs (job_type, args, status, timeout)
+         VALUES ('logJob', '{}'::jsonb, 'unfulfilled', 1) RETURNING id`,
+      )) as { id: string }[];
+
+      for (let workerId of ['dead-worker-A', 'dead-worker-B']) {
+        await adapter.execute(
+          `INSERT INTO job_reservations (job_id, worker_id, locked_until)
+           VALUES ($1, $2, NOW() - INTERVAL '10 seconds')`,
+          { bind: [jobId, workerId] },
+        );
+      }
+
+      let ranCount = 0;
+      runner = new PgQueueRunner({
+        adapter,
+        workerId: 'q-abandon-cap',
+        maxTimeoutSec: 2,
+      });
+      runner.register('logJob', async () => {
+        ranCount++;
+        return null;
+      });
+      await runner.start();
+      // Wake the runner so it picks the job up immediately rather than
+      // waiting for the 10s poll interval.
+      await adapter.execute(`NOTIFY jobs`);
+
+      let started = Date.now();
+      let abandoned = false;
+      let result: { status?: number; message?: string } | null = null;
+      while (Date.now() - started < 5000) {
+        let rows = (await adapter.execute(`SELECT * FROM jobs WHERE id = $1`, {
+          bind: [jobId],
+        })) as unknown as {
+          status: string;
+          result: { status?: number; message?: string } | null;
+        }[];
+        if (rows[0].status === 'rejected') {
+          abandoned = true;
+          result = rows[0].result;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      assert.true(abandoned, 'job was abandoned within timeout window');
+      let messageMentionsAbandon = Boolean(
+        result?.message?.includes('abandoned after 2 failed attempts'),
+      );
+      assert.true(
+        messageMentionsAbandon,
+        `job.result.message reports the abandon, got: ${result?.message}`,
+      );
+      assert.strictEqual(ranCount, 0, 'handler was never invoked');
+
+      // No new reservation row was inserted past the existing two.
+      let [{ count }] = (await adapter.execute(
+        `SELECT COUNT(*)::int as count FROM job_reservations WHERE job_id = $1`,
+        { bind: [jobId] },
+      )) as { count: number }[];
+      assert.strictEqual(count, 2, 'no new reservation was created');
+    });
+
     test('worker stops waiting for job after its been running longer than max time-out', async function (assert) {
       let events: string[] = [];
       let runs = 0;

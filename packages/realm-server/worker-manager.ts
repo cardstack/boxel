@@ -35,6 +35,7 @@ import {
   type PendingJob,
 } from './handlers/handle-indexing-dashboard';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
+import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations';
 
 /* About the Worker Manager
  *
@@ -525,13 +526,22 @@ async function startWorker(
 
   workers.push(worker);
 
-  worker.on('exit', () => {
+  worker.on('exit', async () => {
     clearInterval(watchdog);
     // Remove from workers array
     const index = workers.indexOf(worker);
     if (index > -1) {
       workers.splice(index, 1);
     }
+
+    // Finalize orphan reservations before spawning the replacement, so the
+    // next worker can claim immediately rather than waiting for the 7200s
+    // lease (locked_until) to age out. Failures here are reported but must
+    // not prevent the replacement spawn below.
+    await finalizeOrphanedReservations(adapter, {
+      workerId,
+      jobId: currentState?.jobId,
+    });
 
     if (!isExiting) {
       log.info(`worker ${name} exited. spawning replacement worker`);
