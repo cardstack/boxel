@@ -286,6 +286,23 @@ export class PagePool {
   // Burst ceiling reachable by any priority on saturation. Equal to
   // `#minPages` when the legacy fixed-size config drives the pool.
   #maxBurstPages: number;
+  // High-priority ceiling. Reachable only when the saturating request's
+  // own priority is at or above `#highPriorityThreshold`. Defaults to
+  // `#maxBurstPages` (no separate tier) so deployments that don't set
+  // the env var see the single-tier behaviour from the previous PR.
+  // The value is the structural guarantee that a low-priority workload
+  // cannot consume the entire memory envelope: there is always
+  // expansion budget that only a high-priority request can claim.
+  #highPriorityMaxPages: number;
+  // Priority value at or above which an arriving request can drive
+  // expansion past `#maxBurstPages` into the high-priority tier.
+  // Defaults to `Infinity` when the tier is unset; the upstream
+  // `parsePositiveInt` validation rejects non-integers so no real-
+  // world priority value can satisfy `priority >= +Infinity`. (Note:
+  // a literal `Number.POSITIVE_INFINITY` *would* satisfy it, but no
+  // production code path produces that value — priorities arrive as
+  // integers from the worker queue.)
+  #highPriorityThreshold: number;
   // Wall-time threshold for the contraction tick: `#maxPages > #minPages`
   // AND no pending waiters anywhere on the pool for at least this long
   // → drop one slot. Reset every time pending appears or expansion
@@ -412,6 +429,41 @@ export class PagePool {
       this.#maxBurstPages = options.maxPages;
       this.#maxPages = options.maxPages;
     }
+    // High-priority tier. Reachable only when the saturating request's
+    // own priority is at or above `PRERENDER_HIGH_PRIORITY_THRESHOLD`.
+    // The defaults pin the tier to `#maxBurstPages` (no separate tier)
+    // so the previous PR's single-tier behaviour is preserved when the
+    // env vars are unset — even with the dynamic-pool envelope active,
+    // expansion stops at `#maxBurstPages`. Operators opt in by setting
+    // both env vars; partial config (one of the pair) keeps the tier
+    // dormant on the conservative assumption that a missing knob is a
+    // misconfiguration, not an opt-in.
+    let envHighPriorityMax = parsePositiveInt(
+      process.env.PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX,
+    );
+    let envHighPriorityThreshold = parsePositiveInt(
+      process.env.PRERENDER_HIGH_PRIORITY_THRESHOLD,
+    );
+    if (
+      envHighPriorityMax !== undefined &&
+      envHighPriorityThreshold !== undefined &&
+      this.#maxBurstPages > this.#minPages
+    ) {
+      if (envHighPriorityMax < this.#maxBurstPages) {
+        log.warn(
+          `PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX=${envHighPriorityMax} < PRERENDER_PAGE_POOL_MAX=${this.#maxBurstPages}; clamping HIGH_PRIORITY_MAX to MAX`,
+        );
+        envHighPriorityMax = this.#maxBurstPages;
+      }
+      this.#highPriorityMaxPages = envHighPriorityMax;
+      this.#highPriorityThreshold = envHighPriorityThreshold;
+    } else {
+      // Tier dormant: real-world (integer) priority values can never
+      // satisfy `priority >= +Infinity`, so `#tryExpand` will stop at
+      // `#maxBurstPages`.
+      this.#highPriorityMaxPages = this.#maxBurstPages;
+      this.#highPriorityThreshold = Number.POSITIVE_INFINITY;
+    }
     let envContractionMs = parsePositiveInt(
       process.env.PRERENDER_POOL_IDLE_CONTRACTION_MS,
     );
@@ -420,9 +472,26 @@ export class PagePool {
     if (!Number.isFinite(envTabMax) || envTabMax <= 0) {
       envTabMax = 1;
     }
-    // Cap by the burst ceiling (the largest the pool can grow to)
-    // rather than the live `#maxPages`. Otherwise the per-affinity cap
-    // wouldn't expand alongside pool expansion, defeating the burst.
+    // Cap by the burst ceiling (`#maxBurstPages`), NOT the high-
+    // priority tier ceiling. Capping at `#highPriorityMaxPages`
+    // would let the per-affinity tab budget exceed the burst-tier
+    // capacity (e.g. envTabMax=5, MAX=4, HP_MAX=8 →
+    // affinityTabMax=5), and the legacy reservation formula
+    // `max(1, affinityTabMax − 1)` would yield fileAdmissionCap=4.
+    // Low-priority file workload could fill all 4 burst slots with
+    // no slot left for the module/command sub-call the file render
+    // is waiting on, re-introducing the self-referential prerender
+    // deadlock the reservation is meant to prevent. Capping at
+    // `#maxBurstPages` keeps `affinityTabMax − 1 < #maxBurstPages`,
+    // preserving the deadlock-safety invariant for low/medium-
+    // priority workload.
+    //
+    // The per-affinity cap *intentionally* doesn't track HP_MAX —
+    // the tier exists to give the global pool burst budget for
+    // high-priority traffic, not to multiply the per-realm tab
+    // budget. Operators wanting more per-realm headroom raise
+    // `PRERENDER_AFFINITY_TAB_MAX` and `PRERENDER_PAGE_POOL_MAX`
+    // together.
     this.#affinityTabMax = Math.min(
       Math.max(1, envTabMax),
       this.#maxBurstPages,
@@ -441,17 +510,19 @@ export class PagePool {
       );
     }
     // Cap on total shared contexts (active + orphaned). Default
-    // scales by the burst ceiling (the largest the pool can grow to)
-    // rather than the live `#maxPages`, so the cap stays stable
-    // across expansion / contraction — otherwise it would balloon
-    // during a burst and evict during contraction, defeating the
-    // warm-cache benefit of keeping orphan contexts. Enforced by
-    // `#maybeEvictOrphanContexts` on each release.
+    // scales by the high-priority tier ceiling (the largest the pool
+    // can grow to under any priority) rather than the live `#maxPages`,
+    // so the cap stays stable across expansion / contraction —
+    // otherwise it would balloon during a burst and evict during
+    // contraction, defeating the warm-cache benefit of keeping orphan
+    // contexts. Enforced by `#maybeEvictOrphanContexts` on each
+    // release.
     let envSharedCap = Number(
-      process.env.PRERENDER_SHARED_CONTEXT_CAP ?? this.#maxBurstPages * 2,
+      process.env.PRERENDER_SHARED_CONTEXT_CAP ??
+        this.#highPriorityMaxPages * 2,
     );
     if (!Number.isFinite(envSharedCap) || envSharedCap <= 0) {
-      envSharedCap = this.#maxBurstPages * 2;
+      envSharedCap = this.#highPriorityMaxPages * 2;
     }
     this.#sharedContextCap = Math.max(1, envSharedCap);
     this.#serverURL = options.serverURL;
@@ -819,10 +890,12 @@ export class PagePool {
     // refill kicked off by `#ensureStandbyPool` below has a slot to
     // create into. Bumps the semaphore's capacity in lockstep, which
     // also un-blocks the `#renderSemaphore.acquire` call further down
-    // for this caller. No-op once `#maxPages` has reached
-    // `#maxBurstPages`, and a no-op when the pool is configured at a
-    // legacy fixed size (`#minPages === #maxBurstPages`).
-    this.#maybeExpandUnderSaturation();
+    // for this caller. No-op once `#maxPages` has reached its tier
+    // ceiling (`#maxBurstPages` for low/medium priority,
+    // `#highPriorityMaxPages` for callers at or above the threshold),
+    // and a no-op when the pool is configured at a legacy fixed size
+    // (`#minPages === #maxBurstPages === #highPriorityMaxPages`).
+    this.#maybeExpandUnderSaturation(priority);
     let startupStart = Date.now();
     try {
       await this.#ensureStandbyPool();
@@ -1307,13 +1380,23 @@ export class PagePool {
     return this.#maxBurstPages;
   }
 
+  get highPriorityMaxPages(): number {
+    return this.#highPriorityMaxPages;
+  }
+
+  get highPriorityThreshold(): number {
+    return this.#highPriorityThreshold;
+  }
+
   // Inspect the render-semaphore state and trigger expansion when the
   // arriving caller would otherwise queue on a saturated cap. Hot-path
   // hook off `getPage` — kept defensively narrow (only acts when the
   // semaphore is a concrete `AsyncSemaphore` with the expected fields)
-  // so test stubs don't get unexpected expansion behaviour.
-  #maybeExpandUnderSaturation(): void {
-    if (this.#maxBurstPages <= this.#minPages) return;
+  // so test stubs don't get unexpected expansion behaviour. The
+  // arriving caller's `priority` is threaded through so the high-
+  // priority tier can be unlocked when the caller qualifies.
+  #maybeExpandUnderSaturation(priority: number = 0): void {
+    if (this.#highPriorityMaxPages <= this.#minPages) return;
     let renderSem = this.#renderSemaphore;
     if (
       !renderSem ||
@@ -1325,32 +1408,51 @@ export class PagePool {
     }
     let sem = renderSem as AsyncSemaphore;
     if (sem.inUseCount >= sem.capacity) {
-      this.#tryExpand();
+      this.#tryExpand(priority);
     }
   }
 
   // Best-effort synchronous expansion of the live pool capacity. Bumps
-  // `#maxPages` by one (no-op when already at `#maxBurstPages`),
-  // forwards the resize to the render semaphore, and resets the
-  // contraction loop's idle observation. Returns true if `#maxPages`
-  // grew. Caller is expected to follow up with whatever spawn / refill
-  // path it was about to take — expansion just lifts the ceiling, it
-  // doesn't itself create a tab.
-  #tryExpand(): boolean {
-    if (this.#maxPages >= this.#maxBurstPages) return false;
-    // Require a resize-capable render semaphore. Otherwise `#maxPages`
-    // would drift away from the actual global concurrency gate (the
-    // semaphore's fixed capacity), and the saturation heuristic would
-    // misreport state. Test stubs that supply only `acquire` keep
-    // working by skipping expansion — same as legacy fixed-pool
-    // mode for them.
+  // `#maxPages` by one, forwards the resize to the render semaphore,
+  // and resets the contraction loop's idle observation. Returns true
+  // if `#maxPages` grew. Caller is expected to follow up with whatever
+  // spawn / refill path it was about to take — expansion just lifts
+  // the ceiling, it doesn't itself create a tab.
+  //
+  // Two-tier ceiling:
+  //   - up to `#maxBurstPages`: any priority can drive expansion
+  //     (default tier, available to background and user work alike)
+  //   - past `#maxBurstPages` and up to `#highPriorityMaxPages`: only
+  //     callers with `priority >= #highPriorityThreshold` can drive
+  //     the expansion. The structural guarantee: a low-priority
+  //     workload cannot consume the entire memory envelope on its own
+  //     — there's always reserved expansion budget that requires a
+  //     qualifying priority to claim.
+  //
+  // The defaults (`#highPriorityMaxPages === #maxBurstPages` and
+  // `#highPriorityThreshold === +Infinity`) collapse this into the
+  // single-tier behaviour from the previous PR.
+  //
+  // Requires a resize-capable render semaphore. Without `setCapacity`,
+  // `#maxPages` would drift away from the actual global concurrency
+  // gate (the semaphore's fixed capacity), and the saturation
+  // heuristic would misreport state. Test stubs that supply only
+  // `acquire` keep working by skipping expansion — same as legacy
+  // fixed-pool mode for them.
+  #tryExpand(priority: number = 0): boolean {
+    let cap =
+      priority >= this.#highPriorityThreshold
+        ? this.#highPriorityMaxPages
+        : this.#maxBurstPages;
+    if (this.#maxPages >= cap) return false;
     if (!this.#renderSemaphore?.setCapacity) return false;
     let prev = this.#maxPages;
     this.#maxPages = prev + 1;
     this.#renderSemaphore.setCapacity(this.#maxPages);
     this.#idleObservedAt = undefined;
+    let tier = this.#maxPages > this.#maxBurstPages ? 'high-priority' : 'burst';
     log.info(
-      `pool expansion: maxPages=${prev}→${this.#maxPages} (burst=${this.#maxBurstPages})`,
+      `pool expansion: maxPages=${prev}→${this.#maxPages} tier=${tier} (burst=${this.#maxBurstPages}, hp=${this.#highPriorityMaxPages}, priority=${priority})`,
     );
     return true;
   }
@@ -2102,15 +2204,19 @@ export class PagePool {
   // through `getPage` → `#maybeExpandUnderSaturation`, but unit tests
   // exercising the dynamic-pool envelope shouldn't need a real Chrome
   // round-trip. Returns `true` if `#maxPages` grew on this call.
-  __test_tryExpand(): boolean {
-    return this.#tryExpand();
+  // `priority` selects which tier the expansion can reach:
+  // `priority >= #highPriorityThreshold` unlocks the high-priority
+  // ceiling; lower (or omitted) priorities stop at `#maxBurstPages`.
+  __test_tryExpand(priority?: number): boolean {
+    return this.#tryExpand(priority ?? 0);
   }
 
   // Test-only seam: invokes the saturation-detection hook the way
   // `getPage` does, so unit tests can assert that expansion fires
-  // when the render semaphore is at capacity.
-  __test_maybeExpandUnderSaturation(): void {
-    this.#maybeExpandUnderSaturation();
+  // when the render semaphore is at capacity. Forwards `priority` so
+  // the high-priority tier path can be exercised in unit tests too.
+  __test_maybeExpandUnderSaturation(priority?: number): void {
+    this.#maybeExpandUnderSaturation(priority ?? 0);
   }
 
   // Test-only seam: writes a `source: 'exception'` entry directly
