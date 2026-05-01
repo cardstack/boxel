@@ -14,7 +14,7 @@ import {
   BoxelButton,
   CardContainer,
 } from '@cardstack/boxel-ui/components';
-import { eq, toMenuItems } from '@cardstack/boxel-ui/helpers';
+import { and, eq, not, or, toMenuItems } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -273,9 +273,19 @@ export default class PreviewPanel extends Component<Signature> {
             @cardTypeIcon={{cardTypeIcon @card}}
             @cardTitle={{this.cardTitle}}
             @realmInfo={{this.realmInfo}}
-            @onEdit={{if this.canEditCard (fn @setFormat 'edit')}}
+            {{! Form is edit-with-base-template — visually the same as
+                edit for the header's green bar. Hide the pencil while
+                in either mode and let the X (finish editing) take you
+                back to isolated. }}
+            @onEdit={{if
+              (and
+                this.canEditCard
+                (not (or (eq this.format 'edit') (eq this.format 'form')))
+              )
+              (fn @setFormat 'edit')
+            }}
             @onFinishEditing={{if
-              (eq this.format 'edit')
+              (or (eq this.format 'edit') (eq this.format 'form'))
               (fn @setFormat 'isolated')
             }}
             @isTopCard={{true}}

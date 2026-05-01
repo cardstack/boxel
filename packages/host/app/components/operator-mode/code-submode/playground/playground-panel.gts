@@ -18,7 +18,7 @@ import {
   CardContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { eq, MenuItem, toMenuItems } from '@cardstack/boxel-ui/helpers';
+import { eq, MenuItem, or, toMenuItems } from '@cardstack/boxel-ui/helpers';
 import { Folder, IconPlusThin } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -1111,8 +1111,11 @@ export default class PlaygroundPanel extends Component<Signature> {
                       @isFileDef
                       (if this.setEditMode (fn this.setFormat 'edit'))
                     }}
+                    {{! Form is edit-with-base-template — treat it as
+                        editing for header (green bar + X button to
+                        return to default format). }}
                     @onFinishEditing={{if
-                      (eq this.format 'edit')
+                      (or (eq this.format 'edit') (eq this.format 'form'))
                       (fn this.setFormat this.defaultFormat)
                     }}
                     @isFieldDef={{@isFieldDef}}
