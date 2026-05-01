@@ -129,7 +129,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
     let schema = generateJsonSchemaForCardType(BasicCard, cardApi, mappings);
     assert.deepEqual(schema, {
       attributes: {
-        type: 'xbject',
+        type: 'object',
         properties: {
           ...cardDefAttributesProperties,
           stringField: { type: 'string' },
