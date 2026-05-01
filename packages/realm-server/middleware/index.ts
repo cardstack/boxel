@@ -209,7 +209,18 @@ export function grafanaAuthorization(
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     let authorization = ctxt.req.headers['authorization'];
-    if (!authorization || authorization !== grafanaSecret) {
+    // Accept either the bare secret (legacy form: link-style `?authHeader=`
+    // promoted to a header by convertAuthHeaderQueryParam) or the
+    // standards-compliant `Bearer <secret>` form (CS-10987 button-panel
+    // dashboards). Both routes through the same downstream handler. Once
+    // the GET-link dashboards have been retired for a release cycle, drop
+    // the bare-secret branch + the convertAuthHeaderQueryParam middleware
+    // in one cleanup PR.
+    let isValid =
+      !!authorization &&
+      (authorization === grafanaSecret ||
+        authorization === `Bearer ${grafanaSecret}`);
+    if (!isValid) {
       await sendResponseForUnauthorizedRequest(
         ctxt,
         AuthenticationErrorMessages.MissingAuthHeader,

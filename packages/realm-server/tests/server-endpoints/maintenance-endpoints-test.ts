@@ -366,6 +366,81 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
+      // CS-10987 cutover prep: every grafana operator endpoint accepts
+      // both verbs (GET for legacy link dashboards, POST for the
+      // upcoming button-panel dashboards) and both auth header shapes
+      // (bare secret for legacy `?authHeader=` link promotion, `Bearer
+      // <secret>` for the standards-compliant button-panel form). Once
+      // the link dashboards retire, the legacy GET routes + bare-secret
+      // branch + convertAuthHeaderQueryParam middleware come out in one
+      // cleanup PR.
+      async function insertCancellableJob(): Promise<string> {
+        let [{ id }] = (await context.dbAdapter.execute(`INSERT INTO jobs
+        (args, job_type, concurrency_group, timeout, priority)
+        VALUES
+        (
+          '{"realmURL": "${testRealmURL.href}", "realmUsername":"node-test_realm"}',
+          'from-scratch-index',
+          'indexing:${testRealmURL.href}',
+          180,
+          0
+        ) RETURNING id`)) as { id: string }[];
+        return id;
+      }
+      async function assertJobRejected(assert: Assert, id: string) {
+        let [job] = await context.dbAdapter.execute(
+          `SELECT status FROM jobs WHERE id = ${id}`,
+        );
+        assert.strictEqual(job.status, 'rejected', 'job was rejected');
+      }
+
+      test('grafana endpoint accepts POST with Authorization: Bearer header (CS-10987 button-panel form)', async function (assert) {
+        let id = await insertCancellableJob();
+        let response = await context.request
+          .post(`/_grafana-complete-job?job_id=${id}`)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 204, 'HTTP 204 response');
+        await assertJobRejected(assert, id);
+      });
+
+      test('grafana endpoint accepts POST with Authorization: <bare-secret> header', async function (assert) {
+        let id = await insertCancellableJob();
+        let response = await context.request
+          .post(`/_grafana-complete-job?job_id=${id}`)
+          .set('Authorization', grafanaSecret)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 204, 'HTTP 204 response');
+        await assertJobRejected(assert, id);
+      });
+
+      test('grafana endpoint accepts GET with Authorization: Bearer header (no querystring)', async function (assert) {
+        let id = await insertCancellableJob();
+        let response = await context.request
+          .get(`/_grafana-complete-job?job_id=${id}`)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 204, 'HTTP 204 response');
+        await assertJobRejected(assert, id);
+      });
+
+      test('grafana endpoint rejects POST with wrong Bearer token', async function (assert) {
+        let id = await insertCancellableJob();
+        let response = await context.request
+          .post(`/_grafana-complete-job?job_id=${id}`)
+          .set('Authorization', 'Bearer not-the-real-secret')
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+        let [job] = await context.dbAdapter.execute(
+          `SELECT status FROM jobs WHERE id = ${id}`,
+        );
+        assert.strictEqual(
+          job.status,
+          'unfulfilled',
+          'job not touched on auth failure',
+        );
+      });
+
       test('can add user credit via grafana endpoint', async function (assert) {
         let user = await insertUser(
           context.dbAdapter,
