@@ -33,7 +33,7 @@ import {
   Deferred,
   cardTypeDisplayName,
   cardTypeIcon,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   identifyCard,
   isCardInstance,
   isResolvedCodeRef,
@@ -175,7 +175,7 @@ export default class InteractSubmode extends Component {
       });
     } else {
       let CardKlass = await loadCardDef(
-        codeRefWithAbsoluteURL(ref, relativeTo),
+        codeRefWithAbsoluteIdentifier(ref, relativeTo),
         {
           loader: this.loaderService.loader,
         },

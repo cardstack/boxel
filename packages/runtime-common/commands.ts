@@ -1,7 +1,7 @@
 import {
   type ResolvedCodeRef,
   isCardDef,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
 } from './code-ref';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { CardDefConstructor } from 'https://cardstack.com/base/card-api';
@@ -121,7 +121,7 @@ export function buildCommandFunctionName(
   if (!commandCodeRef?.module || !commandCodeRef?.name) {
     return '';
   }
-  let absoluteCodeRef = codeRefWithAbsoluteURL(
+  let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
     commandCodeRef,
     relativeTo,
   ) as ResolvedCodeRef;

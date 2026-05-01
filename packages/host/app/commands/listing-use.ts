@@ -1,5 +1,5 @@
 import {
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   isResolvedCodeRef,
   loadCardDef,
   generateInstallFolderName,
@@ -54,7 +54,7 @@ export default class ListingUseCommand extends HostBaseCommand<
       if (spec.isComponent) {
         return;
       }
-      let ref = codeRefWithAbsoluteURL(spec.ref, rri(spec.id));
+      let ref = codeRefWithAbsoluteIdentifier(spec.ref, rri(spec.id));
       if (!isResolvedCodeRef(ref)) {
         throw new Error('ref is not a resolved code ref');
       }

@@ -133,7 +133,7 @@ export function isSpecCard(def: any) {
   return isBaseDef(def) && isSpec in def;
 }
 
-export function codeRefWithAbsoluteURL(
+export function codeRefWithAbsoluteIdentifier(
   ref: CodeRef,
   relativeTo?: RealmResourceIdentifier | URL | undefined,
   opts?: { trimExecutableExtension?: true },
@@ -150,7 +150,7 @@ export function codeRefWithAbsoluteURL(
       return { ...ref };
     }
   }
-  return { ...ref, card: codeRefWithAbsoluteURL(ref.card, relativeTo) };
+  return { ...ref, card: codeRefWithAbsoluteIdentifier(ref.card, relativeTo) };
 }
 
 export async function getClass(ref: ResolvedCodeRef, loader: Loader) {
@@ -391,7 +391,7 @@ export function resolveAdoptedCodeRef(instance: CardDef) {
   if (!adoptsFrom) {
     throw new Error('Instance missing adoptsFrom');
   }
-  let resolved = codeRefWithAbsoluteURL(
+  let resolved = codeRefWithAbsoluteIdentifier(
     adoptsFrom,
     instance[relativeTo] || cardIdToURL(instance.id),
   );
@@ -419,7 +419,7 @@ export function resolveAdoptsFrom(card: CardDef): ResolvedCodeRef | undefined {
     if (!baseURL) {
       return undefined;
     }
-    let resolved = codeRefWithAbsoluteURL(ref, baseURL);
+    let resolved = codeRefWithAbsoluteIdentifier(ref, baseURL);
     return isResolvedCodeRef(resolved) ? resolved : undefined;
   };
   if (isResolvedCodeRef(adoptsFrom)) {

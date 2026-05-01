@@ -23,7 +23,7 @@ import {
   baseRealm,
   maybeRelativeURL,
   trimExecutableExtension,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   baseCardRef,
   baseFieldRef,
   type CodeRef,
@@ -421,10 +421,10 @@ function makeNewField({
   if (
     (fieldType === 'linksTo' || fieldType === 'linksToMany') &&
     isEqual(
-      codeRefWithAbsoluteURL(fieldRef, moduleURL, {
+      codeRefWithAbsoluteIdentifier(fieldRef, moduleURL, {
         trimExecutableExtension: true,
       }),
-      codeRefWithAbsoluteURL(cardBeingModified, moduleURL, {
+      codeRefWithAbsoluteIdentifier(cardBeingModified, moduleURL, {
         trimExecutableExtension: true,
       }),
     )

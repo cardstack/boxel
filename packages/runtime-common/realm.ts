@@ -83,7 +83,7 @@ import {
   type Query,
   type PrerenderedHtmlFormat,
   codeRefFromInternalKey,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   userInitiatedPriority,
   systemInitiatedPriority,
   userIdFromUsername,
@@ -4681,7 +4681,7 @@ export class Realm {
     doc: LooseSingleCardDocument,
     relativeTo: URL,
   ): Promise<LooseSingleCardDocument> {
-    let absoluteCodeRef = codeRefWithAbsoluteURL(
+    let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
       doc.data.meta.adoptsFrom,
       relativeTo,
     ) as ResolvedCodeRef;
@@ -4732,7 +4732,7 @@ export class Realm {
       if (Array.isArray(fieldValue)) {
         for (const item of fieldValue) {
           if (item.adoptsFrom) {
-            let absoluteCodeRef = codeRefWithAbsoluteURL(
+            let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
               item.adoptsFrom,
               relativeTo,
             ) as ResolvedCodeRef;
@@ -4757,7 +4757,7 @@ export class Realm {
           }
         }
       } else if (fieldValue.adoptsFrom) {
-        let absoluteCodeRef = codeRefWithAbsoluteURL(
+        let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
           fieldValue.adoptsFrom,
           relativeTo,
         ) as ResolvedCodeRef;

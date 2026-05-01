@@ -13,7 +13,7 @@ import {
   cardIdToURL,
   unresolveCardReference,
   IndexQueryEngine,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   logger,
   CardResourceType,
   FileMetaResourceType,
@@ -263,7 +263,10 @@ export class RealmIndexQueryEngine {
       return false;
     }
     let relativeTo = resource.id ? cardIdToURL(resource.id) : this.realmURL;
-    let codeRef = codeRefWithAbsoluteURL(resource.meta.adoptsFrom, relativeTo);
+    let codeRef = codeRefWithAbsoluteIdentifier(
+      resource.meta.adoptsFrom,
+      relativeTo,
+    );
     if (!isResolvedCodeRef(codeRef)) {
       return false;
     }
@@ -491,7 +494,10 @@ export class RealmIndexQueryEngine {
     }
 
     let relativeTo = resource.id ? cardIdToURL(resource.id) : realmURL;
-    let codeRef = codeRefWithAbsoluteURL(resource.meta.adoptsFrom, relativeTo);
+    let codeRef = codeRefWithAbsoluteIdentifier(
+      resource.meta.adoptsFrom,
+      relativeTo,
+    );
     if (!isResolvedCodeRef(codeRef)) {
       return;
     }
