@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import { RealmPaths } from '@cardstack/runtime-common';
+import { RealmPaths, rri } from '@cardstack/runtime-common';
 
 module('Unit | RealmPaths', function (hooks) {
   let realmPaths: RealmPaths;
@@ -62,13 +62,13 @@ module('Unit | RealmPaths', function (hooks) {
 
   test('#inRealm', function (assert) {
     assert.true(
-      realmPaths.inRealm(new URL('https://cardstack.com/hümans/example')),
+      realmPaths.inRealm(rri('https://cardstack.com/hümans/example')),
     );
     assert.true(
-      realmPaths.inRealm(new URL('https://cardstack.com/hümans/éxample')),
+      realmPaths.inRealm(rri('https://cardstack.com/hümans/éxample')),
     );
     assert.false(
-      realmPaths.inRealm(new URL('https://cardstack.com/humans/éxample')),
+      realmPaths.inRealm(rri('https://cardstack.com/humans/éxample')),
     );
   });
 });

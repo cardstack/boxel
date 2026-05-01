@@ -1,6 +1,7 @@
 import { Deferred } from './deferred';
 import {
   resolveCardReference,
+  rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
 } from './card-reference-resolver';
@@ -598,7 +599,7 @@ export class Realm {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
       },
       async (request, next) => {
-        if (!this.paths.inRealm(new URL(request.url))) {
+        if (!this.paths.inRealm(rri(request.url))) {
           return next(request);
         }
         return await this.internalHandle(request, true);
@@ -1021,7 +1022,7 @@ export class Realm {
           requestContext,
         });
       }
-      if (!this.paths.inRealm(parsedURL)) {
+      if (!this.paths.inRealm(rri(parsedURL.href))) {
         return badRequest({
           message: `URL is not in realm: ${parsedURL.href}`,
           requestContext,
@@ -1707,14 +1708,14 @@ export class Realm {
   maybeHandle = async (
     request: Request,
   ): Promise<ResponseWithNodeStream | null> => {
-    if (!this.paths.inRealm(new URL(request.url))) {
+    if (!this.paths.inRealm(rri(request.url))) {
       return null;
     }
     return await this.internalHandle(request, true);
   };
 
   handle = async (request: Request): Promise<ResponseWithNodeStream | null> => {
-    if (!this.paths.inRealm(new URL(request.url))) {
+    if (!this.paths.inRealm(rri(request.url))) {
       return null;
     }
     return await this.internalHandle(request, false);
@@ -5003,7 +5004,7 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
   ) {
     return true;
   }
-  return baseRealm.inRealm(parsed);
+  return baseRealm.inRealm(rri(parsed.href));
 }
 
 function lastModifiedHeader(

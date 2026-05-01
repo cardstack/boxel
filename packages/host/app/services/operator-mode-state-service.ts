@@ -709,7 +709,7 @@ export default class OperatorModeStateService extends Service {
     if (this._state.codePath && this.realmURL) {
       let realmPath = new RealmPaths(new URL(this.realmURL));
 
-      if (realmPath.inRealm(this._state.codePath)) {
+      if (realmPath.inRealm(rri(this._state.codePath.href))) {
         try {
           return realmPath.local(this._state.codePath!);
         } catch (err: any) {

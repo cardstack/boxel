@@ -1,3 +1,4 @@
+import { rri } from './card-reference-resolver';
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
@@ -41,7 +42,7 @@ export class RealmPaths {
   ): LocalPath {
     if (input instanceof URL) {
       this.assertURLBased('local');
-      if (!this.inRealm(input)) {
+      if (!this.inRealm(rri(input.href))) {
         let error = new Error(
           `realm ${this.url} does not contain ${input.href}`,
         );
@@ -87,23 +88,7 @@ export class RealmPaths {
     return new URL(local + '/', this.url);
   }
 
-  inRealm(input: RealmResourceIdentifier | URL): boolean {
-    if (input instanceof URL) {
-      this.assertURLBased('inRealm');
-      let decodedHref: string;
-      try {
-        decodedHref = decodeURI(input.href);
-      } catch (e) {
-        console.warn(
-          `encountered malformed URI ${input} when checking if in realm ${this.url}, treating as not in this realm`,
-        );
-        return false;
-      }
-      return (
-        decodedHref.startsWith(this.url) ||
-        decodedHref.split('?')[0] == this.url.replace(/\/$/, '') // check if url without querystring same as realm url without trailing slash (for detecting root realm urls with missing trailing slash)
-      );
-    }
+  inRealm(input: RealmResourceIdentifier): boolean {
     let decoded: string;
     try {
       decoded = decodeURI(input);
@@ -111,7 +96,9 @@ export class RealmPaths {
       return false;
     }
     return (
-      decoded.startsWith(this.url) || decoded === this.url.replace(/\/$/, '')
+      decoded.startsWith(this.url) ||
+      // realm root with missing trailing slash, optionally with query string
+      decoded.split('?')[0] === this.url.replace(/\/$/, '')
     );
   }
 

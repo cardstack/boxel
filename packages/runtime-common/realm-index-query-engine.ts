@@ -11,6 +11,7 @@ import {
   resolveCardReference,
   isRegisteredPrefix,
   cardIdToURL,
+  rri,
   unresolveCardReference,
   IndexQueryEngine,
   codeRefWithAbsoluteIdentifier,
@@ -948,7 +949,7 @@ export class RealmIndexQueryEngine {
           ),
         );
         let linkResource: CardResource<Saved> | FileMetaResource | undefined;
-        if (realmPath.inRealm(linkURL)) {
+        if (realmPath.inRealm(rri(linkURL.href))) {
           if (expectsCard || (!relationshipType && !expectsFileMeta)) {
             let maybeResult = await this.#indexQueryEngine.getInstance(
               linkURL,

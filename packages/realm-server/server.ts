@@ -19,6 +19,7 @@ import {
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
   PUBLISHED_DIRECTORY_NAME,
   RealmPaths,
+  rri,
   fetchSessionRoom,
   userInitiatedPriority,
   hasExtension,
@@ -575,7 +576,7 @@ export class RealmServer {
     return this.realms.find((candidate) => {
       let realmURL = new URL(candidate.url);
       realmURL.protocol = requestURL.protocol;
-      return new RealmPaths(realmURL).inRealm(requestURL);
+      return new RealmPaths(realmURL).inRealm(rri(requestURL.href));
     });
   }
 

@@ -544,11 +544,9 @@ module(basename(__filename), function () {
         );
       });
 
-      test('inRealm throws for scoped RealmIdentifier', function (assert) {
-        assert.throws(
-          () => paths.inRealm(new URL('http://example.com/foo')),
-          /inRealm\(\) requires a URL-based RealmPaths/,
-        );
+      test('inRealm with URL-form RRI returns false for scoped RealmIdentifier', function (assert) {
+        // A URL-form RRI cannot match a scoped (prefix) realm via string prefix.
+        assert.false(paths.inRealm(rri('http://example.com/foo')));
       });
 
       test('local throws for scoped RealmIdentifier', function (assert) {
