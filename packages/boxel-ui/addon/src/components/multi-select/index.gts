@@ -8,7 +8,6 @@ import type {
 } from 'ember-power-select/components/power-select';
 import PowerSelect from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
-import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
 
 import { cn, not } from '../../helpers.ts';
 import { BoxelAfterOptionsComponent } from './after-options.gts';

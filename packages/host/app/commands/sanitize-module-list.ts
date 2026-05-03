@@ -1,5 +1,6 @@
 import {
   isScopedCSSRequest,
+  rri,
   trimExecutableExtension,
 } from '@cardstack/runtime-common';
 

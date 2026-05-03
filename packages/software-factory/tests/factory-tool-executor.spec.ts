@@ -606,12 +606,14 @@ test.describe('realm-search on a private realm', () => {
         '@stranger:localhost',
         [],
       );
-      let unauthorizedServerToken = buildServerToken('@stranger:localhost');
+      let unauthorizedRealmServerToken = buildServerToken(
+        '@stranger:localhost',
+      );
       let unauthorizedSetup = buildTestClient({
         realmUrl: realm.realmURL.href,
         realmToken: `Bearer ${unauthorizedToken}`,
         realmServerUrl: realm.realmServerURL.href,
-        realmServerToken: `Bearer ${unauthorizedServerToken}`,
+        realmServerToken: `Bearer ${unauthorizedRealmServerToken}`,
       });
 
       try {

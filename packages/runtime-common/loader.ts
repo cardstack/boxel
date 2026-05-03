@@ -841,10 +841,6 @@ export class Loader {
       throw exception;
     }
 
-    if (!src) {
-      throw new Error(`bug: should never get here`);
-    }
-
     type DefineFunc = ((
       mid: string,
       depList: string[],

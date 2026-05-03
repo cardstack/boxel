@@ -1,5 +1,10 @@
-import { RealmPaths } from './paths';
+import { RealmPaths, ensureTrailingSlash } from './paths';
 import { baseRealm } from './index';
+import {
+  registerCardReferencePrefix,
+  rri,
+  type RealmIdentifier,
+} from './card-reference-resolver';
 import type { ModuleDescriptor } from './package-shim-handler';
 import {
   PackageShimHandler,

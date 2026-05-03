@@ -8,7 +8,7 @@ import type {
   RealmPermissions,
   DefinitionLookup,
 } from '../index';
-import type { JobInfo } from '../worker';
+import type { JobInfo, IndexingProgressEvent } from '../worker';
 export type * from './lint';
 export * from '#lint-task';
 export * from './full-reindex';

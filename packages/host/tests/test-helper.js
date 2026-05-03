@@ -7,6 +7,7 @@ import { start as examStart } from 'ember-exam/test-support';
 // eslint-disable-next-line ember/no-test-import-export
 import { loadRealmTests } from './live-test';
 import { setupQUnit } from './helpers/setup-qunit';
+import { registerShardWarmup } from './helpers/shard-warmup';
 
 export async function start(examOptions) {
   const application = Application.create({
@@ -19,11 +20,13 @@ export async function start(examOptions) {
     setupQUnit();
     setupOperatorModeParametersMatchAssertion(QUnit.assert);
 
-  setup(QUnit.assert);
-  setupOperatorModeParametersMatchAssertion(QUnit.assert);
+    const urlParams = new URLSearchParams(window.location.search);
+    const isParallelExamRun =
+      urlParams.has('browser') || urlParams.has('partition');
 
     if (isParallelExamRun) {
       QUnit.config.failOnZeroTests = false;
+      registerShardWarmup();
     }
 
     await examStart(examOptions);

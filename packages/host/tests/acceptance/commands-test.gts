@@ -1083,16 +1083,8 @@ module('Acceptance | Commands tests', function (hooks) {
       stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
       aiAssistantOpen: true,
     });
-    await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
-    // open skill menu
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-
-    await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/useful-commands"]',
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/useful-commands`);
 
     // simulate message
     let roomId = getRoomIds().pop()!;

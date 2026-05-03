@@ -113,6 +113,7 @@ module.exports = {
         './lib/**/*.js',
         './server/**/*.js',
         './babel.config.cjs',
+        './scripts/**/*.js',
       ],
       parserOptions: {
         sourceType: 'script',
