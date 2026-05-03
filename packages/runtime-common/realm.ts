@@ -4679,9 +4679,8 @@ export class Realm {
     // than cardDocument() to avoid recursing through attachRealmInfo →
     // getRealmInfo → parseRealmInfo.
     try {
-      let indexEntry = await this.#realmIndexQueryEngine.instance(
-        realmConfigCardURL,
-      );
+      let indexEntry =
+        await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
       if (indexEntry?.type === 'instance') {
         let attrs = (indexEntry.instance.attributes ?? {}) as Record<
           string,
