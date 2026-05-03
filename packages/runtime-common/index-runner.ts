@@ -665,17 +665,21 @@ function assertURLEndsWithJSON(url: URL): URL {
 
 function sortInvalidations(urls: URL[], realmURL: URL): URL[] {
   // Visit order priority:
-  //   1. The realm's RealmConfig card at <realmURL>realm.json — must be
-  //      indexed before any other JSON so that parseRealmInfo can read its
-  //      `name` from the index when /_info is fetched during the first
-  //      cardRender. Without this, a render that fetches /_info before the
-  //      RealmConfig is indexed gets the "Unnamed Workspace" fallback baked
-  //      into og:title; the prerender host caches that on its RealmResource
-  //      and never refetches, so re-running fullIndex doesn't recover.
+  //   1. The realm's RealmConfig card at <realmURL>realm.json — write its
+  //      working-index row first so any /_info query that lands AFTER the
+  //      pass commits (`batch.done()` swaps boxel_index_working into
+  //      boxel_index) sees the RealmConfig overlay and resolves the realm's
+  //      display name. parseRealmInfo's overlay path queries the live
+  //      `boxel_index` table without `useWorkInProgressIndex`, so it cannot
+  //      see realm.json mid-pass; this ordering only guarantees a correct
+  //      answer at and after the pass-end commit (and on subsequent
+  //      passes). Host-side prerender caching of stale realmInfo (see
+  //      RealmResource.fetchInfo's `dropTask` short-circuit) is a separate
+  //      concern not addressed here.
   //   2. Non-.json files (modules, source) — file entries must exist before
   //      the cards that depend on them are rendered.
   //   3. Other .json files, sorted lexically for determinism.
-  let realmConfigHref = new URL('realm.json', realmURL).href;
+  let realmConfigHref = new RealmPaths(realmURL).fileURL('realm.json').href;
   return urls.sort((a, b) => {
     let aRealmConfig = a.href === realmConfigHref;
     let bRealmConfig = b.href === realmConfigHref;
