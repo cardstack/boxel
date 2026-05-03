@@ -189,7 +189,7 @@ export class IndexRunner {
     );
 
     let visitStart = Date.now();
-    invalidations = sortInvalidations(invalidations);
+    invalidations = sortInvalidations(invalidations, current.realmURL);
     invalidations =
       await current.#dependencyResolver.orderInvalidationsByDependencies(
         invalidations,
@@ -295,6 +295,7 @@ export class IndexRunner {
     await current.batch.invalidate(urls);
     let invalidations = sortInvalidations(
       current.batch.invalidations.map((href) => new URL(href)),
+      current.realmURL,
     );
     invalidations =
       await current.#dependencyResolver.orderInvalidationsByDependencies(
@@ -662,11 +663,25 @@ function assertURLEndsWithJSON(url: URL): URL {
   return url;
 }
 
-function sortInvalidations(urls: URL[]): URL[] {
-  // sort invalidations so that .json files are visited after their non-.json counterparts,
-  // which allows us to have the file entry in place before we visit the card JSON and need to render it.
-  // among URLs that both do or both don't end with .json, sort lexically by href for consistency.
+function sortInvalidations(urls: URL[], realmURL: URL): URL[] {
+  // Visit order priority:
+  //   1. The realm's RealmConfig card at <realmURL>realm.json — must be
+  //      indexed before any other JSON so that parseRealmInfo can read its
+  //      `name` from the index when /_info is fetched during the first
+  //      cardRender. Without this, a render that fetches /_info before the
+  //      RealmConfig is indexed gets the "Unnamed Workspace" fallback baked
+  //      into og:title; the prerender host caches that on its RealmResource
+  //      and never refetches, so re-running fullIndex doesn't recover.
+  //   2. Non-.json files (modules, source) — file entries must exist before
+  //      the cards that depend on them are rendered.
+  //   3. Other .json files, sorted lexically for determinism.
+  let realmConfigHref = new URL('realm.json', realmURL).href;
   return urls.sort((a, b) => {
+    let aRealmConfig = a.href === realmConfigHref;
+    let bRealmConfig = b.href === realmConfigHref;
+    if (aRealmConfig !== bRealmConfig) {
+      return aRealmConfig ? -1 : 1;
+    }
     let aJson = a.href.endsWith('.json');
     let bJson = b.href.endsWith('.json');
     if (aJson === bJson) {
