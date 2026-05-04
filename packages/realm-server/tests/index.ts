@@ -193,6 +193,7 @@ import './realm-registry-backfill-test';
 import './realm-registry-reconciler-test';
 import './realm-registry-writes-test';
 import './realm-file-changes-listener-test';
+import './module-cache-invalidation-listener-test';
 import './realm-endpoints/directory-test';
 import './realm-endpoints/info-test';
 import './realm-endpoints/invalidate-urls-test';
