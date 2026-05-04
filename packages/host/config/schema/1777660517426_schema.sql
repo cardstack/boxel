@@ -98,6 +98,7 @@
    created_at,
    file_alias TEXT,
    url_hash TEXT GENERATED ALWAYS AS (url) STORED NOT NULL,
+   timing_diagnostics BLOB,
    PRIMARY KEY ( url, cache_scope, auth_user_id ) 
 );
 
