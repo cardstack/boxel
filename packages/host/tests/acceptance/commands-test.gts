@@ -635,12 +635,14 @@ module('Acceptance | Commands tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
 
-    // The aibot message is delivered via the mock-matrix listener which pushes
-    // it through a 100ms-debounced drain. data-room-settled only tracks
-    // loadAllTimelineEvents, so the second message can lag behind the settled
-    // marker. Wait for the apply button to actually be in the DOM before
-    // clicking, and dump diagnostics if it never shows up so future flakes
-    // are debuggable.
+    // Wait for the apply button to appear before clicking. If it never shows
+    // up, dump enough state to diagnose: which room is rendered (vs which one
+    // we sent messages to), what the matrix-service / panel-service state is,
+    // what the roomResource's matrixRoom looks like, and the full server-side
+    // event list. Past flakes have shown the apply button missing because
+    // processRoomTask returned early on a memberIds-without-aiBot read, and
+    // never re-ran because _events alone didn't change after _roomState was
+    // populated.
     let applySelector = '[data-test-message-idx="1"] [data-test-command-apply]';
     try {
       await waitFor(applySelector, { timeout: 10_000 });
@@ -651,10 +653,53 @@ module('Acceptance | Commands tests', function (hooks) {
       let applyButtons = findAll('[data-test-command-apply]').map((el) =>
         el.getAttribute('data-test-command-apply'),
       );
+      let roomElements = findAll('[data-room-id]').map((el) => ({
+        roomId: el.getAttribute('data-room-id'),
+        settled: el.getAttribute('data-room-settled'),
+        roomName: el.getAttribute('data-test-room-name'),
+      }));
+      let sessionPreparation = findAll(
+        '[data-test-session-preparation]',
+      ).length;
+      let matrixService = getService('matrix-service') as any;
+      let aiAssistantPanelService = getService(
+        'ai-assistant-panel-service',
+      ) as any;
+      let roomResource = matrixService.roomResources?.get?.(roomId);
+      let renderedRoomResource = matrixService.roomResources?.get?.(
+        matrixService.currentRoomId,
+      );
+      // Coerce every field to a JSON-native type up front (string/boolean/
+      // number/array). JSON.stringify silently drops Sets/Maps to "{}", which
+      // would throw away the diagnostic if a service field's underlying type
+      // ever changes.
+      let serviceState = {
+        currentRoomId: String(matrixService.currentRoomId ?? ''),
+        isLoadingTimeline: Boolean(matrixService.isLoadingTimeline),
+        isPreparingSession: Boolean(aiAssistantPanelService.isPreparingSession),
+        loadingRooms: Boolean(aiAssistantPanelService.loadingRooms),
+        aiSessionRoomIds: (aiAssistantPanelService.aiSessionRooms ?? []).map(
+          (r: any) => String(r.roomId ?? ''),
+        ),
+      };
+      let resourceState = (label: string, r: any) => ({
+        label,
+        present: Boolean(r),
+        roomId: String(r?.roomId ?? ''),
+        hasMatrixRoom: Boolean(r?.matrixRoom),
+        memberIds: Array.isArray(r?.matrixRoom?.memberIds)
+          ? r.matrixRoom.memberIds.map((m: any) => String(m))
+          : [],
+        hasRoomState: Boolean(r?.matrixRoom?.hasRoomState),
+        eventsCount: Number(r?.matrixRoom?.events?.length ?? 0),
+        messagesCount: Number(r?.messages?.length ?? 0),
+        isProcessing: Boolean(r?.isProcessing),
+      });
       let roomEventsSummary = getRoomEvents(roomId).map((e) => ({
         eventId: e.event_id,
         type: e.type,
         sender: e.sender,
+        stateKey: (e as any).state_key,
         msgtype: (e.content as any)?.msgtype,
         hasCommandRequests: Array.isArray(
           (e.content as any)?.[APP_BOXEL_COMMAND_REQUESTS_KEY],
@@ -664,9 +709,20 @@ module('Acceptance | Commands tests', function (hooks) {
         '[scripted-command-test] apply button never rendered. Diagnostic:',
         JSON.stringify(
           {
-            roomId,
+            testRoomId: roomId,
+            renderedRoomElements: roomElements,
             renderedMessageIdxs: messageIdxs,
             renderedApplyButtonStates: applyButtons,
+            sessionPreparationElements: sessionPreparation,
+            serviceState,
+            resourceForTestRoom: resourceState(
+              'roomResources.get(testRoomId)',
+              roomResource,
+            ),
+            resourceForCurrentRoom: resourceState(
+              'roomResources.get(currentRoomId)',
+              renderedRoomResource,
+            ),
             roomEvents: roomEventsSummary,
           },
           null,
