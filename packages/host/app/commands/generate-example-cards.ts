@@ -5,7 +5,7 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import {
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   isResolvedCodeRef,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
@@ -285,7 +285,7 @@ function resolveExampleCodeRef(
   }
   try {
     const relativeTo = realm ? new URL(realm) : undefined;
-    const resolved = codeRefWithAbsoluteURL(
+    const resolved = codeRefWithAbsoluteIdentifier(
       codeRef,
       relativeTo,
     ) as ResolvedCodeRef;

@@ -25,7 +25,9 @@ import { TrackedSet, TrackedObject, TrackedArray } from 'tracked-built-ins';
 import type {
   Permissions,
   JWTPayload,
+  RealmIdentifier,
   RealmPermissions,
+  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import {
   Deferred,
@@ -33,6 +35,8 @@ import {
   isRegisteredPrefix,
   cardIdToURL,
   logger,
+  ri,
+  rri,
   SupportedMimeType,
   type RealmInfo,
   RealmPaths,
@@ -61,6 +65,12 @@ import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 
 const log = logger('service:realm');
+
+// The name returned by `RealmService#info()` when the corresponding realm
+// resource hasn't yet resolved its `_info` document. Exported so consumers
+// (e.g. SearchResultSection's render-race diagnostic) can detect the
+// placeholder without duplicating the literal string.
+export const UNKNOWN_REALM_NAME = 'Unknown Workspace';
 
 export type EnhancedRealmInfo = RealmInfo & {
   isIndexing: boolean;
@@ -807,7 +817,7 @@ export default class RealmService extends Service {
       this.identifyRealmTracker;
 
       return {
-        name: 'Unknown Workspace',
+        name: UNKNOWN_REALM_NAME,
         backgroundURL: null,
         iconURL: null,
         showAsCatalog: null,
@@ -824,7 +834,7 @@ export default class RealmService extends Service {
     if (!resource.info) {
       resource.fetchInfo();
       return {
-        name: 'Unknown Workspace',
+        name: UNKNOWN_REALM_NAME,
         backgroundURL: null,
         iconURL: null,
         showAsCatalog: null,
@@ -931,11 +941,11 @@ export default class RealmService extends Service {
     return realmsMeta;
   }
 
-  realmOfURL(url: URL) {
+  realmOf(input: RealmResourceIdentifier | URL): RealmIdentifier | undefined {
+    let id = input instanceof URL ? rri(input.href) : input;
     for (const realm of this.realms.keys()) {
-      let realmURL = new URL(realm);
-      if (new RealmPaths(realmURL).inRealm(url)) {
-        return new URL(realmURL);
+      if (new RealmPaths(new URL(realm)).inRealm(id)) {
+        return ri(realm);
       }
     }
     return undefined;

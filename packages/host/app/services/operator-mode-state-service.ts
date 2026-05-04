@@ -11,9 +11,13 @@ import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
-import type { CodeRef } from '@cardstack/runtime-common';
+import type {
+  CodeRef,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import {
   cardIdToURL,
+  rri,
   RealmPaths,
   type LocalPath,
   isResolvedCodeRef,
@@ -331,7 +335,7 @@ export default class OperatorModeStateService extends Service {
       this.trimItemsFromStack(item);
     }
     let realmPaths = new RealmPaths(new URL(cardRealmUrl));
-    let cardPath = realmPaths.local(cardIdToURL(`${cardId}.json`));
+    let cardPath = realmPaths.local(rri(`${cardId}.json`));
     this.recentFilesService.removeRecentFile(cardPath);
     this.recentCardsService.remove(cardId);
   }
@@ -452,6 +456,30 @@ export default class OperatorModeStateService extends Service {
     return item;
   }
 
+  // Mutate a stack item's format in place (and any related transient
+  // fields) instead of replacing the item. The StackItem class marks
+  // format/request/useBaseTemplate as @tracked, so consumers re-render
+  // reactively. Crucially, the item's IDENTITY is preserved — Glimmer's
+  // {{#each}} keeps the same stack-item component instance, so the
+  // CardRenderer (and the user's CardDef component beneath it) are NOT
+  // remounted on a format swap. CardDefs whose `static isolated ===
+  // static edit` keep DOM state, scroll position, and view-transition
+  // continuity across the toggle.
+  setItemFormat(
+    item: StackItem,
+    format: Format,
+    opts?: { request?: Deferred<string>; useBaseTemplate?: boolean },
+  ): void {
+    if (item.type === 'file') {
+      return;
+    }
+    item.format = format;
+    if (opts && 'request' in opts) item.request = opts.request;
+    if (opts && 'useBaseTemplate' in opts)
+      item.useBaseTemplate = opts.useBaseTemplate;
+    this.schedulePersist();
+  }
+
   editCardOnStack(
     stackIndex: number,
     card: CardDef,
@@ -461,14 +489,10 @@ export default class OperatorModeStateService extends Service {
     if (item.type === 'file') {
       return;
     }
-    this.replaceItemInStack(
-      item,
-      item.clone({
-        request: new Deferred(),
-        format: 'edit',
-        useBaseTemplate: opts?.useBaseTemplate,
-      }),
-    );
+    this.setItemFormat(item, 'edit', {
+      request: new Deferred(),
+      useBaseTemplate: opts?.useBaseTemplate,
+    });
   }
 
   viewCardOnStack(
@@ -480,14 +504,10 @@ export default class OperatorModeStateService extends Service {
     if (item.type === 'file') {
       return;
     }
-    this.replaceItemInStack(
-      item,
-      item.clone({
-        request: new Deferred(),
-        format: 'isolated',
-        useBaseTemplate: opts?.useBaseTemplate,
-      }),
-    );
+    this.setItemFormat(item, 'isolated', {
+      request: new Deferred(),
+      useBaseTemplate: opts?.useBaseTemplate,
+    });
   }
 
   clearStackAndAdd(stackIndex: number, newItem: StackItem) {
@@ -551,8 +571,7 @@ export default class OperatorModeStateService extends Service {
 
   private getRealmURLFromItemId(itemId: string): string {
     try {
-      const url = cardIdToURL(itemId);
-      return this.realm.realmOfURL(url)?.href ?? this.realmURL;
+      return this.realm.realmOf(rri(itemId)) ?? this.realmURL;
     } catch (error) {
       return this.realmURL;
     }
@@ -682,7 +701,7 @@ export default class OperatorModeStateService extends Service {
     if (codeRef && isResolvedCodeRef(codeRef)) {
       //(possibly) in a different module
       this._state.codeSelection = codeRef.name;
-      await this.updateCodePath(new URL(codeRef.module));
+      await this.updateCodePath(codeRef.module);
     } else if (
       codeRef &&
       'type' in codeRef &&
@@ -692,7 +711,7 @@ export default class OperatorModeStateService extends Service {
     ) {
       this._state.fieldSelection = codeRef.field;
       this._state.codeSelection = codeRef.card.name;
-      await this.updateCodePath(new URL(codeRef.card.module));
+      await this.updateCodePath(codeRef.card.module);
     } else if (localName && onLocalSelection) {
       //in the same module
       this._state.codeSelection = localName;
@@ -706,7 +725,7 @@ export default class OperatorModeStateService extends Service {
     if (this._state.codePath && this.realmURL) {
       let realmPath = new RealmPaths(new URL(this.realmURL));
 
-      if (realmPath.inRealm(this._state.codePath)) {
+      if (realmPath.inRealm(rri(this._state.codePath.href))) {
         try {
           return realmPath.local(this._state.codePath!);
         } catch (err: any) {
@@ -731,10 +750,12 @@ export default class OperatorModeStateService extends Service {
   };
 
   async updateCodePath(
-    codePath: URL | null,
+    codePath: RealmResourceIdentifier | URL | null,
     moduleInspectorView?: ModuleInspectorView,
   ) {
-    let canonicalCodePath = await this.determineCanonicalCodePath(codePath);
+    let codePathURL =
+      typeof codePath === 'string' ? cardIdToURL(codePath) : codePath;
+    let canonicalCodePath = await this.determineCanonicalCodePath(codePathURL);
     this._state.codePath = canonicalCodePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
@@ -1255,7 +1276,7 @@ export default class OperatorModeStateService extends Service {
     if (!realmUrl.endsWith('/')) {
       realmUrl = realmUrl + '/';
     }
-    let id = `${realmUrl}index`;
+    let id = rri(`${realmUrl}index`);
     let stackItem = new StackItem({
       id,
       format: 'isolated',
@@ -1271,7 +1292,7 @@ export default class OperatorModeStateService extends Service {
     await this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
-        : new URL(id),
+        : id,
     );
     this.updateSubmode(Submodes.Interact);
 

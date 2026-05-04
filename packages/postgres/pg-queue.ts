@@ -40,7 +40,7 @@ import * as Sentry from '@sentry/node';
 const log = logger('queue');
 const MAX_JOB_TIMEOUT_SEC = FROM_SCRATCH_JOB_TIMEOUT_SEC;
 
-interface JobsTable {
+export interface JobsTable {
   id: number;
   job_type: string;
   concurrency_group: string | null;
@@ -53,7 +53,7 @@ interface JobsTable {
   result: PgPrimitive;
 }
 
-interface JobReservationsTable {
+export interface JobReservationsTable {
   id: number;
   job_id: number;
   created_at: Date;
@@ -79,7 +79,7 @@ async function acquireConcurrencyGroupLock(
 }
 
 // Tracks a task that should loop with a timeout and an interruptible sleep.
-class WorkLoop {
+export class WorkLoop {
   private internalWaker: Deferred<void> | undefined;
   private timeout: NodeJS.Timeout | undefined;
   private _shuttingDown = false;
@@ -433,11 +433,21 @@ export class PgQueuePublisher implements QueuePublisher {
   }
 }
 
+// Cap on how many times a job can be reserved before we abandon it. Once a
+// job has had this many reservation rows, the next claim attempt marks the
+// job rejected instead of starting a new attempt. Two attempts means the
+// job got an initial run and one full retry; if both reservations end with
+// the job still 'unfulfilled', the symptom is almost always a deterministic
+// crash in the worker — looping forever just burns wall-clock waiting on
+// 7200s leases.
+const MAX_RESERVATION_COUNT_PER_JOB = 2;
+
 export class PgQueueRunner implements QueueRunner {
   #isDestroyed = false;
   #pgClient: PgAdapter;
   #workerId: string;
   #maxTimeoutSec: number;
+  #maxReservationCount: number;
   #pollInterval = 10000;
   #handlers: Map<string, Function> = new Map();
   #jobRunner: WorkLoop | undefined;
@@ -447,16 +457,19 @@ export class PgQueueRunner implements QueueRunner {
     adapter,
     workerId,
     maxTimeoutSec = MAX_JOB_TIMEOUT_SEC,
+    maxReservationCount = MAX_RESERVATION_COUNT_PER_JOB,
     priority = 0,
   }: {
     adapter: PgAdapter;
     workerId: string;
     priority?: number;
     maxTimeoutSec?: number;
+    maxReservationCount?: number;
   }) {
     this.#pgClient = adapter;
     this.#workerId = workerId;
     this.#maxTimeoutSec = maxTimeoutSec;
+    this.#maxReservationCount = maxReservationCount;
     this.#priority = priority;
   }
 
@@ -569,6 +582,46 @@ export class PgQueueRunner implements QueueRunner {
             continue;
           }
 
+          // Abandon the job after #maxReservationCount attempts. If the
+          // worker has died and left an orphan reservation each time, those
+          // get freed up by finalizeOrphanedReservations on the
+          // worker-manager side; the prior reservation rows themselves
+          // remain in the table and are the trail of failed attempts.
+          // Counting them lets us stop wasting wall-clock on jobs that
+          // deterministically crash a worker.
+          let priorReservations = (await query([
+            `SELECT COUNT(*)::int as count FROM job_reservations WHERE job_id =`,
+            param(jobToRun.id),
+          ])) as unknown as { count: number }[];
+          if (priorReservations[0].count >= this.#maxReservationCount) {
+            await query([
+              `UPDATE jobs SET `,
+              ...separatedByCommas([
+                [
+                  `result =`,
+                  param({
+                    status: 500,
+                    message: `Job abandoned after ${priorReservations[0].count} failed attempts (max=${this.#maxReservationCount})`,
+                  }),
+                ],
+                [`status = 'rejected'`],
+                [`finished_at = NOW()`],
+              ]),
+              `WHERE id =`,
+              param(jobToRun.id),
+            ] as Expression);
+            await query([`NOTIFY jobs_finished`]);
+            await query(['COMMIT']);
+            log.info(
+              `%s: abandoned job %s after %s prior reservations (max=%s)`,
+              this.#workerId,
+              jobToRun.id,
+              priorReservations[0].count,
+              this.#maxReservationCount,
+            );
+            continue;
+          }
+
           let [{ id: jobReservationId }] = (await query([
             'INSERT INTO job_reservations (job_id, locked_until, worker_id) values (',
             ...separatedByCommas([
@@ -599,6 +652,7 @@ export class PgQueueRunner implements QueueRunner {
               this.runJob(jobToRun.job_type, jobToRun.args, {
                 jobId: jobToRun.id,
                 reservationId: jobReservationId,
+                priority: jobToRun.priority,
               }),
               // we race the job so that it doesn't hold this worker hostage if
               // the job's promise never resolves

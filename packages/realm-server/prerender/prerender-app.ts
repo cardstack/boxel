@@ -109,6 +109,11 @@ export function buildPrerenderApp(options: {
   type RouteBaseArgs = {
     auth: string;
     renderOptions: RenderRouteOptions;
+    // Worker-job priority threaded from the producer side. Stamped
+    // onto the diagnostics blob and used by the per-tab queue / per-
+    // affinity admission semaphore / global render semaphore for
+    // priority-aware dequeue.
+    priority?: number;
   };
 
   type PrerenderArgs = RouteBaseArgs & {
@@ -157,6 +162,16 @@ export function buildPrerenderApp(options: {
       ? (attrs.renderOptions as RenderRouteOptions)
       : {};
 
+  // Optional `priority` from the wire format. Coerce to a finite
+  // number; reject non-numeric values silently (defaults to undefined,
+  // server treats as 0).
+  let parsePriority = (attrs: any): number | undefined => {
+    let raw = attrs?.priority;
+    if (raw === undefined || raw === null) return undefined;
+    let n = Number(raw);
+    return Number.isFinite(n) ? n : undefined;
+  };
+
   let missingAttrs = (attrsToCheck: { value: unknown; name: string }[]) =>
     attrsToCheck
       .filter(({ value }) => !isNonEmptyString(value))
@@ -181,6 +196,7 @@ export function buildPrerenderApp(options: {
       },
       { value: rawAffinityValue, name: 'affinityValue' },
     ]);
+    let priority = parsePriority(attrs);
     return {
       args:
         missing.length > 0
@@ -192,6 +208,7 @@ export function buildPrerenderApp(options: {
               url: rawUrl as string,
               auth: rawAuth as string,
               renderOptions,
+              ...(priority !== undefined ? { priority } : {}),
             },
       missing,
       missingMessage:
@@ -223,6 +240,7 @@ export function buildPrerenderApp(options: {
     if (!isNonEmptyString(rawAffinityValue)) missing.push('affinityValue');
     if (!isNonEmptyString(command)) missing.push('command');
     let commandValue = isNonEmptyString(command) ? command : undefined;
+    let priority = parsePriority(attrs);
     return {
       args:
         missing.length > 0
@@ -234,6 +252,7 @@ export function buildPrerenderApp(options: {
               command: command as string,
               commandInput,
               renderOptions,
+              ...(priority !== undefined ? { priority } : {}),
             },
       missing,
       missingMessage:
@@ -323,9 +342,12 @@ export function buildPrerenderApp(options: {
           (routeArgs as { affinityValue?: string } | undefined)
             ?.affinityValue ?? (attrs.affinityValue as string);
         let renderOptionsForLog = routeArgs?.renderOptions ?? {};
+        let priorityForLog =
+          (routeArgs as { priority?: number } | undefined)?.priority ??
+          (typeof attrs.priority === 'number' ? attrs.priority : 0);
 
         log.debug(
-          `received ${options.requestDescription} ${parsed.logTarget}: affinityType=${affinityTypeForLog} affinityValue=${affinityValueForLog} realm=${realmForLog} options=${JSON.stringify(renderOptionsForLog)}`,
+          `received ${options.requestDescription} ${parsed.logTarget}: affinityType=${affinityTypeForLog} affinityValue=${affinityValueForLog} realm=${realmForLog} priority=${priorityForLog} options=${JSON.stringify(renderOptionsForLog)}`,
         );
         if (parsed.missing.length > 0 || !routeArgs) {
           log.warn(
@@ -389,10 +411,11 @@ export function buildPrerenderApp(options: {
         let poolFlagSuffix =
           poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
         log.info(
-          '%s %s requestId=%s total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+          '%s %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
           options.infoLabel,
           parsed.logTarget,
           requestId,
+          priorityForLog,
           totalMs,
           timings.launchMs,
           timings.waits.semaphoreMs,
@@ -500,6 +523,7 @@ export function buildPrerenderApp(options: {
           auth: args.auth,
           command: args.command,
           commandInput: args.commandInput as Record<string, unknown> | null,
+          ...(args.priority !== undefined ? { priority: args.priority } : {}),
           signal,
         }),
       drainingPromise: options.drainingPromise,
@@ -601,8 +625,9 @@ export function buildPrerenderApp(options: {
         );
       }
 
+      let priority = parsePriority(attrs);
       log.debug(
-        `received visit prerender request ${rawUrl}: affinityType=${rawAffinityType} affinityValue=${rawAffinityValue} realm=${rawRealm} options=${JSON.stringify(renderOptions)}`,
+        `received visit prerender request ${rawUrl}: affinityType=${rawAffinityType} affinityValue=${rawAffinityValue} realm=${rawRealm} priority=${priority ?? 0} options=${JSON.stringify(renderOptions)}`,
       );
       if (missing.length > 0) {
         ctxt.status = 400;
@@ -643,6 +668,7 @@ export function buildPrerenderApp(options: {
           ...(fileData ? { fileData } : {}),
           ...(Array.isArray(types) ? { types } : {}),
           ...(batchId ? { batchId } : {}),
+          ...(priority !== undefined ? { priority } : {}),
           signal: ac.signal,
         })
         .then((result) => ({ result }));
@@ -686,9 +712,10 @@ export function buildPrerenderApp(options: {
         .join(', ');
       let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
       log.info(
-        'visit prerendered %s requestId=%s total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+        'visit prerendered %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
         url,
         requestId,
+        priority ?? 0,
         totalMs,
         timings.launchMs,
         timings.waits.semaphoreMs,

@@ -11,6 +11,7 @@ schema_tmp.sql
 test-results/.last-run.json
 .claude/settings.local.json
 .claude/*.lock
+.claude/worktrees/
 traefik/dynamic/*.yml
 .mise.local.toml
 packages/openrouter-realm/OpenRouterModel/

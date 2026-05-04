@@ -1,5 +1,7 @@
 import { service } from '@ember/service';
 
+import { rri } from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -27,7 +29,7 @@ export default class GetRealmOfUrlCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.GetRealmOfUrlResult> {
     let commandModule = await this.loadCommandModule();
     const { GetRealmOfUrlResult } = commandModule;
-    const realmUrl = this.realm.realmOfURL(new URL(input.url));
-    return new GetRealmOfUrlResult({ realmUrl: realmUrl?.href ?? '' });
+    const realmUrl = this.realm.realmOf(rri(input.url));
+    return new GetRealmOfUrlResult({ realmUrl: realmUrl ?? '' });
   }
 }

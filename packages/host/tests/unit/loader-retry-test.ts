@@ -1,5 +1,9 @@
-import type { SharedTests } from '../helpers';
-import { fetchWithTransientRetry, isRetryableStatus } from '../loader';
+import { module, test } from 'qunit';
+
+import {
+  fetchWithTransientRetry,
+  isRetryableStatus,
+} from '@cardstack/runtime-common/loader';
 
 // Synchronous-completing "sleep" stub so tests don't wait on real timers.
 // fetchWithTransientRetry takes any (ms) => Promise<void>, so resolving
@@ -30,15 +34,15 @@ function queued(statuses: number[]): {
   };
 }
 
-const tests: SharedTests<Record<string, never>> = Object.freeze({
-  'returns the first response when status is 2xx': async (assert) => {
+module('Unit | Loader transient 5xx retry (CS-10820)', function () {
+  test('returns the first response when status is 2xx', async function (assert) {
     let { fetch, calls } = queued([200]);
     let response = await fetchWithTransientRetry(fetch, { sleep: noSleep });
     assert.strictEqual(response.status, 200, 'returned the 200 response');
     assert.strictEqual(calls(), 1, 'fetch invoked exactly once');
-  },
+  });
 
-  'retries once after a 502 then succeeds on 200': async (assert) => {
+  test('retries once after a 502 then succeeds on 200', async function (assert) {
     let { fetch, calls } = queued([502, 200]);
     let onRetryCalls: Array<{ attempt: number; status: number }> = [];
     let response = await fetchWithTransientRetry(fetch, {
@@ -52,18 +56,16 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       [{ attempt: 1, status: 502 }],
       'onRetry called once for the 502',
     );
-  },
+  });
 
-  'retries on 503 and 504 (both transient)': async (assert) => {
+  test('retries on 503 and 504 (both transient)', async function (assert) {
     let { fetch, calls } = queued([503, 504, 200]);
     let response = await fetchWithTransientRetry(fetch, { sleep: noSleep });
     assert.strictEqual(response.status, 200, 'succeeded on third attempt');
     assert.strictEqual(calls(), 3, 'fetch invoked three times');
-  },
+  });
 
-  'surfaces last 5xx response after exhausting retry attempts': async (
-    assert,
-  ) => {
+  test('surfaces last 5xx response after exhausting retry attempts', async function (assert) {
     let { fetch, calls } = queued([502, 502, 502, 502]);
     let response = await fetchWithTransientRetry(fetch, {
       sleep: noSleep,
@@ -79,9 +81,9 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       4,
       'fetch invoked exactly 4 times (initial + 3 retries)',
     );
-  },
+  });
 
-  'does not retry on 500 (not transient)': async (assert) => {
+  test('does not retry on 500 (not transient)', async function (assert) {
     let { fetch, calls } = queued([500]);
     let response = await fetchWithTransientRetry(fetch, { sleep: noSleep });
     assert.strictEqual(response.status, 500, '500 surfaced immediately');
@@ -94,18 +96,18 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       isRetryableStatus(500),
       '500 is not a retryable status (guards against accidental widening)',
     );
-  },
+  });
 
-  'does not retry on 4xx (404, 401, 403)': async (assert) => {
+  test('does not retry on 4xx (404, 401, 403)', async function (assert) {
     for (let status of [404, 401, 403, 400]) {
       let { fetch, calls } = queued([status]);
       let response = await fetchWithTransientRetry(fetch, { sleep: noSleep });
       assert.strictEqual(response.status, status, `${status} surfaced`);
       assert.strictEqual(calls(), 1, `${status} did not trigger a retry`);
     }
-  },
+  });
 
-  'does not retry when the fetch call throws': async (assert) => {
+  test('does not retry when the fetch call throws', async function (assert) {
     let callCount = 0;
     let thrower = async () => {
       callCount++;
@@ -122,9 +124,9 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       );
     }
     assert.strictEqual(callCount, 1, 'fetch invoked exactly once, no retry');
-  },
+  });
 
-  'honors custom backoff delays and passes them to onRetry': async (assert) => {
+  test('honors custom backoff delays and passes them to onRetry', async function (assert) {
     let { fetch } = queued([502, 502, 200]);
     let observedDelays: number[] = [];
     await fetchWithTransientRetry(fetch, {
@@ -137,9 +139,9 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       [11, 22],
       'onRetry sees the first two configured delays',
     );
-  },
+  });
 
-  'disposes each discarded response before retrying': async (assert) => {
+  test('disposes each discarded response before retrying', async function (assert) {
     // Fake response carrying an id + a cancel() stub so we can assert that
     // each retried response got its body released before the next attempt.
     let nextId = 0;
@@ -169,9 +171,9 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       [1, 2],
       'dispose called for each discarded retry response, in order, but not for the final one',
     );
-  },
+  });
 
-  'does not call dispose when no retry happens': async (assert) => {
+  test('does not call dispose when no retry happens', async function (assert) {
     let disposeCalls = 0;
     let { fetch } = queued([200]);
     await fetchWithTransientRetry(fetch, {
@@ -181,9 +183,9 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       },
     });
     assert.strictEqual(disposeCalls, 0, 'first-try success skips dispose');
-  },
+  });
 
-  'dispose errors do not mask the retry path': async (assert) => {
+  test('dispose errors do not mask the retry path', async function (assert) {
     let { fetch, calls } = queued([502, 200]);
     let response = await fetchWithTransientRetry(fetch, {
       sleep: noSleep,
@@ -197,7 +199,5 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       'retry still succeeded despite dispose throwing',
     );
     assert.strictEqual(calls(), 2, 'fetch still invoked twice');
-  },
+  });
 });
-
-export default tests;

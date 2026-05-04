@@ -104,7 +104,7 @@ export default class ViewSelector extends Component<Signature> {
             color-mix(
               in oklab,
               var(--foreground, var(--boxel-dark)) 42%,
-              transparent
+              var(--background, var(--boxel-light))
             )
           );
           border-radius: var(

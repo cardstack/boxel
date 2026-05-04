@@ -2,6 +2,9 @@
   "apiVersion": "dashboard.grafana.app/v1beta1",
   "kind": "Dashboard",
   "metadata": {
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    },
     "name": "eetquziy9np4wa"
   },
   "spec": {
@@ -24,7 +27,6 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
-    "id": 24,
     "links": [
       {
         "asDropdown": false,
@@ -86,8 +88,7 @@
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "yellow",
-                  "value": null
+                  "color": "yellow"
                 }
               ]
             }
@@ -250,7 +251,7 @@
       }
     ],
     "refresh": "5s",
-    "schemaVersion": 39,
+    "schemaVersion": 42,
     "tags": [],
     "templating": {
       "list": [
@@ -283,7 +284,7 @@
         {
           "hide": 2,
           "name": "realm_server",
-          "query": "https://realms-staging.stack.cards/",
+          "query": "__REALM_SERVER_URL__",
           "skipUrlSync": false,
           "type": "constant"
         }
@@ -296,8 +297,6 @@
     "timepicker": {},
     "timezone": "browser",
     "title": "User Credits",
-    "uid": "eetquziy9np4wa",
-    "version": 1,
     "weekStart": ""
   }
 }

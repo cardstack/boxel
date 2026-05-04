@@ -1,3 +1,5 @@
+import { tracked } from '@glimmer/tracking';
+
 import { isFileDefInstance } from '@cardstack/runtime-common';
 import type { Deferred } from '@cardstack/runtime-common';
 import type { Store, StoreReadType } from '@cardstack/runtime-common';
@@ -10,7 +12,6 @@ interface Args {
   stackIndex: number;
   id: string;
   type?: StackItemType;
-  closeAfterSaving?: boolean;
   useBaseTemplate?: boolean;
   relationshipContext?: {
     fieldName?: string;
@@ -52,11 +53,18 @@ export function detectStackItemTypeForTarget(
 }
 
 export class StackItem {
-  format: Format;
-  request?: Deferred<string>;
+  // `format`, `request`, `useBaseTemplate` are tracked so that callers
+  // can mutate them IN PLACE (e.g. flipping `format` from 'isolated' →
+  // 'edit') without replacing the StackItem instance. Replacing the
+  // instance forces Glimmer's `{{#each}}` to destroy and re-mount the
+  // entire stack-item subtree — losing scroll position, DOM state,
+  // view transitions, and triggering prefersWideFormat to narrow then
+  // re-expand. In-place mutation lets shared-template formats (CardDef
+  // where `static isolated === static edit`) flip without remounting.
+  @tracked format: Format;
+  @tracked request?: Deferred<string>;
+  @tracked useBaseTemplate?: boolean;
   stackIndex: number;
-  closeAfterSaving?: boolean;
-  useBaseTemplate?: boolean;
   type: StackItemType;
   #id: string;
   relationshipContext?:
@@ -73,7 +81,6 @@ export class StackItem {
       stackIndex,
       id,
       type,
-      closeAfterSaving,
       useBaseTemplate,
       relationshipContext,
     } = args;
@@ -83,7 +90,6 @@ export class StackItem {
     this.request = request;
     this.stackIndex = stackIndex;
     this.type = inferStackItemType(type);
-    this.closeAfterSaving = closeAfterSaving;
     this.useBaseTemplate = useBaseTemplate;
     this.relationshipContext = relationshipContext;
   }
@@ -97,7 +103,6 @@ export class StackItem {
       id,
       format,
       request,
-      closeAfterSaving,
       stackIndex,
       relationshipContext,
       type,
@@ -106,7 +111,6 @@ export class StackItem {
     return new StackItem({
       format,
       request,
-      closeAfterSaving,
       id,
       type,
       stackIndex,
