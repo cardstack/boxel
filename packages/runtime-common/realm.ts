@@ -132,7 +132,6 @@ import {
 } from './matrix-client';
 import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler';
 
-import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
 import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
@@ -2162,7 +2161,15 @@ export class Realm {
     let source = await fileContentToText(fileWithContent);
     let transpiled: string;
     try {
-      transpiled = await transpileJS(source, fileWithContent.path);
+      // Force an absolute path so babel's internal path.resolve doesn't depend
+      // on process.cwd(), which differs between node and browser shims and was
+      // observed to drop the leading slash on vite builds — producing a
+      // moduleName of "dir/person.gts" instead of "/dir/person.gts" in
+      // compiled templates.
+      let debugFilename = fileWithContent.path.startsWith('/')
+        ? fileWithContent.path
+        : `/${fileWithContent.path}`;
+      transpiled = await transpileJS(source, debugFilename);
     } catch (err: any) {
       let cardError =
         err instanceof CardError
@@ -2384,13 +2391,13 @@ export class Realm {
         );
       }
     } catch (e: any) {
-      if (e instanceof TokenExpiredError) {
+      if (e?.constructor?.name === 'TokenExpiredError') {
         this.#log.warn(
           `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
-      if (e instanceof JsonWebTokenError) {
+      if (e?.constructor?.name === 'JsonWebTokenError') {
         this.#log.warn(
           `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
         );

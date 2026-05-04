@@ -599,7 +599,9 @@ test.describe('realm-search on a private realm', () => {
 
       ownerSetup.cleanup();
 
-      // Search with a token for a different user who has no permissions — should fail with 403
+      // Search with a token for a different user who has no permissions — should fail with 403.
+      // Federated search auth uses the realm-server token (via authedRealmServerFetch),
+      // so the server token must also belong to the stranger user.
       let unauthorizedToken = realm.createBearerToken(
         '@stranger:localhost',
         [],

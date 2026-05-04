@@ -1,5 +1,5 @@
 import type * as JSONTypes from 'json-typescript';
-import { Readable } from 'stream';
+import type { Readable as NodeReadable } from 'stream';
 import { parse } from 'date-fns';
 import {
   authorizationMiddleware,
@@ -343,6 +343,11 @@ export function getReader(
 
       let stream: ByteStream;
       if ('nodeStream' in response && response.nodeStream) {
+        // Lazy-load node stream in the node worker path; browsers never hit
+        // this branch (no response.nodeStream) and don't need the module.
+        let { Readable } = (await import('stream')) as {
+          Readable: typeof NodeReadable;
+        };
         if (Readable.toWeb) {
           stream = Readable.toWeb(
             response.nodeStream,
