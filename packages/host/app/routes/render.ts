@@ -1297,13 +1297,7 @@ export default class RenderRoute extends Route<Model> {
     if (!container) {
       return;
     }
-    // 'unusable' is a stronger signal than 'error' — set by the window-error
-    // path and by #transitionToErrorRoute's early-failure fallback to force
-    // page eviction (renderCaptureToError gates `evict` on 'unusable').
-    // Don't downgrade it.
-    if (container.dataset.prerenderStatus !== 'unusable') {
-      container.dataset.prerenderStatus = 'error';
-    }
+    container.dataset.prerenderStatus = 'error';
     if (context.cardId && !container.dataset.prerenderId) {
       container.dataset.prerenderId = context.cardId;
     }
