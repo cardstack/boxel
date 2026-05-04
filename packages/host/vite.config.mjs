@@ -6,7 +6,12 @@ import {
 } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { dirname } from 'node:path';
 import { scopedCSS } from 'glimmer-scoped-css/rollup';
+import { boxelUIChecksumPlugin } from './lib/build/boxel-ui-checksum-plugin.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const require = createRequire(import.meta.url);
 
@@ -151,6 +156,7 @@ export default defineConfig(({ mode }) => ({
       babelHelpers: 'runtime',
       extensions,
     }),
+    boxelUIChecksumPlugin(__dirname),
   ],
   optimizeDeps: {
     exclude: ['@sqlite.org/sqlite-wasm', 'content-tag'],
