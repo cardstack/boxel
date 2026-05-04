@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import { registerCancelIndexingCommand } from './cancel-indexing';
 import { registerCreateCommand } from './create';
+import { registerHistoryCommand } from './history';
 import { registerListCommand } from './list';
 import { registerPullCommand } from './pull';
 import { registerPushCommand } from './push';
@@ -14,6 +15,7 @@ export function registerRealmCommand(program: Command): void {
 
   registerCancelIndexingCommand(realm);
   registerCreateCommand(realm);
+  registerHistoryCommand(realm);
   registerListCommand(realm);
   registerPullCommand(realm);
   registerPushCommand(realm);

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-05-01",
+  "generated": "2026-05-04",
   "threshold": {
     "relative": 0.1,
     "absolute_mb": 5
@@ -67,7 +67,7 @@
       "delta_mb": 23.7
     },
     "Acceptance | file chooser tests | upload size limit": {
-      "delta_mb": 0.1
+      "delta_mb": -2.5
     },
     "Acceptance | file def": {
       "delta_mb": 32.4
