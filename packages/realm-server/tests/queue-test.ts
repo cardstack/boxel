@@ -422,6 +422,354 @@ module(basename(__filename), function () {
       }
     });
 
+    test('incremental dedup: a duplicate publish for an in-flight job attaches as a late waiter', async function (assert) {
+      // Closes the staging-observed race where the PATCH-path enqueue
+      // gets claimed by the worker before the file-watcher echo can
+      // pre-claim coalesce. Without dedup, a second 'incremental-index'
+      // row is inserted for the same change set and the worker runs the
+      // same indexing pass twice. With dedup, the second publish reuses
+      // the running job's id and registers a late waiter.
+      await runner.destroy();
+      let realmURL = 'http://example.com/in-flight-dedup-identical/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'in-flight-dedup-worker',
+      });
+      worker.register(
+        'incremental-index',
+        async (args: { changes: { url: string }[] }) => {
+          started.fulfill();
+          await release.promise;
+          return {
+            invalidations: args.changes.map((change) => change.url),
+            ignoreData: {},
+            stats: {
+              instancesIndexed: 0,
+              filesIndexed: 0,
+              instanceErrors: 0,
+              fileErrors: 0,
+              totalIndexEntries: 0,
+            },
+          };
+        },
+      );
+
+      try {
+        await worker.start();
+
+        let first = await publishIncrementalIndexJob({
+          clientRequestId: 'request-1',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+          },
+        });
+        // Wait for the worker to actually claim and start running the
+        // job before publishing the duplicate, otherwise we'd be testing
+        // pre-claim coalesce instead.
+        await started.promise;
+
+        let second = await publishIncrementalIndexJob({
+          clientRequestId: 'request-2',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+          },
+        });
+
+        assert.strictEqual(
+          first.id,
+          second.id,
+          'duplicate publish reuses the in-flight job id instead of creating a new row',
+        );
+
+        let rows = (await adapter.execute(
+          `SELECT id
+             FROM jobs
+             WHERE concurrency_group = $1
+               AND status = 'unfulfilled'`,
+          { bind: [`indexing:${realmURL}`] },
+        )) as { id: number }[];
+        assert.strictEqual(
+          rows.length,
+          1,
+          'only one incremental-index row exists; duplicate did not enqueue a second job',
+        );
+
+        release.fulfill();
+        let [firstResult, secondResult] = await Promise.all([
+          first.done,
+          second.done,
+        ]);
+        assert.strictEqual(firstResult.clientRequestId, 'request-1');
+        assert.strictEqual(secondResult.clientRequestId, 'request-2');
+        assert.deepEqual(firstResult.invalidations, [`${realmURL}a`]);
+        assert.deepEqual(secondResult.invalidations, [`${realmURL}a`]);
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
+    test('incremental dedup: an incoming subset of the in-flight change set attaches as a late waiter', async function (assert) {
+      // Subset case: in-flight job is processing [a,b] and a new publish
+      // arrives for just [a]. The running indexing pass already covers
+      // url a, so the new caller can reuse it.
+      await runner.destroy();
+      let realmURL = 'http://example.com/in-flight-dedup-subset/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'in-flight-dedup-subset-worker',
+      });
+      worker.register(
+        'incremental-index',
+        async (args: { changes: { url: string }[] }) => {
+          started.fulfill();
+          await release.promise;
+          return {
+            invalidations: args.changes.map((change) => change.url),
+            ignoreData: {},
+            stats: {
+              instancesIndexed: 0,
+              filesIndexed: 0,
+              instanceErrors: 0,
+              fileErrors: 0,
+              totalIndexEntries: 0,
+            },
+          };
+        },
+      );
+
+      try {
+        await worker.start();
+
+        let first = await publishIncrementalIndexJob({
+          clientRequestId: 'request-1',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [
+              { url: `${realmURL}a`, operation: 'update' },
+              { url: `${realmURL}b`, operation: 'update' },
+            ],
+          },
+        });
+        await started.promise;
+
+        let second = await publishIncrementalIndexJob({
+          clientRequestId: 'request-2',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+          },
+        });
+
+        assert.strictEqual(
+          first.id,
+          second.id,
+          'subset publish reuses the in-flight job id',
+        );
+
+        let rows = (await adapter.execute(
+          `SELECT id
+             FROM jobs
+             WHERE concurrency_group = $1
+               AND status = 'unfulfilled'`,
+          { bind: [`indexing:${realmURL}`] },
+        )) as { id: number }[];
+        assert.strictEqual(rows.length, 1);
+
+        release.fulfill();
+        let [firstResult, secondResult] = await Promise.all([
+          first.done,
+          second.done,
+        ]);
+        assert.strictEqual(firstResult.clientRequestId, 'request-1');
+        assert.strictEqual(secondResult.clientRequestId, 'request-2');
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
+    test('incremental dedup: incoming with a non-covered url enqueues a new job', async function (assert) {
+      // The running job is not a superset, so the late publish must
+      // enqueue its own job. Otherwise the new url would never be
+      // indexed.
+      await runner.destroy();
+      let realmURL = 'http://example.com/in-flight-dedup-different/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let invocations = 0;
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'in-flight-dedup-diff-worker',
+      });
+      worker.register(
+        'incremental-index',
+        async (args: { changes: { url: string }[] }) => {
+          invocations += 1;
+          if (invocations === 1) {
+            started.fulfill();
+            await release.promise;
+          }
+          return {
+            invalidations: args.changes.map((change) => change.url),
+            ignoreData: {},
+            stats: {
+              instancesIndexed: 0,
+              filesIndexed: 0,
+              instanceErrors: 0,
+              fileErrors: 0,
+              totalIndexEntries: 0,
+            },
+          };
+        },
+      );
+
+      try {
+        await worker.start();
+
+        let first = await publishIncrementalIndexJob({
+          clientRequestId: 'request-1',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+          },
+        });
+        await started.promise;
+
+        let second = await publishIncrementalIndexJob({
+          clientRequestId: 'request-2',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}b`, operation: 'update' }],
+          },
+        });
+
+        assert.notStrictEqual(
+          first.id,
+          second.id,
+          'non-covered publish does not attach to the in-flight job',
+        );
+
+        let rows = (await adapter.execute(
+          `SELECT id, args
+             FROM jobs
+             WHERE concurrency_group = $1
+               AND status = 'unfulfilled'
+             ORDER BY id`,
+          { bind: [`indexing:${realmURL}`] },
+        )) as { id: number; args: { changes: { url: string }[] } }[];
+        assert.strictEqual(
+          rows.length,
+          2,
+          'two distinct rows exist when the in-flight changes do not cover the incoming changes',
+        );
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
+    test('incremental dedup: operation mismatch enqueues a new job even when urls match', async function (assert) {
+      // An in-flight `update` on url X does not satisfy a new `delete`
+      // on the same X — they are different operations and must run as
+      // separate work.
+      await runner.destroy();
+      let realmURL = 'http://example.com/in-flight-dedup-op-mismatch/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let invocations = 0;
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'in-flight-dedup-op-worker',
+      });
+      worker.register(
+        'incremental-index',
+        async (args: { changes: { url: string }[] }) => {
+          invocations += 1;
+          if (invocations === 1) {
+            started.fulfill();
+            await release.promise;
+          }
+          return {
+            invalidations: args.changes.map((change) => change.url),
+            ignoreData: {},
+            stats: {
+              instancesIndexed: 0,
+              filesIndexed: 0,
+              instanceErrors: 0,
+              fileErrors: 0,
+              totalIndexEntries: 0,
+            },
+          };
+        },
+      );
+
+      try {
+        await worker.start();
+
+        let first = await publishIncrementalIndexJob({
+          clientRequestId: 'request-1',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+          },
+        });
+        await started.promise;
+
+        let second = await publishIncrementalIndexJob({
+          clientRequestId: 'request-2',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'delete' }],
+          },
+        });
+
+        assert.notStrictEqual(
+          first.id,
+          second.id,
+          'operation mismatch publish does not attach to the in-flight job',
+        );
+
+        let rows = (await adapter.execute(
+          `SELECT id
+             FROM jobs
+             WHERE concurrency_group = $1
+               AND status = 'unfulfilled'`,
+          { bind: [`indexing:${realmURL}`] },
+        )) as { id: number }[];
+        assert.strictEqual(rows.length, 2);
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
     test('incremental does not coalesce onto pending from-scratch in same group', async function (assert) {
       await runner.destroy();
 
