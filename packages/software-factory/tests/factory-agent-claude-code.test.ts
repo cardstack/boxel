@@ -500,7 +500,13 @@ module('factory-agent-claude-code', function () {
       );
     });
 
-    test('omits cwd when no workspaceDir is configured', async function (assert) {
+    test('disables native fs entirely when no workspaceDir is configured', async function (assert) {
+      // Without a workspaceDir we have no cwd to scope against and the
+      // canUseTool hook can't compute "inside the workspace." Enabling
+      // native Read / Write / Bash in that state would let the model
+      // touch the host filesystem unrestricted, which is the regression
+      // this guard prevents. Verify that the agent falls back to
+      // MCP-only when workspaceDir is missing.
       let capturedOptions: Options | undefined;
       let agent = new ClaudeCodeFactoryAgent(
         {},
@@ -515,7 +521,35 @@ module('factory-agent-claude-code', function () {
 
       await agent.run(makeContext(), [makeTool({ name: 'signal_done' })]);
 
-      assert.strictEqual(capturedOptions!.cwd, undefined);
+      assert.strictEqual(
+        capturedOptions!.cwd,
+        undefined,
+        'no cwd is set when workspaceDir is missing',
+      );
+      assert.strictEqual(
+        capturedOptions!.canUseTool,
+        undefined,
+        'no path-scoping hook is wired when workspaceDir is missing',
+      );
+      assert.deepEqual(
+        capturedOptions!.tools,
+        [],
+        'native fs tools are disabled when workspaceDir is missing',
+      );
+      let allowed = capturedOptions!.allowedTools ?? [];
+      for (let nativeTool of [
+        'Read',
+        'Write',
+        'Edit',
+        'Bash',
+        'Glob',
+        'Grep',
+      ]) {
+        assert.notOk(
+          allowed.includes(nativeTool),
+          `${nativeTool} is not in allowedTools when workspaceDir is missing`,
+        );
+      }
     });
 
     test('DONE_SIGNAL from a tool handler ends the run with status=done', async function (assert) {

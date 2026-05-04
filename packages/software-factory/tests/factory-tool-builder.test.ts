@@ -706,7 +706,7 @@ module('factory-tool-builder > registered tool delegation', function () {
     let result = (await realmCreateTool.execute({
       'realm-server-url': 'https://realms.example.test/',
       name: 'New Realm',
-      endpoint: 'user/new',
+      endpoint: 'new',
     })) as ToolResult;
 
     assert.strictEqual(result.tool, 'realm-create');

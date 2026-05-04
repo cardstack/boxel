@@ -35,7 +35,7 @@ function realmCreateArgs(overrides?: Record<string, unknown>) {
   return {
     'realm-server-url': 'https://realms.example.test/',
     name: 'My Realm',
-    endpoint: 'user/my-realm',
+    endpoint: 'my-realm',
     ...overrides,
   };
 }

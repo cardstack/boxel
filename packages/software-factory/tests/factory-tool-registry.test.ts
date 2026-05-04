@@ -154,7 +154,7 @@ module('factory-tool-registry > validateArgs', function () {
     let errors = registry.validateArgs('realm-create', {
       'realm-server-url': 'http://example.test/',
       name: 'My Realm',
-      endpoint: 'user/my-realm',
+      endpoint: 'my-realm',
     });
     assert.deepEqual(errors, []);
   });
@@ -192,7 +192,7 @@ module('factory-tool-registry > validateArgs', function () {
     let errors = registry.validateArgs('realm-create', {
       'realm-server-url': 'http://example.test/',
       name: 'My Realm',
-      endpoint: 'user/my-realm',
+      endpoint: 'my-realm',
       // iconURL and backgroundURL are optional
     });
     assert.deepEqual(errors, [], 'no errors for missing optional args');
@@ -203,7 +203,7 @@ module('factory-tool-registry > validateArgs', function () {
     let errors = registry.validateArgs('realm-create', {
       'realm-server-url': '',
       name: 'My Realm',
-      endpoint: 'user/my-realm',
+      endpoint: 'my-realm',
     });
     assert.true(errors.some((e) => e.includes('realm-server-url')));
   });
@@ -213,7 +213,7 @@ module('factory-tool-registry > validateArgs', function () {
     let errors = registry.validateArgs('realm-create', {
       'realm-server-url': '   ',
       name: 'My Realm',
-      endpoint: 'user/my-realm',
+      endpoint: 'my-realm',
     });
     assert.true(
       errors.some((e) => e.includes('realm-server-url')),

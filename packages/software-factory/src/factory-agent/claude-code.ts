@@ -191,41 +191,63 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       tools: sdkTools,
     });
 
+    // Native fs tools are only safe when we have a workspace to scope
+    // them to. Without `workspaceDir` we'd run with no `cwd` and no
+    // `canUseTool` hook — relative paths would resolve against the
+    // process's working directory and absolute paths would be
+    // unrestricted, which is exactly the host-fs access this whole
+    // change is trying to prevent. So if no workspace was configured,
+    // fall back to MCP-only (factory tools and nothing else).
+    let workspaceDir = this.config.workspaceDir;
+    let nativeFsEnabled = workspaceDir !== undefined;
+
     let allowedTools = [
-      ...NATIVE_FS_TOOLS,
+      ...(nativeFsEnabled ? NATIVE_FS_TOOLS : []),
       ...mcpFactoryTools.map((t) => `mcp__${MCP_SERVER_NAME}__${t.name}`),
     ];
 
     let options: Options = {
       systemPrompt,
       mcpServers: { [MCP_SERVER_NAME]: mcpServer },
-      // Enable native Claude Code fs / shell tools so the model can read
-      // and write workspace files directly (Read / Write / Edit) and run
-      // boxel CLI / shell helpers (Bash, Glob, Grep). Realm I/O still goes
-      // through factory MCP tools — the ralph loop owns the realm-side
-      // control plane, Claude Code is the LLM + native-tool surface.
-      tools: NATIVE_FS_TOOLS,
+      // When `workspaceDir` is configured, expose the SDK's native fs /
+      // shell tools so the model can work on workspace files directly
+      // (`Read` / `Write` / `Edit`) and run inspection helpers (`Bash`,
+      // `Glob`, `Grep`). Bash is **not** path-scoped — see the
+      // `canUseTool` note below — so the prompt addendum constrains it
+      // to read-only inspection. The structured fs tools are the path
+      // a model takes to *write*, and those are scoped.
+      tools: nativeFsEnabled ? NATIVE_FS_TOOLS : [],
       allowedTools,
-      // `dontAsk` (instead of `bypassPermissions`) keeps the auto-approve
-      // semantics for everything in `allowedTools` while still firing
-      // `canUseTool` so we can scope native fs operations to the
-      // factory workspace. `bypassPermissions` skips canUseTool, which
-      // let the model write to absolute paths outside the workspace.
+      // `dontAsk` (instead of `bypassPermissions`) keeps the auto-
+      // approve semantics for everything in `allowedTools` while still
+      // firing `canUseTool` so we can scope native fs operations.
+      // bypassPermissions skips canUseTool, which let the model write
+      // to absolute paths outside the workspace in early runs.
+      //
+      // Scope of the hook: it gates the typed fs tools (`Read`,
+      // `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `NotebookRead`)
+      // because their `file_path` arg is structured and trivial to
+      // validate. `Bash` is intentionally NOT gated — parsing
+      // arbitrary shell for write side effects (`>`, `tee`, `cp`,
+      // `mv`, …) is its own footgun, and read-only inspection (`ls`,
+      // `find`, `cat`, `boxel status`) needs the broader fs. The
+      // prompt addendum is the contract for Bash; the hook is the
+      // structural guard for the typed tools.
       permissionMode: 'dontAsk',
-      ...(this.config.workspaceDir
-        ? {
-            canUseTool: buildWorkspaceScopedCanUseTool(
-              this.config.workspaceDir,
-            ),
-          }
+      ...(workspaceDir
+        ? { canUseTool: buildWorkspaceScopedCanUseTool(workspaceDir) }
         : {}),
       maxTurns: MAX_TOOL_USE_TURNS,
-      // Anchor native fs tools to the factory workspace so relative paths
-      // emitted by the model (e.g. `sticky-note.gts`) resolve inside the
-      // mirror of the target realm, not the user's home directory.
-      ...(this.config.workspaceDir ? { cwd: this.config.workspaceDir } : {}),
+      // Anchor native fs tools to the factory workspace so relative
+      // paths emitted by the model (e.g. `sticky-note.gts`) resolve
+      // inside the mirror of the target realm, not the user's home
+      // directory. Bash also inherits this cwd, which keeps simple
+      // relative-path commands (`cat sticky-note.gts`) inside the
+      // workspace by default.
+      ...(workspaceDir ? { cwd: workspaceDir } : {}),
       // Isolate from the host user's Claude Code settings — we want
-      // deterministic agent behavior regardless of whose machine this runs on.
+      // deterministic agent behavior regardless of whose machine this
+      // runs on.
       settingSources: [],
       abortController,
       debug: this.config.debug === true,
@@ -365,11 +387,19 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       '- Card instances under `<CardType>/<id>.json` (the user data the cards represent)',
       '- Inspection: `Read`, `Glob`, `Grep`, and read-only `Bash` (`ls`, `find`, `cat`, `boxel status`, `boxel history`)',
       '',
-      'Stay inside the workspace directory. **`Read` / `Write` / `Edit` /',
-      '`MultiEdit` / `NotebookEdit` / `NotebookRead` are enforced to resolve',
-      'inside the workspace** — absolute paths or `..`-traversal that escape',
-      'are rejected with a deny message before they reach the filesystem.',
-      'Use realm-relative paths only.',
+      'Stay inside the workspace directory.',
+      '',
+      '- **`Read` / `Write` / `Edit` / `MultiEdit` / `NotebookEdit` /',
+      '  `NotebookRead` are structurally enforced** to resolve inside the',
+      '  workspace — absolute paths or `..`-traversal that escape are',
+      '  rejected with a deny message before they reach the filesystem.',
+      '  Use realm-relative paths only.',
+      '- **`Bash` is NOT enforced.** The shell runs with the workspace as',
+      '  its cwd, but you can still write outside via redirection (`>`,',
+      '  `tee`), copy/move (`cp`, `mv`), or absolute paths inside commands.',
+      '  Treat `Bash` as **read-only inspection** only — `ls`, `find`,',
+      '  `cat`, `grep`, read-only `boxel` CLI commands. If you need to',
+      '  write a file, use `Write` or `Edit` so the workspace guard fires.',
       '',
       '## Tracker-schema cards + realm operations — use factory MCP tools',
       '',

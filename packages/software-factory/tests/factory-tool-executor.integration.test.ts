@@ -12,12 +12,16 @@ import { buildTestClient } from './helpers/test-client';
 // ---------------------------------------------------------------------------
 //
 // After the CS-10883 retirements the registry only contains
-// `realm-create`, so the executor's request-shape coverage moved into
-// the `factory-tool-executor.spec.ts` Playwright suite (which exercises
-// realm-create against a real harness server). What stays here are the
-// pure unit-level checks: argument-validation rejection and the safety
-// guards that fire BEFORE any HTTP traffic — those don't need a live
-// realm and shouldn't drag the harness in.
+// `realm-create`, and the per-tool request-shape coverage that used to
+// live here (realm-read / realm-write / realm-delete / realm-search)
+// went away with those tools. `realm-create` does NOT yet have an
+// equivalent live HTTP-shape test in the Playwright spec — the
+// entrypoint integration test covers it end-to-end via `factory:go`,
+// but a focused unit-level "does the executor send the right shape to
+// `_create-realm`?" assertion is a follow-up. What stays here are the
+// pre-flight safety guards that fire BEFORE any HTTP traffic
+// (unregistered tool, source realm, foreign origin) — those don't
+// need a live realm and shouldn't drag the harness in.
 
 interface CapturedRequest {
   method: string;
@@ -156,7 +160,7 @@ module('factory-tool-executor integration > safety constraints', function () {
         await executor.execute('realm-create', {
           'realm-server-url': sourceUrl,
           name: 'My Realm',
-          endpoint: 'user/my-realm',
+          endpoint: 'my-realm',
         });
         assert.ok(false, 'should have thrown');
       } catch (err) {
@@ -200,7 +204,7 @@ module('factory-tool-executor integration > safety constraints', function () {
         await executor.execute('realm-create', {
           'realm-server-url': 'https://evil.example.test/',
           name: 'My Realm',
-          endpoint: 'user/my-realm',
+          endpoint: 'my-realm',
         });
         assert.ok(false, 'should have thrown');
       } catch (err) {
