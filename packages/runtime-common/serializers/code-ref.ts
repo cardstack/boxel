@@ -8,7 +8,11 @@ import {
   isResolvedCodeRef,
   executableExtensions,
 } from '../index';
-import { resolveCardReference, cardIdToURL } from '../card-reference-resolver';
+import {
+  resolveCardReference,
+  cardIdToURL,
+  rri,
+} from '../card-reference-resolver';
 // We only use a subset of SerializeOpts here; accept any to align with the
 // serializer interface without surfacing unused properties.
 import type { SerializeOpts } from 'https://cardstack.com/base/card-api';
@@ -86,9 +90,9 @@ function codeRefAdjustments(
     try {
       let resolved = resolveCardReference(codeRef.module, relativeTo);
       if (resolved !== codeRef.module) {
-        let module = resolved;
+        let module: string = resolved;
         if (opts?.trimExecutableExtension) {
-          module = trimExecutableExtension(module);
+          module = trimExecutableExtension(rri(module));
         }
         if (opts?.allowRelative && opts?.maybeRelativeURL) {
           module = opts.maybeRelativeURL(module);
@@ -101,9 +105,9 @@ function codeRefAdjustments(
     return {};
   }
   if (relativeTo) {
-    let module = resolveCardReference(codeRef.module, relativeTo);
+    let module: string = resolveCardReference(codeRef.module, relativeTo);
     if (opts?.trimExecutableExtension) {
-      module = trimExecutableExtension(module);
+      module = trimExecutableExtension(rri(module));
     }
     if (opts?.allowRelative && opts?.maybeRelativeURL) {
       module = opts.maybeRelativeURL(module);

@@ -13,6 +13,7 @@ import {
 } from './index';
 import {
   isRegisteredPrefix,
+  rri,
   unresolveCardReference,
   type RealmResourceIdentifier,
   type RealmIdentifier,
@@ -204,8 +205,8 @@ export class Batch {
 
   @Memoize()
   private get nodeResolvedInvalidations() {
-    return [...this.invalidations].map(
-      (href) => trimExecutableExtension(new URL(href)).href,
+    return [...this.invalidations].map((href) =>
+      trimExecutableExtension(rri(href)),
     );
   }
 
@@ -308,7 +309,7 @@ export class Batch {
   }
 
   async updateEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
-    if (!new RealmPaths(this.realmURL).inRealm(url)) {
+    if (!new RealmPaths(this.realmURL).inRealm(rri(url.href))) {
       // TODO this is a workaround for CS-6886. after we have solved that issue we can
       // drop this band-aid
       return;
@@ -432,7 +433,7 @@ export class Batch {
     }
     let preparedEntry = {
       url: href,
-      file_alias: trimExecutableExtension(url).href.replace(/\.json$/, ''),
+      file_alias: trimExecutableExtension(rri(url.href)).replace(/\.json$/, ''),
       realm_version: this.realmVersion,
       realm_url: this.realmURL.href,
       is_deleted: false,
@@ -716,9 +717,7 @@ export class Batch {
       return types.map((type) =>
         [
           id,
-          isRegisteredPrefix(id)
-            ? id.replace(/\.(gts|ts|js|gjs)$/, '')
-            : trimExecutableExtension(new URL(id)).href,
+          trimExecutableExtension(rri(id)),
           type,
           this.realmVersion,
           this.realmURL.href,
@@ -838,7 +837,7 @@ export class Batch {
     let invalidations: string[] = [];
     for (let url of urls) {
       for (let seed of await this.invalidationSeeds(url)) {
-        let alias = trimExecutableExtension(new URL(seed)).href;
+        let alias = trimExecutableExtension(rri(seed));
         let workingInvalidations = [
           ...new Set([
             ...(!this.nodeResolvedInvalidations.includes(alias) ? [seed] : []),
@@ -1069,7 +1068,7 @@ export class Batch {
   ): Promise<string[]> {
     if (
       visited.has(resolvedPath) ||
-      this.nodeResolvedInvalidations.includes(resolvedPath)
+      this.nodeResolvedInvalidations.includes(rri(resolvedPath))
     ) {
       return [];
     }
@@ -1116,7 +1115,7 @@ export class Batch {
   private copiedRealmURL(fromRealm: URL, file: URL): URL {
     let source = new RealmPaths(fromRealm);
     let dest = new RealmPaths(this.realmURL);
-    if (!source.inRealm(file)) {
+    if (!source.inRealm(rri(file.href))) {
       return file;
     }
     let local = source.local(file);
@@ -1168,7 +1167,7 @@ export class Batch {
       resolved.search = '';
       resolved.hash = '';
       resolved = depMapper ? depMapper(resolved) : resolved;
-      return trimExecutableExtension(resolved).href;
+      return trimExecutableExtension(rri(resolved.href));
     } catch (_err) {
       return dep;
     }

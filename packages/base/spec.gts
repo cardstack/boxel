@@ -28,7 +28,7 @@ import {
 import {
   getMenuItems,
   cardIdToURL,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   ensureExtension,
   isPrimitive,
   isResolvedCodeRef,
@@ -40,11 +40,7 @@ import {
   type CommandContext,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import {
-  eq,
-  not,
-  type MenuItemOptions,
-} from '@cardstack/boxel-ui/helpers';
+import { eq, not, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import { AiBw as AiBwIcon } from '@cardstack/boxel-ui/icons';
 
 import GlimmerComponent from '@glimmer/component';
@@ -86,7 +82,7 @@ class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataCommand {
     if (!codeRef) {
       return [];
     }
-    codeRef = codeRefWithAbsoluteURL(
+    codeRef = codeRefWithAbsoluteIdentifier(
       codeRef,
       cardIdToURL(card.id!),
     )! as ResolvedCodeRef;
@@ -659,7 +655,7 @@ class Isolated extends Component<typeof Spec> {
       return undefined;
     }
     let url = cardIdToURL(this.args.model.id);
-    let ref = codeRefWithAbsoluteURL(this.args.model.ref, url);
+    let ref = codeRefWithAbsoluteIdentifier(this.args.model.ref, url);
     if (!isResolvedCodeRef(ref)) {
       throw new Error('ref is not a resolved code ref');
     }
@@ -770,7 +766,7 @@ class Edit extends Component<typeof Spec> {
       return undefined;
     }
     let url = cardIdToURL(this.args.model.id);
-    let ref = codeRefWithAbsoluteURL(this.args.model.ref, url);
+    let ref = codeRefWithAbsoluteIdentifier(this.args.model.ref, url);
     if (!isResolvedCodeRef(ref)) {
       throw new Error('ref is not a resolved code ref');
     }
@@ -966,7 +962,7 @@ export class Spec extends CardDef {
               params.commandContext,
             ).execute({
               count: GENERATED_EXAMPLE_COUNT,
-              codeRef: codeRefWithAbsoluteURL(
+              codeRef: codeRefWithAbsoluteIdentifier(
                 this.ref,
                 cardIdToURL(this.id),
               ) as ResolvedCodeRef,

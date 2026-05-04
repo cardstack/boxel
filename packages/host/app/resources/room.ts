@@ -11,8 +11,8 @@ import difference from 'lodash/difference';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
-  cardIdToURL,
   isCardInstance,
+  rri,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
@@ -78,7 +78,10 @@ export type RoomSkill = {
 interface Args {
   named: {
     roomId: string | undefined;
-    events: DiscreteMatrixEvent[] | undefined;
+    // Reactivity hook only — RoomResource never reads this. Returning whatever
+    // tracked deps the caller wants the resource to invalidate on (e.g. events
+    // alone, or [events, hasRoomState]) is sufficient. See CS-6987.
+    deps: unknown;
   };
 }
 
@@ -318,7 +321,7 @@ export class RoomResource extends Resource<Args> {
     for (let skillCard of this.allSkillFileDefs) {
       result.push({
         cardId: skillCard.sourceUrl,
-        realmURL: this.realm.realmOfURL(cardIdToURL(skillCard.sourceUrl))?.href,
+        realmURL: this.realm.realmOf(rri(skillCard.sourceUrl)),
         fileDef: skillCard,
         isActive:
           this.matrixRoom?.skillsConfig.enabledSkillCards
@@ -837,12 +840,12 @@ export class RoomResource extends Resource<Args> {
 export function getRoom(
   parent: object,
   roomId: () => string | undefined,
-  events: () => any | undefined, //TODO: This line of code is needed to get the room to react to new messages. This should be removed in CS-6987
+  deps: () => unknown, //TODO: This line of code is needed to get the room to react to new messages. This should be removed in CS-6987
 ) {
   return RoomResource.from(parent, () => ({
     named: {
       roomId: roomId(),
-      events: events ? events() : [],
+      deps: deps(),
     },
   }));
 }

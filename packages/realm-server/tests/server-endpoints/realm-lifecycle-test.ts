@@ -124,13 +124,15 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'seed file index.json exists',
         );
 
-        let job = (await context.dbAdapter.execute(
-          `SELECT priority FROM jobs WHERE job_type = 'from-scratch-index' AND args->>'realmURL' = '${json.data.id}' ORDER BY created_at DESC LIMIT 1`,
+        let jobs = (await context.dbAdapter.execute(
+          `SELECT priority FROM jobs WHERE job_type = 'from-scratch-index' AND args->>'realmURL' = '${json.data.id}'`,
         )) as { priority: number }[];
-        assert.ok(job[0], 'found from-scratch index job for created realm');
-        assert.strictEqual(
-          job[0].priority,
-          userInitiatedPriority,
+        assert.ok(
+          jobs.length > 0,
+          'found from-scratch index job for created realm',
+        );
+        assert.ok(
+          jobs.some((j) => j.priority === userInitiatedPriority),
           'user initiated realm indexing uses high priority queue',
         );
 

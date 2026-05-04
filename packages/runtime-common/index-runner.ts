@@ -63,9 +63,9 @@ export class IndexRunner {
   #definitionLookup: DefinitionLookup;
   #jobInfo: JobInfo;
   // Worker-job priority threaded from `pg-queue` → `tasks/indexer.ts`
-  // → here (CS-10976). Forwarded into every prerenderer call site so
-  // the prerender server can route by priority. Defaults to `0` for
-  // tests / non-job callers that don't carry job context.
+  // → here. Forwarded into every prerenderer call site so the
+  // prerender server can route by priority. Defaults to `0` for tests
+  // / non-job callers that don't carry job context.
   #jobPriority: number;
   #dependencyResolver: IndexRunnerDependencyManager;
   #reportStatus?: (
@@ -189,7 +189,7 @@ export class IndexRunner {
     );
 
     let visitStart = Date.now();
-    invalidations = sortInvalidations(invalidations);
+    invalidations = sortInvalidations(invalidations, current.realmURL);
     invalidations =
       await current.#dependencyResolver.orderInvalidationsByDependencies(
         invalidations,
@@ -295,6 +295,7 @@ export class IndexRunner {
     await current.batch.invalidate(urls);
     let invalidations = sortInvalidations(
       current.batch.invalidations.map((href) => new URL(href)),
+      current.realmURL,
     );
     invalidations =
       await current.#dependencyResolver.orderInvalidationsByDependencies(
@@ -662,11 +663,29 @@ function assertURLEndsWithJSON(url: URL): URL {
   return url;
 }
 
-function sortInvalidations(urls: URL[]): URL[] {
-  // sort invalidations so that .json files are visited after their non-.json counterparts,
-  // which allows us to have the file entry in place before we visit the card JSON and need to render it.
-  // among URLs that both do or both don't end with .json, sort lexically by href for consistency.
+function sortInvalidations(urls: URL[], realmURL: URL): URL[] {
+  // Visit order priority:
+  //   1. The realm's RealmConfig card at <realmURL>realm.json — write its
+  //      working-index row first so any /_info query that lands AFTER the
+  //      pass commits (`batch.done()` swaps boxel_index_working into
+  //      boxel_index) sees the RealmConfig overlay and resolves the realm's
+  //      display name. parseRealmInfo's overlay path queries the live
+  //      `boxel_index` table without `useWorkInProgressIndex`, so it cannot
+  //      see realm.json mid-pass; this ordering only guarantees a correct
+  //      answer at and after the pass-end commit (and on subsequent
+  //      passes). Host-side prerender caching of stale realmInfo (see
+  //      RealmResource.fetchInfo's `dropTask` short-circuit) is a separate
+  //      concern not addressed here.
+  //   2. Non-.json files (modules, source) — file entries must exist before
+  //      the cards that depend on them are rendered.
+  //   3. Other .json files, sorted lexically for determinism.
+  let realmConfigHref = new RealmPaths(realmURL).fileURL('realm.json').href;
   return urls.sort((a, b) => {
+    let aRealmConfig = a.href === realmConfigHref;
+    let bRealmConfig = b.href === realmConfigHref;
+    if (aRealmConfig !== bRealmConfig) {
+      return aRealmConfig ? -1 : 1;
+    }
     let aJson = a.href.endsWith('.json');
     let bJson = b.href.endsWith('.json');
     if (aJson === bJson) {

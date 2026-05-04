@@ -1,6 +1,7 @@
 import { Deferred } from './deferred';
 import {
   resolveCardReference,
+  rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
 } from './card-reference-resolver';
@@ -83,7 +84,7 @@ import {
   type Query,
   type PrerenderedHtmlFormat,
   codeRefFromInternalKey,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   userInitiatedPriority,
   systemInitiatedPriority,
   userIdFromUsername,
@@ -616,7 +617,7 @@ export class Realm {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
       },
       async (request, next) => {
-        if (!this.paths.inRealm(new URL(request.url))) {
+        if (!this.paths.inRealm(rri(request.url))) {
           return next(request);
         }
         return await this.internalHandle(request, true);
@@ -1039,7 +1040,7 @@ export class Realm {
           requestContext,
         });
       }
-      if (!this.paths.inRealm(parsedURL)) {
+      if (!this.paths.inRealm(rri(parsedURL.href))) {
         return badRequest({
           message: `URL is not in realm: ${parsedURL.href}`,
           requestContext,
@@ -1073,8 +1074,21 @@ export class Realm {
     await this.#startedUp.promise;
   }
 
-  async fullIndex(priority?: number) {
-    await this.realmIndexUpdater.fullIndex(priority);
+  async fullIndex(priority?: number, opts?: { clearLastModified?: boolean }) {
+    // Clear the realmInfo cache before re-indexing so cards rendered
+    // during this pass read /realm.json from the now-populated index
+    // rather than a stale "Unnamed Workspace" cached during an earlier
+    // from-scratch pass that processed /index before /realm.json.
+    // CardsGrid.cardTitle → realmInfo.name drives og:title, which is
+    // baked into the prerendered HTML — clearing only after the pass
+    // would be too late.
+    this.#cachedRealmInfo = null;
+    let { completed } = this.#realmIndexUpdater.publishFullIndex(
+      priority ?? systemInitiatedPriority,
+      { clearLastModified: opts?.clearLastModified },
+    );
+    await completed;
+    this.#cachedRealmInfo = null;
   }
 
   async flushUpdateEvents() {
@@ -1765,14 +1779,14 @@ export class Realm {
   maybeHandle = async (
     request: Request,
   ): Promise<ResponseWithNodeStream | null> => {
-    if (!this.paths.inRealm(new URL(request.url))) {
+    if (!this.paths.inRealm(rri(request.url))) {
       return null;
     }
     return await this.internalHandle(request, true);
   };
 
   handle = async (request: Request): Promise<ResponseWithNodeStream | null> => {
-    if (!this.paths.inRealm(new URL(request.url))) {
+    if (!this.paths.inRealm(rri(request.url))) {
       return null;
     }
     return await this.internalHandle(request, false);
@@ -4612,14 +4626,61 @@ export class Realm {
       }
     }
 
-    // Overlay from the RealmConfig card instance at /realm.json when it has
-    // been indexed. Uses instance() rather than cardDocument() to avoid
-    // recursing through attachRealmInfo → getRealmInfo → parseRealmInfo.
+    // Overlay from the RealmConfig card file at /realm.json on disk. The
+    // file is the source of truth — patchRealmConfig writes it, publish
+    // copySync's it from the source realm — and exists before the indexer
+    // ever processes it. Reading from disk closes the gap during indexing,
+    // when /_info can fire mid-pass via the prerender host's cardRender:
+    // parseRealmInfo's overlay below queries `boxel_index` (without
+    // useWorkInProgressIndex), which can't see entries written to
+    // boxel_index_working until `batch.done()` swaps; without this file
+    // overlay, the very first /_info during a from-scratch pass falls
+    // back to "Unnamed Workspace", the prerender host caches that on its
+    // RealmResource (`fetchInfo` short-circuits if `info` is set), and
+    // /index's prerendered head HTML carries the wrong og:title.
+    let realmConfigCardURL = new URL(
+      this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+    );
     try {
-      let cardURL = new URL(
-        this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+      let cardFilePath: LocalPath = this.paths.local(
+        this.paths.fileURL('realm.json'),
       );
-      let indexEntry = await this.#realmIndexQueryEngine.instance(cardURL);
+      let cardFile = await this.readFileAsText(cardFilePath, undefined);
+      if (cardFile?.content) {
+        let cardDoc = JSON.parse(cardFile.content) as {
+          data?: { attributes?: Record<string, unknown> };
+        };
+        let attrs = (cardDoc?.data?.attributes ?? {}) as Record<
+          string,
+          unknown
+        >;
+        let cardInfo = (attrs.cardInfo ?? {}) as Record<string, unknown>;
+        if (typeof cardInfo.name === 'string') {
+          realmInfo.name = cardInfo.name;
+        }
+        if ('backgroundURL' in attrs) {
+          realmInfo.backgroundURL =
+            typeof attrs.backgroundURL === 'string'
+              ? attrs.backgroundURL
+              : null;
+        }
+        if ('iconURL' in attrs) {
+          realmInfo.iconURL =
+            typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
+        }
+      }
+    } catch (e) {
+      this.#log.warn(`failed to read RealmConfig card from disk: ${e}`);
+    }
+
+    // Final overlay from the indexed RealmConfig card. Wins over the file
+    // read above so that any post-indexing transformations (search-doc
+    // shape, etc.) take precedence in steady state. Uses instance() rather
+    // than cardDocument() to avoid recursing through attachRealmInfo →
+    // getRealmInfo → parseRealmInfo.
+    try {
+      let indexEntry =
+        await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
       if (indexEntry?.type === 'instance') {
         let attrs = (indexEntry.instance.attributes ?? {}) as Record<
           string,
@@ -4892,7 +4953,7 @@ export class Realm {
     doc: LooseSingleCardDocument,
     relativeTo: URL,
   ): Promise<LooseSingleCardDocument> {
-    let absoluteCodeRef = codeRefWithAbsoluteURL(
+    let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
       doc.data.meta.adoptsFrom,
       relativeTo,
     ) as ResolvedCodeRef;
@@ -4943,7 +5004,7 @@ export class Realm {
       if (Array.isArray(fieldValue)) {
         for (const item of fieldValue) {
           if (item.adoptsFrom) {
-            let absoluteCodeRef = codeRefWithAbsoluteURL(
+            let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
               item.adoptsFrom,
               relativeTo,
             ) as ResolvedCodeRef;
@@ -4968,7 +5029,7 @@ export class Realm {
           }
         }
       } else if (fieldValue.adoptsFrom) {
-        let absoluteCodeRef = codeRefWithAbsoluteURL(
+        let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
           fieldValue.adoptsFrom,
           relativeTo,
         ) as ResolvedCodeRef;
@@ -5214,7 +5275,7 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
   ) {
     return true;
   }
-  return baseRealm.inRealm(parsed);
+  return baseRealm.inRealm(rri(parsed.href));
 }
 
 function lastModifiedHeader(

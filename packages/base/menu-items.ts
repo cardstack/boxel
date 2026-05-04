@@ -205,7 +205,7 @@ export function getDefaultCardMenuItems(
       action: async () => {
         await new SwitchSubmodeCommand(params.commandContext).execute({
           submode: 'code',
-          codePath: cardId ? new URL(cardId).href : undefined,
+          codePath: cardId,
         });
       },
       icon: CodeIcon,

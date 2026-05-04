@@ -33,13 +33,14 @@ import {
   Deferred,
   cardTypeDisplayName,
   cardTypeIcon,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   identifyCard,
   isCardInstance,
   isResolvedCodeRef,
   CardError,
   loadCardDef,
   localId as localIdSymbol,
+  rri,
   specRef,
   type getCard,
   type getCards,
@@ -47,6 +48,7 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
   type LocalPath,
+  type RealmResourceIdentifier,
   type ResolvedCodeRef,
   type Filter,
 } from '@cardstack/runtime-common';
@@ -60,6 +62,8 @@ import {
 } from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
+
+import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
 import type {
   CardContext,
@@ -154,7 +158,7 @@ export default class InteractSubmode extends Component {
   private createCard = async (
     stackIndex: number,
     ref: CodeRef,
-    relativeTo: URL | undefined,
+    relativeTo: RealmResourceIdentifier | URL | undefined,
     opts?: {
       realmURL?: URL;
       localDir?: LocalPath;
@@ -170,7 +174,7 @@ export default class InteractSubmode extends Component {
       });
     } else {
       let CardKlass = await loadCardDef(
-        codeRefWithAbsoluteURL(ref, relativeTo),
+        codeRefWithAbsoluteIdentifier(ref, relativeTo),
         {
           loader: this.loaderService.loader,
         },
@@ -236,12 +240,7 @@ export default class InteractSubmode extends Component {
         return;
       }
     }
-    let cardId =
-      typeof cardOrURL === 'string'
-        ? cardOrURL
-        : cardOrURL instanceof URL
-          ? cardOrURL.href
-          : cardOrURL.id;
+    let cardId = idFromCardOrURL(cardOrURL);
     if (!cardId) {
       return;
     }
@@ -552,7 +551,6 @@ export default class InteractSubmode extends Component {
   private openSelectedSearchResultInStack = restartableTask(
     async (cardId: string) => {
       let waiterToken = waiter.beginAsync();
-      let url = new URL(cardId);
       try {
         let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
 
@@ -563,10 +561,10 @@ export default class InteractSubmode extends Component {
           SearchSheetTriggers.DropCardToLeftNeighborStackButton
         ) {
           let newItem = new StackItem({
-            id: url.href,
+            id: cardId,
             format: 'isolated',
             stackIndex: 0,
-            type: this.getStackItemType(url, url.href),
+            type: this.getStackItemType(cardId, cardId),
           });
           // it's important that we await the stack item readiness _before_
           // we mutate the stack, otherwise there are very odd visual artifacts
@@ -587,7 +585,7 @@ export default class InteractSubmode extends Component {
           searchSheetTrigger ===
           SearchSheetTriggers.DropCardToRightNeighborStackButton
         ) {
-          await this.viewCard(this.stacks.length, url, 'isolated');
+          await this.viewCard(this.stacks.length, cardId, 'isolated');
         } else {
           // In case, that the search was accessed directly without clicking right and left buttons,
           // the rightmost stack will be REPLACED by the selection
@@ -599,17 +597,17 @@ export default class InteractSubmode extends Component {
             numberOfStacks === 0 ||
             this.operatorModeStateService.stackIsEmpty(stackIndex)
           ) {
-            await this.viewCard(0, url, 'isolated');
+            await this.viewCard(0, cardId, 'isolated');
           } else {
             stack = this.operatorModeStateService.rightMostStack();
             if (stack) {
               let bottomMostItem = stack[0];
               if (bottomMostItem) {
                 let stackItem = new StackItem({
-                  id: url.href,
+                  id: cardId,
                   format: 'isolated',
                   stackIndex,
-                  type: this.getStackItemType(url, url.href),
+                  type: this.getStackItemType(cardId, cardId),
                 });
                 // await stackItem.ready();
                 this.operatorModeStateService.clearStackAndAdd(
@@ -752,7 +750,7 @@ export default class InteractSubmode extends Component {
     }
 
     // assumption: take actions in the right-most stack
-    await this.createCard(this.rightMostStackIndex, spec.ref, new URL(specId), {
+    await this.createCard(this.rightMostStackIndex, spec.ref, rri(specId), {
       realmURL: this.operatorModeStateService.getWritableRealmURL(),
     });
   });

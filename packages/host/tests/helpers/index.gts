@@ -1481,7 +1481,7 @@ async function persistDocumentToTestRealm(
   let url = new URL(id);
   let registry = getTestRealmRegistry();
   let matching = [...registry.values()].find(({ realm }) =>
-    realm.paths.inRealm(url),
+    realm.paths.inRealm(rri(url.href)),
   );
   if (!matching) {
     return;
