@@ -138,9 +138,6 @@ let eventSink: IndexingEventSink | undefined = isIndexingDashboardEnabled()
   ? new IndexingEventSink()
   : undefined;
 
-process.on('SIGINT', () => (isExiting = true));
-process.on('SIGTERM', () => (isExiting = true));
-
 let webServerInstance: Server | undefined;
 let autoMigrate = migrateDB || undefined;
 
@@ -284,7 +281,18 @@ const shutdown = (onShutdown?: () => void) => {
     return;
   }
   isShuttingDown = true;
-  void runShutdown();
+  // Disable replacement-respawn for every shutdown trigger, not just
+  // SIGINT/SIGTERM. The IPC `'stop'` and `disconnect` paths used to
+  // leave `isExiting` false, so a child exit during shutdown would
+  // still spawn a fresh worker — which would then miss the drain
+  // snapshot and could re-claim the very job we just freed.
+  isExiting = true;
+  runShutdown().catch((e) => {
+    Sentry.captureException(e);
+    log.error(`worker: shutdown threw, forcing exit`, e);
+    runShutdownCallbacks();
+    process.exit(1);
+  });
 };
 
 async function runShutdown() {
@@ -303,12 +311,22 @@ async function runShutdown() {
 
   // Phase 1 — tell children to stop. Each child's pg-queue marks
   // shuttingDown and exits its WorkLoop after the in-flight handler
-  // returns.
+  // returns. `subprocess.send` can throw if the IPC channel has
+  // already closed (child died between our liveness check and the
+  // send) — swallow per-worker so one dead child can't abort the
+  // rest of the drain.
   if (snapshot.length > 0) {
     log.info(`Stopping ${snapshot.length} worker(s)...`);
     snapshot.forEach((worker) => {
       if (!worker.killed && worker.pid) {
-        worker.send?.('stop');
+        try {
+          worker.send?.('stop');
+        } catch (e) {
+          log.warn(
+            `worker.send('stop') threw for worker ${(worker as any).__workerId ?? worker.pid}:`,
+            e,
+          );
+        }
       }
     });
   }
@@ -365,16 +383,32 @@ async function runShutdown() {
     await Promise.allSettled(snapshot.map(drainOneWorker));
   }
 
-  webServerInstance?.closeAllConnections();
-  webServerInstance?.close((err?: Error) => {
-    if (err) {
-      log.error(`Error while closing the server for worker manager HTTP:`, err);
-      process.exit(1);
-    }
-    log.info(`worker manager HTTP on port ${port} has stopped.`);
-    runShutdownCallbacks();
-    process.exit(0);
-  });
+  // Phase 5 — close the readiness web server (if it was started) and
+  // exit. The web server is only created when --port is passed; in
+  // staging/prod the manager runs without --port and webServerInstance
+  // stays undefined. Without an explicit fallback, the close-callback
+  // exit path never fires and the process lingers until ECS SIGKILLs
+  // it on stopTimeout. Run callbacks + exit unconditionally below.
+  let exitCode = 0;
+  if (webServerInstance) {
+    webServerInstance.closeAllConnections();
+    await new Promise<void>((resolve) => {
+      webServerInstance!.close((err?: Error) => {
+        if (err) {
+          log.error(
+            `Error while closing the server for worker manager HTTP:`,
+            err,
+          );
+          exitCode = 1;
+        } else {
+          log.info(`worker manager HTTP on port ${port} has stopped.`);
+        }
+        resolve();
+      });
+    });
+  }
+  runShutdownCallbacks();
+  process.exit(exitCode);
 }
 
 function waitForExit(worker: ChildProcess): Promise<void> {
