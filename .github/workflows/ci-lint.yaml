@@ -125,3 +125,39 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/boxel-cli
+      - name: Verify Boxel CLI plugin synopsis is fresh
+        # Regenerates the `<!-- generated:commands -->` blocks in plugin/skills/*/SKILL.md
+        # from the Commander tree and fails if the working tree changed — i.e. someone
+        # added or changed a CLI command without running `pnpm build:plugin`.
+        if: ${{ !cancelled() }}
+        run: |
+          pnpm run build:plugin
+          if ! git diff --exit-code -- plugin/skills; then
+            echo "::error::plugin/skills synopsis is stale. Run 'pnpm build:plugin' in packages/boxel-cli and commit the result."
+            exit 1
+          fi
+        working-directory: packages/boxel-cli
+      - name: Verify plugin version bumped when synopsis changed
+        # If a PR's diff against main touches any generated:commands block, the plugin's
+        # version must also bump in the same diff. Otherwise marketplace consumers won't
+        # see the update — Claude Code caches by version string.
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        run: |
+          set -euo pipefail
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          # Did any synopsis line change?
+          SYNOPSIS_CHANGED=$(git diff "$BASE" "$HEAD" -- 'packages/boxel-cli/plugin/skills/**/SKILL.md' \
+            | grep -E '^[+-](### `boxel |\*\*Arguments|\*\*Options|- `[-A-Za-z]+|- `<|- `\[)' || true)
+          if [ -z "$SYNOPSIS_CHANGED" ]; then
+            echo "No generated synopsis changes detected; skipping version-bump check."
+            exit 0
+          fi
+          # Was the plugin manifest version touched?
+          if ! git diff "$BASE" "$HEAD" -- packages/boxel-cli/plugin/.claude-plugin/plugin.json \
+            | grep -qE '^[+-]\s*"version"'; then
+            echo "::error::plugin/skills synopsis changed but plugin.json version was not bumped. Marketplace consumers won't see the update without a new version. Bump 'version' in packages/boxel-cli/plugin/.claude-plugin/plugin.json."
+            exit 1
+          fi
+          echo "Synopsis changed and plugin.json version was bumped — OK."
+        working-directory: .
