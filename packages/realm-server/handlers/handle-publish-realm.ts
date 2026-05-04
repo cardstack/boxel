@@ -12,7 +12,6 @@ import {
   PUBLISHED_DIRECTORY_NAME,
   ensureTrailingSlash,
   type DBAdapter,
-  type PublishedRealmTable,
   fetchRealmPermissions,
   uuidv4,
   userInitiatedPriority,
@@ -319,10 +318,13 @@ export default function handlePublishRealm({
         dbAdapter,
         publishedRealmURL,
         async () => {
+          // Phase 4: read existence + identity from realm_registry. The
+          // legacy published_realms table is still dual-written below
+          // until Phase 4 PR 2 drops the writes.
           let existingRows = (await query(dbAdapter, [
-            `SELECT id, owner_username FROM published_realms WHERE published_realm_url =`,
+            `SELECT disk_id, owner_username FROM realm_registry WHERE kind = 'published' AND url =`,
             param(publishedRealmURL),
-          ])) as Pick<PublishedRealmTable, 'id' | 'owner_username'>[];
+          ])) as { disk_id: string; owner_username: string }[];
           let isNewRealm = existingRows.length === 0;
 
           let publishedRealmId: string;
@@ -346,7 +348,7 @@ export default function handlePublishRealm({
               '*': ['read'],
             });
           } else {
-            publishedRealmId = existingRows[0].id;
+            publishedRealmId = existingRows[0].disk_id;
             realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
           }
 
