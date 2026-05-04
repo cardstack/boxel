@@ -4626,14 +4626,61 @@ export class Realm {
       }
     }
 
-    // Overlay from the RealmConfig card instance at /realm.json when it has
-    // been indexed. Uses instance() rather than cardDocument() to avoid
-    // recursing through attachRealmInfo → getRealmInfo → parseRealmInfo.
+    // Overlay from the RealmConfig card file at /realm.json on disk. The
+    // file is the source of truth — patchRealmConfig writes it, publish
+    // copySync's it from the source realm — and exists before the indexer
+    // ever processes it. Reading from disk closes the gap during indexing,
+    // when /_info can fire mid-pass via the prerender host's cardRender:
+    // parseRealmInfo's overlay below queries `boxel_index` (without
+    // useWorkInProgressIndex), which can't see entries written to
+    // boxel_index_working until `batch.done()` swaps; without this file
+    // overlay, the very first /_info during a from-scratch pass falls
+    // back to "Unnamed Workspace", the prerender host caches that on its
+    // RealmResource (`fetchInfo` short-circuits if `info` is set), and
+    // /index's prerendered head HTML carries the wrong og:title.
+    let realmConfigCardURL = new URL(
+      this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+    );
     try {
-      let cardURL = new URL(
-        this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+      let cardFilePath: LocalPath = this.paths.local(
+        this.paths.fileURL('realm.json'),
       );
-      let indexEntry = await this.#realmIndexQueryEngine.instance(cardURL);
+      let cardFile = await this.readFileAsText(cardFilePath, undefined);
+      if (cardFile?.content) {
+        let cardDoc = JSON.parse(cardFile.content) as {
+          data?: { attributes?: Record<string, unknown> };
+        };
+        let attrs = (cardDoc?.data?.attributes ?? {}) as Record<
+          string,
+          unknown
+        >;
+        let cardInfo = (attrs.cardInfo ?? {}) as Record<string, unknown>;
+        if (typeof cardInfo.name === 'string') {
+          realmInfo.name = cardInfo.name;
+        }
+        if ('backgroundURL' in attrs) {
+          realmInfo.backgroundURL =
+            typeof attrs.backgroundURL === 'string'
+              ? attrs.backgroundURL
+              : null;
+        }
+        if ('iconURL' in attrs) {
+          realmInfo.iconURL =
+            typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
+        }
+      }
+    } catch (e) {
+      this.#log.warn(`failed to read RealmConfig card from disk: ${e}`);
+    }
+
+    // Final overlay from the indexed RealmConfig card. Wins over the file
+    // read above so that any post-indexing transformations (search-doc
+    // shape, etc.) take precedence in steady state. Uses instance() rather
+    // than cardDocument() to avoid recursing through attachRealmInfo →
+    // getRealmInfo → parseRealmInfo.
+    try {
+      let indexEntry =
+        await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
       if (indexEntry?.type === 'instance') {
         let attrs = (indexEntry.instance.attributes ?? {}) as Record<
           string,
