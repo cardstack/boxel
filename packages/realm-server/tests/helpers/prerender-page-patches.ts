@@ -279,14 +279,12 @@ export function installFlakyDepFetchPatch(opts: {
     let page = pageInfo.page as any;
     if (page && !patchedPages.has(page)) {
       patchedPages.add(page);
-      try {
-        await page.setRequestInterception(true);
-        interceptingPages.add(page);
-      } catch {
-        // Best-effort: if interception is already active or the page has
-        // been torn down, skip — the test will surface the failure via
-        // missing failuresInjected count rather than as a setup error.
-      }
+      // Fail fast: request.respond()/request.continue() require interception
+      // to be enabled, so attaching the listener without interception would
+      // turn into a confusing error mid-render. Let the puppeteer error
+      // propagate so the test crashes at setup with a clear stack instead.
+      await page.setRequestInterception(true);
+      interceptingPages.add(page);
       let listener = (request: any) => {
         let url: string;
         try {

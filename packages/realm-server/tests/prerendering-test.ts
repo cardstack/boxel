@@ -28,6 +28,7 @@ import {
   rri,
   baseRealm,
   baseRRI,
+  executableExtensions,
 } from '@cardstack/runtime-common';
 import {
   installDelayedRuntimeRealmSearchPatch,
@@ -532,13 +533,24 @@ module(basename(__filename), function () {
       await realm.realmIndexUpdater.fullIndex();
       realm.__testOnlyClearCaches();
 
-      // Match the dep URL exactly. The host's loader fetches modules at
-      // the realm-server URL with the source extension preserved (the
-      // server transpiles in place), so equality against `moduleURL` is
-      // sufficient — we want the next fetch the browser issues for this
-      // module (after clearCache) to be intercepted.
+      // Strip executable extensions from both sides so the matcher fires
+      // for every fetch shape the loader may issue: `flaky-target.gts`
+      // (the source URL), `flaky-target` (extensionless — what the card's
+      // adoptsFrom.module resolves to via rri), or the canonicalized form
+      // surfaced through X-Boxel-Canonical-Path. Without this, the matcher
+      // would miss the actual fetch and the test would silently pass
+      // without exercising the retry path.
+      let stripExecExt = (u: string) => {
+        for (let ext of executableExtensions) {
+          if (u.endsWith(ext)) {
+            return u.slice(0, -ext.length);
+          }
+        }
+        return u;
+      };
+      let targetTrimmed = stripExecExt(moduleURL);
       let flakyPatch = installFlakyDepFetchPatch({
-        matcher: (url) => url === moduleURL,
+        matcher: (url) => stripExecExt(url) === targetTrimmed,
         failuresBeforeSuccess: 1,
       });
       try {
