@@ -11,12 +11,7 @@ import { module, test } from 'qunit';
 
 import { TrackedObject } from 'tracked-built-ins';
 
-import {
-  Deferred,
-  baseRealm,
-  param,
-  query,
-} from '@cardstack/runtime-common';
+import { Deferred, baseRealm, param, query } from '@cardstack/runtime-common';
 
 import {
   getDbAdapter,
