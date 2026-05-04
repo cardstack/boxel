@@ -252,13 +252,58 @@ if (port != null) {
   });
 }
 
-const shutdown = (onShutdown?: () => void) => {
+// How long we'll wait for each worker's reservation drain UPDATE before
+// giving up on it. The whole drain runs in parallel, so this is the worst
+// case per worker, not a sum across workers. Sized comfortably under the
+// ECS task `stopTimeout` (60s recommended) so SIGKILL doesn't overrun us.
+const DRAIN_PER_WORKER_TIMEOUT_MS = 10_000;
+
+let isShuttingDown = false;
+
+const shutdown = async (onShutdown?: () => void) => {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
   log.info(`Shutting down server for worker manager...`);
   if (isEnvironmentMode()) {
     deregisterService(serviceName);
   }
 
   stopCronJobs();
+
+  // Drain in-flight reservations BEFORE forwarding 'stop' to children.
+  // The UPDATE has to commit while we still have a healthy DB connection;
+  // marking the row 'interrupted' keeps it off the per-job reservation
+  // cap so a deploy never burns an attempt on an otherwise-healthy job,
+  // and frees `locked_until` immediately so another worker can re-claim
+  // within the next claim poll instead of waiting out the 7200s lease.
+  if (adapter && workers.length > 0) {
+    log.info(
+      `Draining reservations for ${workers.length} live worker(s) before stopping...`,
+    );
+    await Promise.allSettled(
+      workers.map((worker) => {
+        let workerId = (worker as any).__workerId as string | undefined;
+        if (!workerId) {
+          // Worker hasn't reported a `ready:<id>` yet, so it can't have a
+          // reservation row in the DB — nothing to drain.
+          return Promise.resolve();
+        }
+        return Promise.race([
+          finalizeOrphanedReservations(adapter, workerId, 'interrupted'),
+          new Promise<void>((r) =>
+            setTimeout(() => {
+              log.error(
+                `worker: drain finalize for worker ${workerId} timed out after ${DRAIN_PER_WORKER_TIMEOUT_MS}ms; reservation will fall back to lease expiry`,
+              );
+              r();
+            }, DRAIN_PER_WORKER_TIMEOUT_MS).unref(),
+          ),
+        ]);
+      }),
+    );
+  }
 
   // Stop all workers
   if (workers.length > 0) {
@@ -282,23 +327,30 @@ const shutdown = (onShutdown?: () => void) => {
   });
 };
 
-process.on('SIGINT', () => shutdown());
-process.on('SIGTERM', () => shutdown());
+process.on('SIGINT', () => {
+  void shutdown();
+});
+process.on('SIGTERM', () => {
+  void shutdown();
+});
 process.on('disconnect', () => {
   log.info(`Parent IPC disconnected, shutting down worker manager...`);
-  shutdown();
+  void shutdown();
 });
 process.on('uncaughtException', (err) => {
   log.error(`Uncaught exception in worker manager:`, err);
-  shutdown();
+  void shutdown();
 });
 
 process.on('message', (message) => {
   if (message === 'stop') {
-    if (adapter) {
-      adapter.close(); // warning this is async
-    }
-    shutdown(() => {
+    // Close the adapter *after* the drain UPDATE inside shutdown commits;
+    // the drain needs a healthy adapter to mark in-flight reservations
+    // 'interrupted' so the next worker can re-claim immediately.
+    void shutdown(() => {
+      if (adapter) {
+        adapter.close(); // warning this is async
+      }
       process.send?.('stopped');
     });
   } else if (message === 'kill') {
@@ -484,8 +536,14 @@ async function markFailedJob({
     'WHERE id =',
     param(jobId),
   ] as Expression);
+  // The worker had uninterrupted access to the job and produced no
+  // verdict before being killed by the watchdog (stuck) or after a fatal
+  // error log line. That counts as a real attempt for cap purposes,
+  // unlike the SIGTERM/child-crash paths which mark 'interrupted'.
   await query([
-    `UPDATE job_reservations SET completed_at = NOW() WHERE id =`,
+    `UPDATE job_reservations
+     SET completed_at = NOW(), completion_reason = 'completed'
+     WHERE id =`,
     param(id),
   ]);
   await query([`NOTIFY jobs_finished`]);
@@ -545,14 +603,18 @@ async function startWorker(
     // able to claim the dead worker's reservation until completed_at is
     // set, so this still races to be useful — but if it stalls, the
     // existing 60s monitorWorker / 7200s lease-expiry path is the
-    // backstop, not this exit handler.
-    finalizeOrphanedReservations(adapter, workerId).catch((e) => {
-      Sentry.captureException(e);
-      log.error(
-        `worker: finalizeOrphanedReservations threw for worker ${workerId}`,
-        e,
-      );
-    });
+    // backstop, not this exit handler. A child exit while still holding
+    // a reservation is by definition an interruption, so the row is
+    // marked 'interrupted' and does not count toward the per-job cap.
+    finalizeOrphanedReservations(adapter, workerId, 'interrupted').catch(
+      (e) => {
+        Sentry.captureException(e);
+        log.error(
+          `worker: finalizeOrphanedReservations threw for worker ${workerId}`,
+          e,
+        );
+      },
+    );
   });
 
   if (worker.stdout) {
@@ -598,6 +660,10 @@ async function startWorker(
         if (typeof message === 'string' && message.startsWith('ready:')) {
           let id = message.substring('ready:'.length);
           workerId = id;
+          // Expose the workerId so the manager-level SIGTERM drain
+          // (`shutdown()`) can run finalizeOrphanedReservations against
+          // every live child without having to capture closure scope.
+          (worker as any).__workerId = id;
           watchdog = setInterval(() => monitorWorker(id, worker), 60_000);
           log.info(`[worker ${name} priority ${priority}]: worker ready`);
           r();

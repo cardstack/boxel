@@ -60,6 +60,11 @@ export interface JobReservationsTable {
   locked_until: Date;
   completed_at: Date;
   worker_id: string;
+  // NULL while the reservation is open. On close: 'completed' for a
+  // genuine attempt (worker ran the job to a verdict), 'interrupted' for
+  // an operational interruption (child crash, manager SIGTERM, scale-in),
+  // 'timeout-expired' for the pg-pid reaper path.
+  completion_reason: 'completed' | 'interrupted' | 'timeout-expired' | null;
 }
 
 interface CoalesceCandidateRow extends Pick<
@@ -582,16 +587,19 @@ export class PgQueueRunner implements QueueRunner {
             continue;
           }
 
-          // Abandon the job after #maxReservationCount attempts. If the
-          // worker has died and left an orphan reservation each time, those
-          // get freed up by finalizeOrphanedReservations on the
-          // worker-manager side; the prior reservation rows themselves
-          // remain in the table and are the trail of failed attempts.
-          // Counting them lets us stop wasting wall-clock on jobs that
-          // deterministically crash a worker.
+          // Abandon the job after #maxReservationCount genuine attempts.
+          // Count only reservations that closed with a real verdict
+          // (`completion_reason = 'completed'`) plus still-open ones
+          // (NULL). Reservations closed as `'interrupted'` or
+          // `'timeout-expired'` (deploy, autoscaler, child crash, dropped
+          // PG connection) don't count — the worker never had an
+          // uninterrupted shot at the job, so re-trying isn't a failed
+          // attempt.
           let priorReservations = (await query([
-            `SELECT COUNT(*)::int as count FROM job_reservations WHERE job_id =`,
+            `SELECT COUNT(*)::int as count FROM job_reservations
+             WHERE job_id =`,
             param(jobToRun.id),
+            `AND (completion_reason IS NULL OR completion_reason = 'completed')`,
           ])) as unknown as { count: number }[];
           if (priorReservations[0].count >= this.#maxReservationCount) {
             await query([
@@ -741,7 +749,9 @@ export class PgQueueRunner implements QueueRunner {
             param(jobToRun.id),
           ]);
           await query([
-            `UPDATE job_reservations SET completed_at = now() WHERE id = `,
+            `UPDATE job_reservations
+             SET completed_at = now(), completion_reason = 'completed'
+             WHERE id = `,
             param(jobReservationId),
           ]);
           // NOTIFY takes effect when the transaction actually commits. If it
