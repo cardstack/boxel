@@ -249,6 +249,106 @@ export function installSearchRequestObserverPatch(): {
 }
 
 /**
+ * Inject transient 5xx responses for a chosen subset of fetches inside the
+ * prerender chrome page. The patch enables Puppeteer request interception
+ * once per page; matched URLs return the configured status until the
+ * `failuresBeforeSuccess` budget is exhausted, after which they pass
+ * through. Used to assert that the loader's transient-retry path actually
+ * fires during prerender — without the native-sleep wiring in
+ * loader-service the retry hangs at `await sleep(delay)` and the render
+ * times out instead of recovering on the next attempt.
+ */
+export function installFlakyDepFetchPatch(opts: {
+  matcher: (url: string) => boolean;
+  failuresBeforeSuccess: number;
+  status?: number;
+}): {
+  failuresInjected: () => number;
+  restore: () => Promise<void>;
+} {
+  let originalGetPage = PagePool.prototype.getPage;
+  let patchedPages = new WeakSet<object>();
+  let listeners = new Map<any, (request: any) => void>();
+  let interceptingPages = new Set<any>();
+  let remainingFailures = opts.failuresBeforeSuccess;
+  let failuresInjected = 0;
+  let status = opts.status ?? 502;
+
+  PagePool.prototype.getPage = async function (this: PagePool, realm: string) {
+    let pageInfo = await originalGetPage.call(this, realm);
+    let page = pageInfo.page as any;
+    if (page && !patchedPages.has(page)) {
+      patchedPages.add(page);
+      try {
+        await page.setRequestInterception(true);
+        interceptingPages.add(page);
+      } catch {
+        // Best-effort: if interception is already active or the page has
+        // been torn down, skip — the test will surface the failure via
+        // missing failuresInjected count rather than as a setup error.
+      }
+      let listener = (request: any) => {
+        let url: string;
+        try {
+          url = request.url();
+        } catch {
+          // The request lifecycle ended before we could inspect it.
+          try {
+            request.continue();
+          } catch {
+            // ignore — request already fulfilled or aborted
+          }
+          return;
+        }
+        if (remainingFailures > 0 && opts.matcher(url)) {
+          remainingFailures--;
+          failuresInjected++;
+          request
+            .respond({
+              status,
+              contentType: 'text/plain',
+              body: 'Bad Gateway (test injection)',
+            })
+            .catch(() => {
+              // best-effort: page may have moved on
+            });
+          return;
+        }
+        request.continue().catch(() => {
+          // best-effort: another handler may have already responded
+        });
+      };
+      listeners.set(page, listener);
+      page.on('request', listener);
+    }
+    return { ...pageInfo, page };
+  };
+
+  return {
+    failuresInjected: () => failuresInjected,
+    restore: async () => {
+      PagePool.prototype.getPage = originalGetPage;
+      for (let [page, listener] of listeners) {
+        try {
+          page.off('request', listener);
+        } catch {
+          // best-effort
+        }
+      }
+      for (let page of interceptingPages) {
+        try {
+          await page.setRequestInterception(false);
+        } catch {
+          // best-effort: page may already be closed
+        }
+      }
+      listeners.clear();
+      interceptingPages.clear();
+    },
+  };
+}
+
+/**
  * Simulate the background-tab RAF throttling that causes the render-ready
  * stability loop to stall. This replaces `requestAnimationFrame` inside
  * prerender pages with a version that delays each callback by `delayMs`.
