@@ -7,10 +7,11 @@ import type {
   RunCommandResponse,
 } from '@cardstack/runtime-common';
 import type { GitHubClient } from '../lib/github';
+import { CommandRunner, makeEnqueueRunCommand } from '../lib/command-runner';
 import {
-  CommandRunner,
+  PrListingWorkflowHandler,
   type LintSubmissionFilesFn,
-} from '../lib/command-runner';
+} from '../lib/pr-listing-workflow-handler';
 
 const passThroughLint: LintSubmissionFilesFn = async (files) => ({
   passed: true,
@@ -24,6 +25,21 @@ const passThroughLint: LintSubmissionFilesFn = async (files) => ({
 
 const SUBMISSION_REALM_URL = 'http://localhost:4201/submissions/';
 const SUBMISSION_BOT_USER_ID = '@submissionbot:localhost';
+
+function makeRunner(
+  dbAdapter: DBAdapter,
+  queuePublisher: QueuePublisher,
+  githubClient: GitHubClient,
+  lintSubmissionFiles: LintSubmissionFilesFn = passThroughLint,
+): CommandRunner {
+  let workflowHandler = new PrListingWorkflowHandler({
+    submissionBotUserId: SUBMISSION_BOT_USER_ID,
+    enqueueRunCommand: makeEnqueueRunCommand(queuePublisher, dbAdapter),
+    githubClient,
+    lintSubmissionFiles,
+  });
+  return new CommandRunner(dbAdapter, queuePublisher, [workflowHandler]);
+}
 
 module('command runner', () => {
   test('enqueues run-command job for matching trigger', async (assert) => {
@@ -83,13 +99,7 @@ module('command runner', () => {
       getColumnNames: async () => [],
     } as DBAdapter;
 
-    let commandRunner = new CommandRunner(
-      SUBMISSION_BOT_USER_ID,
-      dbAdapter,
-      queuePublisher,
-      githubClient,
-      passThroughLint,
-    );
+    let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
     let result = await commandRunner.maybeEnqueueCommand(
       '@alice:localhost',
       {
@@ -233,13 +243,7 @@ module('command runner', () => {
       getColumnNames: async () => [],
     } as DBAdapter;
 
-    let commandRunner = new CommandRunner(
-      SUBMISSION_BOT_USER_ID,
-      dbAdapter,
-      queuePublisher,
-      githubClient,
-      passThroughLint,
-    );
+    let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
     await commandRunner.maybeEnqueueCommand(
       '@alice:localhost',
       {
@@ -429,13 +433,7 @@ module('command runner', () => {
       getColumnNames: async () => [],
     } as DBAdapter;
 
-    let commandRunner = new CommandRunner(
-      SUBMISSION_BOT_USER_ID,
-      dbAdapter,
-      queuePublisher,
-      githubClient,
-      passThroughLint,
-    );
+    let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
     await commandRunner.maybeEnqueueCommand(
       '@alice:localhost',
       {
@@ -529,13 +527,7 @@ module('command runner', () => {
       getColumnNames: async () => [],
     } as DBAdapter;
 
-    let commandRunner = new CommandRunner(
-      SUBMISSION_BOT_USER_ID,
-      dbAdapter,
-      queuePublisher,
-      githubClient,
-      passThroughLint,
-    );
+    let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
 
     await assert.rejects(
       commandRunner.maybeEnqueueCommand(
@@ -672,13 +664,7 @@ module('command runner', () => {
       getColumnNames: async () => [],
     } as DBAdapter;
 
-    let commandRunner = new CommandRunner(
-      SUBMISSION_BOT_USER_ID,
-      dbAdapter,
-      queuePublisher,
-      githubClient,
-      passThroughLint,
-    );
+    let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
 
     await assert.rejects(
       commandRunner.maybeEnqueueCommand(
@@ -889,13 +875,7 @@ module('command runner', () => {
       getColumnNames: async () => [],
     } as DBAdapter;
 
-    let commandRunner = new CommandRunner(
-      SUBMISSION_BOT_USER_ID,
-      dbAdapter,
-      queuePublisher,
-      githubClient,
-      passThroughLint,
-    );
+    let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
 
     await commandRunner.maybeEnqueueCommand(
       '@alice:localhost',
@@ -1014,13 +994,7 @@ module('command runner', () => {
       getColumnNames: async () => [],
     } as DBAdapter;
 
-    let commandRunner = new CommandRunner(
-      SUBMISSION_BOT_USER_ID,
-      dbAdapter,
-      queuePublisher,
-      githubClient,
-      passThroughLint,
-    );
+    let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
 
     await assert.rejects(
       commandRunner.maybeEnqueueCommand(
