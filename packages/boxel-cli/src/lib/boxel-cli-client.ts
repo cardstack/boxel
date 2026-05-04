@@ -18,6 +18,11 @@ import {
   readTranspiledModule,
   type ReadTranspiledResult,
 } from '../commands/read-transpiled';
+import {
+  touchFiles as coreTouchFiles,
+  type TouchResult,
+  type TouchCommandOptions,
+} from '../commands/file/touch';
 import { write as coreWrite, type WriteResult } from '../commands/file/write';
 import {
   cancelIndexing as coreCancelIndexing,
@@ -37,6 +42,7 @@ export type {
   SyncResult,
   SearchResult,
   SearchCommandOptions,
+  TouchResult,
 };
 
 const MIME = {
@@ -200,6 +206,21 @@ export class BoxelCLIClient {
    */
   async delete(realmUrl: string, path: string): Promise<DeleteResult> {
     return deleteFile(realmUrl, path, {
+      profileManager: this.pm,
+    });
+  }
+
+  /**
+   * Touch one or more files in a realm to force re-indexing. Delegates to
+   * `touchFiles()` in `commands/file/touch.ts`.
+   */
+  async touch(
+    realmUrl: string,
+    paths: string[],
+    options?: Pick<TouchCommandOptions, 'all' | 'dryRun'>,
+  ): Promise<TouchResult> {
+    return coreTouchFiles(realmUrl, paths, {
+      ...options,
       profileManager: this.pm,
     });
   }

@@ -187,6 +187,7 @@ import './clamp-serialized-error-test';
 import './prerender-diagnostics-persistence-test';
 import './prerender-proxy-test';
 import './queue-test';
+import './finalize-orphan-reservations-test';
 import './run-command-task-test';
 import './realm-endpoints-test';
 import './realm-endpoints/dependencies-test';
