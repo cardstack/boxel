@@ -18,7 +18,8 @@
  * running — the LoopAgent contract (`run(context, tools)`) is identical.
  */
 
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 
 import {
   createSdkMcpServer,
@@ -589,7 +590,13 @@ const PATH_SCOPED_TOOLS = new Set([
 export function buildWorkspaceScopedCanUseTool(
   workspaceDir: string,
 ): CanUseTool {
-  let workspaceAbs = resolve(workspaceDir);
+  // Canonicalize the workspace path once so the comparison below works
+  // regardless of which symlink-equivalent form the SDK reports.
+  // On macOS, factory workspaces typically live under `/var/folders/...`,
+  // which is a symlink to `/private/var/folders/...`. The SDK resolves
+  // paths to their canonical form, so absolute paths flowing into the
+  // hook may use either form. Both must be treated as inside.
+  let workspaceCanonical = canonicalizeExistingAncestor(resolve(workspaceDir));
   return async (toolName, input) => {
     if (!PATH_SCOPED_TOOLS.has(toolName)) {
       return { behavior: 'allow', updatedInput: input };
@@ -600,8 +607,9 @@ export function buildWorkspaceScopedCanUseTool(
       // validation error instead of inventing one here.
       return { behavior: 'allow', updatedInput: input };
     }
-    let absolute = isAbsolute(raw) ? raw : resolve(workspaceAbs, raw);
-    let rel = relative(workspaceAbs, resolve(absolute));
+    let absolute = isAbsolute(raw) ? raw : resolve(workspaceCanonical, raw);
+    let canonical = canonicalizeExistingAncestor(resolve(absolute));
+    let rel = relative(workspaceCanonical, canonical);
     let escapesWorkspace =
       rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
     if (escapesWorkspace) {
@@ -609,12 +617,48 @@ export function buildWorkspaceScopedCanUseTool(
         behavior: 'deny',
         message:
           `Refusing ${toolName} on "${raw}": path resolves outside the ` +
-          `factory workspace (${workspaceAbs}). Use realm-relative paths ` +
-          `only — your working directory is the workspace.`,
+          `factory workspace (${workspaceCanonical}). Use realm-relative ` +
+          `paths only — your working directory is the workspace.`,
       };
     }
     return { behavior: 'allow', updatedInput: input };
   };
+}
+
+/**
+ * Canonicalize a path through symlinks even when the leaf doesn't exist
+ * yet — typical for `Write` creating a fresh file. Walks up to the
+ * deepest existing ancestor, runs `realpathSync` on it, then re-appends
+ * the missing segments. Falls back to the input on unexpected errors so
+ * the hook never throws (which would crash the SDK turn).
+ *
+ * Why we need this: on macOS the typical factory workspace is rooted at
+ * `/var/folders/...`, which `node:fs` reports back as
+ * `/private/var/folders/...`. Without canonicalization, `node:path
+ * .relative('/var/folders/W', '/private/var/folders/W/foo.gts')`
+ * returns `../../private/var/folders/W/foo.gts` — i.e. "escapes" — and
+ * we'd deny a path that's actually inside the workspace.
+ */
+function canonicalizeExistingAncestor(absolutePath: string): string {
+  let current = absolutePath;
+  let suffix: string[] = [];
+  while (true) {
+    try {
+      let real = realpathSync(current);
+      return suffix.length === 0 ? real : resolve(real, ...suffix.reverse());
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        return absolutePath;
+      }
+      let parent = dirname(current);
+      if (parent === current) {
+        // Reached filesystem root without finding any existing ancestor.
+        return absolutePath;
+      }
+      suffix.push(basename(current));
+      current = parent;
+    }
+  }
 }
 
 /**

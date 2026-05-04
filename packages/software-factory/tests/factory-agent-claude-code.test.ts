@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync, symlinkSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { module, test } from 'qunit';
 import { z, type ZodType } from 'zod';
 
@@ -157,6 +161,48 @@ module('factory-agent-claude-code', function () {
       assert.strictEqual(result.behavior, 'allow');
       if (result.behavior === 'allow') {
         assert.strictEqual(result.updatedInput, input);
+      }
+    });
+
+    test('allows absolute paths via the canonical (realpath) workspace location', async function (assert) {
+      // Reproduce the macOS /var → /private/var situation in a portable way:
+      // create a real directory and a symlink that points at it. If we
+      // construct the hook with the symlink path and the SDK reports a
+      // file_path through the canonical (realpath) location, the hook must
+      // not flag that as escaping the workspace.
+      let realDir = mkdtempSync(join(tmpdir(), 'factory-canon-real-'));
+      let symlinkDir = `${realDir}-link`;
+      symlinkSync(realDir, symlinkDir);
+      try {
+        let canonicalCanUseTool = buildWorkspaceScopedCanUseTool(symlinkDir);
+        let result = await canonicalCanUseTool(
+          'Write',
+          { file_path: `${realDir}/sticky-note.gts` },
+          opts,
+        );
+        assert.strictEqual(
+          result.behavior,
+          'allow',
+          'absolute path through the canonical location is recognized as inside the workspace',
+        );
+
+        // And going the other way: hook constructed via the canonical
+        // path, file_path expressed through the symlink form.
+        let canonicalCanUseTool2 =
+          buildWorkspaceScopedCanUseTool(realDir);
+        let result2 = await canonicalCanUseTool2(
+          'Write',
+          { file_path: `${symlinkDir}/sticky-note.gts` },
+          opts,
+        );
+        assert.strictEqual(
+          result2.behavior,
+          'allow',
+          'absolute path through the symlink form is recognized as inside the canonical workspace',
+        );
+      } finally {
+        unlinkSync(symlinkDir);
+        rmSync(realDir, { recursive: true, force: true });
       }
     });
   });
