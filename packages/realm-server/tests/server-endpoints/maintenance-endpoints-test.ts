@@ -431,6 +431,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           .set('Authorization', 'Bearer not-the-real-secret')
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
+        assert.true(
+          response.text.includes('Token invalid'),
+          'reports invalid token (not missing-header) when an Authorization header is present but wrong',
+        );
         let [job] = await context.dbAdapter.execute(
           `SELECT status FROM jobs WHERE id = ${id}`,
         );
@@ -439,6 +443,16 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'unfulfilled',
           'job not touched on auth failure',
         );
+      });
+
+      test('grafana endpoint accepts lowercase scheme + extra whitespace in Bearer header', async function (assert) {
+        let id = await insertCancellableJob();
+        let response = await context.request
+          .post(`/_grafana-complete-job?job_id=${id}`)
+          .set('Authorization', `  bearer   ${grafanaSecret}  `)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 204, 'HTTP 204 response');
+        await assertJobRejected(assert, id);
       });
 
       test('can add user credit via grafana endpoint', async function (assert) {

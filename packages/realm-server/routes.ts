@@ -235,46 +235,15 @@ export function createRoutes(args: CreateRoutesArgs) {
   // is intentional for the CS-10987 cutover; once every operator has
   // pulled the new dashboards (one release cycle), drop the GETs and
   // the convertAuthHeaderQueryParam middleware in one cleanup PR.
-  router.get(
-    '/_grafana-reindex',
-    grafanaAuthorization(args.grafanaSecret),
-    handleReindex(args),
-  );
-  router.post(
-    '/_grafana-reindex',
-    grafanaAuthorization(args.grafanaSecret),
-    handleReindex(args),
-  );
-  router.get(
-    '/_grafana-complete-job',
-    grafanaAuthorization(args.grafanaSecret),
-    handleRemoveJob(args),
-  );
-  router.post(
-    '/_grafana-complete-job',
-    grafanaAuthorization(args.grafanaSecret),
-    handleRemoveJob(args),
-  );
-  router.get(
-    '/_grafana-add-credit',
-    grafanaAuthorization(args.grafanaSecret),
-    handleAddCredit(args),
-  );
-  router.post(
-    '/_grafana-add-credit',
-    grafanaAuthorization(args.grafanaSecret),
-    handleAddCredit(args),
-  );
-  router.get(
-    '/_grafana-full-reindex',
-    grafanaAuthorization(args.grafanaSecret),
-    handleFullReindex(args),
-  );
-  router.post(
-    '/_grafana-full-reindex',
-    grafanaAuthorization(args.grafanaSecret),
-    handleFullReindex(args),
-  );
+  let registerGrafanaEndpoint = (path: string, handler: Koa.Middleware) => {
+    let auth = grafanaAuthorization(args.grafanaSecret);
+    router.get(path, auth, handler);
+    router.post(path, auth, handler);
+  };
+  registerGrafanaEndpoint('/_grafana-reindex', handleReindex(args));
+  registerGrafanaEndpoint('/_grafana-complete-job', handleRemoveJob(args));
+  registerGrafanaEndpoint('/_grafana-add-credit', handleAddCredit(args));
+  registerGrafanaEndpoint('/_grafana-full-reindex', handleFullReindex(args));
   router.post('/_post-deployment', handlePostDeployment(args));
   router.post(
     '/_realm-auth',

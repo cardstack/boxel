@@ -212,18 +212,32 @@ export function grafanaAuthorization(
     // Accept either the bare secret (legacy form: link-style `?authHeader=`
     // promoted to a header by convertAuthHeaderQueryParam) or the
     // standards-compliant `Bearer <secret>` form (CS-10987 button-panel
-    // dashboards). Both routes through the same downstream handler. Once
-    // the GET-link dashboards have been retired for a release cycle, drop
-    // the bare-secret branch + the convertAuthHeaderQueryParam middleware
-    // in one cleanup PR.
-    let isValid =
-      !!authorization &&
-      (authorization === grafanaSecret ||
-        authorization === `Bearer ${grafanaSecret}`);
-    if (!isValid) {
+    // dashboards). The Bearer parse follows RFC 6750: scheme name is
+    // case-insensitive and any 1+ whitespace separator is allowed. Both
+    // shapes route through the same downstream handler. Once the GET-link
+    // dashboards have been retired for a release cycle, drop the
+    // bare-secret branch + the convertAuthHeaderQueryParam middleware in
+    // one cleanup PR.
+    if (!authorization) {
       await sendResponseForUnauthorizedRequest(
         ctxt,
         AuthenticationErrorMessages.MissingAuthHeader,
+      );
+      return;
+    }
+    let trimmed = authorization.trim();
+    let isValid = trimmed === grafanaSecret;
+    if (!isValid) {
+      let parts = trimmed.split(/\s+/);
+      isValid =
+        parts.length === 2 &&
+        parts[0].toLowerCase() === 'bearer' &&
+        parts[1] === grafanaSecret;
+    }
+    if (!isValid) {
+      await sendResponseForUnauthorizedRequest(
+        ctxt,
+        AuthenticationErrorMessages.TokenInvalid,
       );
       return;
     }
