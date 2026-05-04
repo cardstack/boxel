@@ -5,7 +5,12 @@ description: Use when implementing cards in a target realm through the factory e
 
 # Software Factory Operations
 
-Use this skill when operating inside the factory execution loop. The factory agent communicates with realms exclusively through **executable tool functions** — not local filesystem writes or boxel CLI commands.
+Use this skill when operating inside the factory execution loop. Workspace
+files (card definitions, instances, tests) live in a **local workspace
+mirror of the target realm** that the orchestrator syncs back to the realm
+between iterations. Realm-side operations (search, host commands, runtime
+validators) and control signals are **factory tools** the agent invokes
+directly.
 
 ## Realm Roles
 
@@ -14,19 +19,69 @@ Use this skill when operating inside the factory execution loop. The factory age
 - **Target realm** (user-specified, passed to `factory:go`)
   Receives all generated artifacts: Project, Issue, KnowledgeArticle, card definitions, card instances, Catalog Spec cards, and QUnit test files.
 
-## Available Tools
+## Tool Surfaces
 
-The agent has these tools during the execution loop. Use them by name — they are provided via the LLM's native tool-use protocol.
+Two surfaces are available, depending on which agent backend is running.
+The system prompt makes the concrete mapping explicit; this skill describes
+the operations.
 
-### Reading and Searching
+### Workspace files (local mirror of target realm)
 
-- `read_file({ path, realm? })` — Read a file from the target realm. Use before modifying anything.
+These files live in the workspace directory and are synced to the realm
+by the orchestrator. Use the workspace fs surface for them — and only
+for them:
+
+- Card definitions: `*.gts` files
+- Card tests: `*.test.gts` files
+- Content card instances under `<CardType>/<id>.json` (the user data
+  the cards represent — e.g. `StickyNote/note-1.json`)
+
+Tooling per backend:
+
+- **Claude backend:** use the **native** `Read`, `Write`, `Edit`,
+  `Glob`, `Grep`, and `Bash` tools. The SDK query's `cwd` is the
+  workspace, so realm-relative paths resolve directly. `Bash` is
+  available for safe shell helpers (`ls`, `find`, `cat`, read-only
+  `boxel` CLI commands like `boxel status` / `boxel history`).
+- **OpenRouter backend:** use the factory `read_file({ path, realm? })`
+  / `write_file({ path, content, realm? })` tools — same realm-relative
+  paths.
+
+Inspect before writing. Read or grep the file you plan to change, and
+glob for sibling files (e.g. existing card definitions in the same
+directory) before creating new ones.
+
+### Tracker-schema cards — always use the structured factory tools
+
+**Critical:** Project, Issue, KnowledgeArticle, Spec, and issue comments
+have dedicated factory tools that enforce schema and invariants. **Do
+not** create or update them by writing the underlying `.json` directly
+(via native `Write` on the Claude backend, or via `write_file` on
+OpenRouter) — going around the structured tools produces malformed
+cards or silently violates invariants the orchestrator depends on.
+
+| File / artifact                                | Use this tool         |
+| ---------------------------------------------- | --------------------- |
+| `Projects/<slug>.json`                         | `update_project`      |
+| `Issues/<slug>.json`                           | `update_issue`        |
+| `Knowledge Articles/<slug>.json`               | `create_knowledge`    |
+| `Spec/<slug>.json`                             | `create_catalog_spec` |
+| Append a comment to an existing issue          | `add_comment`         |
+
+These tools auto-construct the JSON:API document with the correct
+`adoptsFrom`, do read-patch-write merging that preserves attributes
+you did not pass, and (for issues) enforce that `description` stays
+immutable and that the agent only proposes the legal status
+transitions (`blocked` / `backlog`).
+
+### Realm-side reads (factory tools)
+
+These always go through factory tools regardless of backend — they
+reach the realm runtime, enforce schema and immutability invariants,
+or drive control flow.
+
 - `fetch_transpiled_module({ path, realm? })` — Fetch the compiled JavaScript output of a `.gts` module. Use when an eval/instantiate error reports a line/column — those numbers reference the transpiled output, not your source.
 - `search_realm({ query, realm? })` — Search for cards using a structured query object (filter, sort, page). Use to check for existing cards, find duplicates, inspect project state.
-
-### Writing Files
-
-- `write_file({ path, content, realm? })` — Write a file to the target realm. Path must include extension (`.gts`, `.json`, `.test.gts`).
 
 ### Updating Project State
 
@@ -77,14 +132,14 @@ All five tools are safe to call repeatedly mid-turn; none of them write a realm 
 
 ## Required Flow
 
-1. **Inspect before writing.** Use `search_realm` and `read_file` to understand what already exists in the target realm before creating or modifying files.
-2. **Write card definitions** (`.gts`) via `write_file` to the target realm.
-3. **Write `.test.gts` test files** co-located with card definitions via `write_file` to the target realm. Every issue must have at least one test file. **Write tests immediately after the card definition, before any instances or catalog specs.**
-4. **Write card instances** (`.json`) via `write_file` to the target realm.
-5. **Write a Catalog Spec card** (`Spec/<card-name>.json`) for each top-level card defined in the brief. Link sample instances via `linkedExamples`.
+1. **Inspect before writing.** Use `search_realm` for existing cards in the target realm. Read or grep the workspace files you plan to change (or sibling files in the same directory) before creating or modifying anything.
+2. **Write card definitions** (`.gts`) into the workspace.
+3. **Write `.test.gts` test files** co-located with card definitions. Every issue must have at least one test file. **Write tests immediately after the card definition, before any instances or catalog specs.**
+4. **Write card instances** (`.json`) into the workspace.
+5. **Create a Catalog Spec card** (`Spec/<card-name>.json`) for each top-level card defined in the brief by calling `create_catalog_spec` — never via native `Write`. Link sample instances via `linkedExamples`.
 6. **(Optional) Call `run_tests()`** to self-validate before signalling done. This returns test results in-memory without writing any realm artifacts. Iterating on your own work with `run_tests` is faster than round-tripping through the orchestrator pipeline.
 7. **Call `signal_done()`** when all implementation and test files are written. The orchestrator runs the full validation pipeline (which persists a `TestRun` card, among other artifacts) automatically after this.
-8. **If tests fail**, the orchestrator feeds failure details back. Use `read_file` to inspect current state, then `write_file` to fix implementation or test files. Call `signal_done()` again.
+8. **If tests fail**, the orchestrator feeds failure details back. Re-read the affected workspace files, fix them, and call `signal_done()` again.
 9. **Record progress** via `add_comment` — append notes, blocked reasons, or context to the issue. Never modify the issue description.
 
 ## Target Realm Artifact Structure
@@ -204,8 +259,9 @@ export function runTests() {
 
 ## Important Rules
 
-- **Never write to the source realm.** All generated artifacts go to the target realm.
-- **Use realm HTTP APIs only.** The factory agent does not have access to the local filesystem or boxel CLI commands (`boxel sync`, `boxel push`, etc.). All reads and writes go through the realm API via tool functions.
+- **Never write to the source realm.** All generated artifacts go to the target realm via the workspace mirror.
+- **Stay inside the workspace.** Workspace fs operations are scoped to the local mirror of the target realm. Use realm-relative paths (`sticky-note.gts`, `StickyNote/note-1.json`) — never absolute paths outside the workspace, never the user's home directory, never the source realm.
+- **Don't drive sync yourself.** The orchestrator owns `boxel sync` / `boxel push`. Read-only `boxel` commands (`boxel status`, `boxel history`) are fine for inspection, but never run sync, push, or any command that mutates the realm directly.
 - **Write source code, not compiled output.** When writing `.gts` files, write clean idiomatic source — never compiled JSON blocks or base64-encoded content.
 - **Use absolute `adoptsFrom.module` URLs** when referencing definitions that live in a different realm (e.g., the source realm's tracker schema).
 - **Start small and iterate.** Write the smallest working implementation first, then add the test. If tests fail, read the failure output carefully before making targeted fixes.

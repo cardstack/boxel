@@ -54,6 +54,24 @@ import { logger } from '../logger';
 const MCP_SERVER_NAME = 'factory';
 const MAX_TOOL_USE_TURNS = 50;
 
+/**
+ * Built-in Claude Code tools the factory exposes to the model on the
+ * Claude backend. These replace the custom `read_file` / `write_file`
+ * factory tools — they operate on the SDK query's `cwd` (the factory
+ * workspace), so the model uses native semantics for fs work and we
+ * keep MCP focused on operations that genuinely need realm runtime
+ * access (search_realm, validators, structured updates, signals).
+ */
+const NATIVE_FS_TOOLS = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'];
+
+/**
+ * Factory tool names superseded by native Claude Code tools. Filtered
+ * out of the MCP catalog on the Claude backend so the model only ever
+ * sees one read/write surface (the native one). OpenRouter still gets
+ * these tools — it has no native fs.
+ */
+const NATIVE_FS_REPLACED_TOOLS = new Set(['read_file', 'write_file']);
+
 let log = logger('factory-agent-claude-code');
 
 type CapturedSignal =
@@ -74,6 +92,13 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
   // install. Suppressed on every subsequent inner-loop iteration to keep
   // the log quiet.
   private modelLogged = false;
+  // tool_use_id → tool name. SDK tool_result blocks identify which call
+  // they correspond to by `tool_use_id` only, so we maintain this map
+  // (populated from each assistant `tool_use` block as it streams) to
+  // label tool-result lines in debug output. Without this, every
+  // result message looks like an opaque `[user/tool-result]` and the
+  // operator can't tell which tool actually ran.
+  private toolUseIdToName = new Map<string, string>();
 
   constructor(
     config: ClaudeCodeAgentConfig = {},
@@ -92,14 +117,23 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     context: AgentContext,
     tools: FactoryTool[],
   ): Promise<AgentRunResult> {
-    let systemPrompt = this.buildSystemPrompt(context, tools);
+    // Filter out the factory's `read_file` / `write_file` shims — on the
+    // Claude backend the model uses native Read / Write / Edit instead,
+    // scoped to the workspace via the SDK query's `cwd`. The shared
+    // FactoryTool[] is built once for both backends; OpenRouter still
+    // sees the full list.
+    let mcpFactoryTools = tools.filter(
+      (t) => !NATIVE_FS_REPLACED_TOOLS.has(t.name),
+    );
+
+    let systemPrompt = this.buildSystemPrompt(context, mcpFactoryTools);
     let userPrompt = this.buildUserPrompt(context);
 
     let toolCallLog: ToolCallEntry[] = [];
     let captured: CapturedSignal | undefined;
     let abortController = new AbortController();
 
-    let sdkTools = buildSdkToolsFromFactoryTools(tools, {
+    let sdkTools = buildSdkToolsFromFactoryTools(mcpFactoryTools, {
       onToolCall: (entry) => toolCallLog.push(entry),
       onSignal: (signal) => {
         captured = signal;
@@ -112,19 +146,28 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       tools: sdkTools,
     });
 
-    let allowedTools = tools.map((t) => `mcp__${MCP_SERVER_NAME}__${t.name}`);
+    let allowedTools = [
+      ...NATIVE_FS_TOOLS,
+      ...mcpFactoryTools.map((t) => `mcp__${MCP_SERVER_NAME}__${t.name}`),
+    ];
 
     let options: Options = {
       systemPrompt,
       mcpServers: { [MCP_SERVER_NAME]: mcpServer },
-      // Disable Claude Code's built-in tools so the model can only call
-      // factory tools. This enforces the phase-2 invariant that the ralph
-      // loop owns the control plane; Claude Code is the LLM backend only.
-      tools: [],
+      // Enable native Claude Code fs / shell tools so the model can read
+      // and write workspace files directly (Read / Write / Edit) and run
+      // boxel CLI / shell helpers (Bash, Glob, Grep). Realm I/O still goes
+      // through factory MCP tools — the ralph loop owns the realm-side
+      // control plane, Claude Code is the LLM + native-tool surface.
+      tools: NATIVE_FS_TOOLS,
       allowedTools,
       permissionMode: 'bypassPermissions',
       allowDangerouslySkipPermissions: true,
       maxTurns: MAX_TOOL_USE_TURNS,
+      // Anchor native fs tools to the factory workspace so relative paths
+      // emitted by the model (e.g. `sticky-note.gts`) resolve inside the
+      // mirror of the target realm, not the user's home directory.
+      ...(this.config.workspaceDir ? { cwd: this.config.workspaceDir } : {}),
       // Isolate from the host user's Claude Code settings — we want
       // deterministic agent behavior regardless of whose machine this runs on.
       settingSources: [],
@@ -201,28 +244,106 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       skills,
     });
 
-    // The shared prompt template references tools by their plain names
-    // (`read_file`, `signal_done`, etc.) — which is what OpenRouter's
-    // tool-use protocol registers. The Claude Agent SDK exposes tools via
-    // an MCP server and prefixes every tool name with `mcp__<server>__`,
-    // so without a bridge the model can see "write_file" in the prompt
-    // but only `mcp__factory__write_file` in its tool list. Append a
-    // short tool-naming note so the model can resolve the two
-    // consistently. The OpenRouter path leaves the template untouched.
-    let renameList = tools
+    // Two tool surfaces are visible to the model on the Claude backend:
+    //   1. Native Claude Code tools (Read / Write / Edit / Bash / Glob /
+    //      Grep) — anchored to the factory workspace via the SDK query's
+    //      `cwd`. These replace the factory's old `read_file` /
+    //      `write_file` shims; the model works on the local mirror of the
+    //      target realm directly.
+    //   2. Factory tools exposed via an in-process MCP server, prefixed
+    //      with `mcp__<server>__`. Used for everything that needs realm
+    //      runtime access (search, validators, host commands, structured
+    //      updates) and for control signals (signal_done /
+    //      request_clarification).
+    //
+    // The shared prompt template / skills reference factory operations by
+    // their plain names (e.g. `signal_done`). Append a short rename map
+    // so the model translates plain names into MCP-prefixed calls.
+    // Build the authoritative list of MCP tool names so the addendum can
+    // both rename them and serve as the closed catalog. Adding entries
+    // that look related but are not actually registered (e.g. `realm-read`,
+    // `realm-write`) invites the model to invent siblings, so we keep the
+    // list to exactly the tools the SDK MCP server exposes.
+    let mcpRows = tools
       .map((t) => `- \`${t.name}\` → \`mcp__${MCP_SERVER_NAME}__${t.name}\``)
       .join('\n');
+
+    // Names of the structured update tools that exist in this run. Used
+    // both in the rule (`Write must not be used for these`) and in the
+    // surrounding rationale, so collect them once. The agent only sees
+    // the ones we actually registered.
+    let structuredCardTools = new Set([
+      'update_project',
+      'update_issue',
+      'create_knowledge',
+      'create_catalog_spec',
+      'add_comment',
+    ]);
+    let structuredCardToolList = tools
+      .map((t) => t.name)
+      .filter((n) => structuredCardTools.has(n));
+    let structuredCardToolHumanList = structuredCardToolList
+      .map((n) => `\`${n}\``)
+      .join(' / ');
+
     let toolNamingNote = [
       '',
-      '# Tool naming (Claude Code backend)',
+      '# Tools (Claude Code backend)',
       '',
-      `Your tools are exposed through an MCP server named \`${MCP_SERVER_NAME}\`.`,
-      `When you invoke a tool, use its MCP-prefixed name — not the plain`,
-      `name used elsewhere in this prompt. Mapping:`,
+      'You have two tool surfaces. Pick the right one for the file you are',
+      'about to touch — they are not interchangeable.',
       '',
-      renameList,
+      '## Workspace files — use native Claude Code tools',
       '',
-    ].join('\n');
+      'The factory mirrors the target realm to a local workspace directory',
+      'and sets it as your working directory. Use the native tools you',
+      'already know — `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash` —',
+      'with realm-relative paths (e.g. `sticky-note.gts`,',
+      '`StickyNote/note-1.json`). The orchestrator syncs your changes back',
+      'to the realm between iterations.',
+      '',
+      'Use native tools for:',
+      '',
+      '- Card definitions: `*.gts` files',
+      '- Card tests: `*.test.gts` files',
+      '- Card instances under `<CardType>/<id>.json` (the user data the cards represent)',
+      '- Inspection: `Read`, `Glob`, `Grep`, and read-only `Bash` (`ls`, `find`, `cat`, `boxel status`, `boxel history`)',
+      '',
+      'Stay inside the workspace directory. Never write to absolute paths',
+      'outside it.',
+      '',
+      '## Tracker-schema cards + realm operations — use factory MCP tools',
+      '',
+      `These are exposed through an in-process MCP server named`,
+      `\`${MCP_SERVER_NAME}\` and prefixed with \`mcp__${MCP_SERVER_NAME}__\`.`,
+      'Use them by their plain names in your reasoning, but invoke them by',
+      'their prefixed names.',
+      '',
+      '**Critical rule — do NOT use `Write` or `Edit` for tracker-schema',
+      'cards.** Project, Issue, KnowledgeArticle, Spec, and issue comments',
+      'all have dedicated factory tools that enforce schema and invariants',
+      '(e.g. `update_issue` strips `description` so it stays immutable;',
+      '`create_catalog_spec` sets the correct `adoptsFrom`; all of them do',
+      'read-patch-write merging that preserves attributes you did not pass).',
+      'Going around them via native `Write` produces malformed cards or',
+      'silently violates invariants the orchestrator depends on.',
+      '',
+      structuredCardToolList.length > 0
+        ? `Always use these structured tools for the corresponding files: ${structuredCardToolHumanList}.`
+        : '',
+      '',
+      'The complete factory tool catalog is below. **Do not call any tool',
+      'whose plain name is not in this list** — there is no `realm-read`,',
+      '`realm-write`, or other realm-side fs tool. Realm reads go through',
+      '`search_realm` / `fetch_transpiled_module`; realm writes happen by',
+      'editing workspace files (or calling a structured tool above) and',
+      'letting the orchestrator sync.',
+      '',
+      mcpRows,
+      '',
+    ]
+      .filter((line) => line !== null && line !== undefined)
+      .join('\n');
 
     return base + toolNamingNote;
   }
@@ -251,14 +372,24 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
 
   private debugLog(message: SDKMessage): void {
     try {
-      let summary =
-        message.type === 'assistant'
-          ? `[assistant] ${summarizeAssistantMessage(message)}`
-          : message.type === 'user'
-            ? `[user/tool-result]`
-            : message.type === 'result'
-              ? `[result] subtype=${(message as { subtype?: string }).subtype ?? 'unknown'}`
-              : `[${(message as { type: string }).type}]`;
+      let summary: string;
+      if (message.type === 'assistant') {
+        // Capture tool_use_id → name from each tool_use block so the next
+        // tool_result message can be labelled with the actual tool name.
+        for (let entry of collectToolUseEntries(message)) {
+          this.toolUseIdToName.set(entry.id, entry.name);
+        }
+        summary = `[assistant] ${summarizeAssistantMessage(message)}`;
+      } else if (message.type === 'user') {
+        summary = `[user/tool-result] ${summarizeUserMessage(
+          message,
+          this.toolUseIdToName,
+        )}`;
+      } else if (message.type === 'result') {
+        summary = `[result] subtype=${(message as { subtype?: string }).subtype ?? 'unknown'}`;
+      } else {
+        summary = `[${(message as { type: string }).type}]`;
+      }
       log.info(summary);
     } catch {
       // best-effort
@@ -376,4 +507,127 @@ function summarizeAssistantMessage(msg: {
     return 'unknown';
   });
   return parts.join(', ');
+}
+
+/**
+ * Pull `{ id, name }` from each `tool_use` block in an assistant message.
+ * Used to maintain the tool_use_id → name map that lets us label
+ * subsequent `tool_result` messages with the actual tool name.
+ */
+function collectToolUseEntries(msg: {
+  message: { content?: unknown };
+}): { id: string; name: string }[] {
+  let content = msg.message?.content;
+  if (!Array.isArray(content)) {
+    return [];
+  }
+  let entries: { id: string; name: string }[] = [];
+  for (let block of content) {
+    if (
+      block &&
+      typeof block === 'object' &&
+      (block as { type?: string }).type === 'tool_use'
+    ) {
+      let id = (block as { id?: string }).id;
+      let name = (block as { name?: string }).name;
+      if (typeof id === 'string' && typeof name === 'string') {
+        entries.push({ id, name });
+      }
+    }
+  }
+  return entries;
+}
+
+/**
+ * Format a user message for debug output. User messages from the SDK
+ * carry `tool_result` blocks (one per prior `tool_use`); we pull each
+ * one's correlated tool name from `idToName`, mark error results, and
+ * include a short snippet of the payload so the operator can see what
+ * actually came back without scrolling through full payloads.
+ */
+function summarizeUserMessage(
+  msg: { message: { content?: unknown } },
+  idToName: Map<string, string>,
+): string {
+  let content = msg.message?.content;
+  if (typeof content === 'string') {
+    return collapseAndTruncate(content);
+  }
+  if (!Array.isArray(content)) {
+    return '(no content)';
+  }
+  let parts: string[] = [];
+  for (let block of content) {
+    if (!block || typeof block !== 'object') {
+      parts.push('unknown');
+      continue;
+    }
+    let t = (block as { type?: string }).type;
+    if (t === 'tool_result') {
+      let id = (block as { tool_use_id?: string }).tool_use_id;
+      let name =
+        (id && idToName.get(id)) ??
+        (id ? `<tool ${id.slice(0, 8)}>` : '<unknown>');
+      let isError = (block as { is_error?: boolean }).is_error === true;
+      let payload = stringifyToolResultContent(
+        (block as { content?: unknown }).content,
+      );
+      let label = isError ? `tool_result(${name}, ERROR)` : `tool_result(${name})`;
+      parts.push(`${label}: ${collapseAndTruncate(payload)}`);
+    } else if (t === 'text') {
+      let text = (block as { text?: string }).text ?? '';
+      parts.push(`text(${collapseAndTruncate(text, 80)})`);
+    } else {
+      parts.push(typeof t === 'string' ? t : 'unknown');
+    }
+  }
+  return parts.length > 0 ? parts.join(' | ') : '(no content)';
+}
+
+/**
+ * SDK `tool_result.content` is `string | Array<{ type, text, ... }>`.
+ * Normalize to a single string so the debug summarizer can truncate it.
+ */
+function stringifyToolResultContent(content: unknown): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((c) => {
+        if (typeof c === 'string') return c;
+        if (c && typeof c === 'object') {
+          let text = (c as { text?: unknown }).text;
+          if (typeof text === 'string') return text;
+          try {
+            return JSON.stringify(c);
+          } catch {
+            return '';
+          }
+        }
+        return '';
+      })
+      .join('');
+  }
+  if (content === undefined || content === null) {
+    return '';
+  }
+  try {
+    return JSON.stringify(content);
+  } catch {
+    return String(content);
+  }
+}
+
+/**
+ * Collapse newlines and truncate to a single readable line for log
+ * output. Long results are tagged with their original length so the
+ * operator can tell how much was elided.
+ */
+function collapseAndTruncate(value: string, max = 200): string {
+  let oneLine = value.replace(/\s+/g, ' ').trim();
+  if (oneLine.length <= max) {
+    return oneLine;
+  }
+  return `${oneLine.slice(0, max)}… (+${oneLine.length - max} chars)`;
 }

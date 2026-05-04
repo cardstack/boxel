@@ -263,7 +263,7 @@ module('factory-agent-claude-code', function () {
     test('wires the factory MCP server into Options.mcpServers', async function (assert) {
       let capturedOptions: Options | undefined;
       let agent = new ClaudeCodeFactoryAgent(
-        {},
+        { workspaceDir: '/tmp/factory-workspace-test' },
         {
           promptLoader: stubPromptLoader,
           queryFn: ({ options }) => {
@@ -280,18 +280,94 @@ module('factory-agent-claude-code', function () {
       assert.ok(mcpServers, 'mcpServers is set');
       assert.true('factory' in mcpServers, 'factory MCP server registered');
 
-      // Built-in Claude Code tools must be disabled so the model only has
-      // the factory's custom tools — this guards against the control-plane
-      // boundary drifting.
-      assert.deepEqual(capturedOptions!.tools, []);
+      // Native Claude Code fs / shell tools are enabled so the model
+      // can read and write workspace files directly. Realm I/O still
+      // goes through the factory MCP tools.
+      assert.deepEqual(capturedOptions!.tools, [
+        'Read',
+        'Write',
+        'Edit',
+        'Bash',
+        'Glob',
+        'Grep',
+      ]);
 
       assert.deepEqual(capturedOptions!.allowedTools, [
+        'Read',
+        'Write',
+        'Edit',
+        'Bash',
+        'Glob',
+        'Grep',
         'mcp__factory__signal_done',
       ]);
+
+      assert.strictEqual(
+        capturedOptions!.cwd,
+        '/tmp/factory-workspace-test',
+        'cwd is set to the factory workspace so native fs tools resolve realm-relative paths',
+      );
 
       assert.strictEqual(capturedOptions!.permissionMode, 'bypassPermissions');
       assert.true(capturedOptions!.allowDangerouslySkipPermissions);
       assert.deepEqual(capturedOptions!.settingSources, []);
+    });
+
+    test('omits read_file / write_file from the MCP catalog (native tools cover them)', async function (assert) {
+      let capturedOptions: Options | undefined;
+      let agent = new ClaudeCodeFactoryAgent(
+        { workspaceDir: '/tmp/factory-workspace-test' },
+        {
+          promptLoader: stubPromptLoader,
+          queryFn: ({ options }) => {
+            capturedOptions = options;
+            return emptyQueryIterator() as never;
+          },
+        },
+      );
+
+      await agent.run(makeContext(), [
+        makeTool({ name: 'read_file' }),
+        makeTool({ name: 'write_file' }),
+        makeTool({ name: 'search_realm' }),
+        makeTool({ name: 'signal_done' }),
+      ]);
+
+      let allowed = capturedOptions!.allowedTools ?? [];
+      assert.notOk(
+        allowed.includes('mcp__factory__read_file'),
+        'read_file is not registered as an MCP tool',
+      );
+      assert.notOk(
+        allowed.includes('mcp__factory__write_file'),
+        'write_file is not registered as an MCP tool',
+      );
+      assert.true(
+        allowed.includes('mcp__factory__search_realm'),
+        'realm-side factory tools remain in the MCP catalog',
+      );
+      assert.true(
+        allowed.includes('mcp__factory__signal_done'),
+        'control-flow factory tools remain in the MCP catalog',
+      );
+    });
+
+    test('omits cwd when no workspaceDir is configured', async function (assert) {
+      let capturedOptions: Options | undefined;
+      let agent = new ClaudeCodeFactoryAgent(
+        {},
+        {
+          promptLoader: stubPromptLoader,
+          queryFn: ({ options }) => {
+            capturedOptions = options;
+            return emptyQueryIterator() as never;
+          },
+        },
+      );
+
+      await agent.run(makeContext(), [makeTool({ name: 'signal_done' })]);
+
+      assert.strictEqual(capturedOptions!.cwd, undefined);
     });
 
     test('DONE_SIGNAL from a tool handler ends the run with status=done', async function (assert) {

@@ -90,6 +90,15 @@ export interface FactoryAgentConfig {
 export interface ClaudeCodeAgentConfig {
   /** When true, log SDK events to stderr. */
   debug?: boolean;
+  /**
+   * Local workspace directory mirroring the target realm. Set as the SDK
+   * query's `cwd` so the model's native Read / Write / Edit / Bash / Glob /
+   * Grep tools operate against the factory workspace by default — paths like
+   * `sticky-note.gts` resolve inside the workspace, with no surprise hits
+   * against the user's filesystem. Realm I/O still goes through factory
+   * MCP tools (search_realm, run_command, validators, …).
+   */
+  workspaceDir?: string;
 }
 
 export interface ProjectData {
