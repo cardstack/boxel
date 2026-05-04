@@ -174,6 +174,7 @@ normalize folders Folder
 #      look like a thresholds container (`mode` + `steps`) at index 0
 #      so a `value: null` higher up the steps array (a malformed
 #      threshold worth surfacing) still shows in the diff.
+# shellcheck disable=SC2016  # the `$url` inside is a jq variable bound via --arg, not a shell expansion.
 JQ_NORMALIZE='
   walk(
     if type == "object"

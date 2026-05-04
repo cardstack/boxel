@@ -129,10 +129,13 @@ done < <(find grafanactl/resources/dashboards -type f -name '*.json' 2>/dev/null
 #    Run from REPO_ROOT so prettier picks up the root .prettierrc.js (which
 #    sets singleQuote: false for YAML). Patterns are package-scoped.
 section "prettier --check (YAML)"
-if ! command -v pnpm >/dev/null 2>&1; then
-  err "pnpm not installed — required for prettier (skip with PRETTIER_SKIP=1 if running outside the workspace)"
-elif [[ "${PRETTIER_SKIP:-}" == "1" ]]; then
+if [[ "${PRETTIER_SKIP:-}" == "1" ]]; then
+  # Honored before the pnpm-availability check so the diff/apply workflows
+  # — which intentionally don't run `pnpm install` to stay fast — can opt
+  # out without tripping the missing-pnpm error.
   echo "  PRETTIER_SKIP=1 — skipping prettier check"
+elif ! command -v pnpm >/dev/null 2>&1; then
+  err "pnpm not installed — required for prettier (skip with PRETTIER_SKIP=1 if running outside the workspace)"
 else
   ( cd "$REPO_ROOT" && \
     pnpm exec prettier --check \
