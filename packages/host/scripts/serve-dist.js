@@ -1,8 +1,10 @@
 /**
- * Wrapper around `serve` that supports dynamic port allocation in environment mode.
- * When BOXEL_ENVIRONMENT is set, picks a free port, starts `serve`, then registers
+ * Wrapper around `vite preview` that supports dynamic port allocation in environment mode.
+ * When BOXEL_ENVIRONMENT is set, picks a free port, starts preview, then registers
  * with Traefik so that `host.<branch>.localhost` routes to this instance.
- * When BOXEL_ENVIRONMENT is not set, behaves identically to the old serve:dist command.
+ * When BOXEL_ENVIRONMENT is not set, previews on port 4200.
+ *
+ * CORS headers and SPA fallback are configured in vite.config.mjs under `preview`.
  */
 
 const { spawn } = require('child_process');
@@ -13,18 +15,7 @@ const BOXEL_ENVIRONMENT = process.env.BOXEL_ENVIRONMENT;
 function runServe(port) {
   const child = spawn(
     'npx',
-    [
-      'serve',
-      '--config',
-      '../tests/serve.json',
-      '--single',
-      '--cors',
-      '--no-request-logging',
-      '--no-etag',
-      '--listen',
-      String(port),
-      'dist',
-    ],
+    ['vite', 'preview', '--port', String(port), '--strictPort'],
     { stdio: 'inherit', cwd: path.join(__dirname, '..'), shell: true },
   );
   child.on('exit', (code) => process.exit(code || 0));

@@ -393,7 +393,7 @@ export class RealmServer {
         let originParameter = new URL(decodeURIComponent(connectMatch[1])).href;
 
         let publishedRealms = await query(this.dbAdapter, [
-          `SELECT published_realm_url FROM published_realms WHERE published_realm_url LIKE `,
+          `SELECT url FROM realm_registry WHERE kind = 'published' AND url LIKE `,
           param(`${originParameter}%`),
         ]);
 
@@ -671,7 +671,7 @@ export class RealmServer {
     }
 
     let rows = await query(this.dbAdapter, [
-      `SELECT last_published_at FROM published_realms WHERE published_realm_url =`,
+      `SELECT last_published_at FROM realm_registry WHERE kind = 'published' AND url =`,
       param(realm.url),
     ]);
 
@@ -871,13 +871,10 @@ export class RealmServer {
       },
     );
 
-    indexHTML = indexHTML
-      .replace(/(src|href)="\//g, `$1="${this.assetsURL.href}`)
-      // This is imported within a script tag vs being in an attribute
-      .replace(
-        '/assets/content-tag/standalone.js',
-        new URL('/assets/content-tag/standalone.js', this.assetsURL.href).href,
-      );
+    indexHTML = indexHTML.replace(
+      /(src|href)="\//g,
+      `$1="${this.assetsURL.href}`,
+    );
 
     // Strip any static favicon/apple-touch-icon links from the base HTML
     // since these are now dynamically injected between the head markers

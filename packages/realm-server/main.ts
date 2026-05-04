@@ -18,8 +18,6 @@ import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
-import * as ContentTagGlobal from 'content-tag';
-
 import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer';
 import { buildCreatePrerenderAuth } from './prerender/auth';
@@ -39,8 +37,6 @@ import {
 } from './lib/realm-registry-reconciler';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
-
-(globalThis as any).ContentTagGlobal = ContentTagGlobal;
 
 let log = logger('main');
 const runtimeMetadataFile =

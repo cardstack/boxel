@@ -1,8 +1,9 @@
 /**
- * Wrapper around `ember serve` that supports dynamic port allocation in environment mode.
- * When BOXEL_ENVIRONMENT is set, picks a free port, passes --port to ember serve,
- * then registers with Traefik so that `host.<branch>.localhost` routes here.
- * When BOXEL_ENVIRONMENT is not set, behaves identically to the old start command.
+ * Wrapper around `vite` (dev server) that supports dynamic port allocation in
+ * environment mode. When BOXEL_ENVIRONMENT is set, picks a free port, passes
+ * --port to vite, then registers with Traefik so that `host.<branch>.localhost`
+ * routes here. When BOXEL_ENVIRONMENT is not set, serves on port 4200 to match
+ * the readiness URL the dev-all mise task polls.
  */
 
 const { spawn } = require('child_process');
@@ -11,24 +12,18 @@ const net = require('net');
 
 const BOXEL_ENVIRONMENT = process.env.BOXEL_ENVIRONMENT;
 
-function startEmber(port) {
-  const args = ['serve', '--port', String(port)];
-  const child = spawn('ember', args, {
+function startVite(port) {
+  const child = spawn('npx', ['vite', '--port', String(port), '--strictPort'], {
     stdio: 'inherit',
     cwd: path.join(__dirname, '..'),
     shell: true,
-    env: {
-      ...process.env,
-      NODE_OPTIONS: process.env.NODE_OPTIONS || '--max-old-space-size=8192',
-    },
   });
   child.on('exit', (code) => process.exit(code || 0));
   return child;
 }
 
 if (!BOXEL_ENVIRONMENT) {
-  // Standard mode: default ember serve on port 4200
-  startEmber(4200);
+  startVite(4200);
 } else {
   const { ensureTraefik } = require('./ensure-traefik');
   const { getEnvSlug, registerWithTraefik } = require('./traefik-helpers');
@@ -43,19 +38,18 @@ if (!BOXEL_ENVIRONMENT) {
     process.env.MATRIX_URL = `http://matrix.${slug}.localhost`;
   }
 
-  // Find a free port
   const srv = net.createServer();
   srv.listen(0, () => {
     const port = srv.address().port;
     srv.close(() => {
       console.log(
-        `[environment-mode] Starting ember serve on dynamic port ${port}`,
+        `[environment-mode] Starting vite dev server on dynamic port ${port}`,
       );
       console.log(
         `[environment-mode] Will be accessible at http://${hostname}`,
       );
 
-      startEmber(port);
+      startVite(port);
 
       try {
         registerWithTraefik(slug, hostname, port);

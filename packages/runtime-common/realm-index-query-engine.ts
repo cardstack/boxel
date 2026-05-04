@@ -1,5 +1,5 @@
 import { Memoize } from 'typescript-memoize';
-import { isScopedCSSRequest } from 'glimmer-scoped-css';
+import { isScopedCSSRequest } from './scoped-css';
 import cloneDeep from 'lodash/cloneDeep';
 import {
   SupportedMimeType,

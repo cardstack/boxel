@@ -38,7 +38,7 @@
         "title": "Reindex ${full_index_realm}",
         "tooltip": "",
         "type": "link",
-        "url": "${realm_server}_grafana-reindex?authHeader=${grafana_secret}&realm=${full_index_realm}"
+        "url": "${realm_server}_grafana-reindex?realm=${full_index_realm}"
       },
       {
         "asDropdown": false,
@@ -50,7 +50,7 @@
         "title": "Reindex All Realms",
         "tooltip": "",
         "type": "link",
-        "url": "${realm_server}_grafana-full-reindex?authHeader=${grafana_secret}"
+        "url": "${realm_server}_grafana-full-reindex"
       }
     ],
     "panels": [
@@ -100,7 +100,7 @@
                     {
                       "targetBlank": true,
                       "title": "Delete",
-                      "url": "${realm_server}_grafana-complete-job?authHeader=${grafana_secret}&job_id=${__value.raw}"
+                      "url": "${realm_server}_grafana-complete-job?job_id=${__value.raw}"
                     }
                   ]
                 },
@@ -267,7 +267,7 @@
                     {
                       "targetBlank": true,
                       "title": "Delete",
-                      "url": "${realm_server}_grafana-complete-job?authHeader=${grafana_secret}&reservation_id=${__value.raw}"
+                      "url": "${realm_server}_grafana-complete-job?reservation_id=${__value.raw}"
                     }
                   ]
                 },
@@ -520,13 +520,6 @@
           "hide": 2,
           "name": "realm_server",
           "query": "__REALM_SERVER_URL__",
-          "skipUrlSync": false,
-          "type": "constant"
-        },
-        {
-          "hide": 2,
-          "name": "grafana_secret",
-          "query": "REPLACE_AT_APPLY_TIME",
           "skipUrlSync": false,
           "type": "constant"
         }
