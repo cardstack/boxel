@@ -79,7 +79,7 @@ export async function touchFiles(
       };
     }
     targets = listed.filenames.filter(
-      (p) => p.endsWith('.json') || p.endsWith('.gts'),
+      (p) => (p.endsWith('.json') || p.endsWith('.gts')) && !isProtectedFile(p),
     );
   } else {
     if (paths.length === 0) {
@@ -107,14 +107,14 @@ export async function touchFiles(
       continue;
     }
 
-    if (options?.dryRun) {
-      touched.push(path);
-      continue;
-    }
-
     let readResult = await read(realmUrl, path, { profileManager: pm });
     if (!readResult.ok || readResult.content == null) {
       skipped.push({ path, reason: readResult.error ?? 'read failed' });
+      continue;
+    }
+
+    if (options?.dryRun) {
+      touched.push(path);
       continue;
     }
 
@@ -154,8 +154,12 @@ function toggleTrailingNewline(content: string): string {
 }
 
 function touchGts(content: string): string {
-  if (content.includes(TOUCH_COMMENT)) {
-    return content.replace(new RegExp(`\\n?${TOUCH_COMMENT}\\n?`, 'g'), '\n');
+  // Only strip the dedicated trailing marker line we ourselves appended,
+  // so occurrences inside string literals or unrelated comments are left
+  // untouched and the mutation stays semantically neutral.
+  let trailingMarker = `\n${TOUCH_COMMENT}\n`;
+  if (content.endsWith(trailingMarker)) {
+    return content.slice(0, -trailingMarker.length) + '\n';
   }
   return content.endsWith('\n')
     ? content + TOUCH_COMMENT + '\n'

@@ -30,6 +30,22 @@ export class TouchCheck extends CardDef {
 }
 `;
 
+// Contains the marker text inside a string literal to verify that touchGts
+// only toggles the dedicated trailing line, not arbitrary occurrences.
+const SOURCE_GTS_WITH_MARKER_IN_STRING = `import {
+  CardDef,
+  field,
+  contains,
+} from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
+
+export class MarkerInString extends CardDef {
+  static displayName = 'Marker In String';
+  static markerHint = '// touched for re-index';
+  @field label = contains(StringField);
+}
+`;
+
 function makeCardJson(title: string): string {
   return JSON.stringify(
     {
@@ -53,6 +69,7 @@ beforeAll(async () => {
   await startTestRealmServer({
     fileSystem: {
       'touch-check.gts': SOURCE_GTS,
+      'marker-in-string.gts': SOURCE_GTS_WITH_MARKER_IN_STRING,
       'cards/one.json': makeCardJson('One'),
       'cards/two.json': makeCardJson('Two'),
       'cards/three.json': makeCardJson('Three'),
@@ -96,6 +113,17 @@ async function readFileContent(relPath: string): Promise<string> {
     },
   );
   return response.text();
+}
+
+async function writeFileContent(
+  relPath: string,
+  content: string,
+): Promise<void> {
+  await profileManager.authedRealmFetch(`${realmUrl}${relPath}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/vnd.card+source' },
+    body: content,
+  });
 }
 
 describe('file touch (integration)', () => {
@@ -177,8 +205,43 @@ describe('file touch (integration)', () => {
     expect(result.touched).toContain('touch-check.gts');
     expect(result.touched).toContain('cards/one.json');
     expect(result.touched).toContain('cards/two.json');
-    // protected files must never be in the touched list
+    // .realm.json is filtered out before per-target processing, so it must
+    // appear in neither list — otherwise --all would exit 1 in normal realms.
     expect(result.touched).not.toContain('.realm.json');
+    expect(result.skipped.map((s) => s.path)).not.toContain('.realm.json');
+    expect(result.skipped).toEqual([]);
+  });
+
+  it('touching a .gts that contains the marker text inside a string literal leaves the literal intact and round-trips', async () => {
+    let target = 'marker-in-string.gts';
+    let countMarker = (s: string) =>
+      (s.match(/\/\/ touched for re-index/g) ?? []).length;
+    // Earlier tests (notably --all) may have appended the marker to this
+    // shared fixture; reset to a known baseline so this test is independent.
+    await writeFileContent(target, SOURCE_GTS_WITH_MARKER_IN_STRING);
+    let original = await readFileContent(target);
+    expect(original).toContain(`'// touched for re-index'`);
+    expect(countMarker(original)).toBe(1);
+
+    let firstTouch = await touchFiles(realmUrl, [target], { profileManager });
+    expect(firstTouch.ok, JSON.stringify(firstTouch)).toBe(true);
+
+    let afterFirst = await readFileContent(target);
+    // Exactly one new marker — the original in-string occurrence survived.
+    expect(countMarker(afterFirst)).toBe(2);
+    expect(afterFirst).toContain(
+      `static markerHint = '// touched for re-index';`,
+    );
+
+    let secondTouch = await touchFiles(realmUrl, [target], { profileManager });
+    expect(secondTouch.ok, JSON.stringify(secondTouch)).toBe(true);
+
+    let afterSecond = await readFileContent(target);
+    // The appended marker was removed, the in-string one is still there.
+    expect(countMarker(afterSecond)).toBe(1);
+    expect(afterSecond).toContain(
+      `static markerHint = '// touched for re-index';`,
+    );
   });
 
   it('--dry-run reports the planned touches without writing', async () => {
@@ -227,6 +290,18 @@ describe('file touch (integration)', () => {
     expect(result.touched).toEqual([]);
     expect(result.skipped).toHaveLength(1);
     expect(result.skipped[0].path).toBe('cards/does-not-exist.json');
+    expect(result.skipped[0].reason).toContain('404');
+  });
+
+  it('--dry-run skips paths that would 404 instead of reporting them as touched', async () => {
+    let result = await touchFiles(realmUrl, ['cards/missing.json'], {
+      dryRun: true,
+      profileManager,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.touched).toEqual([]);
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped[0].path).toBe('cards/missing.json');
     expect(result.skipped[0].reason).toContain('404');
   });
 
