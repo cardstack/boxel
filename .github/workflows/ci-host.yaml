@@ -322,7 +322,7 @@ jobs:
       - name: Finalise Percy
         id: finalize
         run: |
-          set -e
+          set -eo pipefail
           npx percy build:finalize 2>&1 | tee /tmp/percy-finalize.log
           BUILD_URL=$(grep -oE 'https://percy\.io/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/builds/[0-9]+' /tmp/percy-finalize.log | tail -1)
           BUILD_ID="${BUILD_URL##*/}"
