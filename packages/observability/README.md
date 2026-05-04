@@ -59,7 +59,16 @@ docker-compose.yml     # local Grafana 12.4.3 + Loki 3.4.4 + Alloy 1.10.0
 
 ```sh
 # One-time: install grafanactl
+# macOS:
 brew install --formula grafanactl
+# Linux: download the prebuilt tarball from
+# https://github.com/grafana/grafanactl/releases/latest and drop the
+# binary on your PATH, e.g.:
+#   curl -sSL -o /tmp/grafanactl.tgz \
+#     https://github.com/grafana/grafanactl/releases/latest/download/grafanactl_Linux_x86_64.tar.gz
+#   tar -xzf /tmp/grafanactl.tgz -C /tmp grafanactl
+#   sudo install -m 0755 /tmp/grafanactl /usr/local/bin/grafanactl
+# (swap `Linux_x86_64` for `Linux_arm64` on aarch64.)
 
 # Bring up local Grafana + Loki + Alloy (log scraper)
 docker compose up -d
