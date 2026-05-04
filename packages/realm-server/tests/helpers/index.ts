@@ -544,9 +544,14 @@ export async function awaitPortRelease(
   let intervalMs = options.intervalMs ?? 25;
   // Map the wildcard bind address back to a connectable loopback address.
   // Server.address() reports `::` for IPv6-any, `0.0.0.0` for IPv4-any —
-  // neither is a valid connect target.
+  // neither is a valid connect target. Probe in the same address family the
+  // listener was bound to: if we map `::` to `127.0.0.1` and the system has
+  // IPv6-only binding behavior, the IPv4 probe gets ECONNREFUSED while the
+  // original IPv6 listener is still bound, falsely reporting release.
   let connectHost = host;
-  if (host === '::' || host === '0.0.0.0') {
+  if (host === '::') {
+    connectHost = '::1';
+  } else if (host === '0.0.0.0') {
     connectHost = '127.0.0.1';
   }
 
