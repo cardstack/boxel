@@ -4841,6 +4841,25 @@ export class Realm {
       });
     }
 
+    // Validate types of fields bound for realm_metadata BEFORE any
+    // writes. The patch schema accepts arbitrary attribute values
+    // (z.record(z.unknown())); without this check a non-boolean
+    // would reach the SQL boolean column and surface as an opaque
+    // 500. Card and sidecar fields rely on their own downstream
+    // validation; the DB-bound fields don't have one.
+    if ('publishable' in attributes) {
+      let publishableValue = attributes.publishable;
+      if (
+        publishableValue !== null &&
+        typeof publishableValue !== 'boolean'
+      ) {
+        return badRequest({
+          message: `'publishable' must be a boolean or null`,
+          requestContext,
+        });
+      }
+    }
+
     let cardAttrs: Record<string, unknown> = {};
     let metadataAttrs: Record<string, unknown> = {};
     let sidecarAttrs: Record<string, unknown> = {};
