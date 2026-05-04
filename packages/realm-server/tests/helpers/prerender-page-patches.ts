@@ -227,6 +227,125 @@ export function installSearchRequestObserverPatch(): {
 }
 
 /**
+ * Inject transient 5xx responses for a chosen subset of fetches inside the
+ * prerender chrome page. The patch enables Puppeteer request interception
+ * once per page; matched URLs return the configured status until the
+ * `failuresBeforeSuccess` budget is exhausted, after which they pass
+ * through. Used to assert that the loader's transient-retry path actually
+ * fires during prerender — without the native-sleep wiring in
+ * loader-service the retry hangs at `await sleep(delay)` and the render
+ * times out instead of recovering on the next attempt.
+ */
+export function installFlakyDepFetchPatch(opts: {
+  matcher: (url: string) => boolean;
+  failuresBeforeSuccess: number;
+  status?: number;
+}): {
+  failuresInjected: () => number;
+  restore: () => Promise<void>;
+} {
+  let originalGetPage = PagePool.prototype.getPage;
+  let patchedPages = new WeakSet<object>();
+  let listeners = new Map<any, (request: any) => void>();
+  let interceptingPages = new Set<any>();
+  let remainingFailures = opts.failuresBeforeSuccess;
+  let failuresInjected = 0;
+  let status = opts.status ?? 502;
+
+  PagePool.prototype.getPage = async function (this: PagePool, realm: string) {
+    let pageInfo = await originalGetPage.call(this, realm);
+    let page = pageInfo.page as any;
+    if (page && !patchedPages.has(page)) {
+      patchedPages.add(page);
+      // Fail fast: request.respond()/request.continue() require interception
+      // to be enabled, so attaching the listener without interception would
+      // turn into a confusing error mid-render. Let the puppeteer error
+      // propagate so the test crashes at setup with a clear stack instead.
+      await page.setRequestInterception(true);
+      interceptingPages.add(page);
+      let listener = (request: any) => {
+        let url: string;
+        let method: string;
+        try {
+          url = request.url();
+          method = request.method();
+        } catch {
+          // The request lifecycle ended before we could inspect it.
+          try {
+            request.continue();
+          } catch {
+            // ignore — request already fulfilled or aborted
+          }
+          return;
+        }
+        // Let preflight pass through to the real realm-server so its CORS
+        // middleware responds with the standard headers. We only want to
+        // inject 5xx on the actual request, mirroring the real-world
+        // transient-failure shape.
+        if (method === 'OPTIONS') {
+          request.continue().catch(() => {
+            // best-effort
+          });
+          return;
+        }
+        if (remainingFailures > 0 && opts.matcher(url)) {
+          remainingFailures--;
+          failuresInjected++;
+          request
+            .respond({
+              status,
+              contentType: 'text/plain',
+              // Mirror the realm-server's `cors({ origin: '*' })` so the
+              // browser surfaces this 5xx to the host loader instead of
+              // blocking it as a CORS-policy violation upstream of the
+              // retry path. Without this header the browser would treat
+              // the response as opaque and the loader would see a network
+              // error (synthetic 500) rather than the retryable 502.
+              headers: {
+                'access-control-allow-origin': '*',
+              },
+              body: 'Bad Gateway (test injection)',
+            })
+            .catch(() => {
+              // best-effort: page may have moved on
+            });
+          return;
+        }
+        request.continue().catch(() => {
+          // best-effort: another handler may have already responded
+        });
+      };
+      listeners.set(page, listener);
+      page.on('request', listener);
+    }
+    return { ...pageInfo, page };
+  };
+
+  return {
+    failuresInjected: () => failuresInjected,
+    restore: async () => {
+      PagePool.prototype.getPage = originalGetPage;
+      for (let [page, listener] of listeners) {
+        try {
+          page.off('request', listener);
+        } catch {
+          // best-effort
+        }
+      }
+      for (let page of interceptingPages) {
+        try {
+          await page.setRequestInterception(false);
+        } catch {
+          // best-effort: page may already be closed
+        }
+      }
+      listeners.clear();
+      interceptingPages.clear();
+    },
+  };
+}
+
+/**
  * Simulate the background-tab RAF throttling that causes the render-ready
  * stability loop to stall. This replaces `requestAnimationFrame` inside
  * prerender pages with a version that delays each callback by `delayMs`.
