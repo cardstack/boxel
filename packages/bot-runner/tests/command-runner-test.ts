@@ -11,7 +11,7 @@ import { CommandRunner, makeEnqueueRunCommand } from '../lib/command-runner';
 import {
   PrListingWorkflowHandler,
   type LintSubmissionFilesFn,
-} from '../lib/pr-listing-workflow-handler';
+} from '../lib/pr-listing/pr-listing-workflow-handler';
 
 const passThroughLint: LintSubmissionFilesFn = async (files) => ({
   passed: true,

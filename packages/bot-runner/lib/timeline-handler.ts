@@ -6,7 +6,7 @@ import {
 } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 import { CommandRunner, makeEnqueueRunCommand } from './command-runner';
-import { PrListingWorkflowHandler } from './pr-listing-workflow-handler';
+import { PrListingWorkflowHandler } from './pr-listing/pr-listing-workflow-handler';
 import type { GitHubClient } from './github';
 import type { DBAdapter, QueuePublisher } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';

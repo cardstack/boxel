@@ -13,8 +13,11 @@ import {
   CreateListingPRHandler,
   type BotTriggerEventContent,
 } from './create-listing-pr-handler';
-import type { BotCommandHandler, EnqueueRunCommandFn } from './command-runner';
-import type { GitHubClient } from './github';
+import type {
+  BotCommandHandler,
+  EnqueueRunCommandFn,
+} from '../command-runner';
+import type { GitHubClient } from '../github';
 
 export type LintSubmissionFilesFn = (
   files: SubmissionFile[],
