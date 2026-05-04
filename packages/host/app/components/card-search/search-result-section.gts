@@ -2,9 +2,11 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import HistoryIcon from '@cardstack/boxel-icons/history';
+import { modifier } from 'ember-modifier';
 import pluralize from 'pluralize';
 
 import { Button, GridContainer } from '@cardstack/boxel-ui/components';
@@ -14,6 +16,7 @@ import type { CodeRef } from '@cardstack/runtime-common';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type RealmService from '@cardstack/host/services/realm';
+import { UNKNOWN_REALM_NAME } from '@cardstack/host/services/realm';
 
 import type {
   RealmSection,
@@ -30,6 +33,33 @@ import {
 import { SECTION_SHOW_MORE_INCREMENT } from './constants';
 import ItemButton from './item-button';
 import SearchSheetSectionHeader from './section-header';
+
+// Tracks which realm URLs we've already warned about to keep the diagnostic
+// to one-per-realm-per-test-run. Only populated under `isTesting()` (the
+// warning is silenced in production), so growth is bounded by realms
+// touched within a single test run / page session — typically a handful.
+const placeholderWarnedFor = new Set<string>();
+
+// did-insert / did-update modifier that emits a one-shot console.warn per
+// realm URL when the section renders with the placeholder realm name.
+// The warning lands in the browser log captured by Ember Exam, so a
+// future recurrence of the realm-info race shows up in CI logs even
+// without a DOM dump. Kept off the render path (no side effects in
+// getters) and gated to test runs (no production logging or set growth).
+const warnPlaceholderModifier = modifier(
+  (
+    _element: Element,
+    [realmUrl, isPlaceholder]: [string | undefined, boolean],
+  ) => {
+    if (!isTesting()) return;
+    if (!isPlaceholder || !realmUrl) return;
+    if (placeholderWarnedFor.has(realmUrl)) return;
+    placeholderWarnedFor.add(realmUrl);
+    console.warn(
+      `search-result-section: rendering with placeholder realm name for ${realmUrl} — realm.info() returned "${UNKNOWN_REALM_NAME}" because fetchInfo has not resolved yet. If a test failed selecting on data-test-realm here, this is the race.`,
+    );
+  },
+);
 
 interface Signature {
   Element: HTMLElement;
@@ -79,6 +109,31 @@ export default class SearchResultSection extends Component<Signature> {
       return this.urlSection.realmInfo.name;
     }
     return undefined;
+  }
+
+  // Stable identifier for the realm section regardless of whether
+  // `realm.info()` has resolved the user-visible name yet. When
+  // `data-test-realm` (the name) is still showing the placeholder
+  // ("Unknown Workspace"), this attribute pins the section to a known
+  // URL so failures are diagnosable and tests can wait reliably.
+  get sectionRealmUrl(): string | undefined {
+    if (this.realmSection) {
+      return this.realmSection.realmUrl;
+    }
+    if (this.urlSection) {
+      return this.urlSection.realmUrl;
+    }
+    return undefined;
+  }
+
+  // True when the section header is showing the placeholder name returned
+  // by `RealmService#info()` before its fetchInfo resolves. Surfaced as a
+  // data-test attribute and consumed by `warnPlaceholderModifier`, so
+  // future CI failures involving `[data-test-realm="<Name>"]` selectors
+  // are immediately diagnosable (the browser log will show which realm
+  // URL raced its info fetch).
+  get sectionRealmInfoIsPlaceholder(): boolean {
+    return this.sectionRealmName === UNKNOWN_REALM_NAME;
   }
 
   @action
@@ -238,6 +293,15 @@ export default class SearchResultSection extends Component<Signature> {
         search-result-block--collapsed=@isCollapsed
       }}
       data-test-realm={{this.sectionRealmName}}
+      data-test-realm-url={{this.sectionRealmUrl}}
+      data-test-realm-info-placeholder={{if
+        this.sectionRealmInfoIsPlaceholder
+        'true'
+      }}
+      {{warnPlaceholderModifier
+        this.sectionRealmUrl
+        this.sectionRealmInfoIsPlaceholder
+      }}
       ...attributes
     >
       {{#if this.realmSection}}

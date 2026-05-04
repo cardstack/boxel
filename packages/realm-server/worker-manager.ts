@@ -35,6 +35,7 @@ import {
   type PendingJob,
 } from './handlers/handle-indexing-dashboard';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
+import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations';
 
 /* About the Worker Manager
  *
@@ -533,10 +534,25 @@ async function startWorker(
       workers.splice(index, 1);
     }
 
+    // Spawn the replacement first so a stalled DB call inside finalize
+    // (connection lock, network blip, etc.) can't delay recovery.
     if (!isExiting) {
       log.info(`worker ${name} exited. spawning replacement worker`);
       startWorker(priority, urlMappings);
     }
+
+    // Free orphan reservations in the background. The new worker won't be
+    // able to claim the dead worker's reservation until completed_at is
+    // set, so this still races to be useful — but if it stalls, the
+    // existing 60s monitorWorker / 7200s lease-expiry path is the
+    // backstop, not this exit handler.
+    finalizeOrphanedReservations(adapter, workerId).catch((e) => {
+      Sentry.captureException(e);
+      log.error(
+        `worker: finalizeOrphanedReservations threw for worker ${workerId}`,
+        e,
+      );
+    });
   });
 
   if (worker.stdout) {
