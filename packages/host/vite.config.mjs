@@ -73,9 +73,10 @@ const sourceMapJsResolver = {
   },
 };
 
-// In environment mode (BOXEL_ENVIRONMENT set), scripts/vite-serve.js exposes
-// the public Traefik hostname via BOXEL_HOST_HOSTNAME so we can let it through
-// Vite's host check and tell the HMR client where to reconnect.
+// In environment mode (BOXEL_ENVIRONMENT set), scripts/vite-with-traefik.js
+// exposes the public Traefik hostname via BOXEL_HOST_HOSTNAME so we can let it
+// through Vite's host check (for both `vite` and `vite preview`) and tell the
+// HMR client where to reconnect (dev only).
 const envHostname = process.env.BOXEL_HOST_HOSTNAME;
 
 export default defineConfig(({ mode }) => ({
@@ -172,6 +173,7 @@ export default defineConfig(({ mode }) => ({
     headers: {
       'Cache-Control': 'no-store',
     },
+    ...(envHostname ? { allowedHosts: [envHostname] } : {}),
   },
   server: envHostname
     ? {

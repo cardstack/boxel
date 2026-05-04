@@ -1,6 +1,7 @@
 /**
  * Shared helpers for Traefik registration in environment mode.
- * Both ember-serve.js and serve-dist.js use these.
+ * Used by scripts/vite-with-traefik.js (which both vite-serve.js and
+ * serve-dist.js delegate to).
  */
 
 const path = require('path');
