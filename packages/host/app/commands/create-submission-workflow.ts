@@ -155,6 +155,7 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
         realm,
         listingId,
         workflowCardUrl: workflowCardId,
+        workflowCardRealm: workflowRealm,
         branchName,
         ...(listingName ? { listingName } : {}),
         ...(listingSummary ? { listingSummary } : {}),

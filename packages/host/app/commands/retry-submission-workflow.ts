@@ -10,7 +10,15 @@ import SendBotTriggerEventCommand from './bot-requests/send-bot-trigger-event';
 
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
-import type { SubmissionWorkflowCard } from '@cardstack/catalog/submission-workflow-card/submission-workflow-card';
+
+// Local view: host's tsconfig maps @cardstack/catalog/* to the legacy
+// in-monorepo catalog-realm, which lacks `failedStep`. Drop this once
+// that path points at boxel-catalog (the canonical source).
+interface WorkflowCardView {
+  roomId?: string;
+  listing?: { id?: string };
+  failedStep?: string | null;
+}
 
 // Re-emits the `pr-listing-retry` bot trigger event for an existing
 // SubmissionWorkflowCard that ended in a failed state. Reads roomId + listing
@@ -38,13 +46,13 @@ export default class RetrySubmissionWorkflowCommand extends HostBaseCommand<
   ): Promise<undefined> {
     let { workflowCardId } = input;
 
-    let workflowCard =
-      await this.store.get<SubmissionWorkflowCard>(workflowCardId);
-    if (!workflowCard || !isCardInstance(workflowCard)) {
+    let result = await this.store.get(workflowCardId);
+    if (!result || !isCardInstance(result)) {
       throw new Error(
         `Cannot retry: workflow card ${workflowCardId} not found`,
       );
     }
+    let workflowCard = result as unknown as WorkflowCardView;
 
     let roomId = workflowCard.roomId;
     let listingId = workflowCard.listing?.id;
@@ -64,9 +72,12 @@ export default class RetrySubmissionWorkflowCommand extends HostBaseCommand<
       );
     }
 
-    // Clear the prior failure state up front for instant UI feedback. The
-    // bot-runner will repopulate these fields on success or on a fresh
-    // failure; we don't have to wait for it to do so.
+    // Snapshot the prior failedStep so we can restore it if the send fails
+    // — without it, the optimistic clear below would hide the Retry button
+    // (canRetry requires prCreationError || failedStep) and strand the user.
+    let priorFailedStep = workflowCard.failedStep ?? null;
+
+    // Optimistic clear for instant UI feedback. Re-set on send failure.
     await this.store.patch(
       workflowCardId,
       {
@@ -78,13 +89,31 @@ export default class RetrySubmissionWorkflowCommand extends HostBaseCommand<
       { doNotWaitForPersist: true },
     );
 
-    await new SendBotTriggerEventCommand(this.commandContext).execute({
-      roomId,
-      realm: listingRealm,
-      type: 'pr-listing-retry',
-      input: {
-        workflowCardUrl: workflowCardId,
-      },
-    });
+    try {
+      await new SendBotTriggerEventCommand(this.commandContext).execute({
+        roomId,
+        realm: listingRealm,
+        type: 'pr-listing-retry',
+        input: {
+          workflowCardUrl: workflowCardId,
+          workflowCardRealm:
+            this.realm.realmOf(rri(workflowCardId)) ?? undefined,
+        },
+      });
+    } catch (sendError: any) {
+      let message =
+        sendError instanceof Error ? sendError.message : String(sendError);
+      await this.store.patch(
+        workflowCardId,
+        {
+          attributes: {
+            prCreationError: `Failed to send retry: ${message}`,
+            failedStep: priorFailedStep,
+          },
+        },
+        { doNotWaitForPersist: true },
+      );
+      throw sendError;
+    }
   }
 }

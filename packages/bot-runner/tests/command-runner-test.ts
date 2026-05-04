@@ -263,8 +263,8 @@ module('command runner', () => {
 
     assert.strictEqual(
       publishedJobs.length,
-      4,
-      'enqueues collect-files, lintStatus=passed patch, create-pr-card, and prCard-link patch (lint step skipped)',
+      5,
+      'enqueues collect-files, lintStatus=passed patch, create-pr-card, prCard-link patch, and clear-error patch (lint step skipped)',
     );
     assert.strictEqual(createdBranches.length, 1, 'creates branch');
     assert.strictEqual(branchWrites.length, 1, 'writes files to branch');
@@ -296,11 +296,18 @@ module('command runner', () => {
       `command:${SUBMISSION_REALM_URL}`,
       'Job 3 (create-pr-card) uses submissions realm concurrency group',
     );
-    // Job 4: prCard link patch — user realm
+    // Job 4: prCard link patch — user realm. Persisted immediately after
+    // create-pr-card so retry on a later GitHub failure can find it.
     assert.strictEqual(
       (publishedJobs[3] as { concurrencyGroup: string }).concurrencyGroup,
       'command:http://localhost:4201/test/',
       'Job 4 (prCard link patch) uses default realm concurrency group',
+    );
+    // Job 5: clear-error patch — user realm
+    assert.strictEqual(
+      (publishedJobs[4] as { concurrencyGroup: string }).concurrencyGroup,
+      'command:http://localhost:4201/test/',
+      'Job 5 (clear-error patch) uses default realm concurrency group',
     );
 
     assert.deepEqual(
@@ -335,10 +342,6 @@ module('command runner', () => {
         commandInput: {
           cardId: submissionCardUrl,
           patch: {
-            attributes: {
-              prCreationError: null,
-              failedStep: null,
-            },
             relationships: {
               prCard: {
                 links: {
@@ -349,7 +352,26 @@ module('command runner', () => {
           },
         },
       },
-      'enqueues workflow card patch in the user realm (clears any prior error state and links PrCard)',
+      'persists prCard link on the workflow card immediately after create-pr-card succeeds (so retry on later failure can reuse the existing PrCard)',
+    );
+    assert.deepEqual(
+      (publishedJobs[4] as { args: Record<string, unknown> }).args,
+      {
+        realmURL: 'http://localhost:4201/test/',
+        realmUsername: '@alice:localhost',
+        runAs: '@alice:localhost',
+        command: '@cardstack/boxel-host/commands/patch-card-instance/default',
+        commandInput: {
+          cardId: submissionCardUrl,
+          patch: {
+            attributes: {
+              prCreationError: null,
+              failedStep: null,
+            },
+          },
+        },
+      },
+      'clears prior error attributes on the workflow card after the GitHub PR succeeds',
     );
     let prBody =
       (
@@ -765,7 +787,8 @@ module('command runner', () => {
                             // title is the display-formatted "Submit <X>";
                             // retry must NOT derive branchName from it.
                             title: 'Submit My Listing',
-                            branchName: 'room-IWFiYzEyMzpsb2NhbGhvc3Q/my-listing',
+                            branchName:
+                              'room-IWFiYzEyMzpsb2NhbGhvc3Q/my-listing',
                           },
                           relationships: {
                             listing: {

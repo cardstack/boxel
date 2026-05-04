@@ -88,7 +88,11 @@ export class CommandRunner {
         return;
       }
 
-      if (!eventContent?.input || typeof eventContent.input !== 'object') {
+      if (
+        !eventContent?.input ||
+        typeof eventContent.input !== 'object' ||
+        Array.isArray(eventContent.input)
+      ) {
         return;
       }
 

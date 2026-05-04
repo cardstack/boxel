@@ -13,10 +13,7 @@ import {
   CreateListingPRHandler,
   type BotTriggerEventContent,
 } from './create-listing-pr-handler';
-import type {
-  BotCommandHandler,
-  EnqueueRunCommandFn,
-} from '../command-runner';
+import type { BotCommandHandler, EnqueueRunCommandFn } from '../command-runner';
 import type { GitHubClient } from '../github';
 
 export type LintSubmissionFilesFn = (
@@ -114,7 +111,13 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
       return this.runWorkflow(ctx);
     }
     if (eventContent.type === PR_LISTING_RETRY) {
-      let ctx = await this.buildRetryContext(runAs, eventContent);
+      let ctx;
+      try {
+        ctx = await this.buildRetryContext(runAs, eventContent);
+      } catch (err) {
+        await this.recordRetryContextFailure(runAs, eventContent, err);
+        throw err;
+      }
       return this.runWorkflow(ctx);
     }
     throw new Error(
@@ -244,9 +247,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
         : await this.runFreshPrCardFlow(ctx);
 
       await runStep('github-pr', () => this.pushToGitHub(ctx, prCardData));
-      await runStep('github-pr', () =>
-        this.linkPrCardOnWorkflow(ctx, prCardData.prCardUrl),
-      );
+      await runStep('github-pr', () => this.clearWorkflowError(ctx));
 
       return prCardData.prCardResult;
     } catch (err) {
@@ -263,6 +264,9 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     await runStep('lint', () => this.applyLintSkip(ctx, totalCount));
     let { prCardResult, prCardUrl } = await runStep('create-pr-card', () =>
       this.createPrCard(ctx, textFiles, totalCount),
+    );
+    await runStep('create-pr-card', () =>
+      this.linkPrCardOnWorkflow(ctx, prCardUrl),
     );
     return { prCardResult, prCardUrl, binaryFiles };
   }
@@ -425,10 +429,16 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
   ): Promise<void> {
     if (!ctx.workflowCardUrl || !prCardUrl) return;
     await this.patchWorkflowCard(ctx, {
-      attributes: { prCreationError: null, failedStep: null },
       relationships: {
         prCard: { links: { self: prCardUrl } },
       },
+    });
+  }
+
+  private async clearWorkflowError(ctx: WorkflowContext): Promise<void> {
+    if (!ctx.workflowCardUrl) return;
+    await this.patchWorkflowCard(ctx, {
+      attributes: { prCreationError: null, failedStep: null },
     });
   }
 
@@ -453,6 +463,46 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
           patchError: patchError?.message ?? patchError,
           failedStep,
         },
+      );
+    }
+  }
+
+  private async recordRetryContextFailure(
+    runAs: string,
+    eventContent: BotTriggerEventContent,
+    err: unknown,
+  ): Promise<void> {
+    let input = eventContent.input as Record<string, unknown> | null;
+    let workflowCardUrl =
+      typeof input?.workflowCardUrl === 'string' && input.workflowCardUrl.trim()
+        ? input.workflowCardUrl.trim()
+        : null;
+    if (!workflowCardUrl) return;
+    let workflowCardRealm =
+      (typeof input?.workflowCardRealm === 'string' &&
+      input.workflowCardRealm.trim()
+        ? input.workflowCardRealm.trim()
+        : null) ?? (eventContent.realm as string);
+    let message = err instanceof Error ? err.message : String(err);
+    try {
+      let result = await this.enqueueRunCommand({
+        runAs,
+        realmURL: workflowCardRealm,
+        command: PATCH_CARD_INSTANCE_COMMAND,
+        commandInput: {
+          cardId: workflowCardUrl,
+          patch: {
+            attributes: {
+              prCreationError: `PR retry failed: ${message}`,
+            },
+          },
+        },
+      });
+      requireReady(result, 'patch-card-instance (retry pre-context failure)');
+    } catch (patchError: any) {
+      log.error(
+        'pr-listing-retry: failed to patch workflow card after retry context build failed',
+        { patchError: patchError?.message ?? patchError },
       );
     }
   }
