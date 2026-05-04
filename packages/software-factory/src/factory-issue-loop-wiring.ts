@@ -37,11 +37,7 @@ import {
   type ToolBuilderConfig,
 } from './factory-tool-builder';
 import { ToolExecutor } from './factory-tool-executor';
-import {
-  ToolRegistry,
-  SCRIPT_TOOLS,
-  REALM_API_TOOLS,
-} from './factory-tool-registry';
+import { ToolRegistry, REALM_API_TOOLS } from './factory-tool-registry';
 import {
   runIssueLoop,
   createDefaultPipeline,
@@ -132,7 +128,7 @@ export async function runFactoryIssueLoop(
   });
 
   // 3. Tool infrastructure
-  let toolRegistry = new ToolRegistry([...SCRIPT_TOOLS, ...REALM_API_TOOLS]);
+  let toolRegistry = new ToolRegistry([...REALM_API_TOOLS]);
   let toolExecutor = new ToolExecutor(toolRegistry, {
     packageRoot: PACKAGE_ROOT,
     targetRealmUrl,

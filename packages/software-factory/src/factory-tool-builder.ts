@@ -195,10 +195,11 @@ export function buildFactoryTools(
     }
   }
 
-  // Add registered script/realm-api tools as FactoryTool wrappers.
-  // Realm-api tools get the config so they can resolve per-realm JWTs.
+  // Add registered realm-api tools as FactoryTool wrappers. After the
+  // CS-10883 retirements the registry only contains `realm-create`;
+  // anything else added later goes through the same build path.
   for (let manifest of toolRegistry.getManifests()) {
-    if (manifest.category === 'script' || manifest.category === 'realm-api') {
+    if (manifest.category === 'realm-api') {
       tools.push(buildRegisteredTool(manifest, toolExecutor, config));
     }
   }

@@ -152,15 +152,13 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     //      these surfaces directly; a duplicate MCP tool would just be
     //      a second way to do the same thing.
     //   2. Tools whose source is `'registered'` — these come from the
-    //      `ToolRegistry`'s script + realm-api manifests (realm-read,
-    //      search-realm, boxel-sync, …) and are kebab-case shadows of
-    //      the core tools. Several are explicitly marked "for non-target
-    //      realms" in their descriptions, but the model picks the
-    //      kebab-case name at random, calls one against the target
-    //      realm, and gets a permission error.
+    //      `ToolRegistry`'s `realm-api` manifests. After CS-10883 the
+    //      registry only contains `realm-create`, which the entrypoint
+    //      drives before the agent runs; nothing on the agent's hot
+    //      path needs it. The filter remains so any future re-additions
+    //      to the registry stay off the Claude path by default.
     //
-    // OpenRouter still sees the full list — it has no native fs / Bash
-    // and may legitimately need the registry tools.
+    // OpenRouter still sees the full list — it has no native fs / Bash.
     let mcpFactoryTools = tools.filter(
       (t) =>
         !CLAUDE_FILTERED_FACTORY_TOOLS.has(t.name) && t.source !== 'registered',
@@ -308,9 +306,9 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     // so the model translates plain names into MCP-prefixed calls.
     // Build the authoritative list of MCP tool names so the addendum can
     // both rename them and serve as the closed catalog. Adding entries
-    // that look related but are not actually registered (e.g. `realm-read`,
-    // `realm-write`) invites the model to invent siblings, so we keep the
-    // list to exactly the tools the SDK MCP server exposes.
+    // that look related but are not actually registered invites the model
+    // to invent siblings, so we keep the list to exactly the tools the
+    // SDK MCP server exposes.
     let mcpRows = tools
       .map((t) => `- \`${t.name}\` → \`mcp__${MCP_SERVER_NAME}__${t.name}\``)
       .join('\n');
@@ -383,11 +381,10 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
         : '',
       '',
       'The complete factory tool catalog is below. **Do not call any tool',
-      'whose plain name is not in this list** — there is no `realm-read`,',
-      '`realm-write`, or other realm-side fs tool. Realm reads go through',
-      '`search_realm` / `fetch_transpiled_module`; realm writes happen by',
-      'editing workspace files (or calling a structured tool above) and',
-      'letting the orchestrator sync.',
+      'whose plain name is not in this list.** Realm reads go through',
+      '`Bash` + `boxel search` / `boxel read-transpiled`; realm writes',
+      'happen by editing workspace files (or calling a structured tool',
+      'above) and letting the orchestrator sync.',
       '',
       mcpRows,
       '',

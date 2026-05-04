@@ -132,7 +132,7 @@ export interface ToolArg {
 export interface ToolManifest {
   name: string;
   description: string;
-  category: 'script' | 'boxel-cli' | 'realm-api';
+  category: 'realm-api';
   args: ToolArg[];
   outputFormat: 'json' | 'text';
 }

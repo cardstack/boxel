@@ -447,7 +447,7 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
         {
           name: 'search-realm',
           description: 'Search cards',
-          category: 'script' as const,
+          category: 'realm-api' as const,
           args: [],
           outputFormat: 'json' as const,
         },
@@ -595,14 +595,14 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
         {
           name: 'run-tests',
           description: 'Run tests',
-          category: 'script' as const,
+          category: 'realm-api' as const,
           args: [],
           outputFormat: 'text' as const,
         },
         {
           name: 'search-realm',
           description: 'Search cards',
-          category: 'script' as const,
+          category: 'realm-api' as const,
           args: [],
           outputFormat: 'json' as const,
         },
