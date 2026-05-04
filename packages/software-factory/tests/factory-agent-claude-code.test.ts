@@ -330,14 +330,21 @@ module('factory-agent-claude-code', function () {
         makeTool({ name: 'read_file' }),
         makeTool({ name: 'write_file' }),
         makeTool({ name: 'run_command' }),
+        makeTool({ name: 'fetch_transpiled_module' }),
         makeTool({ name: 'search_realm' }),
         makeTool({ name: 'signal_done' }),
       ]);
 
       let allowed = capturedOptions!.allowedTools ?? [];
-      // Filtered: native fs replaces these, plus run_command which is
-      // unused in practice (and reachable via `boxel run-command` if needed).
-      for (let filtered of ['read_file', 'write_file', 'run_command']) {
+      // Filtered: native fs replaces read/write, run_command is unused
+      // in practice, fetch_transpiled_module is reachable via Bash +
+      // `boxel read-transpiled`.
+      for (let filtered of [
+        'read_file',
+        'write_file',
+        'run_command',
+        'fetch_transpiled_module',
+      ]) {
         assert.notOk(
           allowed.includes(`mcp__factory__${filtered}`),
           `${filtered} is not registered as an MCP tool on the Claude path`,

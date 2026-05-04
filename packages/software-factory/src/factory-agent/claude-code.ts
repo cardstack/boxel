@@ -72,16 +72,23 @@ const NATIVE_FS_TOOLS = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'];
  * it has no native fs and no Bash.
  *
  * Each entry's replacement:
- * - `read_file`   → native `Read`
- * - `write_file`  → native `Write` / `Edit`
- * - `run_command` → unused in practice (card-type schemas are
- *                    pre-loaded by the wiring); if ever needed, the
- *                    boxel CLI exposes `boxel run-command` over Bash.
+ * - `read_file`              → native `Read`
+ * - `write_file`             → native `Write` / `Edit`
+ * - `run_command`            → unused in practice (card-type schemas
+ *                                are pre-loaded by the wiring); if ever
+ *                                needed, the boxel CLI exposes
+ *                                `boxel run-command` over Bash.
+ * - `fetch_transpiled_module`→ Bash + `boxel read-transpiled <path>
+ *                                --realm <url>`. Used only when a
+ *                                validator reports a transpiled
+ *                                line/column, so the marginal cost of
+ *                                shelling out is negligible.
  */
 const CLAUDE_FILTERED_FACTORY_TOOLS = new Set([
   'read_file',
   'write_file',
   'run_command',
+  'fetch_transpiled_module',
 ]);
 
 let log = logger('factory-agent-claude-code');

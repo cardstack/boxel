@@ -80,7 +80,9 @@ These always go through factory tools regardless of backend — they
 reach the realm runtime, enforce schema and immutability invariants,
 or drive control flow.
 
-- `fetch_transpiled_module({ path, realm? })` — Fetch the compiled JavaScript output of a `.gts` module. Use when an eval/instantiate error reports a line/column — those numbers reference the transpiled output, not your source.
+- Fetch the **transpiled** JavaScript for a `.gts` module — used only when an eval/instantiate error reports a line/column number, since those numbers reference the transpiled output, not your `.gts` source.
+  - **Claude backend:** run `boxel read-transpiled <realm-relative-path> --realm <target-realm-url>` via `Bash`. The `.gts` extension is optional. Pipe through `sed -n '<line>p'` (or wrap with `awk`) when you want to inspect a single line.
+  - **OpenRouter backend:** call the factory `fetch_transpiled_module({ path, realm? })` tool with the same realm-relative path.
 - `search_realm({ query, realm? })` — Search for cards using a structured query object (filter, sort, page). Use to check for existing cards, find duplicates, inspect project state.
 
 ### Updating Project State
@@ -108,8 +110,8 @@ All five tools are safe to call repeatedly mid-turn; none of them write a realm 
 - `run_lint({ path? })` — Run ESLint + Prettier (with `@cardstack/boxel` rules) and return an in-memory `RunLintResult` with `status`, `filesChecked`, `filesWithErrors`, `errorCount`, `warningCount`, `durationMs`, `lintableFiles`, and per-violation `{ rule, file, line, column, message, severity }`. Without `path`, lints every `.gts` / `.gjs` / `.ts` / `.js` file in the target realm. With `path` (realm-relative file path), lints **only that one file** — prefer this right after writing or editing a single file.
 - `run_tests()` — Run the realm's QUnit suite and receive an in-memory result object `{ status, passedCount, failedCount, skippedCount, durationMs, testFiles, failures, errorMessage? }`. Use it when you want feedback before signalling done.
 - `run_parse({ path? })` — Parse and type-check files in the target realm and return an in-memory `RunParseResult` with `status`, `filesChecked`, `filesWithErrors`, `errorCount`, `durationMs`, `parseableFiles`, and per-error `{ file, line, column, message }`. Without `path`, runs glint (ember-tsc) over every `.gts` / `.gjs` / `.ts` file in the realm AND validates every `.json` file listed as a Spec `linkedExample` (same discovery as the parse validation step). With `path` (realm-relative file path), parses **only that one file** — `.gts` / `.gjs` / `.ts` runs through glint; `.json` is parsed and checked for card document structure. The extension is required; `parseableFiles` entries are always returned in the `.json` / `.gts` / `.gjs` / `.ts` form, so you can feed any of them straight back into `path`. Prefer the single-file form right after writing or editing one file.
-- `run_evaluate({ path? })` — Evaluate ESM modules (`.gts` / `.gjs` / `.ts` / `.js`) in the target realm via the prerenderer sandbox and return a `RunEvaluateResult` (status, module counts, per-failure `{ path, error, stackTrace? }`). Without `path`, evaluates every non-test evaluable module. With `path`, evaluates only that single realm-relative file — handy for a quick self-check right after writing one module. Test files (`*.test.*`) are rejected — the test runner validates those. When a failure reports a line/column, those numbers refer to the transpiled module — pair with `fetch_transpiled_module` to locate the offending source construct, then fix the `.gts` source (never copy transpiled patterns back into source).
-- `run_instantiate({ path? })` — Instantiate card example instances in the target realm via the prerenderer sandbox and return a `RunInstantiateResult` (status, instance counts, per-failure `{ path, cardName, error, stackTrace? }`). Without `path`, searches the realm for Spec cards and instantiates every `linkedExample` on every card/app Spec; specs with no `linkedExamples` still get a bare instantiation to exercise the card class. With `path`, instantiates only that single realm-relative `.json` example file — its `meta.adoptsFrom` supplies the module + card name, and spec discovery is skipped entirely so you can self-check one instance in isolation. The `path` argument must end in `.json`. `instanceFiles` only contains real `.json` example paths (bare-instantiation fallbacks are filtered out) so any entry can be fed straight back into `path`. If a bare instantiation fails, its failure entry has `path: ''` and a populated `cardName` — identify the spec by `cardName` and do NOT pass the empty path back into `path`. When a failure reports a line/column, those numbers refer to the transpiled module — pair with `fetch_transpiled_module` to locate the offending source construct, then fix the `.gts` source (never copy transpiled patterns back into source).
+- `run_evaluate({ path? })` — Evaluate ESM modules (`.gts` / `.gjs` / `.ts` / `.js`) in the target realm via the prerenderer sandbox and return a `RunEvaluateResult` (status, module counts, per-failure `{ path, error, stackTrace? }`). Without `path`, evaluates every non-test evaluable module. With `path`, evaluates only that single realm-relative file — handy for a quick self-check right after writing one module. Test files (`*.test.*`) are rejected — the test runner validates those. When a failure reports a line/column, those numbers refer to the transpiled module — pair with the transpiled-module fetch above (Bash + `boxel read-transpiled` on the Claude backend, `fetch_transpiled_module` on OpenRouter) to locate the offending source construct, then fix the `.gts` source (never copy transpiled patterns back into source).
+- `run_instantiate({ path? })` — Instantiate card example instances in the target realm via the prerenderer sandbox and return a `RunInstantiateResult` (status, instance counts, per-failure `{ path, cardName, error, stackTrace? }`). Without `path`, searches the realm for Spec cards and instantiates every `linkedExample` on every card/app Spec; specs with no `linkedExamples` still get a bare instantiation to exercise the card class. With `path`, instantiates only that single realm-relative `.json` example file — its `meta.adoptsFrom` supplies the module + card name, and spec discovery is skipped entirely so you can self-check one instance in isolation. The `path` argument must end in `.json`. `instanceFiles` only contains real `.json` example paths (bare-instantiation fallbacks are filtered out) so any entry can be fed straight back into `path`. If a bare instantiation fails, its failure entry has `path: ''` and a populated `cardName` — identify the spec by `cardName` and do NOT pass the empty path back into `path`. When a failure reports a line/column, those numbers refer to the transpiled module — pair with the transpiled-module fetch above (Bash + `boxel read-transpiled` on the Claude backend, `fetch_transpiled_module` on OpenRouter) to locate the offending source construct, then fix the `.gts` source (never copy transpiled patterns back into source).
 
 ### Control Flow
 
@@ -162,10 +164,13 @@ and runtime errors reference the compiled output.
 
 When a validation error contains text like
 `(error occurred in '/.../sticky-note.gts' @ line 66 : column 32)`, the
-line number is for the transpiled module. Call
-`fetch_transpiled_module({ path: 'sticky-note.gts' })` and read the
-reported line to see what compiled construct raised the error — then
-reason back to the `.gts` source construct that produced it.
+line number is for the transpiled module. Fetch the transpiled output
+and read the reported line to see what compiled construct raised the
+error — then reason back to the `.gts` source construct that produced
+it.
+
+- **Claude backend:** `boxel read-transpiled sticky-note.gts --realm <target-realm-url>` via `Bash`. Pipe through `sed -n '60,70p'` (or similar) to focus on a window around the reported line.
+- **OpenRouter backend:** `fetch_transpiled_module({ path: 'sticky-note.gts' })`.
 
 For example, `" is not a valid character within attribute names: (error occurred in '/.../sticky-note.gts' @ line 66 : column 32)`
 typically points inside a `precompileTemplate(...)` block in the
@@ -176,7 +181,8 @@ to the source.
 
 ### The transpiled output is for DEBUGGING ONLY — never for implementation
 
-**Scope of this tool:** `fetch_transpiled_module` is only for
+**Scope:** the transpiled fetch (Bash + `boxel read-transpiled` on
+Claude, `fetch_transpiled_module` on OpenRouter) is only for
 investigating **runtime errors in `.gts` modules you have already
 written** — when an eval or instantiate validation failure points to
 a line/column in the transpiled output and you need to map that
@@ -201,8 +207,8 @@ reference.
   `boxel-development` skill and existing cards in the target realm are
   the right references — not what the compiler happens to emit.
 
-Use `fetch_transpiled_module` the way a developer uses a source map:
-to translate a runtime line number back to a source construct in the
+Use the transpiled fetch the way a developer uses a source map: to
+translate a runtime line number back to a source construct in the
 code **you wrote**, then close the transpiled view and fix the source
 idiomatically.
 
