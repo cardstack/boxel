@@ -4,8 +4,8 @@ import {
   Component,
   CardDef,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from './card-api';
+import StringField from './string';
 import CurrencyDollarIcon from '@cardstack/boxel-icons/currency-dollar';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
@@ -83,6 +83,7 @@ class CurrencyFieldEdit extends Component<typeof CurrencyField> {
 
 export default class CurrencyField extends FieldDef {
   static displayName = 'Currency';
+  static icon = CurrencyDollarIcon;
   @field code = contains(StringField);
   static edit = CurrencyFieldEdit;
 

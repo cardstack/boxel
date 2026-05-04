@@ -1,15 +1,8 @@
-import {
-  FieldDef,
-  Component,
-  field,
-  contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { FieldDef, Component, field, contains } from './card-api';
+import StringField from './string';
 import { action } from '@ember/object';
-import { eq, not } from '@cardstack/boxel-ui/helpers';
-import { formatDateTime } from '@cardstack/boxel-ui/helpers';
+import { eq, not, formatDateTime } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-
 import ClockIcon from '@cardstack/boxel-icons/clock';
 import { TimeSlots } from './components/time-slots';
 
@@ -44,7 +37,7 @@ export default class TimeField extends FieldDef {
   static displayName = 'Time';
   static icon = ClockIcon;
 
-  @field value = contains(StringField); // Time string (HH:MM format)
+  @field value = contains(StringField);
 
   static embedded = class Embedded extends Component<typeof this> {
     get config(): TimeConfiguration | undefined {
@@ -71,7 +64,7 @@ export default class TimeField extends FieldDef {
 
         return formatDateTime(today, {
           kind: 'time',
-          hour12: hourCycle ? undefined : true, // hour12 conflicts with hourCycle
+          hour12: hourCycle ? undefined : true,
           hourCycle: hourCycle,
           timeStyle: timeStyle,
           fallback: time,
@@ -120,7 +113,7 @@ export default class TimeField extends FieldDef {
 
         return formatDateTime(today, {
           kind: 'time',
-          hour12: hourCycle ? undefined : true, // hour12 conflicts with hourCycle
+          hour12: hourCycle ? undefined : true,
           hourCycle: hourCycle,
           timeStyle: timeStyle,
           fallback: time,

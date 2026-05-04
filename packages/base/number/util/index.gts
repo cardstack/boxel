@@ -35,7 +35,7 @@ export function getFormattedDisplayValue(
   model: any,
   options: NumberFormattingOptions = {},
 ): string {
-  // Only use allowed keys from options
+  if (model == null) return '';
   const { decimals = 0, prefix = '', suffix = '' } = options || {};
   const numericValue = getNumericValue(model);
   const formattedValue = numericValue.toFixed(decimals);

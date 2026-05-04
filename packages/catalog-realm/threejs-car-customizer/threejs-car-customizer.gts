@@ -7,7 +7,7 @@ import {
   contains,
   Component,
 } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import ColorField from '../fields/color';
+import ColorField from 'https://cardstack.com/base/color';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { task } from 'ember-concurrency';

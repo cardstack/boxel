@@ -3,9 +3,9 @@ import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
+} from '../card-api';
+import StringField from '../string';
+import NumberField from '../number';
 import { action } from '@ember/object';
 import ClockIcon from '@cardstack/boxel-icons/clock';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
