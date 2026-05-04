@@ -6,12 +6,22 @@ import {
   linksTo,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
+import enumField from 'https://cardstack.com/base/enum';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 
 import ScreenshotCardCommand from '@cardstack/boxel-host/commands/screenshot-card';
 import { Button } from '@cardstack/boxel-ui/components';
+
+type ScreenshotFormat = 'isolated' | 'embedded';
+
+// Built-in enum field — atom view shows the current value as plain text;
+// edit view renders a BoxelSelect dropdown of the configured options.
+const FormatField = enumField(StringField, {
+  options: ['isolated', 'embedded'],
+  displayName: 'Screenshot Format',
+});
 
 class Isolated extends Component<typeof ScreenshotCardDemo> {
   @tracked isRunning = false;
@@ -27,12 +37,10 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
   }
 
   get isDisabled() {
-    return (
-      this.isRunning || !this.hasCommandContext || !this.hasLinkedCard
-    );
+    return this.isRunning || !this.hasCommandContext || !this.hasLinkedCard;
   }
 
-  get effectiveFormat(): 'isolated' | 'embedded' {
+  get effectiveFormat(): ScreenshotFormat {
     let raw = (this.args.model as any)?.format?.trim?.();
     return raw === 'embedded' ? 'embedded' : 'isolated';
   }
@@ -85,9 +93,8 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
       </section>
 
       <section class='field'>
-        <label>Format (<code>isolated</code> or <code>embedded</code>)</label>
-        <@fields.format @format='edit' />
-        <p class='hint'>Effective format: <code>{{this.effectiveFormat}}</code></p>
+        <label>Format</label>
+        <@fields.format />
       </section>
 
       <section class='actions'>
@@ -132,11 +139,6 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
       .field label {
         font-weight: 600;
       }
-      .hint {
-        margin: 0;
-        font-size: var(--boxel-font-xs);
-        color: var(--boxel-600);
-      }
       .actions {
         display: flex;
         gap: var(--boxel-sp);
@@ -176,7 +178,7 @@ export class ScreenshotCardDemo extends CardDef {
   static displayName = 'Screenshot Card Demo';
 
   @field card = linksTo(CardDef);
-  @field format = contains(StringField); // 'isolated' | 'embedded'
+  @field format = contains(FormatField);
 
   static isolated = Isolated;
 }

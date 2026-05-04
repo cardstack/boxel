@@ -1076,6 +1076,73 @@ export interface ScreenshotCapture {
   height: number;
 }
 
+// Block in the browser context until images, CSS background-image URLs, and
+// fonts have finished loading, then yield one animation frame so the browser
+// actually paints the result. Resolves on `error` events too — we'd rather
+// screenshot a broken-image placeholder than hang the capture. Internal
+// timeout (10s) guards against a slow or auth-failing image stalling the
+// whole flow indefinitely.
+async function waitForImagePaint(page: Page): Promise<void> {
+  let log = logger('prerenderer');
+  let summary = await page.evaluate(async () => {
+    const TIMEOUT_MS = 10_000;
+    let race = <T>(p: Promise<T>): Promise<T | 'timeout'> =>
+      Promise.race([
+        p,
+        new Promise<'timeout'>((r) =>
+          setTimeout(() => r('timeout'), TIMEOUT_MS),
+        ),
+      ]);
+
+    let pendingImgs = Array.from(document.images).filter((i) => !i.complete);
+    let imgWait = Promise.all(
+      pendingImgs.map(
+        (i) =>
+          new Promise<void>((res) => {
+            i.addEventListener('load', () => res(), { once: true });
+            i.addEventListener('error', () => res(), { once: true });
+          }),
+      ),
+    );
+
+    let bgUrls = new Set<string>();
+    for (let el of Array.from(document.querySelectorAll('*'))) {
+      let bg = getComputedStyle(el as HTMLElement).backgroundImage;
+      if (!bg || bg === 'none') continue;
+      for (let m of bg.matchAll(/url\((["']?)(.+?)\1\)/g)) {
+        let url = m[2];
+        if (url && !url.startsWith('data:')) bgUrls.add(url);
+      }
+    }
+    let bgWait = Promise.all(
+      Array.from(bgUrls).map(
+        (u) =>
+          new Promise<void>((res) => {
+            let probe = new Image();
+            probe.addEventListener('load', () => res(), { once: true });
+            probe.addEventListener('error', () => res(), { once: true });
+            probe.src = u;
+          }),
+      ),
+    );
+
+    let fontWait = (document as any).fonts
+      ? (document as any).fonts.ready
+      : Promise.resolve();
+
+    let outcome = await race(Promise.all([imgWait, bgWait, fontWait]));
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    return {
+      pendingImgs: pendingImgs.length,
+      bgUrls: bgUrls.size,
+      timedOut: outcome === 'timeout',
+    };
+  });
+  log.debug(
+    `waitForImagePaint done url=${page.url()} pendingImgs=${summary.pendingImgs} bgUrls=${summary.bgUrls} timedOut=${summary.timedOut}`,
+  );
+}
+
 export async function captureScreenshot(
   page: Page,
   format: 'isolated' | 'embedded',
@@ -1127,6 +1194,12 @@ export async function captureScreenshot(
     };
     return renderCaptureToError(page, capture, 'render.screenshot');
   }
+  // Settle hook only tracks store/loader generation + animation frames; it
+  // does NOT wait for `<img>` element loads, CSS background-image fetches, or
+  // fonts. Without this extra wait the screenshot races those resources and
+  // produces empty avatars / missing thumbnails. Bounded by an internal
+  // timeout so a slow / 401-looping image can't hang the capture.
+  await waitForImagePaint(page);
   let dims = await page.evaluate(() => ({
     width: window.innerWidth,
     height: window.innerHeight,
