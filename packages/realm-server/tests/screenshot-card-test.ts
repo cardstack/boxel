@@ -35,9 +35,7 @@ module(basename(__filename), function () {
       };
     }
 
-    function makeQueue(
-      result: PgPrimitive | (() => PgPrimitive),
-    ): {
+    function makeQueue(result: PgPrimitive | (() => PgPrimitive)): {
       queue: QueuePublisher;
       published: Array<QueuePublishArgs<unknown>>;
     } {
@@ -99,7 +97,9 @@ module(basename(__filename), function () {
         height: 600,
         contentType: 'image/png',
       };
-      let { queue, published } = makeQueue(stubResult as unknown as PgPrimitive);
+      let { queue, published } = makeQueue(
+        stubResult as unknown as PgPrimitive,
+      );
       let app = buildApp(buildArgs(dbAdapter, queue));
 
       let token = createJWT(
