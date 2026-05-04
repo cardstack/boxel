@@ -52,6 +52,7 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from '../../lib/realm-registry-reconciler';
+import { mirrorPublishedRealmToRegistry } from '../../lib/realm-registry-writes';
 
 import {
   PgAdapter,
@@ -1700,6 +1701,9 @@ async function startPermissionedRealmFixture(
 
   if (published) {
     let publishedRealmId = uuidv4();
+    let lastPublishedAt = Date.now();
+    let ownerUsername = '@user:localhost';
+    let sourceRealmURL = 'http://example.localhost/source';
 
     testRealmDir = join(
       dir.name,
@@ -1715,12 +1719,19 @@ async function startPermissionedRealmFixture(
         VALUES
         (
           '${publishedRealmId}',
-          '@user:localhost',
-          'http://example.localhost/source',
+          '${ownerUsername}',
+          '${sourceRealmURL}',
           '${resolvedRealmURL.href}',
-          '${Date.now()}'
+          '${lastPublishedAt}'
         )`,
     );
+    await mirrorPublishedRealmToRegistry(dbAdapter, {
+      publishedRealmURL: resolvedRealmURL.href,
+      publishedRealmId,
+      ownerUsername,
+      sourceRealmURL,
+      lastPublishedAt,
+    });
   } else {
     testRealmDir = join(dir.name, 'realm_server_1', 'test');
   }
