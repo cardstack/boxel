@@ -53,10 +53,33 @@ export const MODULE_CACHE_INVALIDATED_CHANNEL = 'module_cache_invalidated';
 // Postgres caps NOTIFY payloads at 8000 bytes; stay well under so JSON
 // encoding overhead and pathological URL lengths don't blow the limit.
 const NOTIFY_PAYLOAD_BUDGET = 7000;
+// Postgres NOTIFY channel for cross-instance prerender-coalesce wakeups
+// (CS-10953). The winner of a `pg_try_advisory_xact_lock` for a given
+// inFlightKey emits this notify (with the inFlightKey as payload) inside
+// the same transaction as its persistModuleCacheEntry, so peer waiters
+// see the signal only on commit (the cache row is visible to their
+// re-read by the time their wait resolves). Loser path on
+// missed-NOTIFY falls back to a bounded-timeout re-read.
+export const MODULE_CACHE_POPULATED_CHANNEL = 'module_cache_populated';
 // Cached module errors expire after this interval. When a stale error entry
 // is encountered, the prerenderer is called again to get a fresh result.
 // This prevents transient prerender failures from being permanently cached.
 const ERROR_CACHE_TTL_MS = 30_000; // 30 seconds
+// CS-10953 cross-process populate-coalesce loser-path wait timeout. The
+// loser blocks on a peer's NOTIFY; on timeout (peer crashed mid-prerender,
+// missed wakeup, etc.), the loop re-reads the cache and may take another
+// shot at the lock. Set well above realistic prerender wall time
+// (single-module prerenders are sub-second to a few seconds; the absolute
+// upper bound is the prerender request timeout, currently 150s in
+// production) so a healthy peer's prerender always wakes the loser
+// before this fires.
+const COALESCE_NOTIFY_WAIT_MS = 180_000; // 180 seconds
+// Bounded retry loop in the coordinated path. Each iteration re-reads
+// the cache, contends for the lock, and (if losing) waits on NOTIFY. A
+// pathological peer crash-loop or NOTIFY drop sequence could in
+// principle cycle the loser indefinitely; capping at a small number and
+// throwing surfaces it instead of silently hanging.
+const COALESCE_MAX_ITERATIONS = 4;
 const modulesTableCoerceTypes: TypeCoercion = Object.freeze({
   definitions: 'JSON',
   deps: 'JSON',
@@ -190,6 +213,51 @@ export function isFilterRefersToNonexistentTypeError(
   return error instanceof FilterRefersToNonexistentTypeError;
 }
 
+// CS-10953 cross-process prerender-coalesce dependency. When provided,
+// CachingDefinitionLookup routes its uncached load through the coordinator
+// so at most one realm-server process per coalesce key reaches the
+// prerenderer; peer processes block on NOTIFY and re-read the populated
+// row instead of redundant prerender round-trips.
+//
+// Two methods rather than one because the winner's transaction (lock +
+// fn + NOTIFY + commit) and the loser's NOTIFY-or-timeout wait are
+// fundamentally different shapes: the winner runs a critical section
+// pinned to one connection; the loser is a passive subscriber that the
+// winner's NOTIFY (or a timeout) wakes.
+//
+// `tryAcquireAndRun` returns a discriminated union rather than throwing
+// on contention because contention is the expected loser path, not an
+// error condition.
+//
+// `waitForKey` resolves on either the NOTIFY or the timeout — both are
+// acceptable handoffs back to the caller's loop. The loop's next
+// iteration re-reads the cache; on healthy peer the row is now there
+// and the loop exits.
+//
+// Sqlite/in-memory deployments don't construct a coordinator —
+// CachingDefinitionLookup runs its uncoordinated path when this is
+// undefined.
+export interface PopulateCoordinator {
+  // Try to acquire the cross-process coalesce lock for `coalesceKey`. If
+  // acquired, run `fn` inside the same transaction as the lock + emit
+  // pg_notify on the populate channel + commit. If contended, return
+  // `{ acquired: false }` immediately so the caller can transition to
+  // the loser path.
+  //
+  // `fn` runs against the shared dbAdapter (separate pool connections
+  // for any DB work it does). The pinned connection inside this helper
+  // only holds the advisory lock + emits the NOTIFY + commits.
+  tryAcquireAndRun<T>(
+    coalesceKey: string,
+    fn: () => Promise<T>,
+  ): Promise<{ acquired: true; result: T } | { acquired: false }>;
+  // Wait until a NOTIFY for `coalesceKey` arrives on the populate
+  // channel, or `timeoutMs` elapses — whichever comes first. Resolves in
+  // both cases. The caller's loop re-reads the cache regardless of
+  // which path resolved.
+  waitForKey(coalesceKey: string, timeoutMs: number): Promise<void>;
+}
+
 export interface DefinitionLookup {
   lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition>;
   // Like lookupDefinition but does not trigger a prerenderer call or
@@ -246,6 +314,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   #moduleGenerations = new Map<string, number>();
   #realmGenerations = new Map<string, number>();
   #globalGeneration = 0;
+  // CS-10953 cross-process prerender coalescer. Optional — when undefined,
+  // loadModuleCacheEntryUncached runs the original uncoordinated path.
+  // Constructed only by the realm-server main when
+  // PRERENDER_COALESCE_ACROSS_PROCESSES is enabled and the dbAdapter is pg.
+  #populateCoordinator?: PopulateCoordinator;
 
   constructor(
     dbAdapter: DBAdapter,
@@ -255,11 +328,13 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       userId: string,
       permissions: RealmPermissions,
     ) => string,
+    populateCoordinator?: PopulateCoordinator,
   ) {
     this.#dbAdapter = dbAdapter;
     this.#prerenderer = prerenderer;
     this.#fetch = virtualNetwork.fetch;
     this.#createPrerenderAuth = createPrerenderAuth;
+    this.#populateCoordinator = populateCoordinator;
   }
 
   async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
@@ -349,7 +424,20 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       return await existing;
     }
     let pending: Promise<ModuleCacheEntry | undefined>;
-    pending = this.loadModuleCacheEntryUncached(args).finally(() => {
+    // Two paths inside #inFlight:
+    //   - With a populate coordinator (CS-10953): coordinated path adds
+    //     a pg_try_advisory_xact_lock around the prerender so at most
+    //     one realm-server process per coalesceKey reaches the
+    //     prerenderer; peer processes block on NOTIFY and re-read the
+    //     populated row. Inert at N=1.
+    //   - Without a coordinator (default): original uncoordinated path
+    //     runs the prerender and persist directly. This is the path
+    //     used by every test that doesn't construct a coordinator and
+    //     by sqlite/in-memory deployments.
+    let core: Promise<ModuleCacheEntry | undefined> = this.#populateCoordinator
+      ? this.loadModuleCacheEntryCoordinated(args, this.#populateCoordinator)
+      : this.loadModuleCacheEntryUncached(args);
+    pending = core.finally(() => {
       // Identity-check before deletion: an invalidation path may have
       // dropped our entry mid-flight, after which a newer caller can
       // install their own pending under the same key. Deleting
@@ -362,6 +450,81 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     });
     this.#inFlight.set(key, pending);
     return await pending;
+  }
+
+  // CS-10953 cross-process prerender coalescer. Wraps the uncoordinated
+  // body in a pg_try_advisory_xact_lock + NOTIFY-wait loop so at most
+  // one process per coalesceKey reaches the prerenderer.
+  //
+  // Iteration shape:
+  //   1. Read the cache (cheap; avoids contending the lock on hits).
+  //   2. Try the advisory lock via the coordinator.
+  //   3. Winner: run the uncoordinated body inside the lock — re-reads
+  //      cache (double-check), prerenders, persists. Coordinator emits
+  //      NOTIFY on commit. Return the result.
+  //   4. Loser: wait for peer's NOTIFY (or timeout). Loop back.
+  //
+  // The outer `for` is bounded by COALESCE_MAX_ITERATIONS so a
+  // pathological peer crash-loop or NOTIFY-drop sequence surfaces as
+  // an error instead of silently hanging.
+  //
+  // Error semantics:
+  //   - If the uncoordinated body throws, the coordinator rolls back
+  //     (releasing the advisory lock) and rethrows. CS-10948-era error
+  //     caching means transient errors are persisted as error rows with
+  //     a TTL, so subsequent callers read the cached error rather than
+  //     re-running the prerender — the retry loop terminates naturally.
+  //   - Generation-changed (invalidate ran during prerender): the body
+  //     returns the post-invalidate cache state (undefined or fresher
+  //     row); coordinator notifies regardless so peer waiters wake
+  //     promptly. Same observable behavior as N=1 generation-mismatch.
+  private async loadModuleCacheEntryCoordinated(
+    args: {
+      moduleURL: string;
+      realmURL: string;
+      resolvedRealmURL: string;
+      cacheScope: CacheScope;
+      cacheUserId: string;
+      prerenderUserId: string;
+    },
+    coordinator: PopulateCoordinator,
+  ): Promise<ModuleCacheEntry | undefined> {
+    let coalesceKey = inFlightKey(args);
+    for (let iteration = 0; iteration < COALESCE_MAX_ITERATIONS; iteration++) {
+      // Optimistic pre-lock cache read. On a hit we skip the lock
+      // contention entirely; on a miss we proceed to the try-lock.
+      // Mirrors the uncoordinated body's first read — when we win the
+      // lock, the body re-reads inside the lock and short-circuits if a
+      // peer committed in between (the double-check).
+      let cached = await this.readFromDatabaseCache(
+        args.moduleURL,
+        args.cacheScope,
+        args.cacheUserId,
+        args.resolvedRealmURL,
+      );
+      if (cached && !this.isExpiredErrorEntry(cached)) {
+        return cached;
+      }
+
+      let outcome = await coordinator.tryAcquireAndRun(coalesceKey, async () =>
+        this.loadModuleCacheEntryUncached(args),
+      );
+      if (outcome.acquired) {
+        // Winner. Result might be undefined if all populationCandidates
+        // produced missing-module errors — that's a legitimate "module
+        // does not exist" answer and we surface it as undefined, same as
+        // the uncoordinated path.
+        return outcome.result;
+      }
+
+      // Loser. Block on peer's NOTIFY (or bounded timeout). On wake,
+      // the next iteration's optimistic cache read picks up the peer's
+      // populated row.
+      await coordinator.waitForKey(coalesceKey, COALESCE_NOTIFY_WAIT_MS);
+    }
+    throw new Error(
+      `loadModuleCacheEntryCoordinated exceeded ${COALESCE_MAX_ITERATIONS} iterations for ${coalesceKey}; peer prerender appears stuck or NOTIFY broadcast is broken`,
+    );
   }
 
   private async loadModuleCacheEntryUncached({

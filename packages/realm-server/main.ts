@@ -37,6 +37,7 @@ import {
 } from './lib/realm-registry-reconciler';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener';
 import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener';
+import { ModuleCacheCoordinator } from './lib/module-cache-coordination';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
 let log = logger('main');
@@ -110,6 +111,14 @@ const FULL_INDEX_ON_STARTUP =
 // test's first lookupDefinition.
 const SKIP_MODULES_CACHE_CLEAR_ON_STARTUP =
   process.env.REALM_SERVER_SKIP_MODULES_CACHE_CLEAR_ON_STARTUP === 'true';
+// CS-10953 cross-process prerender coalesce. Off by default — flip on
+// after a stage burn-in. Effectively inert at N=1 (no contention; the
+// in-process #inFlight coalescer already dedups same-process callers),
+// but the extra BEGIN/try-lock/COMMIT roundtrip on every cache miss is
+// measurable, so we ship dormant and flip explicitly. At N>1 enables
+// 1-prerender-per-fleet on cold fan-out.
+const PRERENDER_COALESCE_ACROSS_PROCESSES =
+  process.env.PRERENDER_COALESCE_ACROSS_PROCESSES === 'true';
 
 let {
   port,
@@ -289,6 +298,7 @@ const getIndexHTML = async () => {
   let moduleCacheInvalidationListener:
     | ModuleCacheInvalidationListener
     | undefined;
+  let moduleCacheCoordinator: ModuleCacheCoordinator | undefined;
 
   if (workerManagerUrl) {
     await waitForWorkerManager(workerManagerUrl);
@@ -307,11 +317,23 @@ const getIndexHTML = async () => {
     serverURL,
   );
 
+  // CS-10953: optionally construct a cross-process prerender coalescer
+  // (advisory-lock + NOTIFY) and wire it into CachingDefinitionLookup.
+  // Off by default — flip via PRERENDER_COALESCE_ACROSS_PROCESSES=true.
+  // The listener has to be `start()`ed before any coordinated load can
+  // park on it, so we spin it up here, before the CachingDefinitionLookup
+  // would ever serve its first lookup.
+  if (PRERENDER_COALESCE_ACROSS_PROCESSES) {
+    moduleCacheCoordinator = new ModuleCacheCoordinator({ dbAdapter });
+    await moduleCacheCoordinator.start();
+  }
+
   let definitionLookup = new CachingDefinitionLookup(
     dbAdapter,
     prerenderer,
     virtualNetwork,
     createPrerenderAuth,
+    moduleCacheCoordinator,
   );
 
   if (SKIP_MODULES_CACHE_CLEAR_ON_STARTUP) {
@@ -501,6 +523,7 @@ const getIndexHTML = async () => {
           reconciler?.shutDown(),
           fileChangesListener?.shutDown(),
           moduleCacheInvalidationListener?.shutDown(),
+          moduleCacheCoordinator?.shutDown(),
         ]);
         queue.destroy(); // warning this is async
         dbAdapter.close(); // warning this is async
