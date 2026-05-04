@@ -536,6 +536,7 @@ export class Prerenderer {
     url,
     auth,
     format,
+    priority,
     opts,
     signal,
   }: {
@@ -543,6 +544,7 @@ export class Prerenderer {
     url: string;
     auth: string;
     format: 'isolated' | 'embedded';
+    priority?: number;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     signal?: AbortSignal;
   }): Promise<{
@@ -566,6 +568,7 @@ export class Prerenderer {
         url,
         auth,
         format,
+        priority,
         opts,
         signal,
       });

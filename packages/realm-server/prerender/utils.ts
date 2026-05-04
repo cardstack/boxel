@@ -1208,8 +1208,9 @@ export async function captureScreenshot(
     encoding: 'base64',
     type: 'png',
   })) as string;
+  let pngBytes = Buffer.byteLength(base64, 'base64');
   log.debug(
-    `captureScreenshot success format=${format} ancestorLevel=${ancestorLevel} bytes=${base64.length} ${dims.width}x${dims.height}`,
+    `captureScreenshot success format=${format} ancestorLevel=${ancestorLevel} bytes=${pngBytes} base64Chars=${base64.length} ${dims.width}x${dims.height}`,
   );
   return { base64, width: dims.width, height: dims.height };
 }

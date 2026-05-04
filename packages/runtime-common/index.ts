@@ -456,6 +456,9 @@ export type ScreenshotPrerenderArgs = {
   url: string;
   auth: string;
   format: 'isolated' | 'embedded';
+  // Worker-job priority threaded through from the producer side. See
+  // ModulePrerenderArgs for the contract.
+  priority?: number;
 };
 
 export type ScreenshotPrerenderResponse = {
@@ -479,8 +482,10 @@ export interface Prerenderer {
   releaseBatch?(args: ReleaseBatchArgs): Promise<void>;
   // Optional: capture a settled card render to a PNG. Optional so test
   // stubs and older Prerenderer implementations are not forced to
-  // implement it; the realm-server proxy probes for it at runtime and
-  // surfaces a useful error if the upstream doesn't support it.
+  // implement it; the screenshot-card worker task
+  // (`runtime-common/tasks/screenshot-card.ts`) probes for this method at
+  // runtime and surfaces a useful error if the configured prerenderer
+  // doesn't support it.
   prerenderScreenshot?(
     args: ScreenshotPrerenderArgs,
   ): Promise<ScreenshotPrerenderResponse>;

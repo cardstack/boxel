@@ -394,6 +394,7 @@ export class RenderRunner {
     auth,
     format,
     opts,
+    priority,
     signal,
   }: {
     affinityType: AffinityType;
@@ -403,6 +404,7 @@ export class RenderRunner {
     auth: string;
     format: 'isolated' | 'embedded';
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    priority?: number;
     signal?: AbortSignal;
   }): Promise<{
     response: ScreenshotPrerenderResponse;
@@ -412,11 +414,17 @@ export class RenderRunner {
     this.#nonce++;
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     log.info(
-      `screenshot prerendering url=${url} format=${format} nonce=${this.#nonce} affinity=${affinityKey} realm=${realm}`,
+      `screenshot prerendering url=${url} format=${format} nonce=${this.#nonce} affinity=${affinityKey} realm=${realm} priority=${priority ?? 0}`,
     );
 
     const { page, reused, launchMs, waits, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth, 'file', signal);
+      await this.#getPageForAffinity(
+        affinityKey,
+        auth,
+        'file',
+        signal,
+        priority,
+      );
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,

@@ -286,6 +286,7 @@ export function buildPrerenderApp(options: {
     let rawAffinityValue = attrs.affinityValue;
     let rawFormat = attrs.format;
     let renderOptions = parseRenderOptions(attrs);
+    let priority = parsePriority(attrs);
     let formatIsValid = rawFormat === 'isolated' || rawFormat === 'embedded';
     let missing = missingAttrs([
       { value: rawUrl, name: 'url' },
@@ -313,6 +314,7 @@ export function buildPrerenderApp(options: {
               auth: rawAuth as string,
               format: rawFormat as 'isolated' | 'embedded',
               renderOptions,
+              ...(priority !== undefined ? { priority } : {}),
             },
       missing,
       missingMessage:
@@ -609,6 +611,7 @@ export function buildPrerenderApp(options: {
           url: args.url,
           auth: args.auth,
           format: args.format,
+          priority: args.priority,
           signal,
         }),
       drainingPromise: options.drainingPromise,

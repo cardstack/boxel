@@ -81,6 +81,7 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
       url: cardId,
       auth,
       format,
+      priority: jobInfo?.priority,
     });
 
     reportStatus(jobInfo, 'finish');
