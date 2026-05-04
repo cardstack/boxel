@@ -1722,6 +1722,9 @@ importers:
       '@ember/test-helpers':
         specifier: 'catalog:'
         version: 5.4.1(@babel/core@7.28.6)(@glint/template@1.7.7)
+      '@glint/ember-tsc':
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@5.9.3)
       '@types/lodash':
         specifier: 'catalog:'
         version: 4.17.23
