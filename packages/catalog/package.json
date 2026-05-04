@@ -2,7 +2,7 @@
   "name": "@cardstack/catalog",
   "version": "1.0.0",
   "license": "MIT",
-   "devDependencies": {
+  "devDependencies": {
     "@babel/plugin-proposal-decorators": "catalog:",
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
