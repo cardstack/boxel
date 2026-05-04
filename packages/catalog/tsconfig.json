@@ -31,6 +31,6 @@
     },
     "types": ["@cardstack/local-types"]
   },
-  "include": ["../base/**/*"],
+  "include": ["../base/**/*", "contents/**/*.ts", "contents/**/*.gts"],
   "exclude": ["../base/**/__boxel/**"]
 }
