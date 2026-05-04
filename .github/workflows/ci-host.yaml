@@ -36,6 +36,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # TEMPORARY (PR #4638): force Percy on so the reject-on-failure
+          # step has a real build to reject. Remove this block before merge.
+          echo "percy_needed=true" >> "$GITHUB_OUTPUT"
+          echo "TEMP: Forcing Percy on for reject-on-failure verification"
+          exit 0
+
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             echo "percy_needed=true" >> "$GITHUB_OUTPUT"
             echo "Not a pull request — Percy will always run"
@@ -210,6 +216,15 @@ jobs:
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
         working-directory: packages/host
+
+      # TEMPORARY (PR #4638): deliberately fail shard 1 after Percy has
+      # already received its snapshots, so the reject-on-failure step in
+      # host-percy-finalize has something to reject. Remove before merge.
+      - name: TEMP — force shard 1 failure to exercise Percy reject path
+        if: matrix.shardIndex == 1
+        run: |
+          echo "::warning::TEMP: failing shard 1 deliberately to verify the percy build:reject step"
+          exit 1
 
       - name: Upload junit report to GitHub Actions Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
