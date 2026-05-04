@@ -336,24 +336,22 @@ module('factory-agent-claude-code', function () {
       ]);
 
       let allowed = capturedOptions!.allowedTools ?? [];
-      // Filtered: native fs replaces read/write, run_command is unused
-      // in practice, fetch_transpiled_module is reachable via Bash +
-      // `boxel read-transpiled`.
+      // Filtered: native fs replaces read/write; run_command is unused
+      // in practice; fetch_transpiled_module reaches the same realm
+      // endpoint via `boxel read-transpiled`; search_realm reaches the
+      // same endpoint via `boxel search` (with single-quoted JSON).
       for (let filtered of [
         'read_file',
         'write_file',
         'run_command',
         'fetch_transpiled_module',
+        'search_realm',
       ]) {
         assert.notOk(
           allowed.includes(`mcp__factory__${filtered}`),
           `${filtered} is not registered as an MCP tool on the Claude path`,
         );
       }
-      assert.true(
-        allowed.includes('mcp__factory__search_realm'),
-        'realm-side factory tools remain in the MCP catalog',
-      );
       assert.true(
         allowed.includes('mcp__factory__signal_done'),
         'control-flow factory tools remain in the MCP catalog',

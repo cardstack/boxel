@@ -83,12 +83,17 @@ const NATIVE_FS_TOOLS = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'];
  *                                validator reports a transpiled
  *                                line/column, so the marginal cost of
  *                                shelling out is negligible.
+ * - `search_realm`           → Bash + `boxel search --realm <url>
+ *                                --query '<json>' --json`. Single-quote
+ *                                the JSON in shell to avoid expansion;
+ *                                see the operations skill for examples.
  */
 const CLAUDE_FILTERED_FACTORY_TOOLS = new Set([
   'read_file',
   'write_file',
   'run_command',
   'fetch_transpiled_module',
+  'search_realm',
 ]);
 
 let log = logger('factory-agent-claude-code');

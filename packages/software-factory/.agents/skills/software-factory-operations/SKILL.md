@@ -83,7 +83,9 @@ or drive control flow.
 - Fetch the **transpiled** JavaScript for a `.gts` module — used only when an eval/instantiate error reports a line/column number, since those numbers reference the transpiled output, not your `.gts` source.
   - **Claude backend:** run `boxel read-transpiled <realm-relative-path> --realm <target-realm-url>` via `Bash`. The `.gts` extension is optional. Pipe through `sed -n '<line>p'` (or wrap with `awk`) when you want to inspect a single line.
   - **OpenRouter backend:** call the factory `fetch_transpiled_module({ path, realm? })` tool with the same realm-relative path.
-- `search_realm({ query, realm? })` — Search for cards using a structured query object (filter, sort, page). Use to check for existing cards, find duplicates, inspect project state.
+- Search the target realm for cards using a structured query object (filter, sort, page). Use this to check for existing cards, find duplicates, or inspect project state.
+  - **Claude backend:** run `boxel search --realm <target-realm-url> --query '<json>' --json` via `Bash`. **Quoting:** single-quote the entire JSON object so the shell does not expand or split it; keep all keys and string values double-quoted inside. Example: `boxel search --realm https://realms.example/h/p/ --query '{"filter":{"type":{"module":"https://cardstack.com/base/spec","name":"Spec"}}}' --json`. Pipe through `jq` if you want a focused projection.
+  - **OpenRouter backend:** call the factory `search_realm({ query, realm? })` tool with the same structured query object — no shell quoting concerns.
 
 ### Updating Project State
 
@@ -124,7 +126,7 @@ All five tools are safe to call repeatedly mid-turn; none of them write a realm 
 
 ## Required Flow
 
-1. **Inspect before writing.** Use `search_realm` for existing cards in the target realm. Read or grep the workspace files you plan to change (or sibling files in the same directory) before creating or modifying anything.
+1. **Inspect before writing.** Search the target realm for existing cards (Bash + `boxel search` on Claude, `search_realm` on OpenRouter — see the Realm-side reads section above). Read or grep the workspace files you plan to change (or sibling files in the same directory) before creating or modifying anything.
 2. **Write card definitions** (`.gts`) into the workspace.
 3. **Write `.test.gts` test files** co-located with card definitions. Every issue must have at least one test file. **Write tests immediately after the card definition, before any instances or catalog specs.**
 4. **Write card instances** (`.json`) into the workspace.
