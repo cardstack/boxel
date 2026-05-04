@@ -1039,6 +1039,7 @@ export default class RenderRoute extends Route<Model> {
       nonce: context.nonce,
     });
     this.#applyErrorMetadataAttrs(context);
+    let canTransitionToErrorRoute = this.renderBaseParams !== undefined;
     this.#transitionToErrorRoute(transition);
 
     // The prerender server's wait condition treats data-prerender-status='error'
@@ -1047,7 +1048,16 @@ export default class RenderRoute extends Route<Model> {
     // flushing the render.error template, capturing an empty <pre data-prerender-error>
     // (CS-11024). Defer the status flip to afterRender so the readiness signal
     // is only raised once the error template's textContent has been written.
-    schedule('afterRender', this, this.#applyErrorStatus, context);
+    //
+    // Skip the schedule when #transitionToErrorRoute took its early-failure
+    // fallback (no renderBaseParams — error fired before model() ran). That
+    // path writes data-prerender-status='unusable' synchronously to force page
+    // eviction, and the error textContent is also written synchronously on
+    // the same path, so deferring isn't needed — and overwriting 'unusable'
+    // with 'error' here would defeat the eviction signal.
+    if (canTransitionToErrorRoute) {
+      schedule('afterRender', this, this.#applyErrorStatus, context);
+    }
   }
 
   #serializeRenderError(
