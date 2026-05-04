@@ -947,12 +947,14 @@ export default class RealmService extends Service {
 
   // Cross-form realm-membership check.
   //
-  // Both `realm` and `resource` may be in URL form (`http://...`) or
-  // registered-prefix form (`@cardstack/...`). Internally both sides are
-  // resolved to URL form via `cardIdToURL` before comparison, so a URL-form
-  // realm correctly matches a prefix-form resource (and vice versa) as long
-  // as the prefix is registered in `prefixMappings`. Returns `false` if
-  // either side fails to resolve.
+  // `realm` may be in URL form (`http://...`) or as a registered realm-root
+  // identifier/prefix (for example `@cardstack/base/`, including the trailing
+  // slash). `resource` may be in URL form or registered-prefix form.
+  // Internally both sides are resolved to URL form via `cardIdToURL` before
+  // comparison, so a URL-form realm correctly matches a prefix-form resource
+  // (and vice versa) as long as the prefix is registered in `prefixMappings`.
+  // Returns `false` if either side fails to resolve, including when a
+  // non-URL-like string does not match a registered prefix exactly.
   contains(realm: string | URL, resource: string | URL): boolean {
     let realmHref: string;
     let resourceHref: string;
