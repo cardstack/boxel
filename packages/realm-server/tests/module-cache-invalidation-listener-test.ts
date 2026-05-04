@@ -31,9 +31,7 @@ function newRecorder(): BumpRecorder {
 // Minimal stand-in shaped like the bump surface the listener uses. Avoids
 // constructing a full CachingDefinitionLookup for the unit-dispatch tests
 // where we don't need the prerender / virtual-network plumbing.
-function makeStubLookup(
-  recorder: BumpRecorder,
-): CachingDefinitionLookup {
+function makeStubLookup(recorder: BumpRecorder): CachingDefinitionLookup {
   const stub = {
     bumpModuleGeneration(resolvedRealmURL: string, moduleURL: string) {
       recorder.module.push({ resolvedRealmURL, moduleURL });
