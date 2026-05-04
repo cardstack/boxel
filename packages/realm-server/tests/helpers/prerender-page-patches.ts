@@ -287,8 +287,10 @@ export function installFlakyDepFetchPatch(opts: {
       interceptingPages.add(page);
       let listener = (request: any) => {
         let url: string;
+        let method: string;
         try {
           url = request.url();
+          method = request.method();
         } catch {
           // The request lifecycle ended before we could inspect it.
           try {
@@ -298,6 +300,16 @@ export function installFlakyDepFetchPatch(opts: {
           }
           return;
         }
+        // Let preflight pass through to the real realm-server so its CORS
+        // middleware responds with the standard headers. We only want to
+        // inject 5xx on the actual request, mirroring the real-world
+        // transient-failure shape.
+        if (method === 'OPTIONS') {
+          request.continue().catch(() => {
+            // best-effort
+          });
+          return;
+        }
         if (remainingFailures > 0 && opts.matcher(url)) {
           remainingFailures--;
           failuresInjected++;
@@ -305,6 +317,15 @@ export function installFlakyDepFetchPatch(opts: {
             .respond({
               status,
               contentType: 'text/plain',
+              // Mirror the realm-server's `cors({ origin: '*' })` so the
+              // browser surfaces this 5xx to the host loader instead of
+              // blocking it as a CORS-policy violation upstream of the
+              // retry path. Without this header the browser would treat
+              // the response as opaque and the loader would see a network
+              // error (synthetic 500) rather than the retryable 502.
+              headers: {
+                'access-control-allow-origin': '*',
+              },
               body: 'Bad Gateway (test injection)',
             })
             .catch(() => {
