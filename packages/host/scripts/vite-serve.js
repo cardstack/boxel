@@ -13,11 +13,11 @@ const net = require('net');
 const BOXEL_ENVIRONMENT = process.env.BOXEL_ENVIRONMENT;
 
 function startVite(port) {
-  const child = spawn(
-    'npx',
-    ['vite', '--port', String(port), '--strictPort'],
-    { stdio: 'inherit', cwd: path.join(__dirname, '..'), shell: true },
-  );
+  const child = spawn('npx', ['vite', '--port', String(port), '--strictPort'], {
+    stdio: 'inherit',
+    cwd: path.join(__dirname, '..'),
+    shell: true,
+  });
   child.on('exit', (code) => process.exit(code || 0));
   return child;
 }
