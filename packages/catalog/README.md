@@ -94,7 +94,7 @@ pnpm lint:hbs     # Template lint check
 pnpm lint:types   # TypeScript type check
 ```
 
-Linting is automatically run by CI when you submit a pull request to the [boxel-catalog](https://github.com/cardstack/boxel-catalog) repository.
+These commands run locally in this monorepo's `packages/catalog` package. If you submit a pull request to the [boxel-catalog](https://github.com/cardstack/boxel-catalog) repository, any linting run in CI is controlled by that repository's own workflow configuration.
 
 ## Deployment Pipeline
 
