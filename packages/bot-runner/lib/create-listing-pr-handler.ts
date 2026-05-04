@@ -53,7 +53,15 @@ function getCreateListingPRContext(
     typeof input.title === 'string' && input.title.trim()
       ? input.title.trim()
       : `Add ${listingDisplayName} listing`;
-  let headBranch = toBranchName(roomId, listingDisplayName);
+  // Prefer an explicit input.branchName when the upstream caller has one
+  // persisted (workflow card). This guarantees retry targets the same GitHub
+  // branch as the original create attempt, even if listingName has drifted.
+  let explicitBranchName =
+    typeof input.branchName === 'string' && input.branchName.trim()
+      ? input.branchName.trim()
+      : '';
+  let headBranch =
+    explicitBranchName || toBranchName(roomId, listingDisplayName);
 
   if (!headBranch) {
     throw new Error('pr-listing-create trigger must include a valid branch');
