@@ -12,7 +12,6 @@
  * - runIssueLoop() invocation
  */
 
-
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 

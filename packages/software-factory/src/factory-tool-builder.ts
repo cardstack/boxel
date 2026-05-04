@@ -46,7 +46,9 @@ import { readCard, writeCard } from './workspace-fs';
  */
 function normalizeRealmUrls(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return value.filter((v): v is string => typeof v === 'string' && v.length > 0);
+    return value.filter(
+      (v): v is string => typeof v === 'string' && v.length > 0,
+    );
   }
   if (typeof value === 'string' && value.length > 0) {
     return [value];
@@ -305,9 +307,9 @@ function buildSearchRealmsTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'search_realms',
     description:
-      'Federated search across one or more realms via the realm server\'s ' +
+      "Federated search across one or more realms via the realm server's " +
       '`/_federated-search` endpoint. Use this to discover cards in remote ' +
-      'realms (catalog, base realm, other users\' realms). For target-realm ' +
+      "realms (catalog, base realm, other users' realms). For target-realm " +
       'lookups, prefer reading the local workspace directly (native filesystem ' +
       'access). Auth: server token via the active Boxel profile.',
     parameters: {
@@ -617,5 +619,3 @@ function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
     },
   };
 }
-
-

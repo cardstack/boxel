@@ -356,7 +356,7 @@ export class OpenRouterFactoryAgent implements LoopAgent {
       '  `npx boxel sync` are run by the outer loop, not by you.',
       '- Card mutations (Project / Issue / KnowledgeArticle / Spec / comments):',
       '  read the existing JSON with `read_file`, mutate it locally, write it',
-      '  back with `write_file`. Never modify an Issue\'s `description`.',
+      "  back with `write_file`. Never modify an Issue's `description`.",
       '- When you finish, call `signal_done` so the loop runs validation.',
       '',
     ].join('\n');
