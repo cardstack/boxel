@@ -69,7 +69,7 @@ ALLOWLIST=(
   # Comments and rationale fields that mention these patterns by name
   # for documentation purposes (this script's own comments, README
   # callouts, etc.). Match a leading `#`, `//`, or markdown-list `-`.
-  '^[[:space:]]*(#|//|--|\*)'
+  '^[[:space:]]*(#|//|-|\*)'
   # JSON keys that contain the word "password"/"api_key"/"secret" but
   # whose values are placeholders or empty strings — e.g. the
   # secureJsonData scaffolding pattern.
