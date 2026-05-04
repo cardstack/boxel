@@ -33,6 +33,7 @@ import type { CodeRef } from '@cardstack/runtime-common';
 import {
   isCardDocumentString,
   isCardErrorJSONAPI,
+  rri,
   RealmPaths,
   PermissionsContextName,
   GetCardContextName,
@@ -630,8 +631,8 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action private async openSearchResultInEditor(cardId: string) {
     let codePath = cardId.endsWith('.json')
-      ? new URL(cardId)
-      : new URL(cardId + '.json');
+      ? rri(cardId)
+      : rri(`${cardId}.json`);
     await this.operatorModeStateService.updateCodePath(codePath);
   }
 

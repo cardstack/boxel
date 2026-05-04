@@ -39,6 +39,7 @@ import {
   realmURL as realmURLSymbol,
   localId as localIdSymbol,
   meta,
+  rri,
   logger,
   formattedError,
   SupportedMimeType,
@@ -285,7 +286,7 @@ export default class StoreService extends Service implements StoreInterface {
         }
       }
     } else {
-      this.subscribeToRealm(cardIdToURL(id));
+      this.subscribeToRealm(rri(id));
       // intentionally not awaiting this. we keep track of the promise in
       // this.newReferencePromises
       this.wireUpNewReference(id, readType);
@@ -1603,7 +1604,7 @@ export default class StoreService extends Service implements StoreInterface {
           // Source-mode loads in render context don't include realm metadata.
           // Query-backed relationship fields require realmURL to build their
           // fallback search query.
-          let realmURL = this.realm.realmOfURL(cardIdToURL(url))?.href;
+          let realmURL = this.realm.realmOf(rri(url));
           if (realmURL) {
             json.data.meta = {
               ...(json.data.meta ?? {}),
@@ -2012,7 +2013,7 @@ export default class StoreService extends Service implements StoreInterface {
         }
         if (isNew) {
           api.setId(instance, json.data.id!);
-          this.subscribeToRealm(cardIdToURL(instance.id));
+          this.subscribeToRealm(rri(instance.id));
           this.operatorModeStateService.handleCardIdAssignment(
             instance[localIdSymbol],
           );
@@ -2090,23 +2091,22 @@ export default class StoreService extends Service implements StoreInterface {
     });
   }
 
-  private subscribeToRealm(url: URL) {
+  private subscribeToRealm(url: RealmResourceIdentifier | URL) {
     if (this.hostModeService.isActive) {
       return;
     }
 
-    let realmURL = this.realm.realmOfURL(url);
+    let realmURL = this.realm.realmOf(url);
     if (!realmURL) {
       console.warn(
-        `could not determine realm for card ${url.href} when trying to subscribe to realm`,
+        `could not determine realm for card ${url instanceof URL ? url.href : url} when trying to subscribe to realm`,
       );
       return;
     }
-    let realm = realmURL.href;
-    let subscription = this.subscriptions.get(realm);
+    let subscription = this.subscriptions.get(realmURL);
     if (!subscription) {
-      this.subscriptions.set(realm, {
-        unsubscribe: this.messageService.subscribe(realm, (event) =>
+      this.subscriptions.set(realmURL, {
+        unsubscribe: this.messageService.subscribe(realmURL, (event) =>
           this.handleInvalidations(event),
         ),
       });

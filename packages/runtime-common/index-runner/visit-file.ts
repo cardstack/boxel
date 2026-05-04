@@ -1,6 +1,7 @@
 import type { Ignore } from 'ignore';
 
 import {
+  flattenPrerenderMeta,
   hasExecutableExtension,
   isCardResource,
   isIgnored,
@@ -11,7 +12,6 @@ import {
   type LocalPath,
   type LooseCardResource,
   type Prerenderer,
-  type PrerenderResponseMeta,
   type Reader,
   type RealmPaths,
   type RenderRouteOptions,
@@ -29,10 +29,10 @@ interface VisitFileFusedOptions {
   reader: Reader;
   batch: Batch;
   jobInfo: JobInfo;
-  // Worker-job priority threaded from `IndexRunner` (CS-10976).
-  // Forwarded into the `prerenderVisit` request so the prerender
-  // server can route by priority. `0` for system-priority indexing,
-  // `10` for user-initiated; defaults to `0` when not provided.
+  // Worker-job priority threaded from `IndexRunner`. Forwarded into
+  // the `prerenderVisit` request so the prerender server can route by
+  // priority. `0` for system-priority indexing, `10` for user-
+  // initiated; defaults to `0` when not provided.
   jobPriority?: number;
   auth: string;
   // Indexing batch identifier (CS-10758 step 3). Threaded into
@@ -65,24 +65,6 @@ interface VisitFileFusedOptions {
     renderResult?: RenderVisitResponse['fileRender'];
     timingDiagnostics?: TimingDiagnostics;
   }): Promise<void>;
-}
-
-// Flatten a prerender `response.meta` block into the shape persisted
-// to `boxel_index.timing_diagnostics`. Keeps the rich host-side
-// payload (from `meta.diagnostics`) at the top level and promotes the
-// HTTP `requestId` alongside it for easy jsonb-path querying. Returns
-// `undefined` when there's nothing to persist.
-function flattenMeta(
-  meta: PrerenderResponseMeta | undefined,
-): TimingDiagnostics | undefined {
-  if (!meta) return undefined;
-  let diagnostics = meta.diagnostics ?? {};
-  let hasAny = Object.keys(diagnostics).length > 0 || meta.requestId != null;
-  if (!hasAny) return undefined;
-  return {
-    ...diagnostics,
-    ...(meta.requestId ? { requestId: meta.requestId } : {}),
-  };
 }
 
 // Fused visit: calls prerenderer.prerenderVisit once with whichever of the
@@ -236,7 +218,7 @@ export async function visitFileForIndexingFused({
       resourceCreatedAt,
       resource: parsedCardResource,
       renderResult: cardResult,
-      timingDiagnostics: flattenMeta(visitResponse.meta),
+      timingDiagnostics: flattenPrerenderMeta(visitResponse.meta),
     });
   }
 
@@ -250,7 +232,7 @@ export async function visitFileForIndexingFused({
     hasModulePrerender: isModule,
     extractResult: visitResponse.fileExtract,
     renderResult: visitResponse.fileRender,
-    timingDiagnostics: flattenMeta(visitResponse.meta),
+    timingDiagnostics: flattenPrerenderMeta(visitResponse.meta),
   });
 
   logDebug(

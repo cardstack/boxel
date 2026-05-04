@@ -26,10 +26,10 @@ import { AsyncSemaphore } from '../prerender/async-semaphore';
 // that each fire a same-affinity module sub-call mid-flight — and asserts
 // the reservation keeps the system live.
 //
-// PR 10 will re-run this same test against the post-removal code path,
-// where deadlock prevention shifts from the reservation to PR 7's dynamic
-// tab expansion. If PR 10's re-run doesn't pass we don't drop the
-// reservation.
+// A follow-up change (the "drop reservation" PR) re-runs this same
+// test against a post-removal code path, where deadlock prevention
+// shifts from the reservation to dynamic tab expansion. If that
+// re-run doesn't pass, the reservation does not get dropped.
 //
 // Why no real Chrome: the deadlock condition lives in `PagePool`'s
 // admission + queue contract. The cardType-filter chain in real Chrome is
@@ -51,19 +51,19 @@ function makeStubPagePool(opts: {
   function makeStorage(): Storage {
     let values: Record<string, string> = {};
     return {
-      getItem(key) {
+      getItem(key: string) {
         return values[key] ?? null;
       },
-      setItem(key, value) {
+      setItem(key: string, value: string) {
         values[key] = value;
       },
-      removeItem(key) {
+      removeItem(key: string) {
         delete values[key];
       },
       clear() {
         values = {};
       },
-      key(index) {
+      key(index: number) {
         return Object.keys(values)[index] ?? null;
       },
       get length() {
@@ -191,7 +191,7 @@ module(basename(__filename), function () {
 
         // Tight deadlock-detection budget. The non-deadlocked path
         // returns in milliseconds; with the reservation removed and no
-        // expansion (the PR 10 → revert case), this hangs forever.
+        // expansion (the reservation-revert case), this hangs forever.
         // Clear the timer when the work resolves so it doesn't keep the
         // node event loop alive after the test exits — addresses
         // Copilot review on PR 4590.
@@ -307,21 +307,117 @@ module(basename(__filename), function () {
       }
     });
 
+    test('dynamic-pool mode: deadlock-safety reservation removed; expansion resolves the deadlock', async function (assert) {
+      // Reservation-removal verification: same wait-shape as the
+      // first regression
+      // test in this file, but the pool is configured for dynamic
+      // expansion (MIN=2, MAX=4) and the file-admission default is
+      // raised to `affinityTabMax` (no reservation). Two concurrent
+      // file renders fire same-affinity module sub-calls; with no
+      // reservation, the only way both pairs complete inside the
+      // budget is if `#tryExpand` lifts `#maxPages` to absorb the
+      // saturating module sub-calls (one per concurrent file render
+      // in flight, so MAX needs ≥ 2 + 2 = 4 to cover the worst case).
+      //
+      // If this test ever fails, the deadlock-prevention contract is
+      // broken — dropping the reservation was unsafe.
+      let prevMin = process.env.PRERENDER_PAGE_POOL_MIN;
+      let prevMax = process.env.PRERENDER_PAGE_POOL_MAX;
+      process.env.PRERENDER_PAGE_POOL_MIN = '2';
+      process.env.PRERENDER_PAGE_POOL_MAX = '4';
+      try {
+        let semaphore = new AsyncSemaphore(2);
+        let { pool } = makeStubPagePool({
+          maxPages: 2,
+          renderSemaphore: semaphore,
+        });
+        try {
+          await pool.warmStandbys();
+          assert.strictEqual(
+            pool.minPages,
+            2,
+            'dynamic-pool mode active (minPages=2)',
+          );
+          assert.strictEqual(
+            pool.maxBurstPages,
+            4,
+            'dynamic-pool mode active (maxBurstPages=4)',
+          );
+
+          let runFileRenderWithModuleSubCall = async (
+            tag: string,
+          ): Promise<{ tag: string; phase: string }> => {
+            let fileLease = await pool.getPage('realm-a', 'file');
+            try {
+              let moduleLease = await pool.getPage('realm-a', 'module');
+              moduleLease.release();
+            } finally {
+              fileLease.release();
+            }
+            return { tag, phase: 'done' };
+          };
+
+          let deadlockBudgetMs = 3000;
+          let raceWithDeadlock = async (label: string) => {
+            let timer: NodeJS.Timeout | undefined;
+            let timerPromise = new Promise<never>((_, reject) => {
+              timer = setTimeout(() => {
+                reject(
+                  new Error(
+                    `deadlock-prevention-failed: file render '${label}' did not complete within ${deadlockBudgetMs}ms`,
+                  ),
+                );
+              }, deadlockBudgetMs);
+              timer.unref?.();
+            });
+            try {
+              return await Promise.race([
+                runFileRenderWithModuleSubCall(label),
+                timerPromise,
+              ]);
+            } finally {
+              if (timer) clearTimeout(timer);
+            }
+          };
+
+          let results = await Promise.all([
+            raceWithDeadlock('A'),
+            raceWithDeadlock('B'),
+          ]);
+          assert.deepEqual(
+            results.map((r) => r.tag).sort(),
+            ['A', 'B'],
+            'both concurrent file+module pairs completed via expansion',
+          );
+        } finally {
+          await pool.closeAll();
+        }
+      } finally {
+        if (prevMin === undefined) {
+          delete process.env.PRERENDER_PAGE_POOL_MIN;
+        } else {
+          process.env.PRERENDER_PAGE_POOL_MIN = prevMin;
+        }
+        if (prevMax === undefined) {
+          delete process.env.PRERENDER_PAGE_POOL_MAX;
+        } else {
+          process.env.PRERENDER_PAGE_POOL_MAX = prevMax;
+        }
+      }
+    });
+
     test('deadlock-safety warning fires when affinityTabMax < 2', async function (assert) {
-      // Sanity check: the page-pool startup warning that flagged the
-      // degenerate config also lives in this code path. Once PR 10
-      // removes the reservation we want the warning gone — this test
-      // pins down the current state so PR 10's removal is visible.
-      // (We just exercise construction; the warning goes to log, no
-      // user-visible state to assert here. The earlier tests are the
-      // real regression guards.)
+      // Sanity check: the page-pool startup warning that flags the
+      // degenerate legacy config (no expansion budget AND
+      // affinityTabMax < 2) lives in this code path. We exercise
+      // construction; the warning goes to log, no user-visible state
+      // to assert here — the earlier tests are the real regression
+      // guards.
       process.env.PRERENDER_AFFINITY_TAB_MAX = '1';
       let { pool } = makeStubPagePool({ maxPages: 1 });
       try {
         await pool.warmStandbys();
-        // Reaching this point without throw is the assertion. PR 10's
-        // removal will leave the construction path intact but eliminate
-        // the warning's reason for existing.
+        // Reaching this point without throw is the assertion.
         assert.ok(true, 'pool construction succeeded at degenerate tabMax=1');
       } finally {
         await pool.closeAll();
