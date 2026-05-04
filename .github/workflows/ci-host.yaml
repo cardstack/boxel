@@ -388,6 +388,13 @@ jobs:
             echo "### Host Test Results"
             echo
             jq -r '.summary' test-results.json
+
+            failures=$(jq -r '((.stats.tests_fail // 0) + (.stats.tests_error // 0))' test-results.json)
+            check_url=$(jq -r '.check_url // empty' test-results.json)
+            if [ -n "$check_url" ] && [ "$failures" -gt 0 ]; then
+              echo
+              echo "For more details on these errors, see [this check]($check_url)."
+            fi
           } > slot/slot.md
 
       - name: Upload host-tests slot
