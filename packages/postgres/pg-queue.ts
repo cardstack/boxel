@@ -224,34 +224,62 @@ export class PgQueuePublisher implements QueuePublisher {
     }
   }
 
-  private async findPendingCandidates(
+  private async findCoalesceCandidates(
     queryFn: (expression: Expression) => Promise<unknown>,
     concurrencyGroup: string | null,
-  ): Promise<QueueCoalesceCandidate[]> {
+  ): Promise<{
+    pending: QueueCoalesceCandidate[];
+    inFlight: QueueCoalesceCandidate[];
+  }> {
+    // Pending candidates are locked FOR UPDATE so a concurrent publisher
+    // can't merge into the same row. In-flight rows are read in the same
+    // snapshot but not locked: the worker is the only writer that should
+    // commit a status change on them, and our advisory lock prevents
+    // another publisher from racing us on this concurrency group.
     let rows = (await queryFn([
-      `SELECT j.id, j.job_type, j.concurrency_group, j.timeout, j.priority, j.args
+      `SELECT j.id, j.job_type, j.concurrency_group, j.timeout, j.priority, j.args,
+              EXISTS (
+                SELECT 1 FROM job_reservations r
+                WHERE r.job_id = j.id
+                  AND r.locked_until > NOW()
+                  AND r.completed_at IS NULL
+              ) as in_flight
        FROM jobs j
        WHERE j.status='unfulfilled'
          AND j.concurrency_group IS NOT DISTINCT FROM`,
       param(concurrencyGroup),
-      `AND NOT EXISTS (
-          SELECT 1
-          FROM job_reservations r
-          WHERE r.job_id = j.id
-            AND r.locked_until > NOW()
-            AND r.completed_at IS NULL
-       )
-       ORDER BY j.created_at, j.id
-       FOR UPDATE`,
-    ])) as CoalesceCandidateRow[];
-    return rows.map((row) => ({
-      id: row.id,
-      jobType: row.job_type,
-      concurrencyGroup: row.concurrency_group,
-      timeout: row.timeout,
-      priority: row.priority,
-      args: row.args,
-    }));
+      `ORDER BY j.created_at, j.id`,
+    ])) as (CoalesceCandidateRow & { in_flight: boolean })[];
+
+    let pendingIds: number[] = [];
+    let pending: QueueCoalesceCandidate[] = [];
+    let inFlight: QueueCoalesceCandidate[] = [];
+    for (let row of rows) {
+      let candidate: QueueCoalesceCandidate = {
+        id: row.id,
+        jobType: row.job_type,
+        concurrencyGroup: row.concurrency_group,
+        timeout: row.timeout,
+        priority: row.priority,
+        args: row.args,
+      };
+      if (row.in_flight) {
+        inFlight.push(candidate);
+      } else {
+        pending.push(candidate);
+        pendingIds.push(row.id);
+      }
+    }
+
+    if (pendingIds.length > 0) {
+      await queryFn([
+        `SELECT id FROM jobs WHERE`,
+        ...any(pendingIds.map((id) => [`id=`, param(id)])),
+        `FOR UPDATE`,
+      ] as Expression);
+    }
+
+    return { pending, inFlight };
   }
 
   private async insertJob(
@@ -358,11 +386,15 @@ export class PgQueuePublisher implements QueuePublisher {
           await queryFn(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
           await acquireConcurrencyGroupLock(queryFn, incoming.concurrencyGroup);
 
-          let candidates = await this.findPendingCandidates(
+          let { pending, inFlight } = await this.findCoalesceCandidates(
             queryFn,
             incoming.concurrencyGroup,
           );
-          let decision = coalesce({ incoming, candidates });
+          let decision = coalesce({
+            incoming,
+            candidates: pending,
+            inFlightCandidates: inFlight,
+          });
           let jobId: number;
 
           if (decision.type === 'insert') {
@@ -370,24 +402,42 @@ export class PgQueuePublisher implements QueuePublisher {
             jobId = await this.insertJob(queryFn, insertJob);
           } else {
             jobId = decision.jobId;
-            let isStillPending = await this.jobIsPendingAndUnreserved(
-              queryFn,
-              jobId,
-            );
-            if (!isStillPending) {
-              await queryFn(['ROLLBACK']);
-              continue;
-            }
-
-            if (decision.update) {
-              let wasUpdated = await this.updateJobForCoalesce(
+            let isInFlightTarget = inFlight.some((c) => c.id === jobId);
+            if (isInFlightTarget) {
+              // Attaching as a late waiter on an already-claimed job. The
+              // worker holds the args in memory and won't see DB writes,
+              // so the join must not request an `update`. The waiter is
+              // wired up in `publish()` via `addWaiter(jobId, ...)`.
+              if (decision.update !== undefined) {
+                throw new Error(
+                  `coalesce returned a join with update for in-flight job ${jobId}; updates cannot reach a running worker`,
+                );
+              }
+              log.debug(
+                `attaching late waiter to in-flight job %s (concurrency group %s)`,
+                jobId,
+                incoming.concurrencyGroup,
+              );
+            } else {
+              let isStillPending = await this.jobIsPendingAndUnreserved(
                 queryFn,
                 jobId,
-                decision.update,
               );
-              if (!wasUpdated) {
+              if (!isStillPending) {
                 await queryFn(['ROLLBACK']);
                 continue;
+              }
+
+              if (decision.update) {
+                let wasUpdated = await this.updateJobForCoalesce(
+                  queryFn,
+                  jobId,
+                  decision.update,
+                );
+                if (!wasUpdated) {
+                  await queryFn(['ROLLBACK']);
+                  continue;
+                }
               }
             }
           }
