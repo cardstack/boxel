@@ -4858,10 +4858,7 @@ export class Realm {
     // validation; the DB-bound fields don't have one.
     if ('publishable' in attributes) {
       let publishableValue = attributes.publishable;
-      if (
-        publishableValue !== null &&
-        typeof publishableValue !== 'boolean'
-      ) {
+      if (publishableValue !== null && typeof publishableValue !== 'boolean') {
         return badRequest({
           message: `'publishable' must be a boolean or null`,
           requestContext,
