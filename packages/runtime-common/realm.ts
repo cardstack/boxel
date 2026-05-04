@@ -834,6 +834,10 @@ export class Realm {
     return this.#realmIndexUpdater.indexing();
   }
 
+  async incrementalIndexing() {
+    return this.#realmIndexUpdater.incrementalIndexing();
+  }
+
   private startReindex(opts?: {
     clearLastModified?: boolean;
     priority?: number;
@@ -1158,7 +1162,7 @@ export class Realm {
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
-    await this.indexing();
+    await this.incrementalIndexing();
     let urls: URL[] = [];
     // Collect write results for all files we wrote
     let results: { path: LocalPath; lastModified: number }[] = [];
