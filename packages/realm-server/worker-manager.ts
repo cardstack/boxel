@@ -252,19 +252,42 @@ if (port != null) {
   });
 }
 
-// How long we'll wait for each worker's reservation drain UPDATE before
-// giving up on it. The whole drain runs in parallel, so this is the worst
-// case per worker, not a sum across workers. Sized comfortably under the
-// ECS task `stopTimeout` (60s recommended) so SIGKILL doesn't overrun us.
+// Grace window for children to exit cleanly after they receive 'stop'.
+// A worker that exits inside this window finalizes its own reservation
+// via pg-queue's success path (completion_reason='completed', counts
+// toward the cap — that's the correct accounting for a worker that had
+// time to verdict). Anyone still alive after the window is force-killed
+// in the next phase so its handler can't keep running while we free the
+// reservation; otherwise a sibling ECS task would observe a freed
+// reservation and re-claim the same job, executing it concurrently with
+// the still-running original.
+const STOP_GRACE_MS = 10_000;
+
+// Per-worker cap on the awaited drain UPDATE. Drain runs in parallel,
+// so this is the worst case per worker, not a sum. Sized to fit
+// comfortably inside the ECS `stopTimeout` (60s recommended) alongside
+// STOP_GRACE_MS and webserver close.
 const DRAIN_PER_WORKER_TIMEOUT_MS = 10_000;
 
 let isShuttingDown = false;
+// Queue of cleanup callbacks accumulated across (re-)entrant shutdown
+// calls. Without this, the second caller's callback would be silently
+// dropped by the idempotent guard — which matters for the IPC 'stop'
+// path that uses its callback to send a 'stopped' ack to its parent.
+let shutdownCallbacks: Array<() => void> = [];
 
-const shutdown = async (onShutdown?: () => void) => {
+const shutdown = (onShutdown?: () => void) => {
+  if (onShutdown) {
+    shutdownCallbacks.push(onShutdown);
+  }
   if (isShuttingDown) {
     return;
   }
   isShuttingDown = true;
+  void runShutdown();
+};
+
+async function runShutdown() {
   log.info(`Shutting down server for worker manager...`);
   if (isEnvironmentMode()) {
     deregisterService(serviceName);
@@ -272,47 +295,74 @@ const shutdown = async (onShutdown?: () => void) => {
 
   stopCronJobs();
 
-  // Drain in-flight reservations BEFORE forwarding 'stop' to children.
-  // The UPDATE has to commit while we still have a healthy DB connection;
-  // marking the row 'interrupted' keeps it off the per-job reservation
-  // cap so a deploy never burns an attempt on an otherwise-healthy job,
-  // and frees `locked_until` immediately so another worker can re-claim
-  // within the next claim poll instead of waiting out the 7200s lease.
-  if (adapter && workers.length > 0) {
-    log.info(
-      `Draining reservations for ${workers.length} live worker(s) before stopping...`,
-    );
-    await Promise.allSettled(
-      workers.map((worker) => {
-        let workerId = (worker as any).__workerId as string | undefined;
-        if (!workerId) {
-          // Worker hasn't reported a `ready:<id>` yet, so it can't have a
-          // reservation row in the DB — nothing to drain.
-          return Promise.resolve();
-        }
-        return Promise.race([
-          finalizeOrphanedReservations(adapter, workerId, 'interrupted'),
-          new Promise<void>((r) =>
-            setTimeout(() => {
-              log.error(
-                `worker: drain finalize for worker ${workerId} timed out after ${DRAIN_PER_WORKER_TIMEOUT_MS}ms; reservation will fall back to lease expiry`,
-              );
-              r();
-            }, DRAIN_PER_WORKER_TIMEOUT_MS).unref(),
-          ),
-        ]);
-      }),
-    );
-  }
+  // Snapshot the live workers BEFORE the worker.on('exit') handlers
+  // start splicing them out of the global array as they exit. The drain
+  // in Phase 4 wants the original set, including ones that finished
+  // cleanly during Phase 2.
+  let snapshot = [...workers];
 
-  // Stop all workers
-  if (workers.length > 0) {
-    log.info(`Stopping ${workers.length} worker(s)...`);
-    workers.forEach((worker) => {
+  // Phase 1 — tell children to stop. Each child's pg-queue marks
+  // shuttingDown and exits its WorkLoop after the in-flight handler
+  // returns.
+  if (snapshot.length > 0) {
+    log.info(`Stopping ${snapshot.length} worker(s)...`);
+    snapshot.forEach((worker) => {
       if (!worker.killed && worker.pid) {
         worker.send?.('stop');
       }
     });
+  }
+
+  // Phase 2 — brief grace window for clean exits. A child that exits
+  // inside this window has already committed its reservation as
+  // 'completed' via the normal pg-queue success path; the drain in
+  // Phase 4 will be a no-op for those (UPDATE WHERE completed_at IS
+  // NULL matches no rows).
+  if (snapshot.length > 0) {
+    await Promise.race([
+      Promise.all(snapshot.map(waitForExit)),
+      new Promise<void>((r) => setTimeout(r, STOP_GRACE_MS).unref()),
+    ]);
+  }
+
+  // Phase 3 — stragglers. Any worker still alive is stuck in a
+  // long-running handler (e.g. mid-from-scratch-index, ~22 min p50).
+  // Force-kill so its handler cannot keep running while we free its
+  // reservation in Phase 4. Without this, a sibling ECS task would
+  // observe the freed reservation and start the same job again,
+  // executing it concurrently with the still-running original — the
+  // duplicate-execution race the codex review flagged on review.
+  let stragglers = snapshot.filter(
+    (worker) => worker.exitCode === null && !worker.killed,
+  );
+  if (stragglers.length > 0) {
+    log.info(
+      `Force-killing ${stragglers.length} unresponsive worker(s) before draining reservations`,
+    );
+    for (let worker of stragglers) {
+      try {
+        worker.kill('SIGKILL');
+      } catch {
+        // Worker may already be dying; not actionable.
+      }
+    }
+    // Brief pause so the OS can deliver SIGKILL before we open the
+    // reservation row up for re-claim. Tightens (not gates) the window
+    // during which a sibling task could observe a still-locked
+    // reservation; the row-level lock from Phase 4's UPDATE serializes
+    // against any in-flight write either way.
+    await new Promise<void>((r) => setTimeout(r, 250).unref());
+  }
+
+  // Phase 4 — drain. Awaited so the UPDATE flushes before process.exit.
+  // The UPDATE filters by `completed_at IS NULL`, so it's a no-op for
+  // reservations that pg-queue's commit path already closed during
+  // Phase 2. For the rest it marks 'interrupted', which keeps the row
+  // off the per-job reservation cap so a deploy never burns an attempt
+  // on an otherwise-healthy job.
+  if (adapter && snapshot.length > 0) {
+    log.info(`Draining reservations for ${snapshot.length} worker(s)...`);
+    await Promise.allSettled(snapshot.map(drainOneWorker));
   }
 
   webServerInstance?.closeAllConnections();
@@ -322,32 +372,91 @@ const shutdown = async (onShutdown?: () => void) => {
       process.exit(1);
     }
     log.info(`worker manager HTTP on port ${port} has stopped.`);
-    onShutdown?.();
+    runShutdownCallbacks();
     process.exit(0);
   });
-};
+}
+
+function waitForExit(worker: ChildProcess): Promise<void> {
+  if (worker.exitCode !== null || worker.killed) {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    worker.once('exit', () => resolve());
+  });
+}
+
+async function drainOneWorker(worker: ChildProcess): Promise<void> {
+  let workerId = (worker as any).__workerId as string | undefined;
+  if (!workerId) {
+    // Worker hadn't reported a `ready:<id>` yet, so it can't have a
+    // reservation row in the DB — nothing to drain.
+    return;
+  }
+  let timer: NodeJS.Timeout | undefined;
+  let timedOut = false;
+  let timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      log.error(
+        `worker: drain finalize for worker ${workerId} timed out after ${DRAIN_PER_WORKER_TIMEOUT_MS}ms; reservation will fall back to lease expiry`,
+      );
+      resolve();
+    }, DRAIN_PER_WORKER_TIMEOUT_MS);
+    timer.unref();
+  });
+  try {
+    await Promise.race([
+      finalizeOrphanedReservations(adapter, workerId, 'interrupted'),
+      timeout,
+    ]);
+  } finally {
+    // Clear the timer when finalize wins the race so the timeout
+    // callback can't fire later and log a spurious "timed out" message
+    // even though the drain completed successfully.
+    if (timer && !timedOut) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+function runShutdownCallbacks() {
+  // Drain the queue (callbacks may be appended by re-entrant shutdown
+  // calls during the async run; we want to fire those too).
+  while (shutdownCallbacks.length > 0) {
+    let cb = shutdownCallbacks.shift()!;
+    try {
+      cb();
+    } catch (e) {
+      log.error(`worker: shutdown callback threw`, e);
+    }
+  }
+}
 
 process.on('SIGINT', () => {
-  void shutdown();
+  shutdown();
 });
 process.on('SIGTERM', () => {
-  void shutdown();
+  shutdown();
 });
 process.on('disconnect', () => {
   log.info(`Parent IPC disconnected, shutting down worker manager...`);
-  void shutdown();
+  shutdown();
 });
 process.on('uncaughtException', (err) => {
   log.error(`Uncaught exception in worker manager:`, err);
-  void shutdown();
+  shutdown();
 });
 
 process.on('message', (message) => {
   if (message === 'stop') {
-    // Close the adapter *after* the drain UPDATE inside shutdown commits;
-    // the drain needs a healthy adapter to mark in-flight reservations
-    // 'interrupted' so the next worker can re-claim immediately.
-    void shutdown(() => {
+    // Close the adapter *after* the drain UPDATE inside shutdown
+    // commits; the drain needs a healthy adapter to mark in-flight
+    // reservations 'interrupted' so the next worker can re-claim
+    // immediately. The shutdown callback queue makes this work even
+    // if a signal had already initiated shutdown — the ack still
+    // fires when shutdown finishes.
+    shutdown(() => {
       if (adapter) {
         adapter.close(); // warning this is async
       }
