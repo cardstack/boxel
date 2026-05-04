@@ -333,6 +333,12 @@ module('factory-agent-claude-code', function () {
         makeTool({ name: 'fetch_transpiled_module' }),
         makeTool({ name: 'search_realm' }),
         makeTool({ name: 'signal_done' }),
+        // Simulate registry-sourced tools (script + realm-api).
+        // These shadow core tools with kebab-case duplicates and must
+        // not leak into the Claude MCP catalog.
+        makeTool({ name: 'realm-read', source: 'registered' }),
+        makeTool({ name: 'search-realm', source: 'registered' }),
+        makeTool({ name: 'boxel-sync', source: 'registered' }),
       ]);
 
       let allowed = capturedOptions!.allowedTools ?? [];
@@ -350,6 +356,14 @@ module('factory-agent-claude-code', function () {
         assert.notOk(
           allowed.includes(`mcp__factory__${filtered}`),
           `${filtered} is not registered as an MCP tool on the Claude path`,
+        );
+      }
+      // Registered (kebab-case) shadow tools must not leak into the
+      // Claude MCP catalog regardless of their plain name.
+      for (let registered of ['realm-read', 'search-realm', 'boxel-sync']) {
+        assert.notOk(
+          allowed.includes(`mcp__factory__${registered}`),
+          `${registered} (registered) is not exposed on the Claude path`,
         );
       }
       assert.true(

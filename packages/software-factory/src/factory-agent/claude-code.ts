@@ -141,14 +141,25 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     context: AgentContext,
     tools: FactoryTool[],
   ): Promise<AgentRunResult> {
-    // Filter out factory tools the Claude backend doesn't need —
-    // native Claude Code tools (Read / Write / Edit / Bash) cover the
-    // workspace fs surface, and a few others (`run_command`) have a
-    // boxel CLI alternative or are unused in practice. The shared
-    // FactoryTool[] is built once for both backends; OpenRouter still
-    // sees the full list because it has no native fs and no Bash.
+    // Filter out factory tools the Claude backend doesn't need:
+    //
+    //   1. Tools in CLAUDE_FILTERED_FACTORY_TOOLS — native Claude Code
+    //      tools (Read / Write / Edit / Bash) or the boxel CLI cover
+    //      these surfaces directly; a duplicate MCP tool would just be
+    //      a second way to do the same thing.
+    //   2. Tools whose source is `'registered'` — these come from the
+    //      `ToolRegistry`'s script + realm-api manifests (realm-read,
+    //      search-realm, boxel-sync, …) and are kebab-case shadows of
+    //      the core tools. Several are explicitly marked "for non-target
+    //      realms" in their descriptions, but the model picks the
+    //      kebab-case name at random, calls one against the target
+    //      realm, and gets a permission error.
+    //
+    // OpenRouter still sees the full list — it has no native fs / Bash
+    // and may legitimately need the registry tools.
     let mcpFactoryTools = tools.filter(
-      (t) => !CLAUDE_FILTERED_FACTORY_TOOLS.has(t.name),
+      (t) =>
+        !CLAUDE_FILTERED_FACTORY_TOOLS.has(t.name) && t.source !== 'registered',
     );
 
     let systemPrompt = this.buildSystemPrompt(context, mcpFactoryTools);
