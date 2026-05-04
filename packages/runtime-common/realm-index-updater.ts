@@ -97,8 +97,13 @@ export class RealmIndexUpdater {
     published: Promise<Job<FromScratchResult>>;
     completed: Promise<FromScratchResult>;
   } {
-    let indexingDeferred = new Deferred<void>();
-    this.#indexingDeferreds.add(indexingDeferred);
+    // From-scratch jobs intentionally do NOT register in #indexingDeferreds.
+    // The realm write-path gate (`await realm.indexing()` in _batchWrite)
+    // serializes file writes with concurrent *incremental* indexing for the
+    // same instance, a bounded ~1-2s window. From-scratch has no such race —
+    // workers read files independently and each row write is atomic — but it
+    // can sit queued for hours behind a system-wide reindex, so registering
+    // here would block user PATCHes indefinitely.
     let startedAt = performance.now();
 
     this.#log.info(`Realm ${this.realmURL.href} is starting indexing`);
@@ -114,29 +119,24 @@ export class RealmIndexUpdater {
         },
       ))();
 
-    let completed = published
-      .then(async (job) => {
-        let result = await job.done;
-        let { ignoreData, stats } = result;
-        this.#stats = stats;
-        this.#ignoreData = ignoreData;
-        let indexingDurationSeconds = (
-          (performance.now() - startedAt) /
-          1000
-        ).toFixed(2);
-        this.#log.info(
-          `Realm ${this.realmURL.href} has completed indexing in ${indexingDurationSeconds}s: ${JSON.stringify(
-            stats,
-            null,
-            2,
-          )}`,
-        );
-        return result;
-      })
-      .finally(() => {
-        indexingDeferred.fulfill();
-        this.#indexingDeferreds.delete(indexingDeferred);
-      });
+    let completed = published.then(async (job) => {
+      let result = await job.done;
+      let { ignoreData, stats } = result;
+      this.#stats = stats;
+      this.#ignoreData = ignoreData;
+      let indexingDurationSeconds = (
+        (performance.now() - startedAt) /
+        1000
+      ).toFixed(2);
+      this.#log.info(
+        `Realm ${this.realmURL.href} has completed indexing in ${indexingDurationSeconds}s: ${JSON.stringify(
+          stats,
+          null,
+          2,
+        )}`,
+      );
+      return result;
+    });
 
     return {
       published,

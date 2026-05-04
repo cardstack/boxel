@@ -1647,7 +1647,7 @@ module(basename(__filename), function () {
         }
       });
 
-      test('realm.indexing waits for all queued indexing operations', async function (assert) {
+      test('realm.indexing waits for queued incremental operations', async function (assert) {
         let { blocker, release } = await startIndexingGroupBlocker();
         try {
           let incremental = realm.realmIndexUpdater.update(
@@ -1655,42 +1655,123 @@ module(basename(__filename), function () {
             { clientRequestId: 'indexing-race-incremental' },
           );
           let indexingDuringIncremental = realm.indexing();
-          let full = realm.realmIndexUpdater.fullIndex();
-          let indexingAfterFull = realm.indexing();
           let indexingDuringIncrementalResolved = false;
-          let indexingAfterFullResolved = false;
           indexingDuringIncremental?.then(() => {
             indexingDuringIncrementalResolved = true;
-          });
-          indexingAfterFull?.then(() => {
-            indexingAfterFullResolved = true;
           });
 
           assert.ok(
             indexingDuringIncremental,
-            'indexing promise is exposed for the first queued operation',
-          );
-          assert.ok(
-            indexingAfterFull,
-            'indexing promise is exposed for the later queued operation',
+            'indexing promise is exposed for a queued incremental',
           );
 
           release.fulfill();
           await Promise.all([
             blocker.done,
             incremental,
-            full,
             indexingDuringIncremental,
-            indexingAfterFull,
           ]);
           assert.true(
             indexingDuringIncrementalResolved,
-            'indexing promise captured before a later queued operation still resolves',
+            'indexing promise resolves once the queued incremental completes',
           );
-          assert.true(
-            indexingAfterFullResolved,
-            'indexing promise captured after the later queued operation resolves too',
+        } finally {
+          release.fulfill();
+        }
+      });
+
+      test('realm.indexing does not block on a queued from-scratch job', async function (assert) {
+        // Regression: a from-scratch job sitting in the queue (e.g. behind a
+        // system-wide reindex storm) must not block the realm write-path
+        // gate. The gate exists to serialize file writes with concurrent
+        // *incremental* indexing of the same instance — a bounded ~1-2s
+        // window. From-scratch has no such race and can be queued for hours,
+        // so registering it would stall every PATCH.
+        let { blocker, release } = await startIndexingGroupBlocker();
+        try {
+          let full = realm.realmIndexUpdater.fullIndex();
+
+          await waitUntil(
+            async () => {
+              let rows = (await testDbAdapter.execute(
+                `SELECT id
+               FROM jobs
+               WHERE concurrency_group = $1
+                 AND status = 'unfulfilled'
+                 AND job_type = 'from-scratch-index'`,
+                { bind: [`indexing:${realm.url}`] },
+              )) as { id: number }[];
+              return rows.length === 1 ? rows[0] : undefined;
+            },
+            {
+              timeout: 3000,
+              interval: 50,
+              timeoutMessage: 'expected one pending from-scratch job',
+            },
           );
+
+          assert.strictEqual(
+            realm.realmIndexUpdater.indexing(),
+            undefined,
+            'indexing() returns undefined while only a from-scratch job is queued',
+          );
+
+          release.fulfill();
+          await Promise.all([blocker.done, full]);
+        } finally {
+          release.fulfill();
+        }
+      });
+
+      test('realm.indexing tracks only the incremental when both incremental and from-scratch are queued', async function (assert) {
+        let { blocker, release } = await startIndexingGroupBlocker();
+        try {
+          let incremental = realm.realmIndexUpdater.update(
+            [new URL(`${testRealm}mango`)],
+            { clientRequestId: 'indexing-mixed-incremental' },
+          );
+          let full = realm.realmIndexUpdater.fullIndex();
+
+          // Wait until both jobs are pending so the queue state is stable.
+          await waitUntil(
+            async () => {
+              let rows = (await testDbAdapter.execute(
+                `SELECT job_type
+               FROM jobs
+               WHERE concurrency_group = $1
+                 AND status = 'unfulfilled'
+                 AND job_type IN ('incremental-index', 'from-scratch-index')`,
+                { bind: [`indexing:${realm.url}`] },
+              )) as { job_type: string }[];
+              return rows.length === 2 ? rows : undefined;
+            },
+            {
+              timeout: 3000,
+              interval: 50,
+              timeoutMessage:
+                'expected one pending incremental and one pending from-scratch',
+            },
+          );
+
+          let indexingPromise = realm.realmIndexUpdater.indexing();
+          assert.ok(
+            indexingPromise,
+            'indexing() exposes a promise driven by the incremental',
+          );
+
+          release.fulfill();
+          await Promise.all([blocker.done, incremental, indexingPromise]);
+
+          // After the incremental drains the from-scratch may still be
+          // running; indexing() should already be resolved (gated only on the
+          // incremental).
+          assert.strictEqual(
+            realm.realmIndexUpdater.indexing(),
+            undefined,
+            'indexing() returns undefined after the incremental drains, regardless of from-scratch state',
+          );
+
+          await full;
         } finally {
           release.fulfill();
         }
