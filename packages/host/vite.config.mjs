@@ -5,7 +5,9 @@ import {
   ember,
 } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
+import { readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import { scopedCSS } from 'glimmer-scoped-css/rollup';
 
 const require = createRequire(import.meta.url);
@@ -72,6 +74,69 @@ const sourceMapJsResolver = {
     return null;
   },
 };
+
+const optimizedDepRE = /[/\\]node_modules[/\\]\.vite[/\\]deps[/\\].+\.js$/;
+const optimizedDepUrlRE = /^\/node_modules\/\.vite\/deps\/.+\.js$/;
+
+async function padOptimizedDepSourcemap(file) {
+  if (!optimizedDepRE.test(file)) {
+    return;
+  }
+
+  let mapPath = `${file}.map`;
+  let map;
+  try {
+    map = JSON.parse(await readFile(mapPath, 'utf8'));
+  } catch {
+    return;
+  }
+
+  if (!Array.isArray(map.sources) || map.sources.length === 0) {
+    return;
+  }
+
+  let sourcesContent = Array.isArray(map.sourcesContent)
+    ? [...map.sourcesContent]
+    : [];
+  let changed = false;
+  for (let i = 0; i < map.sources.length; i++) {
+    if (sourcesContent[i] == null) {
+      sourcesContent[i] = '';
+      changed = true;
+    }
+  }
+
+  if (!changed) {
+    return;
+  }
+
+  map.sourcesContent = sourcesContent;
+  await writeFile(mapPath, JSON.stringify(map));
+}
+
+function quietOptimizedDepSourcemapWarnings() {
+  return {
+    name: 'boxel-quiet-optimized-dep-sourcemap-warnings',
+    apply: 'serve',
+    configureServer(server) {
+      let depsDir = path.resolve(server.config.root, 'node_modules/.vite/deps');
+      server.middlewares.use(async (req, _res, next) => {
+        try {
+          let pathname = decodeURI((req.url ?? '').split('?')[0]);
+          if (optimizedDepUrlRE.test(pathname)) {
+            let file = path.resolve(server.config.root, pathname.slice(1));
+            if (file.startsWith(`${depsDir}${path.sep}`)) {
+              await padOptimizedDepSourcemap(file);
+            }
+          }
+        } catch {
+          // This only quiets optional sourcemap hydration; never block requests.
+        }
+        next();
+      });
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => ({
   // Preserve function/class names. Boxel's card runtime introspects
@@ -146,6 +211,7 @@ export default defineConfig(({ mode }) => ({
     scopedCSS(),
     classicEmberSupport(),
     ember(),
+    quietOptimizedDepSourcemapWarnings(),
     // extra plugins here
     babel({
       babelHelpers: 'runtime',
