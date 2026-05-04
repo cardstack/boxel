@@ -704,6 +704,153 @@ module(basename(__filename), function () {
       assert.strictEqual(count, 2, 'no new reservation was created');
     });
 
+    test('cap counts only completed and still-open reservations', async function (assert) {
+      // Even with N+1 prior reservations on the job, ones that closed
+      // with `completion_reason = 'interrupted'` (deploy/SIGTERM/child
+      // crash) must NOT count toward the cap. Otherwise a deploy during
+      // a slow reindex burns attempts on jobs that are otherwise fine.
+      await runner.destroy();
+
+      let [{ id: jobId }] = (await adapter.execute(
+        `INSERT INTO jobs (job_type, args, status, timeout)
+         VALUES ('logJob', '{}'::jsonb, 'unfulfilled', 1) RETURNING id`,
+      )) as unknown as { id: number }[];
+
+      // Three "interrupted" reservations — well past the cap of 2 — but
+      // none of them count, so the job remains claimable.
+      for (let workerId of [
+        'sigterm-worker-A',
+        'sigterm-worker-B',
+        'sigterm-worker-C',
+      ]) {
+        await adapter.execute(
+          `INSERT INTO job_reservations
+            (job_id, worker_id, locked_until, completed_at, completion_reason)
+           VALUES ($1, $2, NOW() - INTERVAL '10 seconds', NOW(), 'interrupted')`,
+          { bind: [jobId, workerId] },
+        );
+      }
+
+      let ranCount = 0;
+      let ranDeferred = new Deferred<void>();
+      runner = new PgQueueRunner({
+        adapter,
+        workerId: 'q-cap-ignores-interrupted',
+        maxTimeoutSec: 2,
+      });
+      runner.register('logJob', async () => {
+        ranCount++;
+        ranDeferred.fulfill();
+        return null;
+      });
+      await runner.start();
+      // Same warm-up as the "abandons" test above — wait for LISTEN to
+      // be established before NOTIFYing.
+      await new Promise((r) => setTimeout(r, 250));
+      await adapter.execute(`NOTIFY jobs`);
+
+      await Promise.race([
+        ranDeferred.promise,
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('handler never ran')), 5000),
+        ),
+      ]);
+
+      assert.strictEqual(ranCount, 1, 'handler ran despite 3 prior interrupts');
+
+      let job = (await adapter.execute(
+        `SELECT status FROM jobs WHERE id = $1`,
+        { bind: [jobId] },
+      )) as unknown as { status: string }[];
+      assert.strictEqual(
+        job[0].status,
+        'resolved',
+        'job resolved cleanly — cap was not burned by the interrupted prior runs',
+      );
+    });
+
+    test('cap is hit when prior reservations are explicitly completed', async function (assert) {
+      // Same shape as the `abandons` test, but with `completion_reason`
+      // explicitly set to 'completed'. This pins the new cap query down:
+      // 'completed' rows count just like the legacy NULL-reason rows.
+      await runner.destroy();
+
+      let [{ id: jobId }] = (await adapter.execute(
+        `INSERT INTO jobs (job_type, args, status, timeout)
+         VALUES ('logJob', '{}'::jsonb, 'unfulfilled', 1) RETURNING id`,
+      )) as unknown as { id: number }[];
+
+      for (let workerId of ['completed-worker-A', 'completed-worker-B']) {
+        await adapter.execute(
+          `INSERT INTO job_reservations
+            (job_id, worker_id, locked_until, completed_at, completion_reason)
+           VALUES ($1, $2, NOW() - INTERVAL '10 seconds', NOW(), 'completed')`,
+          { bind: [jobId, workerId] },
+        );
+      }
+
+      let ranCount = 0;
+      runner = new PgQueueRunner({
+        adapter,
+        workerId: 'q-cap-counts-completed',
+        maxTimeoutSec: 2,
+      });
+      runner.register('logJob', async () => {
+        ranCount++;
+        return null;
+      });
+      await runner.start();
+      await new Promise((r) => setTimeout(r, 250));
+      await adapter.execute(`NOTIFY jobs`);
+
+      let started = Date.now();
+      let abandoned = false;
+      while (Date.now() - started < 5000) {
+        let rows = (await adapter.execute(`SELECT * FROM jobs WHERE id = $1`, {
+          bind: [jobId],
+        })) as unknown as { status: string }[];
+        if (rows[0].status === 'rejected') {
+          abandoned = true;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      assert.true(
+        abandoned,
+        'job abandoned with two prior `completed` reservations',
+      );
+      assert.strictEqual(ranCount, 0, 'handler never ran');
+    });
+
+    test('successful job marks its own reservation completed', async function (assert) {
+      // Pins the pg-queue success path: when a worker finishes a job
+      // (resolved or rejected by the handler), the reservation row is
+      // closed with completion_reason = 'completed' so it counts toward
+      // the cap on the next attempt. Without this stamp the cap-of-2
+      // logic would treat the row as ambiguous (NULL, "still open").
+      runner.register('logJob', async () => null);
+
+      let job = await publisher.publish({
+        jobType: 'logJob',
+        concurrencyGroup: 'completion-reason-success',
+        timeout: 5,
+        args: null,
+      });
+      await job.done;
+
+      let rows = (await adapter.execute(
+        `SELECT completion_reason FROM job_reservations WHERE job_id = $1`,
+        { bind: [job.id] },
+      )) as unknown as { completion_reason: string | null }[];
+      assert.strictEqual(rows.length, 1, 'one reservation row was created');
+      assert.strictEqual(
+        rows[0].completion_reason,
+        'completed',
+        'successful run records completion_reason = "completed"',
+      );
+    });
+
     test('worker stops waiting for job after its been running longer than max time-out', async function (assert) {
       let events: string[] = [];
       let runs = 0;
