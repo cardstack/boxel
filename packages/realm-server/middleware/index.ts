@@ -228,11 +228,12 @@ export function grafanaAuthorization(
     let trimmed = authorization.trim();
     let isValid = trimmed === grafanaSecret;
     if (!isValid) {
-      let parts = trimmed.split(/\s+/);
-      isValid =
-        parts.length === 2 &&
-        parts[0].toLowerCase() === 'bearer' &&
-        parts[1] === grafanaSecret;
+      // Match only the first whitespace run so a secret that itself
+      // contains whitespace stays intact in the captured token. A greedy
+      // /\s+/ split produced parts.length > 2 for any such secret and
+      // false-rejected the request.
+      let bearerMatch = trimmed.match(/^bearer\s+(.+)$/i);
+      isValid = !!bearerMatch && bearerMatch[1] === grafanaSecret;
     }
     if (!isValid) {
       await sendResponseForUnauthorizedRequest(
