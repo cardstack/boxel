@@ -6,6 +6,7 @@ import type { Options } from '@anthropic-ai/claude-agent-sdk';
 import {
   ClaudeCodeFactoryAgent,
   buildSdkToolsFromFactoryTools,
+  buildWorkspaceScopedCanUseTool,
 } from '../src/factory-agent/claude-code';
 import type { AgentContext } from '../src/factory-agent';
 import {
@@ -85,6 +86,81 @@ function emptyQueryIterator() {
 // ---------------------------------------------------------------------------
 
 module('factory-agent-claude-code', function () {
+  module('buildWorkspaceScopedCanUseTool', function () {
+    const workspaceDir = '/tmp/factory-workspace-scoping-test';
+    let canUseTool = buildWorkspaceScopedCanUseTool(workspaceDir);
+    let opts = {
+      signal: new AbortController().signal,
+      toolUseID: 'test-tool-use-id',
+    };
+
+    test('allows non-fs tools without inspecting input', async function (assert) {
+      let result = await canUseTool('Bash', { command: 'ls' }, opts);
+      assert.strictEqual(result.behavior, 'allow');
+    });
+
+    test('allows fs ops with realm-relative paths', async function (assert) {
+      for (let toolName of ['Read', 'Write', 'Edit', 'MultiEdit']) {
+        let result = await canUseTool(
+          toolName,
+          { file_path: 'sticky-note.gts' },
+          opts,
+        );
+        assert.strictEqual(
+          result.behavior,
+          'allow',
+          `${toolName} on a relative path is allowed`,
+        );
+      }
+    });
+
+    test('allows fs ops with absolute paths inside the workspace', async function (assert) {
+      let result = await canUseTool(
+        'Write',
+        { file_path: `${workspaceDir}/StickyNote/note-1.json` },
+        opts,
+      );
+      assert.strictEqual(result.behavior, 'allow');
+    });
+
+    test('denies fs ops with absolute paths outside the workspace', async function (assert) {
+      let result = await canUseTool(
+        'Write',
+        { file_path: '/Users/jurgen/code/boxel/elsewhere/sticky-note.gts' },
+        opts,
+      );
+      assert.strictEqual(
+        result.behavior,
+        'deny',
+        'absolute path outside workspace is denied',
+      );
+      if (result.behavior === 'deny') {
+        assert.true(
+          result.message.includes('outside the factory workspace'),
+          'deny message names the violation',
+        );
+      }
+    });
+
+    test('denies fs ops that traverse out of the workspace', async function (assert) {
+      let result = await canUseTool(
+        'Write',
+        { file_path: '../leaks-here.gts' },
+        opts,
+      );
+      assert.strictEqual(result.behavior, 'deny');
+    });
+
+    test('passes through input on allow so the SDK keeps the original args', async function (assert) {
+      let input = { file_path: 'sticky-note.gts' };
+      let result = await canUseTool('Write', input, opts);
+      assert.strictEqual(result.behavior, 'allow');
+      if (result.behavior === 'allow') {
+        assert.strictEqual(result.updatedInput, input);
+      }
+    });
+  });
+
   module('buildSdkToolsFromFactoryTools', function () {
     test('each tool exposes a Zod schema (not JSON Schema) via inputSchema', function (assert) {
       let factoryTool = makeTool({
@@ -308,8 +384,15 @@ module('factory-agent-claude-code', function () {
         'cwd is set to the factory workspace so native fs tools resolve realm-relative paths',
       );
 
-      assert.strictEqual(capturedOptions!.permissionMode, 'bypassPermissions');
-      assert.true(capturedOptions!.allowDangerouslySkipPermissions);
+      // `dontAsk` (instead of bypassPermissions) keeps every tool in
+      // allowedTools auto-approved while still firing canUseTool, which
+      // we use to scope native fs tools to the workspace.
+      assert.strictEqual(capturedOptions!.permissionMode, 'dontAsk');
+      assert.strictEqual(
+        typeof capturedOptions!.canUseTool,
+        'function',
+        'canUseTool is wired so native fs ops can be scoped to the workspace',
+      );
       assert.deepEqual(capturedOptions!.settingSources, []);
     });
 

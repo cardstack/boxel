@@ -18,10 +18,13 @@
  * running — the LoopAgent contract (`run(context, tools)`) is identical.
  */
 
+import { isAbsolute, relative, resolve, sep } from 'node:path';
+
 import {
   createSdkMcpServer,
   query as defaultQuery,
   tool,
+  type CanUseTool,
   type Options,
   type Query,
   type SDKMessage,
@@ -197,8 +200,15 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       // control plane, Claude Code is the LLM + native-tool surface.
       tools: NATIVE_FS_TOOLS,
       allowedTools,
-      permissionMode: 'bypassPermissions',
-      allowDangerouslySkipPermissions: true,
+      // `dontAsk` (instead of `bypassPermissions`) keeps the auto-approve
+      // semantics for everything in `allowedTools` while still firing
+      // `canUseTool` so we can scope native fs operations to the
+      // factory workspace. `bypassPermissions` skips canUseTool, which
+      // let the model write to absolute paths outside the workspace.
+      permissionMode: 'dontAsk',
+      ...(this.config.workspaceDir
+        ? { canUseTool: buildWorkspaceScopedCanUseTool(this.config.workspaceDir) }
+        : {}),
       maxTurns: MAX_TOOL_USE_TURNS,
       // Anchor native fs tools to the factory workspace so relative paths
       // emitted by the model (e.g. `sticky-note.gts`) resolve inside the
@@ -345,8 +355,11 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       '- Card instances under `<CardType>/<id>.json` (the user data the cards represent)',
       '- Inspection: `Read`, `Glob`, `Grep`, and read-only `Bash` (`ls`, `find`, `cat`, `boxel status`, `boxel history`)',
       '',
-      'Stay inside the workspace directory. Never write to absolute paths',
-      'outside it.',
+      'Stay inside the workspace directory. **`Read` / `Write` / `Edit` /',
+      '`MultiEdit` / `NotebookEdit` / `NotebookRead` are enforced to resolve',
+      'inside the workspace** — absolute paths or `..`-traversal that escape',
+      'are rejected with a deny message before they reach the filesystem.',
+      'Use realm-relative paths only.',
       '',
       '## Tracker-schema cards + realm operations — use factory MCP tools',
       '',
@@ -543,6 +556,65 @@ function summarizeAssistantMessage(msg: {
     return 'unknown';
   });
   return parts.join(', ');
+}
+
+/**
+ * Build a `canUseTool` hook that confines native fs operations to the
+ * factory workspace.
+ *
+ * The Claude SDK's built-in `Read` / `Write` / `Edit` / `MultiEdit` /
+ * `NotebookEdit` / `NotebookRead` tools all take an absolute or
+ * relative `file_path`. Relative paths resolve against the SDK's `cwd`
+ * (which we already set to `workspaceDir`); absolute paths bypass cwd
+ * entirely. In the wild, the model has produced absolute paths it
+ * invented from the realm slug — `/Users/jurgen/code/boxel/...` — that
+ * landed real bytes outside the workspace and broke the loop.
+ *
+ * This hook normalizes `file_path` and rejects anything that doesn't
+ * resolve inside `workspaceDir`. Bash is intentionally not gated:
+ * read-only inspection (`ls`, `find`, `cat`, `boxel status`) needs the
+ * full filesystem, and parsing arbitrary shell for write side-effects
+ * is its own footgun. Trust the prompt for Bash; enforce structurally
+ * for the typed fs tools.
+ */
+const PATH_SCOPED_TOOLS = new Set([
+  'Read',
+  'Write',
+  'Edit',
+  'MultiEdit',
+  'NotebookEdit',
+  'NotebookRead',
+]);
+
+export function buildWorkspaceScopedCanUseTool(
+  workspaceDir: string,
+): CanUseTool {
+  let workspaceAbs = resolve(workspaceDir);
+  return async (toolName, input) => {
+    if (!PATH_SCOPED_TOOLS.has(toolName)) {
+      return { behavior: 'allow', updatedInput: input };
+    }
+    let raw = (input as { file_path?: unknown }).file_path;
+    if (typeof raw !== 'string' || raw.trim() === '') {
+      // No file_path to validate — let the SDK surface its own
+      // validation error instead of inventing one here.
+      return { behavior: 'allow', updatedInput: input };
+    }
+    let absolute = isAbsolute(raw) ? raw : resolve(workspaceAbs, raw);
+    let rel = relative(workspaceAbs, resolve(absolute));
+    let escapesWorkspace =
+      rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+    if (escapesWorkspace) {
+      return {
+        behavior: 'deny',
+        message:
+          `Refusing ${toolName} on "${raw}": path resolves outside the ` +
+          `factory workspace (${workspaceAbs}). Use realm-relative paths ` +
+          `only — your working directory is the workspace.`,
+      };
+    }
+    return { behavior: 'allow', updatedInput: input };
+  };
 }
 
 /**
