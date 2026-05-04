@@ -71,6 +71,7 @@ import * as RegisterBotCommandModule from './register-bot';
 import * as ReindexRealmCommandModule from './reindex-realm';
 import * as SanitizeModuleListCommandModule from './sanitize-module-list';
 import * as SaveCardCommandModule from './save-card';
+import * as ScreenshotCardCommandModule from './screenshot-card';
 import * as SearchAndChooseCommandModule from './search-and-choose';
 import * as SearchCardsCommandModule from './search-cards';
 import * as SearchGoogleImagesCommandModule from './search-google-images';
@@ -415,6 +416,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GenerateThumbnailCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/screenshot-card',
+    ScreenshotCardCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-card',
     GetCardCommandModule,
   );
@@ -502,6 +507,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   GenerateExampleCardsCommandModule.default,
   GenerateReadmeSpecCommandModule.default,
   GenerateThumbnailCommandModule.default,
+  ScreenshotCardCommandModule.default,
   GetAllRealmMetasCommandModule.default,
   GetAvailableRealmUrlsCommandModule.default,
   GetDefaultWritableRealmCommandModule.default,
