@@ -44,7 +44,6 @@
     "lint:hbs:fix": "ember-template-lint contents --fix --no-error-on-unmatched-pattern",
     "lint:js": "eslint contents --report-unused-disable-directives --cache",
     "lint:js:fix": "eslint contents --report-unused-disable-directives --fix",
-    "lint:types": "ember-tsc --noEmit",
-    "lint:types:fix": "ember-tsc --noEmit"
+    "lint:types": "ember-tsc --noEmit"
   }
 }
