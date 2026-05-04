@@ -1647,7 +1647,7 @@ module(basename(__filename), function () {
         }
       });
 
-      test('realm.indexing waits for queued incremental operations', async function (assert) {
+      test('realm.indexing waits for all queued indexing operations', async function (assert) {
         let { blocker, release } = await startIndexingGroupBlocker();
         try {
           let incremental = realm.realmIndexUpdater.update(
@@ -1655,38 +1655,53 @@ module(basename(__filename), function () {
             { clientRequestId: 'indexing-race-incremental' },
           );
           let indexingDuringIncremental = realm.indexing();
+          let full = realm.realmIndexUpdater.fullIndex();
+          let indexingAfterFull = realm.indexing();
           let indexingDuringIncrementalResolved = false;
+          let indexingAfterFullResolved = false;
           indexingDuringIncremental?.then(() => {
             indexingDuringIncrementalResolved = true;
+          });
+          indexingAfterFull?.then(() => {
+            indexingAfterFullResolved = true;
           });
 
           assert.ok(
             indexingDuringIncremental,
-            'indexing promise is exposed for a queued incremental',
+            'indexing promise is exposed for the first queued operation',
+          );
+          assert.ok(
+            indexingAfterFull,
+            'indexing promise is exposed for the later queued operation',
           );
 
           release.fulfill();
           await Promise.all([
             blocker.done,
             incremental,
+            full,
             indexingDuringIncremental,
+            indexingAfterFull,
           ]);
           assert.true(
             indexingDuringIncrementalResolved,
-            'indexing promise resolves once the queued incremental completes',
+            'indexing promise captured before a later queued operation still resolves',
+          );
+          assert.true(
+            indexingAfterFullResolved,
+            'indexing promise captured after the later queued operation resolves too',
           );
         } finally {
           release.fulfill();
         }
       });
 
-      test('realm.indexing does not block on a queued from-scratch job', async function (assert) {
-        // Regression: a from-scratch job sitting in the queue (e.g. behind a
-        // system-wide reindex storm) must not block the realm write-path
-        // gate. The gate exists to serialize file writes with concurrent
-        // *incremental* indexing of the same instance — a bounded ~1-2s
-        // window. From-scratch has no such race and can be queued for hours,
-        // so registering it would stall every PATCH.
+      test('realm.incrementalIndexing does not block on a queued from-scratch job', async function (assert) {
+        // Regression: the realm write-path gate uses incrementalIndexing(),
+        // not indexing(). A from-scratch job sitting in the queue (e.g.
+        // behind a system-wide reindex storm) must not block PATCHes — it
+        // has no file/index race with realm-server writes, and can be queued
+        // for hours.
         let { blocker, release } = await startIndexingGroupBlocker();
         try {
           let full = realm.realmIndexUpdater.fullIndex();
@@ -1710,10 +1725,14 @@ module(basename(__filename), function () {
             },
           );
 
-          assert.strictEqual(
+          assert.ok(
             realm.realmIndexUpdater.indexing(),
+            'indexing() still tracks the queued from-scratch (callers wanting "all settled" semantics rely on this)',
+          );
+          assert.strictEqual(
+            realm.realmIndexUpdater.incrementalIndexing(),
             undefined,
-            'indexing() returns undefined while only a from-scratch job is queued',
+            'incrementalIndexing() returns undefined while only a from-scratch job is queued',
           );
 
           release.fulfill();
@@ -1723,7 +1742,7 @@ module(basename(__filename), function () {
         }
       });
 
-      test('realm.indexing tracks only the incremental when both incremental and from-scratch are queued', async function (assert) {
+      test('realm.incrementalIndexing tracks only the incremental when both incremental and from-scratch are queued', async function (assert) {
         let { blocker, release } = await startIndexingGroupBlocker();
         try {
           let incremental = realm.realmIndexUpdater.update(
@@ -1753,22 +1772,22 @@ module(basename(__filename), function () {
             },
           );
 
-          let indexingPromise = realm.realmIndexUpdater.indexing();
+          let incrementalGate = realm.realmIndexUpdater.incrementalIndexing();
           assert.ok(
-            indexingPromise,
-            'indexing() exposes a promise driven by the incremental',
+            incrementalGate,
+            'incrementalIndexing() exposes a promise driven by the incremental',
           );
 
           release.fulfill();
-          await Promise.all([blocker.done, incremental, indexingPromise]);
+          await Promise.all([blocker.done, incremental, incrementalGate]);
 
-          // After the incremental drains the from-scratch may still be
-          // running; indexing() should already be resolved (gated only on the
-          // incremental).
+          // After the incremental drains, the from-scratch may still be
+          // running; incrementalIndexing() should already be resolved while
+          // indexing() continues to track the from-scratch.
           assert.strictEqual(
-            realm.realmIndexUpdater.indexing(),
+            realm.realmIndexUpdater.incrementalIndexing(),
             undefined,
-            'indexing() returns undefined after the incremental drains, regardless of from-scratch state',
+            'incrementalIndexing() returns undefined after the incremental drains, regardless of from-scratch state',
           );
 
           await full;
