@@ -188,8 +188,7 @@ module('factory-agent-claude-code', function () {
 
         // And going the other way: hook constructed via the canonical
         // path, file_path expressed through the symlink form.
-        let canonicalCanUseTool2 =
-          buildWorkspaceScopedCanUseTool(realDir);
+        let canonicalCanUseTool2 = buildWorkspaceScopedCanUseTool(realDir);
         let result2 = await canonicalCanUseTool2(
           'Write',
           { file_path: `${symlinkDir}/sticky-note.gts` },

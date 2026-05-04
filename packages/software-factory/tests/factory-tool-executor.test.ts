@@ -85,11 +85,15 @@ module('factory-tool-executor > argument validation', function () {
       assert.ok(false, 'should have thrown');
     } catch (err) {
       assert.true(err instanceof Error);
+      // realm-create requires realm-server-url + name + endpoint;
+      // any/all of them missing produces an error message that names
+      // them. Pick one to spot-check (the executor reports all
+      // missing args but for assertion-rule reasons we test a single
+      // membership rather than an OR).
+      let message = (err as Error).message;
       assert.true(
-        (err as Error).message.includes('realm-server-url') ||
-          (err as Error).message.includes('name') ||
-          (err as Error).message.includes('endpoint'),
-        'error message names a required arg',
+        message.includes('realm-server-url'),
+        `error message names "realm-server-url": ${message}`,
       );
     }
   });
@@ -172,7 +176,9 @@ module(
 
       let result = await executor.execute(
         'realm-create',
-        realmCreateArgs({ 'realm-server-url': 'https://scratch.example.test/' }),
+        realmCreateArgs({
+          'realm-server-url': 'https://scratch.example.test/',
+        }),
       );
       assert.strictEqual(typeof result, 'object');
     });

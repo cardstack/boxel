@@ -60,13 +60,13 @@ not** create or update them by writing the underlying `.json` directly
 OpenRouter) — going around the structured tools produces malformed
 cards or silently violates invariants the orchestrator depends on.
 
-| File / artifact                                | Use this tool         |
-| ---------------------------------------------- | --------------------- |
-| `Projects/<slug>.json`                         | `update_project`      |
-| `Issues/<slug>.json`                           | `update_issue`        |
-| `Knowledge Articles/<slug>.json`               | `create_knowledge`    |
-| `Spec/<slug>.json`                             | `create_catalog_spec` |
-| Append a comment to an existing issue          | `add_comment`         |
+| File / artifact                       | Use this tool         |
+| ------------------------------------- | --------------------- |
+| `Projects/<slug>.json`                | `update_project`      |
+| `Issues/<slug>.json`                  | `update_issue`        |
+| `Knowledge Articles/<slug>.json`      | `create_knowledge`    |
+| `Spec/<slug>.json`                    | `create_catalog_spec` |
+| Append a comment to an existing issue | `add_comment`         |
 
 These tools auto-construct the JSON:API document with the correct
 `adoptsFrom`, do read-patch-write merging that preserves attributes

@@ -19,7 +19,14 @@
  */
 
 import { realpathSync } from 'node:fs';
-import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  relative,
+  resolve,
+  sep,
+} from 'node:path';
 
 import {
   createSdkMcpServer,
@@ -206,7 +213,11 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       // let the model write to absolute paths outside the workspace.
       permissionMode: 'dontAsk',
       ...(this.config.workspaceDir
-        ? { canUseTool: buildWorkspaceScopedCanUseTool(this.config.workspaceDir) }
+        ? {
+            canUseTool: buildWorkspaceScopedCanUseTool(
+              this.config.workspaceDir,
+            ),
+          }
         : {}),
       maxTurns: MAX_TOOL_USE_TURNS,
       // Anchor native fs tools to the factory workspace so relative paths
@@ -639,6 +650,10 @@ export function buildWorkspaceScopedCanUseTool(
 function canonicalizeExistingAncestor(absolutePath: string): string {
   let current = absolutePath;
   let suffix: string[] = [];
+  // The loop terminates when either realpathSync resolves (every path
+  // inside an existing dir hits this) or `dirname()` stops shrinking
+  // at the filesystem root. eslint can't see that.
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       let real = realpathSync(current);
@@ -721,7 +736,9 @@ function summarizeUserMessage(
       let payload = stringifyToolResultContent(
         (block as { content?: unknown }).content,
       );
-      let label = isError ? `tool_result(${name}, ERROR)` : `tool_result(${name})`;
+      let label = isError
+        ? `tool_result(${name}, ERROR)`
+        : `tool_result(${name})`;
       parts.push(`${label}: ${collapseAndTruncate(payload)}`);
     } else if (t === 'text') {
       let text = (block as { text?: string }).text ?? '';

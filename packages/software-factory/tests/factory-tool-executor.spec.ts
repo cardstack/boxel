@@ -18,10 +18,7 @@ import { ToolExecutor, ToolNotFoundError } from '../src/factory-tool-executor';
 import { ToolRegistry } from '../src/factory-tool-registry';
 import { buildFactoryTools } from '../src/factory-tool-builder';
 import { fetchCardTypeSchema } from '../src/darkfactory-schemas';
-import {
-  baseRealmURLFor,
-  sourceRealmURLFor,
-} from '../src/harness/shared';
+import { baseRealmURLFor, sourceRealmURLFor } from '../src/harness/shared';
 import { buildTestClient } from './helpers/test-client';
 import { createTestWorkspace } from './helpers/workspace-fixture';
 
@@ -397,4 +394,3 @@ test('create_catalog_spec writes and reads back a Spec card', async ({
     cleanup();
   }
 });
-

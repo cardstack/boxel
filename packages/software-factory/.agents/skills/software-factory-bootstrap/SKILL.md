@@ -17,12 +17,12 @@ and invariants. Always create them through these tools — never by writing
 the underlying `.json` directly via native `Write` (Claude backend) or
 `write_file` (OpenRouter backend):
 
-| Card to create / update                | Use this tool        |
-| --------------------------------------- | -------------------- |
-| `Projects/<slug>.json`                  | `update_project`     |
-| `Knowledge Articles/<slug>-*.json`      | `create_knowledge`   |
-| `Issues/<slug>-<card-slug>.json`        | `update_issue`       |
-| Append a comment to an existing issue   | `add_comment`        |
+| Card to create / update               | Use this tool      |
+| ------------------------------------- | ------------------ |
+| `Projects/<slug>.json`                | `update_project`   |
+| `Knowledge Articles/<slug>-*.json`    | `create_knowledge` |
+| `Issues/<slug>-<card-slug>.json`      | `update_issue`     |
+| Append a comment to an existing issue | `add_comment`      |
 
 These tools accept the `path`, `attributes`, and `relationships` you'd
 otherwise hand-construct as JSON:API. They auto-construct the document
@@ -156,7 +156,9 @@ Example call shape (for an Issue):
   },
   "relationships": {
     "project": { "links": { "self": "../Projects/sticky-note" } },
-    "relatedKnowledge.0": { "links": { "self": "../Knowledge Articles/sticky-note-brief-context" } }
+    "relatedKnowledge.0": {
+      "links": { "self": "../Knowledge Articles/sticky-note-brief-context" }
+    }
   }
 }
 ```
