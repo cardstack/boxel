@@ -313,6 +313,26 @@ export interface TimingDiagnostics extends RenderTimeoutDiagnostics {
   indexedAt?: number;
 }
 
+// Flatten a prerender `response.meta` block into the shape persisted to
+// `*.timing_diagnostics` columns. Keeps the rich host-side payload (from
+// `meta.diagnostics`) at the top level and promotes the HTTP `requestId`
+// alongside it for jsonb-path querying. Returns `undefined` when there's
+// nothing to persist. Used by both the indexer (boxel_index rows) and the
+// definition-lookup module-cache writer (modules rows).
+export function flattenPrerenderMeta(
+  meta: PrerenderResponseMeta | undefined,
+): TimingDiagnostics | undefined {
+  if (!meta) return undefined;
+  let diagnostics = meta.diagnostics ?? {};
+  let hasRequestId = meta.requestId != null;
+  let hasAny = Object.keys(diagnostics).length > 0 || hasRequestId;
+  if (!hasAny) return undefined;
+  return {
+    ...diagnostics,
+    ...(hasRequestId ? { requestId: meta.requestId } : {}),
+  };
+}
+
 export type AffinityType = 'realm' | 'user';
 
 // Routing dimension orthogonal to `AffinityType`. Inside one
