@@ -1698,7 +1698,90 @@ importers:
         specifier: 'catalog:'
         version: 5.104.1
 
-  packages/catalog: {}
+  packages/catalog:
+    dependencies:
+      ember-modify-based-class-resource:
+        specifier: 'catalog:'
+        version: 1.1.2(@glimmer/component@2.0.0)(@glint/template@1.7.7)(ember-resources@7.0.7(@glimmer/component@2.0.0)(@glint/template@1.7.7))
+    devDependencies:
+      '@babel/plugin-proposal-decorators':
+        specifier: 'catalog:'
+        version: 7.28.6(@babel/core@7.28.6)
+      '@cardstack/boxel-icons':
+        specifier: workspace:*
+        version: link:../boxel-icons
+      '@cardstack/boxel-ui':
+        specifier: workspace:*
+        version: link:../boxel-ui/addon
+      '@cardstack/local-types':
+        specifier: workspace:*
+        version: link:../local-types
+      '@cardstack/runtime-common':
+        specifier: workspace:*
+        version: link:../runtime-common
+      '@ember/test-helpers':
+        specifier: 'catalog:'
+        version: 5.4.1(@babel/core@7.28.6)(@glint/template@1.7.7)
+      '@types/lodash':
+        specifier: 'catalog:'
+        version: 4.17.23
+      '@types/qunit':
+        specifier: 'catalog:'
+        version: 2.19.13
+      '@types/uuid':
+        specifier: 'catalog:'
+        version: 9.0.8
+      '@typescript-eslint/eslint-plugin':
+        specifier: 'catalog:'
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
+      '@typescript-eslint/parser':
+        specifier: 'catalog:'
+        version: 7.18.0(eslint@8.57.1)(typescript@5.9.3)
+      '@universal-ember/test-support':
+        specifier: 'catalog:'
+        version: 0.5.1(@babel/core@7.28.6)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.0.0)(rsvp@4.8.5))(qunit@2.25.0)
+      chess.js:
+        specifier: 'catalog:'
+        version: 1.0.0-beta.8
+      concurrently:
+        specifier: 'catalog:'
+        version: 8.2.2
+      ember-concurrency:
+        specifier: 'catalog:'
+        version: 5.2.0(@babel/core@7.28.6)(@glint/template@1.7.7)
+      ember-eslint-parser:
+        specifier: 0.5.9
+        version: 0.5.9(patch_hash=0db1e9515cbf9f5b3d3c6509af8967c918c176106e534408441992dd448f2545)(@babel/core@7.28.6)(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)
+      ember-modifier:
+        specifier: ^4.1.0
+        version: 4.1.0(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.0.0)(rsvp@4.8.5))
+      ember-template-lint:
+        specifier: 'catalog:'
+        version: 7.9.3
+      eslint:
+        specifier: 'catalog:'
+        version: 8.57.1
+      eslint-config-prettier:
+        specifier: 'catalog:'
+        version: 9.1.2(eslint@8.57.1)
+      eslint-plugin-ember:
+        specifier: 'catalog:'
+        version: 12.7.5(@babel/core@7.28.6)(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)
+      eslint-plugin-import:
+        specifier: 'catalog:'
+        version: 2.32.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)
+      eslint-plugin-n:
+        specifier: 'catalog:'
+        version: 17.23.2(eslint@8.57.1)(typescript@5.9.3)
+      eslint-plugin-prettier:
+        specifier: 'catalog:'
+        version: 5.5.4(@types/eslint@8.56.5)(eslint-config-prettier@9.1.2(eslint@8.57.1))(eslint@8.57.1)(prettier@3.7.4)
+      prettier:
+        specifier: 'catalog:'
+        version: 3.7.4
+      tracked-built-ins:
+        specifier: ^4.1.2
+        version: 4.1.2(@babel/core@7.28.6)
 
   packages/catalog-realm:
     dependencies:
