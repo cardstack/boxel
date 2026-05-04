@@ -236,6 +236,60 @@ describe('realm history (integration)', () => {
       expect(result.ok).toBe(false);
       expect(result.error).toContain('No checkpoint history');
     });
+
+    it('rejects an empty restore ref instead of restoring the newest', async () => {
+      const cm = new CheckpointManager(workspaceDir);
+      writeFile('a.gts', 'a');
+      await cm.createCheckpoint('manual', [{ file: 'a.gts', status: 'added' }]);
+      writeFile('b.gts', 'b');
+      await cm.createCheckpoint('manual', [{ file: 'b.gts', status: 'added' }]);
+
+      const result = await realmHistory(workspaceDir, { restore: '' });
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('Checkpoint not found');
+      expect(fs.existsSync(path.join(workspaceDir, 'b.gts'))).toBe(true);
+    });
+
+    it('rejects a whitespace-only restore ref', async () => {
+      const cm = new CheckpointManager(workspaceDir);
+      writeFile('a.gts', 'a');
+      await cm.createCheckpoint('manual', [{ file: 'a.gts', status: 'added' }]);
+
+      const result = await realmHistory(workspaceDir, { restore: '   ' });
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('Checkpoint not found');
+    });
+
+    it('rejects an ambiguous hash prefix', async () => {
+      const cm = new CheckpointManager(workspaceDir);
+      // Create enough checkpoints that some non-digit hex prefix collides.
+      // Digit-only refs are treated as index lookups, not hash prefixes.
+      for (let i = 0; i < 40; i++) {
+        writeFile('a.gts', `v${i}`);
+        await cm.createCheckpoint('manual', [
+          { file: 'a.gts', status: i === 0 ? 'added' : 'modified' },
+        ]);
+      }
+      const cps = await cm.getCheckpoints(100);
+      const counts = new Map<string, number>();
+      for (const cp of cps) {
+        const c = cp.hash[0];
+        if (/[a-f]/.test(c)) counts.set(c, (counts.get(c) ?? 0) + 1);
+      }
+      const ambiguousPrefix = [...counts.entries()].find(
+        ([, n]) => n >= 2,
+      )?.[0];
+      expect(ambiguousPrefix).toBeDefined();
+
+      const result = await realmHistory(workspaceDir, {
+        restore: ambiguousPrefix!,
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('Ambiguous reference');
+    });
   });
 
   describe('argument validation', () => {
@@ -254,6 +308,17 @@ describe('realm history (integration)', () => {
       });
       expect(result.ok).toBe(false);
       expect(result.error).toContain('Only one of --restore or --message');
+    });
+
+    it.each([
+      ['zero', 0],
+      ['negative', -1],
+      ['non-integer', 1.5],
+      ['NaN', Number.NaN],
+    ])('rejects an invalid limit (%s)', async (_name, limit) => {
+      const result = await realmHistory(workspaceDir, { limit });
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('positive integer');
     });
   });
 });

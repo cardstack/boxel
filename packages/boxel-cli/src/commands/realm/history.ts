@@ -49,6 +49,10 @@ interface HistoryCliOptions {
 
 type StepResult<T> = ({ ok: true } & T) | { ok: false; error: string };
 
+function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 async function listCheckpointsStep(
   workspaceDir: string,
   limit: number,
@@ -56,15 +60,22 @@ async function listCheckpointsStep(
   if (!fs.existsSync(workspaceDir)) {
     return { ok: false, error: `Directory not found: ${workspaceDir}` };
   }
-  const manager = new CheckpointManager(workspaceDir);
-  if (!(await manager.isInitialized())) {
-    return { ok: true, checkpoints: [], truncated: false };
+  try {
+    const manager = new CheckpointManager(workspaceDir);
+    if (!(await manager.isInitialized())) {
+      return { ok: true, checkpoints: [], truncated: false };
+    }
+    // Fetch one extra so we can detect truncation without a separate count query.
+    const fetched = await manager.getCheckpoints(limit + 1);
+    const truncated = fetched.length > limit;
+    const checkpoints = truncated ? fetched.slice(0, limit) : fetched;
+    return { ok: true, checkpoints, truncated };
+  } catch (e) {
+    return {
+      ok: false,
+      error: `Failed to read checkpoint history: ${errorMessage(e)}`,
+    };
   }
-  // Fetch one extra so we can detect truncation without a separate count query.
-  const fetched = await manager.getCheckpoints(limit + 1);
-  const truncated = fetched.length > limit;
-  const checkpoints = truncated ? fetched.slice(0, limit) : fetched;
-  return { ok: true, checkpoints, truncated };
 }
 
 async function createManualCheckpointStep(
@@ -78,16 +89,23 @@ async function createManualCheckpointStep(
   if (!message) {
     return { ok: false, error: '--message must not be empty.' };
   }
-  const manager = new CheckpointManager(workspaceDir);
-  if (!(await manager.isInitialized())) {
-    await manager.init();
+  try {
+    const manager = new CheckpointManager(workspaceDir);
+    if (!(await manager.isInitialized())) {
+      await manager.init();
+    }
+    const changes = await manager.detectCurrentChanges();
+    const created = await manager.createCheckpoint('manual', changes, message);
+    if (!created) {
+      return { ok: false, error: 'No changes to checkpoint.' };
+    }
+    return { ok: true, created };
+  } catch (e) {
+    return {
+      ok: false,
+      error: `Failed to create checkpoint: ${errorMessage(e)}`,
+    };
   }
-  const changes = await manager.detectCurrentChanges();
-  const created = await manager.createCheckpoint('manual', changes, message);
-  if (!created) {
-    return { ok: false, error: 'No changes to checkpoint.' };
-  }
-  return { ok: true, created };
 }
 
 async function resolveCheckpointRefStep(
@@ -98,24 +116,42 @@ async function resolveCheckpointRefStep(
   if (!fs.existsSync(workspaceDir)) {
     return { ok: false, error: `Directory not found: ${workspaceDir}` };
   }
-  const manager = new CheckpointManager(workspaceDir);
-  if (!(await manager.isInitialized())) {
+  try {
+    const manager = new CheckpointManager(workspaceDir);
+    if (!(await manager.isInitialized())) {
+      return {
+        ok: false,
+        error:
+          'No checkpoint history found for this workspace. ' +
+          'Checkpoints are created automatically during sync operations.',
+      };
+    }
+    const checkpoints = await manager.getCheckpoints(limit);
+    const found = findCheckpoint(ref, checkpoints);
+    if (found.kind === 'none') {
+      return {
+        ok: false,
+        error: `Checkpoint not found: ${ref}. Use a number (1-${checkpoints.length}) or a commit hash.`,
+      };
+    }
+    if (found.kind === 'ambiguous') {
+      const sample = found.matches
+        .slice(0, 5)
+        .map((cp) => cp.shortHash)
+        .join(', ');
+      const more = found.matches.length > 5 ? ', …' : '';
+      return {
+        ok: false,
+        error: `Ambiguous reference: ${ref} matches ${found.matches.length} checkpoints (${sample}${more}). Use a longer prefix or full hash.`,
+      };
+    }
+    return { ok: true, target: found.target };
+  } catch (e) {
     return {
       ok: false,
-      error:
-        'No checkpoint history found for this workspace. ' +
-        'Checkpoints are created automatically during sync operations.',
+      error: `Failed to read checkpoint history: ${errorMessage(e)}`,
     };
   }
-  const checkpoints = await manager.getCheckpoints(limit);
-  const target = findCheckpoint(ref, checkpoints);
-  if (!target) {
-    return {
-      ok: false,
-      error: `Checkpoint not found: ${ref}. Use a number (1-${checkpoints.length}) or a commit hash.`,
-    };
-  }
-  return { ok: true, target };
 }
 
 async function restoreCheckpointStep(
@@ -125,34 +161,50 @@ async function restoreCheckpointStep(
   if (!fs.existsSync(workspaceDir)) {
     return { ok: false, error: `Directory not found: ${workspaceDir}` };
   }
-  const manager = new CheckpointManager(workspaceDir);
-  if (!(await manager.isInitialized())) {
+  try {
+    const manager = new CheckpointManager(workspaceDir);
+    if (!(await manager.isInitialized())) {
+      return {
+        ok: false,
+        error: 'No checkpoint history found for this workspace.',
+      };
+    }
+    await manager.restore(hash);
+    return { ok: true };
+  } catch (e) {
     return {
       ok: false,
-      error: 'No checkpoint history found for this workspace.',
+      error: `Failed to restore checkpoint: ${errorMessage(e)}`,
     };
   }
-  await manager.restore(hash);
-  return { ok: true };
 }
 
-function findCheckpoint(
-  ref: string,
-  checkpoints: Checkpoint[],
-): Checkpoint | undefined {
+type FindResult =
+  | { kind: 'found'; target: Checkpoint }
+  | { kind: 'none' }
+  | { kind: 'ambiguous'; matches: Checkpoint[] };
+
+function findCheckpoint(ref: string, checkpoints: Checkpoint[]): FindResult {
   const trimmed = ref.trim();
+  // Empty refs would `startsWith('')`-match every hash and silently restore
+  // the newest checkpoint — guard explicitly.
+  if (trimmed === '') return { kind: 'none' };
   // Digit-only input is always an index lookup. Falling through to hash
   // matching when out of range would silently match short hashes whose prefix
   // happens to be digits.
   if (/^\d+$/.test(trimmed)) {
     const num = parseInt(trimmed, 10);
-    return num >= 1 && num <= checkpoints.length
-      ? checkpoints[num - 1]
-      : undefined;
+    if (num >= 1 && num <= checkpoints.length) {
+      return { kind: 'found', target: checkpoints[num - 1] };
+    }
+    return { kind: 'none' };
   }
-  return checkpoints.find(
+  const matches = checkpoints.filter(
     (cp) => cp.hash.startsWith(trimmed) || cp.shortHash === trimmed,
   );
+  if (matches.length === 0) return { kind: 'none' };
+  if (matches.length === 1) return { kind: 'found', target: matches[0] };
+  return { kind: 'ambiguous', matches };
 }
 
 /**
@@ -171,6 +223,12 @@ export async function realmHistory(
       ok: false,
       error: 'Only one of --restore or --message may be specified.',
     };
+  }
+  if (
+    options.limit !== undefined &&
+    (!Number.isInteger(options.limit) || options.limit <= 0)
+  ) {
+    return { ok: false, error: 'limit must be a positive integer.' };
   }
   const limit = options.limit ?? DEFAULT_LIMIT;
 
