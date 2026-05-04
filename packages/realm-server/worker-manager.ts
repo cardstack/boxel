@@ -311,14 +311,21 @@ async function runShutdown() {
 
   // Phase 1 — tell children to stop. Each child's pg-queue marks
   // shuttingDown and exits its WorkLoop after the in-flight handler
-  // returns. `subprocess.send` can throw if the IPC channel has
-  // already closed (child died between our liveness check and the
-  // send) — swallow per-worker so one dead child can't abort the
-  // rest of the drain.
+  // returns. We gate on `exitCode === null` (truly still alive) rather
+  // than `!killed`, because `ChildProcess.killed` only records that a
+  // signal was *sent* — a worker the watchdog sent SIGTERM to a
+  // moment ago has `killed === true` but may still be running.
+  // `subprocess.send` can also throw if the IPC channel has already
+  // closed (child died between our liveness check and the send) —
+  // swallow per-worker so one dead child can't abort the rest.
   if (snapshot.length > 0) {
     log.info(`Stopping ${snapshot.length} worker(s)...`);
     snapshot.forEach((worker) => {
-      if (!worker.killed && worker.pid) {
+      if (
+        worker.exitCode === null &&
+        worker.signalCode === null &&
+        worker.pid
+      ) {
         try {
           worker.send?.('stop');
         } catch (e) {
@@ -350,8 +357,16 @@ async function runShutdown() {
   // observe the freed reservation and start the same job again,
   // executing it concurrently with the still-running original — the
   // duplicate-execution race the codex review flagged on review.
+  //
+  // Liveness is `exitCode === null && signalCode === null`, not
+  // `!killed`: a worker the watchdog already sent SIGTERM to has
+  // `killed === true` but may still be running, and we want SIGKILL
+  // to force-terminate it. After a child actually exits via signal,
+  // its exitCode stays null but signalCode becomes set — both must
+  // be null for "truly still alive". SIGKILL is idempotent on a
+  // process that's gone, and the try/catch below covers any EPERM.
   let stragglers = snapshot.filter(
-    (worker) => worker.exitCode === null && !worker.killed,
+    (worker) => worker.exitCode === null && worker.signalCode === null,
   );
   if (stragglers.length > 0) {
     log.info(
@@ -412,7 +427,12 @@ async function runShutdown() {
 }
 
 function waitForExit(worker: ChildProcess): Promise<void> {
-  if (worker.exitCode !== null || worker.killed) {
+  // Resolve immediately only when the process has truly exited
+  // (exitCode is non-null on natural exit, or signalCode is non-null
+  // when killed by signal). `worker.killed` would short-circuit too
+  // eagerly — it just means a signal was sent, not that the child
+  // has actually terminated.
+  if (worker.exitCode !== null || worker.signalCode !== null) {
     return Promise.resolve();
   }
   return new Promise<void>((resolve) => {
