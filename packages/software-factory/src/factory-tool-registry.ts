@@ -7,20 +7,26 @@ import type { ToolArg, ToolManifest } from './factory-agent';
 // Historical context: this registry used to expose three categories of
 // agent-facing tools:
 //
-//   - `script` (search-realm, run-realm-tests) — kebab-case duplicates of
-//     factory-builder tools (`search_realm`, `run_tests`); deleted as
-//     redundant on both backends.
+//   - `script` (search-realm, run-realm-tests) — kebab-case duplicates
+//     of factory-builder tools (`search_realm`, `run_tests`); removed
+//     from the agent's catalog as redundant on both backends. The
+//     scripts they used to spawn (`scripts/boxel-search.ts`,
+//     `scripts/run-realm-tests.ts`) are still around as developer
+//     pnpm scripts (`pnpm boxel:search`, `pnpm test:realm`) — only
+//     the agent-facing wrappers are gone.
 //   - `boxel-cli` (boxel-sync / boxel-push / boxel-pull / boxel-status /
-//     boxel-create / boxel-history) — wrappers around the boxel CLI; the
-//     orchestrator owns sync, the agent never legitimately needed these,
-//     and they were never registered in the production wiring anyway.
-//   - `realm-api` (realm-read / realm-write / realm-delete / realm-search
-//     / realm-create) — HTTP-direct realm access; CS-10883 retires the
-//     read/write/delete/search variants because the factory loop only
-//     operates on the target realm via the workspace, and the agent now
-//     uses native fs / `read_file` / `write_file` / `search_realm` for
-//     that. Only `realm-create` survives — the entrypoint creates the
-//     target realm via the registry executor before the agent runs.
+//     boxel-create / boxel-history) — wrappers around the boxel CLI;
+//     the orchestrator owns sync, the agent never legitimately needed
+//     these, and they were never registered in the production wiring
+//     anyway.
+//   - `realm-api` (realm-read / realm-write / realm-delete /
+//     realm-search / realm-create) — HTTP-direct realm access;
+//     CS-10883 retires the read/write/delete/search variants because
+//     the factory loop only operates on the target realm via the
+//     workspace, and the agent now uses native fs / `read_file` /
+//     `write_file` / `search_realm` for that. Only `realm-create`
+//     survives — the entrypoint creates the target realm via the
+//     registry executor before the agent runs.
 
 const REALM_API_TOOLS: ToolManifest[] = [
   {
