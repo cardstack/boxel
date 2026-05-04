@@ -65,12 +65,24 @@ const MAX_TOOL_USE_TURNS = 50;
 const NATIVE_FS_TOOLS = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'];
 
 /**
- * Factory tool names superseded by native Claude Code tools. Filtered
- * out of the MCP catalog on the Claude backend so the model only ever
- * sees one read/write surface (the native one). OpenRouter still gets
- * these tools — it has no native fs.
+ * Factory tool names that are filtered out of the MCP catalog on the
+ * Claude backend because the model has a native or boxel CLI
+ * alternative — keeping them in the catalog would just be a duplicate
+ * surface for the same operation. OpenRouter still gets these tools;
+ * it has no native fs and no Bash.
+ *
+ * Each entry's replacement:
+ * - `read_file`   → native `Read`
+ * - `write_file`  → native `Write` / `Edit`
+ * - `run_command` → unused in practice (card-type schemas are
+ *                    pre-loaded by the wiring); if ever needed, the
+ *                    boxel CLI exposes `boxel run-command` over Bash.
  */
-const NATIVE_FS_REPLACED_TOOLS = new Set(['read_file', 'write_file']);
+const CLAUDE_FILTERED_FACTORY_TOOLS = new Set([
+  'read_file',
+  'write_file',
+  'run_command',
+]);
 
 let log = logger('factory-agent-claude-code');
 
@@ -117,13 +129,14 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     context: AgentContext,
     tools: FactoryTool[],
   ): Promise<AgentRunResult> {
-    // Filter out the factory's `read_file` / `write_file` shims — on the
-    // Claude backend the model uses native Read / Write / Edit instead,
-    // scoped to the workspace via the SDK query's `cwd`. The shared
+    // Filter out factory tools the Claude backend doesn't need —
+    // native Claude Code tools (Read / Write / Edit / Bash) cover the
+    // workspace fs surface, and a few others (`run_command`) have a
+    // boxel CLI alternative or are unused in practice. The shared
     // FactoryTool[] is built once for both backends; OpenRouter still
-    // sees the full list.
+    // sees the full list because it has no native fs and no Bash.
     let mcpFactoryTools = tools.filter(
-      (t) => !NATIVE_FS_REPLACED_TOOLS.has(t.name),
+      (t) => !CLAUDE_FILTERED_FACTORY_TOOLS.has(t.name),
     );
 
     let systemPrompt = this.buildSystemPrompt(context, mcpFactoryTools);

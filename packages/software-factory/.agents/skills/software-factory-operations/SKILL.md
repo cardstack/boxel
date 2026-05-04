@@ -93,23 +93,13 @@ or drive control flow.
 
 ### Running Host Commands
 
-- `run_command({ command, commandInput? })` — Execute a host command on the realm server via the prerenderer. Commands run in browser context with full card runtime access (Loader, CardAPI, services). Use the specifier format `@cardstack/boxel-host/commands/<name>/default`.
-
-**Example — generate JSON schema for a card type:**
-
-```
-run_command({
-  command: "@cardstack/boxel-host/commands/get-card-type-schema/default",
-  commandInput: {
-    codeRef: {
-      module: "https://realm.example/darkfactory",
-      name: "Project"
-    }
-  }
-})
-```
-
-Returns `{ status: "ready", result: "<serialized JsonCard with schema>" }`. Parse `result` as JSON to get the schema with `attributes` and `relationships` properties.
+You do not need to invoke Boxel host commands from the agent — the
+orchestrator pre-loads the card-type schemas you need and bakes them
+into the structured update tools' parameter schemas. If a future
+workflow does need a host command, the OpenRouter backend exposes
+`run_command({ command, commandInput? })` and the Claude backend
+should shell out via Bash to `boxel run-command <specifier> --realm <url>
+--input '<json>' --json`.
 
 ### Self-Validation (optional, no side effects)
 

@@ -313,7 +313,7 @@ module('factory-agent-claude-code', function () {
       assert.deepEqual(capturedOptions!.settingSources, []);
     });
 
-    test('omits read_file / write_file from the MCP catalog (native tools cover them)', async function (assert) {
+    test('filters factory tools that have native or boxel CLI alternatives', async function (assert) {
       let capturedOptions: Options | undefined;
       let agent = new ClaudeCodeFactoryAgent(
         { workspaceDir: '/tmp/factory-workspace-test' },
@@ -329,19 +329,20 @@ module('factory-agent-claude-code', function () {
       await agent.run(makeContext(), [
         makeTool({ name: 'read_file' }),
         makeTool({ name: 'write_file' }),
+        makeTool({ name: 'run_command' }),
         makeTool({ name: 'search_realm' }),
         makeTool({ name: 'signal_done' }),
       ]);
 
       let allowed = capturedOptions!.allowedTools ?? [];
-      assert.notOk(
-        allowed.includes('mcp__factory__read_file'),
-        'read_file is not registered as an MCP tool',
-      );
-      assert.notOk(
-        allowed.includes('mcp__factory__write_file'),
-        'write_file is not registered as an MCP tool',
-      );
+      // Filtered: native fs replaces these, plus run_command which is
+      // unused in practice (and reachable via `boxel run-command` if needed).
+      for (let filtered of ['read_file', 'write_file', 'run_command']) {
+        assert.notOk(
+          allowed.includes(`mcp__factory__${filtered}`),
+          `${filtered} is not registered as an MCP tool on the Claude path`,
+        );
+      }
       assert.true(
         allowed.includes('mcp__factory__search_realm'),
         'realm-side factory tools remain in the MCP catalog',
