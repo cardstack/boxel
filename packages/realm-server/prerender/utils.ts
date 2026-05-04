@@ -1070,6 +1070,77 @@ export async function captureResult(
   return result;
 }
 
+export interface ScreenshotCapture {
+  base64: string;
+  width: number;
+  height: number;
+}
+
+export async function captureScreenshot(
+  page: Page,
+  format: 'isolated' | 'embedded',
+  ancestorLevel: number,
+  opts?: CaptureOptions,
+): Promise<ScreenshotCapture | RenderError> {
+  log.debug(
+    `captureScreenshot start format=${format} ancestorLevel=${ancestorLevel} url=${page.url()}`,
+  );
+  await transitionTo(page, 'render.html', format, String(ancestorLevel));
+  await waitForRoutePathSuffix(page, `/html/${format}/${ancestorLevel}`, opts);
+  await waitForPrerenderSettle(page);
+  // After settle, surface any terminal prerender error rather than
+  // screenshotting a skeleton/error frame. Reuses the same data-attribute
+  // signaling as the HTML capture path.
+  let terminal = await page.evaluate(() => {
+    let elements = Array.from(
+      document.querySelectorAll('[data-prerender]'),
+    ) as HTMLElement[];
+    for (let element of elements) {
+      let status = element.dataset.prerenderStatus ?? '';
+      if (status === 'error' || status === 'unusable') {
+        let errorElement = element.querySelector(
+          '[data-prerender-error]',
+        ) as HTMLElement | null;
+        let raw = (
+          errorElement?.textContent ??
+          errorElement?.innerHTML ??
+          ''
+        ).trim();
+        return { status: status as 'error' | 'unusable', raw };
+      }
+    }
+    let stray = document.querySelector(
+      '[data-prerender-error]',
+    ) as HTMLElement | null;
+    if (stray) {
+      let raw = (stray.textContent ?? stray.innerHTML ?? '').trim();
+      if (raw.length > 0) {
+        return { status: 'error' as const, raw };
+      }
+    }
+    return null;
+  });
+  if (terminal) {
+    let capture: RenderCapture = {
+      status: terminal.status,
+      value: terminal.raw,
+    };
+    return renderCaptureToError(page, capture, 'render.screenshot');
+  }
+  let dims = await page.evaluate(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }));
+  let base64 = (await page.screenshot({
+    encoding: 'base64',
+    type: 'png',
+  })) as string;
+  log.debug(
+    `captureScreenshot success format=${format} ancestorLevel=${ancestorLevel} bytes=${base64.length} ${dims.width}x${dims.height}`,
+  );
+  return { base64, width: dims.width, height: dims.height };
+}
+
 export async function withTimeout<T>(
   page: Page,
   fn: () => Promise<T>,

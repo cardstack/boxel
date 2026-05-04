@@ -6,6 +6,7 @@ import {
   type RenderVisitResponse,
   type RenderRouteOptions,
   type RunCommandResponse,
+  type ScreenshotPrerenderResponse,
   logger,
 } from '@cardstack/runtime-common';
 import {
@@ -236,6 +237,20 @@ export function createRemotePrerenderer(
           command,
           commandInput,
           ...(priority !== undefined ? { priority } : {}),
+        },
+      );
+    },
+    async prerenderScreenshot({ realm, url, auth, format }) {
+      return await requestWithRetry<ScreenshotPrerenderResponse>(
+        'prerender-screenshot',
+        'screenshot-request',
+        {
+          affinityType: 'realm',
+          affinityValue: realm,
+          realm,
+          url,
+          auth,
+          format,
         },
       );
     },

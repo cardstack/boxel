@@ -15,6 +15,7 @@ export * from './daily-credit-grant';
 export * from './copy';
 export * from './indexer';
 export * from './run-command';
+export * from './screenshot-card';
 
 type LoggerInstance = ReturnType<typeof import('../index').logger>;
 

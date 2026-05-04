@@ -451,6 +451,23 @@ export type RunCommandResponse = {
   meta?: PrerenderResponseMeta;
 };
 
+export type ScreenshotPrerenderArgs = {
+  realm: string;
+  url: string;
+  auth: string;
+  format: 'isolated' | 'embedded';
+};
+
+export type ScreenshotPrerenderResponse = {
+  status: 'ready' | 'error' | 'unusable';
+  base64?: string;
+  width?: number;
+  height?: number;
+  contentType?: 'image/png';
+  error?: string | null;
+  meta?: PrerenderResponseMeta;
+};
+
 export interface Prerenderer {
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
   prerenderVisit(args: PrerenderVisitArgs): Promise<RenderVisitResponse>;
@@ -460,6 +477,13 @@ export interface Prerenderer {
   // before invoking since not every Prerenderer implementation participates
   // in ownership tracking (e.g. test stubs, remote variants on older servers).
   releaseBatch?(args: ReleaseBatchArgs): Promise<void>;
+  // Optional: capture a settled card render to a PNG. Optional so test
+  // stubs and older Prerenderer implementations are not forced to
+  // implement it; the realm-server proxy probes for it at runtime and
+  // surfaces a useful error if the upstream doesn't support it.
+  prerenderScreenshot?(
+    args: ScreenshotPrerenderArgs,
+  ): Promise<ScreenshotPrerenderResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
