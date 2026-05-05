@@ -12,7 +12,6 @@ import {
   PUBLISHED_DIRECTORY_NAME,
   ensureTrailingSlash,
   type DBAdapter,
-  type PublishedRealmTable,
   fetchRealmPermissions,
   uuidv4,
   userInitiatedPriority,
@@ -319,10 +318,13 @@ export default function handlePublishRealm({
         dbAdapter,
         publishedRealmURL,
         async () => {
+          // Phase 4: read existence + identity from realm_registry. The
+          // legacy published_realms table is still dual-written below
+          // until Phase 4 PR 2 drops the writes.
           let existingRows = (await query(dbAdapter, [
-            `SELECT id, owner_username FROM published_realms WHERE published_realm_url =`,
+            `SELECT disk_id, owner_username FROM realm_registry WHERE kind = 'published' AND url =`,
             param(publishedRealmURL),
-          ])) as Pick<PublishedRealmTable, 'id' | 'owner_username'>[];
+          ])) as { disk_id: string; owner_username: string }[];
           let isNewRealm = existingRows.length === 0;
 
           let publishedRealmId: string;
@@ -346,7 +348,7 @@ export default function handlePublishRealm({
               '*': ['read'],
             });
           } else {
-            publishedRealmId = existingRows[0].id;
+            publishedRealmId = existingRows[0].disk_id;
             realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
           }
 
@@ -396,10 +398,31 @@ export default function handlePublishRealm({
             throw swapError;
           }
 
-          let newlyPublishedRealmConfig = readJsonSync(
-            join(publishedRealmPath, '.realm.json'),
+          // CS-10053: publishable lives in realm_metadata now. Mark the
+          // published realm not-publishable via UPSERT after the swap
+          // succeeds so a failed swap doesn't leave a metadata row
+          // pointing at a rolled-back URL.
+          await query(dbAdapter, [
+            `INSERT INTO realm_metadata (url, publishable) VALUES (`,
+            param(publishedRealmURL),
+            `,`,
+            param(false),
+            `) ON CONFLICT (url) DO UPDATE SET publishable = false, updated_at = now()`,
+          ]);
+
+          // hostHome rewrite still goes via the sidecar — CS-10055 will
+          // move it to the card. Read what was copied over (may be
+          // missing if the source realm has no sidecar), rewrite if
+          // necessary, write back only when something changed.
+          let publishedRealmConfigPath = join(
+            publishedRealmPath,
+            '.realm.json',
           );
-          newlyPublishedRealmConfig.publishable = false;
+          let newlyPublishedRealmConfig: Record<string, unknown> = existsSync(
+            publishedRealmConfigPath,
+          )
+            ? readJsonSync(publishedRealmConfigPath)
+            : {};
           let rewrittenHostHome = rewriteHostHomeForPublishedRealm(
             newlyPublishedRealmConfig.hostHome,
             sourceRealmURL,
@@ -407,11 +430,8 @@ export default function handlePublishRealm({
           );
           if (rewrittenHostHome) {
             newlyPublishedRealmConfig.hostHome = rewrittenHostHome;
+            writeJsonSync(publishedRealmConfigPath, newlyPublishedRealmConfig);
           }
-          writeJsonSync(
-            join(publishedRealmPath, '.realm.json'),
-            newlyPublishedRealmConfig,
-          );
 
           // Clear stale modules cache for the published realm so that
           // error entries from a previous publish don't persist

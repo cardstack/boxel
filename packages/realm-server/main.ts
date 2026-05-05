@@ -18,8 +18,6 @@ import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
-import * as ContentTagGlobal from 'content-tag';
-
 import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer';
 import { buildCreatePrerenderAuth } from './prerender/auth';
@@ -32,14 +30,13 @@ import {
 } from './lib/dev-service-registry';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
 import { runRegistryBackfillWithAdvisoryLock } from './lib/realm-registry-backfill';
+import { runRealmMetadataBackfillWithAdvisoryLock } from './lib/realm-metadata-backfill';
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from './lib/realm-registry-reconciler';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
-
-(globalThis as any).ContentTagGlobal = ContentTagGlobal;
 
 let log = logger('main');
 const runtimeMetadataFile =
@@ -336,6 +333,19 @@ const getIndexHTML = async () => {
     })),
   });
 
+  // CS-10053: copy showAsCatalog/publishable from .realm.json into the
+  // realm_metadata table on first boot, then trim those keys from the
+  // sidecar. Idempotent on subsequent boots.
+  await runRealmMetadataBackfillWithAdvisoryLock(dbAdapter, {
+    dbAdapter,
+    realmsRootPath,
+    serverURL: new URL(String(serverURL)),
+    bootstrapRealms: paths.map((p, i) => ({
+      diskPath: String(p),
+      url: hrefs[i][0],
+    })),
+  });
+
   // Validate per-CLI-path username invariant. Phase 3 no longer constructs
   // realms here — the reconciler does it via mountFromRow once registry
   // rows are read — but we still want the misconfiguration to fail fast.
@@ -548,7 +558,7 @@ const getIndexHTML = async () => {
   // Begin the reconciler's background poll loop (LISTEN realm_registry +
   // 30s safety poll). It picks up changes from peer instances (publish,
   // unpublish, delete) and reconciles them into local mounted state.
-  reconciler.start();
+  await reconciler.start();
 
   // Cross-instance cache invalidation. Realm.write() emits NOTIFY
   // realm_file_changes; this listener receives those and forwards to the
@@ -560,7 +570,7 @@ const getIndexHTML = async () => {
     dbAdapter,
     lookupMountedRealm: (url) => realms.find((r) => r.url === url),
   });
-  fileChangesListener.start();
+  await fileChangesListener.start();
 
   let actualPort =
     (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;

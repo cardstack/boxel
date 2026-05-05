@@ -7,6 +7,7 @@ import {
   type FileRenderResponse,
   type RenderRouteOptions,
   type RunCommandResponse,
+  type ScreenshotPrerenderResponse,
   type AffinityType,
   type PrerenderQueue,
   type RenderVisitResponse,
@@ -23,6 +24,7 @@ import {
   captureResult,
   captureModule,
   captureFileExtract,
+  captureScreenshot,
   isRenderError,
   renderAncestors,
   renderHTML,
@@ -32,6 +34,7 @@ import {
   type CaptureOptions,
   type ModuleCapture,
   type FileExtractCapture,
+  type ScreenshotCapture,
   cardRenderTimeout,
   withTimeout,
   transitionTo,
@@ -376,6 +379,132 @@ export class RenderRunner {
       return {
         response,
         timings: { launchMs, renderMs: 0, waits },
+        pool: poolInfo,
+      };
+    } finally {
+      release();
+    }
+  }
+
+  async captureScreenshotAttempt({
+    affinityType,
+    affinityValue,
+    realm,
+    url,
+    auth,
+    format,
+    opts,
+    priority,
+    signal,
+  }: {
+    affinityType: AffinityType;
+    affinityValue: string;
+    realm: string;
+    url: string;
+    auth: string;
+    format: 'isolated' | 'embedded';
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    priority?: number;
+    signal?: AbortSignal;
+  }): Promise<{
+    response: ScreenshotPrerenderResponse;
+    timings: Timings;
+    pool: PoolInfo;
+  }> {
+    this.#nonce++;
+    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    log.info(
+      `screenshot prerendering url=${url} format=${format} nonce=${this.#nonce} affinity=${affinityKey} realm=${realm} priority=${priority ?? 0}`,
+    );
+
+    const { page, reused, launchMs, waits, pageId, release } =
+      await this.#getPageForAffinity(
+        affinityKey,
+        auth,
+        'file',
+        signal,
+        priority,
+      );
+    const poolInfo: PoolInfo = {
+      pageId: pageId ?? 'unknown',
+      affinityType,
+      affinityValue,
+      reused,
+      evicted: false,
+      timedOut: false,
+    };
+    this.#pagePool.resetConsoleErrors(pageId);
+    const markTimeout = (err?: RenderError) => {
+      if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
+        poolInfo.timedOut = true;
+      }
+    };
+
+    try {
+      // See runCommandAttempt: tag as 'queued' and keep the check inside the
+      // try so `finally { release() }` frees the tab slot if the caller
+      // aborted during the getPage handoff.
+      throwIfAborted(signal, 'queued');
+      await page.evaluate((sessionAuth) => {
+        localStorage.setItem('boxel-session', sessionAuth);
+      }, auth);
+
+      let renderStart = Date.now();
+      let nonce = String(this.#nonce);
+      let renderOptions: RenderRouteOptions = { cardRender: true };
+      let serializedOptions = serializeRenderRouteOptions(renderOptions);
+      const captureOptions: CaptureOptions = {
+        expectedId: url.replace(/\.json$/i, ''),
+        expectedNonce: nonce,
+        simulateTimeoutMs: opts?.simulateTimeoutMs,
+        timeoutMs: opts?.timeoutMs,
+      };
+
+      let capture = await withTimeout(
+        page,
+        async () => {
+          await transitionTo(
+            page,
+            'render.html',
+            url,
+            nonce,
+            serializedOptions,
+            format,
+            '0',
+          );
+          return await captureScreenshot(page, format, 0, captureOptions);
+        },
+        opts?.timeoutMs,
+      );
+
+      let response: ScreenshotPrerenderResponse;
+      if (isRenderError(capture)) {
+        let renderError = capture as RenderError;
+        markTimeout(renderError);
+        if (
+          await this.#maybeEvict(affinityKey, 'screenshot render', renderError)
+        ) {
+          poolInfo.evicted = true;
+        }
+        let isUnusable = poolInfo.evicted || renderError.evict === true;
+        response = {
+          status: isUnusable ? 'unusable' : 'error',
+          error: renderError.error.message ?? 'screenshot render failed',
+        };
+      } else {
+        let shot = capture as ScreenshotCapture;
+        response = {
+          status: 'ready',
+          base64: shot.base64,
+          width: shot.width,
+          height: shot.height,
+          contentType: 'image/png',
+        };
+      }
+
+      return {
+        response,
+        timings: { launchMs, renderMs: Date.now() - renderStart, waits },
         pool: poolInfo,
       };
     } finally {

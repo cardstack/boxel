@@ -147,7 +147,7 @@ export async function fetchUserPermissions(
       `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
       param(userId),
       `AND realm_owner = true
-       AND realm_url NOT IN (SELECT published_realm_url FROM published_realms)`,
+       AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')`,
     ])) as {
       realm_url: string;
       read: boolean;
@@ -160,13 +160,13 @@ export async function fetchUserPermissions(
     permissions = (await query(dbAdapter, [
       `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
       param(userId),
-      `AND realm_url NOT IN (SELECT published_realm_url FROM published_realms)
+      `AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
        UNION
        SELECT realm_url, true as read, false as write, false as realm_owner FROM realm_user_permissions WHERE username = '*' AND read = true
        AND realm_url NOT IN (SELECT realm_url FROM realm_user_permissions WHERE username =`,
       param(userId),
       `)
-       AND realm_url NOT IN (SELECT published_realm_url FROM published_realms)`,
+       AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')`,
     ])) as {
       realm_url: string;
       read: boolean;
@@ -246,8 +246,9 @@ export async function fetchAllRealmsWithOwners(
 
   // Published realms may not have realm_user_permissions entries in older data.
   // Fall back to the published realm's owner (or source realm owner) when missing.
+  // Phase 4: read from realm_registry; aliases keep the loop accessors stable.
   const publishedRealms = (await query(dbAdapter, [
-    `SELECT published_realm_url, source_realm_url, owner_username FROM published_realms`,
+    `SELECT url AS published_realm_url, source_url AS source_realm_url, owner_username FROM realm_registry WHERE kind = 'published'`,
   ])) as {
     published_realm_url: string;
     source_realm_url: string;

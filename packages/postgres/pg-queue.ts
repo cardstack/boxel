@@ -60,6 +60,11 @@ export interface JobReservationsTable {
   locked_until: Date;
   completed_at: Date;
   worker_id: string;
+  // NULL while the reservation is open. On close: 'completed' for a
+  // genuine attempt (worker ran the job to a verdict), 'interrupted' for
+  // an operational interruption (child crash, manager SIGTERM, scale-in),
+  // 'timeout-expired' for the pg-pid reaper path.
+  completion_reason: 'completed' | 'interrupted' | 'timeout-expired' | null;
 }
 
 interface CoalesceCandidateRow extends Pick<
@@ -219,34 +224,62 @@ export class PgQueuePublisher implements QueuePublisher {
     }
   }
 
-  private async findPendingCandidates(
+  private async findCoalesceCandidates(
     queryFn: (expression: Expression) => Promise<unknown>,
     concurrencyGroup: string | null,
-  ): Promise<QueueCoalesceCandidate[]> {
+  ): Promise<{
+    pending: QueueCoalesceCandidate[];
+    inFlight: QueueCoalesceCandidate[];
+  }> {
+    // Pending candidates are locked FOR UPDATE so a concurrent publisher
+    // can't merge into the same row. In-flight rows are read in the same
+    // snapshot but not locked: the worker is the only writer that should
+    // commit a status change on them, and our advisory lock prevents
+    // another publisher from racing us on this concurrency group.
     let rows = (await queryFn([
-      `SELECT j.id, j.job_type, j.concurrency_group, j.timeout, j.priority, j.args
+      `SELECT j.id, j.job_type, j.concurrency_group, j.timeout, j.priority, j.args,
+              EXISTS (
+                SELECT 1 FROM job_reservations r
+                WHERE r.job_id = j.id
+                  AND r.locked_until > NOW()
+                  AND r.completed_at IS NULL
+              ) as in_flight
        FROM jobs j
        WHERE j.status='unfulfilled'
          AND j.concurrency_group IS NOT DISTINCT FROM`,
       param(concurrencyGroup),
-      `AND NOT EXISTS (
-          SELECT 1
-          FROM job_reservations r
-          WHERE r.job_id = j.id
-            AND r.locked_until > NOW()
-            AND r.completed_at IS NULL
-       )
-       ORDER BY j.created_at, j.id
-       FOR UPDATE`,
-    ])) as CoalesceCandidateRow[];
-    return rows.map((row) => ({
-      id: row.id,
-      jobType: row.job_type,
-      concurrencyGroup: row.concurrency_group,
-      timeout: row.timeout,
-      priority: row.priority,
-      args: row.args,
-    }));
+      `ORDER BY j.created_at, j.id`,
+    ])) as (CoalesceCandidateRow & { in_flight: boolean })[];
+
+    let pendingIds: number[] = [];
+    let pending: QueueCoalesceCandidate[] = [];
+    let inFlight: QueueCoalesceCandidate[] = [];
+    for (let row of rows) {
+      let candidate: QueueCoalesceCandidate = {
+        id: row.id,
+        jobType: row.job_type,
+        concurrencyGroup: row.concurrency_group,
+        timeout: row.timeout,
+        priority: row.priority,
+        args: row.args,
+      };
+      if (row.in_flight) {
+        inFlight.push(candidate);
+      } else {
+        pending.push(candidate);
+        pendingIds.push(row.id);
+      }
+    }
+
+    if (pendingIds.length > 0) {
+      await queryFn([
+        `SELECT id FROM jobs WHERE`,
+        ...any(pendingIds.map((id) => [`id=`, param(id)])),
+        `FOR UPDATE`,
+      ] as Expression);
+    }
+
+    return { pending, inFlight };
   }
 
   private async insertJob(
@@ -353,11 +386,15 @@ export class PgQueuePublisher implements QueuePublisher {
           await queryFn(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
           await acquireConcurrencyGroupLock(queryFn, incoming.concurrencyGroup);
 
-          let candidates = await this.findPendingCandidates(
+          let { pending, inFlight } = await this.findCoalesceCandidates(
             queryFn,
             incoming.concurrencyGroup,
           );
-          let decision = coalesce({ incoming, candidates });
+          let decision = coalesce({
+            incoming,
+            candidates: pending,
+            inFlightCandidates: inFlight,
+          });
           let jobId: number;
 
           if (decision.type === 'insert') {
@@ -365,24 +402,42 @@ export class PgQueuePublisher implements QueuePublisher {
             jobId = await this.insertJob(queryFn, insertJob);
           } else {
             jobId = decision.jobId;
-            let isStillPending = await this.jobIsPendingAndUnreserved(
-              queryFn,
-              jobId,
-            );
-            if (!isStillPending) {
-              await queryFn(['ROLLBACK']);
-              continue;
-            }
-
-            if (decision.update) {
-              let wasUpdated = await this.updateJobForCoalesce(
+            let isInFlightTarget = inFlight.some((c) => c.id === jobId);
+            if (isInFlightTarget) {
+              // Attaching as a late waiter on an already-claimed job. The
+              // worker holds the args in memory and won't see DB writes,
+              // so the join must not request an `update`. The waiter is
+              // wired up in `publish()` via `addWaiter(jobId, ...)`.
+              if (decision.update !== undefined) {
+                throw new Error(
+                  `coalesce returned a join with update for in-flight job ${jobId}; updates cannot reach a running worker`,
+                );
+              }
+              log.debug(
+                `attaching late waiter to in-flight job %s (concurrency group %s)`,
+                jobId,
+                incoming.concurrencyGroup,
+              );
+            } else {
+              let isStillPending = await this.jobIsPendingAndUnreserved(
                 queryFn,
                 jobId,
-                decision.update,
               );
-              if (!wasUpdated) {
+              if (!isStillPending) {
                 await queryFn(['ROLLBACK']);
                 continue;
+              }
+
+              if (decision.update) {
+                let wasUpdated = await this.updateJobForCoalesce(
+                  queryFn,
+                  jobId,
+                  decision.update,
+                );
+                if (!wasUpdated) {
+                  await queryFn(['ROLLBACK']);
+                  continue;
+                }
               }
             }
           }
@@ -582,16 +637,19 @@ export class PgQueueRunner implements QueueRunner {
             continue;
           }
 
-          // Abandon the job after #maxReservationCount attempts. If the
-          // worker has died and left an orphan reservation each time, those
-          // get freed up by finalizeOrphanedReservations on the
-          // worker-manager side; the prior reservation rows themselves
-          // remain in the table and are the trail of failed attempts.
-          // Counting them lets us stop wasting wall-clock on jobs that
-          // deterministically crash a worker.
+          // Abandon the job after #maxReservationCount genuine attempts.
+          // Count only reservations that closed with a real verdict
+          // (`completion_reason = 'completed'`) plus still-open ones
+          // (NULL). Reservations closed as `'interrupted'` or
+          // `'timeout-expired'` (deploy, autoscaler, child crash, dropped
+          // PG connection) don't count — the worker never had an
+          // uninterrupted shot at the job, so re-trying isn't a failed
+          // attempt.
           let priorReservations = (await query([
-            `SELECT COUNT(*)::int as count FROM job_reservations WHERE job_id =`,
+            `SELECT COUNT(*)::int as count FROM job_reservations
+             WHERE job_id =`,
             param(jobToRun.id),
+            `AND (completion_reason IS NULL OR completion_reason = 'completed')`,
           ])) as unknown as { count: number }[];
           if (priorReservations[0].count >= this.#maxReservationCount) {
             await query([
@@ -741,7 +799,9 @@ export class PgQueueRunner implements QueueRunner {
             param(jobToRun.id),
           ]);
           await query([
-            `UPDATE job_reservations SET completed_at = now() WHERE id = `,
+            `UPDATE job_reservations
+             SET completed_at = now(), completion_reason = 'completed'
+             WHERE id = `,
             param(jobReservationId),
           ]);
           // NOTIFY takes effect when the transaction actually commits. If it

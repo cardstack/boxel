@@ -393,7 +393,7 @@ export class RealmServer {
         let originParameter = new URL(decodeURIComponent(connectMatch[1])).href;
 
         let publishedRealms = await query(this.dbAdapter, [
-          `SELECT published_realm_url FROM published_realms WHERE published_realm_url LIKE `,
+          `SELECT url FROM realm_registry WHERE kind = 'published' AND url LIKE `,
           param(`${originParameter}%`),
         ]);
 
@@ -671,7 +671,7 @@ export class RealmServer {
     }
 
     let rows = await query(this.dbAdapter, [
-      `SELECT last_published_at FROM published_realms WHERE published_realm_url =`,
+      `SELECT last_published_at FROM realm_registry WHERE kind = 'published' AND url =`,
       param(realm.url),
     ]);
 
@@ -871,13 +871,10 @@ export class RealmServer {
       },
     );
 
-    indexHTML = indexHTML
-      .replace(/(src|href)="\//g, `$1="${this.assetsURL.href}`)
-      // This is imported within a script tag vs being in an attribute
-      .replace(
-        '/assets/content-tag/standalone.js',
-        new URL('/assets/content-tag/standalone.js', this.assetsURL.href).href,
-      );
+    indexHTML = indexHTML.replace(
+      /(src|href)="\//g,
+      `$1="${this.assetsURL.href}`,
+    );
 
     // Strip any static favicon/apple-touch-icon links from the base HTML
     // since these are now dynamically injected between the head markers
@@ -1049,9 +1046,22 @@ export class RealmServer {
         [ownerUserId]: DEFAULT_PERMISSIONS,
       });
 
-      writeJSONSync(join(realmPath, '.realm.json'), {
-        publishable: true,
-      });
+      // CS-10053: publishable lives in realm_metadata now, not the
+      // sidecar. The legacy .realm.json is no longer written here;
+      // hostHome/interactHome (still sidecar-owned until CS-10055)
+      // are absent on a fresh realm and don't need a placeholder file.
+      // Reset all mutable metadata columns on conflict so a stale row
+      // (e.g. left over from a previous realm at the same URL whose
+      // delete didn't clean up) doesn't bleed into the new realm.
+      await query(this.dbAdapter, [
+        `INSERT INTO realm_metadata (url, publishable, show_as_catalog) VALUES (`,
+        param(url),
+        `,`,
+        param(true),
+        `,`,
+        param(null),
+        `) ON CONFLICT (url) DO UPDATE SET publishable = true, show_as_catalog = NULL, updated_at = now()`,
+      ]);
       writeJSONSync(join(realmPath, 'realm.json'), {
         data: {
           type: 'card',

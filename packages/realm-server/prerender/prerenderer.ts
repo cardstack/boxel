@@ -7,6 +7,7 @@ import {
   type RenderVisitResponse,
   logger,
   type RunCommandResponse,
+  type ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager';
 import {
@@ -526,6 +527,63 @@ export class Prerenderer {
         throw e;
       }
       log.error(`command run attempt failed (user ${userId})`, e);
+      throw e;
+    }
+  }
+
+  async prerenderScreenshot({
+    realm,
+    url,
+    auth,
+    format,
+    priority,
+    opts,
+    signal,
+  }: {
+    realm: string;
+    url: string;
+    auth: string;
+    format: 'isolated' | 'embedded';
+    priority?: number;
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    signal?: AbortSignal;
+  }): Promise<{
+    response: ScreenshotPrerenderResponse;
+    timings: Timings;
+    pool: PoolMeta;
+  }> {
+    if (this.#stopped) {
+      throw new Error('Prerenderer has been stopped and cannot be used');
+    }
+    let screenshotStart = Date.now();
+    let affinityKey = toAffinityKey({
+      affinityType: 'realm',
+      affinityValue: realm,
+    });
+    try {
+      let result = await this.#renderRunner.captureScreenshotAttempt({
+        affinityType: 'realm',
+        affinityValue: realm,
+        realm,
+        url,
+        auth,
+        format,
+        priority,
+        opts,
+        signal,
+      });
+      Prerenderer.decorateRenderErrorsWithTimings(
+        result.response,
+        result.timings,
+        Date.now() - screenshotStart,
+      );
+      return result;
+    } catch (e) {
+      if (e instanceof PrerenderCancelledError) {
+        await this.#handlePrerenderCancel(e, affinityKey, screenshotStart, url);
+        throw e;
+      }
+      log.error(`screenshot attempt failed (url ${url})`, e);
       throw e;
     }
   }

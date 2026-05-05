@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
-import { join, resolve, basename } from 'path';
+import { join, basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
 import { existsSync, readFileSync } from 'fs-extra';
@@ -337,7 +337,6 @@ module(basename(__filename), function () {
             'realm is public readable',
           );
           let body = response.text.trim();
-          let moduleAbsolutePath = resolve(join(__dirname, '..', 'person.gts'));
 
           // Remove platform-dependent id, from https://github.com/emberjs/babel-plugin-ember-template-compilation/blob/d67cca121cfb3bbf5327682b17ed3f2d5a5af528/__tests__/tests.ts#LL1430C1-L1431C1
           body = stripScopedCSSGlimmerAttributes(
@@ -346,7 +345,7 @@ module(basename(__filename), function () {
 
           assert.codeEqual(
             body,
-            compiledCard('"<id>"', moduleAbsolutePath),
+            compiledCard('"<id>"', '/person.gts'),
             'module JS is correct',
           );
         });

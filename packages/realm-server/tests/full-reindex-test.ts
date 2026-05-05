@@ -17,6 +17,7 @@ import {
   uuidv4,
 } from '@cardstack/runtime-common';
 
+import { mirrorPublishedRealmToRegistry } from '../lib/realm-registry-writes';
 import { setupDB } from './helpers';
 
 module(basename(__filename), function (hooks) {
@@ -60,17 +61,26 @@ module(basename(__filename), function (hooks) {
     publishedRealmURL: string;
     ownerUsername: string;
   }) {
+    let publishedRealmId = uuidv4();
+    let lastPublishedAt = Date.now();
     let { nameExpressions, valueExpressions } = asExpressions({
-      id: uuidv4(),
+      id: publishedRealmId,
       owner_username: ownerUsername,
       source_realm_url: sourceRealmURL,
       published_realm_url: publishedRealmURL,
-      last_published_at: Date.now().toString(),
+      last_published_at: lastPublishedAt.toString(),
     });
     await query(
       dbAdapter,
       insert('published_realms', nameExpressions, valueExpressions),
     );
+    await mirrorPublishedRealmToRegistry(dbAdapter, {
+      publishedRealmURL,
+      publishedRealmId,
+      ownerUsername,
+      sourceRealmURL,
+      lastPublishedAt,
+    });
   }
 
   test('enqueues jobs for source and published realms using the source owner', async function (assert) {
