@@ -38,7 +38,7 @@
         "title": "Add 1,000 Credits",
         "tooltip": "",
         "type": "link",
-        "url": "${realm_server}_grafana-add-credit?authHeader=${grafana_secret}&user=${matrix_user_id}&credit=1000"
+        "url": "${realm_server}_grafana-add-credit?user=${matrix_user_id}&credit=1000"
       },
       {
         "asDropdown": false,
@@ -50,7 +50,7 @@
         "title": "Add 10,000 Credits",
         "tooltip": "",
         "type": "link",
-        "url": "${realm_server}_grafana-add-credit?authHeader=${grafana_secret}&user=${matrix_user_id}&credit=10000"
+        "url": "${realm_server}_grafana-add-credit?user=${matrix_user_id}&credit=10000"
       },
       {
         "asDropdown": false,
@@ -62,7 +62,7 @@
         "title": "Add 100,000 Credits",
         "tooltip": "",
         "type": "link",
-        "url": "${realm_server}_grafana-add-credit?authHeader=${grafana_secret}&user=${matrix_user_id}&credit=100000"
+        "url": "${realm_server}_grafana-add-credit?user=${matrix_user_id}&credit=100000"
       }
     ],
     "panels": [
@@ -273,13 +273,6 @@
           "skipUrlSync": false,
           "sort": 1,
           "type": "query"
-        },
-        {
-          "hide": 2,
-          "name": "grafana_secret",
-          "query": "REPLACE_AT_APPLY_TIME",
-          "skipUrlSync": false,
-          "type": "constant"
         },
         {
           "hide": 2,

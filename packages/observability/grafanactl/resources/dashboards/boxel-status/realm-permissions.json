@@ -38,7 +38,7 @@
         "title": "Grant ${permission_label} to ${matrix_username}",
         "tooltip": "",
         "type": "link",
-        "url": "${realm_server}_grafana-upsert-realm-user-permission?authHeader=${grafana_secret}&realm=${realm_url}&user=${matrix_username}&read=${read_flag}&write=${write_flag}"
+        "url": "${realm_server}_grafana-upsert-realm-user-permission?realm=${realm_url}&user=${matrix_username}&read=${read_flag}&write=${write_flag}"
       }
     ],
     "panels": [
@@ -284,13 +284,6 @@
           "skipUrlSync": true,
           "sort": 0,
           "type": "query"
-        },
-        {
-          "hide": 2,
-          "name": "grafana_secret",
-          "query": "REPLACE_AT_APPLY_TIME",
-          "skipUrlSync": false,
-          "type": "constant"
         },
         {
           "hide": 2,

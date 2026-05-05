@@ -226,27 +226,24 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleUnpublishRealm(args),
   );
 
-  // it's awkward that these are GET's but we are working around grafana's limitations
-  router.get(
-    '/_grafana-reindex',
-    grafanaAuthorization(args.grafanaSecret),
-    handleReindex(args),
-  );
-  router.get(
-    '/_grafana-complete-job',
-    grafanaAuthorization(args.grafanaSecret),
-    handleRemoveJob(args),
-  );
-  router.get(
-    '/_grafana-add-credit',
-    grafanaAuthorization(args.grafanaSecret),
-    handleAddCredit(args),
-  );
-  router.get(
-    '/_grafana-full-reindex',
-    grafanaAuthorization(args.grafanaSecret),
-    handleFullReindex(args),
-  );
+  // GET registrations are the legacy Grafana-link dashboards; POST
+  // registrations are the Grafana-button-panel dashboards from CS-10987,
+  // which carry auth in an `Authorization: Bearer <token>` header rather
+  // than a querystring. Both verbs share the same handler + auth check —
+  // handlers read params from `ctxt.URL.searchParams`, which Koa
+  // populates the same way for both GET and POST. The dual registration
+  // is intentional for the CS-10987 cutover; once every operator has
+  // pulled the new dashboards (one release cycle), drop the GETs and
+  // the convertAuthHeaderQueryParam middleware in one cleanup PR.
+  let registerGrafanaEndpoint = (path: string, handler: Koa.Middleware) => {
+    let auth = grafanaAuthorization(args.grafanaSecret);
+    router.get(path, auth, handler);
+    router.post(path, auth, handler);
+  };
+  registerGrafanaEndpoint('/_grafana-reindex', handleReindex(args));
+  registerGrafanaEndpoint('/_grafana-complete-job', handleRemoveJob(args));
+  registerGrafanaEndpoint('/_grafana-add-credit', handleAddCredit(args));
+  registerGrafanaEndpoint('/_grafana-full-reindex', handleFullReindex(args));
   router.post('/_post-deployment', handlePostDeployment(args));
   router.post(
     '/_realm-auth',

@@ -153,47 +153,87 @@ function parseIncrementalArgsForCoalesce(
   };
 }
 
+function incrementalChangesCover(
+  existing: IncrementalChange[],
+  incoming: IncrementalChange[],
+): boolean {
+  let existingByUrl = new Map<string, IncrementalChange>();
+  for (let change of existing) {
+    existingByUrl.set(change.url, change);
+  }
+  for (let change of incoming) {
+    let match = existingByUrl.get(change.url);
+    if (!match || match.operation !== change.operation) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function chooseIncrementalCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
-  let { incoming, candidates } = context;
+  let { incoming, candidates, inFlightCandidates } = context;
   let sameTypeCandidate = candidates.find(
     (candidate) => candidate.jobType === incoming.jobType,
   );
-  if (!sameTypeCandidate) {
-    return { type: 'insert' };
-  }
+  if (sameTypeCandidate) {
+    let existingArgs = parseIncrementalArgsForCoalesce(sameTypeCandidate.args);
+    let incomingArgs = parseIncrementalArgsForCoalesce(incoming.args);
+    if (!existingArgs || !incomingArgs) {
+      return {
+        type: 'join',
+        jobId: sameTypeCandidate.id,
+        update: {
+          ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
+        },
+      };
+    }
 
-  let existingArgs = parseIncrementalArgsForCoalesce(sameTypeCandidate.args);
-  let incomingArgs = parseIncrementalArgsForCoalesce(incoming.args);
-  if (!existingArgs || !incomingArgs) {
     return {
       type: 'join',
       jobId: sameTypeCandidate.id,
       update: {
         ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
+        args: {
+          ...existingArgs,
+          changes: mergeIncrementalChanges(
+            existingArgs.changes,
+            incomingArgs.changes,
+          ),
+          coalescedCallers: mergeCoalescedCallers(
+            existingArgs.coalescedCallers,
+            incomingArgs.coalescedCallers,
+          ),
+        },
       },
     };
   }
 
-  return {
-    type: 'join',
-    jobId: sameTypeCandidate.id,
-    update: {
-      ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
-      args: {
-        ...existingArgs,
-        changes: mergeIncrementalChanges(
-          existingArgs.changes,
-          incomingArgs.changes,
-        ),
-        coalescedCallers: mergeCoalescedCallers(
-          existingArgs.coalescedCallers,
-          incomingArgs.coalescedCallers,
-        ),
-      },
-    },
-  };
+  // No still-pending candidate to merge into. Closes the race where the
+  // PATCH-path enqueue gets claimed by a worker before the file-watcher
+  // echo (or any second wave of callers) can attach via pre-claim
+  // coalesce. We piggyback on the running job, but only when its args
+  // already cover every (url, operation) we need — operation mismatch
+  // (update vs delete) means different work, so we must enqueue a new
+  // job in that case.
+  let incomingArgs = parseIncrementalArgsForCoalesce(incoming.args);
+  if (incomingArgs) {
+    for (let candidate of inFlightCandidates) {
+      if (candidate.jobType !== incoming.jobType) {
+        continue;
+      }
+      let existingArgs = parseIncrementalArgsForCoalesce(candidate.args);
+      if (!existingArgs) {
+        continue;
+      }
+      if (incrementalChangesCover(existingArgs.changes, incomingArgs.changes)) {
+        return { type: 'join', jobId: candidate.id };
+      }
+    }
+  }
+
+  return { type: 'insert' };
 }
 
 function chooseFromScratchCoalesceDecision(

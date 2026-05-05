@@ -83,6 +83,16 @@ module(basename(__filename), function () {
       let reservationB = await fetchReservation(adapter, resB);
       assert.notEqual(reservationA.completed_at, null, 'res A is closed');
       assert.notEqual(reservationB.completed_at, null, 'res B is closed');
+      assert.strictEqual(
+        reservationA.completion_reason,
+        'interrupted',
+        'res A is marked interrupted (default reason)',
+      );
+      assert.strictEqual(
+        reservationB.completion_reason,
+        'interrupted',
+        'res B is marked interrupted (default reason)',
+      );
 
       // Job rows are intentionally left 'unfulfilled' so the next worker
       // can re-claim them; abandonment after retry exhaustion is the
@@ -91,6 +101,22 @@ module(basename(__filename), function () {
       let jobB = await fetchJob(adapter, jobIdB);
       assert.strictEqual(jobA.status, 'unfulfilled');
       assert.strictEqual(jobB.status, 'unfulfilled');
+    });
+
+    test('records the supplied reason on the closed reservation', async function (assert) {
+      let workerId = 'orphan-worker-reason';
+      let jobId = await insertJob(adapter);
+      let reservationId = await insertReservation(adapter, jobId, workerId);
+
+      await finalizeOrphanedReservations(adapter, workerId, 'timeout-expired');
+
+      let reservation = await fetchReservation(adapter, reservationId);
+      assert.notEqual(reservation.completed_at, null, 'reservation closed');
+      assert.strictEqual(
+        reservation.completion_reason,
+        'timeout-expired',
+        'completion_reason reflects the caller-supplied reason',
+      );
     });
 
     test('does not touch reservations belonging to a different worker', async function (assert) {
