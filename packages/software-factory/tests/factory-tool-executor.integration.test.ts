@@ -108,7 +108,7 @@ module('factory-tool-executor integration > safety constraints', function () {
       let registry = new ToolRegistry();
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
-        targetRealmUrl: `${origin}/user/target/`,
+        targetRealmIdentifier: `${origin}/user/target/`,
         client,
       });
 
@@ -151,7 +151,7 @@ module('factory-tool-executor integration > safety constraints', function () {
       let sourceUrl = `${origin}/source/`;
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
-        targetRealmUrl: `${origin}/user/target/`,
+        targetRealmIdentifier: `${origin}/user/target/`,
         sourceRealmUrl: sourceUrl,
         client,
       });
@@ -196,7 +196,7 @@ module('factory-tool-executor integration > safety constraints', function () {
       let registry = new ToolRegistry();
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
-        targetRealmUrl: `${origin}/user/target/`,
+        targetRealmIdentifier: `${origin}/user/target/`,
         client,
       });
 

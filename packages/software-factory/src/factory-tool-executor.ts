@@ -17,7 +17,7 @@ export interface ToolExecutorConfig {
   /** Absolute path to the software-factory package root. */
   packageRoot: string;
   /** Target realm URL — tools may only target this realm. */
-  targetRealmUrl: string;
+  targetRealmIdentifier: string;
   /** Additional scratch realm URL prefixes that are allowed. */
   allowedRealmPrefixes?: string[];
   /** Source realm URL — tools must NEVER target this realm. */
@@ -217,7 +217,7 @@ export class ToolExecutor {
 
     let allowedOrigins = new Set<string>();
     try {
-      allowedOrigins.add(new URL(this.config.targetRealmUrl).origin);
+      allowedOrigins.add(new URL(this.config.targetRealmIdentifier).origin);
     } catch {
       // skip invalid
     }

@@ -59,7 +59,7 @@ const PACKAGE_ROOT = resolve(__dirname, '..');
 
 export interface IssueLoopWiringConfig {
   briefUrl: string;
-  targetRealmUrl: string;
+  targetRealmIdentifier: string;
   realmServerUrl: string;
   ownerUsername: string;
   /** Boxel CLI client — owns all realm auth and API calls. */
@@ -97,15 +97,15 @@ export interface IssueLoopWiringConfig {
 export async function runFactoryIssueLoop(
   config: IssueLoopWiringConfig,
 ): Promise<IssueLoopResult> {
-  let targetRealmUrl = ensureTrailingSlash(config.targetRealmUrl);
+  let targetRealmIdentifier = ensureTrailingSlash(config.targetRealmIdentifier);
   let realmServerUrl = ensureTrailingSlash(config.realmServerUrl);
   let client = config.client;
   let workspaceDir = config.workspaceDir;
 
   // 1. Issue store
-  let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealmUrl);
+  let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealmIdentifier);
   let issueStore = new RealmIssueStore({
-    realmUrl: targetRealmUrl,
+    realmUrl: targetRealmIdentifier,
     darkfactoryModuleUrl,
     client,
     workspaceDir,
@@ -119,7 +119,7 @@ export async function runFactoryIssueLoop(
   // 2. Context builder with issue relationship loader
   let issueLoader = new RealmIssueRelationshipLoader({
     workspaceDir,
-    realmUrl: targetRealmUrl,
+    realmUrl: targetRealmIdentifier,
   });
   let contextBuilder = new ContextBuilder({
     skillResolver: new DefaultSkillResolver(),
@@ -131,7 +131,7 @@ export async function runFactoryIssueLoop(
   let toolRegistry = new ToolRegistry([...REALM_API_TOOLS]);
   let toolExecutor = new ToolExecutor(toolRegistry, {
     packageRoot: PACKAGE_ROOT,
-    targetRealmUrl,
+    targetRealmIdentifier,
     client,
     debug: config.debug,
   });
@@ -140,7 +140,7 @@ export async function runFactoryIssueLoop(
   let cardTypeSchemas = await loadDarkFactorySchemas(
     client,
     realmServerUrl,
-    targetRealmUrl,
+    targetRealmIdentifier,
     darkfactoryModuleBase,
   );
 
@@ -166,7 +166,7 @@ export async function runFactoryIssueLoop(
   ).href;
   let hostAppUrl = config.hostAppUrl ?? realmServerUrl;
   let toolBuilderConfig: ToolBuilderConfig = {
-    targetRealmUrl,
+    targetRealmIdentifier,
     darkfactoryModuleUrl,
     realmServerUrl,
     client,
@@ -224,7 +224,7 @@ export async function runFactoryIssueLoop(
     });
 
   // 6. Run issue loop
-  log.info(`Starting issue loop: targetRealm=${targetRealmUrl}`);
+  log.info(`Starting issue loop: targetRealm=${targetRealmIdentifier}`);
 
   let issueLoopConfig: IssueLoopConfig = {
     agent,
@@ -232,10 +232,10 @@ export async function runFactoryIssueLoop(
     tools,
     issueStore,
     createValidator,
-    targetRealmUrl,
+    targetRealmIdentifier,
     workspaceDir,
     syncWorkspace: () =>
-      syncWorkspaceToRealm(client, targetRealmUrl, workspaceDir),
+      syncWorkspaceToRealm(client, targetRealmIdentifier, workspaceDir),
     briefUrl: config.briefUrl,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
     maxOuterCycles: config.maxOuterCycles,
@@ -351,12 +351,12 @@ export interface WorkspaceSyncOutcome {
 
 export async function syncWorkspaceToRealm(
   client: BoxelCLIClient,
-  targetRealmUrl: string,
+  targetRealmIdentifier: string,
   workspaceDir: string,
 ): Promise<WorkspaceSyncOutcome> {
   try {
     let result = await withStdoutRedirected(() =>
-      client.sync(targetRealmUrl, workspaceDir, { preferLocal: true }),
+      client.sync(targetRealmIdentifier, workspaceDir, { preferLocal: true }),
     );
     if (result.error) {
       log.warn(`Workspace sync error: ${result.error}`);

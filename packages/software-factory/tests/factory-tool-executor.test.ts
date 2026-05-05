@@ -20,7 +20,7 @@ function makeConfig(
   let { fetch: fetchOverride, client, ...rest } = overrides ?? {};
   return {
     packageRoot: '/fake/software-factory',
-    targetRealmUrl: 'https://realms.example.test/user/target/',
+    targetRealmIdentifier: 'https://realms.example.test/user/target/',
     client:
       client ??
       createMockClient(fetchOverride ? { fetch: fetchOverride } : undefined),

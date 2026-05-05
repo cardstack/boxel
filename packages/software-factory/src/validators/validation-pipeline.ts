@@ -48,7 +48,7 @@ let log = logger('validation-pipeline');
 export interface ValidationStepRunner {
   readonly step: ValidationStep;
   run(
-    targetRealmUrl: string,
+    targetRealmIdentifier: string,
     iteration?: number,
   ): Promise<ValidationStepResult>;
   /** Format step results for LLM context. Returns human-readable string, empty if nothing to report. */
@@ -72,7 +72,7 @@ export class ValidationPipeline implements Validator {
   }
 
   async validate(
-    targetRealmUrl: string,
+    targetRealmIdentifier: string,
     iteration?: number,
   ): Promise<ValidationResults> {
     if (this.runners.length === 0) {
@@ -80,7 +80,7 @@ export class ValidationPipeline implements Validator {
     }
 
     let settled = await Promise.allSettled(
-      this.runners.map((runner) => runner.run(targetRealmUrl, iteration)),
+      this.runners.map((runner) => runner.run(targetRealmIdentifier, iteration)),
     );
 
     let stepResults: ValidationStepResult[] = [];

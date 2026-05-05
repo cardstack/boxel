@@ -61,7 +61,7 @@ test.describe('factory-test-realm e2e', () => {
       await client.pull(realmUrl, workspace.dir);
 
       let handle = await executeTestRunFromRealm({
-        targetRealmUrl: realmUrl,
+        targetRealmIdentifier: realmUrl,
         testResultsModuleUrl,
         realmServerUrl: realm.realmServerURL.href,
         slug: 'hello-e2e',
@@ -139,7 +139,7 @@ test.describe('factory-test-realm e2e', () => {
       await client.pull(realmUrl, workspace.dir);
 
       let handle = await executeTestRunFromRealm({
-        targetRealmUrl: realmUrl,
+        targetRealmIdentifier: realmUrl,
         testResultsModuleUrl,
         realmServerUrl: realm.realmServerURL.href,
         slug: 'hello-fail',
@@ -200,7 +200,7 @@ test.describe('factory-test-realm e2e', () => {
     let workspace = createTestWorkspace();
     workspace.write('blocker', 'file');
     let options: TestRunRealmOptions = {
-      targetRealmUrl: 'http://localhost:1/',
+      targetRealmIdentifier: 'http://localhost:1/',
       testResultsModuleUrl: 'http://localhost:1/software-factory/test-results',
       client: createMockClient(),
       workspaceDir: `${workspace.dir}/blocker`,

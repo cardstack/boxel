@@ -107,7 +107,7 @@ const SAMPLE_CONTEXT: AgentContext = {
       outputFormat: 'text' as const,
     },
   ],
-  targetRealmUrl: 'http://localhost:4201/user/personal/',
+  targetRealmIdentifier: 'http://localhost:4201/user/personal/',
 };
 
 const SAMPLE_PREVIOUS_ACTIONS: AgentAction[] = [

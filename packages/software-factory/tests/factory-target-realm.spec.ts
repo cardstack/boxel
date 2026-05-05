@@ -68,7 +68,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
 
   let realmServerURL = realm.realmServerURL.href;
   let newEndpoint = `e2e-realm-${Date.now()}`;
-  let targetRealmUrl = new URL(
+  let targetRealmIdentifier = new URL(
     `${targetUsername}/${newEndpoint}/`,
     realmServerURL,
   ).href;
@@ -97,8 +97,8 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         resolve(packageRoot, 'src/cli/factory-entrypoint.ts'),
         '--brief-url',
         briefUrl,
-        '--target-realm-url',
-        targetRealmUrl,
+        '--target-realm-identifier',
+        targetRealmIdentifier,
         '--realm-server-url',
         realmServerURL,
         '--no-retry-blocked',
@@ -128,10 +128,10 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       matrixURL,
       targetUsername,
       targetPassword,
-      targetRealmUrl,
+      targetRealmIdentifier,
     );
 
-    let seedIssueUrl = new URL('Issues/bootstrap-seed', targetRealmUrl).href;
+    let seedIssueUrl = new URL('Issues/bootstrap-seed', targetRealmIdentifier).href;
     let seedIssueResponse = await fetch(seedIssueUrl, {
       headers: {
         Accept: SupportedMimeType.CardSource,

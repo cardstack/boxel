@@ -121,7 +121,7 @@ function makeConfig(
   let { fetch: fetchOverride, client, workspaceDir, ...rest } = overrides ?? {};
   let workspace = workspaceDir ? undefined : makeWorkspace();
   let config: ToolBuilderConfig = {
-    targetRealmUrl: TARGET_REALM,
+    targetRealmIdentifier: TARGET_REALM,
     darkfactoryModuleUrl:
       'https://realms.example.test/software-factory/darkfactory',
     realmServerUrl: 'https://realms.example.test/',
@@ -1080,7 +1080,7 @@ module('buildFactoryTools — run_tests', function () {
   test('delegates to injected runTestsInMemory and forwards realm config', async function (assert) {
     let capturedOptions:
       | {
-          targetRealmUrl: string;
+          targetRealmIdentifier: string;
           hostAppUrl: string;
         }
       | undefined;
@@ -1098,7 +1098,7 @@ module('buildFactoryTools — run_tests', function () {
       hostAppUrl: 'https://host.example.test/',
       runTestsInMemory: async (options) => {
         capturedOptions = {
-          targetRealmUrl: options.targetRealmUrl,
+          targetRealmIdentifier: options.targetRealmIdentifier,
           hostAppUrl: options.hostAppUrl,
         };
         return stubResult;
@@ -1113,9 +1113,9 @@ module('buildFactoryTools — run_tests', function () {
 
     assert.deepEqual(result, stubResult, 'tool returns the in-memory result');
     assert.strictEqual(
-      capturedOptions?.targetRealmUrl,
+      capturedOptions?.targetRealmIdentifier,
       TARGET_REALM,
-      'forwards targetRealmUrl from config',
+      'forwards targetRealmIdentifier from config',
     );
     assert.strictEqual(
       capturedOptions?.hostAppUrl,
@@ -1179,7 +1179,7 @@ module('buildFactoryTools — run_lint', function () {
   test('delegates to injected runLintInMemory and forwards realm config', async function (assert) {
     let capturedOptions:
       | {
-          targetRealmUrl: string;
+          targetRealmIdentifier: string;
           hasClient: boolean;
           path: string | undefined;
         }
@@ -1198,7 +1198,7 @@ module('buildFactoryTools — run_lint', function () {
     let config = makeConfig({
       runLintInMemory: async (options) => {
         capturedOptions = {
-          targetRealmUrl: options.targetRealmUrl,
+          targetRealmIdentifier: options.targetRealmIdentifier,
           hasClient: Boolean(options.client),
           path: options.path,
         };
@@ -1213,9 +1213,9 @@ module('buildFactoryTools — run_lint', function () {
 
     assert.deepEqual(result, stubResult, 'tool returns the in-memory result');
     assert.strictEqual(
-      capturedOptions?.targetRealmUrl,
+      capturedOptions?.targetRealmIdentifier,
       TARGET_REALM,
-      'forwards targetRealmUrl from config',
+      'forwards targetRealmIdentifier from config',
     );
     assert.true(
       capturedOptions?.hasClient,
@@ -1631,7 +1631,7 @@ module('buildFactoryTools — run_evaluate', function () {
   test('delegates to injected runEvaluateInMemory and forwards realm config', async function (assert) {
     let capturedOptions:
       | {
-          targetRealmUrl: string;
+          targetRealmIdentifier: string;
           realmServerUrl: string;
           hasClient: boolean;
           path: string | undefined;
@@ -1649,7 +1649,7 @@ module('buildFactoryTools — run_evaluate', function () {
     let config = makeConfig({
       runEvaluateInMemory: async (options) => {
         capturedOptions = {
-          targetRealmUrl: options.targetRealmUrl,
+          targetRealmIdentifier: options.targetRealmIdentifier,
           realmServerUrl: options.realmServerUrl,
           hasClient: Boolean(options.client),
           path: options.path,
@@ -1666,9 +1666,9 @@ module('buildFactoryTools — run_evaluate', function () {
 
     assert.deepEqual(result, stubResult, 'tool returns the in-memory result');
     assert.strictEqual(
-      capturedOptions?.targetRealmUrl,
+      capturedOptions?.targetRealmIdentifier,
       TARGET_REALM,
-      'forwards targetRealmUrl from config',
+      'forwards targetRealmIdentifier from config',
     );
     assert.strictEqual(
       capturedOptions?.realmServerUrl,
@@ -1815,7 +1815,7 @@ module('buildFactoryTools — run_parse', function () {
   test('delegates to injected runParseInMemory and forwards realm config', async function (assert) {
     let capturedOptions:
       | {
-          targetRealmUrl: string;
+          targetRealmIdentifier: string;
           hasClient: boolean;
           path: string | undefined;
         }
@@ -1833,7 +1833,7 @@ module('buildFactoryTools — run_parse', function () {
     let config = makeConfig({
       runParseInMemory: async (options) => {
         capturedOptions = {
-          targetRealmUrl: options.targetRealmUrl,
+          targetRealmIdentifier: options.targetRealmIdentifier,
           hasClient: Boolean(options.client),
           path: options.path,
         };
@@ -1848,9 +1848,9 @@ module('buildFactoryTools — run_parse', function () {
 
     assert.deepEqual(result, stubResult, 'tool returns the in-memory result');
     assert.strictEqual(
-      capturedOptions?.targetRealmUrl,
+      capturedOptions?.targetRealmIdentifier,
       TARGET_REALM,
-      'forwards targetRealmUrl from config',
+      'forwards targetRealmIdentifier from config',
     );
     assert.true(
       capturedOptions?.hasClient,
@@ -1997,7 +1997,7 @@ module('buildFactoryTools — run_instantiate', function () {
   test('delegates to injected runInstantiateInMemory and forwards realm config', async function (assert) {
     let capturedOptions:
       | {
-          targetRealmUrl: string;
+          targetRealmIdentifier: string;
           realmServerUrl: string;
           hasClient: boolean;
           path: string | undefined;
@@ -2015,7 +2015,7 @@ module('buildFactoryTools — run_instantiate', function () {
     let config = makeConfig({
       runInstantiateInMemory: async (options) => {
         capturedOptions = {
-          targetRealmUrl: options.targetRealmUrl,
+          targetRealmIdentifier: options.targetRealmIdentifier,
           realmServerUrl: options.realmServerUrl,
           hasClient: Boolean(options.client),
           path: options.path,
@@ -2032,9 +2032,9 @@ module('buildFactoryTools — run_instantiate', function () {
 
     assert.deepEqual(result, stubResult, 'tool returns the in-memory result');
     assert.strictEqual(
-      capturedOptions?.targetRealmUrl,
+      capturedOptions?.targetRealmIdentifier,
       TARGET_REALM,
-      'forwards targetRealmUrl from config',
+      'forwards targetRealmIdentifier from config',
     );
     assert.strictEqual(
       capturedOptions?.realmServerUrl,

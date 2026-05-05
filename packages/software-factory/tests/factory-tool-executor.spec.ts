@@ -42,7 +42,7 @@ test('unregistered tool is rejected without reaching the server', async ({
     let registry = new ToolRegistry();
     let executor = new ToolExecutor(registry, {
       packageRoot: process.cwd(),
-      targetRealmUrl: realm.realmURL.href,
+      targetRealmIdentifier: realm.realmURL.href,
       client,
     });
 
@@ -76,7 +76,7 @@ async function buildToolsForRealm(
   let registry = new ToolRegistry();
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
-    targetRealmUrl: realm.realmURL.href,
+    targetRealmIdentifier: realm.realmURL.href,
     allowedRealmPrefixes: [realm.realmURL.origin + '/'],
     client,
   });
@@ -123,7 +123,7 @@ async function buildToolsForRealm(
 
   return buildFactoryTools(
     {
-      targetRealmUrl: realm.realmURL.href,
+      targetRealmIdentifier: realm.realmURL.href,
       darkfactoryModuleUrl: `${realm.realmServerURL.href}software-factory/darkfactory`,
       realmServerUrl: realm.realmServerURL.href,
       client,

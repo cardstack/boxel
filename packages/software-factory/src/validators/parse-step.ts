@@ -70,7 +70,7 @@ export interface ParseValidationStepConfig {
   /** Injected for testing — defaults to getNextValidationSequenceNumber. */
   getNextSequenceNumber?: (
     slug: string,
-    targetRealmUrl: string,
+    targetRealmIdentifier: string,
   ) => Promise<number>;
   /**
    * Injected for testing — runs glint (ember-tsc) on .gts files.
@@ -100,26 +100,26 @@ export class ParseValidationStep implements ValidationStepRunner {
 
   private getNextSeqFn: (
     slug: string,
-    targetRealmUrl: string,
+    targetRealmIdentifier: string,
   ) => Promise<number>;
 
   constructor(config: ParseValidationStepConfig) {
     this.config = config;
     this.getNextSeqFn =
       config.getNextSequenceNumber ??
-      ((slug: string, targetRealmUrl: string) =>
+      ((slug: string, targetRealmIdentifier: string) =>
         getNextValidationSequenceNumber(
           config.client,
           slug,
           'Validations/parse_',
           config.parseResultsModuleUrl,
           'ParseResult',
-          targetRealmUrl,
+          targetRealmIdentifier,
         ));
   }
 
   async run(
-    targetRealmUrl: string,
+    targetRealmIdentifier: string,
     iteration?: number,
   ): Promise<ValidationStepResult> {
     // Step 1: Discover files to validate via the shared engine.
@@ -128,12 +128,12 @@ export class ParseValidationStep implements ValidationStepRunner {
     try {
       let [gts, json] = await Promise.all([
         discoverParseableGtsFiles({
-          targetRealmUrl,
+          targetRealmIdentifier,
           client: this.config.client,
           fetchFilenames: this.config.fetchFilenames,
         }),
         discoverJsonExampleFiles({
-          targetRealmUrl,
+          targetRealmIdentifier,
           client: this.config.client,
           searchSpecsFn: this.config.searchSpecsFn,
         }),
@@ -167,7 +167,7 @@ export class ParseValidationStep implements ValidationStepRunner {
       : 'validation';
 
     let issueURL = this.config.issueId
-      ? new URL(this.config.issueId, targetRealmUrl).href
+      ? new URL(this.config.issueId, targetRealmIdentifier).href
       : undefined;
 
     let seq: number;
@@ -175,7 +175,7 @@ export class ParseValidationStep implements ValidationStepRunner {
       seq = iteration;
     } else {
       try {
-        let realmSeq = await this.getNextSeqFn(slug, targetRealmUrl);
+        let realmSeq = await this.getNextSeqFn(slug, targetRealmIdentifier);
         seq = Math.max(realmSeq, this.lastSequenceNumber + 1);
       } catch (err) {
         log.warn(
@@ -192,7 +192,7 @@ export class ParseValidationStep implements ValidationStepRunner {
         slug,
         this.config.parseResultsModuleUrl,
         {
-          targetRealmUrl,
+          targetRealmIdentifier,
           client: this.config.client,
           workspaceDir: this.config.workspaceDir,
           sequenceNumber: seq,
@@ -222,7 +222,7 @@ export class ParseValidationStep implements ValidationStepRunner {
       durationMs,
     } = await parseRealmFiles(
       {
-        targetRealmUrl,
+        targetRealmIdentifier,
         client: this.config.client,
         workspaceDir: this.config.workspaceDir,
         readFileFn: this.config.readFileFn,
@@ -244,7 +244,7 @@ export class ParseValidationStep implements ValidationStepRunner {
           fileResults: allFileResults,
         },
         {
-          targetRealmUrl,
+          targetRealmIdentifier,
           client: this.config.client,
           workspaceDir: this.config.workspaceDir,
         },
