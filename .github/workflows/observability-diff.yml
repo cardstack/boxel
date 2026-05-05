@@ -46,10 +46,10 @@ jobs:
       # `ssm:GetParameter` on:
       #   /staging/grafana/grafanactl_token        (pull-from-staging auth)
       #   /staging/boxel-grafana/realm_server_url  (placeholder substitution)
-      #   /staging/boxel/GRAFANA_SECRET            (CS-10929 — placeholder
-      #                                             substitution; same SSM
-      #                                             path the apply workflow
-      #                                             uses)
+      # The apply role also grants /<env>/boxel/GRAFANA_SECRET, but diff
+      # doesn't read it — diff.sh redacts the secret on both sides before
+      # diffing rather than substituting the real value, so PR comment
+      # output can never carry the credential. See diff.sh for details.
       AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
       GRAFANACTL_VERSION: "0.1.10"
       DIFF_MARKER: "<!-- observability-diff -->"
@@ -78,10 +78,11 @@ jobs:
         #                   substitutes per-env, so diff.sh has to know
         #                   the same per-env value to compare
         #                   apples-to-apples.
-        # GRAFANA_SECRET:   CS-10929 — same rationale, for the
-        #                   `grafana_secret` constant template variable
-        #                   substituted into operator-action button
-        #                   panels' Authorization headers.
+        #
+        # GRAFANA_SECRET is intentionally NOT fetched here — diff.sh
+        # redacts both sides of the diff for the `grafana_secret`
+        # constant template variable, so it never needs the real value
+        # and there's no risk of it appearing in the PR comment output.
         run: |
           GRAFANA_TOKEN="$(aws ssm get-parameter \
             --name /staging/grafana/grafanactl_token \
@@ -95,13 +96,6 @@ jobs:
             --query 'Parameter.Value' \
             --output text)"
           echo "REALM_SERVER_URL=$REALM_SERVER_URL" >> "$GITHUB_ENV"
-          GRAFANA_SECRET="$(aws ssm get-parameter \
-            --name /staging/boxel/GRAFANA_SECRET \
-            --with-decryption \
-            --query 'Parameter.Value' \
-            --output text)"
-          echo "::add-mask::$GRAFANA_SECRET"
-          echo "GRAFANA_SECRET=$GRAFANA_SECRET" >> "$GITHUB_ENV"
 
       - name: Lint
         # Catch manifest issues at PR time, before the diff step does an

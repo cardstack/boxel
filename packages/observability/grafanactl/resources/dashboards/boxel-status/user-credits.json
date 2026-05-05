@@ -34,7 +34,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Operator actions: add extra credit to ${matrix_user_id}. Each button POSTs to the realm-server with `Authorization: Bearer ${grafana_secret}` (substituted at apply time from SSM, CS-10929) and shows a confirmation dialog before firing.",
+        "description": "Operator actions: add extra credit to the user selected above. Each button POSTs to the realm-server with an Authorization: Bearer header (token substituted into a hidden constant template variable at apply time from SSM, CS-10929) and shows a confirmation dialog before firing.",
         "fieldConfig": {
           "defaults": {
             "actions": [

@@ -34,7 +34,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Operator action: grant the selected permission level to the chosen Matrix user on the chosen realm. The button POSTs to the realm-server with `Authorization: Bearer ${grafana_secret}`; the secret is substituted at apply time from SSM (CS-10929). Confirmation dialog shows what's about to change.",
+        "description": "Operator action: grant the selected permission level to the chosen Matrix user on the chosen realm. The button POSTs to the realm-server with an Authorization: Bearer header (token substituted into a hidden constant template variable at apply time from SSM, CS-10929). Confirmation dialog shows what's about to change.",
         "fieldConfig": {
           "defaults": {
             "actions": [

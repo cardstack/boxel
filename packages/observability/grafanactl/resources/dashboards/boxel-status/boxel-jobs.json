@@ -34,7 +34,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Operator actions: trigger a reindex via the realm-server. Each button POSTs with `Authorization: Bearer ${grafana_secret}` (substituted at apply time from SSM, CS-10929) and shows a confirmation dialog. Single-realm reindex targets ${full_index_realm}; full reindex hits every realm and is the more disruptive option.",
+        "description": "Operator actions: trigger a reindex via the realm-server. Each button POSTs with an Authorization: Bearer header (token substituted into a hidden constant template variable at apply time from SSM, CS-10929) and shows a confirmation dialog. Single-realm reindex targets the realm in the variable picker above; full reindex hits every realm and is the more disruptive option.",
         "fieldConfig": {
           "defaults": {
             "actions": [
