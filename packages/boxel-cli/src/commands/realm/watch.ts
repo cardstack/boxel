@@ -1,11 +1,7 @@
 import { InvalidArgumentError, type Command } from 'commander';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import {
-  RealmSyncBase,
-  isProtectedFile,
-  type SyncOptions,
-} from '../../lib/realm-sync-base';
+import { RealmSyncBase, isProtectedFile } from '../../lib/realm-sync-base';
 import {
   CheckpointManager,
   type Checkpoint,
@@ -51,11 +47,6 @@ export interface FlushResult {
   checkpoint: Checkpoint | null;
 }
 
-interface WatcherInternalOptions extends SyncOptions {
-  debounceMs: number;
-  quiet: boolean;
-}
-
 /**
  * Watches a single realm by polling `_mtimes`, accumulating changes between
  * ticks, and applying them in a debounced batch (download + delete + write
@@ -75,13 +66,10 @@ export class RealmWatcher extends RealmSyncBase {
     authenticator: RealmAuthenticator,
     options: { debounceMs: number; quiet: boolean },
   ) {
-    const internal: WatcherInternalOptions = {
-      realmUrl: spec.realmUrl,
-      localDir: spec.localDir,
-      debounceMs: options.debounceMs,
-      quiet: options.quiet,
-    };
-    super(internal, authenticator);
+    super(
+      { realmUrl: spec.realmUrl, localDir: spec.localDir },
+      authenticator,
+    );
     this.debounceMs = options.debounceMs;
     this.quiet = options.quiet;
     this.checkpointManager = new CheckpointManager(spec.localDir);
@@ -131,19 +119,12 @@ export class RealmWatcher extends RealmSyncBase {
   }
 
   /**
-   * Verify realm access, ensure the checkpoint history is initialized, and
-   * seed `lastKnownMtimes` from the on-disk manifest if one exists.
+   * Verify realm access (via the throw-on-error override), ensure the
+   * checkpoint history is initialized, and seed `lastKnownMtimes` from the
+   * on-disk manifest if one exists.
    */
   async initialize(): Promise<void> {
-    const url = `${this.normalizedRealmUrl}_mtimes`;
-    const response = await this.authenticator.authedRealmFetch(url, {
-      headers: { Accept: 'application/vnd.api+json' },
-    });
-    if (!response.ok) {
-      throw new Error(
-        `Cannot access realm ${this.normalizedRealmUrl}: ${response.status} ${response.statusText}`,
-      );
-    }
+    await this.getRemoteMtimes();
 
     if (!(await this.checkpointManager.isInitialized())) {
       await this.checkpointManager.init();
@@ -244,7 +225,7 @@ export class RealmWatcher extends RealmSyncBase {
       }
     }
 
-    await this.persistManifest();
+    await this.persistManifest(pulled, deleted);
 
     const checkpoint = await this.checkpointManager.createCheckpoint(
       'remote',
@@ -294,29 +275,42 @@ export class RealmWatcher extends RealmSyncBase {
     return true;
   }
 
-  private async persistManifest(): Promise<void> {
-    const manifest: SyncManifest = {
-      realmUrl: this.normalizedRealmUrl,
-      files: {},
-      remoteMtimes: {},
-    };
-    for (const [file, mtime] of this.lastKnownMtimes) {
+  // Mutate just the entries that changed in this flush instead of
+  // rehashing everything in lastKnownMtimes — keeps each apply O(changed).
+  private async persistManifest(
+    pulled: string[],
+    deleted: string[],
+  ): Promise<void> {
+    const prior = await loadManifest(this.options.localDir);
+    const files: Record<string, string> = prior?.files
+      ? { ...prior.files }
+      : {};
+
+    for (const file of deleted) {
+      delete files[file];
+    }
+    for (const file of pulled) {
       const localPath = path.join(this.options.localDir, file);
       try {
-        const hash = await computeFileHash(localPath);
-        manifest.files[file] = hash;
-        if (mtime !== 0) {
-          manifest.remoteMtimes![file] = mtime;
-        }
+        files[file] = await computeFileHash(localPath);
       } catch (err: any) {
         if (err.code !== 'ENOENT') throw err;
       }
     }
-    if (
-      manifest.remoteMtimes &&
-      Object.keys(manifest.remoteMtimes).length === 0
-    ) {
-      delete manifest.remoteMtimes;
+
+    const remoteMtimes: Record<string, number> = {};
+    for (const [file, mtime] of this.lastKnownMtimes) {
+      if (mtime !== 0) {
+        remoteMtimes[file] = mtime;
+      }
+    }
+
+    const manifest: SyncManifest = {
+      realmUrl: this.normalizedRealmUrl,
+      files,
+    };
+    if (Object.keys(remoteMtimes).length > 0) {
+      manifest.remoteMtimes = remoteMtimes;
     }
     await saveManifest(this.options.localDir, manifest);
   }
