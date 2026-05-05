@@ -382,15 +382,8 @@ module(basename(__filename), function () {
           dbAdapter,
           definitionLookup: instanceB,
         });
-        listenerB.start();
+        await listenerB.start();
         try {
-          // Give B's LISTEN connection a moment to subscribe before A
-          // emits the NOTIFY. Otherwise B will miss the notification
-          // entirely (and have to fall back to the 60s health poll, which
-          // doesn't resync state because there's nothing to poll — the
-          // payload IS the dispatch).
-          await new Promise((r) => setTimeout(r, 100));
-
           const instanceA = new CachingDefinitionLookup(
             dbAdapter,
             stubPrerenderer,
@@ -443,10 +436,8 @@ module(basename(__filename), function () {
           dbAdapter,
           definitionLookup: instanceB,
         });
-        listenerB.start();
+        await listenerB.start();
         try {
-          await new Promise((r) => setTimeout(r, 100));
-
           const instanceA = new CachingDefinitionLookup(
             dbAdapter,
             stubPrerenderer,
@@ -478,10 +469,8 @@ module(basename(__filename), function () {
           dbAdapter,
           definitionLookup: instanceB,
         });
-        listenerB.start();
+        await listenerB.start();
         try {
-          await new Promise((r) => setTimeout(r, 100));
-
           const instanceA = new CachingDefinitionLookup(
             dbAdapter,
             stubPrerenderer,
@@ -525,10 +514,8 @@ module(basename(__filename), function () {
           dbAdapter,
           definitionLookup: instanceA,
         });
-        listenerA.start();
+        await listenerA.start();
         try {
-          await new Promise((r) => setTimeout(r, 100));
-
           // Synchronously, invalidate() bumps the module generation
           // before awaiting the DELETE. Then the DELETE commits, the
           // pg_notify fires, and the listener (this same instance) bumps
@@ -565,10 +552,8 @@ module(basename(__filename), function () {
           dbAdapter,
           definitionLookup: makeStubLookup(recorderA),
         });
-        listenerA.start();
+        await listenerA.start();
         try {
-          await new Promise((r) => setTimeout(r, 100));
-
           await query(dbAdapter, [
             `SELECT pg_notify(`,
             param(MODULE_CACHE_INVALIDATED_CHANNEL),

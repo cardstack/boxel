@@ -587,7 +587,7 @@ const getIndexHTML = async () => {
     dbAdapter,
     definitionLookup,
   });
-  moduleCacheInvalidationListener.start();
+  await moduleCacheInvalidationListener.start();
 
   let actualPort =
     (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
