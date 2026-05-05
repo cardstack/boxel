@@ -32,12 +32,14 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
   async function (args) {
     let { jobInfo, realmURL, runAs, cardId, format } = args;
     log.debug(
-      `${jobIdentity(jobInfo)} starting screenshot-card for job: ${JSON.stringify({
-        realmURL,
-        runAs,
-        cardId,
-        format,
-      })}`,
+      `${jobIdentity(jobInfo)} starting screenshot-card for job: ${JSON.stringify(
+        {
+          realmURL,
+          runAs,
+          cardId,
+          format,
+        },
+      )}`,
     );
     reportStatus(jobInfo, 'start');
 
