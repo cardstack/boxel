@@ -106,11 +106,15 @@ module(basename(__filename), function () {
         (
           testDbAdapter as { execute: typeof testDbAdapter.execute }
         ).execute = async (sql, opts) => {
+          // `param('instance')` becomes a `$N` placeholder in the rendered
+          // SQL — we have to look at opts.bind to see whether this query
+          // is filtering for instance rows.
+          let bind = opts?.bind ?? [];
           let normalized = sql.replace(/\s+/g, ' ');
-          if (
+          let isBoxelIndexInstanceLookup =
             /FROM boxel_index\b/.test(normalized) &&
-            normalized.includes("'instance'")
-          ) {
+            bind.some((v) => v === 'instance');
+          if (isBoxelIndexInstanceLookup) {
             // Old per-link path: WHERE i.url = $1 OR i.file_alias = $1
             // New batched path:  WHERE i.url IN ($1, ..., $N) OR i.file_alias IN (...)
             if (/\bi\.url\s+IN\s*\(/.test(normalized)) {

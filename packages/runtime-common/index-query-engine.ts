@@ -220,36 +220,45 @@ export class IndexQueryEngine {
     if (urls.length === 0) {
       return resultMap;
     }
-    let lookupHrefs = new Set(urls.map((u) => u.href));
-    let lookupParams = [...lookupHrefs].map((href) => [param(href)]);
-    let rows = (await this.#query([
-      `SELECT i.*, embedded_html, fitted_html`,
-      `FROM ${tableFromOpts(opts)} as i
-       WHERE`,
-      ...every([
-        any([
-          ['i.url IN', ...addExplicitParens(separatedByCommas(lookupParams))],
-          [
-            'i.file_alias IN',
-            ...addExplicitParens(separatedByCommas(lookupParams)),
-          ],
+    let lookupHrefs = [...new Set(urls.map((u) => u.href))];
+    // Each chunk emits 2*N + 1 placeholders (url IN list + file_alias IN list
+    // + i.type param). Cap at half the existing url-batch sizes used in
+    // index-writer.ts (sqlite=900, pg=5000) so we stay well under both
+    // adapter parameter limits.
+    let chunkSize = this.#dbAdapter.kind === 'sqlite' ? 450 : 2500;
+    for (let start = 0; start < lookupHrefs.length; start += chunkSize) {
+      let chunk = lookupHrefs.slice(start, start + chunkSize);
+      let chunkSet = new Set(chunk);
+      let chunkParams = chunk.map((href) => [param(href)]);
+      let rows = (await this.#query([
+        `SELECT i.*, embedded_html, fitted_html`,
+        `FROM ${tableFromOpts(opts)} as i
+         WHERE`,
+        ...every([
+          any([
+            ['i.url IN', ...addExplicitParens(separatedByCommas(chunkParams))],
+            [
+              'i.file_alias IN',
+              ...addExplicitParens(separatedByCommas(chunkParams)),
+            ],
+          ]),
+          ['i.type =', param('instance')],
+          any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
         ]),
-        ['i.type =', param('instance')],
-        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
-      ]),
-    ] as Expression)) as unknown as BoxelIndexTable[];
-    for (let row of rows) {
-      let mapped = this.#rowToInstanceOrError(row, undefined, opts);
-      if (!mapped) {
-        continue;
-      }
-      // A row may be addressable by its url or its file_alias.
-      // Index the result under whichever lookup keys the caller asked about.
-      if (row.url && lookupHrefs.has(row.url)) {
-        resultMap.set(row.url, mapped);
-      }
-      if (row.file_alias && lookupHrefs.has(row.file_alias)) {
-        resultMap.set(row.file_alias, mapped);
+      ] as Expression)) as unknown as BoxelIndexTable[];
+      for (let row of rows) {
+        let mapped = this.#rowToInstanceOrError(row, undefined, opts);
+        if (!mapped) {
+          continue;
+        }
+        // A row may be addressable by its url or its file_alias.
+        // Index the result under whichever lookup keys the caller asked about.
+        if (row.url && chunkSet.has(row.url)) {
+          resultMap.set(row.url, mapped);
+        }
+        if (row.file_alias && chunkSet.has(row.file_alias)) {
+          resultMap.set(row.file_alias, mapped);
+        }
       }
     }
     return resultMap;
@@ -366,35 +375,42 @@ export class IndexQueryEngine {
     if (urls.length === 0) {
       return resultMap;
     }
-    let lookupHrefs = new Set(urls.map((u) => u.href));
-    let lookupParams = [...lookupHrefs].map((href) => [param(href)]);
-    let rows = (await this.#query([
-      `SELECT i.*`,
-      `FROM ${tableFromOpts(opts)} as i
-       WHERE`,
-      ...every([
-        any([
-          ['i.url IN', ...addExplicitParens(separatedByCommas(lookupParams))],
-          [
-            'i.file_alias IN',
-            ...addExplicitParens(separatedByCommas(lookupParams)),
-          ],
+    let lookupHrefs = [...new Set(urls.map((u) => u.href))];
+    // Same chunking discipline as getInstances — keeps placeholder count
+    // safely below the sqlite/pg parameter limits.
+    let chunkSize = this.#dbAdapter.kind === 'sqlite' ? 450 : 2500;
+    for (let start = 0; start < lookupHrefs.length; start += chunkSize) {
+      let chunk = lookupHrefs.slice(start, start + chunkSize);
+      let chunkSet = new Set(chunk);
+      let chunkParams = chunk.map((href) => [param(href)]);
+      let rows = (await this.#query([
+        `SELECT i.*`,
+        `FROM ${tableFromOpts(opts)} as i
+         WHERE`,
+        ...every([
+          any([
+            ['i.url IN', ...addExplicitParens(separatedByCommas(chunkParams))],
+            [
+              'i.file_alias IN',
+              ...addExplicitParens(separatedByCommas(chunkParams)),
+            ],
+          ]),
+          ['i.type =', param('file')],
+          any([['i.has_error = FALSE'], ['i.has_error IS NULL']]),
+          any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
         ]),
-        ['i.type =', param('file')],
-        any([['i.has_error = FALSE'], ['i.has_error IS NULL']]),
-        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
-      ]),
-    ] as Expression)) as unknown as BoxelIndexTable[];
-    for (let row of rows) {
-      let mapped = this.#rowToIndexedFile(row);
-      if (!mapped) {
-        continue;
-      }
-      if (row.url && lookupHrefs.has(row.url)) {
-        resultMap.set(row.url, mapped);
-      }
-      if (row.file_alias && lookupHrefs.has(row.file_alias)) {
-        resultMap.set(row.file_alias, mapped);
+      ] as Expression)) as unknown as BoxelIndexTable[];
+      for (let row of rows) {
+        let mapped = this.#rowToIndexedFile(row);
+        if (!mapped) {
+          continue;
+        }
+        if (row.url && chunkSet.has(row.url)) {
+          resultMap.set(row.url, mapped);
+        }
+        if (row.file_alias && chunkSet.has(row.file_alias)) {
+          resultMap.set(row.file_alias, mapped);
+        }
       }
     }
     return resultMap;
