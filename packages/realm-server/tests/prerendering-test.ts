@@ -859,6 +859,32 @@ module(basename(__filename), function () {
                   },
                 },
               },
+              // Module evaluates a top-level throw, mirroring the
+              // wrong-subpath import class of bug (CS-11024). The route's
+              // model() rejects when the loader imports the module, the
+              // route's `error` action fires with the active transition,
+              // and #processRenderError lifts data-prerender-status='error'
+              // — historically before render.error's <pre> had been
+              // populated, so the prerender server captured an empty
+              // payload and synthesized "invalid error payload" instead of
+              // surfacing the real underlying throw.
+              'eval-throw.gts': `
+              import { CardDef } from 'https://cardstack.com/base/card-api';
+              throw new Error('module-eval-throw');
+              export class EvalThrow extends CardDef {
+                static displayName = 'Eval Throw';
+              }
+            `,
+              'eval-throw.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./eval-throw'),
+                      name: 'EvalThrow',
+                    },
+                  },
+                },
+              },
               'console-error.gts': `
               import { CardDef, Component } from 'https://cardstack.com/base/card-api';
               export class ConsoleError extends CardDef {
@@ -1709,6 +1735,40 @@ module(basename(__filename), function () {
         } finally {
           PagePool.prototype.getPage = originalGetPage;
         }
+      });
+
+      // CS-11024: a card whose module throws synchronously during
+      // evaluation drives the route-error path. data-prerender-status='error'
+      // used to be lifted before the render.error template populated the
+      // <pre data-prerender-error>, letting the prerender server capture an
+      // empty payload and synthesize "invalid error payload". The fix
+      // defers the status flip to afterRender so the captured error is the
+      // actual underlying throw.
+      test('card prerender surfaces module-evaluation throw via the error route', async function (assert) {
+        let cardURL = `${realmURL}eval-throw.json`;
+
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.ok(result.response.error, 'prerender reports error');
+        let message = result.response.error?.error.message ?? '';
+        assert.true(
+          message.includes('module-eval-throw'),
+          `error surfaces actual underlying throw, got: ${message}`,
+        );
+        assert.false(
+          /returned an invalid error payload/.test(message),
+          `error is not the synthesized "invalid error payload" fallback (got: ${message})`,
+        );
+        assert.false(
+          result.pool.timedOut,
+          'module-evaluation throw is not treated as timeout',
+        );
       });
 
       test('card prerender waits for query fallback search and nested relationship loads', async function (assert) {
