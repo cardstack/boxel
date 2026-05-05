@@ -383,6 +383,69 @@ describe('realm watch (integration)', () => {
     expect(fs.existsSync(lockPath)).toBe(false);
   });
 
+  it('refuses when a live track lock exists at the same localDir', async () => {
+    let localDir = makeLocalDir();
+    fs.mkdirSync(localDir, { recursive: true });
+    let trackLockPath = path.join(localDir, '.boxel-track.lock');
+    fs.writeFileSync(
+      trackLockPath,
+      JSON.stringify({
+        pid: process.pid,
+        startedAt: new Date().toISOString(),
+        realmUrl,
+      }),
+    );
+
+    let result = await watchRealms([{ realmUrl, localDir }], {
+      profileManager,
+      intervalMs: 1000,
+      debounceMs: 25,
+      quiet: true,
+    });
+    expect(result.error).toBeDefined();
+    expect(result.error).toContain('boxel realm track');
+    expect(result.error).toContain(`pid ${process.pid}`);
+    expect(result.watchers).toEqual([]);
+    expect(fs.existsSync(path.join(localDir, '.boxel-watch.lock'))).toBe(false);
+    expect(fs.existsSync(trackLockPath)).toBe(true);
+    fs.rmSync(trackLockPath);
+  });
+
+  it('ignores a stale track lock from a dead pid and proceeds', async () => {
+    let localDir = makeLocalDir();
+    fs.mkdirSync(localDir, { recursive: true });
+    let trackLockPath = path.join(localDir, '.boxel-track.lock');
+    fs.writeFileSync(
+      trackLockPath,
+      JSON.stringify({
+        pid: 999_999_999,
+        startedAt: '2020-01-01T00:00:00.000Z',
+        realmUrl,
+      }),
+    );
+
+    let controller = new AbortController();
+    let run = watchRealms([{ realmUrl, localDir }], {
+      profileManager,
+      intervalMs: 1000,
+      debounceMs: 25,
+      quiet: true,
+      signal: controller.signal,
+    });
+
+    await sleep(150);
+    expect(fs.existsSync(path.join(localDir, '.boxel-watch.lock'))).toBe(true);
+
+    controller.abort();
+    let result = await run;
+    expect(result.error).toBeUndefined();
+
+    // Watch doesn't own the track lock — leave the stale file in place;
+    // track itself will overwrite it on next run.
+    expect(fs.existsSync(trackLockPath)).toBe(true);
+    fs.rmSync(trackLockPath);
+  });
+
   it('downgrades a pending modify to a delete when the remote file disappears', async () => {
     let localDir = makeLocalDir();
     await writeRemoteFile(realmUrl, 'flip.gts', 'export const x = 1;\n');

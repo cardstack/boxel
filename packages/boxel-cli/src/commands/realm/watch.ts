@@ -18,10 +18,11 @@ import type { RealmAuthenticator } from '../../lib/realm-authenticator';
 import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
 import { resolveRealmSecretSeed } from '../../lib/prompt';
 import {
-  acquireWatchLock,
-  releaseWatchLock,
-  type WatchLockInfo,
-} from '../../lib/watch-lock';
+  acquireSyncLock,
+  releaseSyncLock,
+  type SyncLockInfo,
+  type LockKind,
+} from '../../lib/sync-lock';
 import {
   FG_CYAN,
   FG_GREEN,
@@ -376,12 +377,16 @@ export async function watchRealms(
   // failure rolls back all earlier locks rather than leaving them dangling.
   const lockedDirs: string[] = [];
   for (const spec of specs) {
-    const result = await acquireWatchLock(spec.localDir, spec.realmUrl);
+    const result = await acquireSyncLock(spec.localDir, 'watch', spec.realmUrl);
     if (!result.ok) {
-      for (const dir of lockedDirs) await releaseWatchLock(dir);
+      for (const dir of lockedDirs) await releaseSyncLock(dir, 'watch');
       return {
         watchers: [],
-        error: formatLockedError(spec.localDir, result.existing),
+        error: formatLockedError(
+          spec.localDir,
+          result.existing,
+          result.conflictKind,
+        ),
       };
     }
     if (result.staleOverwrote && !quiet) {
@@ -401,7 +406,7 @@ export async function watchRealms(
       await watcher.initialize();
     } catch (err) {
       for (const w of watchers) w.shutdown();
-      for (const dir of lockedDirs) await releaseWatchLock(dir);
+      for (const dir of lockedDirs) await releaseSyncLock(dir, 'watch');
       return {
         watchers: [],
         error: `Failed to initialize watch on ${spec.realmUrl}: ${
@@ -483,7 +488,7 @@ export async function watchRealms(
       if (sigtermHandler) process.off('SIGTERM', sigtermHandler);
       for (const dir of lockedDirs) {
         try {
-          await releaseWatchLock(dir);
+          await releaseSyncLock(dir, 'watch');
         } catch {
           // Best effort \u2014 a leftover lock will be detected as stale next run.
         }
@@ -513,7 +518,18 @@ export async function watchRealms(
   return { watchers };
 }
 
-function formatLockedError(localDir: string, info: WatchLockInfo): string {
+function formatLockedError(
+  localDir: string,
+  info: SyncLockInfo,
+  conflictKind: LockKind,
+): string {
+  if (conflictKind === 'track') {
+    return (
+      `A boxel realm track process is already active for ${localDir} ` +
+      `(pid ${info.pid}, started ${info.startedAt}). Stop it before starting watch — ` +
+      `running track and watch against the same directory creates a push/pull loop.`
+    );
+  }
   return (
     `A boxel realm watch process is already active for ${localDir} ` +
     `(pid ${info.pid}, started ${info.startedAt}). Stop it before starting ` +
