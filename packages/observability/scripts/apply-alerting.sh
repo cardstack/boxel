@@ -102,11 +102,22 @@ interval_seconds() {
 }
 
 # Validate that every ${VAR} the JSON references is set to a non-empty
-# value before we call envsubst. envsubst substitutes unset / empty vars
-# with empty strings, so a typo in a placeholder name OR an empty SSM
-# value would silently push e.g. an empty datasource uid into a rule.
-# Same pattern as apply-datasources.sh.
-assert_placeholders_resolved() {
+# value, then envsubst ONLY those refs. Two reasons we pass an explicit
+# allowlist to envsubst rather than letting it substitute everything:
+#
+#   1. envsubst with no args also expands bare `$VAR` (no braces). Alert
+#      rule queries can contain Grafana template tokens like $__interval,
+#      $__rate_interval, $__range — without an allowlist, envsubst would
+#      silently empty-substitute those (since `__interval` etc. aren't set
+#      in env), corrupting the rule. The allowlist makes Grafana template
+#      syntax pass through literally.
+#   2. envsubst substitutes unset / empty vars with empty strings, so a
+#      typo in a placeholder name OR an empty SSM value would silently
+#      push e.g. an empty datasource uid into a rule. The validate step
+#      catches that before envsubst runs.
+#
+# Same shape as apply-datasources.sh and render-config.sh.
+resolve_placeholders() {
   local raw="$1" file="$2"
   local refs ref name
   refs="$(grep -oE '\$\{[A-Z_][A-Z0-9_]*\}' <<<"$raw" | sort -u || true)"
@@ -115,6 +126,11 @@ assert_placeholders_resolved() {
     name="${ref#\$\{}"; name="${name%\}}"
     [[ -n "${!name:-}" ]] || fail "${file}: \${${name}} referenced but not set (or empty) in environment"
   done <<<"$refs"
+  if [[ -n "$refs" ]]; then
+    envsubst "$(tr '\n' ' ' <<<"$refs")" <<<"$raw"
+  else
+    printf '%s\n' "$raw"
+  fi
 }
 
 upsert_group() {
@@ -124,7 +140,7 @@ upsert_group() {
   # error message (e.g., "rule X is invalid: ..."). curl --fail-with-body
   # would also do this, but using -w lets us include the status code in
   # the failure line uniformly.
-  response="$(mktemp)"
+  response="$(mktemp -t alerting-response.XXXXXX)"
   http_status="$(curl -sS -o "$response" -w '%{http_code}' -X PUT \
     -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
     -H "Content-Type: application/json" \
@@ -158,8 +174,7 @@ for f in "${files[@]}"; do
   # JSON one per line, envsubst them so ${VAR} placeholders resolve, then
   # transform into the AlertRuleGroup body the provisioning API expects.
   jq -c '.groups[]' "$f" | while IFS= read -r raw; do
-    assert_placeholders_resolved "$raw" "$f"
-    resolved="$(envsubst <<<"$raw")"
+    resolved="$(resolve_placeholders "$raw" "$f")"
 
     folder_uid="$(jq -r '.folder' <<<"$resolved")"
     group_name="$(jq -r '.name' <<<"$resolved")"
