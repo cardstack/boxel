@@ -129,6 +129,15 @@
    PRIMARY KEY ( realm_url, realm_version ) 
 );
 
+ CREATE TABLE IF NOT EXISTS realm_metadata (
+   url TEXT NOT NULL,
+   show_as_catalog BOOLEAN,
+   publishable BOOLEAN,
+   created_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
+   updated_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
+   PRIMARY KEY ( url ) 
+);
+
  CREATE TABLE IF NOT EXISTS realm_registry (
    id DEFAULT (hex(randomblob(16))) NOT NULL,
    url TEXT NOT NULL,

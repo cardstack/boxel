@@ -69,6 +69,7 @@ import * as ReadSourceCommandModule from './read-source';
 import * as ReadTextFileCommandModule from './read-text-file';
 import * as RegisterBotCommandModule from './register-bot';
 import * as ReindexRealmCommandModule from './reindex-realm';
+import * as RetrySubmissionWorkflowCommandModule from './retry-submission-workflow';
 import * as SanitizeModuleListCommandModule from './sanitize-module-list';
 import * as SaveCardCommandModule from './save-card';
 import * as ScreenshotCardCommandModule from './screenshot-card';
@@ -324,6 +325,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     CreateSubmissionWorkflowCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/retry-submission-workflow',
+    RetrySubmissionWorkflowCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/open-workspace',
     OpenWorkspaceCommandModule,
   );
@@ -534,6 +539,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   OpenCreateListingModalCommandModule.default,
   CreateAndOpenSubmissionWorkflowCard.default,
   CreateSubmissionWorkflowCommandModule.default,
+  RetrySubmissionWorkflowCommandModule.default,
   OpenInInteractModeModule.default,
   OpenWorkspaceCommandModule.default,
   GenerateThemeExampleCommandModule.default,
