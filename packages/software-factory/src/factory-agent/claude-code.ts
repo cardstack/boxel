@@ -201,10 +201,23 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     let workspaceDir = this.config.workspaceDir;
     let nativeFsEnabled = workspaceDir !== undefined;
 
-    let allowedTools = [
-      ...(nativeFsEnabled ? NATIVE_FS_TOOLS : []),
-      ...mcpFactoryTools.map((t) => `mcp__${MCP_SERVER_NAME}__${t.name}`),
-    ];
+    // Critical interaction between `allowedTools` and `canUseTool`
+    // (verified empirically via scripts/canusetool-repro.ts, CS-11033):
+    //
+    //   - A tool listed in `allowedTools` is auto-approved by the SDK
+    //     and `canUseTool` is **never** invoked for it.
+    //   - A tool NOT in `allowedTools` runs `canUseTool` (under
+    //     `permissionMode: 'default'`), and the hook's allow/deny is
+    //     honored.
+    //
+    // So if we put `Write` / `Edit` etc. into `allowedTools`, the
+    // workspace-scoping hook becomes dead code. We keep MCP tools in
+    // `allowedTools` (they're our own in-process implementations and
+    // safe to auto-approve) but deliberately omit native fs tools so
+    // each `Read` / `Write` / `Edit` call is gated by `canUseTool`.
+    let allowedTools = mcpFactoryTools.map(
+      (t) => `mcp__${MCP_SERVER_NAME}__${t.name}`,
+    );
 
     let options: Options = {
       systemPrompt,
@@ -218,22 +231,26 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       // a model takes to *write*, and those are scoped.
       tools: nativeFsEnabled ? NATIVE_FS_TOOLS : [],
       allowedTools,
-      // `dontAsk` (instead of `bypassPermissions`) keeps the auto-
-      // approve semantics for everything in `allowedTools` while still
-      // firing `canUseTool` so we can scope native fs operations.
-      // bypassPermissions skips canUseTool, which let the model write
-      // to absolute paths outside the workspace in early runs.
+      // `default` (not `dontAsk` or `bypassPermissions`) is the only
+      // permission mode that actually invokes `canUseTool` for tools
+      // outside `allowedTools` AND honors its allow/deny. Other modes
+      // either auto-approve everything (`bypassPermissions`,
+      // `acceptEdits`-with-allow) or silently deny without consulting
+      // the hook (`dontAsk`-without-allowedTools-entry). Because we
+      // omit native fs tools from `allowedTools` (see the comment
+      // above), the hook fires on every `Read` / `Write` / `Edit` and
+      // can scope them to the workspace.
       //
       // Scope of the hook: it gates the typed fs tools (`Read`,
       // `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `NotebookRead`)
       // because their `file_path` arg is structured and trivial to
-      // validate. `Bash` is intentionally NOT gated — parsing
-      // arbitrary shell for write side effects (`>`, `tee`, `cp`,
-      // `mv`, …) is its own footgun, and read-only inspection (`ls`,
-      // `find`, `cat`, `boxel status`) needs the broader fs. The
-      // prompt addendum is the contract for Bash; the hook is the
-      // structural guard for the typed tools.
-      permissionMode: 'dontAsk',
+      // validate. `Bash` / `Glob` / `Grep` fall through the hook and
+      // are auto-allowed — parsing arbitrary shell for write side
+      // effects (`>`, `tee`, `cp`, `mv`, …) is its own footgun, and
+      // read-only inspection (`ls`, `find`, `cat`, `boxel status`)
+      // needs the broader fs. The prompt addendum is the contract for
+      // Bash; the hook is the structural guard for the typed tools.
+      permissionMode: 'default',
       ...(workspaceDir
         ? { canUseTool: buildWorkspaceScopedCanUseTool(workspaceDir) }
         : {}),
