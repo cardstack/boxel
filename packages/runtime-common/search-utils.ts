@@ -157,14 +157,7 @@ export function resolveSearchRequestMethod(request: Request): string {
   return method;
 }
 
-export async function parseSearchQueryFromRequest(
-  request: Request,
-): Promise<Query> {
-  let payload = await parseSearchRequestPayload(request);
-  return parseSearchQueryFromPayload(payload);
-}
-
-export function parseSearchQueryFromPayload(payload: unknown): Query {
+function parseSearchQueryFromPayload(payload: unknown): Query {
   let cardsQuery = payload;
   try {
     assertQuery(cardsQuery);
