@@ -101,11 +101,12 @@ module(basename(__filename), function () {
       let originalExecute = testDbAdapter.execute.bind(testDbAdapter);
       let perLinkLookupCount = 0;
       let batchedLinkLookupCount = 0;
+      let dbExecute = testDbAdapter as {
+        execute: typeof testDbAdapter.execute;
+      };
 
       try {
-        (
-          testDbAdapter as { execute: typeof testDbAdapter.execute }
-        ).execute = async (sql, opts) => {
+        dbExecute.execute = async (sql, opts) => {
           // `param('instance')` becomes a `$N` placeholder in the rendered
           // SQL — we have to look at opts.bind to see whether this query
           // is filtering for instance rows.
@@ -140,11 +141,11 @@ module(basename(__filename), function () {
           NUM_SOURCES,
           `search returned all ${NUM_SOURCES} source cards`,
         );
-        assert.ok(
-          result.included && result.included.length === NUM_TARGETS,
-          `included contains all ${NUM_TARGETS} unique targets (got ${
-            result.included?.length ?? 0
-          })`,
+        assert.ok(result.included, 'included is present');
+        assert.strictEqual(
+          result.included?.length ?? 0,
+          NUM_TARGETS,
+          `included contains all ${NUM_TARGETS} unique targets`,
         );
 
         assert.strictEqual(
@@ -153,13 +154,15 @@ module(basename(__filename), function () {
           `expected 0 per-link DB lookups (the old N×M path), got ${perLinkLookupCount}`,
         );
         assert.ok(
-          batchedLinkLookupCount > 0 && batchedLinkLookupCount <= 2,
-          `expected 1–2 batched-link DB queries (1 per recursion depth), got ${batchedLinkLookupCount}`,
+          batchedLinkLookupCount > 0,
+          `expected at least 1 batched-link DB query, got ${batchedLinkLookupCount}`,
+        );
+        assert.ok(
+          batchedLinkLookupCount <= 2,
+          `expected ≤ 2 batched-link DB queries (1 per recursion depth), got ${batchedLinkLookupCount}`,
         );
       } finally {
-        (
-          testDbAdapter as { execute: typeof testDbAdapter.execute }
-        ).execute = originalExecute;
+        dbExecute.execute = originalExecute;
       }
     });
   });
