@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findCheckpoint } from '../../src/commands/realm/history';
+import { findCheckpoint } from '../../src/lib/find-checkpoint';
 import type { Checkpoint } from '../../src/lib/checkpoint-manager';
 
 function cp(hash: string, shortHash?: string): Checkpoint {

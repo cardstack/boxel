@@ -4,6 +4,7 @@ import {
   CheckpointManager,
   type Checkpoint,
 } from '../../lib/checkpoint-manager';
+import { findCheckpoint } from '../../lib/find-checkpoint';
 import { prompt } from '../../lib/prompt';
 import {
   BOLD,
@@ -177,43 +178,6 @@ async function restoreCheckpointStep(
       error: `Failed to restore checkpoint: ${errorMessage(e)}`,
     };
   }
-}
-
-export type FindResult =
-  | { kind: 'found'; target: Checkpoint }
-  | { kind: 'none' }
-  | { kind: 'ambiguous'; matches: Checkpoint[] };
-
-export function findCheckpoint(
-  ref: string,
-  checkpoints: Checkpoint[],
-): FindResult {
-  const trimmed = ref.trim();
-  // Empty refs would `startsWith('')`-match every hash and silently restore
-  // the newest checkpoint — guard explicitly.
-  if (trimmed === '') return { kind: 'none' };
-
-  // Exact short-hash match wins before the digit-only branch. SHA-1 short
-  // hashes are 7 hex chars and can be all-digits (~5.9% of hashes), so
-  // routing digit-only input straight to index lookup would lose those.
-  const exactShort = checkpoints.filter((cp) => cp.shortHash === trimmed);
-  if (exactShort.length === 1) return { kind: 'found', target: exactShort[0] };
-  if (exactShort.length > 1) return { kind: 'ambiguous', matches: exactShort };
-
-  // Digit-only input that didn't match a short hash is treated as an index
-  // lookup. Falling through to hash-prefix matching when out of range would
-  // silently match short hashes whose prefix happens to be digits.
-  if (/^\d+$/.test(trimmed)) {
-    const num = parseInt(trimmed, 10);
-    if (num >= 1 && num <= checkpoints.length) {
-      return { kind: 'found', target: checkpoints[num - 1] };
-    }
-    return { kind: 'none' };
-  }
-  const matches = checkpoints.filter((cp) => cp.hash.startsWith(trimmed));
-  if (matches.length === 0) return { kind: 'none' };
-  if (matches.length === 1) return { kind: 'found', target: matches[0] };
-  return { kind: 'ambiguous', matches };
 }
 
 /**
