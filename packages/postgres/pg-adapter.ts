@@ -112,6 +112,12 @@ export class PgAdapter implements DBAdapter {
     }
   }
 
+  async notify(channel: string, payload: string): Promise<void> {
+    await this.execute('SELECT pg_notify($1, $2)', {
+      bind: [channel, payload],
+    });
+  }
+
   async listen(
     channel: string,
     handler: (notification: Notification) => void,

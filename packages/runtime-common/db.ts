@@ -20,4 +20,9 @@ export interface DBAdapter {
   ) => Promise<Record<string, PgPrimitive>[]>;
   close: () => Promise<void>;
   getColumnNames: (tableName: string) => Promise<string[]>;
+  // Best-effort cross-instance broadcast on a named channel. Backends that
+  // don't support pub/sub (e.g. in-process SQLite) implement this as a no-op:
+  // the caller must treat it as fire-and-forget cache-coherency, never as
+  // delivery-guaranteed messaging.
+  notify: (channel: string, payload: string) => Promise<void>;
 }

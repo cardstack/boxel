@@ -2,7 +2,6 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { Realm } from '@cardstack/runtime-common';
-import { query, param } from '@cardstack/runtime-common';
 import { setupDB } from './helpers';
 import {
   RealmFileChangesListener,
@@ -167,13 +166,10 @@ module(basename(__filename), function () {
         // Give the LISTEN connection a moment to subscribe.
         await new Promise((r) => setTimeout(r, 100));
 
-        await query(dbAdapter, [
-          `SELECT pg_notify(`,
-          param('realm_file_changes'),
-          `,`,
-          param(`${realmUrl}:src/greeting.gts`),
-          `)`,
-        ]);
+        await dbAdapter.notify(
+          'realm_file_changes',
+          `${realmUrl}:src/greeting.gts`,
+        );
 
         const received = await waitFor(() =>
           invalidations.length > 0 ? invalidations : undefined,
@@ -199,13 +195,10 @@ module(basename(__filename), function () {
       try {
         await new Promise((r) => setTimeout(r, 100));
 
-        await query(dbAdapter, [
-          `SELECT pg_notify(`,
-          param('realm_file_changes'),
-          `,`,
-          param(`http://x.test/not-mounted/:file.gts`),
-          `)`,
-        ]);
+        await dbAdapter.notify(
+          'realm_file_changes',
+          `http://x.test/not-mounted/:file.gts`,
+        );
 
         // Wait for the lookup to be recorded (proves the NOTIFY was received
         // and dispatched; the lookup miss then silently drops).
