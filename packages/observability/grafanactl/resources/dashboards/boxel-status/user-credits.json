@@ -27,45 +27,154 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
-    "links": [
-      {
-        "asDropdown": false,
-        "icon": "bolt",
-        "includeVars": false,
-        "keepTime": false,
-        "tags": [],
-        "targetBlank": true,
-        "title": "Add 1,000 Credits",
-        "tooltip": "",
-        "type": "link",
-        "url": "${realm_server}_grafana-add-credit?user=${matrix_user_id}&credit=1000"
-      },
-      {
-        "asDropdown": false,
-        "icon": "bolt",
-        "includeVars": false,
-        "keepTime": false,
-        "tags": [],
-        "targetBlank": true,
-        "title": "Add 10,000 Credits",
-        "tooltip": "",
-        "type": "link",
-        "url": "${realm_server}_grafana-add-credit?user=${matrix_user_id}&credit=10000"
-      },
-      {
-        "asDropdown": false,
-        "icon": "bolt",
-        "includeVars": false,
-        "keepTime": false,
-        "tags": [],
-        "targetBlank": true,
-        "title": "Add 100,000 Credits",
-        "tooltip": "",
-        "type": "link",
-        "url": "${realm_server}_grafana-add-credit?user=${matrix_user_id}&credit=100000"
-      }
-    ],
+    "links": [],
     "panels": [
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Operator actions: add extra credit to the user selected above. Each button POSTs to the realm-server with an Authorization: Bearer header (token substituted into a hidden constant template variable at apply time from SSM, CS-10929) and shows a confirmation dialog before firing.",
+        "fieldConfig": {
+          "defaults": {
+            "actions": [
+              {
+                "type": "fetch",
+                "title": "Add 1,000 credits",
+                "fetch": {
+                  "method": "POST",
+                  "url": "${realm_server}_grafana-add-credit",
+                  "queryParams": [
+                    ["user", "${matrix_user_id}"],
+                    ["credit", "1000"]
+                  ],
+                  "headers": [
+                    ["Authorization", "Bearer ${grafana_secret}"]
+                  ],
+                  "body": ""
+                },
+                "confirmation": "Add 1,000 credits to ${matrix_user_id}?",
+                "oneClick": false
+              },
+              {
+                "type": "fetch",
+                "title": "Add 10,000 credits",
+                "fetch": {
+                  "method": "POST",
+                  "url": "${realm_server}_grafana-add-credit",
+                  "queryParams": [
+                    ["user", "${matrix_user_id}"],
+                    ["credit", "10000"]
+                  ],
+                  "headers": [
+                    ["Authorization", "Bearer ${grafana_secret}"]
+                  ],
+                  "body": ""
+                },
+                "confirmation": "Add 10,000 credits to ${matrix_user_id}?",
+                "oneClick": false
+              },
+              {
+                "type": "fetch",
+                "title": "Add 100,000 credits",
+                "fetch": {
+                  "method": "POST",
+                  "url": "${realm_server}_grafana-add-credit",
+                  "queryParams": [
+                    ["user", "${matrix_user_id}"],
+                    ["credit", "100000"]
+                  ],
+                  "headers": [
+                    ["Authorization", "Bearer ${grafana_secret}"]
+                  ],
+                  "body": ""
+                },
+                "confirmation": "Add 100,000 credits to ${matrix_user_id}? This is the largest grant — make sure this is intentional.",
+                "oneClick": false
+              }
+            ],
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [
+              {
+                "options": {
+                  "from": 0,
+                  "result": {
+                    "index": 0,
+                    "text": "Add Credit"
+                  },
+                  "to": 9999999999999
+                },
+                "type": "range"
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "yellow"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 2,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "name"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT 1 AS click;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "Add Extra Credit to ${matrix_user_id}",
+        "type": "stat"
+      },
       {
         "datasource": {
           "type": "grafana-postgresql-datasource",
@@ -199,7 +308,7 @@
           "h": 12,
           "w": 24,
           "x": 0,
-          "y": 0
+          "y": 4
         },
         "id": 1,
         "options": {
@@ -279,6 +388,13 @@
           "name": "realm_server",
           "query": "__REALM_SERVER_URL__",
           "skipUrlSync": false,
+          "type": "constant"
+        },
+        {
+          "hide": 2,
+          "name": "grafana_secret",
+          "query": "REPLACE_AT_APPLY_TIME",
+          "skipUrlSync": true,
           "type": "constant"
         }
       ]

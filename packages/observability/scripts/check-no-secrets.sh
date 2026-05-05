@@ -51,7 +51,7 @@ PATTERN_REGEXES=(
   'api[_-]?key[[:space:]]*[:=][[:space:]]*["'"'"']?[^$<[:space:]"'"'"']{16,}'
 )
 PATTERN_DESCS=(
-  'authHeader= (Grafana auth-in-querystring; rotate via Phase 3.5 button panels)'
+  'authHeader= (Grafana auth-in-querystring; superseded by CS-10929 button panels — POST + Authorization: Bearer header)'
   'long Bearer token'
   'AWS access key ID'
   'literal password value'
