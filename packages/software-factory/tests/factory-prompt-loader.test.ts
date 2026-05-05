@@ -197,7 +197,13 @@ module('factory-prompt-loader > FilePromptLoader', function () {
       result.includes('signal_done'),
       'system prompt contains signal_done',
     );
-    assert.ok(result.includes('read_file'), 'system prompt contains read_file');
+    // The prompt template talks in operations, not concrete tool names —
+    // each agent backend appends its own surface-specific addendum
+    // (Claude: native fs + MCP rename map; OpenRouter: factory tools).
+    assert.ok(
+      result.includes('workspace mirror of'),
+      'system prompt names the workspace mirror as the read/write surface',
+    );
   });
 
   test('caches templates on subsequent loads', function (assert) {
@@ -251,7 +257,13 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
       result.includes('signal_done'),
       'includes signal_done instruction',
     );
-    assert.ok(result.includes('read_file'), 'includes read_file instruction');
+    // The system prompt now phrases I/O as operations on a workspace
+    // mirror; the concrete read/write tool names (read_file vs native
+    // Read) are introduced by each agent's backend-specific addendum.
+    assert.ok(
+      result.includes('workspace mirror of'),
+      'includes workspace-mirror language for fs operations',
+    );
   });
 
   test('includes realm URLs', function (assert) {
@@ -435,7 +447,7 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
         {
           name: 'search-realm',
           description: 'Search cards',
-          category: 'script' as const,
+          category: 'realm-api' as const,
           args: [],
           outputFormat: 'json' as const,
         },
@@ -583,14 +595,14 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
         {
           name: 'run-tests',
           description: 'Run tests',
-          category: 'script' as const,
+          category: 'realm-api' as const,
           args: [],
           outputFormat: 'text' as const,
         },
         {
           name: 'search-realm',
           description: 'Search cards',
-          category: 'script' as const,
+          category: 'realm-api' as const,
           args: [],
           outputFormat: 'json' as const,
         },

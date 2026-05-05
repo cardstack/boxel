@@ -207,18 +207,29 @@ export class Loader {
 
   private fetchImplementation: Fetch;
   private resolveImport: (moduleIdentifier: string) => string;
+  // When the host runs inside a prerender, `setTimeout` is suppressed by
+  // the render-timer-stub so the default sleep used by
+  // `fetchWithTransientRetry` would never resolve and a transient 5xx on
+  // a dep fetch would hang the render until the prerender timeout. The
+  // host injects a sleep that goes through the native (unblocked)
+  // setTimeout so the retry actually fires.
+  private retrySleep: ((ms: number) => Promise<void>) | undefined;
 
   constructor(
     fetch: Fetch,
     resolveImport?: (moduleIdentifier: string) => string,
+    options?: { retrySleep?: (ms: number) => Promise<void> },
   ) {
     this.fetchImplementation = fetch;
     this.resolveImport =
       resolveImport ?? ((moduleIdentifier) => moduleIdentifier);
+    this.retrySleep = options?.retrySleep;
   }
 
   static cloneLoader(loader: Loader): Loader {
-    let clone = new Loader(loader.fetchImplementation, loader.resolveImport);
+    let clone = new Loader(loader.fetchImplementation, loader.resolveImport, {
+      retrySleep: loader.retrySleep,
+    });
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
     }
@@ -1010,6 +1021,7 @@ export class Loader {
       // catch as thrown exceptions. The catch here is defensive for any
       // other unexpected throw from the fetch helper itself.
       response = await fetchWithTransientRetry(() => this._fetch(moduleURL), {
+        sleep: this.retrySleep,
         onRetry: ({ attempt, maxAttempts, status, delayMs }) => {
           this.log.debug(
             `retrying module fetch for ${moduleURL.href} after status ${status} (attempt ${attempt} of ${maxAttempts}, waiting ${delayMs}ms)`,

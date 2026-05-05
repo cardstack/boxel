@@ -28,9 +28,11 @@ import {
   rri,
   baseRealm,
   baseRRI,
+  executableExtensions,
 } from '@cardstack/runtime-common';
 import {
   installDelayedRuntimeRealmSearchPatch,
+  installFlakyDepFetchPatch,
   installRealmServerAssertOwnRealmServerBypassPatch,
   installSearchRequestObserverPatch,
   installThrottledRAFPatch,
@@ -480,6 +482,120 @@ module(basename(__filename), function () {
         result.pool.timedOut,
         'pool should not mark this as a prerender timeout',
       );
+    });
+
+    test('transient 502 on dep fetch retries instead of timing out', async function (assert) {
+      // While prerendering, the host's render-timer-stub suppresses
+      // window.setTimeout. The loader's transient-5xx retry uses setTimeout-
+      // based backoff, so a single 502 on a dep fetch used to hang the
+      // entire render at `await sleep(delayMs)` for the full 90 s render
+      // timeout. The fix routes the loader's retry sleep through
+      // scheduleNativeTimeout (see loader-service.ts), bypassing the stub.
+      // This test simulates a transient 502 on the card's module fetch and
+      // asserts the prerender recovers within the retry budget rather than
+      // timing out.
+      let modulePath = 'flaky-target.gts';
+      let moduleURL = `${realmURL}${modulePath}`;
+      let cardPath = 'flaky-1.json';
+      let cardURL = `${realmURL}flaky-1`;
+
+      await realmAdapter.write(
+        modulePath,
+        `
+          import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+          export class FlakyTarget extends CardDef {
+            static displayName = 'FlakyTarget';
+            @field name = contains(StringField);
+            static isolated = class extends Component<typeof this> {
+              <template><span data-test-name>{{@model.name}}</span></template>
+            }
+          }
+        `,
+      );
+      await realmAdapter.write(
+        cardPath,
+        JSON.stringify(
+          {
+            data: {
+              attributes: { name: 'Recovered' },
+              meta: {
+                adoptsFrom: {
+                  module: rri('./flaky-target'),
+                  name: 'FlakyTarget',
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+      await realm.realmIndexUpdater.fullIndex();
+      realm.__testOnlyClearCaches();
+
+      // Strip executable extensions from both sides so the matcher fires
+      // for every fetch shape the loader may issue: `flaky-target.gts`
+      // (the source URL), `flaky-target` (extensionless — what the card's
+      // adoptsFrom.module resolves to via rri), or the canonicalized form
+      // surfaced through X-Boxel-Canonical-Path. Without this, the matcher
+      // would miss the actual fetch and the test would silently pass
+      // without exercising the retry path.
+      let stripExecExt = (u: string) => {
+        for (let ext of executableExtensions) {
+          if (u.endsWith(ext)) {
+            return u.slice(0, -ext.length);
+          }
+        }
+        return u;
+      };
+      let targetTrimmed = stripExecExt(moduleURL);
+      let flakyPatch = installFlakyDepFetchPatch({
+        matcher: (url) => stripExecExt(url) === targetTrimmed,
+        failuresBeforeSuccess: 1,
+      });
+      try {
+        let started = Date.now();
+        // clearCache forces the host's loader to drop its cached fetch +
+        // module entries before the render, so the dep fetch the patch
+        // is targeting actually goes to the network rather than coming
+        // from the in-process loader cache populated by fullIndex above.
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+          renderOptions: { clearCache: true },
+        });
+        let elapsedMs = Date.now() - started;
+
+        assert.strictEqual(
+          flakyPatch.failuresInjected(),
+          1,
+          'patch injected exactly one transient 502 for the dep fetch',
+        );
+        assert.notOk(
+          result.response.error,
+          `render recovered from transient 502 (error: ${JSON.stringify(
+            result.response.error?.error ?? null,
+          )})`,
+        );
+        assert.false(
+          result.pool.timedOut,
+          'render did not hit the 90s prerender timeout',
+        );
+        assert.true(
+          elapsedMs < 30_000,
+          `render completes within retry budget; observed ${elapsedMs}ms (90s would mean retry sleep is hung)`,
+        );
+        assert.strictEqual(
+          result.response.serialized?.data.attributes?.name,
+          'Recovered',
+          'card data rendered correctly after retry',
+        );
+      } finally {
+        await flakyPatch.restore();
+      }
     });
   });
 

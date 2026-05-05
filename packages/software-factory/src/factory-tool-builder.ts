@@ -58,6 +58,19 @@ export interface FactoryTool {
   description: string;
   parameters: Record<string, unknown>;
   execute: (args: Record<string, unknown>) => Promise<unknown>;
+  /**
+   * Origin marker. `'core'` is for tools defined directly in this
+   * builder (read_file, search_realm, run_lint, the structured update
+   * tools, signals, …). `'registered'` is for tools wrapped from the
+   * `ToolRegistry`'s script + realm-api manifests (realm-read,
+   * search-realm, boxel-sync, …).
+   *
+   * The Claude backend filters out `'registered'` tools because they
+   * shadow the core ones with kebab-case duplicates the model picks at
+   * random — and most of them are reachable through native fs / Bash +
+   * boxel CLI anyway. OpenRouter still gets every tool.
+   */
+  source?: 'core' | 'registered';
 }
 
 export interface ToolBuilderConfig {
@@ -182,10 +195,11 @@ export function buildFactoryTools(
     }
   }
 
-  // Add registered script/realm-api tools as FactoryTool wrappers.
-  // Realm-api tools get the config so they can resolve per-realm JWTs.
+  // Add registered realm-api tools as FactoryTool wrappers. After the
+  // CS-10883 retirements the registry only contains `realm-create`;
+  // anything else added later goes through the same build path.
   for (let manifest of toolRegistry.getManifests()) {
-    if (manifest.category === 'script' || manifest.category === 'realm-api') {
+    if (manifest.category === 'realm-api') {
       tools.push(buildRegisteredTool(manifest, toolExecutor, config));
     }
   }
@@ -940,6 +954,7 @@ function buildRegisteredTool(
     execute: async (args) => {
       return toolExecutor.execute(manifest.name, args);
     },
+    source: 'registered',
   };
 }
 
