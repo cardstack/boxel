@@ -78,12 +78,20 @@ const sourceMapJsResolver = {
 const optimizedDepRE = /[/\\]node_modules[/\\]\.vite[/\\]deps[/\\].+\.js$/;
 const optimizedDepUrlRE = /^\/node_modules\/\.vite\/deps\/.+\.js$/;
 
+// Per-process cache so we touch each map file at most once per dev server.
+const paddedMapPaths = new Set();
+
 async function padOptimizedDepSourcemap(file) {
   if (!optimizedDepRE.test(file)) {
     return;
   }
 
   let mapPath = `${file}.map`;
+  if (paddedMapPaths.has(mapPath)) {
+    return;
+  }
+  paddedMapPaths.add(mapPath);
+
   let map;
   try {
     map = JSON.parse(await readFile(mapPath, 'utf8'));
@@ -95,15 +103,36 @@ async function padOptimizedDepSourcemap(file) {
     return;
   }
 
+  let mapDir = path.dirname(mapPath);
+  let sourceRoot = typeof map.sourceRoot === 'string' ? map.sourceRoot : '';
   let sourcesContent = Array.isArray(map.sourcesContent)
     ? [...map.sourcesContent]
     : [];
   let changed = false;
   for (let i = 0; i < map.sources.length; i++) {
-    if (sourcesContent[i] == null) {
-      sourcesContent[i] = '';
-      changed = true;
+    if (sourcesContent[i] != null) {
+      continue;
     }
+    // Vite refuses to hydrate sourcesContent from paths that escape the
+    // optimized-dep package boundary, which is why these slots come back
+    // null. We can read the file ourselves to preserve DevTools source
+    // viewing for vendor code; if the read fails, fall back to an empty
+    // string so the slot is at least populated and the warning stays quiet.
+    let srcPath = map.sources[i];
+    let resolved =
+      typeof srcPath === 'string'
+        ? path.resolve(mapDir, sourceRoot, srcPath)
+        : null;
+    let content = '';
+    if (resolved) {
+      try {
+        content = await readFile(resolved, 'utf8');
+      } catch {
+        content = '';
+      }
+    }
+    sourcesContent[i] = content;
+    changed = true;
   }
 
   if (!changed) {
