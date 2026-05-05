@@ -880,7 +880,7 @@ export class RealmIndexQueryEngine {
   ): Promise<Map<string, CardResource<Saved>>> {
     let entries = await Promise.all(
       urls.map(async (url) => {
-        let response = await this.#fetch(new URL(url), {
+        let response = await this.#fetch(url, {
           headers: { Accept: SupportedMimeType.CardJson },
         });
         if (!response.ok) {
