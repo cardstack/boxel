@@ -10,7 +10,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scopedCSS } from 'glimmer-scoped-css/rollup';
-import { boxelUIChecksumPlugin } from './lib/build/boxel-ui-checksum-plugin.js';
+import { boxelUIChecksumPlugin } from './lib/build/boxel-ui-checksum-plugin.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
