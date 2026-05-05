@@ -6,6 +6,7 @@ import { registerListCommand } from './list';
 import { registerPullCommand } from './pull';
 import { registerPushCommand } from './push';
 import { registerSyncCommand } from './sync';
+import { registerTrackCommand } from './track';
 import { registerWaitForReadyCommand } from './wait-for-ready';
 import { registerWatchCommand } from './watch';
 
@@ -21,6 +22,7 @@ export function registerRealmCommand(program: Command): void {
   registerPullCommand(realm);
   registerPushCommand(realm);
   registerSyncCommand(realm);
+  registerTrackCommand(realm);
   registerWaitForReadyCommand(realm);
   registerWatchCommand(realm);
 }
