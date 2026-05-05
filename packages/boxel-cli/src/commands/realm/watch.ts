@@ -246,12 +246,10 @@ export class RealmWatcher extends RealmSyncBase {
         const result = await this.flushPending();
         onFlush?.(result);
       } catch (err) {
-        if (!this.quiet) {
-          console.error(
-            `${FG_RED}[${this.name}] Error applying changes:${RESET}`,
-            err,
-          );
-        }
+        console.error(
+          `${FG_RED}[${this.name}] Error applying changes:${RESET}`,
+          err,
+        );
       }
     }, this.debounceMs);
   }
@@ -446,12 +444,10 @@ export async function watchRealms(
             });
           }
         } catch (err) {
-          if (!quiet) {
-            console.error(
-              `${FG_RED}[${w.name}] poll error:${RESET}`,
-              err instanceof Error ? err.message : err,
-            );
-          }
+          console.error(
+            `${FG_RED}[${w.name}] poll error:${RESET}`,
+            err instanceof Error ? err.message : err,
+          );
         }
       }),
     );
@@ -594,7 +590,6 @@ export function registerWatchCommand(realm: Command): void {
       parseNonNegativeSeconds('--debounce'),
       5,
     )
-    .option('-q, --quiet', 'Suppress periodic status output')
     .option(
       '--realm-secret-seed',
       'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
@@ -606,7 +601,6 @@ export function registerWatchCommand(realm: Command): void {
         options: {
           interval: number;
           debounce: number;
-          quiet?: boolean;
           realmSecretSeed?: boolean;
         },
       ) => {
@@ -616,7 +610,6 @@ export function registerWatchCommand(realm: Command): void {
         const result = await watchRealms([{ realmUrl, localDir }], {
           intervalMs: options.interval * 1000,
           debounceMs: options.debounce * 1000,
-          quiet: options.quiet,
           realmSecretSeed,
         });
         if (result.error) {
