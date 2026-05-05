@@ -291,4 +291,59 @@ describe('realm watch (integration)', () => {
     });
     expect(result.error).toContain('No realms');
   });
+
+  it('does not delete local files when a poll fails', async () => {
+    let localDir = makeLocalDir();
+    await writeRemoteFile(realmUrl, 'survives.gts', 'export const s = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    await watcher.flushPending();
+    expect(fs.existsSync(path.join(localDir, 'survives.gts'))).toBe(true);
+
+    // Force the next poll to fail (simulating a transient fetch error). The
+    // file must remain on disk and `lastKnownMtimes` must be untouched, so a
+    // subsequent successful poll observes no change.
+    (watcher as any).getRemoteMtimes = async () => {
+      throw new Error('simulated network failure');
+    };
+    await expect(watcher.poll()).rejects.toThrow('simulated network failure');
+    expect(watcher.pendingCount).toBe(0);
+    expect(fs.existsSync(path.join(localDir, 'survives.gts'))).toBe(true);
+
+    watcher.shutdown();
+    await deleteRemoteFile(realmUrl, 'survives.gts');
+  });
+
+  it('downgrades a pending modify to a delete when the remote file disappears', async () => {
+    let localDir = makeLocalDir();
+    await writeRemoteFile(realmUrl, 'flip.gts', 'export const x = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    await watcher.flushPending();
+
+    await sleep(1100);
+    await writeRemoteFile(realmUrl, 'flip.gts', 'export const x = 2;\n');
+    await watcher.poll();
+    expect(watcher.pendingCount).toBe(1);
+
+    await deleteRemoteFile(realmUrl, 'flip.gts');
+    await watcher.poll();
+
+    let result = await watcher.flushPending();
+    expect(result.deleted).toContain('flip.gts');
+    expect(result.pulled).not.toContain('flip.gts');
+    expect(fs.existsSync(path.join(localDir, 'flip.gts'))).toBe(false);
+
+    watcher.shutdown();
+  });
 });

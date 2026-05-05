@@ -89,6 +89,30 @@ export class RealmWatcher extends RealmSyncBase {
     await this.flushPending();
   }
 
+  // Override: base swallows errors → empty map, which the watcher would
+  // read as "every file deleted" and wipe the local dir on a network blip.
+  protected override async getRemoteMtimes(): Promise<Map<string, number>> {
+    const url = `${this.normalizedRealmUrl}_mtimes`;
+    const response = await this.authenticator.authedRealmFetch(url, {
+      headers: { Accept: 'application/vnd.api+json' },
+    });
+    if (!response.ok) {
+      throw new Error(
+        `_mtimes fetch failed for ${this.normalizedRealmUrl}: ${response.status} ${response.statusText}`,
+      );
+    }
+    const data = (await response.json()) as {
+      data?: { attributes?: { mtimes?: Record<string, number> } };
+    };
+    const mtimes = new Map<string, number>();
+    for (const [fileUrl, mtime] of Object.entries(
+      data.data?.attributes?.mtimes ?? {},
+    )) {
+      mtimes.set(fileUrl.replace(this.normalizedRealmUrl, ''), mtime);
+    }
+    return mtimes;
+  }
+
   get localDir(): string {
     return this.options.localDir;
   }
@@ -156,9 +180,12 @@ export class RealmWatcher extends RealmSyncBase {
 
     for (const file of this.lastKnownMtimes.keys()) {
       if (isProtectedFile(file)) continue;
-      if (!remoteMtimes.has(file) && !this.pendingChanges.has(file)) {
-        this.pendingChanges.set(file, { status: 'deleted', mtime: 0 });
-        hasNewChanges = true;
+      if (!remoteMtimes.has(file)) {
+        const pending = this.pendingChanges.get(file);
+        if (pending?.status !== 'deleted') {
+          this.pendingChanges.set(file, { status: 'deleted', mtime: 0 });
+          hasNewChanges = true;
+        }
       }
     }
 
@@ -176,11 +203,17 @@ export class RealmWatcher extends RealmSyncBase {
       return { pulled: [], deleted: [], checkpoint: null };
     }
 
+    // Snapshot then clear before any await — anything an interleaved poll()
+    // records during this flush rolls into the next one instead of being
+    // dropped by a trailing clear().
+    const drained = new Map(this.pendingChanges);
+    this.pendingChanges.clear();
+
     const pulled: string[] = [];
     const deleted: string[] = [];
     const changes: CheckpointChange[] = [];
 
-    for (const [file, info] of this.pendingChanges) {
+    for (const [file, info] of drained) {
       if (info.status === 'deleted') {
         const localPath = path.join(this.options.localDir, file);
         try {
@@ -198,14 +231,13 @@ export class RealmWatcher extends RealmSyncBase {
       }
     }
 
-    for (const [file, info] of this.pendingChanges) {
+    for (const [file, info] of drained) {
       if (info.status === 'deleted') {
         this.lastKnownMtimes.delete(file);
       } else {
         this.lastKnownMtimes.set(file, info.mtime);
       }
     }
-    this.pendingChanges.clear();
 
     await this.persistManifest();
 
@@ -405,16 +437,31 @@ export async function watchRealms(
     );
   };
 
-  await tickAll();
+  // Self-scheduling tick: the next setTimeout is only armed after the
+  // current tickAll resolves, so two polls can never overlap.
+  let stopped = false;
+  let timeoutId: NodeJS.Timeout | null = null;
+  const scheduleNextTick = () => {
+    if (stopped) return;
+    timeoutId = setTimeout(async () => {
+      timeoutId = null;
+      if (stopped) return;
+      await tickAll();
+      scheduleNextTick();
+    }, intervalMs);
+  };
 
-  const intervalId = setInterval(tickAll, intervalMs);
+  await tickAll();
+  scheduleNextTick();
 
   await new Promise<void>((resolve) => {
-    let stopped = false;
     const cleanup = () => {
       if (stopped) return;
       stopped = true;
-      clearInterval(intervalId);
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
       for (const w of watchers) w.shutdown();
       if (sigintHandler) process.off('SIGINT', sigintHandler);
       if (sigtermHandler) process.off('SIGTERM', sigtermHandler);
