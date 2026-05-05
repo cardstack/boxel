@@ -1156,8 +1156,14 @@ export class RealmIndexQueryEngine {
         // TODO stop using maxLinkDepth. we should save the JSON-API doc
         // in the index based on keeping track of the rendered fields
         // and invalidate the index as consumed cards change.
+        //
+        // Gate uses the CURRENT item's stack length (ancestors only),
+        // matching the original recursive `stack.length <= maxLinkDepth`
+        // check which ran before pushing the current resource onto the
+        // stack for the recursive call. Using descendStack.length here
+        // would cut traversal off one level early.
         let foundLinks = false;
-        if (linkResource && descendStack.length <= maxLinkDepth) {
+        if (linkResource && entry.item.stack.length <= maxLinkDepth) {
           let alreadyVisited =
             linkResource.id != null && visited.has(linkResource.id);
           if (!alreadyVisited) {
