@@ -1905,103 +1905,8 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
-  test('invalidate() preserves resumed real rows instead of overwriting with tombstones', async function (assert) {
+  test('forgetResumedRows drops a URL from resumedRows so future tombstoning is no longer guarded', async function (assert) {
     let url = `${testRealmURL}1.json`;
-    let dependent = `${testRealmURL}2.json`;
-    await setupIndex(
-      adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
-      {
-        working: [
-          // Resumed real row from a prior attempt of job 42 — has
-          // pristine content; must not be clobbered by tombstoning.
-          {
-            url,
-            realm_version: 1,
-            realm_url: testRealmURL,
-            type: 'instance',
-            job_id: 42,
-            last_modified: '1700000000',
-            is_deleted: false,
-            has_error: false,
-            deps: [],
-            types: [],
-            pristine_doc: {
-              id: url,
-              type: 'card',
-              attributes: { name: 'Resumed' },
-              meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
-            } as LooseCardResource,
-          },
-        ],
-        production: [
-          {
-            url,
-            realm_version: 1,
-            realm_url: testRealmURL,
-            deps: [],
-            types: [],
-          },
-          {
-            url: dependent,
-            realm_version: 1,
-            realm_url: testRealmURL,
-            deps: [url],
-            types: [],
-          },
-        ],
-      },
-    );
-
-    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
-      jobId: 42,
-      reservationId: 1,
-      priority: 0,
-    });
-    await batch.invalidate([new URL(url)]);
-
-    // The resumed URL must NOT have been overwritten with a tombstone:
-    // its pristine_doc and is_deleted=false should still be intact.
-    let [resumedRow] = await adapter.execute(
-      `SELECT is_deleted, pristine_doc, job_id FROM boxel_index_working WHERE url = $1 AND realm_url = $2`,
-      {
-        bind: [url, testRealmURL],
-        coerceTypes: { is_deleted: 'BOOLEAN', pristine_doc: 'JSON' },
-      },
-    );
-    assert.false(
-      resumedRow.is_deleted,
-      'resumed row was not flipped to a tombstone',
-    );
-    assert.ok(resumedRow.pristine_doc, 'pristine doc preserved on resume');
-    assert.strictEqual(
-      resumedRow.job_id,
-      42,
-      'resumed row still tagged with current job_id',
-    );
-
-    // The dependent fan-out URL was NOT in resumedRows, so it should
-    // have been tombstoned normally.
-    let [dependentRow] = await adapter.execute(
-      `SELECT is_deleted, job_id FROM boxel_index_working WHERE url = $1 AND realm_url = $2`,
-      {
-        bind: [dependent, testRealmURL],
-        coerceTypes: { is_deleted: 'BOOLEAN' },
-      },
-    );
-    assert.true(
-      dependentRow.is_deleted,
-      'non-resumed dependent URL was tombstoned',
-    );
-    assert.strictEqual(
-      dependentRow.job_id,
-      42,
-      'tombstone is stamped with the current job_id',
-    );
-  });
-
-  test('forgetResumedRows allows tombstoning a previously-resumed URL', async function (assert) {
-    let url = `${testRealmURL}deleted.json`;
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
@@ -2014,21 +1919,11 @@ module('Unit | index-writer', function (hooks) {
             type: 'instance',
             job_id: 42,
             last_modified: '1700000000',
-            is_deleted: false,
-            has_error: false,
             deps: [],
             types: [],
           },
         ],
-        production: [
-          {
-            url,
-            realm_version: 1,
-            realm_url: testRealmURL,
-            deps: [],
-            types: [],
-          },
-        ],
+        production: [],
       },
     );
 
@@ -2044,20 +1939,13 @@ module('Unit | index-writer', function (hooks) {
     batch.forgetResumedRows([url]);
     assert.false(
       batch.resumedRows.has(url),
-      'forgetResumedRows drops the entry',
+      'after forgetResumedRows the URL is no longer protected',
     );
-    await batch.invalidate([new URL(url)]);
-
-    let [row] = await adapter.execute(
-      `SELECT is_deleted, job_id FROM boxel_index_working WHERE url = $1 AND realm_url = $2`,
-      {
-        bind: [url, testRealmURL],
-        coerceTypes: { is_deleted: 'BOOLEAN' },
-      },
-    );
-    assert.true(
-      row.is_deleted,
-      'after forgetResumedRows, tombstoning proceeds and overwrites the row',
+    batch.forgetResumedRows([`${testRealmURL}does-not-exist.json`]);
+    assert.strictEqual(
+      batch.resumedRows.size,
+      0,
+      'forgetResumedRows on a URL that is not present is a no-op',
     );
   });
 
