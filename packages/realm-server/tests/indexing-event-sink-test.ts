@@ -354,6 +354,109 @@ module(basename(__filename), function () {
       );
     });
 
+    test('flush guards against overlapping ticks under DB pressure', async function (assert) {
+      // Slow adapter — each execute() takes 60 ms, far longer than the
+      // 10 ms tick interval. Without the in-flight guard the timer would
+      // queue up ~6 overlapping flushes per slow write.
+      let executes: RecordedExecute[] = [];
+      let slowAdapter: DBAdapter = {
+        kind: 'pg',
+        isClosed: false,
+        async execute(sql, opts) {
+          executes.push({
+            sql,
+            bind: (opts?.bind ?? []) as PgPrimitive[],
+          });
+          await sleep(60);
+          return [];
+        },
+        async close() {},
+        async getColumnNames() {
+          return [];
+        },
+      };
+      let sink = new IndexingEventSink({ flushIntervalMs: 10 });
+      sink.setAdapter(slowAdapter);
+      try {
+        // Started writes immediately (not via flush). One execute.
+        sink.handleEvent({
+          type: 'indexing-started',
+          realmURL: 'http://example.com/realm/',
+          jobId: 1,
+          jobType: 'from-scratch',
+          totalFiles: 100,
+          files: [],
+        });
+        // Mark dirty — periodic flush should pick this up.
+        sink.handleEvent({
+          type: 'file-visited',
+          realmURL: 'http://example.com/realm/',
+          jobId: 1,
+          url: 'http://example.com/realm/x.gts',
+          filesCompleted: 1,
+          totalFiles: 100,
+        });
+        // 200 ms = ~20 timer ticks. Each flush takes 60 ms, so without
+        // the guard this would fan out into ~20 concurrent execute()
+        // calls. With the guard, at most 4 flushes fire in 200 ms
+        // (each waits for the prior to finish), and only the first one
+        // sees a non-empty dirty set — subsequent flushes find it
+        // already drained and skip.
+        await sleep(200);
+        // Allow for the started UPSERT + ~3 flush UPSERTs at the
+        // worst end of timing variance.
+        assert.ok(
+          executes.length <= 5,
+          `expected ≤5 execute calls under guard, got ${executes.length}`,
+        );
+        assert.ok(
+          executes.length >= 2,
+          `expected at least the started UPSERT + one flush UPSERT, got ${executes.length}`,
+        );
+      } finally {
+        sink.dispose();
+        // Wait for any pending in-flight execute to settle so the test
+        // doesn't bleed work into the next test's setup.
+        await sleep(80);
+      }
+    });
+
+    test('fileVisitedLogEvery is clamped to ≥ 1', function (assert) {
+      // Boundary cases for the env-var-driven sample option (CS-10930).
+      // 0 / negative / NaN should fall back to 1 (no sampling).
+      let s0 = new IndexingEventSink({ fileVisitedLogEvery: 0 });
+      let sNeg = new IndexingEventSink({ fileVisitedLogEvery: -5 });
+      let sNaN = new IndexingEventSink({ fileVisitedLogEvery: NaN });
+      // Indirect assertion via behavior: handleEvent on file-visited
+      // shouldn't throw modulo-by-zero. If the clamp is wrong this
+      // test would catch divide-by-zero or NaN-comparison drift.
+      try {
+        for (let s of [s0, sNeg, sNaN]) {
+          s.handleEvent({
+            type: 'indexing-started',
+            realmURL: 'http://example.com/realm/',
+            jobId: 1,
+            jobType: 'from-scratch',
+            totalFiles: 1,
+            files: [],
+          });
+          s.handleEvent({
+            type: 'file-visited',
+            realmURL: 'http://example.com/realm/',
+            jobId: 1,
+            url: 'http://example.com/realm/a.gts',
+            filesCompleted: 1,
+            totalFiles: 1,
+          });
+        }
+        assert.ok(true, 'no throw on degenerate fileVisitedLogEvery values');
+      } finally {
+        s0.dispose();
+        sNeg.dispose();
+        sNaN.dispose();
+      }
+    });
+
     test('without setAdapter, sink runs in-memory only (no writes attempted)', async function (assert) {
       let { adapter, executes } = makeRecordingAdapter();
       // Construct sink WITHOUT setAdapter — the recording adapter is

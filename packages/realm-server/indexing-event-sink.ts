@@ -51,11 +51,19 @@ export class IndexingEventSink {
   #adapter: DBAdapter | undefined;
   #dirtyJobIds = new Set<number>();
   #flushTimer: NodeJS.Timeout | undefined;
+  #flushInFlight = false;
   #disposed = false;
   #flushIntervalMs: number;
+  #fileVisitedLogEvery: number;
 
-  constructor(opts: { flushIntervalMs?: number } = {}) {
+  constructor(
+    opts: { flushIntervalMs?: number; fileVisitedLogEvery?: number } = {},
+  ) {
     this.#flushIntervalMs = opts.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
+    // 1 = log every file-visited (most fidelity, highest log volume).
+    // 10 ≈ ~1 line/sec/job at heavy indexing throughput.
+    // Values <1 are treated as 1.
+    this.#fileVisitedLogEvery = Math.max(1, opts.fileVisitedLogEvery ?? 1);
   }
 
   /**
@@ -147,9 +155,14 @@ export class IndexingEventSink {
             }
           }
           state.lastUpdatedAt = Date.now();
-          log.info(
-            `[indexing-progress] event=file-visited job=${event.jobId} realm=${state.realmURL} seq=${state.filesCompleted} total=${state.totalFiles} file=${event.url ?? ''}`,
-          );
+          // Per-file log line is the highest-volume signal (~17/sec/job at
+          // heavy indexing). Sample by `fileVisitedLogEvery` so operators
+          // can dial back Loki ingest cost without losing started/finished.
+          if (state.filesCompleted % this.#fileVisitedLogEvery === 0) {
+            log.info(
+              `[indexing-progress] event=file-visited job=${event.jobId} realm=${state.realmURL} seq=${state.filesCompleted} total=${state.totalFiles} file=${event.url ?? ''}`,
+            );
+          }
           // Coalesce file-visited events into one UPDATE per tick;
           // the periodic flush below picks up the dirty set.
           this.#dirtyJobIds.add(event.jobId);
@@ -207,24 +220,38 @@ export class IndexingEventSink {
   }
 
   async #flushDirty(): Promise<void> {
-    if (this.#disposed || !this.#adapter || this.#dirtyJobIds.size === 0) {
+    // Skip if a prior flush is still in flight — under DB pressure a slow
+    // UPSERT batch can outlast the timer interval, and overlapping flushes
+    // would compound load instead of relieving it. The dirty set persists
+    // across the skip so the next tick picks them up.
+    if (
+      this.#disposed ||
+      !this.#adapter ||
+      this.#flushInFlight ||
+      this.#dirtyJobIds.size === 0
+    ) {
       return;
     }
-    let dirty = [...this.#dirtyJobIds];
-    this.#dirtyJobIds.clear();
-    await Promise.all(
-      dirty.map((jobId) => {
-        let state = this.#active.get(jobId);
-        if (!state) {
-          return Promise.resolve();
-        }
-        return this.#upsertProgress(
-          jobId,
-          state.filesCompleted,
-          state.totalFiles,
-        );
-      }),
-    );
+    this.#flushInFlight = true;
+    try {
+      let dirty = [...this.#dirtyJobIds];
+      this.#dirtyJobIds.clear();
+      await Promise.all(
+        dirty.map((jobId) => {
+          let state = this.#active.get(jobId);
+          if (!state) {
+            return Promise.resolve();
+          }
+          return this.#upsertProgress(
+            jobId,
+            state.filesCompleted,
+            state.totalFiles,
+          );
+        }),
+      );
+    } finally {
+      this.#flushInFlight = false;
+    }
   }
 
   async #upsertProgress(

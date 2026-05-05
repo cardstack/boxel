@@ -348,6 +348,14 @@ by realm.
   the existing FireLens pipe. The Indexing Activity Feed panel filters
   by `|= "[indexing-progress]" |= "${realm_url}"`.
 
+**Tunable**: set `BOXEL_INDEXING_PROGRESS_LOG_EVERY=N` (default `1`) on
+each realm-server task to log only every Nth `file-visited` event. The
+DB write-through is unaffected — it's already coalesced to ≤1 UPDATE
+per active job per second. `BOXEL_INDEXING_PROGRESS_LOG_EVERY=10` cuts
+Loki ingest cost ~10× during heavy indexing while keeping ~1 line/sec/job
+of activity-feed visibility. `started`/`finished` lines are always
+emitted regardless.
+
 Why not Prometheus: workers expose no `/metrics` endpoint today, and
 adding the AMP scrape pipe (Alloy sidecar, IAM, AMP datasource) is
 2–3 days of `cardstack/infra` work — out of scope for one panel.

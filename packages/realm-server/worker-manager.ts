@@ -139,7 +139,18 @@ function isIndexingDashboardEnabled(): boolean {
 // emits are how the cluster-wide Boxel Jobs dashboard aggregates
 // progress in staging/prod (CS-10930). The local-only HTML
 // `/_indexing-dashboard` routes are still gated below.
-let eventSink = new IndexingEventSink();
+//
+// BOXEL_INDEXING_PROGRESS_LOG_EVERY (default 1) samples the per-file
+// log line emission so operators can dial back Loki ingest cost during
+// heavy indexing without dropping started/finished events.
+let fileVisitedLogEvery = parseInt(
+  process.env.BOXEL_INDEXING_PROGRESS_LOG_EVERY ?? '1',
+  10,
+);
+if (!Number.isFinite(fileVisitedLogEvery) || fileVisitedLogEvery < 1) {
+  fileVisitedLogEvery = 1;
+}
+let eventSink = new IndexingEventSink({ fileVisitedLogEvery });
 
 let webServerInstance: Server | undefined;
 let autoMigrate = migrateDB || undefined;
