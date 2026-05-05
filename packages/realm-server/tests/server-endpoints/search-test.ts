@@ -35,7 +35,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
 
     let ownerUserId = '@mango:localhost';
 
-    let realmFileSystem: Record<string, LooseSingleCardDocument> = {
+    let realmFileSystem: Record<string, string | LooseSingleCardDocument> = {
       'test-card.json': {
         data: {
           type: 'card',
@@ -64,6 +64,55 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
             adoptsFrom: {
               module: rri('https://cardstack.com/base/card-api'),
               name: 'CardDef',
+            },
+          },
+        },
+      },
+      'friend.gts': `
+        import {
+          contains,
+          linksTo,
+          field,
+          CardDef,
+        } from 'https://cardstack.com/base/card-api';
+        import StringField from 'https://cardstack.com/base/string';
+
+        export class Friend extends CardDef {
+          @field firstName = contains(StringField);
+          @field friend = linksTo(() => Friend);
+        }
+      `,
+      'friend-1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Alice',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: './friend-2',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: rri('./friend'),
+              name: 'Friend',
+            },
+          },
+        },
+      },
+      'friend-2.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Bob',
+          },
+          meta: {
+            adoptsFrom: {
+              module: rri('./friend'),
+              name: 'Friend',
             },
           },
         },
@@ -314,6 +363,177 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         .send({ realms: [testRealm.url], invalid: 'query structure' });
 
       assert.strictEqual(response.status, 400, 'HTTP 400 status');
+    });
+
+    test("QUERY /_federated-search side-loads links by default (include absent) — preserves today's behavior", async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+
+      let query: Query = {
+        filter: {
+          on: {
+            module: rri(`${testRealm.url}friend`),
+            name: 'Friend',
+          },
+          eq: {
+            firstName: 'Alice',
+          },
+        },
+      };
+
+      let searchURL = new URL('/_federated-search', testRealm.url);
+
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .send({ ...query, realms: [testRealm.url] });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(response.body.data.length, 1, 'one Alice returned');
+      assert.ok(
+        Array.isArray(response.body.included),
+        'included is an array when include is absent',
+      );
+      assert.ok(
+        response.body.included.length > 0,
+        'included is populated when include is absent',
+      );
+      let includedIds = response.body.included.map((r: { id: string }) => r.id);
+      assert.ok(
+        includedIds.some((id: string) => id.includes('friend-2')),
+        'linked Bob is side-loaded',
+      );
+    });
+
+    test('QUERY /_federated-search with include:[] returns no included[] and skips link loading', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+
+      let query: Query = {
+        filter: {
+          on: {
+            module: rri(`${testRealm.url}friend`),
+            name: 'Friend',
+          },
+          eq: {
+            firstName: 'Alice',
+          },
+        },
+      };
+
+      let searchURL = new URL('/_federated-search', testRealm.url);
+
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .send({ ...query, realms: [testRealm.url], include: [] });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(response.body.data.length, 1, 'one Alice returned');
+      assert.strictEqual(
+        response.body.included,
+        undefined,
+        'no included array when include:[] is requested',
+      );
+      // Sanity-check that the relationship metadata is still present in data
+      // even though we did not side-load — clients can still walk it manually.
+      assert.ok(
+        response.body.data[0].relationships?.friend?.links?.self,
+        'relationship link is present in data even without side-load',
+      );
+    });
+
+    test('QUERY /_federated-search with include:["friend"] side-loads only the named relationship', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+
+      let query: Query = {
+        filter: {
+          on: {
+            module: rri(`${testRealm.url}friend`),
+            name: 'Friend',
+          },
+          eq: {
+            firstName: 'Alice',
+          },
+        },
+      };
+
+      let searchURL = new URL('/_federated-search', testRealm.url);
+
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .send({
+          ...query,
+          realms: [testRealm.url],
+          include: ['friend'],
+        });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(response.body.data.length, 1, 'one Alice returned');
+      assert.ok(
+        Array.isArray(response.body.included),
+        'included is an array for named relationship',
+      );
+      assert.ok(
+        response.body.included.length > 0,
+        'included is populated for named relationship',
+      );
+      let includedIds = response.body.included.map((r: { id: string }) => r.id);
+      assert.ok(
+        includedIds.some((id: string) => id.includes('friend-2')),
+        'linked Bob is side-loaded',
+      );
+    });
+
+    test('QUERY /_federated-search returns 400 when include is not an array of strings', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+
+      let query: Query = {
+        filter: {
+          on: baseCardRef,
+          eq: {
+            cardTitle: 'Shared Card',
+          },
+        },
+      };
+
+      let searchURL = new URL('/_federated-search', testRealm.url);
+
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .send({ ...query, realms: [testRealm.url], include: 'friend' });
+
+      assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      assert.ok(
+        response.body.errors?.[0]?.message?.includes(
+          'include must be an array of strings',
+        ),
+        'response explains malformed include',
+      );
     });
 
     test('QUERY /_federated-search returns 400 when realms param is missing', async function (assert) {

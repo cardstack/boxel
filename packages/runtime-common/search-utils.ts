@@ -181,6 +181,44 @@ export function parseSearchQueryFromPayload(payload: unknown): Query {
   return cardsQuery as Query;
 }
 
+export type SearchRequest = {
+  query: Query;
+  include?: string[];
+};
+
+export async function parseSearchRequestFromRequest(
+  request: Request,
+): Promise<SearchRequest> {
+  let payload = await parseSearchRequestPayload(request);
+  return parseSearchRequestFromPayload(payload);
+}
+
+export function parseSearchRequestFromPayload(payload: unknown): SearchRequest {
+  let payloadRecord =
+    payload && typeof payload === 'object'
+      ? (payload as Record<string, unknown>)
+      : {};
+  let include: string[] | undefined;
+  let cardsQuery: unknown = payload;
+  if ('include' in payloadRecord) {
+    let rawInclude = payloadRecord.include;
+    if (
+      !Array.isArray(rawInclude) ||
+      !rawInclude.every((entry) => typeof entry === 'string')
+    ) {
+      throw new SearchRequestError(
+        'invalid-query',
+        'include must be an array of strings',
+      );
+    }
+    include = rawInclude;
+    let { include: _omit, ...rest } = payloadRecord;
+    cardsQuery = rest;
+  }
+  let query = parseSearchQueryFromPayload(cardsQuery);
+  return { query, include };
+}
+
 export async function parsePrerenderedSearchRequestFromRequest(
   request: Request,
 ): Promise<{
@@ -317,13 +355,17 @@ export function combinePrerenderedSearchResults(
 }
 
 type SearchableRealm = {
-  search: (query: Query) => Promise<LinkableCollectionDocument>;
+  search: (
+    query: Query,
+    opts?: { include?: string[] },
+  ) => Promise<LinkableCollectionDocument>;
   url?: string;
 };
 
 export async function searchRealms(
   realms: Array<SearchableRealm | null | undefined>,
   query: Query,
+  opts?: { include?: string[] },
 ): Promise<LinkableCollectionDocument> {
   let realmEntries = realms
     .filter((realm): realm is SearchableRealm => Boolean(realm))
@@ -332,7 +374,7 @@ export async function searchRealms(
       label: realm.url ? String(realm.url) : undefined,
     }));
   let searchPromises = realmEntries.map(({ realm }) =>
-    Promise.resolve().then(() => realm.search(query)),
+    Promise.resolve().then(() => realm.search(query, opts)),
   );
   let results = await Promise.allSettled(searchPromises);
   let queryLabel = '[unserializable query]';

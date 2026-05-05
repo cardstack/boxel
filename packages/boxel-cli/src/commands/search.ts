@@ -48,6 +48,15 @@ export async function search(
     ensureTrailingSlash,
   );
 
+  // The CLI only ever surfaces `data[]` to its callers, so default to JSON:API
+  // `include: []` and skip the server's `loadLinks` work entirely. Callers can
+  // still override by setting `include` themselves on `query`.
+  let body: Record<string, unknown> = {
+    realms,
+    include: [],
+    ...query,
+  };
+
   try {
     let response = await pm.authedRealmServerFetch(searchUrl, {
       method: 'QUERY',
@@ -55,7 +64,7 @@ export async function search(
         Accept: 'application/vnd.card+json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ realms, ...query }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {

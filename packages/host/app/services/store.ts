@@ -744,6 +744,7 @@ export default class StoreService extends Service implements StoreInterface {
     opts: {
       includeMeta: true;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      include?: string[];
     },
   ): Promise<{
     resources: (CardResource<Saved> | FileMetaResource)[];
@@ -759,6 +760,7 @@ export default class StoreService extends Service implements StoreInterface {
     opts: {
       includeMeta: true;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      include?: string[];
     },
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }>;
   async search<T extends CardDef | FileDef = CardDef>(
@@ -767,6 +769,7 @@ export default class StoreService extends Service implements StoreInterface {
     opts?: {
       includeMeta?: boolean;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      include?: string[];
     },
   ): Promise<
     | T[]
@@ -795,13 +798,18 @@ export default class StoreService extends Service implements StoreInterface {
         : [];
     }
     if (query.asData) {
-      let result = await this.fetchSearchData(query, searchRealms);
+      let result = await this.fetchSearchData(
+        query,
+        searchRealms,
+        opts?.include,
+      );
       return opts?.includeMeta ? result : result.resources;
     }
     let result = await this.fetchAndHydrateSearchResults<T>(
       query,
       searchRealms,
       opts?.dependencyTrackingContext,
+      opts?.include,
     );
     return opts?.includeMeta ? result : result.instances;
   }
@@ -812,6 +820,7 @@ export default class StoreService extends Service implements StoreInterface {
     query: Query,
     realms: string[],
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+    include?: string[],
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }> {
     let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
     // TODO remove this assertion after multi-realm server/federated identity is supported
@@ -827,7 +836,11 @@ export default class StoreService extends Service implements StoreInterface {
           Accept: SupportedMimeType.CardJson,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ ...query, realms }),
+        body: JSON.stringify({
+          ...query,
+          realms,
+          ...(include !== undefined ? { include } : {}),
+        }),
       },
     );
     if (!response.ok) {
@@ -875,6 +888,7 @@ export default class StoreService extends Service implements StoreInterface {
   private async fetchSearchData(
     query: Query,
     realms: string[],
+    include?: string[],
   ): Promise<{
     resources: (CardResource<Saved> | FileMetaResource)[];
     meta: QueryResultsMeta;
@@ -893,7 +907,11 @@ export default class StoreService extends Service implements StoreInterface {
           Accept: SupportedMimeType.CardJson,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ ...query, realms }),
+        body: JSON.stringify({
+          ...query,
+          realms,
+          ...(include !== undefined ? { include } : {}),
+        }),
       },
     );
     if (!response.ok) {

@@ -218,6 +218,11 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
     {
       isLive: false,
       storeService: getOwner(this)!.lookup('service:render-store') as any,
+      // We only consume `instance.id` and `instance.constructor` from the
+      // results (see live-prerendered-search.ts); skipping link side-loads
+      // saves N×M sequential link queries per search on the cards-grid
+      // prerender path.
+      include: [],
     },
   );
 

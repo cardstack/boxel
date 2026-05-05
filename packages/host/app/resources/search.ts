@@ -45,6 +45,7 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
     isAutoSaved?: boolean;
     storeService?: StoreService;
     doWhileRefreshing?: (() => void) | undefined;
+    include?: string[];
     seed?:
       | {
           cards: T[];
@@ -86,6 +87,8 @@ export class SearchResource<
   #previousQuery: Query | undefined;
   #previousQueryString: string | undefined;
   #previousRealms: string[] | undefined;
+  #previousInclude: string[] | undefined;
+  #include: string[] | undefined;
   #dependencyTracking: RuntimeDependencyTrackingContext | undefined;
   #log = runtimeLogger('search-resource');
   #trackedLoadCount = 0;
@@ -182,6 +185,7 @@ export class SearchResource<
       seed,
       owner,
       storeService,
+      include,
     } = named;
 
     setOwner(this, owner); // works around problem where lifetime parent is used as owner when they should be allowed to differ
@@ -201,6 +205,7 @@ export class SearchResource<
     this.#isLive = isLive;
     this.#doWhileRefreshing = doWhileRefreshing;
     this.#dependencyTracking = named.dependencyTracking;
+    this.#include = include;
     this.realmsToSearch =
       realms === undefined || realms.length === 0
         ? this.realmServer.availableRealmURLs
@@ -269,7 +274,8 @@ export class SearchResource<
     let queryString = buildQueryParamValue(normalizeQueryForSignature(query));
     if (
       isEqual(queryString, this.#previousQueryString) &&
-      isEqual(realms, this.#previousRealms)
+      isEqual(realms, this.#previousRealms) &&
+      isEqual(include, this.#previousInclude)
     ) {
       // we want to only run the search when there is a deep equality
       // difference, not a strict equality difference
@@ -284,6 +290,7 @@ export class SearchResource<
     this.#previousRealms = realms;
     this.#previousQuery = query;
     this.#previousQueryString = queryString;
+    this.#previousInclude = include;
     this.trackStoreLoad(this.search.perform(query), 'search');
   }
   get isLoading() {
@@ -408,6 +415,7 @@ export class SearchResource<
         {
           includeMeta: true,
           dependencyTrackingContext,
+          include: this.#include,
         },
       );
       this.#log.info(
@@ -442,6 +450,7 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
     isLive?: boolean;
     storeService?: StoreService;
     doWhileRefreshing?: (() => void) | undefined;
+    include?: string[];
     seed?:
       | {
           cards: T[];
@@ -469,6 +478,7 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
       doWhileRefreshing: opts?.doWhileRefreshing,
       seed: opts?.seed,
       dependencyTracking: opts?.dependencyTracking,
+      include: opts?.include,
       owner,
     },
   }));

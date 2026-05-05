@@ -3602,11 +3602,22 @@ export class Realm {
     return this.#realmIndexUpdater.isIgnored(url);
   }
 
-  public async search(query: Query): Promise<LinkableCollectionDocument> {
+  public async search(
+    query: Query,
+    opts?: { include?: string[] },
+  ): Promise<LinkableCollectionDocument> {
     assertQuery(query);
-    return await this.#realmIndexQueryEngine.searchCards(query, {
-      loadLinks: true,
-    });
+    let searchOpts: { loadLinks?: true; linkFields?: string[] };
+    if (opts?.include === undefined) {
+      // Preserves today's behavior for callers that have not opted in to
+      // JSON:API include semantics yet.
+      searchOpts = { loadLinks: true };
+    } else if (opts.include.length === 0) {
+      searchOpts = {};
+    } else {
+      searchOpts = { loadLinks: true, linkFields: opts.include };
+    }
+    return await this.#realmIndexQueryEngine.searchCards(query, searchOpts);
   }
 
   private async searchResponse(

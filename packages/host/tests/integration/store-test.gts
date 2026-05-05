@@ -1613,6 +1613,80 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('search forwards include:[] into the _federated-search request body', async function (assert) {
+    let networkService = getService('network');
+    let capturedBodies: any[] = [];
+    let handler = async (req: Request) => {
+      let url = new URL(req.url);
+      if (url.pathname.endsWith('/_federated-search')) {
+        try {
+          capturedBodies.push(JSON.parse(await req.clone().text()));
+        } catch {
+          capturedBodies.push(null);
+        }
+      }
+      return null;
+    };
+    networkService.virtualNetwork.mount(handler, { prepend: true });
+    try {
+      await storeService.search(
+        {
+          filter: {
+            on: { module: testRRI('person'), name: 'Person' },
+            eq: { name: 'Hassan' },
+          },
+        },
+        [testRealmURL],
+        { includeMeta: true, include: [] },
+      );
+      assert.ok(capturedBodies.length > 0, 'a _federated-search was issued');
+      let body = capturedBodies[capturedBodies.length - 1];
+      assert.deepEqual(
+        body.include,
+        [],
+        'request body carries include:[] verbatim',
+      );
+    } finally {
+      networkService.virtualNetwork.unmount(handler);
+    }
+  });
+
+  test('search omits the include key from the request body when not specified', async function (assert) {
+    let networkService = getService('network');
+    let capturedBodies: any[] = [];
+    let handler = async (req: Request) => {
+      let url = new URL(req.url);
+      if (url.pathname.endsWith('/_federated-search')) {
+        try {
+          capturedBodies.push(JSON.parse(await req.clone().text()));
+        } catch {
+          capturedBodies.push(null);
+        }
+      }
+      return null;
+    };
+    networkService.virtualNetwork.mount(handler, { prepend: true });
+    try {
+      await storeService.search(
+        {
+          filter: {
+            on: { module: testRRI('person'), name: 'Person' },
+            eq: { name: 'Hassan' },
+          },
+        },
+        [testRealmURL],
+      );
+      assert.ok(capturedBodies.length > 0, 'a _federated-search was issued');
+      let body = capturedBodies[capturedBodies.length - 1];
+      assert.notOk(
+        'include' in body,
+        'include key is absent so server-side default behavior is preserved',
+      );
+    } finally {
+      networkService.virtualNetwork.unmount(handler);
+    }
+  });
+
   test<TestContextWithSave>('an instance live updates from indexing events for an instance update', async function (assert) {
     assert.expect(2);
     let didSave = false;

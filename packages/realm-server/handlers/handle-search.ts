@@ -2,8 +2,8 @@ import type Koa from 'koa';
 import {
   buildSearchErrorResponse,
   SupportedMimeType,
-  parseSearchQueryFromPayload,
-  parseSearchQueryFromRequest,
+  parseSearchRequestFromPayload,
+  parseSearchRequestFromRequest,
   SearchRequestError,
   searchRealms,
 } from '@cardstack/runtime-common';
@@ -21,14 +21,14 @@ export default function handleSearch(): (ctxt: Koa.Context) => Promise<void> {
   return async function (ctxt: Koa.Context) {
     let { realmList, realmByURL } = getMultiRealmAuthorization(ctxt);
 
-    let cardsQuery;
+    let searchRequest;
     let request = await fetchRequestFromContext(ctxt);
     try {
       let payload = getSearchRequestPayload(ctxt);
-      cardsQuery =
+      searchRequest =
         payload !== undefined
-          ? parseSearchQueryFromPayload(payload)
-          : await parseSearchQueryFromRequest(request);
+          ? parseSearchRequestFromPayload(payload)
+          : await parseSearchRequestFromRequest(request);
     } catch (e) {
       if (e instanceof SearchRequestError) {
         if (e.code === 'invalid-query') {
@@ -43,7 +43,8 @@ export default function handleSearch(): (ctxt: Koa.Context) => Promise<void> {
 
     let combined = await searchRealms(
       realmList.map((realmURL) => realmByURL.get(realmURL)),
-      cardsQuery,
+      searchRequest.query,
+      { include: searchRequest.include },
     );
 
     await setContextResponse(
