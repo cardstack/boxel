@@ -1369,14 +1369,24 @@ export class Realm {
         // Deferred is registered synchronously inside enqueueUpdate before
         // any await, so realm.incrementalIndexing() reflects this work as
         // pending the moment we return.
+        // Snapshot any invalidations from in-loop intermediate flushes (the
+        // module-then-instance gate at line 1262) so the broadcast unions
+        // them with the deferred-flush results. Without this, mixed-batch
+        // writeMany calls with waitForIndex:false would silently drop the
+        // earlier flushes' invalidations and leave subscribers with stale
+        // state for those URLs. Single-file callers (+source / binary)
+        // never hit the intermediate path, so this snapshot is empty for
+        // them — but it's correct for the primitive in general.
+        let priorInvalidations = [...invalidations];
         let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
           urls,
           { clientRequestId },
         );
         let indexingPromise = settled.then((deferredInvalidations) => {
-          this.broadcastIncrementalInvalidationEvent(deferredInvalidations, {
-            clientRequestId,
-          });
+          this.broadcastIncrementalInvalidationEvent(
+            [...new Set([...priorInvalidations, ...deferredInvalidations])],
+            { clientRequestId },
+          );
         });
         indexingPromise.catch((err: unknown) => {
           let message = err instanceof Error ? err.message : String(err);
