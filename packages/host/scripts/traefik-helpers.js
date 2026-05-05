@@ -1,7 +1,6 @@
 /**
  * Shared helpers for Traefik registration in environment mode.
- * Used by scripts/vite-with-traefik.js (which both vite-serve.js and
- * serve-dist.js delegate to).
+ * Both vite-serve.js and serve-dist.js use these.
  */
 
 const path = require('path');
