@@ -1697,29 +1697,15 @@ export class Realm {
 
     if (files.size > 0) {
       try {
-        // CS-11003 PR 3: the /_atomic endpoint no longer awaits indexing
-        // before returning. boxel-cli's `push` command (the canonical
-        // /_atomic caller) doesn't depend on indexed state — it just
-        // wants the source bytes durable on the realm — and indexing a
-        // large batch can take a very long time. Imposing that wait on
-        // the user broke the responsiveness goal CS-11003 exists to
-        // deliver. We KEEP /_atomic (rather than switching push to
-        // parallel +source POSTs) because /_atomic preserves the
-        // module-then-instance ordering that fileSerialization needs
-        // when a batch contains both — see the in-loop intermediate
-        // flush in _batchWrite at the lastWriteType === 'module' &&
-        // currentWriteType === 'instance' gate. Per-file parallel
-        // POSTs would let an instance write start before its module
-        // is indexed and throw FilterRefersToNonexistentTypeError.
-        //
-        // Note: this is a behavior change for ALL /_atomic callers,
-        // not just push. Any caller that relied on "/_atomic returned
-        // 201 means the realm is indexed" must now drain via
+        // /_atomic returns once writes are durable, not once they are
+        // indexed. Callers that need indexed state must drain via
         // realm.incrementalIndexing() (server-side) or wait on the
-        // matrix 'index' incremental event (client-side). Acceptance
-        // tests that go through /_atomic and read indexed state need
-        // an explicit drain — same pattern PR 2 added for the
-        // +source-POST surface.
+        // matrix 'index' incremental event (client-side). Mixed
+        // module+instance batches are still serialized correctly: the
+        // in-loop intermediate flush in _batchWrite at the
+        // lastWriteType === 'module' && currentWriteType === 'instance'
+        // gate is always awaited, so an instance's fileSerialization
+        // sees its module already indexed.
         writeResults = await this.writeMany(files, {
           clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
           serializeFile: true,
