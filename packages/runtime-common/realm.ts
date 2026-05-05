@@ -397,10 +397,18 @@ export interface WriteOptions {
   clientRequestId?: string | null;
   serializeFile?: boolean | null;
   // When false, the write returns as soon as the source bytes are durable;
-  // indexing kicks off in the background. Callers that need to know when
-  // indexing has settled can `await realm.incrementalIndexing()`. Defaults
-  // to true (preserve the synchronous-indexing semantic existing callers
-  // depend on).
+  // the *final* index flush kicks off in the background. Callers that need
+  // to know when indexing has settled can `await realm.incrementalIndexing()`.
+  // Defaults to true (preserve the synchronous-indexing semantic existing
+  // callers depend on).
+  //
+  // Note: in a mixed-batch `writeMany` call where a module is followed by
+  // an instance, the *intermediate* index flush that fileSerialization
+  // depends on is still awaited inline regardless of this flag — without
+  // it, the next instance's serialization would fail. This flag governs
+  // only the final indexing await. The first concrete caller is the per-
+  // file `+source` POST handler, which writes a single file at a time, so
+  // the intermediate-flush path is not exercised in practice.
   waitForIndex?: boolean | null;
 }
 
