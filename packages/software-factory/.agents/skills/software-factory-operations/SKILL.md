@@ -97,9 +97,14 @@ Issue cards have an `attributes.comments[]` array. To append a comment:
    {
      "body": "...comment text, markdown allowed...",
      "author": "factory-agent",
-     "createdAt": "<ISO timestamp>"
+     "datetime": "<ISO timestamp>"
    }
    ```
+
+   The Comment field schema is `{ body, author, datetime }` — the
+   timestamp field is named `datetime`, **not** `createdAt`. Issue cards
+   themselves do have `createdAt` / `updatedAt` attributes, but those are
+   separate from the comment shape.
 
 3. `Write` (or `Edit`) the document back. **Do not modify
    `description` or any other attribute** — comments are append-only.

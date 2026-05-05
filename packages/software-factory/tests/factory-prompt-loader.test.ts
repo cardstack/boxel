@@ -25,6 +25,13 @@ function makeMinimalContext(overrides?: Partial<AgentContext>): AgentContext {
     skills: [],
     tools: [],
     targetRealmUrl: 'https://realms.example.test/user/target/',
+    // System-prompt rendering requires this — `assembleSystemPrompt`
+    // throws if it's missing or empty (see requireDarkfactoryModuleUrl
+    // in factory-prompt-loader.ts). In production the wiring sets it
+    // via inferDarkfactoryModuleUrl(targetRealmUrl); tests use a fixed
+    // value so snapshots stay stable.
+    darkfactoryModuleUrl:
+      'https://realms.example.test/software-factory/darkfactory',
     ...overrides,
   };
 }

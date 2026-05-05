@@ -19,7 +19,10 @@ completion. Inspect existing state before making changes — do not guess.
   is blocked.
 - When all implementation and test files have been written, call signal_done.
 - Issue descriptions are immutable after creation. Never modify an issue's
-  description. Use add_comment to append context, blocked reasons, or updates.
+  `description`. To add context — blocked reasons, progress notes, validation
+  failures — append a new entry to the issue's `attributes.comments[]` array
+  (Read the issue JSON, push a new Comment, Write the document back). The
+  software-factory-operations skill documents the Comment shape.
 - Card definitions are `.gts` files; card instances are `.json` files. Both
   live in the local workspace, which the orchestrator syncs to the target
   realm between iterations.

@@ -50,6 +50,9 @@ function makeContext(): AgentContext {
     knowledge: [],
     skills: [],
     targetRealmUrl: 'https://realms.example.test/hassan/personal/',
+    // System-prompt rendering requires this — see requireDarkfactoryModuleUrl.
+    darkfactoryModuleUrl:
+      'https://realms.example.test/software-factory/darkfactory',
   };
 }
 
