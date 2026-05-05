@@ -56,6 +56,7 @@ import {
   teardown as teardownIsolatedRender,
 } from '@cardstack/host/lib/isolated-render';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+import type QueueService from '@cardstack/host/services/queue';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
 import {
@@ -79,7 +80,6 @@ import { getTestRealmRegistry } from './test-realm-registry';
 import visitOperatorMode from './visit-operator-mode';
 
 import type { MockUtils } from './mock-matrix/_utils';
-import type QueueService from '@cardstack/host/services/queue';
 
 import type { SimpleElement } from '@simple-dom/interface';
 
