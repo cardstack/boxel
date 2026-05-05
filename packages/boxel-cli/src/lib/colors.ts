@@ -1,7 +1,6 @@
 // Disable ANSI escapes when stdout isn't a TTY (piped to file/pager) or
 // NO_COLOR is set — see https://no-color.org. Evaluated at module load.
-const COLOR_ENABLED =
-  process.stdout.isTTY === true && !process.env.NO_COLOR;
+const COLOR_ENABLED = process.stdout.isTTY === true && !process.env.NO_COLOR;
 
 const c = (code: string): string => (COLOR_ENABLED ? code : '');
 

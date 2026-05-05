@@ -66,10 +66,7 @@ export class RealmWatcher extends RealmSyncBase {
     authenticator: RealmAuthenticator,
     options: { debounceMs: number; quiet: boolean },
   ) {
-    super(
-      { realmUrl: spec.realmUrl, localDir: spec.localDir },
-      authenticator,
-    );
+    super({ realmUrl: spec.realmUrl, localDir: spec.localDir }, authenticator);
     this.debounceMs = options.debounceMs;
     this.quiet = options.quiet;
     this.checkpointManager = new CheckpointManager(spec.localDir);

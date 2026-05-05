@@ -17,7 +17,7 @@ import {
 let profileManager: ProfileManager;
 let cleanupProfile: () => void;
 let realmUrl: string;
-let localDirs: string[] = [];
+const localDirs: string[] = [];
 
 function makeLocalDir(): string {
   let dir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-watch-int-'));
