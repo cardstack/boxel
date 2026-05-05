@@ -1775,6 +1775,52 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  test('does not resume rows with has_error=true so the retry can re-attempt them', async function (assert) {
+    let url = `${testRealmURL}errored.json`;
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      {
+        working: [
+          {
+            url,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            type: 'instance',
+            job_id: 42,
+            last_modified: '1700000000',
+            is_deleted: false,
+            has_error: true,
+            error_doc: {
+              message: 'transient',
+              status: 500,
+              additionalErrors: [],
+            },
+            deps: [],
+            types: [],
+          },
+        ],
+        production: [],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
+      jobId: 42,
+      reservationId: 1,
+      priority: 0,
+    });
+    assert.strictEqual(
+      batch.resumedRows.size,
+      0,
+      'errored rows are not resumed — the retry exists to re-attempt them',
+    );
+    assert.deepEqual(
+      batch.invalidations,
+      [],
+      'errored URLs are not pre-seeded into the invalidation set',
+    );
+  });
+
   test('does not resume rows from a different job', async function (assert) {
     await setupIndex(
       adapter,

@@ -224,12 +224,20 @@ export class Batch {
     if (!this.jobInfo || this.jobInfo.jobId <= 0) {
       return;
     }
+    // Exclude `has_error = true` rows. A retry exists precisely so a
+    // transient failure (renderer hang, network blip, OOM) gets a
+    // second chance — preserving the prior error row would freeze
+    // the URL in the failed state until some unrelated change kicks
+    // a different job. Tombstones (`is_deleted = true`) are
+    // similarly excluded so the deletion intent flows through to
+    // `applyBatchUpdates` instead of being skipped as resumed work.
     let rows = (await this.#query([
       `SELECT url, last_modified FROM boxel_index_working WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         ['job_id =', param(this.jobInfo.jobId)],
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
+        any([['has_error = false'], ['has_error IS NULL']]),
       ]),
     ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'last_modified'>[];
     for (let { url, last_modified } of rows) {
