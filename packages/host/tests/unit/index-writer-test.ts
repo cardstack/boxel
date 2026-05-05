@@ -1728,4 +1728,338 @@ module('Unit | index-writer', function (hooks) {
       'card type summary uses last known good card type data',
     );
   });
+
+  test('resumes URLs already processed by a previous attempt of the same job', async function (assert) {
+    let url = `${testRealmURL}1.json`;
+    let lastModified = 1700000000;
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      {
+        working: [
+          {
+            url,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            type: 'instance',
+            job_id: 42,
+            last_modified: String(lastModified),
+            is_deleted: false,
+            deps: [],
+            types: [],
+          },
+        ],
+        production: [],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
+      jobId: 42,
+      reservationId: 1,
+      priority: 0,
+    });
+    assert.strictEqual(
+      batch.resumedRows.size,
+      1,
+      'resumed rows from prior attempt of same job_id are loaded',
+    );
+    assert.strictEqual(
+      batch.resumedRows.get(url),
+      lastModified,
+      'last_modified value is preserved as a number',
+    );
+    assert.deepEqual(
+      batch.invalidations,
+      [url],
+      'resumed URLs are pre-seeded into the invalidation set so done() promotes them',
+    );
+  });
+
+  test('does not resume rows from a different job', async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      {
+        working: [
+          {
+            url: `${testRealmURL}from-other-job.json`,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            type: 'instance',
+            job_id: 99,
+            last_modified: '1700000000',
+            is_deleted: false,
+            deps: [],
+            types: [],
+          },
+        ],
+        production: [],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
+      jobId: 42,
+      reservationId: 1,
+      priority: 0,
+    });
+    assert.strictEqual(
+      batch.resumedRows.size,
+      0,
+      'rows tagged with a different job_id are not resumed',
+    );
+  });
+
+  test('createBatch deletes working rows from a different job for the same realm', async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      {
+        working: [
+          {
+            url: `${testRealmURL}stale.json`,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            type: 'instance',
+            job_id: 99,
+            last_modified: '1700000000',
+            is_deleted: false,
+            deps: [],
+            types: [],
+          },
+        ],
+        production: [],
+      },
+    );
+
+    await indexWriter.createBatch(new URL(testRealmURL), {
+      jobId: 42,
+      reservationId: 1,
+      priority: 0,
+    });
+    let surviving = await adapter.execute(
+      'SELECT url FROM boxel_index_working WHERE realm_url = $1',
+      { bind: [testRealmURL] },
+    );
+    assert.deepEqual(
+      surviving,
+      [],
+      'working rows for the realm tagged with a different job_id are deleted',
+    );
+  });
+
+  test('invalidate() preserves resumed real rows instead of overwriting with tombstones', async function (assert) {
+    let url = `${testRealmURL}1.json`;
+    let dependent = `${testRealmURL}2.json`;
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      {
+        working: [
+          // Resumed real row from a prior attempt of job 42 — has
+          // pristine content; must not be clobbered by tombstoning.
+          {
+            url,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            type: 'instance',
+            job_id: 42,
+            last_modified: '1700000000',
+            is_deleted: false,
+            has_error: false,
+            deps: [],
+            types: [],
+            pristine_doc: {
+              id: url,
+              type: 'card',
+              attributes: { name: 'Resumed' },
+              meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+            } as LooseCardResource,
+          },
+        ],
+        production: [
+          {
+            url,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            deps: [],
+            types: [],
+          },
+          {
+            url: dependent,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            deps: [url],
+            types: [],
+          },
+        ],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
+      jobId: 42,
+      reservationId: 1,
+      priority: 0,
+    });
+    await batch.invalidate([new URL(url)]);
+
+    // The resumed URL must NOT have been overwritten with a tombstone:
+    // its pristine_doc and is_deleted=false should still be intact.
+    let [resumedRow] = await adapter.execute(
+      `SELECT is_deleted, pristine_doc, job_id FROM boxel_index_working WHERE url = $1 AND realm_url = $2`,
+      {
+        bind: [url, testRealmURL],
+        coerceTypes: { is_deleted: 'BOOLEAN', pristine_doc: 'JSON' },
+      },
+    );
+    assert.false(
+      resumedRow.is_deleted,
+      'resumed row was not flipped to a tombstone',
+    );
+    assert.ok(resumedRow.pristine_doc, 'pristine doc preserved on resume');
+    assert.strictEqual(
+      resumedRow.job_id,
+      42,
+      'resumed row still tagged with current job_id',
+    );
+
+    // The dependent fan-out URL was NOT in resumedRows, so it should
+    // have been tombstoned normally.
+    let [dependentRow] = await adapter.execute(
+      `SELECT is_deleted, job_id FROM boxel_index_working WHERE url = $1 AND realm_url = $2`,
+      {
+        bind: [dependent, testRealmURL],
+        coerceTypes: { is_deleted: 'BOOLEAN' },
+      },
+    );
+    assert.true(
+      dependentRow.is_deleted,
+      'non-resumed dependent URL was tombstoned',
+    );
+    assert.strictEqual(
+      dependentRow.job_id,
+      42,
+      'tombstone is stamped with the current job_id',
+    );
+  });
+
+  test('forgetResumedRows allows tombstoning a previously-resumed URL', async function (assert) {
+    let url = `${testRealmURL}deleted.json`;
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      {
+        working: [
+          {
+            url,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            type: 'instance',
+            job_id: 42,
+            last_modified: '1700000000',
+            is_deleted: false,
+            has_error: false,
+            deps: [],
+            types: [],
+          },
+        ],
+        production: [
+          {
+            url,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            deps: [],
+            types: [],
+          },
+        ],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
+      jobId: 42,
+      reservationId: 1,
+      priority: 0,
+    });
+    assert.true(
+      batch.resumedRows.has(url),
+      'precondition: row is initially resumed',
+    );
+    batch.forgetResumedRows([url]);
+    assert.false(
+      batch.resumedRows.has(url),
+      'forgetResumedRows drops the entry',
+    );
+    await batch.invalidate([new URL(url)]);
+
+    let [row] = await adapter.execute(
+      `SELECT is_deleted, job_id FROM boxel_index_working WHERE url = $1 AND realm_url = $2`,
+      {
+        bind: [url, testRealmURL],
+        coerceTypes: { is_deleted: 'BOOLEAN' },
+      },
+    );
+    assert.true(
+      row.is_deleted,
+      'after forgetResumedRows, tombstoning proceeds and overwrites the row',
+    );
+  });
+
+  test('done() promotes resumed rows even though they were never visited in this attempt', async function (assert) {
+    let url = `${testRealmURL}1.json`;
+    let resumedDoc = {
+      id: url,
+      type: 'card' as const,
+      attributes: { name: 'Resumed' },
+      meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+    };
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      {
+        working: [
+          {
+            url,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            type: 'instance',
+            job_id: 42,
+            last_modified: '1700000000',
+            is_deleted: false,
+            has_error: false,
+            deps: [],
+            types: [],
+            pristine_doc: resumedDoc as LooseCardResource,
+            search_doc: { name: 'Resumed' },
+          },
+        ],
+        production: [],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
+      jobId: 42,
+      reservationId: 1,
+      priority: 0,
+    });
+    // Note: no updateEntry / invalidate call — simulating a retry that
+    // discovers all its work was already done by the previous attempt.
+    await batch.done();
+
+    let [promoted] = await adapter.execute(
+      `SELECT pristine_doc, search_doc FROM boxel_index WHERE url = $1`,
+      {
+        bind: [url],
+        coerceTypes: { pristine_doc: 'JSON', search_doc: 'JSON' },
+      },
+    );
+    assert.deepEqual(
+      promoted?.pristine_doc,
+      resumedDoc,
+      'resumed row was promoted to boxel_index by done()',
+    );
+    assert.deepEqual(
+      promoted?.search_doc,
+      { name: 'Resumed' },
+      'resumed row search_doc landed in boxel_index',
+    );
+  });
 });

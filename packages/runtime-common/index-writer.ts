@@ -51,6 +51,28 @@ export class IndexWriter {
   }
 
   async createBatch(realmURL: URL, jobInfo?: JobInfo) {
+    if (jobInfo && jobInfo.jobId > 0) {
+      // Drop any working-table rows for this realm that were stamped
+      // by a *different* job. They are debris from a previous (now
+      // abandoned) indexing attempt — leaving them in place would
+      // bias the seed-fan-out queries that read
+      // `boxel_index_working` and would make `applyBatchUpdates`
+      // promote stale content the current job never processed. The
+      // per-realm `pg_advisory_xact_lock` (`indexing:{realmUrl}` in
+      // `pg-queue.ts`) makes this safe: at most one indexing job
+      // holds a reservation at a time, so any row tagged with a
+      // different job_id is, by construction, no longer in flight.
+      // Rows tagged with the current job's id are intentionally
+      // preserved — that's the resume hand-off point.
+      await query(this.#dbAdapter, [
+        `DELETE FROM boxel_index_working WHERE`,
+        ...every([
+          ['realm_url =', param(realmURL.href)],
+          ['job_id IS NOT NULL'],
+          ['job_id != ', param(jobInfo.jobId)],
+        ]),
+      ] as Expression);
+    }
     let batch = new Batch(this.#dbAdapter, realmURL, jobInfo);
     await batch.ready;
     return batch;
@@ -160,6 +182,15 @@ export interface FileEntry {
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
+  // URLs already written to boxel_index_working by an earlier attempt
+  // of *this same job*, with the last_modified value the previous
+  // attempt observed. Populated during `ready`. The visit loop in
+  // IndexRunner consults this map to skip work the previous attempt
+  // already finished; the from-scratch path additionally compares the
+  // stored last_modified against the current EFS mtime so a file that
+  // changed mid-attempt is re-visited rather than silently resumed
+  // with stale content.
+  #resumedRows = new Map<string, number | null>();
   // Correlation ID minted once per Batch and stamped into every row's
   // `timing_diagnostics` via `updateEntry`, so operators can
   // `SELECT ... WHERE timing_diagnostics->>'invalidationId' = '...'`
@@ -181,7 +212,68 @@ export class Batch {
   ) {
     this.#dbAdapter = dbAdapter;
     this.#currentInvalidationId = uuidv4();
-    this.ready = this.setNextRealmVersion();
+    this.ready = this.setupBatch();
+  }
+
+  private async setupBatch(): Promise<void> {
+    await this.setNextRealmVersion();
+    await this.loadResumedRows();
+  }
+
+  private async loadResumedRows(): Promise<void> {
+    if (!this.jobInfo || this.jobInfo.jobId <= 0) {
+      return;
+    }
+    let rows = (await this.#query([
+      `SELECT url, last_modified FROM boxel_index_working WHERE`,
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        ['job_id =', param(this.jobInfo.jobId)],
+        any([['is_deleted = false'], ['is_deleted IS NULL']]),
+      ]),
+    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'last_modified'>[];
+    for (let { url, last_modified } of rows) {
+      this.#resumedRows.set(
+        url,
+        last_modified == null ? null : parseInt(last_modified),
+      );
+      // Pre-seed the in-memory invalidation set so `applyBatchUpdates`
+      // promotes the resumed rows even though no `updateEntry` /
+      // `invalidate` call in this attempt added them. Without this,
+      // resumed work would sit in the working table indefinitely
+      // because the SELECT ... INTO boxel_index keys on
+      // `#invalidations`.
+      this.#invalidations.add(url);
+    }
+    this.#perfLog.debug(
+      `${jobIdentity(this.jobInfo)} resuming ${this.#resumedRows.size} URLs from prior attempt for ${this.realmURL.href}`,
+    );
+  }
+
+  /**
+   * URLs already processed by an earlier attempt of this job. The map
+   * value is the `last_modified` the previous attempt observed (null
+   * for tombstones / file rows without an mtime). The from-scratch
+   * caller compares this against the current EFS mtime to decide
+   * whether the resumed row is still authoritative.
+   */
+  get resumedRows(): ReadonlyMap<string, number | null> {
+    return this.#resumedRows;
+  }
+
+  /**
+   * Drop URLs from the resumed-row map. Call this when the caller has
+   * concluded the previous attempt's content for those URLs is no
+   * longer authoritative — typically because the file has been
+   * deleted from disk between attempts. After calling this,
+   * `tombstoneEntries` will tombstone the URLs normally and
+   * `applyBatchUpdates` will promote the tombstones to
+   * `boxel_index`, so the deletion lands.
+   */
+  forgetResumedRows(urls: string[]): void {
+    for (let url of urls) {
+      this.#resumedRows.delete(url);
+    }
   }
 
   get invalidations() {
@@ -254,6 +346,7 @@ export class Batch {
       entry.url = destURL;
       entry.realm_url = this.realmURL.href;
       entry.realm_version = this.realmVersion;
+      entry.job_id = this.jobInfo?.jobId ?? null;
       entry.file_alias = copyURL(entry.file_alias);
       entry.types = entry.types ? entry.types.map(copyURL) : entry.types;
       entry.deps = entry.deps ? entry.deps.map(copyURL) : entry.deps;
@@ -438,6 +531,7 @@ export class Batch {
       realm_url: this.realmURL.href,
       is_deleted: false,
       indexed_at: Date.now(),
+      job_id: this.jobInfo?.jobId ?? null,
       ...entryPayload,
     } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
       // we do this because pg automatically casts big ints into strings, so
@@ -515,6 +609,7 @@ export class Batch {
       last_modified: _remove2,
       resource_created_at: _remove3,
       realm_version: _remove4,
+      job_id: _remove5,
       ...productionVersion
     } = entry;
     return {
@@ -689,7 +784,18 @@ export class Batch {
     // = <id>`) also surface the delete rows for this pass — otherwise
     // tombstones would inherit a stale ID from a prior write or stay
     // NULL entirely, misattributing deletes in the grouping view.
-    let existingTypes = await this.existingIndexTypes(invalidations);
+    //
+    // Filter out URLs the previous attempt of this job already wrote
+    // a real (non-tombstone) row for. Tombstoning would upsert over
+    // that real content and erase the previous attempt's progress,
+    // defeating the resume.
+    let toTombstone = invalidations.filter(
+      (url) => !this.#resumedRows.has(url),
+    );
+    if (toTombstone.length === 0) {
+      return;
+    }
+    let existingTypes = await this.existingIndexTypes(toTombstone);
     let columns = [
       'url',
       'file_alias',
@@ -698,6 +804,7 @@ export class Batch {
       'realm_url',
       'is_deleted',
       'timing_diagnostics',
+      'job_id',
     ].map((c) => [c]);
     let tombstoneDiagnostics: TimingDiagnostics = {
       invalidationId: this.#currentInvalidationId,
@@ -709,7 +816,8 @@ export class Batch {
     // regular `updateEntry` path reaches jsonb via `asExpressions`
     // with a `jsonFields` list, which does the same thing).
     let tombstoneDiagnosticsJson = JSON.stringify(tombstoneDiagnostics);
-    let rows = invalidations.flatMap((id) => {
+    let jobIdValue = this.jobInfo?.jobId ?? null;
+    let rows = toTombstone.flatMap((id) => {
       let types = existingTypes.get(id);
       if (!types || types.length === 0) {
         return [];
@@ -723,6 +831,7 @@ export class Batch {
           this.realmURL.href,
           true,
           tombstoneDiagnosticsJson,
+          jobIdValue,
         ].map((v) => [param(v)]),
       );
     });

@@ -72,6 +72,7 @@
    last_known_good_deps BLOB,
    markdown TEXT,
    timing_diagnostics BLOB,
+   job_id INTEGER,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
