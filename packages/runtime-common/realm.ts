@@ -396,6 +396,12 @@ export interface FileWriteResult extends AdapterWriteResult {
 export interface WriteOptions {
   clientRequestId?: string | null;
   serializeFile?: boolean | null;
+  // When false, the write returns as soon as the source bytes are durable;
+  // indexing kicks off in the background. Callers that need to know when
+  // indexing has settled can `await realm.incrementalIndexing()`. Defaults
+  // to true (preserve the synchronous-indexing semantic existing callers
+  // depend on).
+  waitForIndex?: boolean | null;
 }
 
 export interface RealmAdapter {
@@ -1302,12 +1308,40 @@ export class Realm {
 
     // persist file meta (created_at) to DB independent of index and retrieve created
     let createdMap = await this.persistFileMeta(fileMetaRows);
+    let waitForIndex = options?.waitForIndex !== false;
     if (urls.length > 0) {
-      await performIndex();
+      if (waitForIndex) {
+        await performIndex();
+        this.broadcastIncrementalInvalidationEvent([...invalidations], {
+          clientRequestId,
+        });
+      } else {
+        // Fire-and-forget. The indexing deferred is registered synchronously
+        // inside #realmIndexUpdater.update() before any await, so
+        // realm.incrementalIndexing() reflects this work as pending the
+        // moment we return — callers that need determinism (tests, future
+        // sync flows) can await that. The invalidation broadcast must move
+        // inside the deferred so listeners get the populated invalidations
+        // set, not an empty one.
+        let indexingPromise = performIndex().then(() => {
+          this.broadcastIncrementalInvalidationEvent([...invalidations], {
+            clientRequestId,
+          });
+        });
+        indexingPromise.catch((err: unknown) => {
+          let message = err instanceof Error ? err.message : String(err);
+          this.#log.error(
+            `Async indexing failed for ${this.url} (waitForIndex=false): ${message}`,
+          );
+        });
+      }
+    } else {
+      // No urls actually written (e.g., content unchanged). Preserve the
+      // pre-existing always-broadcast behavior.
+      this.broadcastIncrementalInvalidationEvent([...invalidations], {
+        clientRequestId,
+      });
     }
-    this.broadcastIncrementalInvalidationEvent([...invalidations], {
-      clientRequestId,
-    });
     return results.map(({ path, lastModified }) => ({
       path,
       lastModified,
