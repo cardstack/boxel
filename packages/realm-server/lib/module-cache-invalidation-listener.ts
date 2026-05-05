@@ -3,11 +3,9 @@ import {
   MODULE_CACHE_INVALIDATED_CHANNEL,
   type CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
-import type { PgAdapter } from '@cardstack/postgres';
-import { WorkLoop } from '@cardstack/postgres';
+import type { PgAdapter, NotificationSubscription } from '@cardstack/postgres';
 
 const log = logger('realm-server:module-cache-invalidation-listener');
-const DEFAULT_POLL_INTERVAL_MS = 60_000;
 
 // Cross-instance module-cache invalidation broadcast (CS-10952). Peer
 // realm-server processes emit `NOTIFY module_cache_invalidated, '<payload>'`
@@ -18,11 +16,10 @@ const DEFAULT_POLL_INTERVAL_MS = 60_000;
 // invalidation at persist time and discard stale results instead of
 // re-inserting the row a peer just deleted.
 //
-// Mirrors RealmFileChangesListener exactly: dedicated LISTEN connection
-// (PgAdapter.listen uses a fresh Client to dodge pool-LISTEN reliability
-// issues — see node-postgres#1543), WorkLoop for predictable shutdown, 60s
-// safety poll. There's nothing to poll from the DB side — the entire
-// dispatch is in the payload — so the wake-loop just sleeps until shutdown.
+// The LISTEN is backed by `PgAdapter.subscribe` (shared multiplexed
+// notification client). There is no periodic work to run between
+// notifications — the whole dispatch is in the payload — so we don't keep a
+// WorkLoop here. Mirrors `RealmFileChangesListener`.
 //
 // Self-notify is harmless: the emitting process bumps its counter
 // synchronously before its DELETE, so the listener's bump on receiving its
@@ -31,8 +28,6 @@ const DEFAULT_POLL_INTERVAL_MS = 60_000;
 export interface ModuleCacheInvalidationListenerDeps {
   dbAdapter: PgAdapter;
   definitionLookup: CachingDefinitionLookup;
-  // Optional for tests.
-  pollIntervalMs?: number;
 }
 
 export type ParsedModuleCacheInvalidation =
@@ -42,39 +37,48 @@ export type ParsedModuleCacheInvalidation =
 
 export class ModuleCacheInvalidationListener {
   #deps: ModuleCacheInvalidationListenerDeps;
-  #loop: WorkLoop;
-  #started = false;
+  #subscription?: NotificationSubscription;
+  #starting?: Promise<void>;
 
   constructor(deps: ModuleCacheInvalidationListenerDeps) {
     this.#deps = deps;
-    this.#loop = new WorkLoop(
-      'module-cache-invalidation',
-      deps.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
-    );
   }
 
-  start(): void {
-    if (this.#started) {
+  async start(): Promise<void> {
+    if (this.#subscription || this.#starting) {
+      await this.#starting;
       return;
     }
-    this.#started = true;
-    this.#loop.run(async (loop) => {
-      await this.#deps.dbAdapter.listen(
+    this.#starting = (async () => {
+      this.#subscription = await this.#deps.dbAdapter.subscribe(
         MODULE_CACHE_INVALIDATED_CHANNEL,
-        (notification: { payload?: string }) => {
+        (notification) => {
           this.#handleNotification(notification.payload);
         },
-        async () => {
-          while (!loop.shuttingDown) {
-            await loop.sleep();
-          }
-        },
       );
-    });
+    })();
+    try {
+      await this.#starting;
+    } finally {
+      this.#starting = undefined;
+    }
   }
 
   async shutDown(): Promise<void> {
-    await this.#loop.shutDown();
+    // Wait for any in-flight start() to finish wiring up #subscription before
+    // tearing down. Otherwise shutDown can run while subscribe() is still
+    // awaiting the LISTEN, return early with #subscription still undefined,
+    // and the racing start() then installs a live subscription after we
+    // thought we were shut down. Swallow start() errors here — if startup
+    // failed, there's nothing for us to unsubscribe.
+    try {
+      await this.#starting;
+    } catch {
+      // ignore
+    }
+    const sub = this.#subscription;
+    this.#subscription = undefined;
+    await sub?.unsubscribe();
   }
 
   // Exposed for tests; invoked internally by the LISTEN handler.
