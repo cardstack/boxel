@@ -59,6 +59,7 @@
       "esbuild",
       "fsevents",
       "keytar",
+      "opencode-ai",
       "puppeteer"
     ]
   },

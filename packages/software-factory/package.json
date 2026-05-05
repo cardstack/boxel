@@ -34,6 +34,8 @@
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.114",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@opencode-ai/sdk": "1.14.34",
     "@cardstack/boxel-cli": "workspace:*",
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/local-types": "workspace:*",
@@ -55,6 +57,7 @@
     "decorator-transforms": "catalog:",
     "ember-modifier": "^4.1.0",
     "eslint-plugin-qunit": "catalog:",
+    "opencode-ai": "1.14.34",
     "fs-extra": "catalog:",
     "jsonwebtoken": "catalog:",
     "pg": "catalog:",
