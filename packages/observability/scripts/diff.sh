@@ -46,20 +46,31 @@ cd "$(dirname "$0")/.."
 # shellcheck source=./grafanactl-env.sh
 source ./scripts/grafanactl-env.sh "$env_name"
 
-# Mirror apply.sh's per-env REALM_SERVER_URL handling so the
-# `__REALM_SERVER_URL__` placeholder substitution below produces the
-# same value diff.sh expects to find in the live (pulled) state. CI
-# sources REALM_SERVER_URL from SSM in observability-diff.yml; locally
-# we default to apply.sh's hardcoded http://localhost:4201/. For
-# staging/production ad-hoc runs, the operator must export the same
-# value apply.sh uses (CI fetches it from /<env>/boxel-grafana/realm_server_url
-# — see observability-apply-${env_name}.yml).
+# Mirror apply.sh's per-env REALM_SERVER_URL / GRAFANA_SECRET handling so
+# the `__REALM_SERVER_URL__` and `REPLACE_AT_APPLY_TIME` placeholder
+# substitutions below produce the same values diff.sh expects to find in
+# the live (pulled) state. CI sources both from SSM in
+# observability-diff.yml; locally we use the same hardcoded dev defaults
+# apply.sh uses. For staging/production ad-hoc runs, the operator must
+# export the same values apply.sh uses (CI fetches them from
+# /<env>/boxel-grafana/realm_server_url and /<env>/boxel/GRAFANA_SECRET —
+# see observability-apply-${env_name}.yml).
 case "$env_name" in
-  local) realm_server_url="${REALM_SERVER_URL:-http://localhost:4201/}" ;;
+  local)
+    realm_server_url="${REALM_SERVER_URL:-http://localhost:4201/}"
+    if [[ -n "${GRAFANA_SECRET:-}" ]]; then
+      grafana_secret="$GRAFANA_SECRET"
+    else
+      grafana_secret="shhh! it's a secret"
+    fi
+    ;;
   *)
     [[ -n "${REALM_SERVER_URL:-}" ]] \
       || { echo "error: REALM_SERVER_URL not set; CI fetches it from /${env_name}/boxel-grafana/realm_server_url in observability-diff.yml — for a local hosted run, export it manually first (same SSM path apply-${env_name}.yml uses)" >&2; exit 1; }
     realm_server_url="$REALM_SERVER_URL"
+    [[ -n "${GRAFANA_SECRET:-}" ]] \
+      || { echo "error: GRAFANA_SECRET not set; CI fetches it from /${env_name}/boxel/GRAFANA_SECRET in observability-diff.yml — for a local hosted run, export it manually first (same SSM path apply-${env_name}.yml uses)" >&2; exit 1; }
+    grafana_secret="$GRAFANA_SECRET"
     ;;
 esac
 
@@ -156,17 +167,19 @@ normalize folders Folder
 #      it cannot hide a real diff.
 #   3. Key order inside `metadata`. `--sort-keys` makes order stable on
 #      both sides.
-#   4. `__REALM_SERVER_URL__` placeholder (CS-10923 / CS-10990). apply.sh
-#      walks the committed JSON and substitutes the per-env realm-server
-#      URL into the `realm_server` constant template variable's `query`
+#   4. `__REALM_SERVER_URL__` and `REPLACE_AT_APPLY_TIME` placeholders
+#      (CS-10923 / CS-10990 / CS-10929). apply.sh walks the committed JSON
+#      and substitutes the per-env realm-server URL into the `realm_server`
+#      constant template variable's `query` and the per-env GRAFANA_SECRET
+#      into the `grafana_secret` constant template variable's `query`
 #      before pushing. Pulled state therefore always shows the substituted
-#      value. We mirror the same walk here so the committed side ends up
-#      with the same value pre-diff. The match is GUARDED by
-#      `.query == "__REALM_SERVER_URL__"` so the substitution only
-#      rewrites the committed side; the pulled side always carries the
-#      live URL (never the placeholder), so leaving it untouched lets
-#      real drift between $REALM_SERVER_URL and what's actually
-#      provisioned in Grafana surface in the diff.
+#      values. We mirror the same walks here so the committed side ends
+#      up with the same values pre-diff. Each match is GUARDED by the
+#      placeholder string in `.query` so the substitution only rewrites
+#      the committed side; the pulled side always carries the live values
+#      (never the placeholders), so real drift between
+#      $REALM_SERVER_URL / $GRAFANA_SECRET and what's actually provisioned
+#      in Grafana surfaces in the diff.
 #   5. Default `"value": null` on threshold step zero (CS-10991). Grafana
 #      fills in `value: null` on the lowest threshold step (the implicit
 #      `-Infinity` floor) when it stores a dashboard. AMG-era exports
@@ -174,7 +187,7 @@ normalize folders Folder
 #      look like a thresholds container (`mode` + `steps`) at index 0
 #      so a `value: null` higher up the steps array (a malformed
 #      threshold worth surfacing) still shows in the diff.
-# shellcheck disable=SC2016  # the `$url` inside is a jq variable bound via --arg, not a shell expansion.
+# shellcheck disable=SC2016  # `$url` and `$secret` are jq variables bound via --arg, not shell expansions.
 JQ_NORMALIZE='
   walk(
     if type == "object"
@@ -184,6 +197,13 @@ JQ_NORMALIZE='
     then
       .query = $url
       | (if .current then .current.value = $url | .current.text = $url else . end)
+    elif type == "object"
+       and .name? == "grafana_secret"
+       and .type? == "constant"
+       and .query? == "REPLACE_AT_APPLY_TIME"
+    then
+      .query = $secret
+      | (if .current then .current.value = $secret | .current.text = $secret else . end)
     else . end
   )
   | walk(
@@ -223,7 +243,7 @@ normalize_json_content() {  # $1: src dir, $2: dest dir
     rel="${f#"$src"/}"
     target="$dest/$rel"
     mkdir -p "$(dirname "$target")"
-    jq --sort-keys --arg url "$realm_server_url" "$JQ_NORMALIZE" "$f" > "$target"
+    jq --sort-keys --arg url "$realm_server_url" --arg secret "$grafana_secret" "$JQ_NORMALIZE" "$f" > "$target"
   done < <(find "$src" -type f -name '*.json' -print0)
 }
 

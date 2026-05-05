@@ -71,6 +71,10 @@ if [[ "$env_name" != "local" ]]; then
     # Per-env realm-server base URL substituted into dashboards' realm_server
     # constant template variable — CS-10923
     REALM_SERVER_URL
+    # Realm-server shared secret substituted into dashboards' grafana_secret
+    # constant template variable — CS-10929. Used as `Authorization: Bearer
+    # ${grafana_secret}` by the operator-action button panels.
+    GRAFANA_SECRET
   )
   for v in "${required_env_vars[@]}"; do
     [[ -n "${!v:-}" ]] \
@@ -85,15 +89,33 @@ cfg="$(./scripts/render-config.sh "$env_name")"
 # `templating.list[].query` for matching constant variables. Currently
 # substitutes:
 #   __REALM_SERVER_URL__  → REALM_SERVER_URL  (CS-10923)
-# Local mode uses a hardcoded http://localhost:4201/ default so devs
-# don't need any extra setup.
+#   REPLACE_AT_APPLY_TIME → GRAFANA_SECRET    (CS-10929; used as
+#                                              `Authorization: Bearer
+#                                              ${grafana_secret}` in
+#                                              operator-action button panels)
+# Local mode uses hardcoded defaults so devs don't need any extra setup.
 rendered="$(mktemp -d -t grafanactl-render.XXXXXX)"
 trap 'rm -f "$cfg"; rm -rf "$rendered"' EXIT
 cp -R ./grafanactl/resources/. "$rendered/"
 
 case "$env_name" in
-  local) realm_server_url="${REALM_SERVER_URL:-http://localhost:4201/}" ;;
-  *)     realm_server_url="$REALM_SERVER_URL" ;;
+  local)
+    realm_server_url="${REALM_SERVER_URL:-http://localhost:4201/}"
+    # Matches the dev default in packages/software-factory/src/harness/shared.ts
+    # and the matrix test harness, so local Grafana buttons authenticate
+    # against a freshly started realm-server with no extra env config.
+    # Set in two steps because the dev default contains an apostrophe — fragile
+    # inside `${VAR:-default}` when wrapped in double quotes.
+    if [[ -n "${GRAFANA_SECRET:-}" ]]; then
+      grafana_secret="$GRAFANA_SECRET"
+    else
+      grafana_secret="shhh! it's a secret"
+    fi
+    ;;
+  *)
+    realm_server_url="$REALM_SERVER_URL"
+    grafana_secret="$GRAFANA_SECRET"
+    ;;
 esac
 
 # `find -print0` + a NUL-delimited read loop rather than a `**/*.json` glob —
@@ -105,14 +127,27 @@ while IFS= read -r -d '' f; do
   # `jq ... > out && mv ...` chain swallows jq's failure inside the &&,
   # leaving the script to continue with an unrendered file. Run as two
   # separate statements so a jq error fails the script.
-  jq --arg url "$realm_server_url" '
+  #
+  # Both substitutions are GUARDED by the placeholder string in `.query` so
+  # this is a no-op for any other constant template variable that happens to
+  # share a name. Lint enforces grafana_secret == REPLACE_AT_APPLY_TIME on
+  # committed JSON, so the guard never spuriously skips a real secret.
+  jq --arg url "$realm_server_url" --arg secret "$grafana_secret" '
     walk(
       if type == "object"
          and .name? == "realm_server"
          and .type? == "constant"
+         and .query? == "__REALM_SERVER_URL__"
       then
         .query = $url
         | (if .current then .current.value = $url | .current.text = $url else . end)
+      elif type == "object"
+         and .name? == "grafana_secret"
+         and .type? == "constant"
+         and .query? == "REPLACE_AT_APPLY_TIME"
+      then
+        .query = $secret
+        | (if .current then .current.value = $secret | .current.text = $secret else . end)
       else . end
     )
   ' "$f" > "$f.tmp"

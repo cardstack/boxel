@@ -27,33 +27,141 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
-    "links": [
-      {
-        "asDropdown": false,
-        "icon": "bolt",
-        "includeVars": false,
-        "keepTime": false,
-        "tags": [],
-        "targetBlank": true,
-        "title": "Reindex ${full_index_realm}",
-        "tooltip": "",
-        "type": "link",
-        "url": "${realm_server}_grafana-reindex?realm=${full_index_realm}"
-      },
-      {
-        "asDropdown": false,
-        "icon": "bolt",
-        "includeVars": false,
-        "keepTime": false,
-        "tags": [],
-        "targetBlank": true,
-        "title": "Reindex All Realms",
-        "tooltip": "",
-        "type": "link",
-        "url": "${realm_server}_grafana-full-reindex"
-      }
-    ],
+    "links": [],
     "panels": [
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Operator actions: trigger a reindex via the realm-server. Each button POSTs with `Authorization: Bearer ${grafana_secret}` (substituted at apply time from SSM, CS-10929) and shows a confirmation dialog. Single-realm reindex targets ${full_index_realm}; full reindex hits every realm and is the more disruptive option.",
+        "fieldConfig": {
+          "defaults": {
+            "actions": [
+              {
+                "type": "fetch",
+                "title": "Reindex ${full_index_realm}",
+                "fetch": {
+                  "method": "POST",
+                  "url": "${realm_server}_grafana-reindex",
+                  "queryParams": [
+                    [
+                      "realm",
+                      "${full_index_realm}"
+                    ]
+                  ],
+                  "headers": [
+                    [
+                      "Authorization",
+                      "Bearer ${grafana_secret}"
+                    ]
+                  ],
+                  "body": ""
+                },
+                "confirmation": "Reindex ${full_index_realm}?",
+                "oneClick": false
+              },
+              {
+                "type": "fetch",
+                "title": "Reindex ALL realms",
+                "fetch": {
+                  "method": "POST",
+                  "url": "${realm_server}_grafana-full-reindex",
+                  "queryParams": [],
+                  "headers": [
+                    [
+                      "Authorization",
+                      "Bearer ${grafana_secret}"
+                    ]
+                  ],
+                  "body": ""
+                },
+                "confirmation": "Reindex ALL realms? This kicks off an indexing job for every realm on the server and can take a long time.",
+                "oneClick": false
+              }
+            ],
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [
+              {
+                "options": {
+                  "from": 0,
+                  "result": {
+                    "index": 0,
+                    "text": "Reindex"
+                  },
+                  "to": 9999999999999
+                },
+                "type": "range"
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 4,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "name"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT 1 AS click;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "Operator Actions",
+        "type": "stat"
+      },
       {
         "datasource": {
           "type": "grafana-postgresql-datasource",
@@ -95,12 +203,30 @@
               },
               "properties": [
                 {
-                  "id": "links",
+                  "id": "actions",
                   "value": [
                     {
-                      "targetBlank": true,
-                      "title": "Delete",
-                      "url": "${realm_server}_grafana-complete-job?job_id=${__value.raw}"
+                      "type": "fetch",
+                      "title": "Delete job ${__value.raw}",
+                      "fetch": {
+                        "method": "POST",
+                        "url": "${realm_server}_grafana-complete-job",
+                        "queryParams": [
+                          [
+                            "job_id",
+                            "${__value.raw}"
+                          ]
+                        ],
+                        "headers": [
+                          [
+                            "Authorization",
+                            "Bearer ${grafana_secret}"
+                          ]
+                        ],
+                        "body": ""
+                      },
+                      "confirmation": "Delete waiting job ${__value.raw}? This marks it as completed without running it.",
+                      "oneClick": false
                     }
                   ]
                 },
@@ -137,7 +263,7 @@
           "h": 9,
           "w": 24,
           "x": 0,
-          "y": 0
+          "y": 4
         },
         "id": 2,
         "options": {
@@ -262,12 +388,30 @@
               },
               "properties": [
                 {
-                  "id": "links",
+                  "id": "actions",
                   "value": [
                     {
-                      "targetBlank": true,
-                      "title": "Delete",
-                      "url": "${realm_server}_grafana-complete-job?reservation_id=${__value.raw}"
+                      "type": "fetch",
+                      "title": "Delete reservation ${__value.raw}",
+                      "fetch": {
+                        "method": "POST",
+                        "url": "${realm_server}_grafana-complete-job",
+                        "queryParams": [
+                          [
+                            "reservation_id",
+                            "${__value.raw}"
+                          ]
+                        ],
+                        "headers": [
+                          [
+                            "Authorization",
+                            "Bearer ${grafana_secret}"
+                          ]
+                        ],
+                        "body": ""
+                      },
+                      "confirmation": "Cancel running reservation ${__value.raw}? The worker will stop processing it.",
+                      "oneClick": false
                     }
                   ]
                 },
@@ -304,7 +448,7 @@
           "h": 11,
           "w": 24,
           "x": 0,
-          "y": 9
+          "y": 13
         },
         "id": 1,
         "options": {
@@ -440,7 +584,7 @@
           "h": 18,
           "w": 24,
           "x": 0,
-          "y": 20
+          "y": 24
         },
         "id": 3,
         "options": {
@@ -521,6 +665,13 @@
           "name": "realm_server",
           "query": "__REALM_SERVER_URL__",
           "skipUrlSync": false,
+          "type": "constant"
+        },
+        {
+          "hide": 2,
+          "name": "grafana_secret",
+          "query": "REPLACE_AT_APPLY_TIME",
+          "skipUrlSync": true,
           "type": "constant"
         }
       ]
