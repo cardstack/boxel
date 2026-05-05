@@ -161,11 +161,8 @@ module(basename(__filename), function () {
         dbAdapter,
         lookupMountedRealm: (url) => (url === realmUrl ? realmA : undefined),
       });
-      listener.start();
+      await listener.start();
       try {
-        // Give the LISTEN connection a moment to subscribe.
-        await new Promise((r) => setTimeout(r, 100));
-
         await dbAdapter.notify(
           'realm_file_changes',
           `${realmUrl}:src/greeting.gts`,
@@ -191,10 +188,8 @@ module(basename(__filename), function () {
           return undefined;
         },
       });
-      listener.start();
+      await listener.start();
       try {
-        await new Promise((r) => setTimeout(r, 100));
-
         await dbAdapter.notify(
           'realm_file_changes',
           `http://x.test/not-mounted/:file.gts`,
