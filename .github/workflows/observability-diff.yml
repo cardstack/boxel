@@ -28,6 +28,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    # No fork guard: this job needs no AWS credentials or write tokens,
+    # so it's safe on PRs from forks. It exists because ci-lint.yaml's
+    # `paths-ignore` skips the main lint workflow on observability-only
+    # PRs, so this is the dedicated lint coverage for the package
+    # (shellcheck + jq + prettier + manifest/secret regression checks).
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # `init` installs pnpm — required by lint.sh's prettier --check step.
+      - uses: ./.github/actions/init
+      - name: Lint
+        run: pnpm run lint
+        working-directory: packages/observability
+
   diff:
     name: Diff against staging
     runs-on: ubuntu-latest
@@ -86,13 +103,14 @@ jobs:
             --output text)"
           echo "REALM_SERVER_URL=$REALM_SERVER_URL" >> "$GITHUB_ENV"
 
-      - name: Lint
-        # Catch manifest issues at PR time, before the diff step does an
-        # API pull. Same script as ci-lint.yaml runs, but here we have
-        # GRAFANA_TOKEN sourced from SSM, so GRAFANACTL_VALIDATE_ENV adds
-        # the "validate against live staging Grafana" check on top.
-        # PRETTIER_SKIP avoids duplicating ci-lint's YAML format check
-        # (which requires pnpm install — overkill for this focused workflow).
+      - name: Lint (with live-staging validate)
+        # Re-runs lint.sh here because GRAFANA_TOKEN is now available from
+        # SSM, so GRAFANACTL_VALIDATE_ENV=staging adds the "validate
+        # manifests against live staging Grafana" check that the lint job
+        # above can't do (it has no AWS access). Catches manifest issues
+        # before the diff step does an API pull.
+        # PRETTIER_SKIP avoids re-doing the prettier YAML check the lint
+        # job already ran (this job has no pnpm install — staying fast).
         working-directory: packages/observability
         env:
           GRAFANACTL_VALIDATE_ENV: staging
