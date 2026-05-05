@@ -3,6 +3,11 @@
 #MISE depends=["infra:ensure-traefik"]
 #MISE dir="packages/realm-server"
 
+# Tee stdout+stderr to a per-service log file so the local Alloy scraper
+# (packages/observability/alloy/config.alloy) can pick this up via
+# loki.source.file. Alloy's Docker discovery doesn't see native processes.
+LOG_TEE="../observability/scripts/dev-log-tee.sh"
+
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   PRERENDER_MANAGER_VERBOSE_LOGS=false \
@@ -10,4 +15,5 @@ NODE_ENV=development \
   ts-node \
   --transpileOnly prerender/manager-server \
   --port=${PRERENDER_MANAGER_PORT:-$PRERENDER_MGR_PORT} \
-  --exit-on-signal
+  --exit-on-signal \
+  2>&1 | "$LOG_TEE" prerender-manager
