@@ -41,12 +41,25 @@ function configuredPoolMax(): number | undefined {
   return Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
+export type NotificationHandler = (notification: Notification) => void;
+
+export interface NotificationSubscription {
+  unsubscribe(): Promise<void>;
+}
+
 export class PgAdapter implements DBAdapter {
   readonly kind = 'pg';
   #isClosed = false;
   private pool: Pool;
   private started: Promise<void>;
   private config: Config;
+  // Shared LISTEN connection used by all subscribe() callers. A dedicated
+  // Client (not Pool-acquired) is required because LISTEN/NOTIFY is
+  // unreliable on pooled connections — see node-postgres#1543. Lazily
+  // opened on first subscribe; closed in close().
+  #notificationClient?: Client;
+  #notificationClientStarting?: Promise<Client>;
+  #subscribers = new Map<string, Set<NotificationHandler>>();
 
   constructor(opts?: { autoMigrate?: boolean; migrationLogging?: boolean }) {
     if (opts?.autoMigrate) {
@@ -81,7 +94,123 @@ export class PgAdapter implements DBAdapter {
     log.debug(`closing ${this.url}`);
     this.#isClosed = true;
     await this.started;
+    if (this.#notificationClient) {
+      const client = this.#notificationClient;
+      this.#notificationClient = undefined;
+      this.#subscribers.clear();
+      try {
+        await client.end();
+      } catch (err: unknown) {
+        log.warn(`failed to end shared notification client: ${String(err)}`);
+      }
+    }
     await this.pool.end();
+  }
+
+  // Subscribe a handler to a Postgres NOTIFY channel. Multiple subscribe()
+  // callers — across channels, or even on the same channel — share one
+  // dedicated Client; the Client is opened lazily on the first subscribe and
+  // closed in close(). Each call returns an `unsubscribe()` that removes
+  // just this handler; UNLISTEN is sent only after the last handler for a
+  // channel is removed. Concurrent subscribes are safe.
+  async subscribe(
+    channel: string,
+    handler: NotificationHandler,
+  ): Promise<NotificationSubscription> {
+    await this.started;
+    if (this.#isClosed) {
+      throw new Error('PgAdapter is closed');
+    }
+    const client = await this.#ensureNotificationClient();
+    let set = this.#subscribers.get(channel);
+    const isFirst = !set || set.size === 0;
+    if (!set) {
+      set = new Set();
+      this.#subscribers.set(channel, set);
+    }
+    set.add(handler);
+    if (isFirst) {
+      try {
+        await client.query(`LISTEN ${safeName(channel)}`);
+      } catch (err) {
+        // Roll back the bookkeeping so a retry is clean.
+        set.delete(handler);
+        if (set.size === 0) {
+          this.#subscribers.delete(channel);
+        }
+        throw err;
+      }
+    }
+    let unsubscribed = false;
+    return {
+      unsubscribe: async () => {
+        if (unsubscribed) {
+          return;
+        }
+        unsubscribed = true;
+        const subs = this.#subscribers.get(channel);
+        if (!subs) {
+          return;
+        }
+        subs.delete(handler);
+        if (subs.size > 0) {
+          return;
+        }
+        this.#subscribers.delete(channel);
+        if (this.#notificationClient && !this.#isClosed) {
+          try {
+            await this.#notificationClient.query(
+              `UNLISTEN ${safeName(channel)}`,
+            );
+          } catch (err: unknown) {
+            log.warn(`UNLISTEN ${channel} failed: ${String(err)}`);
+          }
+        }
+      },
+    };
+  }
+
+  async #ensureNotificationClient(): Promise<Client> {
+    if (this.#notificationClient) {
+      return this.#notificationClient;
+    }
+    if (this.#notificationClientStarting) {
+      return this.#notificationClientStarting;
+    }
+    this.#notificationClientStarting = (async () => {
+      const client = new Client(this.config);
+      client.on('notification', (n) => {
+        log.debug(`heard pg notification for channel %s`, n.channel);
+        const handlers = this.#subscribers.get(n.channel);
+        if (!handlers) {
+          return;
+        }
+        for (const h of [...handlers]) {
+          try {
+            h(n);
+          } catch (err: unknown) {
+            log.warn(
+              `notification handler for channel ${n.channel} threw: ${String(err)}`,
+            );
+          }
+        }
+      });
+      client.on('error', (err) => {
+        // The shared client is the substrate for every subscriber, so a
+        // disconnect silently kills them all. Surface it loudly. Reconnect
+        // is not implemented here; current production has not seen this
+        // path, and the legacy listen() API has the same hazard.
+        log.error(`shared notification client error: ${String(err)}`);
+      });
+      await client.connect();
+      this.#notificationClient = client;
+      return client;
+    })();
+    try {
+      return await this.#notificationClientStarting;
+    } finally {
+      this.#notificationClientStarting = undefined;
+    }
   }
 
   async execute(
@@ -112,6 +241,11 @@ export class PgAdapter implements DBAdapter {
     }
   }
 
+  // @deprecated — prefer `subscribe(channel, handler)`. Each call to listen()
+  // opens its own dedicated Client connection for the duration of `fn`, which
+  // doesn't scale as the number of LISTEN-using callers grows. subscribe()
+  // multiplexes all callers onto a single shared Client. This entry point is
+  // kept for callers that haven't migrated yet (e.g. pg-queue).
   async listen(
     channel: string,
     handler: (notification: Notification) => void,

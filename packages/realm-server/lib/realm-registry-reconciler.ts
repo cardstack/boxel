@@ -1,6 +1,6 @@
 import type { Realm } from '@cardstack/runtime-common';
 import { logger, param, query } from '@cardstack/runtime-common';
-import type { PgAdapter } from '@cardstack/postgres';
+import type { PgAdapter, NotificationSubscription } from '@cardstack/postgres';
 import { WorkLoop } from '@cardstack/postgres';
 
 const log = logger('realm-server:registry-reconciler');
@@ -65,6 +65,7 @@ export class RealmRegistryReconciler {
   #deps: ReconcilerDeps;
   #loop: WorkLoop;
   #started = false;
+  #subscription?: NotificationSubscription;
   knownByUrl = new Map<string, RealmRegistryRow>();
   mounted = new Map<string, Realm>();
   pendingMounts = new Map<string, Promise<Realm>>();
@@ -102,28 +103,29 @@ export class RealmRegistryReconciler {
   }
 
   // Begin the LISTEN + poll loop. Safe to call once; no-ops on repeat.
-  start(): void {
+  async start(): Promise<void> {
     if (this.#started) {
       return;
     }
     this.#started = true;
+    this.#subscription = await this.#deps.dbAdapter.subscribe(
+      CHANNEL,
+      this.#loop.wake.bind(this.#loop),
+    );
     this.#loop.run(async (loop) => {
-      await this.#deps.dbAdapter.listen(
-        CHANNEL,
-        loop.wake.bind(loop),
-        async () => {
-          // Run one reconcile immediately on start, then loop on wake-or-poll.
-          while (!loop.shuttingDown) {
-            await this.#safeReconcile();
-            await loop.sleep();
-          }
-        },
-      );
+      // Run one reconcile immediately on start, then loop on wake-or-poll.
+      while (!loop.shuttingDown) {
+        await this.#safeReconcile();
+        await loop.sleep();
+      }
     });
   }
 
   async shutDown(): Promise<void> {
     await this.#loop.shutDown();
+    const sub = this.#subscription;
+    this.#subscription = undefined;
+    await sub?.unsubscribe();
   }
 
   async #safeReconcile(): Promise<void> {
