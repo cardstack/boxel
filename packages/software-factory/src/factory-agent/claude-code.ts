@@ -319,6 +319,7 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
 
     let base = this.promptLoader.load('system', {
       targetRealmUrl: context.targetRealmUrl,
+      darkfactoryModuleUrl: context.darkfactoryModuleUrl ?? '',
       skills,
     });
 

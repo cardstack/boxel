@@ -355,8 +355,6 @@ async function main(): Promise<void> {
   let factoryTools = buildFactoryTools(
     {
       targetRealmUrl: 'https://realms.example.test/user/target/',
-      darkfactoryModuleUrl:
-        'https://realms.example.test/software-factory/darkfactory',
       realmServerUrl: 'https://realms.example.test/',
       client: toolBuilderClient,
       // Smoke test doesn't exercise fs I/O — any real path is fine.

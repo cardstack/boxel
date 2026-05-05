@@ -331,6 +331,7 @@ export class OpenRouterFactoryAgent implements LoopAgent {
 
     return this.promptLoader.load('system', {
       targetRealmUrl: context.targetRealmUrl,
+      darkfactoryModuleUrl: context.darkfactoryModuleUrl ?? '',
       skills,
     });
   }

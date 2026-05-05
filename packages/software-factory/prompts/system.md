@@ -32,6 +32,18 @@ completion. Inspect existing state before making changes — do not guess.
 
 - Target realm: {{targetRealmUrl}}
 
+# Tracker schema module URL
+
+When you create a Project, Issue, or KnowledgeArticle JSON file, set
+`data.meta.adoptsFrom.module` to **`{{darkfactoryModuleUrl}}`** — this
+is the live module URL for the tracker schema in this run. The exact
+`adoptsFrom.name` per file (`Project` / `Issue` / `KnowledgeArticle`)
+and the JSON:API document shape are documented in the
+software-factory-bootstrap and software-factory-operations skills.
+
+Catalog Spec cards adopt from `https://cardstack.com/base/spec` /
+`Spec` instead, regardless of the target realm.
+
 {{#each skills}}
 
 # Skill: {{name}}

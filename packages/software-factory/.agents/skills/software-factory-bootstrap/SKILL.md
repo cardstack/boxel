@@ -9,27 +9,44 @@ Use this skill when the current issue has `issueType: bootstrap`. Your job is
 to read the brief, create project artifacts, and set up the issue backlog for
 the implementation phase.
 
-## Use the structured factory tools — never `Write` / `write_file`
+## How to write tracker-schema cards
 
-All cards created in this skill (Project, KnowledgeArticle, Issue) are
-**tracker-schema cards** with dedicated factory tools that enforce schema
-and invariants. Always create them through these tools — never by writing
-the underlying `.json` directly via native `Write` (Claude backend) or
-`write_file` (OpenRouter backend):
+Project, KnowledgeArticle, and Issue cards are plain `.json` files in
+the workspace. Use the workspace fs surface to write them — `Write`
+(Claude backend) or `write_file` (OpenRouter backend) — with the exact
+JSON:API document shape documented below for each card type.
 
-| Card to create / update               | Use this tool      |
-| ------------------------------------- | ------------------ |
-| `Projects/<slug>.json`                | `update_project`   |
-| `Knowledge Articles/<slug>-*.json`    | `create_knowledge` |
-| `Issues/<slug>-<card-slug>.json`      | `update_issue`     |
-| Append a comment to an existing issue | `add_comment`      |
+**The system prompt names the live tracker module URL** (the value you
+should put in `data.meta.adoptsFrom.module` for Project / Issue /
+KnowledgeArticle cards). Use that URL verbatim — do not try to derive it.
 
-These tools accept the `path`, `attributes`, and `relationships` you'd
-otherwise hand-construct as JSON:API. They auto-construct the document
-with the correct `adoptsFrom`, do read-patch-write merging that
-preserves attributes you did not pass, and (for issues) keep
-`description` immutable. Bypassing them produces malformed cards or
-silently violates invariants the orchestrator depends on.
+| File                               | adoptsFrom.name    |
+| ---------------------------------- | ------------------ |
+| `Projects/<slug>.json`             | `Project`          |
+| `Knowledge Articles/<slug>-*.json` | `KnowledgeArticle` |
+| `Issues/<slug>-<card-slug>.json`   | `Issue`            |
+
+For each card, the document is:
+
+```json
+{
+  "data": {
+    "type": "card",
+    "attributes": { ... per the schema below ... },
+    "relationships": { ... per the schema below ... },
+    "meta": {
+      "adoptsFrom": {
+        "module": "<darkfactoryModuleUrl from system prompt>",
+        "name": "<Project | Issue | KnowledgeArticle>"
+      }
+    }
+  }
+}
+```
+
+Catalog Spec cards (`Spec/<slug>.json`) are different — they adopt from
+`https://cardstack.com/base/spec` / `Spec` and are documented in the
+software-factory-operations skill.
 
 ## Naming Conventions
 
@@ -47,7 +64,7 @@ Derive names from the brief title:
 ### Project Card
 
 **Path:** `Projects/<slug>.json`
-**adoptsFrom:** `{ module: "<darkfactoryModuleUrl>", name: "Project" }`
+**adoptsFrom.name:** `Project`
 
 | Field              | Type     | Example                                         |
 | ------------------ | -------- | ----------------------------------------------- |
@@ -61,12 +78,12 @@ Derive names from the brief title:
 
 **Relationships:**
 
-- `knowledgeBase.0` → `{ links: { self: "../Knowledge Articles/<slug>-<article-slug>" } }` (one entry per article)
+- `knowledgeBase.0`, `knowledgeBase.1`, ... → `{ links: { self: "../Knowledge Articles/<slug>-<article-slug>" } }` (one entry per article)
 
 ### KnowledgeArticle Card
 
 **Paths:** `Knowledge Articles/<slug>-<article-slug>.json` (as many as needed)
-**adoptsFrom:** `{ module: "<darkfactoryModuleUrl>", name: "KnowledgeArticle" }`
+**adoptsFrom.name:** `KnowledgeArticle`
 
 Always create at least two articles:
 
@@ -86,7 +103,7 @@ Add more as the brief warrants (e.g., detailed visual design, deep domain knowle
 ### Issue Card — Organized by Entry-Point Card
 
 **Paths:** `Issues/<slug>-<card-name-slug>.json` (one per entry-point card, named after the card)
-**adoptsFrom:** `{ module: "<darkfactoryModuleUrl>", name: "Issue" }`
+**adoptsFrom.name:** `Issue`
 
 Organize implementation issues around **entry-point cards** — the top-level cards users interact with directly and that should be discoverable in the catalog. Create **one issue per entry-point card**, named after that card.
 
@@ -122,6 +139,28 @@ Interior cards (field cards, helper cards, linked supporting types) are implemen
 
 If the brief describes only one entry-point card, create one issue. If it describes multiple, create one per entry-point card ordered so dependency cards come first.
 
+## Issue Invariants — read carefully
+
+The orchestrator depends on three rules about Issue cards. Before this
+skill rewrite they were enforced by a wrapper tool that stripped /
+ignored disallowed fields automatically. Now that you write the JSON
+directly, you must enforce them yourself:
+
+1. **`description` is immutable after creation.** Never modify an
+   Issue's `description` once the card exists. To add post-creation
+   context (blocked reasons, validation failures, progress notes), use
+   the `comments` array instead — see "Adding a comment to an existing
+   issue" in the operations skill.
+2. **`status` transitions are restricted to the agent.** You may set
+   `status` to `"blocked"` (cannot proceed) or `"backlog"` (unblock).
+   Never set `status` to `"done"` or `"in_progress"` — those are owned
+   by the orchestrator based on `signal_done` + validation results.
+3. **Read before write for updates.** When updating an existing Issue
+   (or any tracker card), `Read` the file first, modify only the
+   attributes you intend to change, then `Write` (or `Edit`) the merged
+   document back. Do not overwrite the whole file with only the new
+   fields — you'll silently drop existing attributes the file had.
+
 ## Why Relationships Matter
 
 The `project` and `relatedKnowledge` relationships on implementation issues are
@@ -130,42 +169,54 @@ issue, `ContextBuilder.buildForIssue()` traverses these relationships to
 load the Project card and Knowledge Articles into the agent's context. Without
 these relationships, the agent would have no project scope or brief content.
 
-## How `attributes` and `relationships` map to the structured tools
+## Concrete example — Issue card
 
-The schema tables above describe the `attributes` you pass to
-`update_project`, `create_knowledge`, and `update_issue`. The tool
-auto-constructs the JSON:API document with the correct `adoptsFrom`, so
-you do **not** pass `meta` — only the attributes and relationships.
-
-Example call shape (for an Issue):
+For a sticky-note brief, the Issue file at `Issues/sticky-note.json`
+should look like:
 
 ```json
 {
-  "path": "Issues/sticky-note.json",
-  "attributes": {
-    "issueId": "SN-1",
-    "summary": "Implement Sticky Note card",
-    "description": "...",
-    "issueType": "feature",
-    "status": "backlog",
-    "priority": "high",
-    "order": 1,
-    "acceptanceCriteria": "...",
-    "createdAt": "2026-05-04T00:00:00Z",
-    "updatedAt": "2026-05-04T00:00:00Z"
-  },
-  "relationships": {
-    "project": { "links": { "self": "../Projects/sticky-note" } },
-    "relatedKnowledge.0": {
-      "links": { "self": "../Knowledge Articles/sticky-note-brief-context" }
+  "data": {
+    "type": "card",
+    "attributes": {
+      "issueId": "SN-1",
+      "summary": "Implement Sticky Note card",
+      "description": "## Goal\n\nImplement the Sticky Note card …",
+      "issueType": "feature",
+      "status": "backlog",
+      "priority": "high",
+      "order": 1,
+      "acceptanceCriteria": "- [ ] Card def …",
+      "createdAt": "2026-05-05T00:00:00Z",
+      "updatedAt": "2026-05-05T00:00:00Z"
+    },
+    "relationships": {
+      "project": {
+        "links": { "self": "../Projects/sticky-note" }
+      },
+      "relatedKnowledge.0": {
+        "links": { "self": "../Knowledge Articles/sticky-note-brief-context" }
+      },
+      "relatedKnowledge.1": {
+        "links": {
+          "self": "../Knowledge Articles/sticky-note-agent-onboarding"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "<darkfactoryModuleUrl from system prompt>",
+        "name": "Issue"
+      }
     }
   }
 }
 ```
 
-Use relative paths (`../`) for relationship links since cards are in
-sibling directories. The schema in each tool's parameter definition is
-authoritative — read it before calling the tool.
+The same shape applies to Project (`name: "Project"`) and
+KnowledgeArticle (`name: "KnowledgeArticle"`) — different attributes,
+same envelope. Use relative paths (`../`) for `links.self` since cards
+live in sibling directories.
 
 ## Completion
 

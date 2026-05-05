@@ -84,6 +84,7 @@ export interface IssueContextBuilderLike {
   buildForIssue(params: {
     issue: IssueData;
     targetRealmUrl: string;
+    darkfactoryModuleUrl?: string;
     validationResults?: ValidationResults;
     /** Pre-formatted validation context from Validator.formatForContext(). */
     validationContext?: string;
@@ -107,6 +108,12 @@ export interface IssueLoopConfig {
    */
   createValidator: (issueId: string) => Validator;
   targetRealmUrl: string;
+  /**
+   * Module URL for the tracker schema (Project / Issue / KnowledgeArticle).
+   * Surfaced in the system prompt so the agent can hand-write the correct
+   * `meta.adoptsFrom.module` when constructing tracker JSON via native `Write`.
+   */
+  darkfactoryModuleUrl?: string;
   /**
    * Local workspace directory mirroring the target realm. Passed to the
    * loop so it can interleave sync calls with agent turns and validation.
@@ -219,6 +226,7 @@ export async function runIssueLoop(
     issueStore,
     createValidator,
     targetRealmUrl,
+    darkfactoryModuleUrl,
     syncWorkspace,
     briefUrl,
     maxIterationsPerIssue = DEFAULT_MAX_ITERATIONS_PER_ISSUE,
@@ -327,6 +335,7 @@ export async function runIssueLoop(
       let context = await contextBuilder.buildForIssue({
         issue,
         targetRealmUrl,
+        darkfactoryModuleUrl,
         validationResults,
         validationContext,
         briefUrl,
