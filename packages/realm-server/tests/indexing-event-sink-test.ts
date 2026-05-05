@@ -1,6 +1,41 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
+import type { DBAdapter, PgPrimitive } from '@cardstack/runtime-common';
 import { IndexingEventSink } from '../indexing-event-sink';
+
+interface RecordedExecute {
+  sql: string;
+  bind: PgPrimitive[];
+}
+
+function makeRecordingAdapter(): {
+  adapter: DBAdapter;
+  executes: RecordedExecute[];
+} {
+  let executes: RecordedExecute[] = [];
+  return {
+    executes,
+    adapter: {
+      kind: 'pg',
+      isClosed: false,
+      async execute(sql, opts) {
+        executes.push({
+          sql,
+          bind: (opts?.bind ?? []) as PgPrimitive[],
+        });
+        return [];
+      },
+      async close() {},
+      async getColumnNames() {
+        return [];
+      },
+    },
+  };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 module(basename(__filename), function () {
   test('tracks active indexing from start through file visits to finish', function (assert) {
@@ -142,5 +177,214 @@ module(basename(__filename), function () {
     });
 
     assert.strictEqual(sink.getActiveIndexing().length, 0);
+  });
+
+  module('Postgres write-through (CS-10930)', function () {
+    test('indexing-started UPSERTs job_progress with total_files and files_completed=0', async function (assert) {
+      let { adapter, executes } = makeRecordingAdapter();
+      let sink = new IndexingEventSink({ flushIntervalMs: 50 });
+      sink.setAdapter(adapter);
+      try {
+        sink.handleEvent({
+          type: 'indexing-started',
+          realmURL: 'http://example.com/realm/',
+          jobId: 42,
+          jobType: 'from-scratch',
+          totalFiles: 200,
+          files: [],
+        });
+        // The write is detached; flush microtasks before asserting.
+        await sleep(10);
+
+        assert.strictEqual(executes.length, 1, 'exactly one DB write');
+        assert.ok(
+          executes[0].sql.includes('INSERT INTO job_progress'),
+          'wrote INSERT statement',
+        );
+        assert.ok(
+          executes[0].sql.includes('ON CONFLICT (job_id) DO UPDATE'),
+          'used UPSERT',
+        );
+        assert.deepEqual(
+          executes[0].bind,
+          [42, 200, 0],
+          'bound jobId, totalFiles, filesCompleted=0',
+        );
+      } finally {
+        sink.dispose();
+      }
+    });
+
+    test('file-visited coalesces into one UPDATE per flush tick', async function (assert) {
+      let { adapter, executes } = makeRecordingAdapter();
+      let sink = new IndexingEventSink({ flushIntervalMs: 30 });
+      sink.setAdapter(adapter);
+      try {
+        sink.handleEvent({
+          type: 'indexing-started',
+          realmURL: 'http://example.com/realm/',
+          jobId: 7,
+          jobType: 'incremental',
+          totalFiles: 100,
+          files: [],
+        });
+        await sleep(5);
+        let writesAfterStart = executes.length;
+        assert.strictEqual(writesAfterStart, 1, 'started fired one write');
+
+        // Burst of 50 file-visited events arrives faster than the flush
+        // interval — they should coalesce into ≤1 write per tick.
+        for (let i = 1; i <= 50; i++) {
+          sink.handleEvent({
+            type: 'file-visited',
+            realmURL: 'http://example.com/realm/',
+            jobId: 7,
+            url: `http://example.com/realm/file-${i}.gts`,
+            filesCompleted: i,
+            totalFiles: 100,
+          });
+        }
+        // Wait for one flush tick to fire.
+        await sleep(60);
+
+        let writesAfterBurst = executes.length;
+        assert.ok(
+          writesAfterBurst - writesAfterStart <= 2,
+          `burst of 50 events produced ≤2 writes, got ${writesAfterBurst - writesAfterStart}`,
+        );
+        // The most recent write should reflect the latest in-memory state.
+        let last = executes[executes.length - 1];
+        assert.deepEqual(
+          last.bind,
+          [7, 100, 50],
+          'last write reflects latest filesCompleted (50)',
+        );
+      } finally {
+        sink.dispose();
+      }
+    });
+
+    test('idle ticks do not issue any writes', async function (assert) {
+      let { adapter, executes } = makeRecordingAdapter();
+      let sink = new IndexingEventSink({ flushIntervalMs: 20 });
+      sink.setAdapter(adapter);
+      try {
+        // Wait for several flush ticks with no events.
+        await sleep(70);
+        assert.strictEqual(executes.length, 0, 'no writes when no events');
+      } finally {
+        sink.dispose();
+      }
+    });
+
+    test('indexing-finished issues final UPSERT immediately', async function (assert) {
+      let { adapter, executes } = makeRecordingAdapter();
+      let sink = new IndexingEventSink({ flushIntervalMs: 1000 });
+      sink.setAdapter(adapter);
+      try {
+        sink.handleEvent({
+          type: 'indexing-started',
+          realmURL: 'http://example.com/realm/',
+          jobId: 99,
+          jobType: 'from-scratch',
+          totalFiles: 5,
+          files: [],
+        });
+        sink.handleEvent({
+          type: 'file-visited',
+          realmURL: 'http://example.com/realm/',
+          jobId: 99,
+          url: 'http://example.com/realm/x.gts',
+          filesCompleted: 5,
+          totalFiles: 5,
+        });
+        sink.handleEvent({
+          type: 'indexing-finished',
+          realmURL: 'http://example.com/realm/',
+          jobId: 99,
+        });
+        await sleep(10);
+
+        // Started + finished — two writes (file-visited is debounced
+        // and won't fire its own write before the long-interval tick).
+        assert.strictEqual(executes.length, 2, 'started + finished writes');
+        assert.deepEqual(
+          executes[1].bind,
+          [99, 5, 5],
+          'final write has filesCompleted=5, total_files=5',
+        );
+      } finally {
+        sink.dispose();
+      }
+    });
+
+    test('dispose() stops the flush timer; no writes after dispose', async function (assert) {
+      let { adapter, executes } = makeRecordingAdapter();
+      let sink = new IndexingEventSink({ flushIntervalMs: 20 });
+      sink.setAdapter(adapter);
+
+      sink.handleEvent({
+        type: 'indexing-started',
+        realmURL: 'http://example.com/realm/',
+        jobId: 1,
+        jobType: 'from-scratch',
+        totalFiles: 10,
+        files: [],
+      });
+      await sleep(5);
+      let baseline = executes.length;
+
+      sink.dispose();
+
+      // Subsequent events go in-memory only — no writes.
+      sink.handleEvent({
+        type: 'file-visited',
+        realmURL: 'http://example.com/realm/',
+        jobId: 1,
+        url: 'http://example.com/realm/x.gts',
+        filesCompleted: 1,
+        totalFiles: 10,
+      });
+      await sleep(60);
+
+      assert.strictEqual(
+        executes.length,
+        baseline,
+        'no writes after dispose, even when ticks would have fired',
+      );
+    });
+
+    test('without setAdapter, sink runs in-memory only (no writes attempted)', async function (assert) {
+      let { adapter, executes } = makeRecordingAdapter();
+      // Construct sink WITHOUT setAdapter — the recording adapter is
+      // unused by the sink. Use it to confirm zero writes.
+      let sink = new IndexingEventSink({ flushIntervalMs: 20 });
+      try {
+        sink.handleEvent({
+          type: 'indexing-started',
+          realmURL: 'http://example.com/realm/',
+          jobId: 1,
+          jobType: 'from-scratch',
+          totalFiles: 3,
+          files: [],
+        });
+        sink.handleEvent({
+          type: 'file-visited',
+          realmURL: 'http://example.com/realm/',
+          jobId: 1,
+          url: 'http://example.com/realm/a.gts',
+          filesCompleted: 1,
+          totalFiles: 3,
+        });
+        await sleep(60);
+        assert.strictEqual(executes.length, 0, 'never touched the adapter');
+        // ...but in-memory state still tracked.
+        assert.strictEqual(sink.getActiveIndexing()[0].filesCompleted, 1);
+        // Suppress unused-variable lint on `adapter`.
+        void adapter;
+      } finally {
+        sink.dispose();
+      }
+    });
   });
 });

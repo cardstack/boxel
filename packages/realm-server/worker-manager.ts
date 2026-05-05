@@ -134,9 +134,12 @@ function isIndexingDashboardEnabled(): boolean {
   return !ECS_CONTAINER_METADATA_URI;
 }
 
-let eventSink: IndexingEventSink | undefined = isIndexingDashboardEnabled()
-  ? new IndexingEventSink()
-  : undefined;
+// Always create the sink — its in-memory state is small, and the
+// `[indexing-progress]` log lines + `job_progress` write-through it
+// emits are how the cluster-wide Boxel Jobs dashboard aggregates
+// progress in staging/prod (CS-10930). The local-only HTML
+// `/_indexing-dashboard` routes are still gated below.
+let eventSink = new IndexingEventSink();
 
 let webServerInstance: Server | undefined;
 let autoMigrate = migrateDB || undefined;
@@ -160,7 +163,7 @@ if (port != null) {
     ctxt.body = JSON.stringify(result);
     ctxt.status = isReady ? 200 : 503;
   });
-  if (eventSink) {
+  if (isIndexingDashboardEnabled()) {
     let getPendingJobs = async (): Promise<PendingJob[]> => {
       let rows = (await query([
         `SELECT j.id, j.job_type, j.args, j.priority, EXTRACT(EPOCH FROM j.created_at) * 1000 AS created_at_ms`,
@@ -398,6 +401,12 @@ async function runShutdown() {
     await Promise.allSettled(snapshot.map(drainOneWorker));
   }
 
+  // No workers are alive at this point — stop the indexing-progress
+  // write-through timer before the adapter is closed by the caller's
+  // shutdown callback (otherwise an in-flight flush could hit a
+  // closed connection).
+  eventSink.dispose();
+
   // Phase 5 — close the readiness web server (if it was started) and
   // exit. The web server is only created when --port is passed; in
   // staging/prod the manager runs without --port and webServerInstance
@@ -558,6 +567,11 @@ let adapter: PgAdapter;
     return [isUrlLike(from) ? new URL(from) : from, to] as [URL | string, URL];
   });
   adapter = new PgAdapter({ autoMigrate });
+  // Wire the indexing-progress write-through. The sink was constructed
+  // at module load (above) so that log lines and event handling work
+  // before this point; the periodic flush only starts once an adapter
+  // is set.
+  eventSink.setAdapter(adapter);
 
   for (let i = 0; i < highPriorityCount; i++) {
     await startWorker(userInitiatedPriority, urlMappings);
@@ -851,7 +865,6 @@ async function startWorker(
             (worker as any).__boxelIndexState = undefined;
           }
         } else if (
-          eventSink &&
           typeof message === 'string' &&
           message.startsWith('progress|')
         ) {
