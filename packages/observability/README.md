@@ -319,3 +319,11 @@ CI will run `apply.sh --env staging` on merge to main once Phase 4 (CS-10932) la
 - **Decommission the AMG-era `boxel-dashboard/` Terraform** in `cardstack/infra` once a full release cycle has gone by on the new flow. Tracked as CS-10942. After it lands, `configs/boxel-grafana-data-sources/` (in cardstack/infra) becomes the sole owner of the per-env data the boxel CI workflow reads.
 - **Drop the dual-ship to CloudWatch** once Loki has been load-bearing for a release cycle. Until then both backends receive identical lines through the FireLens config in `cardstack/infra:modules/aws/ecs/firelens/templates/extra.conf.tftpl`.
 - **CODEOWNERS.** No file in the repo today — if the team wants observability-specific reviewer requirements, file a separate ticket.
+
+### TODO(Phase 3.5): operator-action links are temporarily broken
+
+CS-10924 stripped `?authHeader=${grafana_secret}` from every operator-action URL in the dashboards (reindex / full-reindex / complete-job in `boxel-jobs.json`, add-credit in `user-credits.json`, upsert-realm-user-permission in `realm-permissions.json`) and removed the matching `grafana_secret` template variable. The links remain in the JSON so the Phase 3.5 ticket has a concrete target to retrofit, but **clicking them now hits the realm-server operator endpoints with no auth and will 401**.
+
+Phase 3.5 (CS-10987 — operator-endpoint cleanup, deferred to after the cutover) replaces the GET-link pattern with Grafana button panels that POST to the same endpoints with an `Authorization: Bearer <token>` header sourced from a Grafana-managed secret, not a querystring. Until that lands, dashboard operators run those actions via `boxel realm reindex` (CLI) or by hitting the endpoints directly with `curl -H "Authorization: ..."`.
+
+The pre-existing `grafana_secret` value that was previously baked into Terraform / piped through CI logs **must be rotated** as part of the Phase 3.5 cutover — assume compromised. (CS-10924 acceptance criteria carry-over.)

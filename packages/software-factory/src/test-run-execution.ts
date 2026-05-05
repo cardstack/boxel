@@ -287,6 +287,12 @@ function buildQunitTestPageHtml(opts: {
 
   <script>
     globalThis.process = { env: {}, version: '', cwd() { return '/'; } };
+    // Mirror the host's tests/index.html inline shim — vite-bundled code
+    // references the Node \`global\` symbol, and buildQunitTestPageHtml only
+    // extracts <script src> and <script type="module"> blocks, dropping the
+    // source's plain inline <script> that defines this. Without it, Ember
+    // boot throws "global is not defined" and QUnit never starts.
+    globalThis.global = globalThis;
 
     // -----------------------------------------------------------------------
     // Result collection for Playwright extraction.

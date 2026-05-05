@@ -3,49 +3,56 @@ import config from '@cardstack/host/config/environment';
 import * as QUnit from 'qunit';
 import { setApplication } from '@ember/test-helpers';
 import setupOperatorModeParametersMatchAssertion from '@cardstack/host/tests/helpers/operator-mode-parameters-match';
-import start from 'ember-exam/test-support/start';
+import { start as examStart } from 'ember-exam/test-support';
 // eslint-disable-next-line ember/no-test-import-export
 import { loadRealmTests } from './live-test';
 import { setupQUnit } from './helpers/setup-qunit';
 import { registerShardWarmup } from './helpers/shard-warmup';
 
-const application = Application.create({
-  ...config.APP,
-  rootElement: '#ember-testing',
-});
+export async function start(examOptions) {
+  const application = Application.create({
+    ...config.APP,
+    rootElement: '#ember-testing',
+  });
 
-function setupHostTests() {
-  setApplication(application);
-  setupQUnit();
-  setupOperatorModeParametersMatchAssertion(QUnit.assert);
+  async function setupHostTests() {
+    setApplication(application);
+    setupQUnit();
+    setupOperatorModeParametersMatchAssertion(QUnit.assert);
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const isParallelExamRun =
-    urlParams.has('browser') || urlParams.has('partition');
+    const urlParams = new URLSearchParams(window.location.search);
+    const isParallelExamRun =
+      urlParams.has('browser') || urlParams.has('partition');
 
-  if (isParallelExamRun) {
-    QUnit.config.failOnZeroTests = false;
-    registerShardWarmup();
+    if (isParallelExamRun) {
+      QUnit.config.failOnZeroTests = false;
+      registerShardWarmup();
+    }
+
+    await examStart(examOptions);
   }
 
-  start();
-}
+  function setupLiveTests() {
+    setApplication(application);
+    setupQUnit();
 
-function setupLiveTests() {
-  setApplication(application);
-  setupQUnit();
+    loadRealmTests(application).catch((error) => {
+      const details =
+        error?.stack ||
+        error?.message ||
+        JSON.stringify(error) ||
+        String(error);
+      console.error(`Failed to load realm tests: ${details}`);
+      QUnit.start(); //restarting test due to failure
+    });
+  }
 
-  loadRealmTests(application).catch((error) => {
-    console.error('Failed to load realm tests', error);
-    QUnit.start(); //restarting test due to failure
-  });
-}
+  // Single check — prevents double QUnit initialization (one QUnit instance only).
+  const isLiveTest = new URL(window.location.href).searchParams.has('liveTest');
 
-// Single check — prevents double QUnit initialization (one QUnit instance only).
-const isLiveTest = new URL(window.location.href).searchParams.has('liveTest');
-
-if (isLiveTest) {
-  setupLiveTests();
-} else {
-  setupHostTests();
+  if (isLiveTest) {
+    setupLiveTests();
+  } else {
+    await setupHostTests();
+  }
 }

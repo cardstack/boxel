@@ -1,20 +1,6 @@
 import 'ember-source/types';
 import * as ContentTag from 'content-tag';
 
-declare global {
-  // Make ContentTagGlobal a property of globalThis
-  interface Window {
-    ContentTagGlobal: typeof ContentTag;
-  }
-
-  interface globalThis {
-    ContentTagGlobal: typeof ContentTag;
-  }
-
-  // For Node.js environments
-  let ContentTagGlobal: typeof ContentTag;
-}
-
 import { TemplateFactory } from 'htmlbars-inline-precompile';
 import '@glint/ember-tsc/types';
 import { ComponentLike } from '@glint/template';
@@ -71,10 +57,13 @@ declare module '@ember/helper' {
     [InvokeDirect]: GlintFnHelper[typeof InvokeDirect];
   }
 
-  interface ConcatHelper extends GlintConcatHelper, HelperLike<{
-    Args: { Positional: unknown[] };
-    Return: string;
-  }> {}
+  interface ConcatHelper
+    extends
+      GlintConcatHelper,
+      HelperLike<{
+        Args: { Positional: unknown[] };
+        Return: string;
+      }> {}
 
   interface GetHelper {
     [InvokeDirect]: GlintGetHelper[typeof InvokeDirect];
@@ -82,14 +71,16 @@ declare module '@ember/helper' {
 }
 
 declare module '@ember/modifier/on' {
-  interface OnModifier
-    extends ModifierLike<{
-      Element: Element;
-      Args: {
-        Named: OnModifierArgs;
-        Positional: [name: string, callback: (event: EventForName<string>) => void];
-      };
-    }> {}
+  interface OnModifier extends ModifierLike<{
+    Element: Element;
+    Args: {
+      Named: OnModifierArgs;
+      Positional: [
+        name: string,
+        callback: (event: EventForName<string>) => void,
+      ];
+    };
+  }> {}
 }
 
 // `@ember/routing` re-exports `LinkTo` from `@ember/-internals/glimmer`, where
