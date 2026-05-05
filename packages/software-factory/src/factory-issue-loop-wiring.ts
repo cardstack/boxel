@@ -37,11 +37,7 @@ import {
   type ToolBuilderConfig,
 } from './factory-tool-builder';
 import { ToolExecutor } from './factory-tool-executor';
-import {
-  ToolRegistry,
-  SCRIPT_TOOLS,
-  REALM_API_TOOLS,
-} from './factory-tool-registry';
+import { ToolRegistry, REALM_API_TOOLS } from './factory-tool-registry';
 import {
   runIssueLoop,
   createDefaultPipeline,
@@ -132,7 +128,7 @@ export async function runFactoryIssueLoop(
   });
 
   // 3. Tool infrastructure
-  let toolRegistry = new ToolRegistry([...SCRIPT_TOOLS, ...REALM_API_TOOLS]);
+  let toolRegistry = new ToolRegistry([...REALM_API_TOOLS]);
   let toolExecutor = new ToolExecutor(toolRegistry, {
     packageRoot: PACKAGE_ROOT,
     targetRealmUrl,
@@ -199,6 +195,7 @@ export async function runFactoryIssueLoop(
       realmServerUrl,
       client,
       debug: config.debug,
+      workspaceDir,
     });
     agent = built.agent;
     // For the claude backend, the specific model is only known after the
@@ -258,6 +255,12 @@ export interface CreateLoopAgentConfig {
   realmServerUrl: string;
   client: BoxelCLIClient;
   debug?: boolean;
+  /**
+   * Factory workspace directory. Forwarded to the Claude backend so its
+   * native fs tools (Read / Write / Edit / Bash) resolve relative paths
+   * inside the workspace. Other backends ignore it.
+   */
+  workspaceDir?: string;
 }
 
 /**
@@ -298,7 +301,10 @@ export function createLoopAgentWithLabel(config: CreateLoopAgentConfig): {
   switch (config.provider) {
     case 'claude':
       return {
-        agent: new ClaudeCodeFactoryAgent({ debug: config.debug }),
+        agent: new ClaudeCodeFactoryAgent({
+          debug: config.debug,
+          workspaceDir: config.workspaceDir,
+        }),
         label: 'claude',
       };
 
