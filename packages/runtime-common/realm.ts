@@ -3060,6 +3060,18 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Drain any in-flight incremental indexing before serializing the new
+    // card. fileSerialization runs lookupDefinition on the card's
+    // adoptsFrom module, and with CS-11003's deferred +source POST a
+    // module that was just uploaded may not be indexed yet —
+    // serialization would then throw FilterRefersToNonexistentTypeError
+    // and the +json POST would fail. Draining here makes the JSON-API
+    // path tolerant of an immediately-preceding +source POST without
+    // disturbing the +json POST's own synchronous-indexing contract.
+    let pending = this.incrementalIndexing();
+    if (pending) {
+      await pending;
+    }
     let body = await request.text();
     let json;
     try {
