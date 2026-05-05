@@ -4159,6 +4159,16 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Drain any in-flight incremental indexing before reading boxel_index.
+    // The publishability report scans indexed instances for private-realm
+    // imports + error_doc rows; with CS-11003's deferred indexing on
+    // +source POSTs, an immediately-following publishability call could
+    // otherwise see a stale snapshot and miss real violations (e.g. a
+    // leaky card that just landed but isn't indexed yet).
+    let pending = this.incrementalIndexing();
+    if (pending) {
+      await pending;
+    }
     let sourceRealmURL = ensureTrailingSlash(this.url);
     let resourceEntries = new Map<string, ResourceIndexEntry[]>();
     let visibilityCache = new Map<string, RealmVisibility>();
