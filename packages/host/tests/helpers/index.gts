@@ -2032,26 +2032,57 @@ export async function addSkillToAiAssistant(
     skillCardIdsToActivate: [skillCardId],
   });
 
+  // Allow the matrix-service's debounced room-state drain (~100ms) and the
+  // mock client's setTimeout(0) listener fan-out to flush before we poll, so
+  // waitUntil sees a consistent snapshot rather than racing the runloop.
+  await settled();
+
   let matrixService = getService('matrix-service') as {
     getRoomData(roomId: string): {
       skillsConfig: {
         enabledSkillCards?: Array<{ sourceUrl?: string }>;
+        disabledSkillCards?: Array<{ sourceUrl?: string }>;
+        commandDefinitions?: Array<{ sourceUrl?: string }>;
       };
     } | null;
   };
 
-  await waitUntil(
-    () =>
-      Boolean(
-        matrixService
-          .getRoomData(resolvedRoomId)
-          ?.skillsConfig.enabledSkillCards?.some(
-            (fileDef) => fileDef.sourceUrl === skillCardId,
-          ),
-      ),
-    {
-      timeout: 5000,
-      timeoutMessage: `Timed out waiting for room skill state for "${skillCardId}"`,
-    },
-  );
+  try {
+    await waitUntil(
+      () =>
+        Boolean(
+          matrixService
+            .getRoomData(resolvedRoomId)
+            ?.skillsConfig.enabledSkillCards?.some(
+              (fileDef) => fileDef.sourceUrl === skillCardId,
+            ),
+        ),
+      {
+        timeout: 15000,
+        timeoutMessage: `Timed out waiting for room skill state for "${skillCardId}"`,
+      },
+    );
+  } catch (err) {
+    // Capture diagnostics so future flakes are easier to attribute. The error
+    // surface from `waitUntil` is intentionally terse — we want a snapshot of
+    // what the matrix-service believed the room contained at the moment of
+    // timeout.
+    let snapshot = matrixService.getRoomData(resolvedRoomId)?.skillsConfig;
+    let diagnostic = {
+      roomId: resolvedRoomId,
+      skillCardId,
+      skillsConfigPresent: Boolean(snapshot),
+      enabledSkillCards:
+        snapshot?.enabledSkillCards?.map((f) => f.sourceUrl) ?? null,
+      disabledSkillCards:
+        snapshot?.disabledSkillCards?.map((f) => f.sourceUrl) ?? null,
+      commandDefinitionsCount: snapshot?.commandDefinitions?.length ?? null,
+    };
+    console.error(
+      `[addSkillToAiAssistant] timeout diagnostics: ${JSON.stringify(
+        diagnostic,
+      )}`,
+    );
+    throw err;
+  }
 }

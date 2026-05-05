@@ -96,9 +96,21 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
               let skillCard = maybeSkillCard as SkillModule.Skill;
               skillCardCache.set(skillId, skillCard);
               skillsNeedingUpload.push(skillCard);
+            } else {
+              // Skill load returned something that isn't a usable skill card
+              // (commonly a CardErrorJSONAPI). The activation is silently
+              // dropped; surface a warning so test flakes / production
+              // regressions don't go unattributed.
+              console.warn(
+                `[UpdateRoomSkillsCommand] skipping activation of "${skillId}": store.get did not return a Skill instance`,
+                maybeSkillCard,
+              );
             }
-          } catch {
-            // Ignore failures to load individual skill cards
+          } catch (err) {
+            console.warn(
+              `[UpdateRoomSkillsCommand] skipping activation of "${skillId}": store.get threw`,
+              err,
+            );
           }
         }
 
@@ -140,8 +152,15 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
                 skillCardCache.set(skillId, skillCard);
                 return skillCard;
               }
-            } catch {
-              // Ignore failures to load individual skill cards
+              console.warn(
+                `[UpdateRoomSkillsCommand] cannot rehydrate enabled skill "${skillId}": store.get did not return a Skill instance`,
+                maybeSkillCard,
+              );
+            } catch (err) {
+              console.warn(
+                `[UpdateRoomSkillsCommand] cannot rehydrate enabled skill "${skillId}": store.get threw`,
+                err,
+              );
             }
             return undefined;
           }),
