@@ -142,8 +142,9 @@ module(basename(__filename), function () {
           `search returned all ${NUM_SOURCES} source cards`,
         );
         assert.ok(result.included, 'included is present');
+        let includedCount = result.included?.length ?? 0;
         assert.strictEqual(
-          result.included?.length ?? 0,
+          includedCount,
           NUM_TARGETS,
           `included contains all ${NUM_TARGETS} unique targets`,
         );
