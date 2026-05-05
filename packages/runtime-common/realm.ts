@@ -3469,6 +3469,17 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Drain any in-flight incremental indexing before reading the card from
+    // the index. With CS-11003's deferred +source POST, an immediately-
+    // following GET +json after a definition rewrite would otherwise read
+    // a stale snapshot — e.g. a post-rename instance still serialized
+    // under the old schema. Read endpoints serve the realm's canonical
+    // indexed view; the small wait when indexing is genuinely pending is
+    // the right tradeoff vs returning stale state.
+    let pending = this.incrementalIndexing();
+    if (pending) {
+      await pending;
+    }
     let requestedLocalPath = this.paths.local(new URL(request.url));
     let requestedHadJsonExtension = requestedLocalPath.endsWith('.json');
     let localPath = requestedLocalPath;
