@@ -4,7 +4,7 @@ import {
   ensureTrailingSlash,
   parsePrerenderedSearchRequestFromPayload,
   parseRealmsFromPayload,
-  parseSearchQueryFromPayload,
+  parseSearchRequestFromPayload,
   parseSearchRequestPayload,
   SearchRequestError,
   searchPrerenderedRealms,
@@ -108,9 +108,9 @@ function registerSearchRoutes() {
         throw e;
       }
 
-      let cardsQuery;
+      let searchRequest;
       try {
-        cardsQuery = parseSearchQueryFromPayload(payload);
+        searchRequest = parseSearchRequestFromPayload(payload);
       } catch (e) {
         if (e instanceof SearchRequestError) {
           return buildSearchErrorResponse(e.message);
@@ -120,7 +120,8 @@ function registerSearchRoutes() {
 
       let combined = await searchRealms(
         realmList.map((realmURL) => getSearchableRealmForURL(realmURL)),
-        cardsQuery,
+        searchRequest.query,
+        { include: searchRequest.include },
       );
 
       return new Response(JSON.stringify(combined), {
