@@ -3,5 +3,8 @@
   "private": true,
   "version": "0.0.0",
   "license": "MIT",
-  "description": "Self-host Grafana dashboards as code: grafanactl resource manifests + local docker-compose preview"
+  "description": "Self-host Grafana dashboards as code: grafanactl resource manifests + local docker-compose preview",
+  "scripts": {
+    "lint": "bash ./scripts/lint.sh"
+  }
 }
