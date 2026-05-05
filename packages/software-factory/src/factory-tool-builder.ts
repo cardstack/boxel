@@ -33,7 +33,6 @@ import {
 } from './parse-execution';
 import { runTestsInMemory } from './test-run-execution';
 import type { RunTestsInMemoryOptions, RunTestsResult } from './test-run-types';
-import { readCard, writeCard } from './workspace-fs';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -131,12 +130,16 @@ export function buildFactoryTools(
   toolExecutor: ToolExecutor,
   toolRegistry: ToolRegistry,
 ): FactoryTool[] {
+  // Native fs / Bash / Glob / Grep are owned by the agent backend
+  // (Claude Agent SDK or opencode) — both surface them as native
+  // tools. We used to ship `read_file` / `write_file` /
+  // `fetch_transpiled_module` / `search_realm` / `run_command` as
+  // MCP wrappers because the prior direct-HTTP OpenRouter agent had
+  // no fs / shell. Those wrappers are retired now that opencode
+  // backs the OpenRouter path (CS-11034) — both backends use native
+  // tools for fs and `boxel read-transpiled` / `boxel search` (via
+  // Bash) for realm reads.
   let tools: FactoryTool[] = [
-    buildWriteFileTool(config),
-    buildReadFileTool(config),
-    buildFetchTranspiledModuleTool(config),
-    buildSearchRealmTool(config),
-    buildRunCommandTool(config),
     buildRunLintTool(config),
     buildRunTestsTool(config),
     buildRunEvaluateTool(config),
@@ -200,123 +203,6 @@ export function requireStringArg(
 // ---------------------------------------------------------------------------
 // Factory-level tools
 // ---------------------------------------------------------------------------
-
-function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
-  return {
-    name: 'write_file',
-    description:
-      'Write a file to the target realm workspace. The path must include the file extension. Writes go to the local workspace and are synced to the realm between iterations.',
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description:
-            'Realm-relative file path with extension (e.g., "my-card.gts", "Card/1.json")',
-        },
-        content: { type: 'string', description: 'File content' },
-        realm: {
-          type: 'string',
-          enum: ['target'],
-          description: 'Which realm to write to (default: target)',
-        },
-      },
-      required: ['path', 'content'],
-    },
-    execute: async (args) => {
-      let path = requireStringArg(args, 'path', 'write_file');
-      let content = requireStringArg(args, 'content', 'write_file');
-      return writeCard(config.workspaceDir, path, content);
-    },
-  };
-}
-
-function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
-  return {
-    name: 'read_file',
-    description:
-      'Read a file from the target realm workspace. Returns parsed JSON when possible, otherwise raw text.',
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description: 'Realm-relative file path',
-        },
-        realm: {
-          type: 'string',
-          enum: ['target'],
-          description: 'Which realm to read from (default: target)',
-        },
-      },
-      required: ['path'],
-    },
-    execute: async (args) => {
-      let path = requireStringArg(args, 'path', 'read_file');
-      return readCard(config.workspaceDir, path);
-    },
-  };
-}
-
-function buildFetchTranspiledModuleTool(
-  config: ToolBuilderConfig,
-): FactoryTool {
-  return {
-    name: 'fetch_transpiled_module',
-    description:
-      "Debugging tool ONLY for investigating runtime errors in .gts modules you've written. Use when an eval or instantiate validation error reports a line/column number — those line numbers refer to the transpiled output, not your .gts source, so fetching the transpiled output is how you locate the offending source construct. Never use the transpiled output as a reference for how to write code. Do NOT copy its patterns (setComponentTemplate, precompileTemplate, wire-format templates, base64 CSS imports) into source — always write idiomatic Ember / <template>-tag / CardDef source. Editing: only edit the .gts source (the transpiled output is regenerated on the next write). Auth: per-realm JWT.",
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description:
-            'Realm-relative module path. The .gts extension is optional — the realm accepts either form.',
-        },
-        realm: {
-          type: 'string',
-          enum: ['target'],
-          description: 'Which realm to read from (default: target)',
-        },
-      },
-      required: ['path'],
-    },
-    execute: async (args) => {
-      let path = requireStringArg(args, 'path', 'fetch_transpiled_module');
-      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
-      return config.client.readTranspiled(realmUrl, path);
-    },
-  };
-}
-
-function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
-  return {
-    name: 'search_realm',
-    description:
-      'Search for cards in a realm using a structured query. Auth: per-realm JWT.',
-    parameters: {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'object',
-          description: 'Search query object (filter, sort, page)',
-        },
-        realm: {
-          type: 'string',
-          enum: ['target'],
-          description: 'Which realm to search (default: target)',
-        },
-      },
-      required: ['query'],
-    },
-    execute: async (args) => {
-      let query = args.query as Record<string, unknown>;
-      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
-      let result = await config.client.search(realmUrl, query);
-      return result.ok ? { data: result.data } : { error: result.error };
-    },
-  };
-}
 
 function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
   let execute = config.runTestsInMemory ?? runTestsInMemory;
@@ -566,41 +452,6 @@ function buildRequestClarificationTool(): FactoryTool {
   };
 }
 
-function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
-  return {
-    name: 'run_command',
-    description:
-      'Execute a Boxel host command on the realm server via the prerenderer. ' +
-      'This runs Boxel host commands ONLY — not shell commands, scripts, or Node.js. ' +
-      'Commands must be Boxel host command specifiers in the format ' +
-      '"@cardstack/boxel-host/commands/<name>/default". ' +
-      'Auth: realm server token.',
-    parameters: {
-      type: 'object',
-      properties: {
-        command: {
-          type: 'string',
-          description:
-            'Boxel host command specifier — must be in the format "@cardstack/boxel-host/commands/<name>/default"',
-        },
-        commandInput: {
-          type: 'object',
-          description: 'Optional input for the command',
-        },
-      },
-      required: ['command'],
-    },
-    execute: async (args) => {
-      return config.client.runCommand(
-        config.realmServerUrl,
-        config.targetRealmUrl,
-        args.command as string,
-        args.commandInput as Record<string, unknown> | undefined,
-      );
-    },
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Registered tool wrappers (script + realm-api)
 // ---------------------------------------------------------------------------
@@ -651,10 +502,3 @@ function buildRegisteredTool(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function resolveRealmUrl(
-  config: ToolBuilderConfig,
-  _realm: string | undefined,
-): string {
-  return config.targetRealmUrl;
-}

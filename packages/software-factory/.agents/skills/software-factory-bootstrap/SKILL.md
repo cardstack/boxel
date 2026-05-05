@@ -12,9 +12,8 @@ the implementation phase.
 ## How to write tracker-schema cards
 
 Project, KnowledgeArticle, and Issue cards are plain `.json` files in
-the workspace. Use the workspace fs surface to write them — `Write`
-(Claude backend) or `write_file` (OpenRouter backend) — with the exact
-JSON:API document shape documented below for each card type.
+the workspace. Use the native `Write` tool with the exact JSON:API
+document shape documented below for each card type.
 
 **The system prompt names the live tracker module URL** (the value you
 should put in `data.meta.adoptsFrom.module` for Project / Issue /

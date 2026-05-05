@@ -8,14 +8,12 @@
  * early and surfaces the corresponding AgentRunResult. Otherwise the query
  * runs to normal completion (maxTurns or no-more-tool-calls).
  *
- * Relationship to OpenRouterFactoryAgent:
- *   - Same prompt assembly (FilePromptLoader + assemble*Prompt helpers)
- *   - Same tool catalog (FactoryTool[])
- *   - Same exit signals (DONE_SIGNAL / CLARIFICATION_SIGNAL)
- *   - Different transport: Agent SDK instead of OpenRouter HTTP
- *
- * The factory's deterministic ralph loop is oblivious to which agent is
- * running — the LoopAgent contract (`run(context, tools)`) is identical.
+ * The sibling backend (`./opencode.ts`) drives the same factory loop
+ * via the opencode SDK + an OpenRouter (or boxel-proxy) provider —
+ * same prompt assembly, same tool catalog, same exit signals, just a
+ * different transport. The factory's deterministic ralph loop is
+ * oblivious to which agent is running: the LoopAgent contract
+ * (`run(context, tools)`) is identical for both.
  */
 
 import { realpathSync } from 'node:fs';
@@ -76,38 +74,6 @@ const MAX_TOOL_USE_TURNS = 50;
  */
 const NATIVE_FS_TOOLS = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'];
 
-/**
- * Factory tool names that are filtered out of the MCP catalog on the
- * Claude backend because the model has a native or boxel CLI
- * alternative — keeping them in the catalog would just be a duplicate
- * surface for the same operation. OpenRouter still gets these tools;
- * it has no native fs and no Bash.
- *
- * Each entry's replacement:
- * - `read_file`              → native `Read`
- * - `write_file`             → native `Write` / `Edit`
- * - `run_command`            → unused in practice (card-type schemas
- *                                are pre-loaded by the wiring); if ever
- *                                needed, the boxel CLI exposes
- *                                `boxel run-command` over Bash.
- * - `fetch_transpiled_module`→ Bash + `boxel read-transpiled <path>
- *                                --realm <url>`. Used only when a
- *                                validator reports a transpiled
- *                                line/column, so the marginal cost of
- *                                shelling out is negligible.
- * - `search_realm`           → Bash + `boxel search --realm <url>
- *                                --query '<json>' --json`. Single-quote
- *                                the JSON in shell to avoid expansion;
- *                                see the operations skill for examples.
- */
-const CLAUDE_FILTERED_FACTORY_TOOLS = new Set([
-  'read_file',
-  'write_file',
-  'run_command',
-  'fetch_transpiled_module',
-  'search_realm',
-]);
-
 let log = logger('factory-agent-claude-code');
 
 type CapturedSignal =
@@ -153,24 +119,18 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     context: AgentContext,
     tools: FactoryTool[],
   ): Promise<AgentRunResult> {
-    // Filter out factory tools the Claude backend doesn't need:
-    //
-    //   1. Tools in CLAUDE_FILTERED_FACTORY_TOOLS — native Claude Code
-    //      tools (Read / Write / Edit / Bash) or the boxel CLI cover
-    //      these surfaces directly; a duplicate MCP tool would just be
-    //      a second way to do the same thing.
-    //   2. Tools whose source is `'registered'` — these come from the
-    //      `ToolRegistry`'s `realm-api` manifests. After CS-10883 the
-    //      registry only contains `realm-create`, which the entrypoint
-    //      drives before the agent runs; nothing on the agent's hot
-    //      path needs it. The filter remains so any future re-additions
-    //      to the registry stay off the Claude path by default.
-    //
-    // OpenRouter still sees the full list — it has no native fs / Bash.
-    let mcpFactoryTools = tools.filter(
-      (t) =>
-        !CLAUDE_FILTERED_FACTORY_TOOLS.has(t.name) && t.source !== 'registered',
-    );
+    // Filter out tools whose source is `'registered'` — these come
+    // from the ToolRegistry's `realm-api` manifests. After CS-10883
+    // the registry only contains `realm-create`, which the
+    // entrypoint drives before the agent runs; nothing on the
+    // agent's hot path needs it. The filter remains so any future
+    // re-additions to the registry stay off the Claude path by
+    // default. The OpenRouter-only fs wrappers (read_file /
+    // write_file / search_realm / fetch_transpiled_module /
+    // run_command) used to be filtered here too — they're now
+    // retired entirely (CS-11034) since both backends use native
+    // tools.
+    let mcpFactoryTools = tools.filter((t) => t.source !== 'registered');
 
     let systemPrompt = this.buildSystemPrompt(context, mcpFactoryTools);
     let userPrompt = this.buildUserPrompt(context);
@@ -316,9 +276,9 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       };
     }
 
-    // Stream ended without an explicit signal. Mirror OpenRouterFactoryAgent:
-    // if the agent called at least one tool, treat as done; otherwise
-    // needs_iteration so the orchestrator feeds validation failures back.
+    // Stream ended without an explicit signal. If the agent called
+    // at least one tool, treat as done; otherwise needs_iteration so
+    // the orchestrator feeds validation failures back.
     return {
       status: toolCallLog.length > 0 ? 'done' : 'needs_iteration',
       toolCalls: toolCallLog,

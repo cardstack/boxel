@@ -36,16 +36,13 @@ for them:
 - Content card instances under `<CardType>/<id>.json` (the user data
   the cards represent — e.g. `StickyNote/note-1.json`)
 
-Tooling per backend:
-
-- **Claude backend:** use the **native** `Read`, `Write`, `Edit`,
-  `Glob`, `Grep`, and `Bash` tools. The SDK query's `cwd` is the
-  workspace, so realm-relative paths resolve directly. `Bash` is
-  available for safe shell helpers (`ls`, `find`, `cat`, read-only
-  `boxel` CLI commands like `boxel status` / `boxel history`).
-- **OpenRouter backend:** use the factory `read_file({ path, realm? })`
-  / `write_file({ path, content, realm? })` tools — same realm-relative
-  paths.
+Tooling: use the native `Read`, `Write`, `Edit`, `Glob`, `Grep`, and
+`Bash` tools. Both agent backends (Claude Agent SDK and opencode) mount
+the workspace as `cwd`, so realm-relative paths resolve directly. `Bash`
+is available for safe shell helpers (`ls`, `find`, `cat`, read-only
+`boxel` CLI commands like `boxel status` / `boxel history`). The
+backend's path-scoping safety net rejects writes that resolve outside
+the workspace.
 
 Inspect before writing. Read or grep the file you plan to change, and
 glob for sibling files (e.g. existing card definitions in the same
@@ -54,9 +51,9 @@ directory) before creating new ones.
 ### Tracker-schema cards — write JSON directly
 
 Project, Issue, KnowledgeArticle, and Spec cards are plain `.json` files
-in the workspace. Use `Write` (Claude) or `write_file` (OpenRouter) to
-create them and `Read` + `Edit` (or `Read` + `Write` of the merged
-document) to update them — same workspace fs surface as `.gts` files.
+in the workspace. Use `Write` to create them and `Read` + `Edit` (or
+`Read` + `Write` of the merged document) to update them — same workspace
+fs surface as `.gts` files.
 
 | File path                        | adoptsFrom                                                     |
 | -------------------------------- | -------------------------------------------------------------- |
@@ -136,28 +133,25 @@ The full document envelope is the same as for tracker cards (`data` /
 `type: "card"` / `attributes` / `relationships` / `meta.adoptsFrom`),
 just with the `https://cardstack.com/base/spec` adoptsFrom.
 
-### Realm-side reads (factory tools)
+### Realm-side reads (Bash + boxel CLI)
 
-These always go through factory tools regardless of backend — they
-reach the realm runtime, enforce schema and immutability invariants,
-or drive control flow.
+For realm-runtime reads — fetching transpiled output, searching cards
+by query — shell out via `Bash` to the boxel CLI. Both helpers run
+read-only against the realm and don't modify workspace state.
 
 - Fetch the **transpiled** JavaScript for a `.gts` module — used only when an eval/instantiate error reports a line/column number, since those numbers reference the transpiled output, not your `.gts` source.
-  - **Claude backend:** run `boxel read-transpiled <realm-relative-path> --realm <target-realm-url>` via `Bash`. The `.gts` extension is optional. Pipe through `sed -n '<line>p'` (or wrap with `awk`) when you want to inspect a single line.
-  - **OpenRouter backend:** call the factory `fetch_transpiled_module({ path, realm? })` tool with the same realm-relative path.
+  Run `boxel read-transpiled <realm-relative-path> --realm <target-realm-url>` via `Bash`. The `.gts` extension is optional. Pipe through `sed -n '<line>p'` (or wrap with `awk`) when you want to inspect a single line.
 - Search the target realm for cards using a structured query object (filter, sort, page). Use this to check for existing cards, find duplicates, or inspect project state.
-  - **Claude backend:** run `boxel search --realm <target-realm-url> --query '<json>' --json` via `Bash`. **Quoting:** single-quote the entire JSON object so the shell does not expand or split it; keep all keys and string values double-quoted inside. Example: `boxel search --realm https://realms.example/h/p/ --query '{"filter":{"type":{"module":"https://cardstack.com/base/spec","name":"Spec"}}}' --json`. Pipe through `jq` if you want a focused projection.
-  - **OpenRouter backend:** call the factory `search_realm({ query, realm? })` tool with the same structured query object — no shell quoting concerns.
+  Run `boxel search --realm <target-realm-url> --query '<json>' --json` via `Bash`. **Quoting:** single-quote the entire JSON object so the shell does not expand or split it; keep all keys and string values double-quoted inside. Example: `boxel search --realm https://realms.example/h/p/ --query '{"filter":{"type":{"module":"https://cardstack.com/base/spec","name":"Spec"}}}' --json`. Pipe through `jq` if you want a focused projection.
 
 ### Running Host Commands
 
-You do not need to invoke Boxel host commands from the agent — the
-orchestrator pre-loads the card-type schemas you need and bakes them
-into the structured update tools' parameter schemas. If a future
-workflow does need a host command, the OpenRouter backend exposes
-`run_command({ command, commandInput? })` and the Claude backend
-should shell out via Bash to `boxel run-command <specifier> --realm <url>
---input '<json>' --json`.
+You don't normally need to invoke Boxel host commands from the agent —
+the orchestrator pre-loads the card-type schemas the system prompt
+references. If a future workflow does need a host command, shell out
+via `Bash` to `boxel run-command <specifier> --realm <url> --input
+'<json>' --json` (same single-quoting rules as the search example
+above).
 
 ### Self-Validation (optional, no side effects)
 
@@ -166,8 +160,8 @@ All five tools are safe to call repeatedly mid-turn; none of them write a realm 
 - `run_lint({ path? })` — Run ESLint + Prettier (with `@cardstack/boxel` rules) and return an in-memory `RunLintResult` with `status`, `filesChecked`, `filesWithErrors`, `errorCount`, `warningCount`, `durationMs`, `lintableFiles`, and per-violation `{ rule, file, line, column, message, severity }`. Without `path`, lints every `.gts` / `.gjs` / `.ts` / `.js` file in the target realm. With `path` (realm-relative file path), lints **only that one file** — prefer this right after writing or editing a single file.
 - `run_tests()` — Run the realm's QUnit suite and receive an in-memory result object `{ status, passedCount, failedCount, skippedCount, durationMs, testFiles, failures, errorMessage? }`. Use it when you want feedback before signalling done.
 - `run_parse({ path? })` — Parse and type-check files in the target realm and return an in-memory `RunParseResult` with `status`, `filesChecked`, `filesWithErrors`, `errorCount`, `durationMs`, `parseableFiles`, and per-error `{ file, line, column, message }`. Without `path`, runs glint (ember-tsc) over every `.gts` / `.gjs` / `.ts` file in the realm AND validates every `.json` file listed as a Spec `linkedExample` (same discovery as the parse validation step). With `path` (realm-relative file path), parses **only that one file** — `.gts` / `.gjs` / `.ts` runs through glint; `.json` is parsed and checked for card document structure. The extension is required; `parseableFiles` entries are always returned in the `.json` / `.gts` / `.gjs` / `.ts` form, so you can feed any of them straight back into `path`. Prefer the single-file form right after writing or editing one file.
-- `run_evaluate({ path? })` — Evaluate ESM modules (`.gts` / `.gjs` / `.ts` / `.js`) in the target realm via the prerenderer sandbox and return a `RunEvaluateResult` (status, module counts, per-failure `{ path, error, stackTrace? }`). Without `path`, evaluates every non-test evaluable module. With `path`, evaluates only that single realm-relative file — handy for a quick self-check right after writing one module. Test files (`*.test.*`) are rejected — the test runner validates those. When a failure reports a line/column, those numbers refer to the transpiled module — pair with the transpiled-module fetch above (Bash + `boxel read-transpiled` on the Claude backend, `fetch_transpiled_module` on OpenRouter) to locate the offending source construct, then fix the `.gts` source (never copy transpiled patterns back into source).
-- `run_instantiate({ path? })` — Instantiate card example instances in the target realm via the prerenderer sandbox and return a `RunInstantiateResult` (status, instance counts, per-failure `{ path, cardName, error, stackTrace? }`). Without `path`, searches the realm for Spec cards and instantiates every `linkedExample` on every card/app Spec; specs with no `linkedExamples` still get a bare instantiation to exercise the card class. With `path`, instantiates only that single realm-relative `.json` example file — its `meta.adoptsFrom` supplies the module + card name, and spec discovery is skipped entirely so you can self-check one instance in isolation. The `path` argument must end in `.json`. `instanceFiles` only contains real `.json` example paths (bare-instantiation fallbacks are filtered out) so any entry can be fed straight back into `path`. If a bare instantiation fails, its failure entry has `path: ''` and a populated `cardName` — identify the spec by `cardName` and do NOT pass the empty path back into `path`. When a failure reports a line/column, those numbers refer to the transpiled module — pair with the transpiled-module fetch above (Bash + `boxel read-transpiled` on the Claude backend, `fetch_transpiled_module` on OpenRouter) to locate the offending source construct, then fix the `.gts` source (never copy transpiled patterns back into source).
+- `run_evaluate({ path? })` — Evaluate ESM modules (`.gts` / `.gjs` / `.ts` / `.js`) in the target realm via the prerenderer sandbox and return a `RunEvaluateResult` (status, module counts, per-failure `{ path, error, stackTrace? }`). Without `path`, evaluates every non-test evaluable module. With `path`, evaluates only that single realm-relative file — handy for a quick self-check right after writing one module. Test files (`*.test.*`) are rejected — the test runner validates those. When a failure reports a line/column, those numbers refer to the transpiled module — pair with the transpiled-module fetch above (Bash + `boxel read-transpiled`) to locate the offending source construct, then fix the `.gts` source (never copy transpiled patterns back into source).
+- `run_instantiate({ path? })` — Instantiate card example instances in the target realm via the prerenderer sandbox and return a `RunInstantiateResult` (status, instance counts, per-failure `{ path, cardName, error, stackTrace? }`). Without `path`, searches the realm for Spec cards and instantiates every `linkedExample` on every card/app Spec; specs with no `linkedExamples` still get a bare instantiation to exercise the card class. With `path`, instantiates only that single realm-relative `.json` example file — its `meta.adoptsFrom` supplies the module + card name, and spec discovery is skipped entirely so you can self-check one instance in isolation. The `path` argument must end in `.json`. `instanceFiles` only contains real `.json` example paths (bare-instantiation fallbacks are filtered out) so any entry can be fed straight back into `path`. If a bare instantiation fails, its failure entry has `path: ''` and a populated `cardName` — identify the spec by `cardName` and do NOT pass the empty path back into `path`. When a failure reports a line/column, those numbers refer to the transpiled module — pair with the transpiled-module fetch above (Bash + `boxel read-transpiled`) to locate the offending source construct, then fix the `.gts` source (never copy transpiled patterns back into source).
 
 ### Control Flow
 
@@ -176,7 +170,7 @@ All five tools are safe to call repeatedly mid-turn; none of them write a realm 
 
 ## Required Flow
 
-1. **Inspect before writing.** Search the target realm for existing cards (Bash + `boxel search` on Claude, `search_realm` on OpenRouter — see the Realm-side reads section above). Read or grep the workspace files you plan to change (or sibling files in the same directory) before creating or modifying anything.
+1. **Inspect before writing.** Search the target realm for existing cards (Bash + `boxel search` — see the Realm-side reads section above). Read or grep the workspace files you plan to change (or sibling files in the same directory) before creating or modifying anything.
 2. **Write card definitions** (`.gts`) into the workspace.
 3. **Write `.test.gts` test files** co-located with card definitions. Every issue must have at least one test file. **Write tests immediately after the card definition, before any instances or catalog specs.**
 4. **Write card instances** (`.json`) into the workspace.
@@ -221,8 +215,9 @@ and read the reported line to see what compiled construct raised the
 error — then reason back to the `.gts` source construct that produced
 it.
 
-- **Claude backend:** `boxel read-transpiled sticky-note.gts --realm <target-realm-url>` via `Bash`. Pipe through `sed -n '60,70p'` (or similar) to focus on a window around the reported line.
-- **OpenRouter backend:** `fetch_transpiled_module({ path: 'sticky-note.gts' })`.
+Run `boxel read-transpiled sticky-note.gts --realm <target-realm-url>`
+via `Bash`. Pipe through `sed -n '60,70p'` (or similar) to focus on a
+window around the reported line.
 
 For example, `" is not a valid character within attribute names: (error occurred in '/.../sticky-note.gts' @ line 66 : column 32)`
 typically points inside a `precompileTemplate(...)` block in the
@@ -233,10 +228,9 @@ to the source.
 
 ### The transpiled output is for DEBUGGING ONLY — never for implementation
 
-**Scope:** the transpiled fetch (Bash + `boxel read-transpiled` on
-Claude, `fetch_transpiled_module` on OpenRouter) is only for
-investigating **runtime errors in `.gts` modules you have already
-written** — when an eval or instantiate validation failure points to
+**Scope:** the transpiled fetch (Bash + `boxel read-transpiled`) is
+only for investigating **runtime errors in `.gts` modules you have
+already written** — when an eval or instantiate validation failure points to
 a line/column in the transpiled output and you need to map that
 coordinate back to your source. It is not for learning how to write
 cards, not for understanding Boxel patterns, and not a general

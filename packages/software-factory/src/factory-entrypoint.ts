@@ -37,6 +37,14 @@ export interface FactoryEntrypointOptions {
   agent: FactoryAgentProvider;
   /** Only set when agent === 'openrouter' and the flag carried a `=<id>` suffix. */
   openRouterModel?: string;
+  /**
+   * OpenRouter API key for direct billing on the `--agent openrouter`
+   * path. Read from `--openrouter-api-key <key>` or env
+   * `OPENROUTER_API_KEY`. When unset, the OpenRouter path falls
+   * through to the realm-server `_request-forward` proxy (boxel
+   * tokens). Ignored on every other backend.
+   */
+  openRouterApiKey?: string;
   debug?: boolean;
   retryBlocked?: boolean;
 }
@@ -134,9 +142,15 @@ export function getFactoryEntrypointUsage(): string {
     '  --no-retry-blocked          Skip retrying blocked issues (by default, blocked issues are reset to backlog)',
     '  --agent <provider>          LLM backend: "claude" (default, uses Claude Code Agent SDK),',
     '                              "codex" (not yet implemented),',
-    '                              "openrouter" (defaults to anthropic/claude-opus-4),',
+    '                              "openrouter" (defaults to anthropic/claude-opus-4-7, runs',
+    '                              via the opencode SDK with native fs / Bash),',
     '                              or "openrouter=<model-id>" to pick a specific OpenRouter model',
     '                              (e.g., "openrouter=anthropic/claude-sonnet-4").',
+    '  --openrouter-api-key <key>  OpenRouter API key for the openrouter backend.',
+    '                              When set, opencode talks to OpenRouter directly with this key.',
+    '                              When unset (and OPENROUTER_API_KEY env is also unset), the',
+    '                              backend falls back to proxying through the realm server',
+    '                              (`_request-forward`) — burns boxel tokens.',
     '  --debug                     Log LLM prompts and responses to stderr',
     '  --help                      Show this usage information',
     '',
@@ -180,6 +194,9 @@ export function parseFactoryEntrypointArgs(
         agent: {
           type: 'string',
         },
+        'openrouter-api-key': {
+          type: 'string',
+        },
         debug: {
           type: 'boolean',
         },
@@ -217,12 +234,22 @@ export function parseFactoryEntrypointArgs(
     );
   }
 
+  let openRouterApiKey: string | undefined;
+  let rawOpenRouterApiKey = parsed.values['openrouter-api-key'];
+  if (typeof rawOpenRouterApiKey === 'string') {
+    let trimmed = rawOpenRouterApiKey.trim();
+    if (trimmed !== '') {
+      openRouterApiKey = trimmed;
+    }
+  }
+
   return {
     briefUrl: normalizeUrl(briefUrl, '--brief-url'),
     targetRealmUrl: normalizeUrl(targetRealmUrl, '--target-realm-url'),
     realmServerUrl,
     agent: parsedAgent.provider,
     openRouterModel: parsedAgent.openRouterModel,
+    openRouterApiKey,
     debug: parsed.values.debug === true ? true : undefined,
     retryBlocked: parsed.values['no-retry-blocked'] === true ? false : true,
   };
@@ -315,6 +342,7 @@ export async function runFactoryEntrypoint(
     workspaceDir,
     agent: options.agent,
     openRouterModel: options.openRouterModel,
+    openRouterApiKey: options.openRouterApiKey,
     debug: options.debug,
     retryBlocked: options.retryBlocked,
   });
