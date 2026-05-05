@@ -342,8 +342,11 @@ export interface WatchRealmsResult {
 
 /**
  * Programmatic entry point. Returns when the abort signal fires (or the
- * process receives SIGINT/SIGTERM when no signal is supplied). Used by both
- * the CLI registration below and integration tests.
+ * process receives SIGINT/SIGTERM when no signal is supplied). The CLI
+ * passes a single spec; the array shape exists for programmatic / test
+ * use. The authenticator is resolved once (from `specs[0].realmUrl`) and
+ * shared across all specs — multi-realm callers must use realms that
+ * share a profile / secret seed.
  */
 export async function watchRealms(
   specs: WatchRealmSpec[],
