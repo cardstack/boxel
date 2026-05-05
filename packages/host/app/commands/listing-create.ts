@@ -27,7 +27,7 @@ import AuthedFetchCommand from './authed-fetch';
 import CreateSpecCommand from './create-specs';
 import GenerateThumbnailCommand from './generate-thumbnail';
 import GetCardCommand from './get-card';
-import GetCatalogRealmUrlsCommand from './get-catalog-realm-urls';
+import GetCatalogRealmIdentifiersCommand from './get-catalog-realm-identifiers';
 import GetRealmOfResourceIdentifierCommand from './get-realm-of-resource-identifier';
 import OneShotLlmRequestCommand from './one-shot-llm-request';
 import SanitizeModuleListCommand from './sanitize-module-list';
@@ -55,7 +55,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
   description = 'Create a catalog listing for an example card';
 
   private async getCatalogRealm(): Promise<string> {
-    const { realmIdentifiers } = await new GetCatalogRealmUrlsCommand(
+    const { realmIdentifiers } = await new GetCatalogRealmIdentifiersCommand(
       this.commandContext,
     ).execute();
     let catalogRealm = realmIdentifiers.find((realm: string) =>

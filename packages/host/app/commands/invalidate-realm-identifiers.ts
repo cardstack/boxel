@@ -6,7 +6,7 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import type RealmService from '../services/realm';
 
-export default class InvalidateRealmUrlsCommand extends HostBaseCommand<
+export default class InvalidateRealmIdentifiersCommand extends HostBaseCommand<
   typeof BaseCommandModule.InvalidateRealmIdentifiersInput,
   undefined
 > {
