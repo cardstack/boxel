@@ -55,7 +55,6 @@ export interface FlushResult {
 export class RealmWatcher extends RealmSyncBase {
   readonly name: string;
   private readonly debounceMs: number;
-  private readonly quiet: boolean;
   private readonly checkpointManager: CheckpointManager;
   private lastKnownMtimes = new Map<string, number>();
   private pendingChanges = new Map<string, PendingChange>();
@@ -64,11 +63,10 @@ export class RealmWatcher extends RealmSyncBase {
   constructor(
     spec: WatchRealmSpec,
     authenticator: RealmAuthenticator,
-    options: { debounceMs: number; quiet: boolean },
+    options: { debounceMs: number },
   ) {
     super({ realmUrl: spec.realmUrl, localDir: spec.localDir }, authenticator);
     this.debounceMs = options.debounceMs;
-    this.quiet = options.quiet;
     this.checkpointManager = new CheckpointManager(spec.localDir);
     this.name = deriveRealmName(this.normalizedRealmUrl);
   }
@@ -398,7 +396,6 @@ export async function watchRealms(
   for (const spec of specs) {
     const watcher = new RealmWatcher(spec, authenticator, {
       debounceMs,
-      quiet,
     });
     try {
       await watcher.initialize();
