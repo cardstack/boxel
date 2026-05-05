@@ -129,3 +129,9 @@ grafanactl \
 # Data sources — grafanactl doesn't manage them, so push via HTTP API.
 # Local skips this (docker-compose handles file provisioning).
 ./scripts/apply-datasources.sh --env "$env_name"
+
+# Alert rule groups — also outside grafanactl's scope. Run after the
+# datasource push so any datasource UIDs the rules reference are
+# guaranteed to exist before the rules land. Local skips this (the
+# docker-compose file mount provisions alerts at container startup).
+./scripts/apply-alerting.sh --env "$env_name"
