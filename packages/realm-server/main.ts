@@ -558,7 +558,7 @@ const getIndexHTML = async () => {
   // Begin the reconciler's background poll loop (LISTEN realm_registry +
   // 30s safety poll). It picks up changes from peer instances (publish,
   // unpublish, delete) and reconciles them into local mounted state.
-  reconciler.start();
+  await reconciler.start();
 
   // Cross-instance cache invalidation. Realm.write() emits NOTIFY
   // realm_file_changes; this listener receives those and forwards to the
@@ -570,7 +570,7 @@ const getIndexHTML = async () => {
     dbAdapter,
     lookupMountedRealm: (url) => realms.find((r) => r.url === url),
   });
-  fileChangesListener.start();
+  await fileChangesListener.start();
 
   let actualPort =
     (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
