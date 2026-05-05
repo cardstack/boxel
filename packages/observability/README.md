@@ -323,6 +323,34 @@ CI will run `apply.sh --env staging` on merge to main once Phase 4 (CS-10932) la
 | CS-10932 | 4     | landed      | CI: apply to staging on merge                 |
 | CS-10933 | 4     | not started | CI: post diff comment on PRs                  |
 | CS-10936 | 5     | landed      | CI: apply to production                       |
+| CS-10930 | 6.5   | this PR     | Live indexing-progress panel                  |
+
+## Indexing progress (CS-10930)
+
+**Owner dashboard: `boxel-jobs.json`**. The Boxel Jobs dashboard owns the
+cluster-wide indexing-progress view — backlog stats, throughput / stocks
+time-series, and the per-active-job "Active Indexing" table with
+file-by-file progress bars. Drill-through "View activity feed" links
+open `boxel-logs.json` panel id 11 (Indexing Activity Feed) prefiltered
+by realm.
+
+**Hybrid storage**:
+
+- **Snapshot state** lives in Postgres `job_progress` (UNLOGGED,
+  PK = `job_id`). Three counters and a timestamp; `IndexingEventSink`
+  upserts on `indexing-started` and `indexing-finished`, and a
+  per-sink 1 s flush coalesces `file-visited` events into one UPDATE
+  per dirty job per tick. Lost on Postgres crash by design (UNLOGGED) —
+  acceptable because indexing runs that crash get re-driven and the
+  table repopulates.
+- **Streaming feed** lives in Loki. Each event also emits a structured
+  `[indexing-progress] event=… job=… realm=… …` stdout line through
+  the existing FireLens pipe. The Indexing Activity Feed panel filters
+  by `|= "[indexing-progress]" |= "${realm_url}"`.
+
+Why not Prometheus: workers expose no `/metrics` endpoint today, and
+adding the AMP scrape pipe (Alloy sidecar, IAM, AMP datasource) is
+2–3 days of `cardstack/infra` work — out of scope for one panel.
 
 ## Vendored content
 
