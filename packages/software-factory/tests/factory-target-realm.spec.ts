@@ -131,7 +131,8 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       targetRealmIdentifier,
     );
 
-    let seedIssueUrl = new URL('Issues/bootstrap-seed', targetRealmIdentifier).href;
+    let seedIssueUrl = new URL('Issues/bootstrap-seed', targetRealmIdentifier)
+      .href;
     let seedIssueResponse = await fetch(seedIssueUrl, {
       headers: {
         Accept: SupportedMimeType.CardSource,

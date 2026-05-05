@@ -80,7 +80,9 @@ export class ValidationPipeline implements Validator {
     }
 
     let settled = await Promise.allSettled(
-      this.runners.map((runner) => runner.run(targetRealmIdentifier, iteration)),
+      this.runners.map((runner) =>
+        runner.run(targetRealmIdentifier, iteration),
+      ),
     );
 
     let stepResults: ValidationStepResult[] = [];

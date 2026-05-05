@@ -151,7 +151,9 @@ function resolveRealmServerUrl(
 }
 
 function extractEndpointFromRealmUrl(targetRealmIdentifier: string): string {
-  let segments = new URL(targetRealmIdentifier).pathname.split('/').filter(Boolean);
+  let segments = new URL(targetRealmIdentifier).pathname
+    .split('/')
+    .filter(Boolean);
   let endpoint = segments.at(-1);
 
   if (!endpoint) {

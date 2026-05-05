@@ -207,7 +207,10 @@ export async function evaluateRealmModules(
     let moduleUrl = toModuleUrl(file, options.targetRealmIdentifier);
 
     try {
-      let result = await evaluateModuleFn(moduleUrl, options.targetRealmIdentifier);
+      let result = await evaluateModuleFn(
+        moduleUrl,
+        options.targetRealmIdentifier,
+      );
       moduleResults.push({
         path: file,
         error: result.error ?? '',

@@ -292,7 +292,9 @@ export class TestValidationStep implements ValidationStepRunner {
   // Private helpers
   // -------------------------------------------------------------------------
 
-  private async discoverTestFiles(targetRealmIdentifier: string): Promise<string[]> {
+  private async discoverTestFiles(
+    targetRealmIdentifier: string,
+  ): Promise<string[]> {
     let result = await this.fetchFilenamesFn(targetRealmIdentifier);
 
     if (result.error) {

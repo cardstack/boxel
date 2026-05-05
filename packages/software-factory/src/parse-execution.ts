@@ -345,7 +345,10 @@ export async function parseRealmFiles(
   if (jsonFiles.length > 0) {
     let jsonSettled = await Promise.allSettled(
       jsonFiles.map(async (jsonUrl) => {
-        let readResult = await readFileFn(options.targetRealmIdentifier, jsonUrl);
+        let readResult = await readFileFn(
+          options.targetRealmIdentifier,
+          jsonUrl,
+        );
         if (!readResult.ok) {
           return {
             file: jsonUrl,

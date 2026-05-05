@@ -346,7 +346,10 @@ export async function runIssueLoop(
       // Validation — runs after every agent turn.
       // Pass the iteration number so all steps use it as the sequence
       // number in artifact filenames (parse_slug-1, lint_slug-1, etc.)
-      validationResults = await validator.validate(targetRealmIdentifier, iteration);
+      validationResults = await validator.validate(
+        targetRealmIdentifier,
+        iteration,
+      );
 
       // Push the validator's artifact cards (ParseResult / LintResult /
       // EvalResult / InstantiateResult / TestRun) to the realm so they

@@ -458,7 +458,10 @@ module('factory-context-builder > core fields', function () {
       targetRealmIdentifier: 'https://example.test/my-realm/',
     });
 
-    assert.strictEqual(ctx.targetRealmIdentifier, 'https://example.test/my-realm/');
+    assert.strictEqual(
+      ctx.targetRealmIdentifier,
+      'https://example.test/my-realm/',
+    );
   });
 
   test('handles empty knowledge array', async function (assert) {
@@ -798,7 +801,10 @@ module(
         targetRealmIdentifier: 'https://example.test/my-realm/',
       });
 
-      assert.strictEqual(ctx.targetRealmIdentifier, 'https://example.test/my-realm/');
+      assert.strictEqual(
+        ctx.targetRealmIdentifier,
+        'https://example.test/my-realm/',
+      );
     });
 
     test('throws when issueLoader is not configured', async function (assert) {
