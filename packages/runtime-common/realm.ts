@@ -205,13 +205,17 @@ const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
 
 // Fields owned by the RealmConfig card instance at /realm.json. Anything not
 // in this set is still written to the legacy .realm.json sidecar until
-// CS-10053 / CS-10055 move the remaining flags off-file.
+// CS-10055 moves hostHome / interactHome off-file.
 const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
   'name',
   'backgroundURL',
   'iconURL',
   'hostRoutingRules',
 ]);
+
+// Fields owned by the realm_metadata DB table. Routes through
+// upsertRealmMetadata rather than the sidecar.
+const REALM_CONFIG_METADATA_PROPERTIES = new Set<string>(['publishable']);
 
 export interface FileRef {
   path: LocalPath;
@@ -834,6 +838,10 @@ export class Realm {
     return this.#realmIndexUpdater.indexing();
   }
 
+  async incrementalIndexing() {
+    return this.#realmIndexUpdater.incrementalIndexing();
+  }
+
   private startReindex(opts?: {
     clearLastModified?: boolean;
     priority?: number;
@@ -1158,7 +1166,7 @@ export class Realm {
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
-    await this.indexing();
+    await this.incrementalIndexing();
     let urls: URL[] = [];
     // Collect write results for all files we wrote
     let results: { path: LocalPath; lastModified: number }[] = [];
@@ -4581,6 +4589,71 @@ export class Realm {
     }
   }
 
+  // Reads showAsCatalog / publishable from realm_metadata. Both columns
+  // are nullable; missing rows or query failures return null/null,
+  // matching the pre-CS-10053 behavior of "absent in sidecar".
+  private async getRealmMetadata(): Promise<{
+    showAsCatalog: boolean | null;
+    publishable: boolean | null;
+  }> {
+    try {
+      let results = (await query(this.#dbAdapter, [
+        `SELECT show_as_catalog, publishable FROM realm_metadata WHERE url =`,
+        param(this.url),
+      ])) as {
+        show_as_catalog: boolean | null;
+        publishable: boolean | null;
+      }[];
+      if (results.length === 0) {
+        return { showAsCatalog: null, publishable: null };
+      }
+      return {
+        showAsCatalog: results[0].show_as_catalog,
+        publishable: results[0].publishable,
+      };
+    } catch (error) {
+      this.#log.warn(`Failed to query realm metadata: ${error}`);
+      return { showAsCatalog: null, publishable: null };
+    }
+  }
+
+  // Upserts the patch into realm_metadata for this realm. Only the
+  // provided keys are written; absent keys retain their existing column
+  // values via COALESCE on the EXCLUDED row's NULL. Pass an explicit
+  // null to clear a column.
+  private async upsertRealmMetadata(patch: {
+    publishable?: boolean | null;
+    showAsCatalog?: boolean | null;
+  }): Promise<void> {
+    if (patch.publishable === undefined && patch.showAsCatalog === undefined) {
+      return;
+    }
+    let publishable =
+      patch.publishable === undefined ? null : patch.publishable;
+    let showAsCatalog =
+      patch.showAsCatalog === undefined ? null : patch.showAsCatalog;
+    let publishableProvided = patch.publishable !== undefined;
+    let showAsCatalogProvided = patch.showAsCatalog !== undefined;
+    await query(this.#dbAdapter, [
+      `INSERT INTO realm_metadata (url, publishable, show_as_catalog) VALUES (`,
+      param(this.url),
+      `,`,
+      param(publishable),
+      `,`,
+      param(showAsCatalog),
+      `) ON CONFLICT (url) DO UPDATE SET `,
+      // Update only the columns that were provided; preserve the
+      // existing values of the others.
+      ...(publishableProvided
+        ? [`publishable = `, param(publishable), `, `]
+        : []),
+      ...(showAsCatalogProvided
+        ? [`show_as_catalog = `, param(showAsCatalog), `, `]
+        : []),
+      `updated_at = now()`,
+    ]);
+  }
+
   async getRealmInfo(): Promise<RealmInfo> {
     if (!this.#cachedRealmInfo) {
       this.#cachedRealmInfo = await this.parseRealmInfo();
@@ -4591,8 +4664,11 @@ export class Realm {
   private async parseRealmInfo(): Promise<RealmInfo> {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
-    let realmConfig = await this.readFileAsText(localPath, undefined);
-    let lastPublishedAt = await this.getLastPublishedAt();
+    let [realmConfig, lastPublishedAt, metadata] = await Promise.all([
+      this.readFileAsText(localPath, undefined),
+      this.getLastPublishedAt(),
+      this.getRealmMetadata(),
+    ]);
     let realmInfo: RealmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,
@@ -4616,8 +4692,6 @@ export class Realm {
         realmInfo.backgroundURL =
           realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
-        realmInfo.showAsCatalog =
-          realmConfigJson.showAsCatalog ?? realmInfo.showAsCatalog;
         realmInfo.interactHome =
           realmConfigJson.interactHome ?? realmInfo.interactHome;
         realmInfo.hostHome = realmConfigJson.hostHome ?? realmInfo.hostHome;
@@ -4626,14 +4700,18 @@ export class Realm {
             (this.#matrixClient.getUserId()! || this.#matrixClient.username),
           this.#matrixClient.matrixURL.href,
         );
-        realmInfo.publishable =
-          realmConfigJson.publishable ?? realmInfo.publishable;
         realmInfo.lastPublishedAt =
           realmConfigJson.lastPublishedAt || realmInfo.lastPublishedAt;
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
     }
+
+    // showAsCatalog and publishable live in realm_metadata after CS-10053.
+    // The sidecar-parse block above intentionally does not read them; the
+    // DB is the only source.
+    realmInfo.showAsCatalog = metadata.showAsCatalog;
+    realmInfo.publishable = metadata.publishable;
 
     // Overlay from the RealmConfig card file at /realm.json on disk. The
     // file is the source of truth — patchRealmConfig writes it, publish
@@ -4776,20 +4854,39 @@ export class Realm {
       });
     }
 
+    // Validate types of fields bound for realm_metadata BEFORE any
+    // writes. The patch schema accepts arbitrary attribute values
+    // (z.record(z.unknown())); without this check a non-boolean
+    // would reach the SQL boolean column and surface as an opaque
+    // 500. Card and sidecar fields rely on their own downstream
+    // validation; the DB-bound fields don't have one.
+    if ('publishable' in attributes) {
+      let publishableValue = attributes.publishable;
+      if (publishableValue !== null && typeof publishableValue !== 'boolean') {
+        return badRequest({
+          message: `'publishable' must be a boolean or null`,
+          requestContext,
+        });
+      }
+    }
+
     let cardAttrs: Record<string, unknown> = {};
+    let metadataAttrs: Record<string, unknown> = {};
     let sidecarAttrs: Record<string, unknown> = {};
     for (let [key, value] of Object.entries(attributes)) {
       if (REALM_CONFIG_CARD_PROPERTIES.has(key)) {
         cardAttrs[key] = value;
+      } else if (REALM_CONFIG_METADATA_PROPERTIES.has(key)) {
+        metadataAttrs[key] = value;
       } else {
         sidecarAttrs[key] = value;
       }
     }
 
-    // Read and merge BOTH files before writing either. A mixed PATCH like
-    // { name, publishable } touches both the card and the sidecar, and we
-    // don't want a malformed sidecar to surface 500 *after* the card has
-    // already been mutated.
+    // Read and validate BOTH files before writing anything. A mixed PATCH
+    // like { name, publishable } touches the card, the realm_metadata
+    // table, and possibly the sidecar; we don't want a malformed sidecar
+    // to surface 500 *after* the card has already been mutated.
     let cardPath: LocalPath | undefined;
     let cardDoc:
       | {
@@ -4915,6 +5012,14 @@ export class Realm {
         realmConfigPath,
         JSON.stringify(realmConfig, null, 2) + '\n',
       );
+    }
+    if (Object.keys(metadataAttrs).length > 0) {
+      await this.upsertRealmMetadata({
+        publishable:
+          'publishable' in metadataAttrs
+            ? (metadataAttrs.publishable as boolean | null)
+            : undefined,
+      });
     }
 
     this.#cachedRealmInfo = null;

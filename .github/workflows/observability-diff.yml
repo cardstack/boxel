@@ -80,12 +80,24 @@ jobs:
             --output text)"
           echo "::add-mask::$GRAFANA_TOKEN"
           echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
-
           REALM_SERVER_URL="$(aws ssm get-parameter \
             --name /staging/boxel-grafana/realm_server_url \
             --query 'Parameter.Value' \
             --output text)"
           echo "REALM_SERVER_URL=$REALM_SERVER_URL" >> "$GITHUB_ENV"
+
+      - name: Lint
+        # Catch manifest issues at PR time, before the diff step does an
+        # API pull. Same script as ci-lint.yaml runs, but here we have
+        # GRAFANA_TOKEN sourced from SSM, so GRAFANACTL_VALIDATE_ENV adds
+        # the "validate against live staging Grafana" check on top.
+        # PRETTIER_SKIP avoids duplicating ci-lint's YAML format check
+        # (which requires pnpm install — overkill for this focused workflow).
+        working-directory: packages/observability
+        env:
+          GRAFANACTL_VALIDATE_ENV: staging
+          PRETTIER_SKIP: "1"
+        run: ./scripts/lint.sh
 
       - name: Compute diff
         id: diff

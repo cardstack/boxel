@@ -1696,6 +1696,106 @@ module(basename(__filename), function () {
         }
       });
 
+      test('realm.incrementalIndexing does not block on a queued from-scratch job', async function (assert) {
+        // Regression: the realm write-path gate uses incrementalIndexing(),
+        // not indexing(). A from-scratch job sitting in the queue (e.g.
+        // behind a system-wide reindex storm) must not block PATCHes — it
+        // has no file/index race with realm-server writes, and can be queued
+        // for hours.
+        let { blocker, release } = await startIndexingGroupBlocker();
+        try {
+          let full = realm.realmIndexUpdater.fullIndex();
+
+          await waitUntil(
+            async () => {
+              let rows = (await testDbAdapter.execute(
+                `SELECT id
+               FROM jobs
+               WHERE concurrency_group = $1
+                 AND status = 'unfulfilled'
+                 AND job_type = 'from-scratch-index'`,
+                { bind: [`indexing:${realm.url}`] },
+              )) as { id: number }[];
+              return rows.length === 1 ? rows[0] : undefined;
+            },
+            {
+              timeout: 3000,
+              interval: 50,
+              timeoutMessage: 'expected one pending from-scratch job',
+            },
+          );
+
+          assert.ok(
+            realm.realmIndexUpdater.indexing(),
+            'indexing() still tracks the queued from-scratch (callers wanting "all settled" semantics rely on this)',
+          );
+          assert.strictEqual(
+            realm.realmIndexUpdater.incrementalIndexing(),
+            undefined,
+            'incrementalIndexing() returns undefined while only a from-scratch job is queued',
+          );
+
+          release.fulfill();
+          await Promise.all([blocker.done, full]);
+        } finally {
+          release.fulfill();
+        }
+      });
+
+      test('realm.incrementalIndexing tracks only the incremental when both incremental and from-scratch are queued', async function (assert) {
+        let { blocker, release } = await startIndexingGroupBlocker();
+        try {
+          let incremental = realm.realmIndexUpdater.update(
+            [new URL(`${testRealm}mango`)],
+            { clientRequestId: 'indexing-mixed-incremental' },
+          );
+          let full = realm.realmIndexUpdater.fullIndex();
+
+          // Wait until both jobs are pending so the queue state is stable.
+          await waitUntil(
+            async () => {
+              let rows = (await testDbAdapter.execute(
+                `SELECT job_type
+               FROM jobs
+               WHERE concurrency_group = $1
+                 AND status = 'unfulfilled'
+                 AND job_type IN ('incremental-index', 'from-scratch-index')`,
+                { bind: [`indexing:${realm.url}`] },
+              )) as { job_type: string }[];
+              return rows.length === 2 ? rows : undefined;
+            },
+            {
+              timeout: 3000,
+              interval: 50,
+              timeoutMessage:
+                'expected one pending incremental and one pending from-scratch',
+            },
+          );
+
+          let incrementalGate = realm.realmIndexUpdater.incrementalIndexing();
+          assert.ok(
+            incrementalGate,
+            'incrementalIndexing() exposes a promise driven by the incremental',
+          );
+
+          release.fulfill();
+          await Promise.all([blocker.done, incremental, incrementalGate]);
+
+          // After the incremental drains, the from-scratch may still be
+          // running; incrementalIndexing() should already be resolved while
+          // indexing() continues to track the from-scratch.
+          assert.strictEqual(
+            realm.realmIndexUpdater.incrementalIndexing(),
+            undefined,
+            'incrementalIndexing() returns undefined after the incremental drains, regardless of from-scratch state',
+          );
+
+          await full;
+        } finally {
+          release.fulfill();
+        }
+      });
+
       test('burst full-index requests dedupe to one pending canonical from-scratch job', async function (assert) {
         let { blocker, release } = await startIndexingGroupBlocker();
         try {

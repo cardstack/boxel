@@ -28,9 +28,11 @@ import {
   rri,
   baseRealm,
   baseRRI,
+  executableExtensions,
 } from '@cardstack/runtime-common';
 import {
   installDelayedRuntimeRealmSearchPatch,
+  installFlakyDepFetchPatch,
   installRealmServerAssertOwnRealmServerBypassPatch,
   installSearchRequestObserverPatch,
   installThrottledRAFPatch,
@@ -481,6 +483,120 @@ module(basename(__filename), function () {
         'pool should not mark this as a prerender timeout',
       );
     });
+
+    test('transient 502 on dep fetch retries instead of timing out', async function (assert) {
+      // While prerendering, the host's render-timer-stub suppresses
+      // window.setTimeout. The loader's transient-5xx retry uses setTimeout-
+      // based backoff, so a single 502 on a dep fetch used to hang the
+      // entire render at `await sleep(delayMs)` for the full 90 s render
+      // timeout. The fix routes the loader's retry sleep through
+      // scheduleNativeTimeout (see loader-service.ts), bypassing the stub.
+      // This test simulates a transient 502 on the card's module fetch and
+      // asserts the prerender recovers within the retry budget rather than
+      // timing out.
+      let modulePath = 'flaky-target.gts';
+      let moduleURL = `${realmURL}${modulePath}`;
+      let cardPath = 'flaky-1.json';
+      let cardURL = `${realmURL}flaky-1`;
+
+      await realmAdapter.write(
+        modulePath,
+        `
+          import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+          export class FlakyTarget extends CardDef {
+            static displayName = 'FlakyTarget';
+            @field name = contains(StringField);
+            static isolated = class extends Component<typeof this> {
+              <template><span data-test-name>{{@model.name}}</span></template>
+            }
+          }
+        `,
+      );
+      await realmAdapter.write(
+        cardPath,
+        JSON.stringify(
+          {
+            data: {
+              attributes: { name: 'Recovered' },
+              meta: {
+                adoptsFrom: {
+                  module: rri('./flaky-target'),
+                  name: 'FlakyTarget',
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+      await realm.realmIndexUpdater.fullIndex();
+      realm.__testOnlyClearCaches();
+
+      // Strip executable extensions from both sides so the matcher fires
+      // for every fetch shape the loader may issue: `flaky-target.gts`
+      // (the source URL), `flaky-target` (extensionless — what the card's
+      // adoptsFrom.module resolves to via rri), or the canonicalized form
+      // surfaced through X-Boxel-Canonical-Path. Without this, the matcher
+      // would miss the actual fetch and the test would silently pass
+      // without exercising the retry path.
+      let stripExecExt = (u: string) => {
+        for (let ext of executableExtensions) {
+          if (u.endsWith(ext)) {
+            return u.slice(0, -ext.length);
+          }
+        }
+        return u;
+      };
+      let targetTrimmed = stripExecExt(moduleURL);
+      let flakyPatch = installFlakyDepFetchPatch({
+        matcher: (url) => stripExecExt(url) === targetTrimmed,
+        failuresBeforeSuccess: 1,
+      });
+      try {
+        let started = Date.now();
+        // clearCache forces the host's loader to drop its cached fetch +
+        // module entries before the render, so the dep fetch the patch
+        // is targeting actually goes to the network rather than coming
+        // from the in-process loader cache populated by fullIndex above.
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+          renderOptions: { clearCache: true },
+        });
+        let elapsedMs = Date.now() - started;
+
+        assert.strictEqual(
+          flakyPatch.failuresInjected(),
+          1,
+          'patch injected exactly one transient 502 for the dep fetch',
+        );
+        assert.notOk(
+          result.response.error,
+          `render recovered from transient 502 (error: ${JSON.stringify(
+            result.response.error?.error ?? null,
+          )})`,
+        );
+        assert.false(
+          result.pool.timedOut,
+          'render did not hit the 90s prerender timeout',
+        );
+        assert.true(
+          elapsedMs < 30_000,
+          `render completes within retry budget; observed ${elapsedMs}ms (90s would mean retry sleep is hung)`,
+        );
+        assert.strictEqual(
+          result.response.serialized?.data.attributes?.name,
+          'Recovered',
+          'card data rendered correctly after retry',
+        );
+      } finally {
+        await flakyPatch.restore();
+      }
+    });
   });
 
   function defineNonMutatingRunnerTests() {
@@ -739,6 +855,32 @@ module(basename(__filename), function () {
                     adoptsFrom: {
                       module: rri('./throws'),
                       name: 'Throws',
+                    },
+                  },
+                },
+              },
+              // Module evaluates a top-level throw, mirroring the
+              // wrong-subpath import class of bug (CS-11024). The route's
+              // model() rejects when the loader imports the module, the
+              // route's `error` action fires with the active transition,
+              // and #processRenderError lifts data-prerender-status='error'
+              // — historically before render.error's <pre> had been
+              // populated, so the prerender server captured an empty
+              // payload and synthesized "invalid error payload" instead of
+              // surfacing the real underlying throw.
+              'eval-throw.gts': `
+              import { CardDef } from 'https://cardstack.com/base/card-api';
+              throw new Error('module-eval-throw');
+              export class EvalThrow extends CardDef {
+                static displayName = 'Eval Throw';
+              }
+            `,
+              'eval-throw.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./eval-throw'),
+                      name: 'EvalThrow',
                     },
                   },
                 },
@@ -1593,6 +1735,40 @@ module(basename(__filename), function () {
         } finally {
           PagePool.prototype.getPage = originalGetPage;
         }
+      });
+
+      // CS-11024: a card whose module throws synchronously during
+      // evaluation drives the route-error path. data-prerender-status='error'
+      // used to be lifted before the render.error template populated the
+      // <pre data-prerender-error>, letting the prerender server capture an
+      // empty payload and synthesize "invalid error payload". The fix
+      // defers the status flip to afterRender so the captured error is the
+      // actual underlying throw.
+      test('card prerender surfaces module-evaluation throw via the error route', async function (assert) {
+        let cardURL = `${realmURL}eval-throw.json`;
+
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.ok(result.response.error, 'prerender reports error');
+        let message = result.response.error?.error.message ?? '';
+        assert.true(
+          message.includes('module-eval-throw'),
+          `error surfaces actual underlying throw, got: ${message}`,
+        );
+        assert.false(
+          /returned an invalid error payload/.test(message),
+          `error is not the synthesized "invalid error payload" fallback (got: ${message})`,
+        );
+        assert.false(
+          result.pool.timedOut,
+          'module-evaluation throw is not treated as timeout',
+        );
       });
 
       test('card prerender waits for query fallback search and nested relationship loads', async function (assert) {

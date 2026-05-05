@@ -56,6 +56,7 @@ import {
   teardown as teardownIsolatedRender,
 } from '@cardstack/host/lib/isolated-render';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+import type QueueService from '@cardstack/host/services/queue';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
 import {
@@ -1254,7 +1255,7 @@ async function setupTestRealm({
 }) {
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = getService('network');
-  let { queue } = getService('queue');
+  let { queue } = getService('queue') as QueueService;
 
   realmURL = realmURL ?? testRealmURL;
 

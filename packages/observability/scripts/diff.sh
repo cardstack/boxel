@@ -174,6 +174,7 @@ normalize folders Folder
 #      look like a thresholds container (`mode` + `steps`) at index 0
 #      so a `value: null` higher up the steps array (a malformed
 #      threshold worth surfacing) still shows in the diff.
+# shellcheck disable=SC2016  # the `$url` inside is a jq variable bound via --arg, not a shell expansion.
 JQ_NORMALIZE='
   walk(
     if type == "object"
@@ -219,7 +220,7 @@ normalize_json_content() {  # $1: src dir, $2: dest dir
   # and zsh and has no shell-state side effects.
   local f rel target
   while IFS= read -r -d '' f; do
-    rel="${f#$src/}"
+    rel="${f#"$src"/}"
     target="$dest/$rel"
     mkdir -p "$(dirname "$target")"
     jq --sort-keys --arg url "$realm_server_url" "$JQ_NORMALIZE" "$f" > "$target"

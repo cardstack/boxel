@@ -112,3 +112,11 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/boxel-cli
+      - name: Lint Observability
+        # No JS/TS in this package — the lint script wraps shellcheck, jq,
+        # prettier, and a secret-shape regression check on dashboard JSON.
+        # shellcheck and jq are preinstalled on ubuntu-latest; pnpm/prettier
+        # come from the init action above.
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/observability
