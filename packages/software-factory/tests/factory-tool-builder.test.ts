@@ -256,10 +256,9 @@ module('factory-tool-builder > tool building', function () {
     assert.true(toolNames.includes('create_knowledge'));
     assert.true(toolNames.includes('signal_done'));
     assert.true(toolNames.includes('request_clarification'));
-    // Script tools from registry
-    assert.true(toolNames.includes('search-realm'));
-    // Realm-api tools from registry
-    assert.true(toolNames.includes('realm-read'));
+    // After CS-10883 retired the kebab-case shadow tools, only
+    // `realm-create` survives in the registry.
+    assert.true(toolNames.includes('realm-create'));
   });
 
   test('each tool has name, description, parameters, and execute', function (assert) {
@@ -691,26 +690,30 @@ module('factory-tool-builder > signal tools', function () {
 module('factory-tool-builder > registered tool delegation', function () {
   test('delegates registered tool to ToolExecutor', async function (assert) {
     let toolResult: ToolResult = {
-      tool: 'search-realm',
+      tool: 'realm-create',
       exitCode: 0,
-      output: { data: [{ id: '1' }] },
+      output: { data: { id: 'https://realms.example.test/user/new/' } },
       durationMs: 42,
     };
     let { executor } = createMockToolExecutor(
-      new Map([['search-realm', toolResult]]),
+      new Map([['realm-create', toolResult]]),
     );
     let registry = new ToolRegistry();
     let config = makeConfig();
     let tools = buildFactoryTools(config, executor, registry);
-    let searchRealmTool = findTool(tools, 'search-realm');
+    let realmCreateTool = findTool(tools, 'realm-create');
 
-    let result = (await searchRealmTool.execute({
-      realm: TARGET_REALM,
+    let result = (await realmCreateTool.execute({
+      'realm-server-url': 'https://realms.example.test/',
+      name: 'New Realm',
+      endpoint: 'new',
     })) as ToolResult;
 
-    assert.strictEqual(result.tool, 'search-realm');
+    assert.strictEqual(result.tool, 'realm-create');
     assert.strictEqual(result.exitCode, 0);
-    assert.deepEqual(result.output, { data: [{ id: '1' }] });
+    assert.deepEqual(result.output, {
+      data: { id: 'https://realms.example.test/user/new/' },
+    });
   });
 });
 

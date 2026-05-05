@@ -24,9 +24,6 @@
   }) as typeof setInterval;
 }
 
-import * as ContentTagGlobal from 'content-tag';
-(globalThis as any).ContentTagGlobal = ContentTagGlobal;
-
 import QUnit from 'qunit';
 
 QUnit.config.testTimeout = 60000;
@@ -188,6 +185,7 @@ import './prerender-diagnostics-persistence-test';
 import './prerender-proxy-test';
 import './queue-test';
 import './finalize-orphan-reservations-test';
+import './screenshot-card-test';
 import './run-command-task-test';
 import './realm-endpoints-test';
 import './realm-endpoints/dependencies-test';
@@ -220,6 +218,7 @@ import './server-endpoints/maintenance-endpoints-test';
 import './server-endpoints/queue-status-test';
 import './server-endpoints/realm-lifecycle-test';
 import './server-endpoints/run-command-endpoint-test';
+import './server-endpoints/screenshot-card-endpoint-test';
 import './server-endpoints/search-test';
 import './server-endpoints/search-prerendered-test';
 import './server-config-test';

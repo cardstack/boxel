@@ -68,6 +68,34 @@ This workflow is ideal for rapid iteration and testing of catalog content:
 
 5. **Tag the commit** to release to production
 
+## Linting
+
+This package includes automated linting checks for JavaScript, TypeScript, and Glimmer templates:
+
+- **ESLint**: Validates `.ts` and `.gts` files
+- **ember-template-lint**: Validates `.hbs` files
+- **ember-tsc**: TypeScript type checking
+
+### Running Linting
+
+```bash
+# Check for linting issues
+pnpm lint
+
+# Auto-fix linting issues
+pnpm lint:fix
+```
+
+Individual linting commands:
+
+```bash
+pnpm lint:js      # ESLint check
+pnpm lint:hbs     # Template lint check
+pnpm lint:types   # TypeScript type check
+```
+
+These commands run locally in this monorepo's `packages/catalog` package. If you submit a pull request to the [boxel-catalog](https://github.com/cardstack/boxel-catalog) repository, any linting run in CI is controlled by that repository's own workflow configuration.
+
 ## Deployment Pipeline
 
 1. **Development**: Edit catalog content locally or remotely

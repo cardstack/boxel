@@ -9,6 +9,28 @@ Use this skill when the current issue has `issueType: bootstrap`. Your job is
 to read the brief, create project artifacts, and set up the issue backlog for
 the implementation phase.
 
+## Use the structured factory tools — never `Write` / `write_file`
+
+All cards created in this skill (Project, KnowledgeArticle, Issue) are
+**tracker-schema cards** with dedicated factory tools that enforce schema
+and invariants. Always create them through these tools — never by writing
+the underlying `.json` directly via native `Write` (Claude backend) or
+`write_file` (OpenRouter backend):
+
+| Card to create / update               | Use this tool      |
+| ------------------------------------- | ------------------ |
+| `Projects/<slug>.json`                | `update_project`   |
+| `Knowledge Articles/<slug>-*.json`    | `create_knowledge` |
+| `Issues/<slug>-<card-slug>.json`      | `update_issue`     |
+| Append a comment to an existing issue | `add_comment`      |
+
+These tools accept the `path`, `attributes`, and `relationships` you'd
+otherwise hand-construct as JSON:API. They auto-construct the document
+with the correct `adoptsFrom`, do read-patch-write merging that
+preserves attributes you did not pass, and (for issues) keep
+`description` immutable. Bypassing them produces malformed cards or
+silently violates invariants the orchestrator depends on.
+
 ## Naming Conventions
 
 Derive names from the brief title:
@@ -108,30 +130,42 @@ issue, `ContextBuilder.buildForIssue()` traverses these relationships to
 load the Project card and Knowledge Articles into the agent's context. Without
 these relationships, the agent would have no project scope or brief content.
 
-## JSON:API Document Format
+## How `attributes` and `relationships` map to the structured tools
 
-Every card written via `write_file` must be a JSON:API document:
+The schema tables above describe the `attributes` you pass to
+`update_project`, `create_knowledge`, and `update_issue`. The tool
+auto-constructs the JSON:API document with the correct `adoptsFrom`, so
+you do **not** pass `meta` — only the attributes and relationships.
+
+Example call shape (for an Issue):
 
 ```json
 {
-  "data": {
-    "type": "card",
-    "attributes": { ... },
-    "relationships": {
-      "project": { "links": { "self": "../Projects/sticky-note" } },
-      "relatedKnowledge.0": { "links": { "self": "../Knowledge Articles/sticky-note-brief-context" } }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "<darkfactoryModuleUrl>",
-        "name": "Issue"
-      }
+  "path": "Issues/sticky-note.json",
+  "attributes": {
+    "issueId": "SN-1",
+    "summary": "Implement Sticky Note card",
+    "description": "...",
+    "issueType": "feature",
+    "status": "backlog",
+    "priority": "high",
+    "order": 1,
+    "acceptanceCriteria": "...",
+    "createdAt": "2026-05-04T00:00:00Z",
+    "updatedAt": "2026-05-04T00:00:00Z"
+  },
+  "relationships": {
+    "project": { "links": { "self": "../Projects/sticky-note" } },
+    "relatedKnowledge.0": {
+      "links": { "self": "../Knowledge Articles/sticky-note-brief-context" }
     }
   }
 }
 ```
 
-Use relative paths (`../`) for relationship links since cards are in sibling directories.
+Use relative paths (`../`) for relationship links since cards are in
+sibling directories. The schema in each tool's parameter definition is
+authoritative — read it before calling the tool.
 
 ## Completion
 

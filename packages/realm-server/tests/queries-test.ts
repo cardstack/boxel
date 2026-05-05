@@ -12,6 +12,7 @@ import {
   query,
 } from '@cardstack/runtime-common';
 
+import { mirrorPublishedRealmToRegistry } from '../lib/realm-registry-writes';
 import { setupDB } from './helpers';
 
 module(basename(__filename), function () {
@@ -38,17 +39,25 @@ module(basename(__filename), function () {
       ownerUsername?: string;
     }) {
       let publishedRealmId = uuidv4();
+      let lastPublishedAt = Date.now();
       let { nameExpressions, valueExpressions } = asExpressions({
         id: publishedRealmId,
         owner_username: ownerUsername,
         source_realm_url: sourceRealmURL,
         published_realm_url: publishedRealmURL,
-        last_published_at: Date.now().toString(),
+        last_published_at: lastPublishedAt.toString(),
       });
       await query(
         dbAdapter,
         insert('published_realms', nameExpressions, valueExpressions),
       );
+      await mirrorPublishedRealmToRegistry(dbAdapter, {
+        publishedRealmURL,
+        publishedRealmId,
+        ownerUsername,
+        sourceRealmURL,
+        lastPublishedAt,
+      });
     }
 
     test('can fetch only own realms, filtering out public and published realms', async function (assert) {
@@ -168,17 +177,25 @@ module(basename(__filename), function () {
       ownerUsername?: string;
     }) {
       let publishedRealmId = uuidv4();
+      let lastPublishedAt = Date.now();
       let { nameExpressions, valueExpressions } = asExpressions({
         id: publishedRealmId,
         owner_username: ownerUsername,
         source_realm_url: sourceRealmURL,
         published_realm_url: publishedRealmURL,
-        last_published_at: Date.now().toString(),
+        last_published_at: lastPublishedAt.toString(),
       });
       await query(
         dbAdapter,
         insert('published_realms', nameExpressions, valueExpressions),
       );
+      await mirrorPublishedRealmToRegistry(dbAdapter, {
+        publishedRealmURL,
+        publishedRealmId,
+        ownerUsername,
+        sourceRealmURL,
+        lastPublishedAt,
+      });
     }
 
     test('uses source realm owner when published realm permissions are missing', async function (assert) {

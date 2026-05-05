@@ -194,6 +194,15 @@ export class GenerateThumbnailOutput extends CardDef {
   @field imageDefIdentifier = contains(StringField);
 }
 
+export class ScreenshotCardInput extends CardDef {
+  @field card = linksTo(CardDef);
+  @field format = contains(StringField); // 'isolated' | 'embedded'
+}
+
+export class ScreenshotCardOutput extends CardDef {
+  @field imageDefUrl = contains(StringField);
+}
+
 export class CreateInstanceInput extends CardDef {
   @field codeRef = contains(CodeRefField);
   @field realm = contains(StringField);
@@ -433,6 +442,10 @@ export class CreateListingPRRequestInput extends CardDef {
   @field realm = contains(RealmField);
   @field listingId = contains(StringField);
   @field listingName = contains(StringField);
+}
+
+export class RetrySubmissionWorkflowInput extends CardDef {
+  @field workflowCardId = contains(StringField);
 }
 
 export class ListingCreateInput extends CardDef {

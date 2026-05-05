@@ -52,6 +52,7 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from '../../lib/realm-registry-reconciler';
+import { mirrorPublishedRealmToRegistry } from '../../lib/realm-registry-writes';
 
 import {
   PgAdapter,
@@ -59,6 +60,7 @@ import {
   PgQueueRunner,
 } from '@cardstack/postgres';
 import type { Server } from 'http';
+import { Socket as NetSocket } from 'net';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
   Prerenderer as LocalPrerenderer,
@@ -498,6 +500,19 @@ export async function closeServer(server: Server) {
   if (!server) {
     return;
   }
+  // Capture the listening address before close() so we can poll the OS until
+  // the port is fully unbound. node's `server.close(cb)` only waits for the
+  // listener to stop accepting new connections — under load, the kernel can
+  // hold the port in TIME_WAIT briefly and the next bind() races into
+  // EADDRINUSE.
+  let address = server.address();
+  let host: string | undefined;
+  let port: number | undefined;
+  if (address && typeof address === 'object') {
+    host = address.address;
+    port = address.port;
+  }
+
   // Force-close idle keep-alive sockets so server.close() resolves promptly.
   // Without this, a lingering connection from the host page (puppeteer fetching
   // from the realm server) can hold the port bound long after the test moves
@@ -505,6 +520,75 @@ export async function closeServer(server: Server) {
   server.closeIdleConnections?.();
   server.closeAllConnections?.();
   await new Promise<void>((r) => server.close(() => r()));
+
+  if (host && typeof port === 'number' && port > 0) {
+    await awaitPortRelease(host, port);
+  }
+}
+
+/**
+ * Poll a TCP port on `host` until a fresh connect() is refused (i.e. nothing
+ * is LISTENing there anymore). Used after `server.close()` returns to give
+ * the kernel a chance to fully release the bind slot before the next fixture
+ * tries to listen on the same port.
+ *
+ * Resolves on first refusal. Logs a clear diagnostic on timeout so the next
+ * failure points to the leaked port rather than the downstream EADDRINUSE.
+ */
+export async function awaitPortRelease(
+  host: string,
+  port: number,
+  options: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<void> {
+  let timeoutMs = options.timeoutMs ?? 2000;
+  let intervalMs = options.intervalMs ?? 25;
+  // Map the wildcard bind address back to a connectable loopback address.
+  // Server.address() reports `::` for IPv6-any, `0.0.0.0` for IPv4-any —
+  // neither is a valid connect target. Probe in the same address family the
+  // listener was bound to: if we map `::` to `127.0.0.1` and the system has
+  // IPv6-only binding behavior, the IPv4 probe gets ECONNREFUSED while the
+  // original IPv6 listener is still bound, falsely reporting release.
+  let connectHost = host;
+  if (host === '::') {
+    connectHost = '::1';
+  } else if (host === '0.0.0.0') {
+    connectHost = '127.0.0.1';
+  }
+
+  let started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    let stillListening = await new Promise<boolean>((resolve) => {
+      let socket = new NetSocket();
+      let settled = false;
+      let done = (listening: boolean) => {
+        if (settled) return;
+        settled = true;
+        socket.destroy();
+        resolve(listening);
+      };
+      socket.setTimeout(Math.max(50, intervalMs * 2));
+      socket.once('connect', () => done(true));
+      socket.once('timeout', () => done(true));
+      socket.once('error', () => {
+        // ECONNREFUSED is the expected signal that the port is fully released.
+        // Anything else (host unreachable, etc.) we also treat as released —
+        // we're not the right place to diagnose upstream network errors and
+        // a non-listening socket is a non-listening socket.
+        done(false);
+      });
+      socket.connect(port, connectHost);
+    });
+
+    if (!stillListening) {
+      return;
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+
+  console.warn(
+    `awaitPortRelease: ${connectHost}:${port} still appears bound after ${timeoutMs}ms; ` +
+      `the next fixture binding this port will likely EADDRINUSE.`,
+  );
 }
 
 function trackServer(server: Server): Server {
@@ -1700,6 +1784,9 @@ async function startPermissionedRealmFixture(
 
   if (published) {
     let publishedRealmId = uuidv4();
+    let lastPublishedAt = Date.now();
+    let ownerUsername = '@user:localhost';
+    let sourceRealmURL = 'http://example.localhost/source';
 
     testRealmDir = join(
       dir.name,
@@ -1715,12 +1802,19 @@ async function startPermissionedRealmFixture(
         VALUES
         (
           '${publishedRealmId}',
-          '@user:localhost',
-          'http://example.localhost/source',
+          '${ownerUsername}',
+          '${sourceRealmURL}',
           '${resolvedRealmURL.href}',
-          '${Date.now()}'
+          '${lastPublishedAt}'
         )`,
     );
+    await mirrorPublishedRealmToRegistry(dbAdapter, {
+      publishedRealmURL: resolvedRealmURL.href,
+      publishedRealmId,
+      ownerUsername,
+      sourceRealmURL,
+      lastPublishedAt,
+    });
   } else {
     testRealmDir = join(dir.name, 'realm_server_1', 'test');
   }

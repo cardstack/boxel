@@ -69,8 +69,10 @@ import * as ReadSourceCommandModule from './read-source';
 import * as ReadTextFileCommandModule from './read-text-file';
 import * as RegisterBotCommandModule from './register-bot';
 import * as ReindexRealmCommandModule from './reindex-realm';
+import * as RetrySubmissionWorkflowCommandModule from './retry-submission-workflow';
 import * as SanitizeModuleListCommandModule from './sanitize-module-list';
 import * as SaveCardCommandModule from './save-card';
+import * as ScreenshotCardCommandModule from './screenshot-card';
 import * as SearchAndChooseCommandModule from './search-and-choose';
 import * as SearchCardsCommandModule from './search-cards';
 import * as SearchGoogleImagesCommandModule from './search-google-images';
@@ -323,6 +325,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     CreateSubmissionWorkflowCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/retry-submission-workflow',
+    RetrySubmissionWorkflowCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/open-workspace',
     OpenWorkspaceCommandModule,
   );
@@ -415,6 +421,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GenerateThumbnailCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/screenshot-card',
+    ScreenshotCardCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-card',
     GetCardCommandModule,
   );
@@ -502,6 +512,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   GenerateExampleCardsCommandModule.default,
   GenerateReadmeSpecCommandModule.default,
   GenerateThumbnailCommandModule.default,
+  ScreenshotCardCommandModule.default,
   GetAllRealmMetasCommandModule.default,
   GetAvailableRealmUrlsCommandModule.default,
   GetDefaultWritableRealmCommandModule.default,
@@ -528,6 +539,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   OpenCreateListingModalCommandModule.default,
   CreateAndOpenSubmissionWorkflowCard.default,
   CreateSubmissionWorkflowCommandModule.default,
+  RetrySubmissionWorkflowCommandModule.default,
   OpenInInteractModeModule.default,
   OpenWorkspaceCommandModule.default,
   GenerateThemeExampleCommandModule.default,

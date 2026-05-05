@@ -15,8 +15,6 @@ export type {
   QunitResults,
   QunitRunSummary,
   QunitTestResult,
-  RunRealmTestsFailure,
-  RunRealmTestsOutput,
   RunTestsFailure,
   RunTestsInMemoryOptions,
   RunTestsResult,
