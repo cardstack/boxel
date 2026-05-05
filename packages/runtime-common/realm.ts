@@ -848,7 +848,12 @@ export class Realm {
     return this.#realmIndexUpdater.indexing();
   }
 
-  async incrementalIndexing() {
+  // Returns undefined when there is no in-flight incremental indexing, or a
+  // Promise that resolves once every currently in-flight job settles. Not
+  // declared `async` on purpose — the `async` wrapper would force a Promise
+  // return even in the no-pending case, defeating callers (and tests) that
+  // synchronously check whether indexing is pending.
+  incrementalIndexing(): Promise<void> | undefined {
     return this.#realmIndexUpdater.incrementalIndexing();
   }
 
