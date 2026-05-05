@@ -205,10 +205,63 @@ export class IndexQueryEngine {
         ['i.type =', param('instance')],
         any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
       ]),
-    ] as Expression)) as unknown as (BoxelIndexTable & {
-      default_embedded_html: string | null;
-    })[];
-    let maybeResult: BoxelIndexTable | undefined = result[0];
+    ] as Expression)) as unknown as BoxelIndexTable[];
+    return this.#rowToInstanceOrError(result[0], url, opts);
+  }
+
+  // Batch variant of getInstance: one DB round-trip for many URLs.
+  // Returns a map keyed by the LOOKUP URL (matching either i.url or i.file_alias)
+  // so callers can address results by the URL they passed in.
+  async getInstances(
+    urls: URL[],
+    opts?: GetEntryOptions,
+  ): Promise<Map<string, InstanceOrError>> {
+    let resultMap = new Map<string, InstanceOrError>();
+    if (urls.length === 0) {
+      return resultMap;
+    }
+    let lookupHrefs = new Set(urls.map((u) => u.href));
+    let lookupParams = [...lookupHrefs].map((href) => [param(href)]);
+    let rows = (await this.#query([
+      `SELECT i.*, embedded_html, fitted_html`,
+      `FROM ${tableFromOpts(opts)} as i
+       WHERE`,
+      ...every([
+        any([
+          ['i.url IN', ...addExplicitParens(separatedByCommas(lookupParams))],
+          [
+            'i.file_alias IN',
+            ...addExplicitParens(separatedByCommas(lookupParams)),
+          ],
+        ]),
+        ['i.type =', param('instance')],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+      ]),
+    ] as Expression)) as unknown as BoxelIndexTable[];
+    for (let row of rows) {
+      let mapped = this.#rowToInstanceOrError(row, undefined, opts);
+      if (!mapped) {
+        continue;
+      }
+      // A row may be addressable by its url or its file_alias.
+      // Index the result under whichever lookup keys the caller asked about.
+      if (row.url && lookupHrefs.has(row.url)) {
+        resultMap.set(row.url, mapped);
+      }
+      if (row.file_alias && lookupHrefs.has(row.file_alias)) {
+        resultMap.set(row.file_alias, mapped);
+      }
+    }
+    return resultMap;
+  }
+
+  // Shared row → InstanceOrError mapping for getInstance / getInstances.
+  // `lookupURL` is used only for error context and is optional in the batch path.
+  #rowToInstanceOrError(
+    maybeResult: BoxelIndexTable | undefined,
+    lookupURL: URL | undefined,
+    opts?: GetEntryOptions,
+  ): InstanceOrError | undefined {
     if (!maybeResult) {
       return undefined;
     }
@@ -263,7 +316,9 @@ export class IndexQueryEngine {
     let instanceEntry = assertIndexEntry(maybeResult);
     if (!instance) {
       throw new Error(
-        `bug: index entry for ${url.href} with opts: ${stringify(
+        `bug: index entry for ${
+          lookupURL?.href ?? canonicalURL
+        } with opts: ${stringify(
           opts,
         )} has neither an error_doc nor a pristine_doc`,
       );
@@ -298,7 +353,56 @@ export class IndexQueryEngine {
         any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
       ]),
     ] as Expression)) as unknown as BoxelIndexTable[];
-    let maybeResult: BoxelIndexTable | undefined = result[0];
+    return this.#rowToIndexedFile(result[0]);
+  }
+
+  // Batch variant of getFile.
+  // Keys are the LOOKUP URLs the caller passed in (matching either i.url or i.file_alias).
+  async getFiles(
+    urls: URL[],
+    opts?: GetEntryOptions,
+  ): Promise<Map<string, IndexedFile>> {
+    let resultMap = new Map<string, IndexedFile>();
+    if (urls.length === 0) {
+      return resultMap;
+    }
+    let lookupHrefs = new Set(urls.map((u) => u.href));
+    let lookupParams = [...lookupHrefs].map((href) => [param(href)]);
+    let rows = (await this.#query([
+      `SELECT i.*`,
+      `FROM ${tableFromOpts(opts)} as i
+       WHERE`,
+      ...every([
+        any([
+          ['i.url IN', ...addExplicitParens(separatedByCommas(lookupParams))],
+          [
+            'i.file_alias IN',
+            ...addExplicitParens(separatedByCommas(lookupParams)),
+          ],
+        ]),
+        ['i.type =', param('file')],
+        any([['i.has_error = FALSE'], ['i.has_error IS NULL']]),
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+      ]),
+    ] as Expression)) as unknown as BoxelIndexTable[];
+    for (let row of rows) {
+      let mapped = this.#rowToIndexedFile(row);
+      if (!mapped) {
+        continue;
+      }
+      if (row.url && lookupHrefs.has(row.url)) {
+        resultMap.set(row.url, mapped);
+      }
+      if (row.file_alias && lookupHrefs.has(row.file_alias)) {
+        resultMap.set(row.file_alias, mapped);
+      }
+    }
+    return resultMap;
+  }
+
+  #rowToIndexedFile(
+    maybeResult: BoxelIndexTable | undefined,
+  ): IndexedFile | undefined {
     if (!maybeResult) {
       return undefined;
     }
