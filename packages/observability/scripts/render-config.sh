@@ -28,6 +28,7 @@ out="$(mktemp -t grafanactl-config.XXXXXX)"
 
 # Substitute ONLY ${GRAFANA_TOKEN}; everything else passes through literally.
 # (Important — Grafana template syntax inside dashboard JSON also uses ${...}.)
+# shellcheck disable=SC2016  # the literal `${GRAFANA_TOKEN}` is the allow-list arg to envsubst, not a shell expansion.
 GRAFANA_TOKEN="${GRAFANA_TOKEN:-}" envsubst '${GRAFANA_TOKEN}' < "$src" \
   | grep -v '^current-context:' \
   > "$out"

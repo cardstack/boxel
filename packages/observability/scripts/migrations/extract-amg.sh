@@ -141,9 +141,9 @@ slugify() {
     | sed -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
 }
 
-# fail_on_collision <out_path> <kind> <existing_uid> <current_uid> <title>
+# fail_on_collision <out_path> <kind> <current_uid> <title>
 fail_on_collision() {
-  local out="$1" kind="$2" existing_uid="$3" current_uid="$4" title="$5"
+  local out="$1" kind="$2" current_uid="$3" title="$4"
   if [[ -e "$out" ]]; then
     echo "" >&2
     echo "error: ${kind} filename collision: $out" >&2
@@ -160,7 +160,7 @@ while IFS= read -r folder; do
   title="$(jq -r '.title' <<<"$folder")"
   slug="$(slugify "$title")"
   out="$FOLDERS_DIR/$slug.json"
-  fail_on_collision "$out" folder "" "$uid" "$title"
+  fail_on_collision "$out" folder "$uid" "$title"
   echo "  folder: $title ($uid) → $out" >&2
   jq -n --arg uid "$uid" --arg title "$title" '{
     apiVersion: "folder.grafana.app/v1beta1",
@@ -180,7 +180,7 @@ while IFS= read -r row; do
   title="$(jq -r '.title' <<<"$row")"
   slug="$(slugify "$title")"
   out="$DASHBOARDS_DIR/$slug.json"
-  fail_on_collision "$out" dashboard "" "$uid" "$title"
+  fail_on_collision "$out" dashboard "$uid" "$title"
   echo "  dashboard: $title ($uid) → $out" >&2
   api "/api/dashboards/uid/$uid" | jq --arg uid "$uid" '
     .dashboard as $d |
@@ -212,7 +212,7 @@ while IFS= read -r ds; do
   name="$(jq -r '.name' <<<"$ds")"
   slug="$(slugify "$name")"
   out="$DATASOURCES_DIR/$slug.json"
-  fail_on_collision "$out" datasource "" "" "$name"
+  fail_on_collision "$out" datasource "" "$name"
   echo "  datasource: $name → $out" >&2
   jq -n --argjson ds "$ds" '{
     apiVersion: 1,
@@ -242,7 +242,7 @@ if [[ -n "$alerts_json" && "$alerts_json" != "null" && "$alerts_json" != "[]" ]]
     rule_slug="$(slugify "$name")"
     folder_slug="$(slugify "$folder_uid")"
     out="$ALERTS_DIR/${folder_slug}--${rule_slug}.json"
-    fail_on_collision "$out" "alert group" "" "$folder_uid/$name" "$name"
+    fail_on_collision "$out" "alert group" "$folder_uid/$name" "$name"
     echo "  alert group: $name (folder=$folder_uid) → $out" >&2
     jq -n --argjson rules "$rules" --arg name "$name" --arg folder "$folder_uid" '{
       apiVersion: 1,
