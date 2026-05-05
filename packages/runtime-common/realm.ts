@@ -1390,8 +1390,10 @@ export class Realm {
         });
         indexingPromise.catch((err: unknown) => {
           let message = err instanceof Error ? err.message : String(err);
+          // Covers worker job rejection AND post-worker realm-side work
+          // (onInvalidation / handleExecutableInvalidations / broadcast).
           this.#log.error(
-            `Worker-time indexing failed for ${this.url}: ${message}`,
+            `Deferred indexing chain failed for ${this.url}: ${message}`,
           );
         });
       }
