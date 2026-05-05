@@ -188,6 +188,10 @@ export class Worker {
         Tasks['dailyCreditGrant'](taskArgs),
       ),
       this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),
+      this.#queue.register(
+        `screenshot-card`,
+        Tasks['screenshotCard'](taskArgs),
+      ),
     ]);
     await this.#queue.start();
   }
