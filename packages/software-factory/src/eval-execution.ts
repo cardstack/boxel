@@ -375,7 +375,7 @@ async function defaultEvaluateModule(
     realmServerUrl,
     realmUrl,
     EVALUATE_MODULE_COMMAND,
-    { moduleUrl, realmUrl },
+    { moduleIdentifier: moduleUrl, realmIdentifier: realmUrl },
   );
 
   log.debug(

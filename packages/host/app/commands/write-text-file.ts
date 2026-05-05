@@ -94,7 +94,7 @@ export default class WriteTextFileCommand extends HostBaseCommand<
 
     let commandModule = await this.loadCommandModule();
     const { FileIdentifierCard } = commandModule;
-    return new FileIdentifierCard({ fileUrl: finalUrl.href });
+    return new FileIdentifierCard({ fileIdentifier: finalUrl.href });
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {
