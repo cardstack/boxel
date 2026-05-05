@@ -66,6 +66,7 @@ export class RealmRegistryReconciler {
   #loop: WorkLoop;
   #started = false;
   #subscription?: NotificationSubscription;
+  #starting?: Promise<void>;
   knownByUrl = new Map<string, RealmRegistryRow>();
   mounted = new Map<string, Realm>();
   pendingMounts = new Map<string, Promise<Realm>>();
@@ -105,23 +106,41 @@ export class RealmRegistryReconciler {
   // Begin the LISTEN + poll loop. Safe to call once; no-ops on repeat.
   async start(): Promise<void> {
     if (this.#started) {
+      await this.#starting;
       return;
     }
     this.#started = true;
-    this.#subscription = await this.#deps.dbAdapter.subscribe(
-      CHANNEL,
-      this.#loop.wake.bind(this.#loop),
-    );
-    this.#loop.run(async (loop) => {
-      // Run one reconcile immediately on start, then loop on wake-or-poll.
-      while (!loop.shuttingDown) {
-        await this.#safeReconcile();
-        await loop.sleep();
-      }
-    });
+    this.#starting = (async () => {
+      this.#subscription = await this.#deps.dbAdapter.subscribe(
+        CHANNEL,
+        this.#loop.wake.bind(this.#loop),
+      );
+      this.#loop.run(async (loop) => {
+        // Run one reconcile immediately on start, then loop on wake-or-poll.
+        while (!loop.shuttingDown) {
+          await this.#safeReconcile();
+          await loop.sleep();
+        }
+      });
+    })();
+    try {
+      await this.#starting;
+    } finally {
+      this.#starting = undefined;
+    }
   }
 
   async shutDown(): Promise<void> {
+    // Wait for any in-flight start() to finish wiring up #subscription before
+    // tearing down. Otherwise shutDown can race a still-pending subscribe()
+    // and leave a live subscription installed after we thought we were shut
+    // down. Swallow start() errors here — nothing to unsubscribe if startup
+    // failed.
+    try {
+      await this.#starting;
+    } catch {
+      // ignore
+    }
     await this.#loop.shutDown();
     const sub = this.#subscription;
     this.#subscription = undefined;

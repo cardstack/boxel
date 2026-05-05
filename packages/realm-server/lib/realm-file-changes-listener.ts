@@ -51,6 +51,17 @@ export class RealmFileChangesListener {
   }
 
   async shutDown(): Promise<void> {
+    // Wait for any in-flight start() to finish wiring up #subscription before
+    // tearing down. Otherwise shutDown can run while subscribe() is still
+    // awaiting the LISTEN, return early with #subscription still undefined,
+    // and the racing start() then installs a live subscription after we
+    // thought we were shut down. Swallow start() errors here — if startup
+    // failed, there's nothing for us to unsubscribe.
+    try {
+      await this.#starting;
+    } catch {
+      // ignore
+    }
     const sub = this.#subscription;
     this.#subscription = undefined;
     await sub?.unsubscribe();

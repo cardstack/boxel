@@ -168,6 +168,54 @@ module(basename(__filename), function () {
       assert.ok(true, 'second unsubscribe did not throw');
     });
 
+    test('concurrent subscribes on the same empty channel both receive notifications', async function (assert) {
+      // Both subscribers race through subscribe() at the same time, joining
+      // the same in-flight LISTEN-establishment promise. Once it resolves,
+      // both add their handlers and both should see every notification.
+      const seenA: string[] = [];
+      const seenB: string[] = [];
+      const [subA, subB] = await Promise.all([
+        dbAdapter.subscribe('mux_test_concurrent', (n) => {
+          if (n.payload) seenA.push(n.payload);
+        }),
+        dbAdapter.subscribe('mux_test_concurrent', (n) => {
+          if (n.payload) seenB.push(n.payload);
+        }),
+      ]);
+      try {
+        await notify(dbAdapter, 'mux_test_concurrent', 'msg');
+        await waitFor(() => (seenA.length > 0 ? true : undefined));
+        await waitFor(() => (seenB.length > 0 ? true : undefined));
+        assert.deepEqual(seenA, ['msg']);
+        assert.deepEqual(seenB, ['msg']);
+      } finally {
+        await subA.unsubscribe();
+        await subB.unsubscribe();
+      }
+    });
+
+    test('subscribing the same handler reference twice yields independent subscriptions', async function (assert) {
+      // Each subscribe() returns its own unsubscribe() that is supposed to
+      // remove only that subscription. If we used a Set keyed on handler
+      // identity, the same fn registered twice would collapse — and either
+      // returned unsubscribe would remove both. The fix is identity-per-call.
+      const seen: string[] = [];
+      const handler = (n: { payload?: string }) => {
+        if (n.payload) seen.push(n.payload);
+      };
+      const subA = await dbAdapter.subscribe('mux_test_dup_fn', handler);
+      const subB = await dbAdapter.subscribe('mux_test_dup_fn', handler);
+      try {
+        await subA.unsubscribe();
+        await notify(dbAdapter, 'mux_test_dup_fn', 'after-A-unsub');
+        await waitFor(() => (seen.length > 0 ? true : undefined));
+        // B's subscription is still live; the same fn fires once for B.
+        assert.deepEqual(seen, ['after-A-unsub']);
+      } finally {
+        await subB.unsubscribe();
+      }
+    });
+
     test('a handler that throws does not break sibling handlers on the same channel', async function (assert) {
       const seen: string[] = [];
       const subThrow = await dbAdapter.subscribe('mux_test_throwing', () => {

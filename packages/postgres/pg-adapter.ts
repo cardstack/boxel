@@ -47,6 +47,19 @@ export interface NotificationSubscription {
   unsubscribe(): Promise<void>;
 }
 
+// Per-channel state kept alive while at least one subscriber is registered
+// or while a LISTEN is being established. Each subscribe() pushes its own
+// handler entry and holds a reference to it, so unsubscribing removes the
+// exact entry — even when the same function reference is subscribed twice.
+// `establishment` resolves when LISTEN has succeeded; concurrent subscribers
+// to the same channel join the same promise so a LISTEN failure rejects all
+// of them atomically rather than leaving later subscribers stranded.
+type HandlerEntry = { fn: NotificationHandler };
+type ChannelState = {
+  handlers: HandlerEntry[];
+  establishment: Promise<void>;
+};
+
 export class PgAdapter implements DBAdapter {
   readonly kind = 'pg';
   #isClosed = false;
@@ -59,7 +72,7 @@ export class PgAdapter implements DBAdapter {
   // opened on first subscribe; closed in close().
   #notificationClient?: Client;
   #notificationClientStarting?: Promise<Client>;
-  #subscribers = new Map<string, Set<NotificationHandler>>();
+  #channels = new Map<string, ChannelState>();
 
   constructor(opts?: { autoMigrate?: boolean; migrationLogging?: boolean }) {
     if (opts?.autoMigrate) {
@@ -94,10 +107,23 @@ export class PgAdapter implements DBAdapter {
     log.debug(`closing ${this.url}`);
     this.#isClosed = true;
     await this.started;
-    if (this.#notificationClient) {
-      const client = this.#notificationClient;
-      this.#notificationClient = undefined;
-      this.#subscribers.clear();
+    // Resolve any in-flight notification-client startup so we can end the
+    // resulting Client. Without this await, a close() that races a first
+    // subscribe() can leave the connection alive after #isClosed flipped to
+    // true, because the connect() resolves into #notificationClient only
+    // after we've already returned from close().
+    let pendingStart = this.#notificationClientStarting;
+    if (pendingStart) {
+      try {
+        await pendingStart;
+      } catch {
+        // Startup failed — there's nothing for us to end.
+      }
+    }
+    const client = this.#notificationClient;
+    this.#notificationClient = undefined;
+    this.#channels.clear();
+    if (client) {
       try {
         await client.end();
       } catch (err: unknown) {
@@ -112,62 +138,86 @@ export class PgAdapter implements DBAdapter {
   // dedicated Client; the Client is opened lazily on the first subscribe and
   // closed in close(). Each call returns an `unsubscribe()` that removes
   // just this handler; UNLISTEN is sent only after the last handler for a
-  // channel is removed. Concurrent subscribes are safe.
+  // channel is removed. Concurrent subscribes on the same channel join the
+  // same in-flight LISTEN, so a LISTEN failure rejects all racing callers
+  // atomically — no caller is ever stranded with a registered handler that
+  // the backend isn't actually delivering to.
   async subscribe(
     channel: string,
     handler: NotificationHandler,
   ): Promise<NotificationSubscription> {
     await this.started;
-    if (this.#isClosed) {
-      throw new Error('PgAdapter is closed');
-    }
-    const client = await this.#ensureNotificationClient();
-    let set = this.#subscribers.get(channel);
-    const isFirst = !set || set.size === 0;
-    if (!set) {
-      set = new Set();
-      this.#subscribers.set(channel, set);
-    }
-    set.add(handler);
-    if (isFirst) {
-      try {
-        await client.query(`LISTEN ${safeName(channel)}`);
-      } catch (err) {
-        // Roll back the bookkeeping so a retry is clean.
-        set.delete(handler);
-        if (set.size === 0) {
-          this.#subscribers.delete(channel);
-        }
-        throw err;
+    // Loop in case the channel state we joined gets torn down by a concurrent
+    // unsubscribe (or LISTEN failure) while we were still awaiting establishment.
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      if (this.#isClosed) {
+        throw new Error('PgAdapter is closed');
       }
-    }
-    let unsubscribed = false;
-    return {
-      unsubscribe: async () => {
-        if (unsubscribed) {
-          return;
-        }
-        unsubscribed = true;
-        const subs = this.#subscribers.get(channel);
-        if (!subs) {
-          return;
-        }
-        subs.delete(handler);
-        if (subs.size > 0) {
-          return;
-        }
-        this.#subscribers.delete(channel);
-        if (this.#notificationClient && !this.#isClosed) {
-          try {
-            await this.#notificationClient.query(
-              `UNLISTEN ${safeName(channel)}`,
-            );
-          } catch (err: unknown) {
-            log.warn(`UNLISTEN ${channel} failed: ${String(err)}`);
+      const client = await this.#ensureNotificationClient();
+      if (this.#isClosed) {
+        throw new Error('PgAdapter is closed');
+      }
+      let state = this.#channels.get(channel);
+      if (!state) {
+        const safeChannel = safeName(channel);
+        const establishment = (async () => {
+          await client.query(`LISTEN ${safeChannel}`);
+        })();
+        const newState: ChannelState = { handlers: [], establishment };
+        this.#channels.set(channel, newState);
+        // If LISTEN ultimately rejects, drop the channel from the map so the
+        // next subscribe gets a fresh attempt rather than re-awaiting a
+        // permanently-rejected promise. Awaiting subscribers see the rejection
+        // through their own `await state.establishment` below.
+        establishment.catch(() => {
+          if (this.#channels.get(channel) === newState) {
+            this.#channels.delete(channel);
           }
-        }
-      },
-    };
+        });
+        state = newState;
+      }
+      const joined = state;
+      await joined.establishment;
+      // A concurrent unsubscribe may have torn the channel state down between
+      // when we joined it and when LISTEN resolved. Re-check, retry from the
+      // top if so.
+      if (this.#channels.get(channel) !== joined) {
+        continue;
+      }
+      const entry: HandlerEntry = { fn: handler };
+      joined.handlers.push(entry);
+      let unsubscribed = false;
+      return {
+        unsubscribe: async () => {
+          if (unsubscribed) {
+            return;
+          }
+          unsubscribed = true;
+          const cur = this.#channels.get(channel);
+          if (!cur) {
+            return;
+          }
+          const idx = cur.handlers.indexOf(entry);
+          if (idx >= 0) {
+            cur.handlers.splice(idx, 1);
+          }
+          if (cur.handlers.length > 0) {
+            return;
+          }
+          this.#channels.delete(channel);
+          if (this.#notificationClient && !this.#isClosed) {
+            try {
+              await this.#notificationClient.query(
+                `UNLISTEN ${safeName(channel)}`,
+              );
+            } catch (err: unknown) {
+              log.warn(`UNLISTEN ${channel} failed: ${String(err)}`);
+            }
+          }
+        },
+      };
+    }
   }
 
   async #ensureNotificationClient(): Promise<Client> {
@@ -181,13 +231,13 @@ export class PgAdapter implements DBAdapter {
       const client = new Client(this.config);
       client.on('notification', (n) => {
         log.debug(`heard pg notification for channel %s`, n.channel);
-        const handlers = this.#subscribers.get(n.channel);
-        if (!handlers) {
+        const state = this.#channels.get(n.channel);
+        if (!state) {
           return;
         }
-        for (const h of [...handlers]) {
+        for (const entry of [...state.handlers]) {
           try {
-            h(n);
+            entry.fn(n);
           } catch (err: unknown) {
             log.warn(
               `notification handler for channel ${n.channel} threw: ${String(err)}`,
