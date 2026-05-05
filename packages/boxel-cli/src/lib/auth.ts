@@ -176,3 +176,32 @@ export async function addRealmToMatrixAccountData(
     }
   }
 }
+
+// Returns true when the URL was present and a write occurred, false when the
+// URL wasn't in the list (caller decides how to surface that to the user).
+export async function removeRealmFromMatrixAccountData(
+  matrixAuth: MatrixAuth,
+  realmUrl: string,
+): Promise<boolean> {
+  let existingRealms = await getUserRealmsFromMatrixAccountData(matrixAuth);
+
+  if (!existingRealms.includes(realmUrl)) {
+    return false;
+  }
+  let next = existingRealms.filter((url) => url !== realmUrl);
+  let putResponse = await fetch(userRealmsAccountDataUrl(matrixAuth), {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${matrixAuth.accessToken}`,
+    },
+    body: JSON.stringify({ realms: next }),
+  });
+  if (!putResponse.ok) {
+    let text = await putResponse.text();
+    throw new Error(
+      `Failed to update Matrix account data: ${putResponse.status} ${text}`,
+    );
+  }
+  return true;
+}
