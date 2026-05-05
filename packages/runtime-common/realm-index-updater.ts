@@ -199,15 +199,25 @@ export class RealmIndexUpdater {
   // Two-phase incremental update. Returns once the job is durably enqueued
   // (the queue insert into Postgres has landed), with `settled` exposing the
   // promise that resolves when the worker finishes and the optional
-  // onInvalidation hook runs. Pre-enqueue failures (getRealmOwnerUsername,
-  // queue.publish) reject from this method so the caller knows the work was
-  // never queued and the realm is still consistent. Worker-time failures
-  // reject from `settled` and surface via error_doc inside the worker.
+  // onInvalidation/onSettled hooks run. Pre-enqueue failures
+  // (getRealmOwnerUsername, queue.publish) reject from this method so the
+  // caller knows the work was never queued and the realm is still
+  // consistent. Worker-time and post-worker failures reject from `settled`
+  // and surface via error_doc inside the worker.
+  //
+  // `onSettled` is part of the deferred lifecycle: it runs after the worker
+  // and onInvalidation finish, but before the indexing deferred is
+  // fulfilled and removed from #incrementalIndexingDeferreds. This is the
+  // hook callers use for work that must happen before `realm.incrementalIndexing()`
+  // resolves — for example, the post-worker invalidation broadcast on the
+  // deferred-indexing path. Without this, an outer `.then()` would fire
+  // after the drain returns and could race with test teardown.
   async enqueueUpdate(
     urls: URL[],
     opts?: {
       delete?: true;
       onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>;
+      onSettled?: () => Promise<void> | void;
       clientRequestId?: string | null;
     },
   ): Promise<{ settled: Promise<void> }> {
@@ -256,6 +266,9 @@ export class RealmIndexUpdater {
           await opts.onInvalidation(
             invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
           );
+        }
+        if (opts?.onSettled) {
+          await opts.onSettled();
         }
       } catch (e: any) {
         indexingDeferred.reject(e);

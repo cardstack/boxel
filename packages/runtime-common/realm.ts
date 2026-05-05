@@ -1003,18 +1003,31 @@ export class Realm {
 
   // Two-phase variant for the deferred-indexing path. Awaits the durable
   // queue insert so pre-enqueue failures (DB partial outage) propagate to
-  // the caller; the returned `settled` promise resolves to the collected
-  // invalidations once the worker finishes. Worker-time failures reject
-  // `settled` and surface via error_doc inside the worker as before.
+  // the caller; the returned `settled` promise resolves once the worker
+  // finishes, onInvalidation runs, and the caller's onSettled hook runs.
+  // Worker-time and post-worker failures reject `settled` and surface via
+  // error_doc inside the worker as before.
+  //
+  // The caller's onSettled hook receives the collected invalidations and
+  // runs *inside the indexing deferred lifecycle* — before the deferred is
+  // fulfilled and removed from #incrementalIndexingDeferreds. Routing the
+  // post-worker invalidation broadcast through this hook (instead of an
+  // outer .then() on settled) means realm.incrementalIndexing() genuinely
+  // waits for the broadcast, which is the only way an afterEach drain can
+  // prevent the broadcast from racing with mock-matrix teardown.
   private async enqueueIndexUpdateAndCollectInvalidations(
     urls: URL[],
-    opts?: {
+    opts: {
       delete?: true;
       clientRequestId?: string | null;
+      onSettled?: (invalidations: string[]) => Promise<void> | void;
     },
-  ): Promise<{ settled: Promise<string[]> }> {
+  ): Promise<{ settled: Promise<void> }> {
     if (urls.length === 0) {
-      return { settled: Promise.resolve([]) };
+      if (opts.onSettled) {
+        await opts.onSettled([]);
+      }
+      return { settled: Promise.resolve() };
     }
 
     let invalidations = new Set<string>();
@@ -1027,9 +1040,14 @@ export class Realm {
           invalidations.add(invalidatedURL.href);
         }
       },
+      onSettled: async () => {
+        if (opts.onSettled) {
+          await opts.onSettled([...invalidations]);
+        }
+      },
     });
 
-    return { settled: settled.then(() => [...invalidations]) };
+    return { settled };
   }
 
   private broadcastIncrementalInvalidationEvent(
@@ -1380,15 +1398,25 @@ export class Realm {
         let priorInvalidations = [...invalidations];
         let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
           urls,
-          { clientRequestId },
+          {
+            clientRequestId,
+            // Route the post-worker broadcast through onSettled so it runs
+            // INSIDE the indexing deferred lifecycle. Without this, the
+            // broadcast would fire from an outer .then() after the deferred
+            // is already removed — meaning realm.incrementalIndexing()
+            // resolves before the broadcast, and an afterEach drain that
+            // awaits the drain still races with the broadcast against
+            // test teardown (mock-matrix already destroyed → broadcast
+            // throws on serverState).
+            onSettled: (deferredInvalidations) => {
+              this.broadcastIncrementalInvalidationEvent(
+                [...new Set([...priorInvalidations, ...deferredInvalidations])],
+                { clientRequestId },
+              );
+            },
+          },
         );
-        let indexingPromise = settled.then((deferredInvalidations) => {
-          this.broadcastIncrementalInvalidationEvent(
-            [...new Set([...priorInvalidations, ...deferredInvalidations])],
-            { clientRequestId },
-          );
-        });
-        indexingPromise.catch((err: unknown) => {
+        settled.catch((err: unknown) => {
           let message = err instanceof Error ? err.message : String(err);
           // Covers worker job rejection AND post-worker realm-side work
           // (onInvalidation / handleExecutableInvalidations / broadcast).
