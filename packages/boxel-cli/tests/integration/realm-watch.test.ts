@@ -319,6 +319,70 @@ describe('realm watch (integration)', () => {
     await deleteRemoteFile(realmUrl, 'survives.gts');
   });
 
+  it('blocks a second concurrent watch against the same localDir', async () => {
+    let localDir = makeLocalDir();
+
+    let firstController = new AbortController();
+    let firstRun = watchRealms([{ realmUrl, localDir }], {
+      profileManager,
+      intervalMs: 1000,
+      debounceMs: 25,
+      quiet: true,
+      signal: firstController.signal,
+    });
+
+    // Wait for the first run to acquire the lock.
+    await sleep(150);
+
+    let lockPath = path.join(localDir, '.boxel-watch.lock');
+    expect(fs.existsSync(lockPath)).toBe(true);
+
+    let secondResult = await watchRealms([{ realmUrl, localDir }], {
+      profileManager,
+      intervalMs: 1000,
+      debounceMs: 25,
+      quiet: true,
+    });
+    expect(secondResult.error).toBeDefined();
+    expect(secondResult.error).toContain(`pid ${process.pid}`);
+    expect(secondResult.watchers).toEqual([]);
+
+    firstController.abort();
+    await firstRun;
+    expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  it('overwrites a stale lock left by a process that no longer exists', async () => {
+    let localDir = makeLocalDir();
+    let lockPath = path.join(localDir, '.boxel-watch.lock');
+    fs.writeFileSync(
+      lockPath,
+      JSON.stringify({
+        pid: 999_999_999,
+        startedAt: '2020-01-01T00:00:00.000Z',
+        realmUrl,
+      }),
+    );
+
+    let controller = new AbortController();
+    let run = watchRealms([{ realmUrl, localDir }], {
+      profileManager,
+      intervalMs: 1000,
+      debounceMs: 25,
+      quiet: true,
+      signal: controller.signal,
+    });
+
+    await sleep(150);
+    let parsed = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+    expect(parsed.pid).toBe(process.pid);
+
+    controller.abort();
+    let result = await run;
+    expect(result.error).toBeUndefined();
+    expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
   it('downgrades a pending modify to a delete when the remote file disappears', async () => {
     let localDir = makeLocalDir();
     await writeRemoteFile(realmUrl, 'flip.gts', 'export const x = 1;\n');
