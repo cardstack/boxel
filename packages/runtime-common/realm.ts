@@ -1001,6 +1001,37 @@ export class Realm {
     return [...invalidations];
   }
 
+  // Two-phase variant for the deferred-indexing path. Awaits the durable
+  // queue insert so pre-enqueue failures (DB partial outage) propagate to
+  // the caller; the returned `settled` promise resolves to the collected
+  // invalidations once the worker finishes. Worker-time failures reject
+  // `settled` and surface via error_doc inside the worker as before.
+  private async enqueueIndexUpdateAndCollectInvalidations(
+    urls: URL[],
+    opts?: {
+      delete?: true;
+      clientRequestId?: string | null;
+    },
+  ): Promise<{ settled: Promise<string[]> }> {
+    if (urls.length === 0) {
+      return { settled: Promise.resolve([]) };
+    }
+
+    let invalidations = new Set<string>();
+    let { settled } = await this.#realmIndexUpdater.enqueueUpdate(urls, {
+      ...(opts?.delete ? { delete: true } : {}),
+      clientRequestId: opts?.clientRequestId ?? null,
+      onInvalidation: async (invalidatedURLs: URL[]) => {
+        await this.handleExecutableInvalidations(invalidatedURLs);
+        for (let invalidatedURL of invalidatedURLs) {
+          invalidations.add(invalidatedURL.href);
+        }
+      },
+    });
+
+    return { settled: settled.then(() => [...invalidations]) };
+  }
+
   private broadcastIncrementalInvalidationEvent(
     invalidations: string[],
     opts?: { clientRequestId?: string | null },
@@ -1329,22 +1360,28 @@ export class Realm {
           clientRequestId,
         });
       } else {
-        // Fire-and-forget. The indexing deferred is registered synchronously
-        // inside #realmIndexUpdater.update() before any await, so
-        // realm.incrementalIndexing() reflects this work as pending the
-        // moment we return — callers that need determinism (tests, future
-        // sync flows) can await that. The invalidation broadcast must move
-        // inside the deferred so listeners get the populated invalidations
-        // set, not an empty one.
-        let indexingPromise = performIndex().then(() => {
-          this.broadcastIncrementalInvalidationEvent([...invalidations], {
+        // Two-phase: await the durable queue insert inline so pre-enqueue
+        // failures (DB partial outage) propagate back to this method's
+        // caller and ultimately to the HTTP client — without that, a write
+        // could land on disk and never get indexed, leaving the realm
+        // silently stale. The worker settle is fire-and-forget; worker-
+        // time failures surface via error_doc inside the worker as before.
+        // Deferred is registered synchronously inside enqueueUpdate before
+        // any await, so realm.incrementalIndexing() reflects this work as
+        // pending the moment we return.
+        let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
+          urls,
+          { clientRequestId },
+        );
+        let indexingPromise = settled.then((deferredInvalidations) => {
+          this.broadcastIncrementalInvalidationEvent(deferredInvalidations, {
             clientRequestId,
           });
         });
         indexingPromise.catch((err: unknown) => {
           let message = err instanceof Error ? err.message : String(err);
           this.#log.error(
-            `Async indexing failed for ${this.url} (waitForIndex=false): ${message}`,
+            `Worker-time indexing failed for ${this.url}: ${message}`,
           );
         });
       }
@@ -2462,12 +2499,18 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Source-content-type callers, by definition, don't depend on indexed
+    // state — if they did they would use application/vnd.card+json. Return
+    // as soon as the source bytes are durable; indexing happens async and
+    // surfaces errors via error_doc as before. Subscribers to indexing
+    // events still see the broadcast once the worker settles.
     let { lastModified, created } = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text(),
       {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
         serializeFile: false,
+        waitForIndex: false,
       },
     );
     return createResponse({
@@ -2487,6 +2530,9 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Binary files have no indexable card representation, so awaiting the
+    // index update would be even more wasteful than for card source. Return
+    // as soon as the bytes are durable.
     let bytes = new Uint8Array(await request.arrayBuffer());
     let { lastModified, created } = await this.write(
       this.paths.local(new URL(request.url)),
@@ -2494,6 +2540,7 @@ export class Realm {
       {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
         serializeFile: false,
+        waitForIndex: false,
       },
     );
     return createResponse({

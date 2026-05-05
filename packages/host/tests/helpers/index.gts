@@ -949,6 +949,13 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     let store = getService('store');
     await store.flushSaves();
     await store.loaded();
+    // Drain any indexing kicked off async by waitForIndex:false writes
+    // (e.g. +source POSTs). Without this drain, async indexing from the
+    // current test can settle into the next test and produce ghost state
+    // / flaky reads from the index.
+    for (let entry of getTestRealmRegistry().values()) {
+      await entry.realm.incrementalIndexing();
+    }
     let context = this as RenderingContextWithPrerender;
     if (context.__cardPrerenderElement) {
       teardownIsolatedRender(
