@@ -51,28 +51,6 @@ export class IndexWriter {
   }
 
   async createBatch(realmURL: URL, jobInfo?: JobInfo) {
-    if (jobInfo && jobInfo.jobId > 0) {
-      // Drop any working-table rows for this realm that were stamped
-      // by a *different* job. They are debris from a previous (now
-      // abandoned) indexing attempt — leaving them in place would
-      // bias the seed-fan-out queries that read
-      // `boxel_index_working` and would make `applyBatchUpdates`
-      // promote stale content the current job never processed. The
-      // per-realm `pg_advisory_xact_lock` (`indexing:{realmUrl}` in
-      // `pg-queue.ts`) makes this safe: at most one indexing job
-      // holds a reservation at a time, so any row tagged with a
-      // different job_id is, by construction, no longer in flight.
-      // Rows tagged with the current job's id are intentionally
-      // preserved — that's the resume hand-off point.
-      await query(this.#dbAdapter, [
-        `DELETE FROM boxel_index_working WHERE`,
-        ...every([
-          ['realm_url =', param(realmURL.href)],
-          ['job_id IS NOT NULL'],
-          ['job_id != ', param(jobInfo.jobId)],
-        ]),
-      ] as Expression);
-    }
     let batch = new Batch(this.#dbAdapter, realmURL, jobInfo);
     await batch.ready;
     return batch;

@@ -1855,14 +1855,21 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
-  test('createBatch deletes working rows from a different job for the same realm', async function (assert) {
+  test('working rows from another job are visible to dependency-walk queries but not to resumedRows', async function (assert) {
+    // The cumulative working table is the source of truth for the
+    // reverse-deps walk in `Batch.invalidate` (via
+    // `itemsThatReference`). Rows from completed prior batches must
+    // stay so subsequent jobs can find them. The `job_id` filter in
+    // `loadResumedRows` is what isolates the *current* job's
+    // resume-handoff from those rows.
+    let otherUrl = `${testRealmURL}other-job-row.json`;
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
       {
         working: [
           {
-            url: `${testRealmURL}stale.json`,
+            url: otherUrl,
             realm_version: 1,
             realm_url: testRealmURL,
             type: 'instance',
@@ -1877,19 +1884,24 @@ module('Unit | index-writer', function (hooks) {
       },
     );
 
-    await indexWriter.createBatch(new URL(testRealmURL), {
+    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
       jobId: 42,
       reservationId: 1,
       priority: 0,
     });
+    assert.strictEqual(
+      batch.resumedRows.size,
+      0,
+      'rows tagged with a different job_id are NOT in resumedRows',
+    );
     let surviving = await adapter.execute(
       'SELECT url FROM boxel_index_working WHERE realm_url = $1',
       { bind: [testRealmURL] },
     );
     assert.deepEqual(
-      surviving,
-      [],
-      'working rows for the realm tagged with a different job_id are deleted',
+      surviving.map((r) => r.url),
+      [otherUrl],
+      'cumulative working state is preserved (it is the source for reverse-deps walks)',
     );
   });
 
