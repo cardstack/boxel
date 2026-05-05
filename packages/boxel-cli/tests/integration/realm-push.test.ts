@@ -399,8 +399,13 @@ describe('realm push (integration)', () => {
     await pushCommand(localDir, realmUrl, { profileManager });
 
     expect(await remoteFileExists(realmUrl, 'card.gts')).toBe(true);
-    let remoteRealmJson = await fetchRemoteFile(realmUrl, '.realm.json');
-    expect(remoteRealmJson).not.toContain('locally-edited-marker');
+    // The remote .realm.json may not exist at all on a freshly-created
+    // realm (CS-10053 stopped seeding one). Either way, the local file
+    // must not have been pushed.
+    if (await remoteFileExists(realmUrl, '.realm.json')) {
+      let remoteRealmJson = await fetchRemoteFile(realmUrl, '.realm.json');
+      expect(remoteRealmJson).not.toContain('locally-edited-marker');
+    }
 
     let manifest = readManifest(localDir);
     expect(manifest.files['.realm.json']).toBeUndefined();

@@ -444,6 +444,10 @@ export class CreateListingPRRequestInput extends CardDef {
   @field listingName = contains(StringField);
 }
 
+export class RetrySubmissionWorkflowInput extends CardDef {
+  @field workflowCardId = contains(StringField);
+}
+
 export class ListingCreateInput extends CardDef {
   @field openCardIds = containsMany(StringField);
   @field codeRef = contains(CodeRefField);
