@@ -79,6 +79,7 @@ import { getTestRealmRegistry } from './test-realm-registry';
 import visitOperatorMode from './visit-operator-mode';
 
 import type { MockUtils } from './mock-matrix/_utils';
+import type QueueService from '@cardstack/host/services/queue';
 
 import type { SimpleElement } from '@simple-dom/interface';
 
@@ -1254,7 +1255,7 @@ async function setupTestRealm({
 }) {
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = getService('network');
-  let { queue } = getService('queue');
+  let { queue } = getService('queue') as QueueService;
 
   realmURL = realmURL ?? testRealmURL;
 

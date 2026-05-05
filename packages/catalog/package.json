@@ -15,12 +15,11 @@
     "@types/lodash": "catalog:",
     "@types/qunit": "catalog:",
     "@universal-ember/test-support": "catalog:",
-    "@types/uuid": "catalog:",
-    "chess.js": "catalog:",
     "concurrently": "catalog:",
     "ember-concurrency": "catalog:",
     "ember-eslint-parser": "0.5.9",
     "ember-modifier": "^4.1.0",
+    "ember-resources": "catalog:",
     "ember-template-lint": "catalog:",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
@@ -28,8 +27,11 @@
     "eslint-plugin-import": "catalog:",
     "eslint-plugin-n": "catalog:",
     "eslint-plugin-prettier": "catalog:",
+    "lodash": "catalog:",
     "prettier": "catalog:",
-    "tracked-built-ins": "catalog:"
+    "prettier-plugin-ember-template-tag": "catalog:",
+    "qunit": "catalog:",
+    "qunit-dom": "catalog:"
   },
   "dependencies": {
     "ember-modify-based-class-resource": "catalog:"
