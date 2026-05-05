@@ -36,7 +36,7 @@ export interface ModuleCacheInvalidationListenerDeps {
 }
 
 export type ParsedModuleCacheInvalidation =
-  | { kind: 'module'; resolvedRealmURL: string; moduleURL: string }
+  | { kind: 'module'; resolvedRealmURL: string; moduleURLs: string[] }
   | { kind: 'realm'; resolvedRealmURL: string }
   | { kind: 'global' };
 
@@ -96,10 +96,12 @@ export class ModuleCacheInvalidationListener {
     try {
       switch (parsed.kind) {
         case 'module':
-          this.#deps.definitionLookup.bumpModuleGeneration(
-            parsed.resolvedRealmURL,
-            parsed.moduleURL,
-          );
+          for (const moduleURL of parsed.moduleURLs) {
+            this.#deps.definitionLookup.bumpModuleGeneration(
+              parsed.resolvedRealmURL,
+              moduleURL,
+            );
+          }
           return;
         case 'realm':
           this.#deps.definitionLookup.bumpRealmGeneration(
@@ -118,45 +120,57 @@ export class ModuleCacheInvalidationListener {
   }
 }
 
-// Payload formats emitted by CachingDefinitionLookup invalidation paths:
-//   `module:<resolvedRealmURL>:<moduleURL>`
-//   `realm:<resolvedRealmURL>`
-//   `global`
+// Payload formats emitted by CachingDefinitionLookup invalidation paths
+// (JSON-encoded):
+//   {"k":"module","r":<resolvedRealmURL>,"m":[<moduleURL>,...]}
+//   {"k":"realm","r":<resolvedRealmURL>}
+//   {"k":"global"}
 //
-// Realm and module URLs always carry a scheme (`http://`, `https://`) and a
-// trailing slash on the realm URL; the discriminator prefix is separated by
-// the first `:` that immediately precedes a non-`/` character. We split on
-// the first `:` after the kind keyword to keep parsing simple — the kind
-// keyword is one of three known values and never contains `:`.
+// Module fan-out is batched into a single payload (chunked at the emitter
+// to stay under Postgres's 8000-byte NOTIFY payload cap) so one invalidate()
+// produces one notify per chunk instead of one per URL.
 export function parseModuleCacheInvalidationPayload(
   payload: string,
 ): ParsedModuleCacheInvalidation | undefined {
-  if (payload === 'global') {
-    return { kind: 'global' };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return undefined;
   }
-  if (payload.startsWith('realm:')) {
-    const resolvedRealmURL = payload.slice('realm:'.length);
-    if (!resolvedRealmURL) {
-      return undefined;
-    }
-    return { kind: 'realm', resolvedRealmURL };
+  if (!parsed || typeof parsed !== 'object') {
+    return undefined;
   }
-  if (payload.startsWith('module:')) {
-    // After stripping `module:`, the rest is `<resolvedRealmURL>:<moduleURL>`.
-    // Realm URLs always end in `/`, so the separator is the first `:` that
-    // immediately follows a `/`. Mirrors realm-file-changes-listener
-    // parsePayload's separator approach.
-    const rest = payload.slice('module:'.length);
-    const match = /\/:/.exec(rest);
-    if (!match) {
-      return undefined;
+  const obj = parsed as Record<string, unknown>;
+  switch (obj.k) {
+    case 'module': {
+      const resolvedRealmURL = obj.r;
+      const moduleURLs = obj.m;
+      if (typeof resolvedRealmURL !== 'string' || !resolvedRealmURL) {
+        return undefined;
+      }
+      if (!Array.isArray(moduleURLs) || moduleURLs.length === 0) {
+        return undefined;
+      }
+      const urls: string[] = [];
+      for (const url of moduleURLs) {
+        if (typeof url !== 'string' || !url) {
+          return undefined;
+        }
+        urls.push(url);
+      }
+      return { kind: 'module', resolvedRealmURL, moduleURLs: urls };
     }
-    const resolvedRealmURL = rest.slice(0, match.index + 1);
-    const moduleURL = rest.slice(match.index + 2);
-    if (!resolvedRealmURL || !moduleURL) {
-      return undefined;
+    case 'realm': {
+      const resolvedRealmURL = obj.r;
+      if (typeof resolvedRealmURL !== 'string' || !resolvedRealmURL) {
+        return undefined;
+      }
+      return { kind: 'realm', resolvedRealmURL };
     }
-    return { kind: 'module', resolvedRealmURL, moduleURL };
+    case 'global':
+      return { kind: 'global' };
+    default:
+      return undefined;
   }
-  return undefined;
 }

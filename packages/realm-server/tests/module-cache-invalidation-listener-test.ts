@@ -118,71 +118,114 @@ function waitFor<T>(
 
 module(basename(__filename), function () {
   module('parseModuleCacheInvalidationPayload', function () {
-    test('parses a module: payload with port-bearing realm url', function (assert) {
+    test('parses a module payload carrying a single URL', function (assert) {
       assert.deepEqual(
         parseModuleCacheInvalidationPayload(
-          'module:http://localhost:4201/luke/:http://localhost:4201/luke/cards/person.gts',
+          JSON.stringify({
+            k: 'module',
+            r: 'http://localhost:4201/luke/',
+            m: ['http://localhost:4201/luke/cards/person.gts'],
+          }),
         ),
         {
           kind: 'module',
           resolvedRealmURL: 'http://localhost:4201/luke/',
-          moduleURL: 'http://localhost:4201/luke/cards/person.gts',
+          moduleURLs: ['http://localhost:4201/luke/cards/person.gts'],
         },
       );
     });
 
-    test('parses a module: payload without a port', function (assert) {
+    test('parses a module payload carrying many URLs', function (assert) {
+      const urls = [
+        'https://cardstack.com/base/card-api.gts',
+        'https://cardstack.com/base/string.gts',
+        'https://cardstack.com/base/number.gts',
+      ];
       assert.deepEqual(
         parseModuleCacheInvalidationPayload(
-          'module:https://cardstack.com/base/:https://cardstack.com/base/card-api.gts',
+          JSON.stringify({
+            k: 'module',
+            r: 'https://cardstack.com/base/',
+            m: urls,
+          }),
         ),
         {
           kind: 'module',
           resolvedRealmURL: 'https://cardstack.com/base/',
-          moduleURL: 'https://cardstack.com/base/card-api.gts',
+          moduleURLs: urls,
         },
       );
     });
 
-    test('parses a realm: payload', function (assert) {
+    test('parses a realm payload', function (assert) {
       assert.deepEqual(
         parseModuleCacheInvalidationPayload(
-          'realm:http://localhost:4201/luke/',
+          JSON.stringify({ k: 'realm', r: 'http://localhost:4201/luke/' }),
         ),
         { kind: 'realm', resolvedRealmURL: 'http://localhost:4201/luke/' },
       );
     });
 
     test('parses a global payload', function (assert) {
-      assert.deepEqual(parseModuleCacheInvalidationPayload('global'), {
-        kind: 'global',
-      });
+      assert.deepEqual(
+        parseModuleCacheInvalidationPayload(JSON.stringify({ k: 'global' })),
+        { kind: 'global' },
+      );
     });
 
-    test('returns undefined for an unknown kind prefix', function (assert) {
+    test('returns undefined for non-JSON', function (assert) {
       assert.strictEqual(
-        parseModuleCacheInvalidationPayload('garbage:http://x/'),
+        parseModuleCacheInvalidationPayload('not-json'),
         undefined,
       );
     });
 
-    test('returns undefined for module: without a /: separator', function (assert) {
+    test('returns undefined for an unknown kind', function (assert) {
       assert.strictEqual(
-        parseModuleCacheInvalidationPayload('module:no-separator-here'),
+        parseModuleCacheInvalidationPayload(
+          JSON.stringify({ k: 'garbage', r: 'http://x/' }),
+        ),
         undefined,
       );
     });
 
-    test('returns undefined for an empty realm: payload', function (assert) {
+    test('returns undefined for module payload missing realm url', function (assert) {
       assert.strictEqual(
-        parseModuleCacheInvalidationPayload('realm:'),
+        parseModuleCacheInvalidationPayload(
+          JSON.stringify({ k: 'module', r: '', m: ['http://x/foo.gts'] }),
+        ),
+        undefined,
+      );
+    });
+
+    test('returns undefined for module payload with empty url list', function (assert) {
+      assert.strictEqual(
+        parseModuleCacheInvalidationPayload(
+          JSON.stringify({ k: 'module', r: 'http://x/', m: [] }),
+        ),
+        undefined,
+      );
+    });
+
+    test('returns undefined for module payload with non-string url entry', function (assert) {
+      assert.strictEqual(
+        parseModuleCacheInvalidationPayload(
+          JSON.stringify({ k: 'module', r: 'http://x/', m: [123] }),
+        ),
+        undefined,
+      );
+    });
+
+    test('returns undefined for an empty realm payload', function (assert) {
+      assert.strictEqual(
+        parseModuleCacheInvalidationPayload(JSON.stringify({ k: 'realm' })),
         undefined,
       );
     });
   });
 
   module('ModuleCacheInvalidationListener (dispatch)', function () {
-    test('handleNotification with module: invokes bumpModuleGeneration with parsed args', function (assert) {
+    test('handleNotification with single-URL module payload bumps once', function (assert) {
       const recorder = newRecorder();
       const listener = new ModuleCacheInvalidationListener({
         dbAdapter: {} as unknown as PgAdapter,
@@ -190,7 +233,11 @@ module(basename(__filename), function () {
       });
 
       listener.handleNotification(
-        'module:http://x.test/r/:http://x.test/r/cards/foo.gts',
+        JSON.stringify({
+          k: 'module',
+          r: 'http://x.test/r/',
+          m: ['http://x.test/r/cards/foo.gts'],
+        }),
       );
 
       assert.deepEqual(recorder.module, [
@@ -203,28 +250,57 @@ module(basename(__filename), function () {
       assert.strictEqual(recorder.global, 0);
     });
 
-    test('handleNotification with realm: invokes bumpRealmGeneration', function (assert) {
+    test('handleNotification with multi-URL module payload bumps once per URL', function (assert) {
       const recorder = newRecorder();
       const listener = new ModuleCacheInvalidationListener({
         dbAdapter: {} as unknown as PgAdapter,
         definitionLookup: makeStubLookup(recorder),
       });
 
-      listener.handleNotification('realm:http://x.test/r/');
+      const urls = [
+        'http://x.test/r/cards/foo.gts',
+        'http://x.test/r/cards/bar.gts',
+        'http://x.test/r/cards/baz.gts',
+      ];
+      listener.handleNotification(
+        JSON.stringify({ k: 'module', r: 'http://x.test/r/', m: urls }),
+      );
+
+      assert.deepEqual(
+        recorder.module,
+        urls.map((moduleURL) => ({
+          resolvedRealmURL: 'http://x.test/r/',
+          moduleURL,
+        })),
+      );
+      assert.deepEqual(recorder.realm, []);
+      assert.strictEqual(recorder.global, 0);
+    });
+
+    test('handleNotification with realm payload bumps bumpRealmGeneration', function (assert) {
+      const recorder = newRecorder();
+      const listener = new ModuleCacheInvalidationListener({
+        dbAdapter: {} as unknown as PgAdapter,
+        definitionLookup: makeStubLookup(recorder),
+      });
+
+      listener.handleNotification(
+        JSON.stringify({ k: 'realm', r: 'http://x.test/r/' }),
+      );
 
       assert.deepEqual(recorder.realm, ['http://x.test/r/']);
       assert.deepEqual(recorder.module, []);
       assert.strictEqual(recorder.global, 0);
     });
 
-    test('handleNotification with global invokes bumpGlobalGeneration', function (assert) {
+    test('handleNotification with global payload bumps bumpGlobalGeneration', function (assert) {
       const recorder = newRecorder();
       const listener = new ModuleCacheInvalidationListener({
         dbAdapter: {} as unknown as PgAdapter,
         definitionLookup: makeStubLookup(recorder),
       });
 
-      listener.handleNotification('global');
+      listener.handleNotification(JSON.stringify({ k: 'global' }));
 
       assert.strictEqual(recorder.global, 1);
       assert.deepEqual(recorder.module, []);
@@ -238,9 +314,11 @@ module(basename(__filename), function () {
         definitionLookup: makeStubLookup(recorder),
       });
 
-      listener.handleNotification('not-a-valid-payload');
-      listener.handleNotification('module:no-separator');
-      listener.handleNotification('realm:');
+      listener.handleNotification('not-json');
+      listener.handleNotification(
+        JSON.stringify({ k: 'module', r: 'http://x.test/r/' }),
+      );
+      listener.handleNotification(JSON.stringify({ k: 'realm' }));
 
       assert.deepEqual(recorder.module, []);
       assert.deepEqual(recorder.realm, []);
@@ -495,7 +573,7 @@ module(basename(__filename), function () {
             `SELECT pg_notify(`,
             param(MODULE_CACHE_INVALIDATED_CHANNEL),
             `,`,
-            param('global'),
+            param(JSON.stringify({ k: 'global' })),
             `)`,
           ]);
 
