@@ -28,6 +28,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    # No fork guard: this job needs no AWS credentials or write tokens,
+    # so it's safe on PRs from forks. It exists because ci-lint.yaml's
+    # `paths-ignore` skips the main lint workflow on observability-only
+    # PRs, so this is the dedicated lint coverage for the package
+    # (shellcheck + jq + prettier + manifest/secret regression checks).
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # `init` installs pnpm — required by lint.sh's prettier --check step.
+      - uses: ./.github/actions/init
+      - name: Lint
+        run: pnpm run lint
+        working-directory: packages/observability
+
   diff:
     name: Diff against staging
     runs-on: ubuntu-latest
@@ -42,10 +59,14 @@ jobs:
 
     env:
       AWS_REGION: us-east-1
-      # Reuses the apply role from cardstack/infra#665. Permission is
-      # `ssm:GetParameter` on /staging/grafana/grafanactl_token only —
-      # which is what the diff workflow needs (read the token, then use
-      # it to pull dashboards/folders from staging Grafana).
+      # Reuses the apply role from cardstack/infra#665. Permissions are
+      # `ssm:GetParameter` on:
+      #   /staging/grafana/grafanactl_token        (pull-from-staging auth)
+      #   /staging/boxel-grafana/realm_server_url  (placeholder substitution)
+      # The apply role also grants /<env>/boxel/GRAFANA_SECRET, but diff
+      # doesn't read it — diff.sh redacts the secret on both sides before
+      # diffing rather than substituting the real value, so PR comment
+      # output can never carry the credential. See diff.sh for details.
       AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
       GRAFANACTL_VERSION: "0.1.10"
       DIFF_MARKER: "<!-- observability-diff -->"
@@ -67,11 +88,18 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Source diff-time secrets from SSM
-        # GRAFANA_TOKEN: pull-from-staging auth.
+        # GRAFANA_TOKEN:    pull-from-staging auth.
         # REALM_SERVER_URL: needed by diff.sh's __REALM_SERVER_URL__
-        # substitution (CS-10990); committed JSON carries the placeholder
-        # and apply.sh substitutes per-env, so diff.sh has to know the
-        # same per-env value to compare apples-to-apples.
+        #                   substitution (CS-10990); committed JSON
+        #                   carries the placeholder and apply.sh
+        #                   substitutes per-env, so diff.sh has to know
+        #                   the same per-env value to compare
+        #                   apples-to-apples.
+        #
+        # GRAFANA_SECRET is intentionally NOT fetched here — diff.sh
+        # redacts both sides of the diff for the `grafana_secret`
+        # constant template variable, so it never needs the real value
+        # and there's no risk of it appearing in the PR comment output.
         run: |
           GRAFANA_TOKEN="$(aws ssm get-parameter \
             --name /staging/grafana/grafanactl_token \
@@ -80,12 +108,25 @@ jobs:
             --output text)"
           echo "::add-mask::$GRAFANA_TOKEN"
           echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
-
           REALM_SERVER_URL="$(aws ssm get-parameter \
             --name /staging/boxel-grafana/realm_server_url \
             --query 'Parameter.Value' \
             --output text)"
           echo "REALM_SERVER_URL=$REALM_SERVER_URL" >> "$GITHUB_ENV"
+
+      - name: Lint (with live-staging validate)
+        # Re-runs lint.sh here because GRAFANA_TOKEN is now available from
+        # SSM, so GRAFANACTL_VALIDATE_ENV=staging adds the "validate
+        # manifests against live staging Grafana" check that the lint job
+        # above can't do (it has no AWS access). Catches manifest issues
+        # before the diff step does an API pull.
+        # PRETTIER_SKIP avoids re-doing the prettier YAML check the lint
+        # job already ran (this job has no pnpm install — staying fast).
+        working-directory: packages/observability
+        env:
+          GRAFANACTL_VALIDATE_ENV: staging
+          PRETTIER_SKIP: "1"
+        run: ./scripts/lint.sh
 
       - name: Compute diff
         id: diff

@@ -7,8 +7,8 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
 import StringField from 'https://cardstack.com/base/string';
-import NumberField from '../fields/number'; // ² Import catalog number field
-import DateField from '../fields/date'; // ³ Import catalog date field
+import NumberField from 'https://cardstack.com/base/number'; // ² Import catalog number field
+import DateField from 'https://cardstack.com/base/date'; // ³ Import catalog date field
 import AudioField from '../fields/audio'; // ⁴ Import catalog audio field with waveform
 import ImageField from '../fields/image'; // ⁵ Import catalog image field for album art
 import { tracked } from '@glimmer/tracking';

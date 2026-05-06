@@ -1312,9 +1312,14 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       let firstEtag = firstResponse.headers['etag'];
       assert.ok(firstEtag, 'first response has ETag');
 
-      // Simulate a republish by updating last_published_at
+      // Simulate a republish by updating last_published_at on both the
+      // legacy table and realm_registry (the source of truth for reads).
+      let newLastPublishedAt = Date.now() + 1000;
       await dbAdapter.execute(
-        `UPDATE published_realms SET last_published_at = '${Date.now() + 1000}' WHERE published_realm_url = '${realmURL.href}'`,
+        `UPDATE published_realms SET last_published_at = '${newLastPublishedAt}' WHERE published_realm_url = '${realmURL.href}'`,
+      );
+      await dbAdapter.execute(
+        `UPDATE realm_registry SET last_published_at = ${newLastPublishedAt}, updated_at = now() WHERE url = '${realmURL.href}' AND kind = 'published'`,
       );
 
       let secondResponse = await request

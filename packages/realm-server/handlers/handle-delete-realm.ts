@@ -105,10 +105,14 @@ export default function handleDeleteRealm({
       }
       let sourceRealmPath = join(realmsRootPath, sourceRow[0].disk_id);
 
+      // Phase 4: existence check on realm_registry (kind='published')
+      // instead of the legacy published_realms table. SELECT 1 is aliased
+      // to AS found rather than relying on Postgres's default `?column?`
+      // unnamed-column label, which isn't portable across SQL adapters.
       let publishedRealmMatch = (await query(dbAdapter, [
-        `SELECT id FROM published_realms WHERE published_realm_url =`,
+        `SELECT 1 AS found FROM realm_registry WHERE kind = 'published' AND url =`,
         param(realmURL),
-      ])) as Pick<PublishedRealmTable, 'id'>[];
+      ])) as { found: number }[];
       if (publishedRealmMatch.length > 0) {
         await sendResponseForUnprocessableEntity(
           ctxt,
@@ -146,8 +150,11 @@ export default function handleDeleteRealm({
       // per-URL granularity rather than globally. Pragmatic for this PR;
       // multi-instance hardening could tighten this later.
       await withRealmWriteLock(dbAdapter, realmURL, async () => {
+        // Phase 4: cascade lookup reads realm_registry rather than
+        // published_realms. SQL aliases keep the loop body's field
+        // accessors stable.
         let publishedRealms = (await query(dbAdapter, [
-          `SELECT id, published_realm_url FROM published_realms WHERE source_realm_url =`,
+          `SELECT disk_id AS id, url AS published_realm_url FROM realm_registry WHERE kind = 'published' AND source_url =`,
           param(realmURL),
         ])) as Pick<PublishedRealmTable, 'id' | 'published_realm_url'>[];
 

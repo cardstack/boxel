@@ -10,7 +10,7 @@ import {
   contains,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import DatetimeStampField from '../fields/datetime-stamp';
+import DatetimeStampField from 'https://cardstack.com/base/datetime-stamp';
 import CodeSnippet from '../components/code-snippet';
 
 const standardFieldCode = `@field standard = contains(DatetimeStampField);`;

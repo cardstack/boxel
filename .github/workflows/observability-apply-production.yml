@@ -58,6 +58,11 @@ jobs:
       # in cardstack/infra. Permissions are ssm:GetParameter on:
       #   /production/grafana/grafanactl_token  (added in cardstack/infra#666)
       #   /production/loki/internal_url         (added in cardstack/infra#674, CS-10968)
+      #   /production/boxel/GRAFANA_SECRET      (CS-10929 — used by operator-action
+      #                                         button panels for `Authorization:
+      #                                         Bearer ${grafana_secret}`; matches
+      #                                         the realm-server task's existing
+      #                                         shared secret)
       AWS_ROLE_ARN: arn:aws:iam::120317779495:role/boxel-observability-apply
       # Server URL is NOT set here — single source of truth is
       # packages/observability/grafanactl/config.yaml (see staging workflow
@@ -142,7 +147,7 @@ jobs:
             echo "${var}=${val}" >> "$GITHUB_ENV"
           }
 
-          fetch GRAFANA_TOKEN          /production/grafana/grafanactl_token       --with-decryption
+          fetch GRAFANA_TOKEN          /production/grafana/grafanactl_token   --with-decryption
           fetch LOKI_URL               /production/loki/internal_url
           fetch BOXEL_DB_HOST          /production/boxel-grafana/db_host
           fetch SYNAPSE_PROMETHEUS_URL /production/boxel-grafana/prometheus_url
@@ -150,6 +155,20 @@ jobs:
           fetch BOXEL_DB_NAME          /production/boxel/PGDATABASE
           fetch BOXEL_DB_USER          /production/boxel/GRAFANA_DB_USER
           fetch BOXEL_DB_PASSWORD      /production/boxel/GRAFANA_DB_PASSWORD  --with-decryption
+          fetch GRAFANA_SECRET         /production/boxel/GRAFANA_SECRET       --with-decryption
+
+      - name: Lint
+        # Belt-and-suspenders: ci-lint.yaml runs the same lint at PR time
+        # without a token. Here, with the production token already sourced
+        # from SSM, GRAFANACTL_VALIDATE_ENV adds a "validate against the
+        # live production Grafana" step. PRETTIER_SKIP avoids duplicating
+        # ci-lint's YAML format check (which requires pnpm install —
+        # overkill for this focused workflow).
+        working-directory: packages/observability
+        env:
+          GRAFANACTL_VALIDATE_ENV: production
+          PRETTIER_SKIP: "1"
+        run: ./scripts/lint.sh
 
       - name: Apply
         working-directory: packages/observability

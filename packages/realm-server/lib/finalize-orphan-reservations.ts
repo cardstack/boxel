@@ -30,9 +30,18 @@ const log = logger('worker-manager');
 //      diagnostic. So a deterministic-crash job dies cleanly via the cap
 //      without needing this path to short-circuit it; a transient-crash
 //      job gets the retry the cap allows.
+//
+// `reason` records *why* the reservation closed so the cap query can
+// distinguish operational interruptions (child crash, manager SIGTERM)
+// from genuine completed attempts. Every call site in the worker-manager
+// is by definition an interruption — a child that exits while still
+// holding a reservation never finished the work. The pg-queue's own
+// success/failure finalize path sets `'completed'` separately; this
+// function never owns that case.
 export async function finalizeOrphanedReservations(
   dbAdapter: DBAdapter,
   workerId: string | undefined,
+  reason: 'interrupted' | 'timeout-expired' = 'interrupted',
 ): Promise<void> {
   if (!workerId) {
     return;
@@ -40,7 +49,10 @@ export async function finalizeOrphanedReservations(
 
   try {
     await runQuery(dbAdapter, [
-      `UPDATE job_reservations SET completed_at = NOW() WHERE worker_id =`,
+      `UPDATE job_reservations
+       SET completed_at = NOW(), completion_reason =`,
+      param(reason),
+      `WHERE worker_id =`,
       param(workerId),
       `AND completed_at IS NULL`,
     ] as Expression);

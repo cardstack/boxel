@@ -422,6 +422,354 @@ module(basename(__filename), function () {
       }
     });
 
+    test('incremental dedup: a duplicate publish for an in-flight job attaches as a late waiter', async function (assert) {
+      // Closes the staging-observed race where the PATCH-path enqueue
+      // gets claimed by the worker before the file-watcher echo can
+      // pre-claim coalesce. Without dedup, a second 'incremental-index'
+      // row is inserted for the same change set and the worker runs the
+      // same indexing pass twice. With dedup, the second publish reuses
+      // the running job's id and registers a late waiter.
+      await runner.destroy();
+      let realmURL = 'http://example.com/in-flight-dedup-identical/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'in-flight-dedup-worker',
+      });
+      worker.register(
+        'incremental-index',
+        async (args: { changes: { url: string }[] }) => {
+          started.fulfill();
+          await release.promise;
+          return {
+            invalidations: args.changes.map((change) => change.url),
+            ignoreData: {},
+            stats: {
+              instancesIndexed: 0,
+              filesIndexed: 0,
+              instanceErrors: 0,
+              fileErrors: 0,
+              totalIndexEntries: 0,
+            },
+          };
+        },
+      );
+
+      try {
+        await worker.start();
+
+        let first = await publishIncrementalIndexJob({
+          clientRequestId: 'request-1',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+          },
+        });
+        // Wait for the worker to actually claim and start running the
+        // job before publishing the duplicate, otherwise we'd be testing
+        // pre-claim coalesce instead.
+        await started.promise;
+
+        let second = await publishIncrementalIndexJob({
+          clientRequestId: 'request-2',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+          },
+        });
+
+        assert.strictEqual(
+          first.id,
+          second.id,
+          'duplicate publish reuses the in-flight job id instead of creating a new row',
+        );
+
+        let rows = (await adapter.execute(
+          `SELECT id
+             FROM jobs
+             WHERE concurrency_group = $1
+               AND status = 'unfulfilled'`,
+          { bind: [`indexing:${realmURL}`] },
+        )) as { id: number }[];
+        assert.strictEqual(
+          rows.length,
+          1,
+          'only one incremental-index row exists; duplicate did not enqueue a second job',
+        );
+
+        release.fulfill();
+        let [firstResult, secondResult] = await Promise.all([
+          first.done,
+          second.done,
+        ]);
+        assert.strictEqual(firstResult.clientRequestId, 'request-1');
+        assert.strictEqual(secondResult.clientRequestId, 'request-2');
+        assert.deepEqual(firstResult.invalidations, [`${realmURL}a`]);
+        assert.deepEqual(secondResult.invalidations, [`${realmURL}a`]);
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
+    test('incremental dedup: an incoming subset of the in-flight change set attaches as a late waiter', async function (assert) {
+      // Subset case: in-flight job is processing [a,b] and a new publish
+      // arrives for just [a]. The running indexing pass already covers
+      // url a, so the new caller can reuse it.
+      await runner.destroy();
+      let realmURL = 'http://example.com/in-flight-dedup-subset/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'in-flight-dedup-subset-worker',
+      });
+      worker.register(
+        'incremental-index',
+        async (args: { changes: { url: string }[] }) => {
+          started.fulfill();
+          await release.promise;
+          return {
+            invalidations: args.changes.map((change) => change.url),
+            ignoreData: {},
+            stats: {
+              instancesIndexed: 0,
+              filesIndexed: 0,
+              instanceErrors: 0,
+              fileErrors: 0,
+              totalIndexEntries: 0,
+            },
+          };
+        },
+      );
+
+      try {
+        await worker.start();
+
+        let first = await publishIncrementalIndexJob({
+          clientRequestId: 'request-1',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [
+              { url: `${realmURL}a`, operation: 'update' },
+              { url: `${realmURL}b`, operation: 'update' },
+            ],
+          },
+        });
+        await started.promise;
+
+        let second = await publishIncrementalIndexJob({
+          clientRequestId: 'request-2',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+          },
+        });
+
+        assert.strictEqual(
+          first.id,
+          second.id,
+          'subset publish reuses the in-flight job id',
+        );
+
+        let rows = (await adapter.execute(
+          `SELECT id
+             FROM jobs
+             WHERE concurrency_group = $1
+               AND status = 'unfulfilled'`,
+          { bind: [`indexing:${realmURL}`] },
+        )) as { id: number }[];
+        assert.strictEqual(rows.length, 1);
+
+        release.fulfill();
+        let [firstResult, secondResult] = await Promise.all([
+          first.done,
+          second.done,
+        ]);
+        assert.strictEqual(firstResult.clientRequestId, 'request-1');
+        assert.strictEqual(secondResult.clientRequestId, 'request-2');
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
+    test('incremental dedup: incoming with a non-covered url enqueues a new job', async function (assert) {
+      // The running job is not a superset, so the late publish must
+      // enqueue its own job. Otherwise the new url would never be
+      // indexed.
+      await runner.destroy();
+      let realmURL = 'http://example.com/in-flight-dedup-different/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let invocations = 0;
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'in-flight-dedup-diff-worker',
+      });
+      worker.register(
+        'incremental-index',
+        async (args: { changes: { url: string }[] }) => {
+          invocations += 1;
+          if (invocations === 1) {
+            started.fulfill();
+            await release.promise;
+          }
+          return {
+            invalidations: args.changes.map((change) => change.url),
+            ignoreData: {},
+            stats: {
+              instancesIndexed: 0,
+              filesIndexed: 0,
+              instanceErrors: 0,
+              fileErrors: 0,
+              totalIndexEntries: 0,
+            },
+          };
+        },
+      );
+
+      try {
+        await worker.start();
+
+        let first = await publishIncrementalIndexJob({
+          clientRequestId: 'request-1',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+          },
+        });
+        await started.promise;
+
+        let second = await publishIncrementalIndexJob({
+          clientRequestId: 'request-2',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}b`, operation: 'update' }],
+          },
+        });
+
+        assert.notStrictEqual(
+          first.id,
+          second.id,
+          'non-covered publish does not attach to the in-flight job',
+        );
+
+        let rows = (await adapter.execute(
+          `SELECT id, args
+             FROM jobs
+             WHERE concurrency_group = $1
+               AND status = 'unfulfilled'
+             ORDER BY id`,
+          { bind: [`indexing:${realmURL}`] },
+        )) as { id: number; args: { changes: { url: string }[] } }[];
+        assert.strictEqual(
+          rows.length,
+          2,
+          'two distinct rows exist when the in-flight changes do not cover the incoming changes',
+        );
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
+    test('incremental dedup: operation mismatch enqueues a new job even when urls match', async function (assert) {
+      // An in-flight `update` on url X does not satisfy a new `delete`
+      // on the same X — they are different operations and must run as
+      // separate work.
+      await runner.destroy();
+      let realmURL = 'http://example.com/in-flight-dedup-op-mismatch/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let invocations = 0;
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'in-flight-dedup-op-worker',
+      });
+      worker.register(
+        'incremental-index',
+        async (args: { changes: { url: string }[] }) => {
+          invocations += 1;
+          if (invocations === 1) {
+            started.fulfill();
+            await release.promise;
+          }
+          return {
+            invalidations: args.changes.map((change) => change.url),
+            ignoreData: {},
+            stats: {
+              instancesIndexed: 0,
+              filesIndexed: 0,
+              instanceErrors: 0,
+              fileErrors: 0,
+              totalIndexEntries: 0,
+            },
+          };
+        },
+      );
+
+      try {
+        await worker.start();
+
+        let first = await publishIncrementalIndexJob({
+          clientRequestId: 'request-1',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+          },
+        });
+        await started.promise;
+
+        let second = await publishIncrementalIndexJob({
+          clientRequestId: 'request-2',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'delete' }],
+          },
+        });
+
+        assert.notStrictEqual(
+          first.id,
+          second.id,
+          'operation mismatch publish does not attach to the in-flight job',
+        );
+
+        let rows = (await adapter.execute(
+          `SELECT id
+             FROM jobs
+             WHERE concurrency_group = $1
+               AND status = 'unfulfilled'`,
+          { bind: [`indexing:${realmURL}`] },
+        )) as { id: number }[];
+        assert.strictEqual(rows.length, 2);
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
     test('incremental does not coalesce onto pending from-scratch in same group', async function (assert) {
       await runner.destroy();
 
@@ -702,6 +1050,153 @@ module(basename(__filename), function () {
         { bind: [jobId] },
       )) as unknown as { count: number }[];
       assert.strictEqual(count, 2, 'no new reservation was created');
+    });
+
+    test('cap counts only completed and still-open reservations', async function (assert) {
+      // Even with N+1 prior reservations on the job, ones that closed
+      // with `completion_reason = 'interrupted'` (deploy/SIGTERM/child
+      // crash) must NOT count toward the cap. Otherwise a deploy during
+      // a slow reindex burns attempts on jobs that are otherwise fine.
+      await runner.destroy();
+
+      let [{ id: jobId }] = (await adapter.execute(
+        `INSERT INTO jobs (job_type, args, status, timeout)
+         VALUES ('logJob', '{}'::jsonb, 'unfulfilled', 1) RETURNING id`,
+      )) as unknown as { id: number }[];
+
+      // Three "interrupted" reservations — well past the cap of 2 — but
+      // none of them count, so the job remains claimable.
+      for (let workerId of [
+        'sigterm-worker-A',
+        'sigterm-worker-B',
+        'sigterm-worker-C',
+      ]) {
+        await adapter.execute(
+          `INSERT INTO job_reservations
+            (job_id, worker_id, locked_until, completed_at, completion_reason)
+           VALUES ($1, $2, NOW() - INTERVAL '10 seconds', NOW(), 'interrupted')`,
+          { bind: [jobId, workerId] },
+        );
+      }
+
+      let ranCount = 0;
+      let ranDeferred = new Deferred<void>();
+      runner = new PgQueueRunner({
+        adapter,
+        workerId: 'q-cap-ignores-interrupted',
+        maxTimeoutSec: 2,
+      });
+      runner.register('logJob', async () => {
+        ranCount++;
+        ranDeferred.fulfill();
+        return null;
+      });
+      await runner.start();
+      // Same warm-up as the "abandons" test above — wait for LISTEN to
+      // be established before NOTIFYing.
+      await new Promise((r) => setTimeout(r, 250));
+      await adapter.execute(`NOTIFY jobs`);
+
+      await Promise.race([
+        ranDeferred.promise,
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('handler never ran')), 5000),
+        ),
+      ]);
+
+      assert.strictEqual(ranCount, 1, 'handler ran despite 3 prior interrupts');
+
+      let job = (await adapter.execute(
+        `SELECT status FROM jobs WHERE id = $1`,
+        { bind: [jobId] },
+      )) as unknown as { status: string }[];
+      assert.strictEqual(
+        job[0].status,
+        'resolved',
+        'job resolved cleanly — cap was not burned by the interrupted prior runs',
+      );
+    });
+
+    test('cap is hit when prior reservations are explicitly completed', async function (assert) {
+      // Same shape as the `abandons` test, but with `completion_reason`
+      // explicitly set to 'completed'. This pins the new cap query down:
+      // 'completed' rows count just like the legacy NULL-reason rows.
+      await runner.destroy();
+
+      let [{ id: jobId }] = (await adapter.execute(
+        `INSERT INTO jobs (job_type, args, status, timeout)
+         VALUES ('logJob', '{}'::jsonb, 'unfulfilled', 1) RETURNING id`,
+      )) as unknown as { id: number }[];
+
+      for (let workerId of ['completed-worker-A', 'completed-worker-B']) {
+        await adapter.execute(
+          `INSERT INTO job_reservations
+            (job_id, worker_id, locked_until, completed_at, completion_reason)
+           VALUES ($1, $2, NOW() - INTERVAL '10 seconds', NOW(), 'completed')`,
+          { bind: [jobId, workerId] },
+        );
+      }
+
+      let ranCount = 0;
+      runner = new PgQueueRunner({
+        adapter,
+        workerId: 'q-cap-counts-completed',
+        maxTimeoutSec: 2,
+      });
+      runner.register('logJob', async () => {
+        ranCount++;
+        return null;
+      });
+      await runner.start();
+      await new Promise((r) => setTimeout(r, 250));
+      await adapter.execute(`NOTIFY jobs`);
+
+      let started = Date.now();
+      let abandoned = false;
+      while (Date.now() - started < 5000) {
+        let rows = (await adapter.execute(`SELECT * FROM jobs WHERE id = $1`, {
+          bind: [jobId],
+        })) as unknown as { status: string }[];
+        if (rows[0].status === 'rejected') {
+          abandoned = true;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      assert.true(
+        abandoned,
+        'job abandoned with two prior `completed` reservations',
+      );
+      assert.strictEqual(ranCount, 0, 'handler never ran');
+    });
+
+    test('successful job marks its own reservation completed', async function (assert) {
+      // Pins the pg-queue success path: when a worker finishes a job
+      // (resolved or rejected by the handler), the reservation row is
+      // closed with completion_reason = 'completed' so it counts toward
+      // the cap on the next attempt. Without this stamp the cap-of-2
+      // logic would treat the row as ambiguous (NULL, "still open").
+      runner.register('logJob', async () => null);
+
+      let job = await publisher.publish({
+        jobType: 'logJob',
+        concurrencyGroup: 'completion-reason-success',
+        timeout: 5,
+        args: null,
+      });
+      await job.done;
+
+      let rows = (await adapter.execute(
+        `SELECT completion_reason FROM job_reservations WHERE job_id = $1`,
+        { bind: [job.id] },
+      )) as unknown as { completion_reason: string | null }[];
+      assert.strictEqual(rows.length, 1, 'one reservation row was created');
+      assert.strictEqual(
+        rows[0].completion_reason,
+        'completed',
+        'successful run records completion_reason = "completed"',
+      );
     });
 
     test('worker stops waiting for job after its been running longer than max time-out', async function (assert) {

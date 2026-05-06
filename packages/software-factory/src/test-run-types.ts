@@ -2,31 +2,6 @@ import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 
 // ---------------------------------------------------------------------------
-// Realm Test Output Types
-// ---------------------------------------------------------------------------
-
-/**
- * Shape of the JSON summary emitted by `scripts/run-realm-tests.ts`.
- */
-export interface RunRealmTestsOutput {
-  sourceRealmPath?: string;
-  sourceRealmUrl?: string;
-  scratchPath?: string;
-  scratchRealmUrl?: string;
-  copiedFixtures?: string[];
-  expected?: number;
-  unexpected?: number;
-  skipped?: number;
-  failures?: RunRealmTestsFailure[];
-}
-
-export interface RunRealmTestsFailure {
-  title: string;
-  outcome: string;
-  error: string;
-}
-
-// ---------------------------------------------------------------------------
 // TestRun Card Types
 // ---------------------------------------------------------------------------
 

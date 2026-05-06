@@ -14,14 +14,17 @@ Part of the AMG → self-host Grafana migration:
 
 There are **two source-of-truth trees** in this package, because Grafana 12 manages different resource kinds through different APIs:
 
-| Tree                   | Tool                  | Resource kinds                               | Apply mechanism                                  |
-| ---------------------- | --------------------- | -------------------------------------------- | ------------------------------------------------ |
-| `grafanactl/resources/` | `grafanactl resources push` | Dashboards, folders                       | API push (CI on merge)                            |
-| `provisioning/`        | Grafana built-in file provisioning | Data sources, alert rules, contact points | Files mounted at `/etc/grafana/provisioning/`, read at startup |
+| Tree                    | Tool                                                                   | Resource kinds                            | Apply mechanism                                                                                                                                                              |
+| ----------------------- | ---------------------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `grafanactl/resources/` | `grafanactl resources push`                                            | Dashboards, folders                       | API push (CI on merge)                                                                                                                                                       |
+| `provisioning/`         | Grafana built-in file provisioning (local) + HTTP API bridges (hosted) | Data sources, alert rules, contact points | Local: files mounted at `/etc/grafana/provisioning/`, read at startup. Hosted: `apply-datasources.sh` + `apply-alerting.sh` push the same files through the legacy HTTP API. |
 
 **Why two trees?** `grafanactl` (Grafana Labs' official CLI replacing the archived Grizzly) only manages App Platform resources — `grafanactl resources list` shows dashboards, folders, playlists, snapshots, but **not data sources or alert rules**. Those still live behind the legacy HTTP API.
 
-Locally, `provisioning/` files are mounted into the Grafana container by `docker-compose.yml` and read at startup with `${ENV_VAR}` substitution. **For staging and production, `apply-datasources.sh` reads the same YAML files, env-var-substitutes them (e.g. `${LOKI_URL}` from SSM `/<env>/loki/internal_url`), and upserts each entry through Grafana's `/api/datasources` HTTP API** — a small bridge that gives us file-as-source-of-truth without needing image bakes or EFS mounts on the hosted side.
+Locally, `provisioning/` files are mounted into the Grafana container by `docker-compose.yml` and read at startup with `${ENV_VAR}` substitution. For staging and production, two small bridges read those same files and push them through legacy HTTP APIs — file-as-source-of-truth without needing image bakes or EFS mounts on the hosted side:
+
+- **`apply-datasources.sh`** reads each `provisioning/datasources/*.yaml`, env-var-substitutes (e.g. `${LOKI_URL}` from SSM `/<env>/loki/internal_url`), and upserts via `/api/datasources`.
+- **`apply-alerting.sh`** reads each `provisioning/alerting/*.json`, env-var-substitutes, and upserts each rule group via `/api/v1/provisioning/folder/{folderUID}/rule-groups/{group}` with `X-Disable-Provenance: true` (so each rule stays UI-editable between pushes; file remains canonical).
 
 ## Layout
 
@@ -45,6 +48,8 @@ scripts/
   apply.sh             # ./scripts/apply.sh --env <local|staging|production>
   apply-datasources.sh # internal — pushes provisioning/datasources/* via HTTP API
                        # (called by apply.sh; staging/production only)
+  apply-alerting.sh    # internal — pushes provisioning/alerting/* via the
+                       # provisioning HTTP API (called by apply.sh; staging/production only)
   pull.sh              # ./scripts/pull.sh  --env <name> --path <dir>
   check.sh             # ./scripts/check.sh --env <name>  (connectivity smoke test)
   tail-logs.sh         # ./scripts/tail-logs.sh --env <name> --service <task family>
@@ -59,7 +64,16 @@ docker-compose.yml     # local Grafana 12.4.3 + Loki 3.4.4 + Alloy 1.10.0
 
 ```sh
 # One-time: install grafanactl
+# macOS:
 brew install --formula grafanactl
+# Linux: download the prebuilt tarball from
+# https://github.com/grafana/grafanactl/releases/latest and drop the
+# binary on your PATH, e.g.:
+#   curl -sSL -o /tmp/grafanactl.tgz \
+#     https://github.com/grafana/grafanactl/releases/latest/download/grafanactl_Linux_x86_64.tar.gz
+#   tar -xzf /tmp/grafanactl.tgz -C /tmp grafanactl
+#   sudo install -m 0755 /tmp/grafanactl /usr/local/bin/grafanactl
+# (swap `Linux_x86_64` for `Linux_arm64` on aarch64.)
 
 # Bring up local Grafana + Loki + Alloy (log scraper)
 docker compose up -d
@@ -94,12 +108,12 @@ you change it, change it everywhere — `alloy/config.alloy` (local) and
 `cardstack/infra:modules/aws/ecs/firelens/templates/extra.conf.tftpl`
 (staging + production).
 
-| Label       | Local source                                          | Staging / production source                                        | When set                          |
-| ----------- | ----------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------- |
-| `env`       | constant `local` (Alloy relabel rule)                 | constant `staging` / `production` (Fluent Bit static `Labels`)     | always                            |
-| `service`   | Docker container name, leading `/` stripped           | ECS task family — `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse` | always |
-| `realm`     | opt-in via Docker label `boxel.realm=<name>`          | task env when the task pins a single realm (omitted on multi-realm workloads) | when meaningful |
-| `worker_id` | not set locally                                       | per-process worker id (`<runtime-id>-pid-<pid>`), parsed from `[worker <id> priority N]:` log line prefixes by a Fluent Bit Lua filter. Matches `job_reservations.worker_id`. | worker tasks only, lines with the prefix |
+| Label       | Local source                                 | Staging / production source                                                                                                                                                   | When set                                 |
+| ----------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `env`       | constant `local` (Alloy relabel rule)        | constant `staging` / `production` (Fluent Bit static `Labels`)                                                                                                                | always                                   |
+| `service`   | Docker container name, leading `/` stripped  | ECS task family — `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse`                                                                                       | always                                   |
+| `realm`     | opt-in via Docker label `boxel.realm=<name>` | task env when the task pins a single realm (omitted on multi-realm workloads)                                                                                                 | when meaningful                          |
+| `worker_id` | not set locally                              | per-process worker id (`<runtime-id>-pid-<pid>`), parsed from `[worker <id> priority N]:` log line prefixes by a Fluent Bit Lua filter. Matches `job_reservations.worker_id`. | worker tasks only, lines with the prefix |
 
 The local Alloy scraper drops the observability stack's own Compose
 services (`grafana`, `loki`, `alloy`) so `{env="local"}` queries don't
@@ -167,7 +181,7 @@ URL/token plumbing differs. Replace `<env>` with `local`, `staging`, or
 A LogQL selector by itself doesn't carry a time window — that comes
 from the client (Grafana Explore's range picker, `tail-logs.sh
 --since`, or `start`/`end` on the `query_range` HTTP API). The `[1d]`,
-`[5m]` etc. inside `count_over_time(... [N])` are the *aggregation*
+`[5m]` etc. inside `count_over_time(... [N])` are the _aggregation_
 window, not the query window.
 
 ```logql
@@ -222,19 +236,19 @@ URL from SSM.
 ./scripts/tail-logs.sh --env production --service synapse --since 30m --no-follow --confirm
 ```
 
-| Flag | Default | Notes |
-|------|---------|-------|
-| `--env` | (required) | `local`, `staging`, `production` |
-| `--service` | (required) | `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse` (or any local container name) |
-| `--realm` | unset | Restrict to a single realm. |
-| `--worker-id` | unset | Per-Fargate-task id; workers only. |
-| `--filter` | unset | LogQL line-filter (`\|=`); literal substring. |
-| `--regex` | unset | LogQL line-regex (`\|~`). Mutually exclusive with `--filter`. |
-| `--since` | `15m` | `30s`, `15m`, `1h`, `2d` — pattern `^\d+[smhd]$`. |
-| `--limit` | `200` | Max lines per batch. |
-| `--follow` / `--no-follow` | follow | Default polls every 5 s until ctrl-C. |
-| `--json` | text | Raw Loki response per batch (pipe to jq). |
-| `--confirm` | n/a | Required for `--env production`. |
+| Flag                       | Default    | Notes                                                                                               |
+| -------------------------- | ---------- | --------------------------------------------------------------------------------------------------- |
+| `--env`                    | (required) | `local`, `staging`, `production`                                                                    |
+| `--service`                | (required) | `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse` (or any local container name) |
+| `--realm`                  | unset      | Restrict to a single realm.                                                                         |
+| `--worker-id`              | unset      | Per-Fargate-task id; workers only.                                                                  |
+| `--filter`                 | unset      | LogQL line-filter (`\|=`); literal substring.                                                       |
+| `--regex`                  | unset      | LogQL line-regex (`\|~`). Mutually exclusive with `--filter`.                                       |
+| `--since`                  | `15m`      | `30s`, `15m`, `1h`, `2d` — pattern `^\d+[smhd]$`.                                                   |
+| `--limit`                  | `200`      | Max lines per batch.                                                                                |
+| `--follow` / `--no-follow` | follow     | Default polls every 5 s until ctrl-C.                                                               |
+| `--json`                   | text       | Raw Loki response per batch (pipe to jq).                                                           |
+| `--confirm`                | n/a        | Required for `--env production`.                                                                    |
 
 The same script powers the `tail-logs` Claude agent skill at
 `.claude/skills/tail-logs/SKILL.md` — agents call the script with
@@ -248,28 +262,28 @@ that ships to Loki **also** ships the same lines to CloudWatch — see
 the FireLens config emits two `[OUTPUT]` blocks per task. Pick which
 backend to query based on what you're doing:
 
-| Use case                                                          | Query target | Why                                                                                                                       |
-| ----------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| Reproducing a dashboard panel locally                             | Loki         | Dashboards under `grafanactl/resources/dashboards/` use LogQL — same syntax, same labels, same answer.                    |
-| Tailing live activity from a laptop                               | Loki         | `tail-logs.sh` (CS-10920) / `logcli` keep the same labels and a uniform shell.                                            |
-| Cross-service queries (e.g. "all errors in staging in the last hour") | Loki     | One label plane (`env=staging`) covers everything. CloudWatch needs a Logs Insights query per log group.                  |
-| Long-window forensics (>30 days)                                  | CloudWatch   | CloudWatch retention is set per-log-group on the existing infra; Loki's S3 lifecycle expires chunks at 180 days.          |
-| AMG-era saved query / runbook you remember                        | CloudWatch   | The CloudWatch shape didn't change — paste the old Logs Insights query and it still works through Phase 7.                |
-| AWS-side troubleshooting (ECS Agent, FireLens itself)             | CloudWatch   | Loki only sees the application's stdout. ECS-internal events are CloudWatch only.                                         |
+| Use case                                                              | Query target | Why                                                                                                              |
+| --------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Reproducing a dashboard panel locally                                 | Loki         | Dashboards under `grafanactl/resources/dashboards/` use LogQL — same syntax, same labels, same answer.           |
+| Tailing live activity from a laptop                                   | Loki         | `tail-logs.sh` (CS-10920) / `logcli` keep the same labels and a uniform shell.                                   |
+| Cross-service queries (e.g. "all errors in staging in the last hour") | Loki         | One label plane (`env=staging`) covers everything. CloudWatch needs a Logs Insights query per log group.         |
+| Long-window forensics (>30 days)                                      | CloudWatch   | CloudWatch retention is set per-log-group on the existing infra; Loki's S3 lifecycle expires chunks at 180 days. |
+| AMG-era saved query / runbook you remember                            | CloudWatch   | The CloudWatch shape didn't change — paste the old Logs Insights query and it still works through Phase 7.       |
+| AWS-side troubleshooting (ECS Agent, FireLens itself)                 | CloudWatch   | Loki only sees the application's stdout. ECS-internal events are CloudWatch only.                                |
 
 The dual-ship goes away (CloudWatch-only drop) in a follow-up ticket
 once Loki has been load-bearing for a full release cycle.
 
 ## Hosted vs local Loki
 
-| Trait                  | Local                                | Staging / production                                            |
-| ---------------------- | ------------------------------------ | --------------------------------------------------------------- |
-| Storage                | filesystem, named volume `loki_data` | S3 bucket `boxel-loki-chunks-<env>`                             |
-| Persistence            | survives `docker compose restart`; lost on `down -v` | indefinite, governed by S3 lifecycle                            |
-| Retention              | none enforced (devs prune manually)  | transition to IA at 30 d, expire at 180 d (S3 lifecycle)        |
-| `reject_old_samples`   | `false` (so backfills work)          | `true` (default, ~7d window)                                    |
-| Auth                   | none                                 | bearer token at the Grafana ALB (`/loki*` path rule); SG-only on internal NLB |
-| Reachable from         | localhost only                       | Grafana ECS tasks + FireLens log_router sidecars; laptops via the public path |
+| Trait                | Local                                                | Staging / production                                                          |
+| -------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Storage              | filesystem, named volume `loki_data`                 | S3 bucket `boxel-loki-chunks-<env>`                                           |
+| Persistence          | survives `docker compose restart`; lost on `down -v` | indefinite, governed by S3 lifecycle                                          |
+| Retention            | none enforced (devs prune manually)                  | transition to IA at 30 d, expire at 180 d (S3 lifecycle)                      |
+| `reject_old_samples` | `false` (so backfills work)                          | `true` (default, ~7d window)                                                  |
+| Auth                 | none                                                 | bearer token at the Grafana ALB (`/loki*` path rule); SG-only on internal NLB |
+| Reachable from       | localhost only                                       | Grafana ECS tasks + FireLens log_router sidecars; laptops via the public path |
 
 ## Staging / production workflow
 
@@ -293,22 +307,58 @@ CI will run `apply.sh --env staging` on merge to main once Phase 4 (CS-10932) la
 
 ## Phase status
 
-| Ticket    | Phase | Status      | Description                              |
-| --------- | ----- | ----------- | ---------------------------------------- |
-| CS-10914  | 2     | landed      | Package skeleton                         |
-| CS-10912  | 2     | landed      | Local `docker-compose.yml` for Grafana   |
-| CS-10913  | 2     | landed      | grafanactl `local`/`staging`/`prod` ctxs |
-| CS-10918  | 2.5   | landed      | Loki container + data source (local)     |
-| CS-10916  | 2.5   | landed      | Alloy log scraper for local              |
-| CS-10919  | 2.5   | landed      | Loki on ECS (staging + production)       |
-| CS-10917  | 2.5   | landed      | FireLens dual-ship (5 task families × 2 envs) |
-| CS-10920  | 2.5   | this PR     | `tail-logs.sh` + Claude agent skill      |
-| CS-10921  | 2.5   | landed      | Loki + tail-logs README                  |
-| CS-10968  | 2.5   | this PR     | Hosted Grafana → Loki data source wiring |
-| CS-10922  | 3     | landed      | AMG export and reformat                  |
-| CS-10932  | 4     | landed      | CI: apply to staging on merge            |
-| CS-10933  | 4     | not started | CI: post diff comment on PRs             |
-| CS-10936  | 5     | landed      | CI: apply to production                  |
+| Ticket   | Phase | Status      | Description                                   |
+| -------- | ----- | ----------- | --------------------------------------------- |
+| CS-10914 | 2     | landed      | Package skeleton                              |
+| CS-10912 | 2     | landed      | Local `docker-compose.yml` for Grafana        |
+| CS-10913 | 2     | landed      | grafanactl `local`/`staging`/`prod` ctxs      |
+| CS-10918 | 2.5   | landed      | Loki container + data source (local)          |
+| CS-10916 | 2.5   | landed      | Alloy log scraper for local                   |
+| CS-10919 | 2.5   | landed      | Loki on ECS (staging + production)            |
+| CS-10917 | 2.5   | landed      | FireLens dual-ship (5 task families × 2 envs) |
+| CS-10920 | 2.5   | this PR     | `tail-logs.sh` + Claude agent skill           |
+| CS-10921 | 2.5   | landed      | Loki + tail-logs README                       |
+| CS-10968 | 2.5   | this PR     | Hosted Grafana → Loki data source wiring      |
+| CS-10922 | 3     | landed      | AMG export and reformat                       |
+| CS-10932 | 4     | landed      | CI: apply to staging on merge                 |
+| CS-10933 | 4     | not started | CI: post diff comment on PRs                  |
+| CS-10936 | 5     | landed      | CI: apply to production                       |
+| CS-10930 | 6.5   | this PR     | Live indexing-progress panel                  |
+
+## Indexing progress (CS-10930)
+
+**Owner dashboard: `boxel-jobs.json`**. The Boxel Jobs dashboard owns the
+cluster-wide indexing-progress view — backlog stats, throughput / stocks
+time-series, and the per-active-job "Active Indexing" table with
+file-by-file progress bars. Drill-through "View activity feed" links
+open `boxel-logs.json` panel id 11 (Indexing Activity Feed) prefiltered
+by realm.
+
+**Hybrid storage**:
+
+- **Snapshot state** lives in Postgres `job_progress` (UNLOGGED,
+  PK = `job_id`). Three counters and a timestamp; `IndexingEventSink`
+  upserts on `indexing-started` and `indexing-finished`, and a
+  per-sink 1 s flush coalesces `file-visited` events into one UPDATE
+  per dirty job per tick. Lost on Postgres crash by design (UNLOGGED) —
+  acceptable because indexing runs that crash get re-driven and the
+  table repopulates.
+- **Streaming feed** lives in Loki. Each event also emits a structured
+  `[indexing-progress] event=… job=… realm=… …` stdout line through
+  the existing FireLens pipe. The Indexing Activity Feed panel filters
+  by `|= "[indexing-progress]" |= "${realm_url}"`.
+
+**Tunable**: set `BOXEL_INDEXING_PROGRESS_LOG_EVERY=N` (default `1`) on
+each realm-server task to log only every Nth `file-visited` event. The
+DB write-through is unaffected — it's already coalesced to ≤1 UPDATE
+per active job per second. `BOXEL_INDEXING_PROGRESS_LOG_EVERY=10` cuts
+Loki ingest cost ~10× during heavy indexing while keeping ~1 line/sec/job
+of activity-feed visibility. `started`/`finished` lines are always
+emitted regardless.
+
+Why not Prometheus: workers expose no `/metrics` endpoint today, and
+adding the AMP scrape pipe (Alloy sidecar, IAM, AMP datasource) is
+2–3 days of `cardstack/infra` work — out of scope for one panel.
 
 ## Vendored content
 
@@ -319,3 +369,11 @@ CI will run `apply.sh --env staging` on merge to main once Phase 4 (CS-10932) la
 - **Decommission the AMG-era `boxel-dashboard/` Terraform** in `cardstack/infra` once a full release cycle has gone by on the new flow. Tracked as CS-10942. After it lands, `configs/boxel-grafana-data-sources/` (in cardstack/infra) becomes the sole owner of the per-env data the boxel CI workflow reads.
 - **Drop the dual-ship to CloudWatch** once Loki has been load-bearing for a release cycle. Until then both backends receive identical lines through the FireLens config in `cardstack/infra:modules/aws/ecs/firelens/templates/extra.conf.tftpl`.
 - **CODEOWNERS.** No file in the repo today — if the team wants observability-specific reviewer requirements, file a separate ticket.
+
+### TODO(Phase 3.5): operator-action links are temporarily broken
+
+CS-10924 stripped `?authHeader=${grafana_secret}` from every operator-action URL in the dashboards (reindex / full-reindex / complete-job in `boxel-jobs.json`, add-credit in `user-credits.json`, upsert-realm-user-permission in `realm-permissions.json`) and removed the matching `grafana_secret` template variable. The links remain in the JSON so the Phase 3.5 ticket has a concrete target to retrofit, but **clicking them now hits the realm-server operator endpoints with no auth and will 401**.
+
+Phase 3.5 (CS-10987 — operator-endpoint cleanup, deferred to after the cutover) replaces the GET-link pattern with Grafana button panels that POST to the same endpoints with an `Authorization: Bearer <token>` header sourced from a Grafana-managed secret, not a querystring. Until that lands, dashboard operators run those actions via `boxel realm reindex` (CLI) or by hitting the endpoints directly with `curl -H "Authorization: ..."`.
+
+The pre-existing `grafana_secret` value that was previously baked into Terraform / piped through CI logs **must be rotated** as part of the Phase 3.5 cutover — assume compromised. (CS-10924 acceptance criteria carry-over.)

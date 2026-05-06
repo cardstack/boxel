@@ -1230,6 +1230,9 @@ export function buildPrerenderManagerApp(options?: {
   router.post('/run-command', (ctxt) =>
     proxyPrerenderRequest(ctxt, 'run-command', 'command'),
   );
+  router.post('/prerender-screenshot', (ctxt) =>
+    proxyPrerenderRequest(ctxt, 'prerender-screenshot', 'screenshot'),
+  );
 
   // Broadcast a release-batch to every server currently assigned to the
   // requested affinity (CS-10758 step 3). Any assigned server could hold

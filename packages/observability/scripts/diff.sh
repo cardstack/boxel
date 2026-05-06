@@ -54,6 +54,18 @@ source ./scripts/grafanactl-env.sh "$env_name"
 # staging/production ad-hoc runs, the operator must export the same
 # value apply.sh uses (CI fetches it from /<env>/boxel-grafana/realm_server_url
 # — see observability-apply-${env_name}.yml).
+#
+# `grafana_secret` (CS-10929) is intentionally NOT mirrored from
+# GRAFANA_SECRET. apply.sh substitutes the real secret, so the live
+# (pulled) state of every dashboard's `grafana_secret` constant template
+# variable carries the real value. If we substituted the same real value
+# on the committed side, a) any rotation drift between SSM and live
+# Grafana would surface in the diff (i.e., the diff would print the old
+# AND new secret), and b) the substituted value can appear in `git diff`
+# context lines when nearby panels change. Both leak into the PR comment
+# diff.sh's output is rendered into. Instead we redact both sides to a
+# fixed placeholder before diffing — see the `grafana_secret` arm of
+# JQ_NORMALIZE below.
 case "$env_name" in
   local) realm_server_url="${REALM_SERVER_URL:-http://localhost:4201/}" ;;
   *)
@@ -164,9 +176,22 @@ normalize folders Folder
 #      with the same value pre-diff. The match is GUARDED by
 #      `.query == "__REALM_SERVER_URL__"` so the substitution only
 #      rewrites the committed side; the pulled side always carries the
-#      live URL (never the placeholder), so leaving it untouched lets
-#      real drift between $REALM_SERVER_URL and what's actually
-#      provisioned in Grafana surface in the diff.
+#      live URL (never the placeholder), so real drift between
+#      $REALM_SERVER_URL and what's actually provisioned in Grafana
+#      surfaces in the diff.
+#   4b. `grafana_secret` redaction (CS-10929). apply.sh substitutes the
+#      realm-server shared secret into the `grafana_secret` constant
+#      template variable's `query` at push time. The live (pulled) state
+#      therefore carries the real secret, and a rotation in SSM that
+#      hasn't been re-applied would show the old secret in the diff
+#      output — which the diff.yml workflow renders into a PR comment
+#      (no Actions log masking on PR comment bodies). To keep diff.sh
+#      from leaking credentials, redact both sides to a fixed placeholder
+#      ("REDACTED") whenever a `grafana_secret` constant template
+#      variable is encountered, regardless of its current `.query` value.
+#      That covers the committed side (where `.query` is still
+#      "REPLACE_AT_APPLY_TIME") and the pulled side (where it's the
+#      substituted real secret) with one walk arm.
 #   5. Default `"value": null` on threshold step zero (CS-10991). Grafana
 #      fills in `value: null` on the lowest threshold step (the implicit
 #      `-Infinity` floor) when it stores a dashboard. AMG-era exports
@@ -174,6 +199,7 @@ normalize folders Folder
 #      look like a thresholds container (`mode` + `steps`) at index 0
 #      so a `value: null` higher up the steps array (a malformed
 #      threshold worth surfacing) still shows in the diff.
+# shellcheck disable=SC2016  # `$url` is a jq variable bound via --arg, not a shell expansion.
 JQ_NORMALIZE='
   walk(
     if type == "object"
@@ -183,6 +209,14 @@ JQ_NORMALIZE='
     then
       .query = $url
       | (if .current then .current.value = $url | .current.text = $url else . end)
+    elif type == "object"
+       and .name? == "grafana_secret"
+       and .type? == "constant"
+    then
+      # Redact both sides — see the long comment under "Normalize JSON
+      # content" above for why this is unconditional rather than guarded.
+      .query = "REDACTED"
+      | (if .current then .current.value = "REDACTED" | .current.text = "REDACTED" else . end)
     else . end
   )
   | walk(
@@ -219,7 +253,7 @@ normalize_json_content() {  # $1: src dir, $2: dest dir
   # and zsh and has no shell-state side effects.
   local f rel target
   while IFS= read -r -d '' f; do
-    rel="${f#$src/}"
+    rel="${f#"$src"/}"
     target="$dest/$rel"
     mkdir -p "$(dirname "$target")"
     jq --sort-keys --arg url "$realm_server_url" "$JQ_NORMALIZE" "$f" > "$target"

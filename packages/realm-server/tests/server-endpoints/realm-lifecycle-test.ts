@@ -90,13 +90,19 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           owner,
           endpoint,
         );
-        let realmJSON = readJSONSync(join(realmPath, '.realm.json'));
+        // CS-10053: publishable lives in realm_metadata now; createRealm
+        // no longer writes a .realm.json sidecar at all.
+        assert.notOk(
+          existsSync(join(realmPath, '.realm.json')),
+          'no .realm.json sidecar is written by createRealm',
+        );
+        let metadataRows = (await context.dbAdapter.execute(
+          `SELECT publishable FROM realm_metadata WHERE url = '${json.data.id}'`,
+        )) as { publishable: boolean | null }[];
         assert.deepEqual(
-          realmJSON,
-          {
-            publishable: true,
-          },
-          'sidecar .realm.json holds only legacy fields after CS-10051',
+          metadataRows,
+          [{ publishable: true }],
+          'realm_metadata row seeded with publishable=true',
         );
         let realmCard = readJSONSync(join(realmPath, 'realm.json'));
         assert.deepEqual(

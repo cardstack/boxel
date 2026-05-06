@@ -34,6 +34,43 @@
           "type": "loki",
           "uid": "loki"
         },
+        "description": "Streaming feed of file-by-file indexing activity emitted by every realm-server's IndexingEventSink (CS-10930). Filter narrows by the realm picker above; pre-fills when arrived via 'View activity feed' from Boxel Jobs. Set the time range wide enough to cover the indexing run you're investigating.",
+        "gridPos": {
+          "h": 12,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 11,
+        "options": {
+          "dedupStrategy": "none",
+          "enableLogDetails": true,
+          "prettifyLogMessage": false,
+          "showCommonLabels": false,
+          "showLabels": false,
+          "showTime": true,
+          "sortOrder": "Descending",
+          "wrapLogMessage": true
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "{service=~\"realm-server|worker\"} |= \"[indexing-progress]\" |= \"${realm_url}\"",
+            "queryType": "range",
+            "refId": "A"
+          }
+        ],
+        "title": "Indexing Activity Feed",
+        "type": "logs"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
         "description": "This panel displays the logs for the job selected in the drop down above. Make sure to set the date range wide enough to capture the selected logs.",
         "gridPos": {
           "h": 7,
@@ -146,6 +183,33 @@
     "tags": [],
     "templating": {
       "list": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT DISTINCT realm_url AS __value, REPLACE(REPLACE(realm_url, '${realm_server}', ''), 'https://', '') AS __text FROM boxel_index ORDER BY __text;",
+          "description": "Filter the Indexing Activity Feed to one realm. Drill-throughs from Boxel Jobs prefill this.",
+          "hide": 0,
+          "includeAll": false,
+          "label": "Realm",
+          "multi": false,
+          "name": "realm_url",
+          "options": [],
+          "query": "SELECT DISTINCT realm_url AS __value, REPLACE(REPLACE(realm_url, '${realm_server}', ''), 'https://', '') AS __text FROM boxel_index ORDER BY __text;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "hide": 2,
+          "name": "realm_server",
+          "query": "__REALM_SERVER_URL__",
+          "skipUrlSync": false,
+          "type": "constant"
+        },
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",

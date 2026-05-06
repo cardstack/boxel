@@ -4,7 +4,7 @@ import { action } from '@ember/object';
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
 import type Transition from '@ember/routing/transition';
-import { join, scheduleOnce } from '@ember/runloop';
+import { join, schedule, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 
 import { isTesting } from '@embroider/macros';
@@ -1038,8 +1038,26 @@ export default class RenderRoute extends Route<Model> {
       cardId: context.cardId,
       nonce: context.nonce,
     });
-    this.#applyErrorMetadata(context);
+    this.#applyErrorMetadataAttrs(context);
+    let canTransitionToErrorRoute = this.renderBaseParams !== undefined;
     this.#transitionToErrorRoute(transition);
+
+    // The prerender server's wait condition treats data-prerender-status='error'
+    // as "DOM is settled, snapshot now". Writing it synchronously alongside the
+    // transition means the server can poll between the status flip and Glimmer
+    // flushing the render.error template, capturing an empty <pre data-prerender-error>
+    // (CS-11024). Defer the status flip to afterRender so the readiness signal
+    // is only raised once the error template's textContent has been written.
+    //
+    // Skip the schedule when #transitionToErrorRoute took its early-failure
+    // fallback (no renderBaseParams — error fired before model() ran). That
+    // path writes data-prerender-status='unusable' synchronously to force page
+    // eviction, and the error textContent is also written synchronously on
+    // the same path, so deferring isn't needed — and overwriting 'unusable'
+    // with 'error' here would defeat the eviction signal.
+    if (canTransitionToErrorRoute) {
+      schedule('afterRender', this, this.#applyErrorStatus, context);
+    }
   }
 
   #serializeRenderError(
@@ -1248,7 +1266,7 @@ export default class RenderRoute extends Route<Model> {
     }
   }
 
-  #applyErrorMetadata(context: { cardId?: string; nonce?: string }) {
+  #applyErrorMetadataAttrs(context: { cardId?: string; nonce?: string }) {
     if (typeof document === 'undefined') {
       return;
     }
@@ -1256,7 +1274,6 @@ export default class RenderRoute extends Route<Model> {
       '[data-prerender]',
     ) as HTMLElement | null;
     if (container) {
-      container.dataset.prerenderStatus = 'error';
       if (context.cardId) {
         container.dataset.prerenderId = context.cardId;
       }
@@ -1274,6 +1291,28 @@ export default class RenderRoute extends Route<Model> {
       if (context.nonce) {
         errorElement.dataset.prerenderNonce = context.nonce;
       }
+    }
+  }
+
+  #applyErrorStatus(context: { cardId?: string; nonce?: string }) {
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
+    if (typeof document === 'undefined') {
+      return;
+    }
+    let container = document.querySelector(
+      '[data-prerender]',
+    ) as HTMLElement | null;
+    if (!container) {
+      return;
+    }
+    container.dataset.prerenderStatus = 'error';
+    if (context.cardId && !container.dataset.prerenderId) {
+      container.dataset.prerenderId = context.cardId;
+    }
+    if (context.nonce && !container.dataset.prerenderNonce) {
+      container.dataset.prerenderNonce = context.nonce;
     }
   }
 

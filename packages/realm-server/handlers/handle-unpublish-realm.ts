@@ -70,8 +70,11 @@ export default function handleUnpublishRealm({
       : `${json.publishedRealmURL}/`;
 
     try {
+      // Phase 4: read from realm_registry; alias the columns so the
+      // downstream field accessors stay the same as when this read
+      // pointed at published_realms.
       let publishedRealmData = (await query(dbAdapter, [
-        `SELECT * FROM published_realms WHERE published_realm_url =`,
+        `SELECT disk_id AS id, owner_username, source_url AS source_realm_url, url AS published_realm_url, last_published_at FROM realm_registry WHERE kind = 'published' AND url =`,
         param(publishedRealmURL),
       ])) as Pick<
         PublishedRealmTable,

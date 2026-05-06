@@ -10,7 +10,7 @@ import {
   contains,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import WeekField from '../fields/date/week';
+import WeekField from 'https://cardstack.com/base/date/week';
 import CodeSnippet from '../components/code-snippet';
 
 const standardFieldCode = `@field standard = contains(WeekField);`;
