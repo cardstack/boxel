@@ -28,8 +28,9 @@ export default async function percySnapshot(
   // attached. The hard-coded IBM Plex Sans `document.fonts.check` below stays
   // the load-bearing assertion: if the font that actually moves Percy pixels
   // is missing, fail there with a clear message.
+  let faces = Array.from(document.fonts);
   let fontResults = await Promise.allSettled(
-    Array.from(document.fonts, (f) => f.load().then(() => f)),
+    faces.map((f) => f.load().then(() => f)),
   );
   await document.fonts.ready;
 
@@ -37,22 +38,41 @@ export default async function percySnapshot(
     if (result.status !== 'rejected') {
       return [];
     }
-    let face = Array.from(document.fonts)[idx];
+    let face = faces[idx];
     let descriptor = face
       ? `${face.weight} ${face.style} "${face.family}"`
       : `<font#${idx}>`;
-    let reason = describeFontLoadError(result.reason);
-    return [`${descriptor}: ${reason}`];
+    return [{ face, descriptor, reason: describeFontLoadError(result.reason) }];
   });
-  if (failedFonts.length) {
-    console.warn(
-      `[percy-snapshot] ${failedFonts.length} @font-face load(s) failed; continuing snapshot. Failures:\n  ${failedFonts.join('\n  ')}`,
+
+  // If IBM Plex Sans itself failed to load, fail loud here — `document.fonts
+  // .check(..., '')` below cannot be relied on to catch this: per the WHATWG
+  // spec, `FontFaceSet.check` treats faces in `error` status as settled, and
+  // with empty text it can still return `true` while the required face is
+  // actually unrenderable. Without this explicit guard, Percy would capture
+  // the page with a fallback font silently substituted.
+  let failedRequired = failedFonts.find(
+    ({ face }) => face?.family === 'IBM Plex Sans',
+  );
+  if (failedRequired) {
+    throw new Error(
+      `Required font failed to load: ${failedRequired.descriptor}: ${failedRequired.reason}`,
     );
   }
 
-  // The hard-coded Sans check remains as a load-bearing assertion: this font
-  // is the default body font, and a capture without it shifts every text
-  // element by a fraction of a pixel and turns Percy red across the board.
+  if (failedFonts.length) {
+    let lines = failedFonts.map(
+      ({ descriptor, reason }) => `${descriptor}: ${reason}`,
+    );
+    console.warn(
+      `[percy-snapshot] ${failedFonts.length} @font-face load(s) failed; continuing snapshot. Failures:\n  ${lines.join('\n  ')}`,
+    );
+  }
+
+  // Belt-and-suspenders: even if no Sans face entered the `error` status, the
+  // page may still be missing a Sans weight (e.g. never declared, or evicted
+  // after a teardown). A capture without it shifts every text element by a
+  // fraction of a pixel and turns Percy red across the board.
   for (const weight of ['400', '500', '600', '700']) {
     const descriptor = `${weight} 1em IBM Plex Sans`;
     if (!document.fonts.check(descriptor, '')) {
