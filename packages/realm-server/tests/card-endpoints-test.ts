@@ -891,6 +891,14 @@ module(basename(__filename), function () {
             'public, max-age=0, must-revalidate',
             'world-readable realm advertises public cache-control',
           );
+          // The X-Boxel-Etag-Suppressed signal only fires when the
+          // foreign-deps guard rejects the ETag; a card with purely
+          // local deps must NOT carry it, otherwise ops dashboards
+          // can't tell normal from suppressed traffic.
+          assert.notOk(
+            response.get('X-Boxel-Etag-Suppressed'),
+            'no suppression signal on a card with only local deps',
+          );
         });
 
         test('returns 304 when If-None-Match matches the current ETag', async function (assert) {

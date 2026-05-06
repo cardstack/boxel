@@ -3290,7 +3290,8 @@ export class Realm {
         // attachRealmInfo() and (re)populated the realm-info cache —
         // so the cached hash is current as of this response.
         await this.getRealmInfo();
-        let etag = this.hasForeignRealmDeps(entry.deps)
+        let foreignDeps = this.hasForeignRealmDeps(entry.deps);
+        let etag = foreignDeps
           ? undefined
           : buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash());
         return createResponse({
@@ -3300,6 +3301,7 @@ export class Realm {
               'content-type': SupportedMimeType.CardJson,
               'cache-control': this.cardJsonCacheControl(requestContext),
               ...(etag ? { etag } : {}),
+              ...etagSuppressedHeader(foreignDeps),
               ...lastModifiedHeader(existingDoc),
               ...(createdAt != null
                 ? { 'x-created': formatRFC7231(createdAt * 1000) }
@@ -3423,8 +3425,12 @@ export class Realm {
     // attachRealmInfo(), but only when entry was a non-error doc.
     // On the error fallback we may still need to populate it.
     await this.getRealmInfo();
+    let foreignDeps =
+      entry && entry.type !== 'error'
+        ? this.hasForeignRealmDeps(entry.deps)
+        : false;
     let etag =
-      entry && entry.type !== 'error' && !this.hasForeignRealmDeps(entry.deps)
+      entry && entry.type !== 'error' && !foreignDeps
         ? buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash())
         : undefined;
     return createResponse({
@@ -3434,6 +3440,7 @@ export class Realm {
           'content-type': SupportedMimeType.CardJson,
           'cache-control': this.cardJsonCacheControl(requestContext),
           ...(etag ? { etag } : {}),
+          ...etagSuppressedHeader(foreignDeps),
           ...lastModifiedHeader(doc),
           ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
         },
@@ -3668,7 +3675,8 @@ export class Realm {
       // doesn't cascade `indexed_at`, so a validator we emit here
       // could 304 a follow-up request whose `included[]` should have
       // been re-fetched from the foreign realm.
-      let responseEtag = this.hasForeignRealmDeps(maybeError.deps)
+      let foreignDeps = this.hasForeignRealmDeps(maybeError.deps);
+      let responseEtag = foreignDeps
         ? undefined
         : buildCardJsonEtag(
             maybeError.indexedAt,
@@ -3681,6 +3689,7 @@ export class Realm {
             'content-type': SupportedMimeType.CardJson,
             'cache-control': cacheControl,
             ...(responseEtag ? { etag: responseEtag } : {}),
+            ...etagSuppressedHeader(foreignDeps),
             ...lastModifiedHeader(card),
             ...(createdAt != null
               ? { 'x-created': formatRFC7231(createdAt * 1000) }
@@ -5710,6 +5719,19 @@ function lastModifiedHeader(
       ? { 'last-modified': formatRFC7231(card.data.meta.lastModified * 1000) }
       : {}
   ) as {} | { 'last-modified': string };
+}
+
+// Visibility hook for the foreign-realm-deps ETag suppression — when
+// a card+json response declines to emit an ETag because it has
+// dependencies in another realm, this header surfaces the reason so
+// ops can measure how often the guard fires (Grafana / log
+// aggregation) and prioritize wiring up cross-realm dep
+// invalidation in `index-writer.calculateInvalidations`. Once that
+// lands, both this header and the suppression itself can come out.
+function etagSuppressedHeader(
+  hasForeignDeps: boolean,
+): {} | { 'X-Boxel-Etag-Suppressed': string } {
+  return hasForeignDeps ? { 'X-Boxel-Etag-Suppressed': 'foreign-deps' } : {};
 }
 
 export type ErrorReporter = (error: Error) => void;
