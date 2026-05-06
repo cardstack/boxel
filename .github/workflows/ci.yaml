@@ -47,6 +47,12 @@ jobs:
               - 'packages/runtime-common/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
+              # Test pipelines boot services via `mise run test-services:*`,
+              # which sources every script under mise-tasks/. dev-log-tee.sh is
+              # a runtime dep of the four service tasks. Treat both as part of
+              # the boot path so changes there don't slip past PR-time CI.
+              - 'mise-tasks/**'
+              - 'packages/observability/scripts/**'
             boxel:
               - *shared
               - '.github/workflows/build-host.yml'
