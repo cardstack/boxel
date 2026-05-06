@@ -12,7 +12,7 @@
  * card — missing fields, mis-shaped data, broken getters — fails here too.
  */
 
-import { retryWithPoll, type BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 import {
@@ -24,6 +24,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { logger } from './logger';
 import { validateRealmRelativePath } from './realm-relative-path';
+import { retryWithPoll } from './retry-with-poll';
 import { readCard } from './workspace-fs';
 
 let log = logger('instantiate-execution');

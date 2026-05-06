@@ -1,11 +1,11 @@
 import { resolve } from 'node:path';
 
-import { retryWithPoll } from '@cardstack/boxel-cli/api';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 import { createSeedIssue } from '../src/factory-seed';
 import type { FactoryBrief } from '../src/factory-brief';
 import { RealmIssueStore } from '../src/issue-scheduler';
+import { retryWithPoll } from '../src/retry-with-poll';
 import { expect, test } from './fixtures';
 import { buildTestClient } from './helpers/test-client';
 import { createTestWorkspace } from './helpers/workspace-fixture';

@@ -25,8 +25,3 @@ export {
 } from './src/lib/profile-manager';
 
 export { setQuiet, isQuiet } from './src/lib/cli-log';
-
-export {
-  retryWithPoll,
-  type RetryWithPollOptions,
-} from './src/lib/retry-with-poll';
