@@ -34,101 +34,185 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Operator actions: trigger a reindex via the realm-server. Each button POSTs with an Authorization: Bearer header (token substituted into a hidden constant template variable at apply time from SSM, CS-10929) and shows a confirmation dialog. Single-realm reindex targets the realm in the variable picker above; full reindex hits every realm and is the more disruptive option.",
+        "description": "Operator actions: trigger a reindex via the realm-server. Live blast-radius (pending / in-flight / oldest pending) is fetched from boxel_index/jobs every refresh; the reindex buttons disable themselves while an indexing job is already in flight for the selected realm. Each click POSTs with `Authorization: Bearer ${grafana_secret}` (substituted from SSM at apply time, CS-10929).",
         "fieldConfig": {
-          "defaults": {
-            "actions": [
-              {
-                "type": "fetch",
-                "title": "Reindex ${full_index_realm}",
-                "fetch": {
-                  "method": "POST",
-                  "url": "${realm_server}_grafana-reindex",
-                  "queryParams": [
-                    [
-                      "realm",
-                      "${full_index_realm}"
-                    ]
-                  ],
-                  "headers": [
-                    [
-                      "Authorization",
-                      "Bearer ${grafana_secret}"
-                    ]
-                  ],
-                  "body": ""
-                },
-                "confirmation": "Reindex ${full_index_realm}?",
-                "oneClick": false
-              },
-              {
-                "type": "fetch",
-                "title": "Reindex ALL realms",
-                "fetch": {
-                  "method": "POST",
-                  "url": "${realm_server}_grafana-full-reindex",
-                  "queryParams": [],
-                  "headers": [
-                    [
-                      "Authorization",
-                      "Bearer ${grafana_secret}"
-                    ]
-                  ],
-                  "body": ""
-                },
-                "confirmation": "Reindex ALL realms? This kicks off an indexing job for every realm on the server and can take a long time.",
-                "oneClick": false
-              }
-            ],
-            "color": {
-              "mode": "thresholds"
-            },
-            "mappings": [
-              {
-                "options": {
-                  "from": 0,
-                  "result": {
-                    "index": 0,
-                    "text": "Reindex"
-                  },
-                  "to": 9999999999999
-                },
-                "type": "range"
-              }
-            ],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "blue"
-                }
-              ]
-            }
-          },
+          "defaults": {},
           "overrides": []
         },
         "gridPos": {
-          "h": 4,
+          "h": 14,
           "w": 24,
           "x": 0,
           "y": 0
         },
         "id": 4,
         "options": {
-          "colorMode": "value",
-          "graphMode": "none",
-          "justifyMode": "center",
-          "orientation": "horizontal",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
+          "buttonGroup": {
+            "orientation": "center",
+            "size": "md"
           },
-          "textMode": "name"
+          "confirmModal": {
+            "body": "Please confirm the action.",
+            "cancel": "Cancel",
+            "columns": {
+              "include": ["name", "newValue"],
+              "name": "Field",
+              "newValue": "Value",
+              "oldValue": "Previous"
+            },
+            "confirm": "Confirm",
+            "elementDisplayMode": "modified",
+            "title": "Confirm operator action"
+          },
+          "elements": [
+            {
+              "id": "realm",
+              "type": "disabled",
+              "title": "Selected realm",
+              "tooltip": "Set via the \"Realm to Full Index\" variable picker above.",
+              "labelWidth": 22,
+              "section": "current",
+              "fieldName": "realm",
+              "queryField": { "refId": "A", "value": "realm" }
+            },
+            {
+              "id": "pending",
+              "type": "disabled",
+              "title": "Pending jobs (this realm)",
+              "tooltip": "Indexing jobs queued for the selected realm with no live worker reservation.",
+              "labelWidth": 22,
+              "section": "current",
+              "fieldName": "pending",
+              "queryField": { "refId": "A", "value": "pending" }
+            },
+            {
+              "id": "in_flight",
+              "type": "disabled",
+              "title": "In-flight (this realm)",
+              "tooltip": "Indexing jobs currently held by a worker for the selected realm. While > 0, the per-realm reindex button is disabled.",
+              "labelWidth": 22,
+              "section": "current",
+              "fieldName": "in_flight",
+              "queryField": { "refId": "A", "value": "in_flight" }
+            },
+            {
+              "id": "total_in_flight",
+              "type": "disabled",
+              "title": "In-flight (all realms)",
+              "tooltip": "Indexing jobs currently held by a worker across every realm on the server. While > 0, the full-reindex button is disabled.",
+              "labelWidth": 22,
+              "section": "current",
+              "fieldName": "total_in_flight",
+              "queryField": { "refId": "A", "value": "total_in_flight" }
+            },
+            {
+              "id": "oldest_pending_human",
+              "type": "disabled",
+              "title": "Oldest pending",
+              "tooltip": "Age of the oldest pending indexing job for the selected realm. Sustained age usually means workers are saturated or stuck.",
+              "labelWidth": 22,
+              "section": "current",
+              "fieldName": "oldest_pending_human",
+              "queryField": { "refId": "A", "value": "oldest_pending_human" }
+            },
+            {
+              "id": "last_reindex_status",
+              "type": "disabledTextarea",
+              "title": "Last reindex (this realm)",
+              "tooltip": "Most recent from-scratch-index for the selected realm. Reads from the jobs / job_progress tables (CS-10930).",
+              "labelWidth": 22,
+              "rows": 2,
+              "section": "current",
+              "fieldName": "last_reindex_status",
+              "queryField": { "refId": "A", "value": "last_reindex_status" }
+            },
+            {
+              "id": "btn_reindex_realm",
+              "type": "button",
+              "title": "Reindex selected realm",
+              "buttonLabel": "Reindex ${full_index_realm}",
+              "tooltip": "POST /_grafana-reindex?realm=${full_index_realm}. Disabled while an indexing job is in flight for this realm.",
+              "labelWidth": 22,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "primary",
+              "value": "",
+              "disableIf": "return Number((context.panel.elements.find(function(e){return e.id==='in_flight';})||{}).value || 0) > 0;",
+              "customCode": "const realm = '${full_index_realm}';\nconst inFlight = Number((context.panel.elements.find(function(e){return e.id==='in_flight';})||{}).value || 0);\nconst pending = Number((context.panel.elements.find(function(e){return e.id==='pending';})||{}).value || 0);\nconst oldest = (context.panel.elements.find(function(e){return e.id==='oldest_pending_human';})||{}).value || 'n/a';\nif (inFlight > 0) {\n  context.grafana.notifyWarning(['Reindex blocked', 'An indexing job is already in flight for this realm. Wait for it to finish before triggering a new one.']);\n  return;\n}\nif (!window.confirm('Reindex ' + realm + '?\\n\\nBlast radius:\\n  pending: ' + pending + '\\n  oldest pending: ' + oldest + '\\n\\nThis will queue a from-scratch index for the selected realm only.')) { return; }\ntry {\n  const r = await fetch('${realm_server}_grafana-reindex?realm=' + encodeURIComponent(realm), { method: 'POST', headers: { 'Authorization': 'Bearer ${grafana_secret}' } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Reindex queued', 'Started reindex of ' + realm]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Reindex failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Reindex failed', String(err)]);\n}\n"
+            },
+            {
+              "id": "btn_reindex_all",
+              "type": "button",
+              "title": "Reindex all realms",
+              "buttonLabel": "Reindex ALL realms",
+              "tooltip": "POST /_grafana-full-reindex. Disabled while any indexing job is in flight on the server. Long-running — every realm is reindexed.",
+              "labelWidth": 22,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "destructive",
+              "value": "",
+              "disableIf": "return Number((context.panel.elements.find(function(e){return e.id==='total_in_flight';})||{}).value || 0) > 0;",
+              "customCode": "const totalInFlight = Number((context.panel.elements.find(function(e){return e.id==='total_in_flight';})||{}).value || 0);\nif (totalInFlight > 0) {\n  context.grafana.notifyWarning(['Full reindex blocked', 'There are ' + totalInFlight + ' indexing job(s) in flight across all realms. Wait for them to finish before triggering a full reindex.']);\n  return;\n}\nif (!window.confirm('Reindex ALL realms?\\n\\nThis kicks off an indexing job for every realm on the server and can take a long time.')) { return; }\ntry {\n  const r = await fetch('${realm_server}_grafana-full-reindex', { method: 'POST', headers: { 'Authorization': 'Bearer ${grafana_secret}' } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Full reindex queued', 'Started reindex of all realms.']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Full reindex failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Full reindex failed', String(err)]);\n}\n"
+            }
+          ],
+          "initial": {
+            "code": "",
+            "contentType": "application/json",
+            "datasource": "cef5v5sl9k7i8f",
+            "getPayload": "return {};",
+            "highlight": false,
+            "method": "datasource",
+            "payload": {}
+          },
+          "layout": {
+            "orientation": "horizontal",
+            "padding": 10,
+            "sectionVariant": "default",
+            "sections": [
+              { "id": "current", "name": "Current state" },
+              { "id": "actions", "name": "Actions" }
+            ],
+            "variant": "split"
+          },
+          "reset": {
+            "backgroundColor": "purple",
+            "foregroundColor": "yellow",
+            "icon": "process",
+            "text": "Refresh",
+            "variant": "hidden"
+          },
+          "resetAction": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "mode": "initial",
+            "payload": {}
+          },
+          "saveDefault": { "icon": "save", "text": "Save Default", "variant": "hidden" },
+          "submit": {
+            "backgroundColor": "purple",
+            "foregroundColor": "yellow",
+            "icon": "cloud-upload",
+            "text": "Submit",
+            "variant": "hidden"
+          },
+          "sync": false,
+          "update": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "payload": {},
+            "payloadMode": "all"
+          },
+          "updateEnabled": "disabled"
         },
-        "pluginVersion": "12.4.3",
+        "pluginVersion": "6.2.0",
         "targets": [
           {
             "datasource": {
@@ -138,29 +222,12 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT 1 AS click;",
-            "refId": "A",
-            "sql": {
-              "columns": [
-                {
-                  "parameters": [],
-                  "type": "function"
-                }
-              ],
-              "groupBy": [
-                {
-                  "property": {
-                    "type": "string"
-                  },
-                  "type": "groupBy"
-                }
-              ],
-              "limit": 50
-            }
+            "rawSql": "WITH realm_jobs AS (\n  SELECT j.*\n    FROM jobs j\n   WHERE j.job_type IN ('from-scratch-index','incremental-index')\n     AND COALESCE(j.args->>'realmURL','') = '${full_index_realm}'\n),\nrealm_pending AS (\n  SELECT COUNT(*) AS n,\n         MIN(j.created_at) AS oldest_created\n    FROM realm_jobs j\n    LEFT JOIN job_reservations jr ON j.id = jr.job_id\n      AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n   WHERE j.status = 'unfulfilled' AND jr.id IS NULL\n),\nrealm_in_flight AS (\n  SELECT COUNT(*) AS n\n    FROM realm_jobs j\n    JOIN job_reservations jr ON j.id = jr.job_id\n      AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n   WHERE j.finished_at IS NULL\n),\nall_in_flight AS (\n  SELECT COUNT(*) AS n\n    FROM jobs j\n    JOIN job_reservations jr ON j.id = jr.job_id\n      AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n   WHERE j.finished_at IS NULL\n     AND j.job_type IN ('from-scratch-index','incremental-index')\n),\nlast_reindex AS (\n  SELECT j.id, j.created_at AS started, j.finished_at AS finished,\n         j.status,\n         COALESCE(jp.files_completed, 0) AS files_completed,\n         COALESCE(jp.total_files, 0) AS total_files\n    FROM realm_jobs j\n    LEFT JOIN job_progress jp ON jp.job_id = j.id\n   WHERE j.job_type = 'from-scratch-index'\n   ORDER BY j.created_at DESC\n   LIMIT 1\n)\nSELECT\n  '${full_index_realm}' AS realm,\n  COALESCE((SELECT n FROM realm_pending), 0) AS pending,\n  COALESCE((SELECT n FROM realm_in_flight), 0) AS in_flight,\n  COALESCE((SELECT n FROM all_in_flight), 0) AS total_in_flight,\n  CASE\n    WHEN (SELECT oldest_created FROM realm_pending) IS NULL THEN 'none'\n    ELSE TO_CHAR(NOW() - (SELECT oldest_created FROM realm_pending), 'HH24:MI:SS')\n      || ' (since ' || TO_CHAR((SELECT oldest_created FROM realm_pending) AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') || ' UTC)'\n  END AS oldest_pending_human,\n  COALESCE(\n    (SELECT\n       CASE\n         WHEN finished IS NULL AND started IS NOT NULL THEN\n           'running — ' || files_completed || '/' || NULLIF(total_files,0) || ' files, started ' || TO_CHAR(started AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') || ' UTC'\n         WHEN finished IS NOT NULL THEN\n           UPPER(COALESCE(status,'finished')) || ' at ' || TO_CHAR(finished AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') || ' UTC'\n         ELSE COALESCE(status,'unknown')\n       END\n     FROM last_reindex),\n    'never'\n  ) AS last_reindex_status;",
+            "refId": "A"
           }
         ],
         "title": "Operator Actions",
-        "type": "stat"
+        "type": "volkovlabs-form-panel"
       },
       {
         "datasource": {

@@ -34,114 +34,191 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Operator actions: add extra credit to the user selected above. Each button POSTs to the realm-server with an Authorization: Bearer header (token substituted into a hidden constant template variable at apply time from SSM, CS-10929) and shows a confirmation dialog before firing.",
+        "description": "Operator actions: grant extra credit to the selected user. Live balance + last grant are fetched from credits_ledger every refresh; the custom-amount button disables when the entered amount is non-positive. Each click POSTs with `Authorization: Bearer ${grafana_secret}` (substituted from SSM at apply time, CS-10929).",
         "fieldConfig": {
-          "defaults": {
-            "actions": [
-              {
-                "type": "fetch",
-                "title": "Add 1,000 credits",
-                "fetch": {
-                  "method": "POST",
-                  "url": "${realm_server}_grafana-add-credit",
-                  "queryParams": [
-                    ["user", "${matrix_user_id}"],
-                    ["credit", "1000"]
-                  ],
-                  "headers": [
-                    ["Authorization", "Bearer ${grafana_secret}"]
-                  ],
-                  "body": ""
-                },
-                "confirmation": "Add 1,000 credits to ${matrix_user_id}?",
-                "oneClick": false
-              },
-              {
-                "type": "fetch",
-                "title": "Add 10,000 credits",
-                "fetch": {
-                  "method": "POST",
-                  "url": "${realm_server}_grafana-add-credit",
-                  "queryParams": [
-                    ["user", "${matrix_user_id}"],
-                    ["credit", "10000"]
-                  ],
-                  "headers": [
-                    ["Authorization", "Bearer ${grafana_secret}"]
-                  ],
-                  "body": ""
-                },
-                "confirmation": "Add 10,000 credits to ${matrix_user_id}?",
-                "oneClick": false
-              },
-              {
-                "type": "fetch",
-                "title": "Add 100,000 credits",
-                "fetch": {
-                  "method": "POST",
-                  "url": "${realm_server}_grafana-add-credit",
-                  "queryParams": [
-                    ["user", "${matrix_user_id}"],
-                    ["credit", "100000"]
-                  ],
-                  "headers": [
-                    ["Authorization", "Bearer ${grafana_secret}"]
-                  ],
-                  "body": ""
-                },
-                "confirmation": "Add 100,000 credits to ${matrix_user_id}? This is the largest grant — make sure this is intentional.",
-                "oneClick": false
-              }
-            ],
-            "color": {
-              "mode": "thresholds"
-            },
-            "mappings": [
-              {
-                "options": {
-                  "from": 0,
-                  "result": {
-                    "index": 0,
-                    "text": "Add Credit"
-                  },
-                  "to": 9999999999999
-                },
-                "type": "range"
-              }
-            ],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "yellow"
-                }
-              ]
-            }
-          },
+          "defaults": {},
           "overrides": []
         },
         "gridPos": {
-          "h": 4,
+          "h": 14,
           "w": 24,
           "x": 0,
           "y": 0
         },
         "id": 2,
         "options": {
-          "colorMode": "value",
-          "graphMode": "none",
-          "justifyMode": "center",
-          "orientation": "horizontal",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
+          "buttonGroup": {
+            "orientation": "center",
+            "size": "md"
           },
-          "textMode": "name"
+          "confirmModal": {
+            "body": "Please confirm the action.",
+            "cancel": "Cancel",
+            "columns": {
+              "include": ["name", "newValue"],
+              "name": "Field",
+              "newValue": "Value",
+              "oldValue": "Previous"
+            },
+            "confirm": "Confirm",
+            "elementDisplayMode": "modified",
+            "title": "Confirm operator action"
+          },
+          "elements": [
+            {
+              "id": "user_id",
+              "type": "disabled",
+              "title": "User",
+              "tooltip": "Set via the \"User ID\" variable picker above.",
+              "labelWidth": 22,
+              "section": "current",
+              "fieldName": "user_id",
+              "queryField": { "refId": "A", "value": "user_id" }
+            },
+            {
+              "id": "remaining_plan_allowance",
+              "type": "disabled",
+              "title": "Remaining plan allowance",
+              "tooltip": "Plan-allowance credits left in the active subscription cycle (plan_allowance + plan_allowance_used, summed). Excludes extra credit.",
+              "labelWidth": 22,
+              "section": "current",
+              "fieldName": "remaining_plan_allowance",
+              "queryField": { "refId": "A", "value": "remaining_plan_allowance" }
+            },
+            {
+              "id": "remaining_extra_credit",
+              "type": "disabled",
+              "title": "Remaining extra credit",
+              "tooltip": "Extra credit currently available (extra_credit + extra_credit_used, summed across all time).",
+              "labelWidth": 22,
+              "section": "current",
+              "fieldName": "remaining_extra_credit",
+              "queryField": { "refId": "A", "value": "remaining_extra_credit" }
+            },
+            {
+              "id": "last_extra_credit_grant",
+              "type": "disabled",
+              "title": "Last extra-credit grant",
+              "tooltip": "Most recent extra_credit row in credits_ledger for this user.",
+              "labelWidth": 22,
+              "section": "current",
+              "fieldName": "last_extra_credit_grant",
+              "queryField": { "refId": "A", "value": "last_extra_credit_grant" }
+            },
+            {
+              "id": "custom_amount",
+              "type": "number",
+              "title": "Custom amount",
+              "tooltip": "Used by the \"Add custom amount\" button below. Disabled while ≤ 0.",
+              "labelWidth": 22,
+              "min": 1,
+              "max": 1000000,
+              "step": 1,
+              "value": 5000,
+              "section": "actions"
+            },
+            {
+              "id": "btn_add_1k",
+              "type": "button",
+              "title": "Add 1,000 credits",
+              "buttonLabel": "+1,000",
+              "tooltip": "POST /_grafana-add-credit?user=${matrix_user_id}&credit=1000.",
+              "labelWidth": 22,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "primary",
+              "value": "",
+              "customCode": "if (!window.confirm('Add 1,000 credits to ${matrix_user_id}?')) { return; }\nconst params = new URLSearchParams({ user: '${matrix_user_id}', credit: '1000' });\ntry {\n  const r = await fetch('${realm_server}_grafana-add-credit?' + params.toString(), { method: 'POST', headers: { 'Authorization': 'Bearer ${grafana_secret}' } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Credit added', '+1,000 credits to ${matrix_user_id}']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Add credit failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Add credit failed', String(err)]);\n}\n"
+            },
+            {
+              "id": "btn_add_10k",
+              "type": "button",
+              "title": "Add 10,000 credits",
+              "buttonLabel": "+10,000",
+              "tooltip": "POST /_grafana-add-credit?user=${matrix_user_id}&credit=10000.",
+              "labelWidth": 22,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "primary",
+              "value": "",
+              "customCode": "if (!window.confirm('Add 10,000 credits to ${matrix_user_id}?')) { return; }\nconst params = new URLSearchParams({ user: '${matrix_user_id}', credit: '10000' });\ntry {\n  const r = await fetch('${realm_server}_grafana-add-credit?' + params.toString(), { method: 'POST', headers: { 'Authorization': 'Bearer ${grafana_secret}' } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Credit added', '+10,000 credits to ${matrix_user_id}']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Add credit failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Add credit failed', String(err)]);\n}\n"
+            },
+            {
+              "id": "btn_add_100k",
+              "type": "button",
+              "title": "Add 100,000 credits",
+              "buttonLabel": "+100,000",
+              "tooltip": "POST /_grafana-add-credit?user=${matrix_user_id}&credit=100000. Largest preset — confirm before clicking.",
+              "labelWidth": 22,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "destructive",
+              "value": "",
+              "customCode": "if (!window.confirm('Add 100,000 credits to ${matrix_user_id}?\\n\\nThis is the largest preset — make sure this is intentional.')) { return; }\nconst params = new URLSearchParams({ user: '${matrix_user_id}', credit: '100000' });\ntry {\n  const r = await fetch('${realm_server}_grafana-add-credit?' + params.toString(), { method: 'POST', headers: { 'Authorization': 'Bearer ${grafana_secret}' } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Credit added', '+100,000 credits to ${matrix_user_id}']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Add credit failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Add credit failed', String(err)]);\n}\n"
+            },
+            {
+              "id": "btn_add_custom",
+              "type": "button",
+              "title": "Add custom amount",
+              "buttonLabel": "Add custom amount",
+              "tooltip": "POST /_grafana-add-credit with the value of \"Custom amount\". Disabled while the amount is ≤ 0.",
+              "labelWidth": 22,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "secondary",
+              "value": "",
+              "disableIf": "return Number((context.panel.elements.find(function(e){return e.id==='custom_amount';})||{}).value || 0) <= 0;",
+              "customCode": "const amount = Number((context.panel.elements.find(function(e){return e.id==='custom_amount';})||{}).value || 0);\nif (amount <= 0) {\n  context.grafana.notifyWarning(['Invalid amount', 'Enter a positive credit amount before clicking.']);\n  return;\n}\nif (!window.confirm('Add ' + amount.toLocaleString() + ' credits to ${matrix_user_id}?')) { return; }\nconst params = new URLSearchParams({ user: '${matrix_user_id}', credit: String(amount) });\ntry {\n  const r = await fetch('${realm_server}_grafana-add-credit?' + params.toString(), { method: 'POST', headers: { 'Authorization': 'Bearer ${grafana_secret}' } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Credit added', '+' + amount.toLocaleString() + ' credits to ${matrix_user_id}']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Add credit failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Add credit failed', String(err)]);\n}\n"
+            }
+          ],
+          "initial": {
+            "code": "",
+            "contentType": "application/json",
+            "datasource": "cef5v5sl9k7i8f",
+            "getPayload": "return {};",
+            "highlight": false,
+            "method": "datasource",
+            "payload": {}
+          },
+          "layout": {
+            "orientation": "horizontal",
+            "padding": 10,
+            "sectionVariant": "default",
+            "sections": [
+              { "id": "current", "name": "Current state" },
+              { "id": "actions", "name": "Grant credit" }
+            ],
+            "variant": "split"
+          },
+          "reset": { "icon": "process", "text": "Refresh", "variant": "hidden" },
+          "resetAction": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "mode": "initial",
+            "payload": {}
+          },
+          "saveDefault": { "icon": "save", "text": "Save Default", "variant": "hidden" },
+          "submit": { "icon": "cloud-upload", "text": "Submit", "variant": "hidden" },
+          "sync": false,
+          "update": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "payload": {},
+            "payloadMode": "all"
+          },
+          "updateEnabled": "disabled"
         },
-        "pluginVersion": "12.4.3",
+        "pluginVersion": "6.2.0",
         "targets": [
           {
             "datasource": {
@@ -151,29 +228,12 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT 1 AS click;",
-            "refId": "A",
-            "sql": {
-              "columns": [
-                {
-                  "parameters": [],
-                  "type": "function"
-                }
-              ],
-              "groupBy": [
-                {
-                  "property": {
-                    "type": "string"
-                  },
-                  "type": "groupBy"
-                }
-              ],
-              "limit": 50
-            }
+            "rawSql": "WITH balance AS (\n  SELECT\n    SUM(CASE WHEN c.credit_type = 'plan_allowance' AND s.status = 'active' THEN c.credit_amount ELSE 0 END) +\n    SUM(CASE WHEN c.credit_type = 'plan_allowance_used' AND s.status = 'active' THEN c.credit_amount ELSE 0 END) AS remaining_plan_allowance,\n    SUM(CASE WHEN c.credit_type = 'extra_credit' THEN c.credit_amount ELSE 0 END) +\n    SUM(CASE WHEN c.credit_type = 'extra_credit_used' THEN c.credit_amount ELSE 0 END) AS remaining_extra_credit\n  FROM users u\n  LEFT JOIN credits_ledger c ON c.user_id = u.id\n  LEFT JOIN subscription_cycles sc ON sc.id = c.subscription_cycle_id\n  LEFT JOIN subscriptions s ON s.id = sc.subscription_id\n  WHERE u.matrix_user_id = '${matrix_user_id}'\n),\nlast_grant AS (\n  SELECT c.credit_amount, c.created_at\n    FROM users u\n    JOIN credits_ledger c ON c.user_id = u.id\n   WHERE u.matrix_user_id = '${matrix_user_id}'\n     AND c.credit_type = 'extra_credit'\n   ORDER BY c.created_at DESC\n   LIMIT 1\n)\nSELECT\n  '${matrix_user_id}' AS user_id,\n  COALESCE((SELECT remaining_plan_allowance FROM balance), 0) AS remaining_plan_allowance,\n  COALESCE((SELECT remaining_extra_credit FROM balance), 0) AS remaining_extra_credit,\n  COALESCE(\n    (SELECT '+' || credit_amount::TEXT || ' credits at ' || TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') || ' UTC' FROM last_grant),\n    'never'\n  ) AS last_extra_credit_grant;",
+            "refId": "A"
           }
         ],
         "title": "Add Extra Credit to ${matrix_user_id}",
-        "type": "stat"
+        "type": "volkovlabs-form-panel"
       },
       {
         "datasource": {
