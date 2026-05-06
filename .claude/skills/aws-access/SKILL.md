@@ -356,7 +356,7 @@ The boxel deployed services all log to CloudWatch under predictable group names:
 | `ecs-boxel-realm-server-staging` | `ecs-boxel-realm-server-production` | Realm-server requests, indexer drive lines, prerender-client (manager) calls. The main place to grep `requestId=…`. |
 | `ecs-boxel-prerender-server-staging` | `ecs-boxel-prerender-server-production` | Prerender-server endpoint logs (per-render breakdown), the periodic `prerender-queue-snapshot` line, page-pool warnings. |
 | `ecs-boxel-prerender-manager-staging` | `ecs-boxel-prerender-manager-production` | Manager proxy decisions (queueMs, target assignment). |
-| `ecs-boxel-worker-staging` | `ecs-boxel-worker-production` | Background worker / job queue (the realm-server itself runs the worker manager — there is no separate worker-manager log group). |
+| `ecs-boxel-worker-staging` | `ecs-boxel-worker-production` | Worker-manager + spawned worker child processes (same ECS task, so manager and worker logs share this group). The realm-server only publishes jobs; it does not run them. |
 
 Cross-component grep is the bread-and-butter pattern: every request carries `requestId=<uuid>` through realm-server → manager → prerender-server, so a single `requestId` filter will collate the whole call.
 
