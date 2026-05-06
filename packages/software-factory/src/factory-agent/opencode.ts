@@ -620,9 +620,15 @@ async function waitForSessionIdle(
   // race short-circuits this).
   const STABILITY_WINDOW_MS = 60_000;
   const MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes; comfortable upper bound for opus
+  // After this many consecutive `session.list` failures, give up — the
+  // opencode subprocess has almost certainly died (TypeError: fetch
+  // failed). We return cleanly so the outer factory loop can continue
+  // to the next iteration instead of crashing the whole run.
+  const MAX_CONSECUTIVE_LIST_FAILURES = 5;
   let started = Date.now();
   let lastUpdated: number | undefined;
   let stableSince: number | undefined;
+  let consecutiveFailures = 0;
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -632,22 +638,39 @@ async function waitForSessionIdle(
       );
     }
 
-    let res = (await client.session.list({
-      query: { directory: workspaceDir },
-    })) as {
-      data?: Array<{ id: string; time: { updated: number } }>;
-    };
-    let session = res.data?.find((s) => s.id === sessionId);
-    if (session) {
-      let updated = session.time.updated;
-      if (lastUpdated === undefined || updated !== lastUpdated) {
-        lastUpdated = updated;
-        stableSince = Date.now();
-      } else if (
-        stableSince !== undefined &&
-        Date.now() - stableSince >= STABILITY_WINDOW_MS
-      ) {
+    let res:
+      | { data?: Array<{ id: string; time: { updated: number } }> }
+      | undefined;
+    try {
+      res = (await client.session.list({
+        query: { directory: workspaceDir },
+      })) as {
+        data?: Array<{ id: string; time: { updated: number } }>;
+      };
+      consecutiveFailures = 0;
+    } catch (err) {
+      consecutiveFailures++;
+      if (consecutiveFailures >= MAX_CONSECUTIVE_LIST_FAILURES) {
+        log.warn(
+          `opencode session.list failed ${consecutiveFailures}× in a row (${String(err)}); treating session as ended`,
+        );
         return;
+      }
+    }
+
+    if (res) {
+      let session = res.data?.find((s) => s.id === sessionId);
+      if (session) {
+        let updated = session.time.updated;
+        if (lastUpdated === undefined || updated !== lastUpdated) {
+          lastUpdated = updated;
+          stableSince = Date.now();
+        } else if (
+          stableSince !== undefined &&
+          Date.now() - stableSince >= STABILITY_WINDOW_MS
+        ) {
+          return;
+        }
       }
     }
 
