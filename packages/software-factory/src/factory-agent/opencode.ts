@@ -128,6 +128,31 @@ const FACTORY_MCP_TOOL_NAMES = new Set([
   'request_clarification',
 ]);
 
+/**
+ * Per-session tool whitelist for opencode. We need fs (`read` / `write` /
+ * `edit`) for the workspace, `bash` to shell out to `boxel
+ * read-transpiled` / `boxel search`, and `glob` / `grep` to inspect
+ * existing state. Everything else opencode bundles by default
+ * (`webfetch`, `task`, `todowrite`, `skill`, `question`, `invalid`)
+ * costs tokens on every request without serving the factory's flow,
+ * so we explicitly disable them. Our own factory MCP tools come
+ * through the MCP transport and aren't affected by this map.
+ */
+const ENABLED_OPENCODE_TOOLS = {
+  read: true,
+  write: true,
+  edit: true,
+  bash: true,
+  glob: true,
+  grep: true,
+  webfetch: false,
+  task: false,
+  todowrite: false,
+  skill: false,
+  question: false,
+  invalid: false,
+};
+
 export interface OpencodeAgentConfig {
   /** OpenRouter model ID (e.g., `anthropic/claude-opus-4-7`). */
   model: string;
@@ -358,6 +383,13 @@ export class OpencodeFactoryAgent implements LoopAgent {
               modelID: this.config.model,
             },
             system: systemPrompt,
+            // Trim opencode's default tool catalog to only what the
+            // factory actually uses. Every tool definition costs
+            // tokens on every chat completion — disabling the ones
+            // we never need (webfetch, task, todowrite, skill,
+            // question, invalid) cuts thousands of tokens out of
+            // each request and keeps the model focused.
+            tools: ENABLED_OPENCODE_TOOLS,
             parts: [{ type: 'text', text: prompt }],
           },
         })
