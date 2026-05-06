@@ -99,10 +99,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
   private fetchFilenamesFn: (
     realmUrl: string,
   ) => Promise<{ filenames: string[]; error?: string }>;
-  private getNextSeqFn: (
-    slug: string,
-    targetRealm: string,
-  ) => Promise<number>;
+  private getNextSeqFn: (slug: string, targetRealm: string) => Promise<number>;
 
   constructor(config: InstantiateValidationStepConfig) {
     this.config = config;

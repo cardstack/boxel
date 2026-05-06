@@ -395,11 +395,7 @@ async function runSingleInstance(
     );
   }
 
-  let prepared = await prepareExampleInstance(
-    targetRealm,
-    workspaceDir,
-    path,
-  );
+  let prepared = await prepareExampleInstance(targetRealm, workspaceDir, path);
   if ('error' in prepared) {
     return emptyErrorResult(prepared.error);
   }

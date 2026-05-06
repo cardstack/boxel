@@ -17,9 +17,7 @@ import { readCard, writeCard } from './workspace-fs';
  * Infer the darkfactory module URL from a target realm URL.
  * Uses the realm's origin to construct the URL.
  */
-export function inferDarkfactoryModuleUrl(
-  targetRealm: string,
-): string {
+export function inferDarkfactoryModuleUrl(targetRealm: string): string {
   let parsed = new URL(targetRealm);
   return new URL('software-factory/darkfactory', parsed.origin + '/').href;
 }

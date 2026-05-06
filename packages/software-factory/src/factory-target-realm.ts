@@ -116,19 +116,12 @@ function resolveTargetRealmOwner(): string {
   );
 }
 
-function resolveTargetRealm(
-  explicitTargetRealm: string | null,
-): string {
+function resolveTargetRealm(explicitTargetRealm: string | null): string {
   if (!explicitTargetRealm) {
-    throw new FactoryEntrypointUsageError(
-      'Missing required --target-realm',
-    );
+    throw new FactoryEntrypointUsageError('Missing required --target-realm');
   }
 
-  return normalizeUrl(
-    explicitTargetRealm,
-    '--target-realm',
-  );
+  return normalizeUrl(explicitTargetRealm, '--target-realm');
 }
 
 function resolveRealmServerUrl(
@@ -151,9 +144,7 @@ function resolveRealmServerUrl(
 }
 
 function extractEndpointFromRealmUrl(targetRealm: string): string {
-  let segments = new URL(targetRealm).pathname
-    .split('/')
-    .filter(Boolean);
+  let segments = new URL(targetRealm).pathname.split('/').filter(Boolean);
   let endpoint = segments.at(-1);
 
   if (!endpoint) {

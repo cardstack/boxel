@@ -39,10 +39,7 @@ let log = logger('issue-loop');
  * See ValidationPipeline for the real implementation.
  */
 export interface Validator {
-  validate(
-    targetRealm: string,
-    iteration: number,
-  ): Promise<ValidationResults>;
+  validate(targetRealm: string, iteration: number): Promise<ValidationResults>;
   /** Format validation results for LLM context and issue descriptions. */
   formatForContext(results: ValidationResults): string;
 }
@@ -346,10 +343,7 @@ export async function runIssueLoop(
       // Validation — runs after every agent turn.
       // Pass the iteration number so all steps use it as the sequence
       // number in artifact filenames (parse_slug-1, lint_slug-1, etc.)
-      validationResults = await validator.validate(
-        targetRealm,
-        iteration,
-      );
+      validationResults = await validator.validate(targetRealm, iteration);
 
       // Push the validator's artifact cards (ParseResult / LintResult /
       // EvalResult / InstantiateResult / TestRun) to the realm so they

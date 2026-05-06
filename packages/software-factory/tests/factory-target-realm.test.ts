@@ -55,8 +55,7 @@ module('factory-target-realm', function (hooks) {
     useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
-      targetRealm:
-        'https://realms.example.test/boxel/hassan/personal/',
+      targetRealm: 'https://realms.example.test/boxel/hassan/personal/',
       realmServerUrl: 'https://realms.example.test/boxel/',
     });
 
@@ -174,8 +173,7 @@ module('factory-target-realm', function (hooks) {
     useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
-      targetRealm:
-        'https://realms.example.test/typed-by-user/personal/',
+      targetRealm: 'https://realms.example.test/typed-by-user/personal/',
       realmServerUrl: null,
     });
 

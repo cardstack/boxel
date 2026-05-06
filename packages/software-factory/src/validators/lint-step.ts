@@ -81,10 +81,7 @@ export class LintValidationStep implements ValidationStepRunner {
   private config: LintValidationStepConfig;
   private lastSequenceNumber = 0;
 
-  private getNextSeqFn: (
-    slug: string,
-    targetRealm: string,
-  ) => Promise<number>;
+  private getNextSeqFn: (slug: string, targetRealm: string) => Promise<number>;
 
   constructor(config: LintValidationStepConfig) {
     this.config = config;

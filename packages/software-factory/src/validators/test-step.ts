@@ -197,10 +197,7 @@ export class TestValidationStep implements ValidationStepRunner {
     }
 
     // Step 3: Read back the completed TestRun card for detailed results
-    let details = await this.readTestRunDetails(
-      targetRealm,
-      handle.testRunId,
-    );
+    let details = await this.readTestRunDetails(targetRealm, handle.testRunId);
 
     if (handle.status === 'error') {
       log.info(
@@ -292,9 +289,7 @@ export class TestValidationStep implements ValidationStepRunner {
   // Private helpers
   // -------------------------------------------------------------------------
 
-  private async discoverTestFiles(
-    targetRealm: string,
-  ): Promise<string[]> {
+  private async discoverTestFiles(targetRealm: string): Promise<string[]> {
     let result = await this.fetchFilenamesFn(targetRealm);
 
     if (result.error) {

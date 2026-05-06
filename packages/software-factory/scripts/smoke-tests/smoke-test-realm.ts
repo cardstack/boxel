@@ -153,9 +153,7 @@ async function main() {
   if (!targetRealm) {
     let username = active.matrixId.replace(/^@/, '').replace(/:.*$/, '');
     targetRealm = `http://localhost:4201/${username}/smoke-test-realm/`;
-    log.info(
-      `No --target-realm specified, using default: ${targetRealm}\n`,
-    );
+    log.info(`No --target-realm specified, using default: ${targetRealm}\n`);
   }
 
   if (!targetRealm.endsWith('/')) {
@@ -213,11 +211,7 @@ async function main() {
   );
 
   log.info('  Writing hello.gts (HelloCard definition)...');
-  let defResult = await client.write(
-    targetRealm,
-    'hello.gts',
-    HELLO_CARD_GTS,
-  );
+  let defResult = await client.write(targetRealm, 'hello.gts', HELLO_CARD_GTS);
   log.info(
     defResult.ok ? '  ✓ hello.gts' : `  ✗ hello.gts: ${defResult.error}`,
   );

@@ -85,10 +85,7 @@ export class EvalValidationStep implements ValidationStepRunner {
   private config: EvalValidationStepConfig;
   private lastSequenceNumber = 0;
 
-  private getNextSeqFn: (
-    slug: string,
-    targetRealm: string,
-  ) => Promise<number>;
+  private getNextSeqFn: (slug: string, targetRealm: string) => Promise<number>;
 
   constructor(config: EvalValidationStepConfig) {
     this.config = config;

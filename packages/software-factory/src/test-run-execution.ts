@@ -102,9 +102,7 @@ export async function resolveTestRun(
 async function findResumableTestRun(
   options: TestRunRealmOptions,
 ): Promise<ResumableTestRun | undefined> {
-  let targetRealm = ensureTrailingSlash(
-    options.targetRealm,
-  );
+  let targetRealm = ensureTrailingSlash(options.targetRealm);
 
   let result = await options.client.search(options.targetRealm, {
     filter: {
@@ -503,9 +501,7 @@ async function runQunitInBrowser(
     let realmParam = encodeURIComponent(options.targetRealm);
     let pageUrl = `${testPageUrl}?liveTest=true&realmURL=${realmParam}&hidepassed`;
 
-    let realmToken = await options.client.getRealmToken(
-      options.targetRealm,
-    );
+    let realmToken = await options.client.getRealmToken(options.targetRealm);
     if (realmToken) {
       let realmOrigin = new URL(options.targetRealm).origin;
       await page.route(`${realmOrigin}/**`, (route) => {

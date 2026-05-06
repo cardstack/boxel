@@ -207,11 +207,7 @@ module('factory-entrypoint', function (hooks) {
 
   test('parseFactoryEntrypointArgs rejects missing required inputs', function (assert) {
     assert.throws(
-      () =>
-        parseFactoryEntrypointArgs([
-          '--target-realm',
-          targetRealm,
-        ]),
+      () => parseFactoryEntrypointArgs(['--target-realm', targetRealm]),
       (error: unknown) =>
         error instanceof FactoryEntrypointUsageError &&
         error.message === 'Missing required --brief-url',

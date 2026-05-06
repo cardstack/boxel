@@ -68,10 +68,8 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
 
   let realmServerURL = realm.realmServerURL.href;
   let newEndpoint = `e2e-realm-${Date.now()}`;
-  let targetRealm = new URL(
-    `${targetUsername}/${newEndpoint}/`,
-    realmServerURL,
-  ).href;
+  let targetRealm = new URL(`${targetUsername}/${newEndpoint}/`, realmServerURL)
+    .href;
 
   let tempProfileHome = createTempProfileHome(
     targetUsername,
@@ -131,8 +129,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       targetRealm,
     );
 
-    let seedIssueUrl = new URL('Issues/bootstrap-seed', targetRealm)
-      .href;
+    let seedIssueUrl = new URL('Issues/bootstrap-seed', targetRealm).href;
     let seedIssueResponse = await fetch(seedIssueUrl, {
       headers: {
         Accept: SupportedMimeType.CardSource,

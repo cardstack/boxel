@@ -219,10 +219,7 @@ export function parseFactoryEntrypointArgs(
 
   return {
     briefUrl: normalizeUrl(briefUrl, '--brief-url'),
-    targetRealm: normalizeUrl(
-      targetRealm,
-      '--target-realm',
-    ),
+    targetRealm: normalizeUrl(targetRealm, '--target-realm'),
     realmServerUrl,
     agent: parsedAgent.provider,
     openRouterModel: parsedAgent.openRouterModel,

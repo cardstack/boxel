@@ -98,10 +98,7 @@ export class ParseValidationStep implements ValidationStepRunner {
   private config: ParseValidationStepConfig;
   private lastSequenceNumber = 0;
 
-  private getNextSeqFn: (
-    slug: string,
-    targetRealm: string,
-  ) => Promise<number>;
+  private getNextSeqFn: (slug: string, targetRealm: string) => Promise<number>;
 
   constructor(config: ParseValidationStepConfig) {
     this.config = config;
