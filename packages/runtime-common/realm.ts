@@ -1005,6 +1005,55 @@ export class Realm {
     return [...invalidations];
   }
 
+  // Two-phase variant for the deferred-indexing path. Awaits the durable
+  // queue insert so pre-enqueue failures (DB partial outage) propagate to
+  // the caller; the returned `settled` promise resolves once the worker
+  // finishes, onInvalidation runs, and the caller's onSettled hook runs.
+  // Worker-time and post-worker failures reject `settled` and surface via
+  // error_doc inside the worker as before.
+  //
+  // The caller's onSettled hook receives the collected invalidations and
+  // runs *inside the indexing deferred lifecycle* — before the deferred is
+  // fulfilled and removed from #incrementalIndexingDeferreds. Routing the
+  // post-worker invalidation broadcast through this hook (instead of an
+  // outer .then() on settled) means realm.incrementalIndexing() genuinely
+  // waits for the broadcast, which is the only way an afterEach drain can
+  // prevent the broadcast from racing with mock-matrix teardown.
+  private async enqueueIndexUpdateAndCollectInvalidations(
+    urls: URL[],
+    opts: {
+      delete?: true;
+      clientRequestId?: string | null;
+      onSettled?: (invalidations: string[]) => Promise<void> | void;
+    },
+  ): Promise<{ settled: Promise<void> }> {
+    if (urls.length === 0) {
+      if (opts.onSettled) {
+        await opts.onSettled([]);
+      }
+      return { settled: Promise.resolve() };
+    }
+
+    let invalidations = new Set<string>();
+    let { settled } = await this.#realmIndexUpdater.enqueueUpdate(urls, {
+      ...(opts?.delete ? { delete: true } : {}),
+      clientRequestId: opts?.clientRequestId ?? null,
+      onInvalidation: async (invalidatedURLs: URL[]) => {
+        await this.handleExecutableInvalidations(invalidatedURLs);
+        for (let invalidatedURL of invalidatedURLs) {
+          invalidations.add(invalidatedURL.href);
+        }
+      },
+      onSettled: async () => {
+        if (opts.onSettled) {
+          await opts.onSettled([...invalidations]);
+        }
+      },
+    });
+
+    return { settled };
+  }
+
   private broadcastIncrementalInvalidationEvent(
     invalidations: string[],
     opts?: { clientRequestId?: string | null },
@@ -1331,22 +1380,50 @@ export class Realm {
           clientRequestId,
         });
       } else {
-        // Fire-and-forget. The indexing deferred is registered synchronously
-        // inside #realmIndexUpdater.update() before any await, so
-        // realm.incrementalIndexing() reflects this work as pending the
-        // moment we return — callers that need determinism (tests, future
-        // sync flows) can await that. The invalidation broadcast must move
-        // inside the deferred so listeners get the populated invalidations
-        // set, not an empty one.
-        let indexingPromise = performIndex().then(() => {
-          this.broadcastIncrementalInvalidationEvent([...invalidations], {
+        // Two-phase: await the durable queue insert inline so pre-enqueue
+        // failures (DB partial outage) propagate back to this method's
+        // caller and ultimately to the HTTP client — without that, a write
+        // could land on disk and never get indexed, leaving the realm
+        // silently stale. The worker settle is fire-and-forget; worker-
+        // time failures surface via error_doc inside the worker as before.
+        // Deferred is registered synchronously inside enqueueUpdate before
+        // any await, so realm.incrementalIndexing() reflects this work as
+        // pending the moment we return.
+        // Snapshot any invalidations from in-loop intermediate flushes (the
+        // module-then-instance gate at line 1262) so the broadcast unions
+        // them with the deferred-flush results. Without this, mixed-batch
+        // writeMany calls with waitForIndex:false would silently drop the
+        // earlier flushes' invalidations and leave subscribers with stale
+        // state for those URLs. Single-file callers (+source / binary)
+        // never hit the intermediate path, so this snapshot is empty for
+        // them — but it's correct for the primitive in general.
+        let priorInvalidations = [...invalidations];
+        let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
+          urls,
+          {
             clientRequestId,
-          });
-        });
-        indexingPromise.catch((err: unknown) => {
+            // Route the post-worker broadcast through onSettled so it runs
+            // INSIDE the indexing deferred lifecycle. Without this, the
+            // broadcast would fire from an outer .then() after the deferred
+            // is already removed — meaning realm.incrementalIndexing()
+            // resolves before the broadcast, and an afterEach drain that
+            // awaits the drain still races with the broadcast against
+            // test teardown (mock-matrix already destroyed → broadcast
+            // throws on serverState).
+            onSettled: (deferredInvalidations) => {
+              this.broadcastIncrementalInvalidationEvent(
+                [...new Set([...priorInvalidations, ...deferredInvalidations])],
+                { clientRequestId },
+              );
+            },
+          },
+        );
+        settled.catch((err: unknown) => {
           let message = err instanceof Error ? err.message : String(err);
+          // Covers worker job rejection AND post-worker realm-side work
+          // (onInvalidation / handleExecutableInvalidations / broadcast).
           this.#log.error(
-            `Async indexing failed for ${this.url} (waitForIndex=false): ${message}`,
+            `Deferred indexing chain failed for ${this.url}: ${message}`,
           );
         });
       }
@@ -2464,12 +2541,18 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Source-content-type callers, by definition, don't depend on indexed
+    // state — if they did they would use application/vnd.card+json. Return
+    // as soon as the source bytes are durable; indexing happens async and
+    // surfaces errors via error_doc as before. Subscribers to indexing
+    // events still see the broadcast once the worker settles.
     let { lastModified, created } = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text(),
       {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
         serializeFile: false,
+        waitForIndex: false,
       },
     );
     return createResponse({
@@ -2489,6 +2572,9 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Binary files have no indexable card representation, so awaiting the
+    // index update would be even more wasteful than for card source. Return
+    // as soon as the bytes are durable.
     let bytes = new Uint8Array(await request.arrayBuffer());
     let { lastModified, created } = await this.write(
       this.paths.local(new URL(request.url)),
@@ -2496,6 +2582,7 @@ export class Realm {
       {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
         serializeFile: false,
+        waitForIndex: false,
       },
     );
     return createResponse({
@@ -2975,6 +3062,18 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Drain any in-flight incremental indexing before serializing the new
+    // card. fileSerialization runs lookupDefinition on the card's
+    // adoptsFrom module, and with CS-11003's deferred +source POST a
+    // module that was just uploaded may not be indexed yet —
+    // serialization would then throw FilterRefersToNonexistentTypeError
+    // and the +json POST would fail. Draining here makes the JSON-API
+    // path tolerant of an immediately-preceding +source POST without
+    // disturbing the +json POST's own synchronous-indexing contract.
+    let pending = this.incrementalIndexing();
+    if (pending) {
+      await pending;
+    }
     let body = await request.text();
     let json;
     try {
@@ -3372,6 +3471,17 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Drain any in-flight incremental indexing before reading the card from
+    // the index. With CS-11003's deferred +source POST, an immediately-
+    // following GET +json after a definition rewrite would otherwise read
+    // a stale snapshot — e.g. a post-rename instance still serialized
+    // under the old schema. Read endpoints serve the realm's canonical
+    // indexed view; the small wait when indexing is genuinely pending is
+    // the right tradeoff vs returning stale state.
+    let pending = this.incrementalIndexing();
+    if (pending) {
+      await pending;
+    }
     let requestedLocalPath = this.paths.local(new URL(request.url));
     let requestedHadJsonExtension = requestedLocalPath.endsWith('.json');
     let localPath = requestedLocalPath;
@@ -4074,6 +4184,16 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Drain any in-flight incremental indexing before reading boxel_index.
+    // The publishability report scans indexed instances for private-realm
+    // imports + error_doc rows; with CS-11003's deferred indexing on
+    // +source POSTs, an immediately-following publishability call could
+    // otherwise see a stale snapshot and miss real violations (e.g. a
+    // leaky card that just landed but isn't indexed yet).
+    let pending = this.incrementalIndexing();
+    if (pending) {
+      await pending;
+    }
     let sourceRealmURL = ensureTrailingSlash(this.url);
     let resourceEntries = new Map<string, ResourceIndexEntry[]>();
     let visibilityCache = new Map<string, RealmVisibility>();
