@@ -81,8 +81,9 @@ export async function removeRealm(
   }
   let normalized = existing.map(ensureTrailingSlash);
   let previousCount = normalized.length;
+  let matchCount = normalized.filter((u) => u === realmUrl).length;
 
-  if (!normalized.includes(realmUrl)) {
+  if (matchCount === 0) {
     return {
       realmUrl,
       removed: false,
@@ -95,7 +96,7 @@ export async function removeRealm(
     };
   }
 
-  let nextCount = previousCount - 1;
+  let nextCount = previousCount - matchCount;
 
   if (options.dryRun) {
     return {
@@ -166,6 +167,19 @@ export async function removeRealm(
       error: `Server delete succeeded, but Matrix unlink failed: ${
         err instanceof Error ? err.message : String(err)
       }`,
+    };
+  }
+
+  if (!unlinked) {
+    return {
+      realmUrl,
+      removed: false,
+      serverDeleted: true,
+      unlinked: false,
+      previousCount,
+      nextCount: previousCount,
+      error:
+        'Server delete succeeded, but Matrix account_data did not contain the URL by the time we PUT (concurrent edit?). Server-side files are gone; please refresh and check your realm list.',
     };
   }
 

@@ -129,6 +129,33 @@ describe('realm remove (integration)', () => {
     expect(after).not.toContain(realmUrl);
   });
 
+  it('removes legacy duplicate entries (with and without trailing slash)', async () => {
+    let name = uniqueRealmName();
+    let { realmUrl } = await createRealm(name, `Test ${name}`, {
+      profileManager,
+    });
+    let withoutSlash = realmUrl.replace(/\/$/, '');
+
+    // createRealm adds the trailing-slash form. Inject the trailing-slash-less
+    // form directly so the list looks like a legacy account_data with both
+    // shapes for the same realm.
+    await profileManager.addToUserRealms(withoutSlash);
+    let beforeRemove = await profileManager.getUserRealms();
+    expect(beforeRemove).toContain(realmUrl);
+    expect(beforeRemove).toContain(withoutSlash);
+
+    let result = await removeRealm({ realmUrl, profileManager });
+    expect(result.error).toBeUndefined();
+    expect(result.removed).toBe(true);
+    expect(result.serverDeleted).toBe(true);
+    expect(result.unlinked).toBe(true);
+    expect(result.previousCount - result.nextCount).toBe(2);
+
+    let after = await profileManager.getUserRealms();
+    expect(after).not.toContain(realmUrl);
+    expect(after).not.toContain(withoutSlash);
+  });
+
   it('fails with a 403 error when the caller does not own the realm', async () => {
     let realmName = uniqueRealmName();
     let { realmUrl } = await createRealm(realmName, `Test ${realmName}`, {

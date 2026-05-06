@@ -14,6 +14,7 @@ interface MatrixLoginResponse {
 }
 
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 export async function matrixLogin(
   matrixUrl: string,
@@ -177,18 +178,23 @@ export async function addRealmToMatrixAccountData(
   }
 }
 
-// Returns true when the URL was present and a write occurred, false when the
-// URL wasn't in the list (caller decides how to surface that to the user).
+// Returns true when at least one entry was removed and a write occurred,
+// false when no entry matched the URL (caller decides how to surface that
+// to the user). Comparison is normalized via `ensureTrailingSlash` and every
+// matching entry is dropped, so legacy duplicates like `https://host/realm`
+// + `https://host/realm/` are both cleaned out in a single PUT.
 export async function removeRealmFromMatrixAccountData(
   matrixAuth: MatrixAuth,
   realmUrl: string,
 ): Promise<boolean> {
+  let target = ensureTrailingSlash(realmUrl);
   let existingRealms = await getUserRealmsFromMatrixAccountData(matrixAuth);
-
-  if (!existingRealms.includes(realmUrl)) {
+  let next = existingRealms.filter(
+    (url) => ensureTrailingSlash(url) !== target,
+  );
+  if (next.length === existingRealms.length) {
     return false;
   }
-  let next = existingRealms.filter((url) => url !== realmUrl);
   let putResponse = await fetch(userRealmsAccountDataUrl(matrixAuth), {
     method: 'PUT',
     headers: {
