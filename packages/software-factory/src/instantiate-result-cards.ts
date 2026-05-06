@@ -22,7 +22,7 @@ export interface InstantiateResultAttributes {
 }
 
 export interface InstantiateResultRealmOptions {
-  targetRealmUrl: string;
+  targetRealm: string;
   client: BoxelCLIClient;
   /** Local workspace directory — InstantiateResult cards are written here. */
   workspaceDir: string;

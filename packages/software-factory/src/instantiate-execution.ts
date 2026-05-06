@@ -73,7 +73,7 @@ export type InstantiateCardFn = (
 ) => Promise<InstantiateModuleResult>;
 
 export interface DiscoverRealmSpecsOptions {
-  targetRealmUrl: string;
+  targetRealm: string;
   client: BoxelCLIClient;
   /** Injected for testing — defaults to a client.search over Spec cards. */
   searchSpecsFn?: (
@@ -82,7 +82,7 @@ export interface DiscoverRealmSpecsOptions {
 }
 
 export interface InstantiateRealmSpecsOptions {
-  targetRealmUrl: string;
+  targetRealm: string;
   realmServerUrl: string;
   client: BoxelCLIClient;
   /**
@@ -105,7 +105,7 @@ export interface InstantiateRealmSpecsOutput {
 // ---------------------------------------------------------------------------
 
 export interface RunInstantiateInMemoryOptions {
-  targetRealmUrl: string;
+  targetRealm: string;
   realmServerUrl: string;
   client: BoxelCLIClient;
   /**
@@ -180,10 +180,10 @@ export async function discoverRealmSpecs(
   let totalWaitMs = 5_000;
   let pollMs = 250;
   let deadline = Date.now() + totalWaitMs;
-  let result = await searchSpecsFn(options.targetRealmUrl);
+  let result = await searchSpecsFn(options.targetRealm);
   while (!result.error && result.specs.length === 0 && Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, pollMs));
-    result = await searchSpecsFn(options.targetRealmUrl);
+    result = await searchSpecsFn(options.targetRealm);
   }
   return result;
 }
@@ -214,11 +214,11 @@ export async function instantiateRealmSpecs(
 
   let startedAt = Date.now();
   let records: InstanceInstantiationRecord[] = [];
-  let normalizedRealmUrl = ensureTrailingSlash(options.targetRealmUrl);
+  let normalizedRealmUrl = ensureTrailingSlash(options.targetRealm);
 
   for (let spec of specs) {
     let exampleInstances = await collectExampleInstances(
-      options.targetRealmUrl,
+      options.targetRealm,
       options.workspaceDir,
       spec,
     );
@@ -249,7 +249,7 @@ export async function instantiateRealmSpecs(
         instantiateCardFn(
           spec.moduleUrl,
           spec.cardName,
-          options.targetRealmUrl,
+          options.targetRealm,
           example.data || undefined,
         ),
       ),
@@ -330,7 +330,7 @@ export async function runInstantiateInMemory(
   if (options.path != null) {
     return runSingleInstance(
       options.path,
-      options.targetRealmUrl,
+      options.targetRealm,
       options.workspaceDir,
       instantiateCardFn,
     );
@@ -339,7 +339,7 @@ export async function runInstantiateInMemory(
   let specsResult: { specs: SpecInfo[]; error?: string };
   try {
     specsResult = await discoverRealmSpecs({
-      targetRealmUrl: options.targetRealmUrl,
+      targetRealm: options.targetRealm,
       client: options.client,
     });
   } catch (err) {
@@ -366,7 +366,7 @@ export async function runInstantiateInMemory(
   try {
     let { records, durationMs } = await instantiateRealmSpecs(
       {
-        targetRealmUrl: options.targetRealmUrl,
+        targetRealm: options.targetRealm,
         realmServerUrl: options.realmServerUrl,
         client: options.client,
         workspaceDir: options.workspaceDir,
@@ -397,7 +397,7 @@ export async function runInstantiateInMemory(
 
 async function runSingleInstance(
   path: string,
-  targetRealmUrl: string,
+  targetRealm: string,
   workspaceDir: string,
   instantiateCardFn: InstantiateCardFn,
 ): Promise<RunInstantiateResult> {
@@ -411,11 +411,7 @@ async function runSingleInstance(
     );
   }
 
-  let prepared = await prepareExampleInstance(
-    targetRealmUrl,
-    workspaceDir,
-    path,
-  );
+  let prepared = await prepareExampleInstance(targetRealm, workspaceDir, path);
   if ('error' in prepared) {
     return emptyErrorResult(prepared.error);
   }
@@ -426,7 +422,7 @@ async function runSingleInstance(
     outcome = await instantiateCardFn(
       prepared.codeRef.module,
       prepared.codeRef.name,
-      targetRealmUrl,
+      targetRealm,
       prepared.data,
     );
   } catch (err) {
@@ -455,7 +451,7 @@ async function runSingleInstance(
  * codeRef. Mirrors the per-example prep inside `instantiateRealmSpecs`.
  */
 async function prepareExampleInstance(
-  targetRealmUrl: string,
+  targetRealm: string,
   workspaceDir: string,
   exampleUrl: string,
 ): Promise<
@@ -514,7 +510,7 @@ async function prepareExampleInstance(
   // step produced when exampleUrls were always extensionless).
   let exampleCardUrl = new URL(
     exampleUrl.replace(/\.json$/, ''),
-    ensureTrailingSlash(targetRealmUrl),
+    ensureTrailingSlash(targetRealm),
   ).href;
 
   // `isSingleCardDocument` has already confirmed `adoptsFrom` is a
@@ -540,14 +536,14 @@ async function prepareExampleInstance(
 }
 
 async function collectExampleInstances(
-  targetRealmUrl: string,
+  targetRealm: string,
   workspaceDir: string,
   spec: SpecInfo,
 ): Promise<{ url: string; data: string }[]> {
   let exampleInstances: { url: string; data: string }[] = [];
   for (let exampleUrl of spec.exampleUrls) {
     let prepared = await prepareExampleInstance(
-      targetRealmUrl,
+      targetRealm,
       workspaceDir,
       exampleUrl,
     );

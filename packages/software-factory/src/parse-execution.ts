@@ -84,7 +84,7 @@ export interface ParseErrorViolation {
 }
 
 export interface DiscoverFilesOptions {
-  targetRealmUrl: string;
+  targetRealm: string;
   client: BoxelCLIClient;
   /** Injected for testing — defaults to client.listFiles. */
   fetchFilenames?: (
@@ -97,7 +97,7 @@ export interface DiscoverFilesOptions {
 }
 
 export interface ParseRealmFilesOptions {
-  targetRealmUrl: string;
+  targetRealm: string;
   client: BoxelCLIClient;
   /**
    * Local workspace directory to read source files from. The realm is
@@ -136,7 +136,7 @@ export interface ParseRealmFilesOutput {
 // ---------------------------------------------------------------------------
 
 export interface RunParseInMemoryOptions {
-  targetRealmUrl: string;
+  targetRealm: string;
   client: BoxelCLIClient;
   /**
    * Local workspace directory to read source files from.
@@ -191,14 +191,14 @@ export interface RunParseResult {
 export async function discoverParseableGtsFiles(
   options: Pick<
     DiscoverFilesOptions,
-    'targetRealmUrl' | 'client' | 'fetchFilenames'
+    'targetRealm' | 'client' | 'fetchFilenames'
   >,
 ): Promise<string[]> {
   let fetchFilenames =
     options.fetchFilenames ??
     ((realmUrl: string) => options.client.listFiles(realmUrl));
 
-  let result = await fetchFilenames(options.targetRealmUrl);
+  let result = await fetchFilenames(options.targetRealm);
   if (result.error) {
     throw new Error(result.error);
   }
@@ -216,7 +216,7 @@ export async function discoverParseableGtsFiles(
 export async function discoverJsonExampleFiles(
   options: Pick<
     DiscoverFilesOptions,
-    'targetRealmUrl' | 'client' | 'searchSpecsFn'
+    'targetRealm' | 'client' | 'searchSpecsFn'
   >,
 ): Promise<string[]> {
   let searchSpecsFn =
@@ -233,10 +233,10 @@ export async function discoverJsonExampleFiles(
   let totalWaitMs = 5_000;
   let pollMs = 250;
   let deadline = Date.now() + totalWaitMs;
-  let result = await searchSpecsFn(options.targetRealmUrl);
+  let result = await searchSpecsFn(options.targetRealm);
   while (!result.error && result.specs.length === 0 && Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, pollMs));
-    result = await searchSpecsFn(options.targetRealmUrl);
+    result = await searchSpecsFn(options.targetRealm);
   }
   if (result.error) {
     log.warn(`Failed to discover specs for JSON validation: ${result.error}`);
@@ -302,7 +302,7 @@ export async function parseRealmFiles(
     let gtsContents: { path: string; content: string }[] = [];
     for (let file of gtsFiles) {
       try {
-        let readResult = await readFileFn(options.targetRealmUrl, file);
+        let readResult = await readFileFn(options.targetRealm, file);
         if (!readResult.ok) {
           recordReadError(
             file,
@@ -359,7 +359,7 @@ export async function parseRealmFiles(
   if (jsonFiles.length > 0) {
     let jsonSettled = await Promise.allSettled(
       jsonFiles.map(async (jsonUrl) => {
-        let readResult = await readFileFn(options.targetRealmUrl, jsonUrl);
+        let readResult = await readFileFn(options.targetRealm, jsonUrl);
         if (!readResult.ok) {
           return {
             file: jsonUrl,
@@ -459,11 +459,11 @@ export async function runParseInMemory(
     try {
       [gtsFiles, jsonFiles] = await Promise.all([
         discoverParseableGtsFiles({
-          targetRealmUrl: options.targetRealmUrl,
+          targetRealm: options.targetRealm,
           client: options.client,
         }),
         discoverJsonExampleFiles({
-          targetRealmUrl: options.targetRealmUrl,
+          targetRealm: options.targetRealm,
           client: options.client,
         }),
       ]);
@@ -491,7 +491,7 @@ export async function runParseInMemory(
   try {
     let { fileResults, durationMs } = await parseRealmFiles(
       {
-        targetRealmUrl: options.targetRealmUrl,
+        targetRealm: options.targetRealm,
         client: options.client,
         workspaceDir: options.workspaceDir,
       },
