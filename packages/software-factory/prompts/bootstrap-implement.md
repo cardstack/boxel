@@ -17,9 +17,13 @@ Description:
 
 ## What to Create
 
-Create the following artifacts in the target realm using the available tools
-(`write_file`, `update_issue`, `create_knowledge`). Use `search_realm` and
-`read_file` to inspect existing state before creating anything.
+Create the following artifacts in the target realm by calling the
+**`Write`** tool to produce each `.json` file. The cwd is the local
+workspace mirror of the target realm; file paths below are
+workspace-relative. Use **`Read`** / **`Glob`** to inspect existing
+state before creating anything, and **`Bash`** to shell out to
+`boxel search` if you need to query the realm. Do not describe what
+you would write — call `Write` to actually create each file.
 
 ### 1. Project Card
 
@@ -110,13 +114,18 @@ dependency cards are implemented before cards that consume them.
 
 ## Instructions
 
-1. Use `read_file` to read the brief at the URL above (if it is in a realm) or use the brief content in the description
-2. Derive the slug and project code from the brief title
-3. Create the Project card
-4. Create Knowledge Article cards (at least brief context + agent onboarding)
-5. Identify entry-point cards from the brief — these are the top-level cards users interact with
-6. Create one implementation Issue per entry-point card, with all relationships wired
-7. Call `signal_done()` — the orchestrator manages issue status transitions. Do NOT set the issue status yourself.
+1. The brief content is included verbatim in the issue description above. Do not fetch the URL — read the description.
+2. Derive the slug and project code from the brief title.
+3. Call `Write` to create the **Project card** at `Projects/<slug>.json`.
+4. Call `Write` to create the **Knowledge Article cards** in `Knowledge Articles/` (at least brief context + agent onboarding).
+5. Identify entry-point cards from the brief — these are the top-level cards users interact with.
+6. Call `Write` to create **one implementation Issue per entry-point card** at `Issues/<slug>-<card-name-slug>.json`, with all relationships wired.
+7. Call **`signal_done`** (factory MCP tool) — the orchestrator manages issue status transitions. Do NOT set the issue status yourself.
+
+Create artifacts in the order listed — Project first, then Knowledge
+Articles, then Issues — so that relationship targets exist when
+referenced. **You must actually call the `Write` tool for each file.
+Calling `signal_done` without writing the artifacts is a failure.**
 
 Create artifacts in the order listed — Project first, then Knowledge Articles,
 then Issues — so that relationship targets exist when referenced.

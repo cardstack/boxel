@@ -362,6 +362,24 @@ export class OpencodeFactoryAgent implements LoopAgent {
       let prompt = this.buildPrompt(context);
       let systemPrompt = this.buildSystemPrompt(context);
 
+      if (this.config.debug) {
+        log.info(
+          `--- system prompt (${systemPrompt.length} chars) ---\n${systemPrompt}\n--- end system prompt ---`,
+        );
+        log.info(
+          `--- user prompt (${prompt.length} chars) ---\n${prompt}\n--- end user prompt ---`,
+        );
+        log.info(
+          `enabled opencode tools: ${Object.entries(ENABLED_OPENCODE_TOOLS)
+            .filter(([, v]) => v)
+            .map(([k]) => k)
+            .join(', ')}`,
+        );
+        log.info(
+          `enabled factory MCP tools: ${[...FACTORY_MCP_TOOL_NAMES].join(', ')}`,
+        );
+      }
+
       // The SDK's `session.prompt` HTTP call is *supposed* to block
       // until the model + tool loop completes, but in opencode
       // 1.14.34 the response often isn't flushed once the loop exits
