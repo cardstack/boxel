@@ -5,7 +5,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
 export interface ResolveFactoryTargetRealmOptions {
-  targetRealmIdentifier: string | null;
+  targetRealm: string | null;
   realmServerUrl: string | null;
 }
 
@@ -33,7 +33,7 @@ export interface FactoryTargetRealmBootstrapActions {
 export function resolveFactoryTargetRealm(
   options: ResolveFactoryTargetRealmOptions,
 ): FactoryTargetRealmResolution {
-  let url = resolveTargetRealmIdentifier(options.targetRealmIdentifier);
+  let url = resolveTargetRealm(options.targetRealm);
   let serverUrl = resolveRealmServerUrl(options.realmServerUrl, url);
   let ownerUsername = resolveTargetRealmOwner();
 
@@ -116,24 +116,24 @@ function resolveTargetRealmOwner(): string {
   );
 }
 
-function resolveTargetRealmIdentifier(
-  explicitTargetRealmIdentifier: string | null,
+function resolveTargetRealm(
+  explicitTargetRealm: string | null,
 ): string {
-  if (!explicitTargetRealmIdentifier) {
+  if (!explicitTargetRealm) {
     throw new FactoryEntrypointUsageError(
-      'Missing required --target-realm-identifier',
+      'Missing required --target-realm',
     );
   }
 
   return normalizeUrl(
-    explicitTargetRealmIdentifier,
-    '--target-realm-identifier',
+    explicitTargetRealm,
+    '--target-realm',
   );
 }
 
 function resolveRealmServerUrl(
   explicitRealmServerUrl: string | null,
-  _targetRealmIdentifier: string,
+  _targetRealm: string,
 ): string {
   if (explicitRealmServerUrl) {
     return normalizeUrl(explicitRealmServerUrl, '--realm-server-url');
@@ -150,15 +150,15 @@ function resolveRealmServerUrl(
   );
 }
 
-function extractEndpointFromRealmUrl(targetRealmIdentifier: string): string {
-  let segments = new URL(targetRealmIdentifier).pathname
+function extractEndpointFromRealmUrl(targetRealm: string): string {
+  let segments = new URL(targetRealm).pathname
     .split('/')
     .filter(Boolean);
   let endpoint = segments.at(-1);
 
   if (!endpoint) {
     throw new FactoryEntrypointUsageError(
-      `Target realm URL "${targetRealmIdentifier}" is missing an endpoint segment`,
+      `Target realm URL "${targetRealm}" is missing an endpoint segment`,
     );
   }
 

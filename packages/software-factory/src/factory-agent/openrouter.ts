@@ -330,7 +330,7 @@ export class OpenRouterFactoryAgent implements LoopAgent {
     }));
 
     return this.promptLoader.load('system', {
-      targetRealmIdentifier: context.targetRealmIdentifier,
+      targetRealm: context.targetRealm,
       skills,
     });
   }

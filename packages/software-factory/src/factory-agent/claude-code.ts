@@ -318,7 +318,7 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     }));
 
     let base = this.promptLoader.load('system', {
-      targetRealmIdentifier: context.targetRealmIdentifier,
+      targetRealm: context.targetRealm,
       skills,
     });
 

@@ -232,8 +232,8 @@ async function main(): Promise<void> {
   let safetyClient = makeMockClient(async () => new Response('{}'));
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
-    targetRealmIdentifier: 'https://realms.example.test/user/target/',
-    sourceRealmIdentifier: 'https://realms.example.test/user/source/',
+    targetRealm: 'https://realms.example.test/user/target/',
+    sourceRealm: 'https://realms.example.test/user/source/',
     allowedRealmPrefixes: ['https://realms.example.test/user/scratch-'],
     client: safetyClient,
   });
@@ -292,7 +292,7 @@ async function main(): Promise<void> {
   let mockClient = makeMockClient(mockFetch);
   let mockExecutor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
-    targetRealmIdentifier: 'https://realms.example.test/user/target/',
+    targetRealm: 'https://realms.example.test/user/target/',
     client: mockClient,
   });
 
@@ -348,13 +348,13 @@ async function main(): Promise<void> {
   let toolBuilderClient = makeMockClient(toolBuilderFetch);
   let toolBuilderExecutor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
-    targetRealmIdentifier: 'https://realms.example.test/user/target/',
+    targetRealm: 'https://realms.example.test/user/target/',
     client: toolBuilderClient,
   });
 
   let factoryTools = buildFactoryTools(
     {
-      targetRealmIdentifier: 'https://realms.example.test/user/target/',
+      targetRealm: 'https://realms.example.test/user/target/',
       darkfactoryModuleUrl:
         'https://realms.example.test/software-factory/darkfactory',
       realmServerUrl: 'https://realms.example.test/',

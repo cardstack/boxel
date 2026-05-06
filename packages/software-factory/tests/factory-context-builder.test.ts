@@ -162,7 +162,7 @@ module('factory-context-builder > skill resolution', function () {
       project,
       issue,
       knowledge: [],
-      targetRealmIdentifier: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
     });
 
     assert.strictEqual(resolver.calls.length, 1, 'resolve() called once');
@@ -197,7 +197,7 @@ module('factory-context-builder > skill resolution', function () {
       project: makeProject(),
       issue: makeIssue(),
       knowledge: [],
-      targetRealmIdentifier: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
     });
 
     assert.strictEqual(loader.loadAllCalls.length, 1, 'loadAll() called once');
@@ -222,7 +222,7 @@ module('factory-context-builder > skill resolution', function () {
       project: makeProject(),
       issue,
       knowledge: [],
-      targetRealmIdentifier: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
     });
 
     assert.strictEqual(
@@ -251,7 +251,7 @@ module('factory-context-builder > skill resolution', function () {
       project: makeProject(),
       issue: makeIssue(),
       knowledge: [],
-      targetRealmIdentifier: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
     });
 
     assert.strictEqual(ctx.skills.length, 2, 'two skills in context');
@@ -287,7 +287,7 @@ module('factory-context-builder > skill budget', function () {
       project: makeProject(),
       issue: makeIssue(),
       knowledge: [],
-      targetRealmIdentifier: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
     });
 
     assert.strictEqual(ctx.skills.length, 1, 'budget trimmed to one skill');
@@ -317,7 +317,7 @@ module('factory-context-builder > skill budget', function () {
       project: makeProject(),
       issue: makeIssue(),
       knowledge: [],
-      targetRealmIdentifier: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
     });
 
     assert.strictEqual(ctx.skills.length, 2, 'all skills included');
@@ -337,7 +337,7 @@ module('factory-context-builder > tools excluded', function () {
       project: makeProject(),
       issue: makeIssue(),
       knowledge: [],
-      targetRealmIdentifier: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
     });
 
     assert.strictEqual(
@@ -361,7 +361,7 @@ module('factory-context-builder > test results', function () {
       project: makeProject(),
       issue: makeIssue(),
       knowledge: [],
-      targetRealmIdentifier: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
     });
 
     assert.strictEqual(ctx.testResults, undefined, 'no testResults');
@@ -387,7 +387,7 @@ module('factory-context-builder > test results', function () {
       project: makeProject(),
       issue: makeIssue(),
       knowledge: [],
-      targetRealmIdentifier: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
 
       testResults,
     });
@@ -410,7 +410,7 @@ module('factory-context-builder > test results', function () {
       project: makeProject(),
       issue: makeIssue(),
       knowledge: [],
-      targetRealmIdentifier: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
 
       testResults,
     });
@@ -439,7 +439,7 @@ module('factory-context-builder > core fields', function () {
       project,
       issue,
       knowledge,
-      targetRealmIdentifier: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
     });
 
     assert.strictEqual(ctx.project, project, 'project passed through');
@@ -455,11 +455,11 @@ module('factory-context-builder > core fields', function () {
       project: makeProject(),
       issue: makeIssue(),
       knowledge: [],
-      targetRealmIdentifier: 'https://example.test/my-realm/',
+      targetRealm: 'https://example.test/my-realm/',
     });
 
     assert.strictEqual(
-      ctx.targetRealmIdentifier,
+      ctx.targetRealm,
       'https://example.test/my-realm/',
     );
   });
@@ -472,7 +472,7 @@ module('factory-context-builder > core fields', function () {
       project: makeProject(),
       issue: makeIssue(),
       knowledge: [],
-      targetRealmIdentifier: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
     });
 
     assert.deepEqual(ctx.knowledge, [], 'empty knowledge is fine');
@@ -520,7 +520,7 @@ module('factory-context-builder > buildForIssue > relationships', function () {
 
     let ctx = await builder.buildForIssue({
       issue: makeIssue(),
-      targetRealmIdentifier: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
     });
 
     assert.strictEqual(ctx.project.id, 'proj-99', 'project loaded from issue');
@@ -537,7 +537,7 @@ module('factory-context-builder > buildForIssue > relationships', function () {
 
     let ctx = await builder.buildForIssue({
       issue: makeIssue(),
-      targetRealmIdentifier: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
     });
 
     assert.strictEqual(ctx.knowledge.length, 2, 'two knowledge articles');
@@ -552,7 +552,7 @@ module('factory-context-builder > buildForIssue > relationships', function () {
     try {
       await builder.buildForIssue({
         issue: makeIssue({ id: 'orphan-issue' }),
-        targetRealmIdentifier: 'https://example.test/target/',
+        targetRealm: 'https://example.test/target/',
       });
       assert.ok(false, 'should have thrown');
     } catch (error) {
@@ -598,7 +598,7 @@ module(
 
       let ctx = await builder.buildForIssue({
         issue: makeIssue(),
-        targetRealmIdentifier: 'https://example.test/target/',
+        targetRealm: 'https://example.test/target/',
         validationResults,
       });
 
@@ -625,7 +625,7 @@ module(
 
       let ctx = await builder.buildForIssue({
         issue: makeIssue(),
-        targetRealmIdentifier: 'https://example.test/target/',
+        targetRealm: 'https://example.test/target/',
       });
 
       assert.strictEqual(
@@ -669,7 +669,7 @@ module(
 
       let ctx = await builder.buildForIssue({
         issue: makeIssue(),
-        targetRealmIdentifier: 'https://example.test/target/',
+        targetRealm: 'https://example.test/target/',
         validationResults,
       });
 
@@ -708,7 +708,7 @@ module('factory-context-builder > buildForIssue > skills', function () {
 
     await builder.buildForIssue({
       issue,
-      targetRealmIdentifier: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
     });
 
     assert.strictEqual(resolver.calls.length, 1, 'resolver called once');
@@ -744,7 +744,7 @@ module('factory-context-builder > buildForIssue > skills', function () {
 
     let ctx = await builder.buildForIssue({
       issue: makeIssue(),
-      targetRealmIdentifier: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
     });
 
     assert.strictEqual(ctx.skills.length, 1, 'budget trimmed to one skill');
@@ -769,7 +769,7 @@ module(
 
       let ctx = await builder.buildForIssue({
         issue: makeIssue({ issueType: 'bootstrap' }),
-        targetRealmIdentifier: 'https://example.test/target/',
+        targetRealm: 'https://example.test/target/',
         briefUrl: 'https://example.test/briefs/sticky-notes',
       });
 
@@ -786,23 +786,23 @@ module(
 
       let ctx = await builder.buildForIssue({
         issue: makeIssue(),
-        targetRealmIdentifier: 'https://example.test/target/',
+        targetRealm: 'https://example.test/target/',
       });
 
       assert.strictEqual(ctx.briefUrl, undefined, 'no briefUrl');
     });
 
-    test('includes targetRealmIdentifier in context', async function (assert) {
+    test('includes targetRealm in context', async function (assert) {
       let { config } = makeIssueConfig();
       let builder = new ContextBuilder(config);
 
       let ctx = await builder.buildForIssue({
         issue: makeIssue(),
-        targetRealmIdentifier: 'https://example.test/my-realm/',
+        targetRealm: 'https://example.test/my-realm/',
       });
 
       assert.strictEqual(
-        ctx.targetRealmIdentifier,
+        ctx.targetRealm,
         'https://example.test/my-realm/',
       );
     });
@@ -814,7 +814,7 @@ module(
       try {
         await builder.buildForIssue({
           issue: makeIssue(),
-          targetRealmIdentifier: 'https://example.test/target/',
+          targetRealm: 'https://example.test/target/',
         });
         assert.ok(false, 'should have thrown');
       } catch (error) {

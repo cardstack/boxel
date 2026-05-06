@@ -42,7 +42,7 @@ test('unregistered tool is rejected without reaching the server', async ({
     let registry = new ToolRegistry();
     let executor = new ToolExecutor(registry, {
       packageRoot: process.cwd(),
-      targetRealmIdentifier: realm.realmURL.href,
+      targetRealm: realm.realmURL.href,
       client,
     });
 
@@ -76,7 +76,7 @@ async function buildToolsForRealm(
   let registry = new ToolRegistry();
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
-    targetRealmIdentifier: realm.realmURL.href,
+    targetRealm: realm.realmURL.href,
     allowedRealmPrefixes: [realm.realmURL.origin + '/'],
     client,
   });
@@ -84,8 +84,8 @@ async function buildToolsForRealm(
   // Fetch schemas via _run-command. The realmUrl targets the test realm
   // (where the owner has permissions), while the codeRef module URL points
   // to the source realm where darkfactory.gts is defined.
-  let sourceRealmIdentifier = sourceRealmURLFor(realm.realmServerURL).href;
-  let darkfactoryModule = `${sourceRealmIdentifier}darkfactory`;
+  let sourceRealm = sourceRealmURLFor(realm.realmServerURL).href;
+  let darkfactoryModule = `${sourceRealm}darkfactory`;
 
   let cardTypeSchemas = new Map<
     string,
@@ -123,7 +123,7 @@ async function buildToolsForRealm(
 
   return buildFactoryTools(
     {
-      targetRealmIdentifier: realm.realmURL.href,
+      targetRealm: realm.realmURL.href,
       darkfactoryModuleUrl: `${realm.realmServerURL.href}software-factory/darkfactory`,
       realmServerUrl: realm.realmServerURL.href,
       client,

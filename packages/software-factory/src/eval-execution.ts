@@ -66,7 +66,7 @@ export interface EvalModuleRecord {
 }
 
 export interface EvaluateRealmModulesOptions {
-  targetRealmIdentifier: string;
+  targetRealm: string;
   client: BoxelCLIClient;
   realmServerUrl: string;
   /** Injected for testing — defaults to client.runCommand → evaluate-module. */
@@ -85,7 +85,7 @@ export interface EvaluateRealmModulesOutput {
 }
 
 export interface DiscoverEvaluableFilesOptions {
-  targetRealmIdentifier: string;
+  targetRealm: string;
   client: BoxelCLIClient;
   /** Injected for testing — defaults to client.listFiles. */
   fetchFilenames?: (
@@ -98,7 +98,7 @@ export interface DiscoverEvaluableFilesOptions {
 // ---------------------------------------------------------------------------
 
 export interface RunEvaluateInMemoryOptions {
-  targetRealmIdentifier: string;
+  targetRealm: string;
   realmServerUrl: string;
   client: BoxelCLIClient;
   /**
@@ -151,7 +151,7 @@ export async function discoverEvaluableFiles(
     options.fetchFilenames ??
     ((realmUrl: string) => options.client.listFiles(realmUrl));
 
-  let result = await fetchFilenames(options.targetRealmIdentifier);
+  let result = await fetchFilenames(options.targetRealm);
   if (result.error) {
     log.warn(`Failed to fetch realm filenames: ${result.error}`);
     throw new Error(result.error);
@@ -204,12 +204,12 @@ export async function evaluateRealmModules(
   let failedModules: EvalModuleRecord[] = [];
 
   for (let file of files) {
-    let moduleUrl = toModuleUrl(file, options.targetRealmIdentifier);
+    let moduleUrl = toModuleUrl(file, options.targetRealm);
 
     try {
       let result = await evaluateModuleFn(
         moduleUrl,
-        options.targetRealmIdentifier,
+        options.targetRealm,
       );
       moduleResults.push({
         path: file,
@@ -279,7 +279,7 @@ export async function runEvaluateInMemory(
   } else {
     try {
       evaluableFiles = await discoverEvaluableFiles({
-        targetRealmIdentifier: options.targetRealmIdentifier,
+        targetRealm: options.targetRealm,
         client: options.client,
       });
     } catch (err) {
@@ -304,7 +304,7 @@ export async function runEvaluateInMemory(
     let { moduleResults, failedModules, durationMs } =
       await evaluateRealmModules(
         {
-          targetRealmIdentifier: options.targetRealmIdentifier,
+          targetRealm: options.targetRealm,
           realmServerUrl: options.realmServerUrl,
           client: options.client,
         },

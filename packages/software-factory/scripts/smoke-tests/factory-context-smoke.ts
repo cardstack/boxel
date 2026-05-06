@@ -151,7 +151,7 @@ async function main(): Promise<void> {
       project: SAMPLE_PROJECT,
       issue,
       knowledge: SAMPLE_KNOWLEDGE,
-      targetRealmIdentifier: 'https://example.test/user/target/',
+      targetRealm: 'https://example.test/user/target/',
     });
 
     log.info('  First pass (no test results):');
@@ -168,8 +168,8 @@ async function main(): Promise<void> {
     );
     check('testResults not set', ctx.testResults === undefined);
     check(
-      'targetRealmIdentifier set',
-      ctx.targetRealmIdentifier === 'https://example.test/user/target/',
+      'targetRealm set',
+      ctx.targetRealm === 'https://example.test/user/target/',
     );
 
     let totalTokens = ctx.skills.reduce((s, sk) => s + estimateTokens(sk), 0);
@@ -189,7 +189,7 @@ async function main(): Promise<void> {
       project: SAMPLE_PROJECT,
       issue,
       knowledge: SAMPLE_KNOWLEDGE,
-      targetRealmIdentifier: 'https://example.test/user/target/',
+      targetRealm: 'https://example.test/user/target/',
       testResults: {
         status: 'failed',
         passedCount: 2,
@@ -247,7 +247,7 @@ async function main(): Promise<void> {
       project: SAMPLE_PROJECT,
       issue: SAMPLE_ISSUES[0].issue,
       knowledge: [],
-      targetRealmIdentifier: 'https://example.test/user/target/',
+      targetRealm: 'https://example.test/user/target/',
     });
 
     let totalTokens = ctx.skills.reduce((s, sk) => s + estimateTokens(sk), 0);

@@ -15,7 +15,7 @@ import {
 } from '../src/factory-target-realm';
 import { installTestProfile } from './helpers/test-profile';
 
-const targetRealmIdentifier = 'https://realms.example.test/hassan/personal/';
+const targetRealm = 'https://realms.example.test/hassan/personal/';
 
 module('factory-target-realm', function (hooks) {
   let cleanupProfile: (() => void) | undefined;
@@ -38,11 +38,11 @@ module('factory-target-realm', function (hooks) {
     useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
-      targetRealmIdentifier,
+      targetRealm,
       realmServerUrl: null,
     });
 
-    assert.strictEqual(resolution.url, targetRealmIdentifier);
+    assert.strictEqual(resolution.url, targetRealm);
     assert.strictEqual(
       resolution.serverUrl,
       'https://realms.example.test/',
@@ -55,7 +55,7 @@ module('factory-target-realm', function (hooks) {
     useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
-      targetRealmIdentifier:
+      targetRealm:
         'https://realms.example.test/boxel/hassan/personal/',
       realmServerUrl: 'https://realms.example.test/boxel/',
     });
@@ -72,12 +72,12 @@ module('factory-target-realm', function (hooks) {
     assert.throws(
       () =>
         resolveFactoryTargetRealm({
-          targetRealmIdentifier: null,
+          targetRealm: null,
           realmServerUrl: null,
         }),
       (error: unknown) =>
         error instanceof FactoryEntrypointUsageError &&
-        error.message === 'Missing required --target-realm-identifier',
+        error.message === 'Missing required --target-realm',
     );
   });
 
@@ -93,7 +93,7 @@ module('factory-target-realm', function (hooks) {
     assert.throws(
       () =>
         resolveFactoryTargetRealm({
-          targetRealmIdentifier: 'http://localhost:4201/hassan/my-realm/',
+          targetRealm: 'http://localhost:4201/hassan/my-realm/',
           realmServerUrl: null,
         }),
       (error: unknown) =>
@@ -119,7 +119,7 @@ module('factory-target-realm', function (hooks) {
     assert.throws(
       () =>
         resolveFactoryTargetRealm({
-          targetRealmIdentifier,
+          targetRealm,
           realmServerUrl: null,
         }),
       (error: unknown) =>
@@ -133,7 +133,7 @@ module('factory-target-realm', function (hooks) {
     useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
-      targetRealmIdentifier,
+      targetRealm,
       realmServerUrl: null,
     });
     let createCalls = 0;
@@ -156,7 +156,7 @@ module('factory-target-realm', function (hooks) {
     useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
-      targetRealmIdentifier,
+      targetRealm,
       realmServerUrl: null,
     });
 
@@ -174,7 +174,7 @@ module('factory-target-realm', function (hooks) {
     useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
-      targetRealmIdentifier:
+      targetRealm:
         'https://realms.example.test/typed-by-user/personal/',
       realmServerUrl: null,
     });

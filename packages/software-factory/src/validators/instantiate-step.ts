@@ -69,7 +69,7 @@ export interface InstantiateValidationStepConfig {
   /** Injected for testing — defaults to getNextValidationSequenceNumber. */
   getNextSequenceNumber?: (
     slug: string,
-    targetRealmIdentifier: string,
+    targetRealm: string,
   ) => Promise<number>;
 }
 
@@ -101,7 +101,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
   ) => Promise<{ filenames: string[]; error?: string }>;
   private getNextSeqFn: (
     slug: string,
-    targetRealmIdentifier: string,
+    targetRealm: string,
   ) => Promise<number>;
 
   constructor(config: InstantiateValidationStepConfig) {
@@ -111,26 +111,26 @@ export class InstantiateValidationStep implements ValidationStepRunner {
       ((realmUrl: string) => config.client.listFiles(realmUrl));
     this.getNextSeqFn =
       config.getNextSequenceNumber ??
-      ((slug: string, targetRealmIdentifier: string) =>
+      ((slug: string, targetRealm: string) =>
         getNextValidationSequenceNumber(
           config.client,
           slug,
           'Validations/instantiate_',
           config.instantiateResultsModuleUrl,
           'InstantiateResult',
-          targetRealmIdentifier,
+          targetRealm,
         ));
   }
 
   async run(
-    targetRealmIdentifier: string,
+    targetRealm: string,
     iteration?: number,
   ): Promise<ValidationStepResult> {
     // Step 1: Discover specs in the realm
     let specInfos: SpecInfo[];
     try {
       let result = await discoverRealmSpecs({
-        targetRealmIdentifier,
+        targetRealm,
         client: this.config.client,
         searchSpecsFn: this.config.searchSpecsFn,
       });
@@ -154,7 +154,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
     if (specInfos.length === 0) {
       let hasModules = false;
       try {
-        let filesResult = await this.fetchFilenamesFn(targetRealmIdentifier);
+        let filesResult = await this.fetchFilenamesFn(targetRealm);
         hasModules = (filesResult.filenames ?? []).some(
           (f) => f.endsWith('.gts') && !f.endsWith('.test.gts'),
         );
@@ -193,7 +193,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
       : 'validation';
 
     let issueURL = this.config.issueId
-      ? new URL(this.config.issueId, targetRealmIdentifier).href
+      ? new URL(this.config.issueId, targetRealm).href
       : undefined;
 
     let seq: number;
@@ -201,7 +201,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
       seq = iteration;
     } else {
       try {
-        let realmSeq = await this.getNextSeqFn(slug, targetRealmIdentifier);
+        let realmSeq = await this.getNextSeqFn(slug, targetRealm);
         seq = Math.max(realmSeq, this.lastSequenceNumber + 1);
       } catch (err) {
         log.warn(
@@ -218,7 +218,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         slug,
         this.config.instantiateResultsModuleUrl,
         {
-          targetRealmIdentifier,
+          targetRealm,
           client: this.config.client,
           workspaceDir: this.config.workspaceDir,
           sequenceNumber: seq,
@@ -244,7 +244,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
     // Step 3: Instantiate each spec's examples via the shared engine.
     let { records, durationMs } = await instantiateRealmSpecs(
       {
-        targetRealmIdentifier,
+        targetRealm,
         realmServerUrl: this.config.realmServerUrl,
         client: this.config.client,
         workspaceDir: this.config.workspaceDir,
@@ -277,7 +277,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
           cardResults: allCardResults,
         },
         {
-          targetRealmIdentifier,
+          targetRealm,
           client: this.config.client,
           workspaceDir: this.config.workspaceDir,
         },

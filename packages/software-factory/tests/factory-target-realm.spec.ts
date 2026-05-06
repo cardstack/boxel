@@ -68,7 +68,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
 
   let realmServerURL = realm.realmServerURL.href;
   let newEndpoint = `e2e-realm-${Date.now()}`;
-  let targetRealmIdentifier = new URL(
+  let targetRealm = new URL(
     `${targetUsername}/${newEndpoint}/`,
     realmServerURL,
   ).href;
@@ -97,8 +97,8 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         resolve(packageRoot, 'src/cli/factory-entrypoint.ts'),
         '--brief-url',
         briefUrl,
-        '--target-realm-identifier',
-        targetRealmIdentifier,
+        '--target-realm',
+        targetRealm,
         '--realm-server-url',
         realmServerURL,
         '--no-retry-blocked',
@@ -128,10 +128,10 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       matrixURL,
       targetUsername,
       targetPassword,
-      targetRealmIdentifier,
+      targetRealm,
     );
 
-    let seedIssueUrl = new URL('Issues/bootstrap-seed', targetRealmIdentifier)
+    let seedIssueUrl = new URL('Issues/bootstrap-seed', targetRealm)
       .href;
     let seedIssueResponse = await fetch(seedIssueUrl, {
       headers: {

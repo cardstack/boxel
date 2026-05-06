@@ -43,7 +43,7 @@ export async function resolveTestRun(
   options: ExecuteTestRunOptions,
 ): Promise<TestRunHandle & { resumed: boolean; pendingTests?: string[] }> {
   let realmOptions: TestRunRealmOptions = {
-    targetRealmIdentifier: options.targetRealmIdentifier,
+    targetRealm: options.targetRealm,
     testResultsModuleUrl: options.testResultsModuleUrl,
     client: options.client,
     workspaceDir: options.workspaceDir,
@@ -102,11 +102,11 @@ export async function resolveTestRun(
 async function findResumableTestRun(
   options: TestRunRealmOptions,
 ): Promise<ResumableTestRun | undefined> {
-  let targetRealmIdentifier = ensureTrailingSlash(
-    options.targetRealmIdentifier,
+  let targetRealm = ensureTrailingSlash(
+    options.targetRealm,
   );
 
-  let result = await options.client.search(options.targetRealmIdentifier, {
+  let result = await options.client.search(options.targetRealm, {
     filter: {
       on: { module: options.testResultsModuleUrl, name: 'TestRun' },
     },
@@ -141,8 +141,8 @@ async function findResumableTestRun(
     .map((r) => r.testName ?? '');
 
   let cardId = latest.id ?? '';
-  let relativePath = cardId.startsWith(targetRealmIdentifier)
-    ? cardId.slice(targetRealmIdentifier.length)
+  let relativePath = cardId.startsWith(targetRealm)
+    ? cardId.slice(targetRealm.length)
     : cardId;
 
   return {
@@ -168,7 +168,7 @@ async function getNextSequenceNumber(
     'Validations/test_',
     options.testResultsModuleUrl,
     'TestRun',
-    options.targetRealmIdentifier,
+    options.targetRealm,
   );
   return Math.max(seq, minSequenceNumber + 1);
 }
@@ -193,7 +193,7 @@ function buildQunitTestPageHtml(opts: {
   /** URL of our local server that serves static host dist assets */
   assetServerUrl: string;
   hostDistDir: string;
-  targetRealmIdentifier: string;
+  targetRealm: string;
   /** Browser-accessible URL of the realm server (compat proxy) */
   realmProxyUrl: string;
   /** Optional slug identifying the issue under test — shown in the page title. */
@@ -422,7 +422,7 @@ async function startTestPageServer(
 // ---------------------------------------------------------------------------
 
 interface QunitRunnerOptions {
-  targetRealmIdentifier: string;
+  targetRealm: string;
   client: BoxelCLIClient;
   hostAppUrl: string;
   hostDistDir?: string;
@@ -474,14 +474,14 @@ async function runQunitInBrowser(
     let html = buildQunitTestPageHtml({
       assetServerUrl: testPageUrl,
       hostDistDir,
-      targetRealmIdentifier: options.targetRealmIdentifier,
+      targetRealm: options.targetRealm,
       realmProxyUrl: options.hostAppUrl,
       slug: options.slug,
     });
     setHtml(html);
 
     log.debug(
-      `Serving QUnit page at ${testPageUrl} for realm ${options.targetRealmIdentifier}`,
+      `Serving QUnit page at ${testPageUrl} for realm ${options.targetRealm}`,
     );
 
     browser = await chromium.launch({ headless: true });
@@ -500,14 +500,14 @@ async function runQunitInBrowser(
     // header. live-test.js fetches _mtimes and modules without auth, but
     // private realms require it. Using page.route() injects auth at the
     // network level before any page scripts run.
-    let realmParam = encodeURIComponent(options.targetRealmIdentifier);
+    let realmParam = encodeURIComponent(options.targetRealm);
     let pageUrl = `${testPageUrl}?liveTest=true&realmURL=${realmParam}&hidepassed`;
 
     let realmToken = await options.client.getRealmToken(
-      options.targetRealmIdentifier,
+      options.targetRealm,
     );
     if (realmToken) {
-      let realmOrigin = new URL(options.targetRealmIdentifier).origin;
+      let realmOrigin = new URL(options.targetRealm).origin;
       await page.route(`${realmOrigin}/**`, (route) => {
         let headers = {
           ...route.request().headers(),
@@ -560,7 +560,7 @@ export async function executeTestRunFromRealm(
   options: ExecuteTestRunOptions,
 ): Promise<TestRunHandle> {
   let realmOptions: TestRunRealmOptions = {
-    targetRealmIdentifier: options.targetRealmIdentifier,
+    targetRealm: options.targetRealm,
     testResultsModuleUrl: options.testResultsModuleUrl,
     client: options.client,
     workspaceDir: options.workspaceDir,
@@ -580,7 +580,7 @@ export async function executeTestRunFromRealm(
   let runnerStart = Date.now();
   try {
     let { qunitResults, durationMs } = await runQunitInBrowser({
-      targetRealmIdentifier: options.targetRealmIdentifier,
+      targetRealm: options.targetRealm,
       client: options.client,
       hostAppUrl: options.hostAppUrl,
       hostDistDir: options.hostDistDir,
@@ -644,7 +644,7 @@ export async function runTestsInMemory(
 ): Promise<RunTestsResult> {
   let testFiles: string[];
   try {
-    let listing = await options.client.listFiles(options.targetRealmIdentifier);
+    let listing = await options.client.listFiles(options.targetRealm);
     if (listing.error) {
       return emptyErrorResult(
         `Failed to discover test files: ${listing.error}`,
@@ -673,7 +673,7 @@ export async function runTestsInMemory(
 
   try {
     let { qunitResults, durationMs } = await runQunitInBrowser({
-      targetRealmIdentifier: options.targetRealmIdentifier,
+      targetRealm: options.targetRealm,
       client: options.client,
       hostAppUrl: options.hostAppUrl,
       hostDistDir: options.hostDistDir,

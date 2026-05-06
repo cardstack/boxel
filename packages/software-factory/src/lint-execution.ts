@@ -39,7 +39,7 @@ export interface LintErrorViolation {
 }
 
 export interface LintRealmFilesOptions {
-  targetRealmIdentifier: string;
+  targetRealm: string;
   client: BoxelCLIClient;
   /**
    * Local workspace directory to read source files from. The realm is
@@ -75,7 +75,7 @@ export interface LintRealmFilesOutput {
 // ---------------------------------------------------------------------------
 
 export interface RunLintInMemoryOptions {
-  targetRealmIdentifier: string;
+  targetRealm: string;
   client: BoxelCLIClient;
   /**
    * Local workspace directory to read source files from. The realm is used
@@ -127,14 +127,14 @@ export interface RunLintResult {
 export async function discoverLintableFiles(
   options: Pick<
     LintRealmFilesOptions,
-    'targetRealmIdentifier' | 'client' | 'fetchFilenames'
+    'targetRealm' | 'client' | 'fetchFilenames'
   >,
 ): Promise<string[]> {
   let fetchFilenames =
     options.fetchFilenames ??
     ((realmUrl: string) => options.client.listFiles(realmUrl));
 
-  let result = await fetchFilenames(options.targetRealmIdentifier);
+  let result = await fetchFilenames(options.targetRealm);
   if (result.error) {
     log.warn(`Failed to fetch realm filenames: ${result.error}`);
     throw new Error(result.error);
@@ -176,7 +176,7 @@ export async function lintRealmFiles(
 
   for (let file of files) {
     try {
-      let readResult = await readFileFn(options.targetRealmIdentifier, file);
+      let readResult = await readFileFn(options.targetRealm, file);
       if (!readResult.ok) {
         recordReadError(
           file,
@@ -192,7 +192,7 @@ export async function lintRealmFiles(
       }
 
       let lintResponse = await lintFileFn(
-        options.targetRealmIdentifier,
+        options.targetRealm,
         readResult.content,
         file,
       );
@@ -264,7 +264,7 @@ export async function runLintInMemory(
   } else {
     try {
       lintableFiles = await discoverLintableFiles({
-        targetRealmIdentifier: options.targetRealmIdentifier,
+        targetRealm: options.targetRealm,
         client: options.client,
       });
     } catch (err) {
@@ -290,7 +290,7 @@ export async function runLintInMemory(
   try {
     let { fileResults, durationMs } = await lintRealmFiles(
       {
-        targetRealmIdentifier: options.targetRealmIdentifier,
+        targetRealm: options.targetRealm,
         client: options.client,
         workspaceDir: options.workspaceDir,
       },

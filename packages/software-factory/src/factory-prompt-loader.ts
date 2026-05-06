@@ -389,7 +389,7 @@ export function assembleSystemPrompt(
   }));
 
   return loader.load('system', {
-    targetRealmIdentifier: context.targetRealmIdentifier,
+    targetRealm: context.targetRealm,
     skills,
   });
 }
