@@ -961,7 +961,10 @@ export default class RealmService extends Service {
   // (and vice versa) as long as the prefix is registered in `prefixMappings`.
   // Returns `false` if either side fails to resolve, including when a
   // non-URL-like string does not match a registered prefix exactly.
-  contains(realm: string | URL, resource: string | URL): boolean {
+  contains(
+    realm: RealmIdentifier | URL,
+    resource: RealmResourceIdentifier | URL,
+  ): boolean {
     let realmHref: string;
     let resourceHref: string;
     try {

@@ -24,6 +24,8 @@ import {
   normalizeQueryForSignature,
   buildQueryParamValue,
   parseSearchURL,
+  ri,
+  rri,
   runtimeDependencyContextWithSource,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -302,7 +304,7 @@ export class SearchResource<
     return this.realmsToSearch
       .map((realm) => {
         let cards = this.instances.filter((card) =>
-          this.realm.contains(realm, card.id),
+          this.realm.contains(ri(realm), rri(card.id)),
         );
         return { realm, cards };
       })
