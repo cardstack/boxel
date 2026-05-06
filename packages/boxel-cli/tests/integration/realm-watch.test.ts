@@ -6,6 +6,7 @@ import * as path from 'path';
 import { RealmWatcher, watchRealms } from '../../src/commands/realm/watch';
 import { CheckpointManager } from '../../src/lib/checkpoint-manager';
 import { ProfileManager } from '../../src/lib/profile-manager';
+import type { RealmAuthenticator } from '../../src/lib/realm-authenticator';
 import {
   startTestRealmServer,
   stopTestRealmServer,
@@ -381,6 +382,135 @@ describe('realm watch (integration)', () => {
     let result = await run;
     expect(result.error).toBeUndefined();
     expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  it('does not arm a debounceTimer after shutdown when a poll resolves post-cleanup', async () => {
+    let localDir = makeLocalDir();
+    await writeRemoteFile(realmUrl, 'race.gts', 'export const r = 1;\n');
+
+    // Pre-sync so the watch starts in a steady state — initialize() and the
+    // initial tickAll find no new changes and no flush is scheduled.
+    let primer = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await primer.initialize();
+    await primer.poll();
+    await primer.flushPending();
+    primer.shutdown();
+
+    let baseline = await new CheckpointManager(localDir).getCheckpoints();
+    expect(baseline.length).toBe(1);
+
+    // Bump the remote so the next-tick poll WOULD detect a change and call
+    // scheduleFlush() — which is the path the fix gates.
+    await sleep(1100); // mtime is second-precision
+    await writeRemoteFile(realmUrl, 'race.gts', 'export const r = 2;\n');
+
+    // Gate the 3rd _mtimes call (1: initialize, 2: initial tickAll's poll,
+    // 3: the next scheduled tick — the one we want in flight at abort time).
+    let mtimesCallCount = 0;
+    let releaseGate: () => void = () => {};
+    let gateOpened: () => void = () => {};
+    let gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    let entered = new Promise<void>((resolve) => {
+      gateOpened = resolve;
+    });
+    let gatedAuth: RealmAuthenticator = {
+      authedRealmFetch: async (input, init) => {
+        let url = typeof input === 'string' ? input : input.toString();
+        if (url.endsWith('_mtimes')) {
+          mtimesCallCount++;
+          if (mtimesCallCount === 3) {
+            gateOpened();
+            await gate;
+          }
+        }
+        return profileManager.authedRealmFetch(input, init);
+      },
+    };
+
+    let controller = new AbortController();
+    let runPromise = watchRealms([{ realmUrl, localDir }], {
+      authenticator: gatedAuth,
+      intervalMs: 50,
+      debounceMs: 100,
+      quiet: true,
+      signal: controller.signal,
+    });
+
+    // Wait for the next tick to enter the gated _mtimes call.
+    await entered;
+
+    // Abort while the in-flight poll is blocked. cleanup() runs synchronously
+    // through stopped=true → w.shutdown() before awaiting releaseWatchLock.
+    controller.abort();
+    let result = await runPromise;
+    expect(result.error).toBeUndefined();
+
+    // Now release the poll. Without the fix, its continuation calls
+    // scheduleFlush() on the (already shut down) watcher and arms a fresh
+    // debounceTimer that fires post-cleanup, writing files and a new
+    // checkpoint after watchRealms() has returned.
+    releaseGate();
+
+    // Wait long enough for any (buggy) debounceTimer to fire (debounceMs=100).
+    await sleep(300);
+
+    let checkpoints = await new CheckpointManager(localDir).getCheckpoints();
+    expect(checkpoints.length).toBe(baseline.length);
+    // The bumped remote content was NOT pulled — the gated scheduleFlush is a
+    // no-op after shutdown, so the local file stays at r = 1.
+    expect(fs.readFileSync(path.join(localDir, 'race.gts'), 'utf8')).toContain(
+      'r = 1',
+    );
+    expect(fs.existsSync(path.join(localDir, '.boxel-watch.lock'))).toBe(false);
+
+    await deleteRemoteFile(realmUrl, 'race.gts');
+  });
+
+  it('removes SIGINT/SIGTERM handlers when the watch is stopped via signal', async () => {
+    let localDir = makeLocalDir();
+    await writeRemoteFile(realmUrl, 'sigint.gts', 'export const x = 1;\n');
+
+    // Snapshot pre-existing listeners so we don't conflate with vitest's own
+    // signal handling — just check that watchRealms registers exactly one
+    // and removes it on cleanup.
+    let originalSigint = [...process.listeners('SIGINT')];
+    let originalSigterm = [...process.listeners('SIGTERM')];
+
+    // No `signal` supplied → the SIGINT/SIGTERM branch in watchRealms runs.
+    let runPromise = watchRealms([{ realmUrl, localDir }], {
+      profileManager,
+      intervalMs: 1000,
+      debounceMs: 25,
+      quiet: true,
+    });
+
+    await sleep(150);
+
+    let addedSigint = process
+      .listeners('SIGINT')
+      .filter((l) => !originalSigint.includes(l));
+    let addedSigterm = process
+      .listeners('SIGTERM')
+      .filter((l) => !originalSigterm.includes(l));
+    expect(addedSigint).toHaveLength(1);
+    expect(addedSigterm).toHaveLength(1);
+
+    // Invoke the registered handler directly instead of process.emit('SIGINT'),
+    // which would also trigger any unrelated SIGINT listeners on the runner.
+    (addedSigint[0] as () => void)();
+
+    let result = await runPromise;
+    expect(result.error).toBeUndefined();
+    expect(process.listeners('SIGINT')).toEqual(originalSigint);
+    expect(process.listeners('SIGTERM')).toEqual(originalSigterm);
+    expect(fs.existsSync(path.join(localDir, '.boxel-watch.lock'))).toBe(false);
+
+    await deleteRemoteFile(realmUrl, 'sigint.gts');
   });
 
   it('downgrades a pending modify to a delete when the remote file disappears', async () => {

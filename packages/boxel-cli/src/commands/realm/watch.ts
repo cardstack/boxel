@@ -59,6 +59,7 @@ export class RealmWatcher extends RealmSyncBase {
   private lastKnownMtimes = new Map<string, number>();
   private pendingChanges = new Map<string, PendingChange>();
   private debounceTimer: NodeJS.Timeout | null = null;
+  private isShutdown = false;
 
   constructor(
     spec: WatchRealmSpec,
@@ -235,6 +236,10 @@ export class RealmWatcher extends RealmSyncBase {
    * of changes lands in a single checkpoint.
    */
   scheduleFlush(onFlush?: (result: FlushResult) => void): void {
+    // Closes the race where a poll() in flight at cleanup() resolves AFTER
+    // shutdown() and would otherwise arm a new debounceTimer that nothing
+    // clears — i.e. work scheduled past the watcher's lifetime.
+    if (this.isShutdown) return;
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
@@ -253,6 +258,9 @@ export class RealmWatcher extends RealmSyncBase {
   }
 
   shutdown(): void {
+    // Set the flag before clearing the timer so a concurrent scheduleFlush()
+    // racing the in-flight poll path observes the shutdown state.
+    this.isShutdown = true;
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
