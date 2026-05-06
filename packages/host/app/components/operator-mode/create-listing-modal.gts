@@ -23,6 +23,7 @@ import {
   isResolvedCodeRef,
   removeFileExtension,
   rri,
+  type CommandContext,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -164,9 +165,7 @@ export default class CreateListingModal extends Component<Signature> {
     // specifiers, so the catalog file isn't independently buildable. Going
     // through the loader is the only path that resolves both correctly.
     let module = await this.loaderService.loader.import<{
-      default: new (
-        commandContext: typeof this.commandService.commandContext,
-      ) => {
+      default: new (commandContext: CommandContext) => {
         execute: (input: {
           codeRef: ResolvedCodeRef;
           targetRealm: string;
