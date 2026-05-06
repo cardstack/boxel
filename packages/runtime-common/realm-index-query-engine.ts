@@ -906,6 +906,12 @@ export class RealmIndexQueryEngine {
       resource: LooseCardResource | FileMetaResource;
       stack: string[];
       applyLinkFields: boolean;
+      // Roots are returned in doc.data; everything else gets cloned and
+      // pushed onto included[] *after* its relationships are rewritten in
+      // its own layer (preserving the original implementation's order: the
+      // recursive caller cloned a resource only after the recursive call
+      // had already mutated its relationship.data fields).
+      isRoot: boolean;
     };
     let layer: LayerItem[] = [];
     for (let resource of rootResources) {
@@ -919,6 +925,7 @@ export class RealmIndexQueryEngine {
         resource,
         stack: [],
         applyLinkFields: !!opts?.linkFields,
+        isRoot: true,
       });
     }
 
@@ -1170,41 +1177,25 @@ export class RealmIndexQueryEngine {
             if (linkResource.id != null) {
               visited.add(linkResource.id);
             }
-            if (
-              linkResource.id != null &&
-              !omitSet.has(linkResource.id) &&
-              !included.find((r) => r.id === linkResource!.id)
-            ) {
-              let rewritten = cloneDeep({
-                ...linkResource,
-                ...{ links: { self: linkResource.id } },
-              });
-              visitInstanceURLs(rewritten, (url, setURL) =>
-                absolutizeInstanceURL(url, rewritten.id, setURL),
-              );
-              visitModuleDeps(rewritten, (url, setURL) =>
-                absolutizeInstanceURL(url, rewritten.id, (newURL) =>
-                  setURL(newURL as RealmResourceIdentifier),
-                ),
-              );
-              included.push(rewritten);
-            }
             // Schedule expansion at the next layer. linkFields applies
             // only at the root layer; nested relationships are fully
-            // loaded up to maxLinkDepth.
+            // loaded up to maxLinkDepth. The clone+push to included[]
+            // happens at the END of that layer's processing — once the
+            // resource's relationships have been rewritten — so the
+            // clone captures the mutations rather than the pre-rewrite
+            // state from pristine_doc.
             nextLayer.push({
               resource: linkResource,
               stack: descendStack,
               applyLinkFields: false,
+              isRoot: false,
             });
             foundLinks = true;
-          } else if (
-            linkResource.id != null &&
-            (omitSet.has(linkResource.id) ||
-              included.find((r) => r.id === linkResource!.id))
-          ) {
-            // Already part of the doc via another path — count as found
-            // so relationship.data still gets rewritten below.
+          } else if (linkResource.id != null) {
+            // Already visited — either a root (in omit) or scheduled for
+            // inclusion at the end of its own processing layer. Either way
+            // it's part of our doc, so relationship.data still gets
+            // rewritten below.
             foundLinks = true;
           }
         }
@@ -1237,6 +1228,40 @@ export class RealmIndexQueryEngine {
             id: entry.relationshipId.href,
           };
         }
+      }
+
+      // Step 5: clone+absolutize each non-root layer item and push it onto
+      // included[]. Doing this AFTER step 4 ensures the cloned snapshot
+      // reflects any relationship.data rewrites we just applied to the
+      // resource (matching the original recursive implementation, which
+      // cloned in the parent's loop only after the recursive call had
+      // mutated the child's relationships).
+      for (let item of layer) {
+        if (item.isRoot) {
+          continue;
+        }
+        if (item.resource.id == null) {
+          continue;
+        }
+        if (omitSet.has(item.resource.id)) {
+          continue;
+        }
+        if (included.find((r) => r.id === item.resource.id)) {
+          continue;
+        }
+        let rewritten = cloneDeep({
+          ...item.resource,
+          ...{ links: { self: item.resource.id } },
+        });
+        visitInstanceURLs(rewritten, (url, setURL) =>
+          absolutizeInstanceURL(url, rewritten.id, setURL),
+        );
+        visitModuleDeps(rewritten, (url, setURL) =>
+          absolutizeInstanceURL(url, rewritten.id, (newURL) =>
+            setURL(newURL as RealmResourceIdentifier),
+          ),
+        );
+        included.push(rewritten);
       }
 
       layer = nextLayer;
