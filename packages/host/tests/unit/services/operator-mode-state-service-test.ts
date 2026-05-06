@@ -1,14 +1,18 @@
 import { getService } from '@universal-ember/test-support';
 import { setupTest } from 'ember-qunit';
+import { setupWindowMock } from 'ember-window-mock/test-support';
+import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import { Deferred } from '@cardstack/runtime-common';
 
 import { StackItem } from '@cardstack/host/lib/stack-item';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { AiAssistantOpen } from '@cardstack/host/utils/local-storage-keys';
 
 module('Unit | Service | operator-mode-state-service', function (hooks) {
   setupTest(hooks);
+  setupWindowMock(hooks);
 
   let service: OperatorModeStateService;
 
@@ -86,5 +90,65 @@ module('Unit | Service | operator-mode-state-service', function (hooks) {
         'file items are not mutated by setItemFormat',
       );
     });
+  });
+
+  test('openAiAssistant / closeAiAssistant persist preference to localStorage', function (assert) {
+    service.openAiAssistant();
+    assert.strictEqual(
+      window.localStorage.getItem(AiAssistantOpen),
+      'true',
+      'open writes true',
+    );
+    service.closeAiAssistant();
+    assert.strictEqual(
+      window.localStorage.getItem(AiAssistantOpen),
+      'false',
+      'close writes false',
+    );
+  });
+
+  test('URL aiAssistantOpen=true wins over localStorage=false', function (assert) {
+    window.localStorage.setItem(AiAssistantOpen, 'false');
+    service.restore({ stacks: [], aiAssistantOpen: true });
+    assert.true(
+      service.aiAssistantOpen,
+      'explicit true in URL overrides persisted closed preference',
+    );
+  });
+
+  test('URL aiAssistantOpen=false wins over localStorage=true', function (assert) {
+    window.localStorage.setItem(AiAssistantOpen, 'true');
+    service.restore({ stacks: [], aiAssistantOpen: false });
+    assert.false(
+      service.aiAssistantOpen,
+      'explicit false in URL overrides persisted open preference',
+    );
+  });
+
+  test('URL with no aiAssistantOpen key falls back to localStorage (closed)', function (assert) {
+    window.localStorage.setItem(AiAssistantOpen, 'false');
+    service.restore({ stacks: [] });
+    assert.false(
+      service.aiAssistantOpen,
+      'panel stays closed when URL state omits the key and localStorage says closed',
+    );
+  });
+
+  test('URL with no aiAssistantOpen key falls back to localStorage (open default)', function (assert) {
+    // no localStorage seeded — first-ever visit
+    service.restore({ stacks: [] });
+    assert.true(
+      service.aiAssistantOpen,
+      'panel opens by default when neither URL nor localStorage carry a preference',
+    );
+  });
+
+  test('resetState rereads persisted preference (logout/login cycle)', function (assert) {
+    window.localStorage.setItem(AiAssistantOpen, 'false');
+    service.resetState();
+    assert.false(
+      service.aiAssistantOpen,
+      'after reset, panel respects persisted closed preference',
+    );
   });
 });
