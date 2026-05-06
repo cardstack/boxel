@@ -1100,6 +1100,18 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         snapshotAtPersist.global === snapshotAtEntry.global
       ) {
         let sizeChars = approximateEntrySizeChars(entry, row.definitions);
+        // If a concurrent caller already inserted under this key, subtract
+        // the existing entry's bytes before overwriting. `Map#set`
+        // replaces the value but the bytes counter would otherwise
+        // double-count the replaced entry, drifting permanently above
+        // the actual map weight and forcing spurious evictions.
+        // Reachable because `lookupCachedDefinition` calls this directly,
+        // bypassing `#inFlight`, so two concurrent cache-only readers can
+        // both finish the SQL round-trip for the same cacheKey.
+        let existing = this.#parsedCache.get(cacheKey);
+        if (existing) {
+          this.#parsedCacheBytes -= existing.sizeChars;
+        }
         this.#parsedCache.set(cacheKey, {
           entry,
           snapshot: snapshotAtPersist,
