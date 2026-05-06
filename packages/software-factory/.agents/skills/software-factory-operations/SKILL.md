@@ -66,8 +66,16 @@ document) to update them — same workspace fs surface as `.gts` files.
 | `Spec/<slug>.json`               | `{module: "https://cardstack.com/base/spec", name: "Spec"}`    |
 
 `<darkfactoryModuleUrl>` is named in the system prompt — use that value
-verbatim. The full schemas (attributes + relationships per type) live
-in the `software-factory-bootstrap` skill.
+verbatim.
+
+**Always fetch the live schema before writing.** Field names, enum
+values, and relationship keys for each card type are introspected at
+runtime — never hard-coded in this skill. Call
+`get_card_schema({ module, name })` for the card you're about to write
+and use the returned `{ attributes, relationships? }` JSON Schema to
+shape the document. The bootstrap skill covers the bootstrap-specific
+attribute population guidance; this skill covers the operational
+patterns (read-before-write, comments, invariants) that layer on top.
 
 **Read before write.** When updating any tracker card, `Read` the file
 first, change only the attributes you intend to update, then write the
@@ -88,49 +96,48 @@ enforced by a wrapper tool; they aren't anymore):
 
 ### Adding a comment to an existing issue
 
-Issue cards have an `attributes.comments[]` array. To append a comment:
+Issue cards carry a containsMany comments array on `attributes`. To
+append a comment:
 
-1. `Read` the issue's `.json`.
-2. Append a new entry to `data.attributes.comments` with shape:
-
-   ```json
-   {
-     "body": "...comment text, markdown allowed...",
-     "author": "factory-agent",
-     "datetime": "<ISO timestamp>"
-   }
-   ```
-
-   The Comment field schema is `{ body, author, datetime }` — the
-   timestamp field is named `datetime`, **not** `createdAt`. Issue cards
-   themselves do have `createdAt` / `updatedAt` attributes, but those are
-   separate from the comment shape.
-
-3. `Write` (or `Edit`) the document back. **Do not modify
-   `description` or any other attribute** — comments are append-only.
+1. Call `get_card_schema({ module: "<darkfactoryModuleUrl>", name: "Issue" })` if you don't already have the Issue schema cached. The comments array entry is itself an object with its own field shape — use the field names returned by the schema (the body / author / timestamp fields) verbatim. The timestamp field on a comment is **not** the same as the Issue's own top-level `createdAt` / `updatedAt` attributes; the schema disambiguates them.
+2. `Read` the issue's `.json`.
+3. Append a new entry to the comments array on `data.attributes`, populating the body (markdown comment text), the author (e.g. `"factory-agent"` or `"orchestrator"`), and the comment-timestamp field (ISO timestamp).
+4. `Write` (or `Edit`) the document back. **Do not modify the
+   description or any other attribute** — comments are append-only.
 
 ### Catalog Spec card shape
 
 Spec cards (`Spec/<slug>.json`) adopt from
 `https://cardstack.com/base/spec` / `Spec`, **not** from the tracker
-module. Required attributes:
+module. Fetch the live schema before writing:
 
-- `cardTitle` — display title (e.g. `"Sticky Note"`)
-- `cardDescription` — short product description
-- `specType` — `"card"` for entry-point cards
-- `ref` — `{module: "../<slug>", name: "<PascalClass>"}` pointing at
-  your `.gts` definition (relative path, no `.gts` extension)
-- `readMe` — markdown usage guide for the catalog
-
-Plus a `relationships.linkedExamples` array linking to one or more
-sample instances:
-
-```json
-"linkedExamples": [
-  { "links": { "self": "../<CardType>/<instance-id>" } },
-  ...
-]
 ```
+get_card_schema({ module: "https://cardstack.com/base/spec", name: "Spec" })
+```
+
+Use the returned `{ attributes, relationships? }` to shape the
+document. What the schema does **not** tell you and you must supply
+yourself for entry-point cards:
+
+- A display title and short description suitable for the catalog.
+- The spec-type field set to the enum value the schema returns for
+  card-style specs (vs. apps, fields, etc.).
+- A code-ref attribute pointing at your `.gts` definition, formatted as
+  `{module: "../<slug>", name: "<PascalClass>"}` (relative path, no
+  `.gts` extension) so the spec resolves the definition relative to
+  itself.
+- A markdown usage guide for the catalog page.
+- A linked-examples relationship populated with one or more sample
+  instances:
+
+  ```json
+  "<linked-examples-key>": [
+    { "links": { "self": "../<CardType>/<instance-id>" } },
+    ...
+  ]
+  ```
+
+  (The schema names the relationship key.)
 
 The full document envelope is the same as for tracker cards (`data` /
 `type: "card"` / `attributes` / `relationships` / `meta.adoptsFrom`),
@@ -149,15 +156,22 @@ or drive control flow.
   - **Claude backend:** run `boxel search --realm <target-realm-url> --query '<json>' --json` via `Bash`. **Quoting:** single-quote the entire JSON object so the shell does not expand or split it; keep all keys and string values double-quoted inside. Example: `boxel search --realm https://realms.example/h/p/ --query '{"filter":{"type":{"module":"https://cardstack.com/base/spec","name":"Spec"}}}' --json`. Pipe through `jq` if you want a focused projection.
   - **OpenRouter backend:** call the factory `search_realm({ query, realm? })` tool with the same structured query object — no shell quoting concerns.
 
-### Running Host Commands
+### Fetching live card-type schemas
 
-You do not need to invoke Boxel host commands from the agent — the
-orchestrator pre-loads the card-type schemas you need and bakes them
-into the structured update tools' parameter schemas. If a future
-workflow does need a host command, the OpenRouter backend exposes
-`run_command({ command, commandInput? })` and the Claude backend
-should shell out via Bash to `boxel run-command <specifier> --realm <url>
---input '<json>' --json`.
+`get_card_schema({ module, name })` returns the live JSON Schema
+(`{ attributes, relationships? }`) for any `CardDef`, introspected from
+the actual class via the realm server's prerenderer (the same path the
+AI Bot uses for its patch-tool schemas). Always call this before
+writing a tracker card (Project / Issue / KnowledgeArticle), a Spec
+card, or any other card whose shape you need to know. Schemas are
+cached per-process, so repeated calls with the same code ref are free.
+
+### Running other Host Commands
+
+For host commands beyond the schema fetch, the OpenRouter backend
+exposes `run_command({ command, commandInput? })` and the Claude
+backend should shell out via Bash to
+`boxel run-command <specifier> --realm <url> --input '<json>' --json`.
 
 ### Self-Validation (optional, no side effects)
 

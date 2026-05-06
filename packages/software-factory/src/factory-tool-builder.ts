@@ -8,7 +8,9 @@
  */
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common/card-reference-resolver';
 
+import { fetchCardTypeSchema } from './darkfactory-schemas';
 import {
   runEvaluateInMemory,
   type RunEvaluateInMemoryOptions,
@@ -136,6 +138,7 @@ export function buildFactoryTools(
     buildReadFileTool(config),
     buildFetchTranspiledModuleTool(config),
     buildSearchRealmTool(config),
+    buildGetCardSchemaTool(config),
     buildRunCommandTool(config),
     buildRunLintTool(config),
     buildRunTestsTool(config),
@@ -314,6 +317,58 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
       let result = await config.client.search(realmUrl, query);
       return result.ok ? { data: result.data } : { error: result.error };
+    },
+  };
+}
+
+function buildGetCardSchemaTool(config: ToolBuilderConfig): FactoryTool {
+  return {
+    name: 'get_card_schema',
+    description:
+      'Fetch the live JSON Schema (attributes + relationships) for a card ' +
+      'definition by its CodeRef. Returns `{ attributes, relationships? }` ' +
+      'with field names, types, and enum values introspected from the ' +
+      'actual `CardDef` at runtime — never hard-coded. Use this BEFORE ' +
+      'writing a tracker JSON file (Project, Issue, KnowledgeArticle, ' +
+      'Spec, etc.) so the document you write matches the live schema, ' +
+      'even when the schema evolves. Schemas are fetched via the realm ' +
+      'server prerenderer (the same path the AI Bot uses) and cached ' +
+      'per-process, so repeated calls with the same code ref are cheap.',
+    parameters: {
+      type: 'object',
+      properties: {
+        module: {
+          type: 'string',
+          description:
+            'Absolute module URL of the card definition (e.g. the live ' +
+            '`darkfactoryModuleUrl` from the system prompt for tracker ' +
+            'cards, or `https://cardstack.com/base/spec` for catalog Spec).',
+        },
+        name: {
+          type: 'string',
+          description:
+            'Exported card name within the module (e.g. `Project`, ' +
+            '`Issue`, `KnowledgeArticle`, `Spec`).',
+        },
+      },
+      required: ['module', 'name'],
+    },
+    execute: async (args) => {
+      let module = requireStringArg(args, 'module', 'get_card_schema');
+      let name = requireStringArg(args, 'name', 'get_card_schema');
+      let schema = await fetchCardTypeSchema(
+        config.client,
+        config.realmServerUrl,
+        config.targetRealmUrl,
+        { module: module as RealmResourceIdentifier, name },
+      );
+      if (!schema) {
+        return {
+          ok: false,
+          error: `Failed to fetch schema for ${module}#${name}. Verify the module URL is reachable from the target realm and that the named export is a CardDef.`,
+        };
+      }
+      return { ok: true, schema };
     },
   };
 }

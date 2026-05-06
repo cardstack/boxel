@@ -203,6 +203,7 @@ module('factory-tool-builder > tool building', function () {
     assert.true(toolNames.includes('write_file'));
     assert.true(toolNames.includes('read_file'));
     assert.true(toolNames.includes('search_realm'));
+    assert.true(toolNames.includes('get_card_schema'));
     assert.true(toolNames.includes('signal_done'));
     assert.true(toolNames.includes('request_clarification'));
     // After CS-10883 retired the kebab-case shadow tools, only
@@ -1383,5 +1384,179 @@ module('buildFactoryTools — run_instantiate', function () {
     assert.strictEqual(result.failures.length, 1);
     assert.strictEqual(result.failures[0].path, 'B/1.json');
     assert.strictEqual(result.failures[0].cardName, 'BadCard');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// get_card_schema tool (live-schema fetch via realm prerenderer)
+// ---------------------------------------------------------------------------
+
+module('buildFactoryTools — get_card_schema', function () {
+  /**
+   * Build a mock client whose `runCommand` returns a stub schema for the
+   * GetCardTypeSchemaCommand and records the args it was called with.
+   * Other client methods fall through to a no-op default.
+   */
+  function buildSchemaClient(
+    schema: {
+      attributes: Record<string, unknown>;
+      relationships?: Record<string, unknown>;
+    },
+    capture?: {
+      calls: {
+        realmServerUrl: string;
+        realmUrl: string;
+        command: string;
+        commandInput: unknown;
+      }[];
+    },
+  ) {
+    let base = createMockClient();
+    return {
+      ...base,
+      runCommand: async (
+        realmServerUrl: string,
+        realmUrl: string,
+        command: string,
+        commandInput?: Record<string, unknown>,
+      ) => {
+        capture?.calls.push({
+          realmServerUrl,
+          realmUrl,
+          command,
+          commandInput,
+        });
+        return {
+          status: 'ready' as const,
+          result: JSON.stringify({
+            data: { attributes: { json: schema } },
+          }),
+          error: null,
+        };
+      },
+    } as unknown as ReturnType<typeof createMockClient>;
+  }
+
+  test('registers get_card_schema with module + name as required params', function (assert) {
+    let config = makeConfig();
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tool = tools.find((t) => t.name === 'get_card_schema');
+    assert.ok(tool, 'get_card_schema tool is registered');
+    let params = tool!.parameters as {
+      type: string;
+      properties: Record<string, { type: string }>;
+      required?: string[];
+    };
+    assert.strictEqual(params.type, 'object');
+    assert.strictEqual(params.properties.module?.type, 'string');
+    assert.strictEqual(params.properties.name?.type, 'string');
+    assert.deepEqual(params.required, ['module', 'name']);
+  });
+
+  test('forwards CodeRef to GetCardTypeSchemaCommand and returns schema', async function (assert) {
+    let calls: {
+      realmServerUrl: string;
+      realmUrl: string;
+      command: string;
+      commandInput: unknown;
+    }[] = [];
+    let stubSchema = {
+      attributes: { properties: { foo: { type: 'string' } } },
+      relationships: { properties: { bar: { type: 'object' } } },
+    };
+    let client = buildSchemaClient(stubSchema, { calls });
+    // Use a unique module URL per test to bypass the per-process cache
+    // in fetchCardTypeSchema.
+    let module = `https://realms.example.test/test-${Date.now()}-${Math.random()}-A/m`;
+
+    let config = makeConfig({ client });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tool = tools.find((t) => t.name === 'get_card_schema')!;
+
+    let result = (await tool.execute({ module, name: 'Project' })) as {
+      ok: boolean;
+      schema?: unknown;
+    };
+
+    assert.true(result.ok, 'returns ok: true on success');
+    assert.deepEqual(
+      result.schema,
+      stubSchema,
+      'returns the parsed schema verbatim',
+    );
+    assert.strictEqual(calls.length, 1, 'runCommand invoked exactly once');
+    assert.strictEqual(
+      calls[0].command,
+      '@cardstack/boxel-host/commands/get-card-type-schema/default',
+      'forwards GetCardTypeSchemaCommand specifier',
+    );
+    assert.strictEqual(
+      calls[0].realmServerUrl,
+      'https://realms.example.test/',
+      'forwards realmServerUrl from config',
+    );
+    assert.strictEqual(
+      calls[0].realmUrl,
+      TARGET_REALM,
+      'forwards target realm as command-context realm',
+    );
+    let input = calls[0].commandInput as { codeRef: { module: string; name: string } };
+    assert.strictEqual(input.codeRef.module, module);
+    assert.strictEqual(input.codeRef.name, 'Project');
+  });
+
+  test('surfaces failure when runCommand returns a non-ready status', async function (assert) {
+    let module = `https://realms.example.test/test-${Date.now()}-${Math.random()}-B/m`;
+    let client = {
+      ...createMockClient(),
+      runCommand: async () => ({
+        status: 'error' as const,
+        result: null,
+        error: 'boom',
+      }),
+    } as unknown as ReturnType<typeof createMockClient>;
+
+    let config = makeConfig({ client });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tool = tools.find((t) => t.name === 'get_card_schema')!;
+
+    let result = (await tool.execute({ module, name: 'Issue' })) as {
+      ok: boolean;
+      error?: string;
+    };
+
+    assert.false(result.ok, 'returns ok: false on schema-fetch failure');
+    assert.true(
+      typeof result.error === 'string' && result.error.includes(module),
+      'error message references the failing module URL',
+    );
+  });
+
+  test('throws when module or name args are missing', async function (assert) {
+    let config = makeConfig();
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+    let tool = tools.find((t) => t.name === 'get_card_schema')!;
+
+    let err1: Error | undefined;
+    try {
+      await tool.execute({ name: 'Project' });
+    } catch (e) {
+      err1 = e as Error;
+    }
+    assert.ok(err1, 'throws when module is missing');
+    assert.true(/non-empty string "module"/.test(err1?.message ?? ''));
+
+    let err2: Error | undefined;
+    try {
+      await tool.execute({ module: 'https://example.test/m' });
+    } catch (e) {
+      err2 = e as Error;
+    }
+    assert.ok(err2, 'throws when name is missing');
+    assert.true(/non-empty string "name"/.test(err2?.message ?? ''));
   });
 });
