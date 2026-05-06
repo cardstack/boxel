@@ -368,10 +368,17 @@ module('command runner', () => {
               prCreationError: null,
               failedStep: null,
             },
+            relationships: {
+              prCard: {
+                links: {
+                  self: prCardUrl,
+                },
+              },
+            },
           },
         },
       },
-      'clears prior error attributes on the workflow card after the GitHub PR succeeds',
+      'clears prior error attributes on the workflow card after the GitHub PR succeeds, re-asserting the prCard link to survive any stale-fetch race',
     );
     let prBody =
       (
