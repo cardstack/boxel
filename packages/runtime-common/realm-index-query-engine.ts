@@ -875,15 +875,60 @@ export class RealmIndexQueryEngine {
     }
   }
 
+  private async fetchCrossRealmLinks(
+    urls: string[],
+    invocationId: string,
+    layerIndex: number,
+  ): Promise<Map<string, CardResource<Saved>>> {
+    let entries = await Promise.all(
+      urls.map(async (url) => {
+        let response: Response;
+        try {
+          response = await this.#fetch(url, {
+            headers: { Accept: SupportedMimeType.CardJson },
+          });
+        } catch (err: unknown) {
+          let message =
+            err instanceof Error ? err.message : String(err ?? 'unknown');
+          this.#log.warn(
+            `[loadLinks ${invocationId}] layer=${layerIndex} cross-realm fetch threw for ${url}: ${message}`,
+          );
+          throw err;
+        }
+        if (!response.ok) {
+          this.#log.warn(
+            `[loadLinks ${invocationId}] layer=${layerIndex} cross-realm fetch failed for ${url} status=${response.status}`,
+          );
+          throw await CardError.fromFetchResponse(url, response);
+        }
+        let json = await response.json();
+        if (!isSingleCardDocument(json)) {
+          throw new Error(
+            `instance ${url} is not a card document. it is: ${JSON.stringify(
+              json,
+              null,
+              2,
+            )}`,
+          );
+        }
+        let linkResource: CardResource<Saved> = {
+          ...json.data,
+          ...{ links: { self: json.data.id } },
+        };
+        return [url, linkResource] as const;
+      }),
+    );
+    return new Map(entries);
+  }
+
   // TODO The caller should provide a list of fields to be included via JSONAPI
   // request. currently we just use the maxLinkDepth to control how deep to load
   // links.
   //
   // Level-order BFS: each layer issues at most one batched DB query for
-  // in-realm cards and one for in-realm file-meta resources, regardless of
-  // how many siblings reference links at that depth (CS-11038). Cross-realm
-  // links still go through individual fetches per the original semantics; a
-  // sibling ticket parallelizes those.
+  // in-realm cards and one for in-realm file-meta resources, alongside
+  // Promise.all-fanout cross-realm fetches, all running concurrently
+  // regardless of how many siblings reference links at that depth.
   private async loadLinks(
     {
       realmURL,
@@ -1001,6 +1046,7 @@ export class RealmIndexQueryEngine {
       let entries: Entry[] = [];
       let inRealmCardURLs = new Set<string>();
       let inRealmFileURLs = new Set<string>();
+      let crossRealmURLs = new Set<string>();
 
       for (let item of layer) {
         let { resource, applyLinkFields } = item;
@@ -1091,6 +1137,8 @@ export class RealmIndexQueryEngine {
             if (expectsFileMeta) {
               inRealmFileURLs.add(linkURL.href);
             }
+          } else {
+            crossRealmURLs.add(linkURL.href);
           }
 
           entries.push({
@@ -1108,17 +1156,19 @@ export class RealmIndexQueryEngine {
       }
 
       this.#log.debug(
-        `[loadLinks ${invocationId}] layer=${currentLayerIndex} size=${layer.length} entries=${entries.length} inRealmCards=${inRealmCardURLs.size} inRealmFiles=${inRealmFileURLs.size} crossRealm=${entries.filter((e) => !e.inRealm).length}`,
+        `[loadLinks ${invocationId}] layer=${currentLayerIndex} size=${layer.length} entries=${entries.length} inRealmCards=${inRealmCardURLs.size} inRealmFiles=${inRealmFileURLs.size} crossRealm=${crossRealmURLs.size}`,
       );
 
-      // Step 3: issue this layer's batched DB queries — at most two
-      // round-trips (instances + file-meta) regardless of how many
-      // siblings reference links at this depth.
+      // Step 3: issue this layer's batched DB queries plus cross-realm
+      // fetches concurrently. In-realm links collapse to one batched query
+      // per kind (instances + file-meta); cross-realm links fan out one
+      // fetch per unique URL via Promise.all alongside the DB round-trips.
       let batchStart = Date.now();
       let instanceMap: Map<string, InstanceOrError>;
       let fileMap: Map<string, IndexedFile>;
+      let crossRealmMap: Map<string, CardResource<Saved>>;
       try {
-        [instanceMap, fileMap] = await Promise.all([
+        [instanceMap, fileMap, crossRealmMap] = await Promise.all([
           inRealmCardURLs.size > 0
             ? this.#indexQueryEngine.getInstances(
                 [...inRealmCardURLs].map((u) => new URL(u)),
@@ -1131,23 +1181,30 @@ export class RealmIndexQueryEngine {
                 opts,
               )
             : Promise.resolve(new Map<string, IndexedFile>()),
+          crossRealmURLs.size > 0
+            ? this.fetchCrossRealmLinks(
+                [...crossRealmURLs],
+                invocationId,
+                currentLayerIndex,
+              )
+            : Promise.resolve(new Map<string, CardResource<Saved>>()),
         ]);
       } catch (err: unknown) {
         let message =
           err instanceof Error ? err.message : String(err ?? 'unknown error');
         this.#log.warn(
-          `[loadLinks ${invocationId}] layer=${currentLayerIndex} batched index lookup rejected (cards=${inRealmCardURLs.size} files=${inRealmFileURLs.size}): ${message}`,
+          `[loadLinks ${invocationId}] layer=${currentLayerIndex} batched index lookup rejected (cards=${inRealmCardURLs.size} files=${inRealmFileURLs.size} crossRealm=${crossRealmURLs.size}): ${message}`,
         );
         throw err;
       }
       this.#log.debug(
-        `[loadLinks ${invocationId}] layer=${currentLayerIndex} batch fetched in ${Date.now() - batchStart}ms instances=${instanceMap.size}/${inRealmCardURLs.size} files=${fileMap.size}/${inRealmFileURLs.size}`,
+        `[loadLinks ${invocationId}] layer=${currentLayerIndex} batch fetched in ${Date.now() - batchStart}ms instances=${instanceMap.size}/${inRealmCardURLs.size} files=${fileMap.size}/${inRealmFileURLs.size} crossRealm=${crossRealmMap.size}/${crossRealmURLs.size}`,
       );
 
-      // Step 4: per-entry — resolve linkResource (in-realm: from the
-      // batched maps; cross-realm: per-entry fetch), build the next
-      // layer, and rewrite relationship.data with the same semantics as
-      // the original recursive implementation.
+      // Step 4: per-entry — resolve linkResource from the prefetched
+      // maps (in-realm or cross-realm), build the next layer, and
+      // rewrite relationship.data with the same semantics as the
+      // original recursive implementation.
       let nextLayer: LayerItem[] = [];
       for (let entry of entries) {
         let linkResource: CardResource<Saved> | FileMetaResource | undefined;
@@ -1169,45 +1226,7 @@ export class RealmIndexQueryEngine {
             }
           }
         } else {
-          let response: Response;
-          try {
-            response = await this.#fetch(entry.linkURL, {
-              headers: { Accept: SupportedMimeType.CardJson },
-            });
-          } catch (err: unknown) {
-            let message =
-              err instanceof Error ? err.message : String(err ?? 'unknown');
-            this.#log.warn(
-              `[loadLinks ${invocationId}] layer=${currentLayerIndex} cross-realm fetch threw for ${entry.linkURL.href}: ${message}`,
-            );
-            throw err;
-          }
-          if (!response.ok) {
-            this.#log.warn(
-              `[loadLinks ${invocationId}] layer=${currentLayerIndex} cross-realm fetch failed for ${entry.linkURL.href} status=${response.status}`,
-            );
-            let cardError = await CardError.fromFetchResponse(
-              entry.linkURL.href,
-              response,
-            );
-            throw cardError;
-          }
-          let json = await response.json();
-          if (!isSingleCardDocument(json)) {
-            throw new Error(
-              `instance ${
-                entry.linkURL.href
-              } is not a card document. it is: ${JSON.stringify(
-                json,
-                null,
-                2,
-              )}`,
-            );
-          }
-          linkResource = {
-            ...json.data,
-            ...{ links: { self: json.data.id } },
-          };
+          linkResource = crossRealmMap.get(entry.linkURL.href);
         }
 
         let descendStack =
