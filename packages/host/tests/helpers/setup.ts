@@ -31,8 +31,14 @@ let nextFetchId = 0;
 // failure (which surfaces the generic browser TypeError "A network error
 // occurred." with no URL) can be correlated with the actual request that blew
 // up. Each entry is `${method} ${url}: ${reason}`; cleared in beforeEach.
+//
+// Each fetch captures `currentTestEpoch` at start; on failure, we only push to
+// the buffer when the captured epoch still matches the current one. Without
+// that gate, a fetch from test N rejecting after test N+1's beforeEach has
+// cleared the buffer would repopulate it and misattribute URLs to N+1.
 const recentFailedFetches: string[] = [];
 const RECENT_FAILED_FETCHES_LIMIT = 20;
+let currentTestEpoch = 0;
 
 function setupFetchDebugging(hooks: NestedHooks) {
   let originalFetch: typeof globalThis.fetch | undefined;
@@ -41,6 +47,7 @@ function setupFetchDebugging(hooks: NestedHooks) {
   hooks.beforeEach(function () {
     inFlightFetches.clear();
     recentFailedFetches.length = 0;
+    currentTestEpoch++;
     if (!globalThis.fetch) {
       return;
     }
@@ -49,13 +56,14 @@ function setupFetchDebugging(hooks: NestedHooks) {
     wrappedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       let { method, url } = describeFetchRequest(input, init);
       let id = nextFetchId++;
+      let epoch = currentTestEpoch;
       inFlightFetches.set(id, `${method} ${url}`);
       try {
         return await boundFetch(input, init);
       } catch (error) {
         let reason = formatErrorForLog(error);
         console.error(`[test-fetch] ${method} ${url} failed: ${reason}`);
-        rememberFailedFetch(method, url, reason);
+        rememberFailedFetch(epoch, method, url, reason);
         throw error;
       } finally {
         inFlightFetches.delete(id);
@@ -74,7 +82,17 @@ function setupFetchDebugging(hooks: NestedHooks) {
   });
 }
 
-function rememberFailedFetch(method: string, url: string, reason: string) {
+function rememberFailedFetch(
+  epoch: number,
+  method: string,
+  url: string,
+  reason: string,
+) {
+  // Drop late rejections from a prior test — the buffer is per-test and would
+  // otherwise contaminate the next test's diagnostic output.
+  if (epoch !== currentTestEpoch) {
+    return;
+  }
   recentFailedFetches.push(`${method} ${url}: ${reason}`);
   if (recentFailedFetches.length > RECENT_FAILED_FETCHES_LIMIT) {
     recentFailedFetches.splice(
@@ -136,7 +154,11 @@ function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
           // never let diagnostic logging swallow the original failure
         }
         if (typeof originalOnUncaughtException === 'function') {
-          originalOnUncaughtException(error);
+          // Preserve QUnit as the receiver in case any future hook reads
+          // `this` — current QUnit 2.x reads `config` from closure scope, but
+          // calling via `.call(qunitGlobal, ...)` keeps the wrapper's behavior
+          // identical to the unwrapped path regardless.
+          originalOnUncaughtException.call(qunitGlobal, error);
         }
       };
       qunitGlobal.onUncaughtException = wrappedOnUncaughtException;
