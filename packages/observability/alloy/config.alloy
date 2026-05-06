@@ -61,6 +61,27 @@ loki.source.docker "containers" {
 	forward_to = [loki.process.filter_old.receiver]
 }
 
+// Local-dev native processes (realm-server, worker, prerender,
+// prerender-manager) run on the host via mise tasks, not in Docker, so the
+// Docker discovery above can't see them. The mise dev tasks tee their
+// stdout+stderr through packages/observability/scripts/dev-log-tee.sh into
+// BOXEL_LOG_DIR (default /tmp/boxel-logs/<service>.log on the host), and
+// docker-compose.yml bind-mounts that directory into this container at
+// /var/log/boxel-host/. Map keys other than __path__ become Loki labels.
+local.file_match "host_processes" {
+	path_targets = [
+		{__path__ = "/var/log/boxel-host/realm-server.log", service = "realm-server", env = "local"},
+		{__path__ = "/var/log/boxel-host/worker.log", service = "worker", env = "local"},
+		{__path__ = "/var/log/boxel-host/prerender.log", service = "prerender", env = "local"},
+		{__path__ = "/var/log/boxel-host/prerender-manager.log", service = "prerender-manager", env = "local"},
+	]
+}
+
+loki.source.file "host_processes" {
+	targets    = local.file_match.host_processes.targets
+	forward_to = [loki.process.filter_old.receiver]
+}
+
 // Long-running containers (e.g. a `boxel-pg` that's been up for a year)
 // hand Alloy their entire log history when it first attaches. Loki rejects
 // anything outside its small ordering window, generating a 400-storm. Drop
