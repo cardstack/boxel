@@ -137,19 +137,24 @@ function parseJsonValue<T>(value: T | string | null): T | null {
   return value as T;
 }
 
-// Approximate the JSON-text byte size of a `ModuleCacheEntry` for the
+// Approximate the JSON-text size of a `ModuleCacheEntry` for the
 // parsed-cache budget. The `definitions` blob dominates entry size by
 // orders of magnitude in production (the `deps` array and `error_doc`
-// row are bytes, not megabytes), so the size of the rest is negligible
-// for budget accounting.
+// row are bytes, not megabytes), so the rest is negligible for budget
+// accounting.
 //
 // If the source row arrived as a JSON string (Postgres returned text),
 // its `.length` is exact and free. Otherwise (jsonb auto-decoded by the
 // driver to a JS object) we re-stringify the parsed `definitions` —
 // O(N) on the parsed object, but paid once per cache insert and
-// amortized over every subsequent hit. JSON.stringify can throw on
-// unexpected shapes (cycles, BigInts); fall back to 0 so a single
-// pathological insert can't poison the cache.
+// amortized over every subsequent hit.
+//
+// `JSON.stringify` can throw on unexpected shapes (cycles, BigInts).
+// Returns 0 in that case as a "size unknown" sentinel; the caller must
+// treat 0 as "skip caching" so a pathological insert can't bypass the
+// budget cap. (Realistic prerender output won't trigger this — module
+// definitions are plain JSON-shaped — but the safety hatch needs to
+// stay closed.)
 function approximateEntrySizeChars(
   entry: ModuleCacheEntry,
   rawDefinitions: unknown,
@@ -298,7 +303,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       sizeChars: number;
     }
   >();
-  #parsedCacheBytes = 0;
+  #parsedCacheChars = 0;
 
   constructor(
     dbAdapter: DBAdapter,
@@ -540,6 +545,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       key,
       (this.#moduleGenerations.get(key) ?? 0) + 1,
     );
+    // Eager-evict matching parsed-cache entries. Snapshot validation in
+    // `readFromDatabaseCache` already drops a stale entry on next access,
+    // so this is for memory hygiene — without it, a stale entry could sit
+    // resident until LRU touches it. The cacheKey shape is
+    // `${resolvedRealmURL}|${moduleURL}|<scope>|<user>`, so the prefix
+    // narrows to entries for this exact module across all (scope, user)
+    // pairs.
+    this.evictParsedCacheByPrefix(`${resolvedRealmURL}|${moduleURL}|`);
   }
 
   bumpRealmGeneration(resolvedRealmURL: string): void {
@@ -547,10 +560,21 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolvedRealmURL,
       (this.#realmGenerations.get(resolvedRealmURL) ?? 0) + 1,
     );
+    // Eager-evict every parsed-cache entry for this realm — same memory-
+    // hygiene reasoning as `bumpModuleGeneration`, but the realm-scoped
+    // counter invalidates every (moduleURL, scope, user) combination
+    // under the realm.
+    this.evictParsedCacheByPrefix(`${resolvedRealmURL}|`);
   }
 
   bumpGlobalGeneration(): void {
     this.#globalGeneration += 1;
+    // Every parsed-cache entry is now snapshot-stale by construction.
+    // Drop the whole map so the memory is released immediately rather
+    // than waiting for each entry to be touched and self-evict, or for
+    // LRU pressure to push them out under unrelated work.
+    this.#parsedCache.clear();
+    this.#parsedCacheChars = 0;
   }
 
   // Returns true if the cached entry has a top-level error and has exceeded
@@ -1023,7 +1047,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         this.#parsedCache.set(cacheKey, cached);
         return cached.entry;
       }
-      this.#parsedCacheBytes -= cached.sizeChars;
+      this.#parsedCacheChars -= cached.sizeChars;
       this.#parsedCache.delete(cacheKey);
     }
 
@@ -1100,33 +1124,56 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         snapshotAtPersist.global === snapshotAtEntry.global
       ) {
         let sizeChars = approximateEntrySizeChars(entry, row.definitions);
-        // If a concurrent caller already inserted under this key, subtract
-        // the existing entry's bytes before overwriting. `Map#set`
-        // replaces the value but the bytes counter would otherwise
-        // double-count the replaced entry, drifting permanently above
-        // the actual map weight and forcing spurious evictions.
-        // Reachable because `lookupCachedDefinition` calls this directly,
-        // bypassing `#inFlight`, so two concurrent cache-only readers can
-        // both finish the SQL round-trip for the same cacheKey.
-        let existing = this.#parsedCache.get(cacheKey);
-        if (existing) {
-          this.#parsedCacheBytes -= existing.sizeChars;
+        // sizeChars === 0 only when `approximateEntrySizeChars` couldn't
+        // determine a size (e.g. JSON.stringify threw on a pathological
+        // shape). Skip the cache write rather than insert a zero-weight
+        // entry that would consume memory without counting against the
+        // budget — that would silently disable budget enforcement for
+        // any pathological row that landed first.
+        if (sizeChars > 0) {
+          // If a concurrent caller already inserted under this key,
+          // subtract the existing entry's chars before overwriting.
+          // `Map#set` replaces the value but the chars counter would
+          // otherwise double-count the replaced entry, drifting
+          // permanently above the actual map weight and forcing
+          // spurious evictions. Reachable because
+          // `lookupCachedDefinition` calls this directly, bypassing
+          // `#inFlight`, so two concurrent cache-only readers can both
+          // finish the SQL round-trip for the same cacheKey.
+          let existing = this.#parsedCache.get(cacheKey);
+          if (existing) {
+            this.#parsedCacheChars -= existing.sizeChars;
+          }
+          this.#parsedCache.set(cacheKey, {
+            entry,
+            snapshot: snapshotAtPersist,
+            sizeChars,
+          });
+          this.#parsedCacheChars += sizeChars;
+          this.evictParsedCacheUntilUnderBudget();
         }
-        this.#parsedCache.set(cacheKey, {
-          entry,
-          snapshot: snapshotAtPersist,
-          sizeChars,
-        });
-        this.#parsedCacheBytes += sizeChars;
-        this.evictParsedCacheUntilUnderBudget();
       }
     }
     return entry;
   }
 
+  // Drop every parsed-cache entry whose key starts with `prefix` and
+  // decrement the chars counter accordingly. Called from the bump
+  // methods so a local invalidation or a cross-process NOTIFY-replay
+  // (via CS-10952's listener) frees memory immediately rather than
+  // waiting for snapshot mismatches to evict on the next access.
+  private evictParsedCacheByPrefix(prefix: string): void {
+    for (let [key, entry] of this.#parsedCache) {
+      if (key.startsWith(prefix)) {
+        this.#parsedCacheChars -= entry.sizeChars;
+        this.#parsedCache.delete(key);
+      }
+    }
+  }
+
   private evictParsedCacheUntilUnderBudget(): void {
     while (
-      this.#parsedCacheBytes > PARSED_CACHE_BUDGET_CHARS &&
+      this.#parsedCacheChars > PARSED_CACHE_BUDGET_CHARS &&
       this.#parsedCache.size > 0
     ) {
       let oldestKey = this.#parsedCache.keys().next().value;
@@ -1135,7 +1182,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       }
       let oldest = this.#parsedCache.get(oldestKey);
       if (oldest) {
-        this.#parsedCacheBytes -= oldest.sizeChars;
+        this.#parsedCacheChars -= oldest.sizeChars;
       }
       this.#parsedCache.delete(oldestKey);
     }
