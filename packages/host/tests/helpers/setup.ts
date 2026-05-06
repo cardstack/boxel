@@ -8,7 +8,6 @@ import {
   setupRenderingTest as emberSetupRenderingTest,
 } from 'ember-qunit';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import * as QUnit from 'qunit';
 
 import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
 import type ResetService from '@cardstack/host/services/reset';
@@ -102,6 +101,22 @@ function rememberFailedFetch(
   }
 }
 
+// Resolve the qunit runtime object (the one the qunit package installs on the
+// global) rather than the ES module namespace. Importing `import * as QUnit
+// from 'qunit'` produces a frozen module record where `onUncaughtException`
+// is a getter-only export — assignments throw `TypeError: Cannot set property
+// onUncaughtException of #<Object> which has only a getter`. The runtime
+// global is writable; `suspendGlobalErrorHook` (uncaught-exceptions.ts) reads
+// and reassigns it the same way.
+function getQUnitRuntime():
+  | { onUncaughtException?: (error: unknown) => void }
+  | undefined {
+  let q = (globalThis as { QUnit?: unknown }).QUnit;
+  return q && typeof q === 'object'
+    ? (q as { onUncaughtException?: (error: unknown) => void })
+    : undefined;
+}
+
 // surface unhandled rejections during tests with full stacks + in-flight URLs
 function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
   let handler: ((event: PromiseRejectionEvent) => void) | undefined;
@@ -139,10 +154,8 @@ function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
     // context. Without this hook, the failure message exposes only the generic
     // browser TypeError with no URL, making field-playground / code-submode
     // network-error flakes effectively unattributable.
-    let qunitGlobal = QUnit as unknown as {
-      onUncaughtException?: (error: unknown) => void;
-    };
-    if (qunitGlobal && typeof qunitGlobal === 'object') {
+    let qunitGlobal = getQUnitRuntime();
+    if (qunitGlobal) {
       originalOnUncaughtException = qunitGlobal.onUncaughtException;
       wrappedOnUncaughtException = (error: unknown) => {
         try {
@@ -172,12 +185,9 @@ function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
     handler = undefined;
     target = undefined;
 
-    let qunitGlobal = QUnit as unknown as {
-      onUncaughtException?: (error: unknown) => void;
-    };
+    let qunitGlobal = getQUnitRuntime();
     if (
       qunitGlobal &&
-      typeof qunitGlobal === 'object' &&
       qunitGlobal.onUncaughtException === wrappedOnUncaughtException
     ) {
       qunitGlobal.onUncaughtException = originalOnUncaughtException as
