@@ -40,10 +40,7 @@ let log = logger('issue-loop');
  * See ValidationPipeline for the real implementation.
  */
 export interface Validator {
-  validate(
-    targetRealmUrl: string,
-    iteration: number,
-  ): Promise<ValidationResults>;
+  validate(targetRealm: string, iteration: number): Promise<ValidationResults>;
   /** Format validation results for LLM context and issue descriptions. */
   formatForContext(results: ValidationResults): string;
 }
@@ -84,7 +81,7 @@ export {
 export interface IssueContextBuilderLike {
   buildForIssue(params: {
     issue: IssueData;
-    targetRealmUrl: string;
+    targetRealm: string;
     validationResults?: ValidationResults;
     /** Pre-formatted validation context from Validator.formatForContext(). */
     validationContext?: string;
@@ -107,7 +104,7 @@ export interface IssueLoopConfig {
    * slugs) to the specific issue being validated.
    */
   createValidator: (issueId: string) => Validator;
-  targetRealmUrl: string;
+  targetRealm: string;
   /**
    * Local workspace directory mirroring the target realm. Passed to the
    * loop so it can interleave sync calls with agent turns and validation.
@@ -219,7 +216,7 @@ export async function runIssueLoop(
     tools,
     issueStore,
     createValidator,
-    targetRealmUrl,
+    targetRealm,
     syncWorkspace,
     briefUrl,
     maxIterationsPerIssue = DEFAULT_MAX_ITERATIONS_PER_ISSUE,
@@ -234,7 +231,7 @@ export async function runIssueLoop(
   let exhaustedIssues = new Set<string>();
 
   log.info(
-    `Starting issue loop: targetRealm=${targetRealmUrl}, maxIterationsPerIssue=${maxIterationsPerIssue}`,
+    `Starting issue loop: targetRealm=${targetRealm}, maxIterationsPerIssue=${maxIterationsPerIssue}`,
   );
 
   if (!scheduler.hasUnblockedIssues()) {
@@ -336,7 +333,7 @@ export async function runIssueLoop(
       // Build context — includes pre-formatted validation context from prior iteration
       let context = await contextBuilder.buildForIssue({
         issue,
-        targetRealmUrl,
+        targetRealm,
         validationResults,
         validationContext,
         briefUrl,
@@ -356,7 +353,7 @@ export async function runIssueLoop(
       // Validation — runs after every agent turn.
       // Pass the iteration number so all steps use it as the sequence
       // number in artifact filenames (parse_slug-1, lint_slug-1, etc.)
-      validationResults = await validator.validate(targetRealmUrl, iteration);
+      validationResults = await validator.validate(targetRealm, iteration);
 
       // Push the validator's artifact cards (ParseResult / LintResult /
       // EvalResult / InstantiateResult / TestRun) to the realm so they

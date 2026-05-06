@@ -74,7 +74,7 @@ export interface FactoryTool {
 }
 
 export interface ToolBuilderConfig {
-  targetRealmUrl: string;
+  targetRealm: string;
   /** The darkfactory module URL (lives in the software-factory realm, NOT the target realm). */
   darkfactoryModuleUrl: string;
   /** Boxel CLI client — owns all realm auth and API calls. */
@@ -350,7 +350,7 @@ function buildFetchTranspiledModuleTool(
     },
     execute: async (args) => {
       let path = requireStringArg(args, 'path', 'fetch_transpiled_module');
-      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
+      let realmUrl = resolveRealm(config, args.realm as string | undefined);
       return config.client.readTranspiled(realmUrl, path);
     },
   };
@@ -378,7 +378,7 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
     },
     execute: async (args) => {
       let query = args.query as Record<string, unknown>;
-      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
+      let realmUrl = resolveRealm(config, args.realm as string | undefined);
       let result = await config.client.search(realmUrl, query);
       return result.ok ? { data: result.data } : { error: result.error };
     },
@@ -685,7 +685,7 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
         };
       }
       return execute({
-        targetRealmUrl: config.targetRealmUrl,
+        targetRealm: config.targetRealm,
         client: config.client,
         hostAppUrl: config.hostAppUrl ?? config.realmServerUrl,
       });
@@ -725,7 +725,7 @@ function buildRunLintTool(config: ToolBuilderConfig): FactoryTool {
           ? rawPath.trim()
           : undefined;
       return execute({
-        targetRealmUrl: config.targetRealmUrl,
+        targetRealm: config.targetRealm,
         client: config.client,
         workspaceDir: config.workspaceDir,
         ...(path ? { path } : {}),
@@ -783,7 +783,7 @@ function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
         };
       }
       return execute({
-        targetRealmUrl: config.targetRealmUrl,
+        targetRealm: config.targetRealm,
         realmServerUrl: config.realmServerUrl,
         client: config.client,
         ...(path ? { path } : {}),
@@ -831,7 +831,7 @@ function buildRunParseTool(config: ToolBuilderConfig): FactoryTool {
           ? rawPath.trim()
           : undefined;
       return execute({
-        targetRealmUrl: config.targetRealmUrl,
+        targetRealm: config.targetRealm,
         client: config.client,
         workspaceDir: config.workspaceDir,
         ...(path ? { path } : {}),
@@ -893,7 +893,7 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
         };
       }
       return execute({
-        targetRealmUrl: config.targetRealmUrl,
+        targetRealm: config.targetRealm,
         realmServerUrl: config.realmServerUrl,
         client: config.client,
         workspaceDir: config.workspaceDir,
@@ -966,7 +966,7 @@ function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
     execute: async (args) => {
       return config.client.runCommand(
         config.realmServerUrl,
-        config.targetRealmUrl,
+        config.targetRealm,
         args.command as string,
         args.commandInput as Record<string, unknown> | undefined,
       );
@@ -1025,9 +1025,9 @@ function buildRegisteredTool(
 // Helpers
 // ---------------------------------------------------------------------------
 
-function resolveRealmUrl(
+function resolveRealm(
   config: ToolBuilderConfig,
   _realm: string | undefined,
 ): string {
-  return config.targetRealmUrl;
+  return config.targetRealm;
 }

@@ -58,7 +58,7 @@ function makeContext(): AgentContext {
     issue: { id: 'Issues/demo', issueType: 'feature' },
     knowledge: [],
     skills: [],
-    targetRealmUrl: 'https://realms.example.test/hassan/personal/',
+    targetRealm: 'https://realms.example.test/hassan/personal/',
   };
 }
 

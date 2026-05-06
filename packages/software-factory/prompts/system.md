@@ -30,7 +30,7 @@ completion. Inspect existing state before making changes — do not guess.
 
 # Realms
 
-- Target realm: {{targetRealmUrl}}
+- Target realm: {{targetRealm}}
 
 {{#each skills}}
 

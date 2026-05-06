@@ -17,7 +17,7 @@ import { installTestProfile } from './helpers/test-profile';
 
 const briefUrl =
   'https://briefs.example.test/software-factory/Wiki/sticky-note';
-const targetRealmUrl = 'https://realms.example.test/hassan/personal/';
+const targetRealm = 'https://realms.example.test/hassan/personal/';
 const normalizedBrief: FactoryBrief = {
   title: 'Sticky Note',
   sourceUrl: briefUrl,
@@ -28,7 +28,7 @@ const normalizedBrief: FactoryBrief = {
   tags: ['documents-content', 'sticky', 'note'],
 };
 const bootstrappedTargetRealm: FactoryTargetRealmBootstrapResult = {
-  url: targetRealmUrl,
+  url: targetRealm,
   serverUrl: 'https://realms.example.test/',
   ownerUsername: 'hassan',
   createdRealm: true,
@@ -59,15 +59,15 @@ module('factory-entrypoint', function (hooks) {
     let options = parseFactoryEntrypointArgs([
       '--brief-url',
       briefUrl,
-      '--target-realm-url',
-      targetRealmUrl,
+      '--target-realm',
+      targetRealm,
       '--realm-server-url',
       'https://realms.example.test/',
     ]);
 
     assert.deepEqual(options, {
       briefUrl,
-      targetRealmUrl,
+      targetRealm,
       realmServerUrl: 'https://realms.example.test/',
       agent: 'claude',
       openRouterModel: undefined,
@@ -80,8 +80,8 @@ module('factory-entrypoint', function (hooks) {
     let options = parseFactoryEntrypointArgs([
       '--brief-url',
       briefUrl,
-      '--target-realm-url',
-      targetRealmUrl,
+      '--target-realm',
+      targetRealm,
       '--agent',
       'claude',
     ]);
@@ -94,8 +94,8 @@ module('factory-entrypoint', function (hooks) {
     let options = parseFactoryEntrypointArgs([
       '--brief-url',
       briefUrl,
-      '--target-realm-url',
-      targetRealmUrl,
+      '--target-realm',
+      targetRealm,
       '--agent',
       'codex',
     ]);
@@ -107,8 +107,8 @@ module('factory-entrypoint', function (hooks) {
     let options = parseFactoryEntrypointArgs([
       '--brief-url',
       briefUrl,
-      '--target-realm-url',
-      targetRealmUrl,
+      '--target-realm',
+      targetRealm,
       '--agent',
       'openrouter',
     ]);
@@ -121,8 +121,8 @@ module('factory-entrypoint', function (hooks) {
     let options = parseFactoryEntrypointArgs([
       '--brief-url',
       briefUrl,
-      '--target-realm-url',
-      targetRealmUrl,
+      '--target-realm',
+      targetRealm,
       '--agent',
       'openrouter=anthropic/claude-sonnet-4',
     ]);
@@ -135,8 +135,8 @@ module('factory-entrypoint', function (hooks) {
     let options = parseFactoryEntrypointArgs([
       '--brief-url',
       briefUrl,
-      '--target-realm-url',
-      targetRealmUrl,
+      '--target-realm',
+      targetRealm,
     ]);
 
     assert.strictEqual(options.agent, 'claude');
@@ -148,8 +148,8 @@ module('factory-entrypoint', function (hooks) {
         parseFactoryEntrypointArgs([
           '--brief-url',
           briefUrl,
-          '--target-realm-url',
-          targetRealmUrl,
+          '--target-realm',
+          targetRealm,
           '--agent',
           'ollama',
         ]),
@@ -165,8 +165,8 @@ module('factory-entrypoint', function (hooks) {
         parseFactoryEntrypointArgs([
           '--brief-url',
           briefUrl,
-          '--target-realm-url',
-          targetRealmUrl,
+          '--target-realm',
+          targetRealm,
           '--agent',
           'claude=foo',
         ]),
@@ -182,8 +182,8 @@ module('factory-entrypoint', function (hooks) {
         parseFactoryEntrypointArgs([
           '--brief-url',
           briefUrl,
-          '--target-realm-url',
-          targetRealmUrl,
+          '--target-realm',
+          targetRealm,
           '--agent',
           'openrouter=',
         ]),
@@ -197,8 +197,8 @@ module('factory-entrypoint', function (hooks) {
     let options = parseFactoryEntrypointArgs([
       '--brief-url',
       briefUrl,
-      '--target-realm-url',
-      targetRealmUrl,
+      '--target-realm',
+      targetRealm,
       '--no-retry-blocked',
     ]);
 
@@ -207,7 +207,7 @@ module('factory-entrypoint', function (hooks) {
 
   test('parseFactoryEntrypointArgs rejects missing required inputs', function (assert) {
     assert.throws(
-      () => parseFactoryEntrypointArgs(['--target-realm-url', targetRealmUrl]),
+      () => parseFactoryEntrypointArgs(['--target-realm', targetRealm]),
       (error: unknown) =>
         error instanceof FactoryEntrypointUsageError &&
         error.message === 'Missing required --brief-url',
@@ -218,7 +218,7 @@ module('factory-entrypoint', function (hooks) {
     let summary = buildFactoryEntrypointSummary(
       {
         briefUrl,
-        targetRealmUrl,
+        targetRealm,
         realmServerUrl: null,
         agent: 'claude',
       },
@@ -235,7 +235,7 @@ module('factory-entrypoint', function (hooks) {
       'sticky',
       'note',
     ]);
-    assert.strictEqual(summary.targetRealm.url, targetRealmUrl);
+    assert.strictEqual(summary.targetRealm.url, targetRealm);
     assert.strictEqual(summary.targetRealm.ownerUsername, 'hassan');
     assert.deepEqual(
       summary.actions.map((action) => action.name),
@@ -266,7 +266,7 @@ module('factory-entrypoint', function (hooks) {
       runFactoryEntrypoint(
         {
           briefUrl,
-          targetRealmUrl,
+          targetRealm,
           realmServerUrl: null,
           agent: 'codex',
         },
@@ -314,7 +314,7 @@ module('factory-entrypoint', function (hooks) {
     let usage = getFactoryEntrypointUsage();
 
     assert.true(/--brief-url <url>/.test(usage));
-    assert.true(/--target-realm-url <url>/.test(usage));
+    assert.true(/--target-realm <realm>/.test(usage));
     assert.true(/--realm-server-url <url>/.test(usage));
     assert.true(/--no-retry-blocked/.test(usage));
     assert.true(/--help/.test(usage));
@@ -331,7 +331,7 @@ module('factory-entrypoint', function (hooks) {
     let summary = await runFactoryEntrypoint(
       {
         briefUrl,
-        targetRealmUrl,
+        targetRealm,
         realmServerUrl: null,
         agent: 'claude',
       },
@@ -409,7 +409,7 @@ module('factory-entrypoint', function (hooks) {
     await runFactoryEntrypoint(
       {
         briefUrl,
-        targetRealmUrl,
+        targetRealm,
         realmServerUrl: 'https://realms.example.test/app/',
         agent: 'claude',
       },

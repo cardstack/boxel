@@ -235,7 +235,7 @@ export interface AgentContext {
   previousActions?: AgentAction[];
   /** @deprecated Iteration tracking is now owned by the orchestrator. */
   iteration?: number;
-  targetRealmUrl: string;
+  targetRealm: string;
   /** Validation results from the prior inner-loop iteration (used for pass/fail checks). */
   validationResults?: ValidationResults;
   /** Pre-formatted validation context from Validator.formatForContext() — the sole mechanism for validation reaching the LLM. */

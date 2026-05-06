@@ -21,7 +21,7 @@ export interface EvalResultAttributes {
 }
 
 export interface EvalResultRealmOptions {
-  targetRealmUrl: string;
+  targetRealm: string;
   client: BoxelCLIClient;
   /** Local workspace directory — EvalResult cards are written here. */
   workspaceDir: string;

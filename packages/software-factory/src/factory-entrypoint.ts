@@ -32,7 +32,7 @@ let log = logger('factory-entrypoint');
 
 export interface FactoryEntrypointOptions {
   briefUrl: string;
-  targetRealmUrl: string | null;
+  targetRealm: string | null;
   realmServerUrl: string | null;
   agent: FactoryAgentProvider;
   /** Only set when agent === 'openrouter' and the flag carried a `=<id>` suffix. */
@@ -123,11 +123,11 @@ export { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 export function getFactoryEntrypointUsage(): string {
   return [
     'Usage:',
-    '  pnpm factory:go --brief-url <url> --target-realm-url <url> [options]',
+    '  pnpm factory:go --brief-url <url> --target-realm <realm> [options]',
     '',
     'Required:',
     '  --brief-url <url>           Absolute URL for the source brief card',
-    '  --target-realm-url <url>    Absolute URL for the target realm',
+    '  --target-realm <realm>      Target realm (URL form, e.g. http://localhost:4201/me/realm/)',
     '',
     'Options:',
     '  --realm-server-url <url>   Realm server URL (default: from active Boxel profile)',
@@ -146,7 +146,7 @@ export function getFactoryEntrypointUsage(): string {
     '  For public briefs, no further auth setup is needed.',
     '  For private briefs, factory:go authenticates via the active Boxel profile.',
     '  The realm server URL comes from --realm-server-url, or the active Boxel profile.',
-    '  It is never inferred from --target-realm-url.',
+    '  It is never inferred from --target-realm.',
   ].join('\n');
 }
 
@@ -165,7 +165,7 @@ export function parseFactoryEntrypointArgs(
         'brief-url': {
           type: 'string',
         },
-        'target-realm-url': {
+        'target-realm': {
           type: 'string',
         },
         'realm-server-url': {
@@ -197,9 +197,9 @@ export function parseFactoryEntrypointArgs(
   }
 
   let briefUrl = requireStringValue(parsed.values['brief-url'], '--brief-url');
-  let targetRealmUrl = requireStringValue(
-    parsed.values['target-realm-url'],
-    '--target-realm-url',
+  let targetRealm = requireStringValue(
+    parsed.values['target-realm'],
+    '--target-realm',
   );
   let realmServerUrl =
     typeof parsed.values['realm-server-url'] === 'string'
@@ -219,7 +219,7 @@ export function parseFactoryEntrypointArgs(
 
   return {
     briefUrl: normalizeUrl(briefUrl, '--brief-url'),
-    targetRealmUrl: normalizeUrl(targetRealmUrl, '--target-realm-url'),
+    targetRealm: normalizeUrl(targetRealm, '--target-realm'),
     realmServerUrl,
     agent: parsedAgent.provider,
     openRouterModel: parsedAgent.openRouterModel,
@@ -246,7 +246,7 @@ export async function runFactoryEntrypoint(
   let targetRealmResolution = (
     dependencies?.resolveTargetRealm ?? resolveFactoryTargetRealm
   )({
-    targetRealmUrl: options.targetRealmUrl,
+    targetRealm: options.targetRealm,
     realmServerUrl: options.realmServerUrl,
   });
 
@@ -308,7 +308,7 @@ export async function runFactoryEntrypoint(
   let loopFn = dependencies?.runIssueLoop ?? runFactoryIssueLoop;
   let loopResult = await loopFn({
     briefUrl: options.briefUrl,
-    targetRealmUrl: targetRealm.url,
+    targetRealm: targetRealm.url,
     realmServerUrl: targetRealm.serverUrl,
     ownerUsername: targetRealm.ownerUsername,
     client,

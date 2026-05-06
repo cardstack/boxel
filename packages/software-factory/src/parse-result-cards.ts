@@ -27,7 +27,7 @@ export interface ParseResultAttributes {
 }
 
 export interface ParseResultRealmOptions {
-  targetRealmUrl: string;
+  targetRealm: string;
   client: BoxelCLIClient;
   /** Local workspace directory — ParseResult cards are written here. */
   workspaceDir: string;

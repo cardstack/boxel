@@ -542,6 +542,17 @@ export default function handlePublishRealm({
       await publishedRealm.fullIndex(userInitiatedPriority, {
         clearLastModified: true,
       });
+
+      // The source realm's `RealmInfo.lastPublishedAt` map is built
+      // from `realm_registry` rows joined on `source_url = sourceRealmURL`,
+      // so publishing this derivative just changed it. Without
+      // invalidating the cache, the source's `getRealmInfo()` keeps
+      // returning the pre-publish snapshot — and the card+json ETag,
+      // which folds a hash of that snapshot in, would still match a
+      // stale `If-None-Match` and serve a 304 with the old
+      // `meta.realmInfo.lastPublishedAt`. (CS-11010)
+      sourceRealm.invalidateCachedRealmInfo();
+
       let publishedPermissions = await fetchRealmPermissions(
         dbAdapter,
         new URL(publishedRealmURL),

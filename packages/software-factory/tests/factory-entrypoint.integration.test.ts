@@ -83,7 +83,7 @@ function createTempProfileHome(options: {
 module('factory-entrypoint integration', function () {
   test('factory:go --debug prints a structured JSON summary', async function (assert) {
     let canonicalTargetRealmUrl: string;
-    let targetRealmUrl: string;
+    let targetRealm: string;
     let createdCardPaths = new Set<string>();
     let server = createServer((request, response) => {
       if (request.url === '/software-factory/Wiki/sticky-note') {
@@ -306,7 +306,7 @@ module('factory-entrypoint integration', function () {
 
     let origin = `http://127.0.0.1:${address.port}`;
     let briefUrl = `${origin}/software-factory/Wiki/sticky-note`;
-    targetRealmUrl = `${origin}/typed-by-user/personal/`;
+    targetRealm = `${origin}/typed-by-user/personal/`;
     canonicalTargetRealmUrl = `${origin}/hassan/personal/`;
 
     let tempHome = createTempProfileHome({
@@ -325,8 +325,8 @@ module('factory-entrypoint integration', function () {
           '--',
           '--brief-url',
           briefUrl,
-          '--target-realm-url',
-          targetRealmUrl,
+          '--target-realm',
+          targetRealm,
           '--realm-server-url',
           `${origin}/`,
           '--debug',
@@ -385,7 +385,7 @@ module('factory-entrypoint integration', function () {
         '--silent',
         'factory:go',
         '--',
-        '--target-realm-url',
+        '--target-realm',
         'https://realms.example.test/hassan/personal/',
       ],
       {
@@ -397,7 +397,7 @@ module('factory-entrypoint integration', function () {
     assert.strictEqual(result.status, 1);
     assert.true(/Missing required --brief-url/.test(result.stderr));
     assert.true(/Usage:/.test(result.stderr));
-    assert.true(/--target-realm-url <url>/.test(result.stderr));
+    assert.true(/--target-realm <realm>/.test(result.stderr));
   });
 
   test('factory:go package script prints usage with --help', function (assert) {
@@ -429,7 +429,7 @@ module('factory-entrypoint integration', function () {
 
     try {
       let briefUrl = `http://127.0.0.1:${address.port}/software-factory/Wiki/sticky-note`;
-      let targetRealmUrl = `http://127.0.0.1:${address.port}/hassan/personal/`;
+      let targetRealm = `http://127.0.0.1:${address.port}/hassan/personal/`;
       let result = await runCommand(
         'pnpm',
         [
@@ -438,8 +438,8 @@ module('factory-entrypoint integration', function () {
           '--',
           '--brief-url',
           briefUrl,
-          '--target-realm-url',
-          targetRealmUrl,
+          '--target-realm',
+          targetRealm,
         ],
         {
           cwd: packageRoot,

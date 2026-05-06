@@ -49,7 +49,7 @@ function makeContext(): AgentContext {
     },
     knowledge: [],
     skills: [],
-    targetRealmUrl: 'https://realms.example.test/hassan/personal/',
+    targetRealm: 'https://realms.example.test/hassan/personal/',
   };
 }
 
