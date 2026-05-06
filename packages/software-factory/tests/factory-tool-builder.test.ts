@@ -1502,7 +1502,9 @@ module('buildFactoryTools — get_card_schema', function () {
       TARGET_REALM,
       'forwards target realm as command-context realm',
     );
-    let input = calls[0].commandInput as { codeRef: { module: string; name: string } };
+    let input = calls[0].commandInput as {
+      codeRef: { module: string; name: string };
+    };
     assert.strictEqual(input.codeRef.module, module);
     assert.strictEqual(input.codeRef.name, 'Project');
   });
@@ -1529,8 +1531,9 @@ module('buildFactoryTools — get_card_schema', function () {
     };
 
     assert.false(result.ok, 'returns ok: false on schema-fetch failure');
+    assert.strictEqual(typeof result.error, 'string', 'error is a string');
     assert.true(
-      typeof result.error === 'string' && result.error.includes(module),
+      (result.error ?? '').includes(module),
       'error message references the failing module URL',
     );
   });
