@@ -805,6 +805,7 @@ jobs:
     needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
       group: workspace-sync-cli-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -834,6 +835,8 @@ jobs:
       - name: Start Matrix services for tests
         run: pnpm start:matrix | tee -a /tmp/test-services.log &
         working-directory: packages/realm-server
+      - name: Wait for PostgreSQL to accept connections
+        run: timeout 60 bash -c 'until (echo > /dev/tcp/127.0.0.1/5435) >/dev/null 2>&1; do sleep 1; done'
       - name: Register realm users for tests
         run: pnpm register-realm-users
         working-directory: packages/matrix
