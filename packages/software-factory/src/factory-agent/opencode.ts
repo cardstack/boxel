@@ -277,36 +277,54 @@ export class OpencodeFactoryAgent implements LoopAgent {
 
     let { createOpencodeServer, createOpencodeClient } =
       await loadOpencodeSdk();
-    this.opencode = await createOpencodeServer({
-      config: {
-        provider: providerConfig,
-        mcp: {
-          [MCP_SERVER_NAME]: {
-            type: 'remote',
-            url: this.mcp.url,
-            enabled: true,
+    // Resolve the workspace's canonical real path now (we'll need it
+    // before the session is created, just to set the subprocess's cwd).
+    let resolvedDir = realpathSync(this.config.workspaceDir);
+    // CRITICAL: opencode's `createOpencodeServer` spawns the subprocess
+    // without a `cwd` option — it inherits the parent's cwd. The model
+    // then resolves relative paths from its native fs tools (`Read`,
+    // `Write`, `Edit`, …) against that inherited cwd. Without this
+    // chdir the model would write files into the directory `factory:go`
+    // was invoked from instead of the realm workspace, and we'd see
+    // "Read /Users/.../packages/software-factory/Projects/foo.json"
+    // (which doesn't exist) rather than the workspace path.
+    let originalCwd = process.cwd();
+    process.chdir(resolvedDir);
+    try {
+      this.opencode = await createOpencodeServer({
+        config: {
+          provider: providerConfig,
+          mcp: {
+            [MCP_SERVER_NAME]: {
+              type: 'remote',
+              url: this.mcp.url,
+              enabled: true,
+            },
+          },
+          permission: {
+            edit: 'allow',
+            // Opencode's bash permission accepts either a single mode
+            // or a per-pattern map. We allow Bash unconditionally; the
+            // model is told (via the prompt) to use it for read-only
+            // inspection only. The `external_directory` knob is what
+            // structurally prevents write escape.
+            bash: 'allow',
+            external_directory: 'deny',
           },
         },
-        permission: {
-          edit: 'allow',
-          // Opencode's bash permission accepts either a single mode
-          // or a per-pattern map. We allow Bash unconditionally; the
-          // model is told (via the prompt) to use it for read-only
-          // inspection only. The `external_directory` knob is what
-          // structurally prevents write escape.
-          bash: 'allow',
-          external_directory: 'deny',
-        },
-      },
-    });
+      });
+    } finally {
+      // Restore the parent process's cwd. The opencode subprocess has
+      // already forked off `resolvedDir`; the parent doesn't need to
+      // stay there.
+      process.chdir(originalCwd);
+    }
     this.client = createOpencodeClient({ baseUrl: this.opencode.url });
-    // Resolve the workspace to its canonical real path once. opencode
-    // normalizes the `directory` query through its own realpath before
-    // storing the session (e.g. `/var/folders/...` →
-    // `/private/var/folders/...` on macOS), and `session.list` /
-    // `session.status` filter by exact-string match — so the directory
-    // we send must match what opencode files internally.
-    this.resolvedWorkspaceDir = realpathSync(this.config.workspaceDir);
+    // Reuse the same canonical path for `session.list` / `session.status`
+    // queries. opencode normalizes `directory` through its own realpath
+    // (`/var/folders/...` → `/private/var/folders/...` on macOS), and
+    // its filter is an exact-string match.
+    this.resolvedWorkspaceDir = resolvedDir;
 
     if (this.config.debug) {
       log.info(
