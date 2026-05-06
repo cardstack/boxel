@@ -43,7 +43,8 @@ Skills appear under the `/boxel-cli:` namespace.
 
 | Skill | Use it for |
 |---|---|
-| `/boxel-cli:boxel-development` | Authoring `.gts` card definitions and `.json` instances. The high-level Boxel patterns guide. |
+| `/boxel-cli:boxel-development` | Authoring `.gts` card definitions and `.json` instances. The high-level Boxel patterns guide. Generated from [`cardstack/boxel-skills`](https://github.com/cardstack/boxel-skills). |
+| `/boxel-cli:boxel-design` | Design-discovery prompts for distinctive Boxel UI. Generated from [`cardstack/boxel-skills`](https://github.com/cardstack/boxel-skills). |
 | `/boxel-cli:boxel-file-structure` | File and directory naming rules, `adoptsFrom` module paths, link relationship semantics. |
 | `/boxel-cli:realm-sync` | `boxel realm sync/push/pull/create/list` — moving files between local disk and a realm. |
 | `/boxel-cli:realm-history` | `boxel realm history/wait-for-ready/cancel-indexing` — inspecting and steering realm indexing. |
@@ -60,6 +61,7 @@ The plugin's `version` is independent of `@cardstack/boxel-cli`'s npm version. T
 | New / changed CLI command | bump | bump (synopsis regenerates) |
 | Plugin prose only | — | bump |
 | CLI refactor / bug fix (no Commander change) | bump | — |
+| New `cardstack/boxel-skills` release | — | bump (after re-running `pnpm build:skills`) |
 
 See [Releasing](#releasing) below for how a `plugin.json` bump actually reaches users.
 
@@ -70,9 +72,10 @@ The plugin is **git-distributed** through `.claude-plugin/marketplace.json` at t
 ### Steps
 
 1. If you changed CLI commands, run `pnpm build:plugin` from `packages/boxel-cli/` to regenerate the `<!-- generated:commands -->` blocks in each `SKILL.md`.
-2. Bump `packages/boxel-cli/plugin/.claude-plugin/plugin.json` `version` (semver — patch for prose, minor for new skills, major for breaking changes to skill names/contracts).
-3. Open a PR. CI in `.github/workflows/ci-lint.yaml` will fail if the synopsis is stale (*synopsis freshness* check) or if the bump is missing when synopsis changed (*synopsis-bump coupling* check).
-4. Merge to `main`. That's the publish — `cardstack/boxel`'s `.claude-plugin/marketplace.json` is the source of truth and Claude Code pulls from it directly.
+2. If `cardstack/boxel-skills` cut a new tag (or you want to pull in upstream edits), bump `BOXEL_SKILLS_VERSION` in `packages/boxel-cli/scripts/build-skills.ts` and run `pnpm build:skills` from `packages/boxel-cli/`. That regenerates `plugin/skills/boxel-development/` and `plugin/skills/boxel-design/` from the pinned tag.
+3. Bump `packages/boxel-cli/plugin/.claude-plugin/plugin.json` `version` (semver — patch for prose, minor for new skills, major for breaking changes to skill names/contracts).
+4. Open a PR. CI in `.github/workflows/ci-lint.yaml` will fail if the synopsis is stale (*synopsis freshness* check), if the boxel-skills sync is stale (*boxel-skills sync* check), or if the bump is missing when generated content changed (*synopsis-bump* / *boxel-skills-bump coupling* checks).
+5. Merge to `main`. That's the publish — `cardstack/boxel`'s `.claude-plugin/marketplace.json` is the source of truth and Claude Code pulls from it directly.
 
 ### How users pick up the new version
 

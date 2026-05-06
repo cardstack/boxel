@@ -58,6 +58,7 @@
   "scripts": {
     "build": "pnpm clean && NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build.ts",
     "build:plugin": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build-plugin.ts",
+    "build:skills": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build-skills.ts",
     "clean": "rm -rf dist/*",
     "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/index.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
