@@ -3767,6 +3767,17 @@ export class Realm {
 
   public async search(query: Query): Promise<LinkableCollectionDocument> {
     assertQuery(query);
+    // Drain any in-flight incremental indexing before reading boxel_index.
+    // Search results serve the realm's canonical indexed view; without
+    // this drain, a search immediately after a write that didn't await
+    // indexing would return a stale snapshot (missing rows for files
+    // that are durable but not yet indexed). Drains for in-process
+    // callers (Realm.search via federated-search routes) and HTTP
+    // callers (the /_search route handler delegates here).
+    let pendingIndex = this.incrementalIndexing();
+    if (pendingIndex) {
+      await pendingIndex;
+    }
     return await this.#realmIndexQueryEngine.searchCards(query, {
       loadLinks: true,
     });
@@ -3903,6 +3914,14 @@ export class Realm {
     },
   ): Promise<PrerenderedCardCollectionDocument> {
     assertQuery(query);
+    // Drain any in-flight incremental indexing — see search() for
+    // rationale. Same pattern: covers both in-process callers
+    // (federated-search-prerendered) and HTTP callers
+    // (_search-prerendered route handler).
+    let pendingIndex = this.incrementalIndexing();
+    if (pendingIndex) {
+      await pendingIndex;
+    }
     let results = await this.#realmIndexQueryEngine.searchPrerendered(query, {
       htmlFormat: opts.htmlFormat,
       cardUrls: opts.cardUrls,
