@@ -147,6 +147,24 @@ export default function handleUnpublishRealm({
         await removeRealmPermissions(dbAdapter, new URL(publishedRealmURL));
       });
 
+      // Removing this derivative just changed the source realm's
+      // `RealmInfo.lastPublishedAt` map (rows where `source_url =
+      // sourceRealmURL`). Without invalidating the source's cached
+      // realm info, its card+json ETag (which folds a hash of the
+      // realm info in) would keep matching pre-unpublish If-None-Match
+      // headers and serve a 304 with stale `meta.realmInfo`. (CS-11010)
+      let sourceRealmURL = publishedRealmInfo.source_realm_url;
+      if (sourceRealmURL) {
+        try {
+          let sourceRealm = await reconciler.lookupOrMount(sourceRealmURL);
+          sourceRealm?.invalidateCachedRealmInfo();
+        } catch (err) {
+          log.warn(
+            `Could not invalidate source realm cached realm-info for ${sourceRealmURL} after unpublish: ${err}`,
+          );
+        }
+      }
+
       // Permissions for the published realm were removed inside the
       // write lock above, so fetchRealmPermissions(publishedRealmURL)
       // would return nothing useful for X-Boxel-Realm-Public-Readable.
