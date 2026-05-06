@@ -268,21 +268,37 @@ export class OpencodeFactoryAgent implements LoopAgent {
       // present and reliable here. The prompt's return value is
       // unused — DONE / CLARIFICATION signals come back through the
       // MCP server, not the prompt.
-      let promptPromise = client.session
-        .prompt({
-          path: { id: sessionId },
-          body: {
-            model: {
-              providerID: FACTORY_PROVIDER_ID,
-              modelID: this.config.model,
-            },
-            system: systemPrompt,
-            parts: [{ type: 'text', text: prompt }],
+      let promptBody = {
+        path: { id: sessionId },
+        body: {
+          model: {
+            providerID: FACTORY_PROVIDER_ID,
+            modelID: this.config.model,
           },
-        })
-        .catch((err) => {
-          log.warn(`session.prompt rejected: ${String(err)}`);
-        });
+          system: systemPrompt,
+          parts: [{ type: 'text', text: prompt } as const],
+        },
+      };
+      let promptPromise = (async () => {
+        try {
+          return await client.session.prompt(promptBody);
+        } catch (err) {
+          // opencode 1.14.34 occasionally fails the very first
+          // `/session/{id}/message` POST on a freshly-spawned subprocess
+          // with `TypeError: fetch failed`. A short delay + one retry
+          // hides the flake.
+          log.warn(
+            `session.prompt rejected (${String(err)}), retrying once...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          try {
+            return await client.session.prompt(promptBody);
+          } catch (err2) {
+            log.warn(`session.prompt rejected on retry: ${String(err2)}`);
+            return undefined;
+          }
+        }
+      })();
 
       try {
         // Happy path: the model calls `signal_done` (or
