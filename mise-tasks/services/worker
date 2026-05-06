@@ -3,6 +3,15 @@
 #MISE depends=["infra:ensure-traefik", "infra:ensure-pg", "infra:wait-for-prerender"]
 #MISE dir="packages/realm-server"
 
+# Propagate the worker's exit status through the trailing `| dev-log-tee.sh`
+# pipeline so mise sees crashes instead of the tee stage's clean EOF.
+set -o pipefail
+
+# Tee stdout+stderr to a per-service log file so the local Alloy scraper
+# (packages/observability/alloy/config.alloy) can pick this up via
+# loki.source.file. Alloy's Docker discovery doesn't see native processes.
+LOG_TEE="../observability/scripts/dev-log-tee.sh"
+
 DEFAULT_CATALOG_REALM_URL="${REALM_BASE_URL}/catalog/"
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
 DEFAULT_LEGACY_CATALOG_REALM_URL="${REALM_BASE_URL}/legacy-catalog/"
@@ -50,5 +59,6 @@ NODE_ENV=development \
   --toUrl="${REALM_BASE_URL}/openrouter/" \
   \
   --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
-  --toUrl="${SOFTWARE_FACTORY_REALM_URL}"
- 
+  --toUrl="${SOFTWARE_FACTORY_REALM_URL}" \
+  2>&1 | "$LOG_TEE" worker
+
