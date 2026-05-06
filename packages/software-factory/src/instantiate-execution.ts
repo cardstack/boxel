@@ -12,7 +12,7 @@
  * card — missing fields, mis-shaped data, broken getters — fails here too.
  */
 
-import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import { retryWithPoll, type BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 import {
@@ -170,22 +170,14 @@ export async function discoverRealmSpecs(
     options.searchSpecsFn ??
     ((realmUrl: string) => defaultSearchSpecs(options.client, realmUrl));
 
-  // Realm-side indexing for source POSTs is now async (CS-11003), so a
-  // newly-uploaded Spec card may not be in the search index by the time
-  // we get here. Retry the search a few times before giving up so an
-  // agent or test that just pushed Spec files isn't penalized for
-  // indexing latency. 0 specs on the first try is the only sentinel
-  // worth retrying — once even one spec lands, the rest of any pending
-  // indexing is the realm's problem to surface, not ours.
-  let totalWaitMs = 5_000;
-  let pollMs = 250;
-  let deadline = Date.now() + totalWaitMs;
-  let result = await searchSpecsFn(options.targetRealmUrl);
-  while (!result.error && result.specs.length === 0 && Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, pollMs));
-    result = await searchSpecsFn(options.targetRealmUrl);
-  }
-  return result;
+  // Realm-side source POST indexing is async, so a newly-uploaded Spec
+  // card may not be in the search index by the time we get here. Bounded-
+  // poll until even one spec shows up so an agent or test that just
+  // pushed Spec files isn't penalized for indexing latency.
+  return retryWithPoll(
+    () => searchSpecsFn(options.targetRealmUrl),
+    (r) => !r.error && r.specs.length === 0,
+  );
 }
 
 /**
