@@ -179,7 +179,18 @@ async function proxySSE(
       buffer += new TextDecoder().decode(value);
       if (onTick) onTick();
 
-      for (const line of extractSSELines(buffer)) {
+      // Split on `\n`, keep the trailing incomplete fragment in
+      // `buffer`, dispatch every complete line. The previous
+      // implementation called a helper that locally reassigned
+      // its `buffer` parameter — the caller's buffer never got
+      // trimmed, so every new read re-emitted every prior line.
+      // For SSE that means the receiver got each delta multiple
+      // times and concatenated them ("foofoo barfoo bar baz...").
+      let parts = buffer.split('\n');
+      buffer = parts.pop() ?? '';
+
+      for (let raw of parts) {
+        let line = raw.trim();
         if (!line || line.startsWith(':')) continue;
         if (line.startsWith('data: ')) {
           const data = line.slice(6);
@@ -191,14 +202,4 @@ async function proxySSE(
   } finally {
     reader.releaseLock();
   }
-}
-
-function extractSSELines(buffer: string): string[] {
-  const lines: string[] = [];
-  let lineEnd: number;
-  while ((lineEnd = buffer.indexOf('\n')) !== -1) {
-    lines.push(buffer.slice(0, lineEnd).trim());
-    buffer = buffer.slice(lineEnd + 1);
-  }
-  return lines;
 }
