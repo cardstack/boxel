@@ -121,7 +121,12 @@ let autoMigrate = migrateDB || undefined;
   }
 
   function reportProgress(event: IndexingProgressEvent) {
-    if (!ECS_CONTAINER_METADATA_URI && process.send) {
+    // Emit on every worker, including ECS — the manager's
+    // IndexingEventSink turns these into `[indexing-progress]` log lines
+    // and `job_progress` row writes that feed the cluster-wide Boxel Jobs
+    // dashboard (CS-10930). Local-only HTML endpoints stay gated in
+    // worker-manager.ts.
+    if (process.send) {
       process.send(`progress|${JSON.stringify(event)}`);
     }
   }

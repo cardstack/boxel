@@ -10,7 +10,7 @@ import {
   contains,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import DurationField from '../fields/time/duration';
+import DurationField from 'https://cardstack.com/base/time/duration';
 import CodeSnippet from '../components/code-snippet';
 
 const standardFieldCode = `@field standard = contains(DurationField);`;
