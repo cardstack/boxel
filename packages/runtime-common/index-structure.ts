@@ -40,6 +40,12 @@ export interface BoxelIndexTable {
   // operators can post-hoc investigate slow (but not failing)
   // renders too.
   timing_diagnostics: Record<string, unknown> | null;
+  // Originating worker job id. Stamped on every working-table write so
+  // a retry of the same job can find (and skip) URLs the previous
+  // attempt already processed. Only present on `boxel_index_working`
+  // — the production `boxel_index` mirror does not carry this column,
+  // hence the field is optional.
+  job_id?: number | null;
 }
 
 export interface RealmVersionsTable {

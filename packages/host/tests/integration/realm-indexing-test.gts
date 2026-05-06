@@ -606,6 +606,124 @@ module(`Integration | realm indexing`, function (hooks) {
     }
   });
 
+  test('write with waitForIndex:false returns before indexing settles and incrementalIndexing() drains it', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'Pet/mango.json': {
+          data: {
+            id: `${testRealmURL}Pet/mango`,
+            attributes: {
+              firstName: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
+      },
+    });
+    let queryEngine = realm.realmIndexQueryEngine;
+
+    await realm.write(
+      'Pet/mango.json',
+      JSON.stringify({
+        data: {
+          id: testRRI('Pet/mango'),
+          attributes: {
+            firstName: 'Van Gogh',
+          },
+          meta: {
+            adoptsFrom: {
+              module: rri('http://localhost:4202/test/pet'),
+              name: 'Pet',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+      { waitForIndex: false },
+    );
+
+    let pendingIndex = realm.incrementalIndexing();
+    assert.notStrictEqual(
+      pendingIndex,
+      undefined,
+      'indexing is still pending immediately after waitForIndex:false write',
+    );
+
+    await pendingIndex;
+    assert.strictEqual(
+      realm.incrementalIndexing(),
+      undefined,
+      'incrementalIndexing() resolves to undefined once the deferred indexing settles',
+    );
+
+    let entry = await queryEngine.cardDocument(
+      new URL(`${testRealmURL}Pet/mango`),
+    );
+    if (entry?.type === 'doc') {
+      assert.strictEqual(
+        entry.doc.data.attributes?.firstName,
+        'Van Gogh',
+        'index reflects the deferred-indexed write after the drain',
+      );
+    } else {
+      assert.ok(
+        false,
+        `search entry was an error: ${entry?.error.errorDetail.message}`,
+      );
+    }
+  });
+
+  test('write with default options (waitForIndex:true) awaits indexing inline', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'Pet/mango.json': {
+          data: {
+            id: `${testRealmURL}Pet/mango`,
+            attributes: {
+              firstName: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    await realm.write(
+      'Pet/mango.json',
+      JSON.stringify({
+        data: {
+          id: testRRI('Pet/mango'),
+          attributes: {
+            firstName: 'Van Gogh',
+          },
+          meta: {
+            adoptsFrom: {
+              module: rri('http://localhost:4202/test/pet'),
+              name: 'Pet',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    assert.strictEqual(
+      realm.incrementalIndexing(),
+      undefined,
+      'no pending indexing remains after a default write — the await happened inline',
+    );
+  });
+
   test('can index card with linkTo field', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
