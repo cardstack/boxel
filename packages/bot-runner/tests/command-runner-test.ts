@@ -84,6 +84,7 @@ module('command runner', () => {
     ]);
     let dbAdapter = {
       kind: 'pg',
+      notify: async () => {},
       isClosed: false,
       execute: async (sql: string, opts?: ExecuteOptions) => {
         if (sql.includes('FROM bot_commands WHERE bot_id =')) {
@@ -228,6 +229,7 @@ module('command runner', () => {
     ]);
     let dbAdapter = {
       kind: 'pg',
+      notify: async () => {},
       isClosed: false,
       execute: async (sql: string, opts?: ExecuteOptions) => {
         if (sql.includes('FROM bot_commands WHERE bot_id =')) {
@@ -368,10 +370,17 @@ module('command runner', () => {
               prCreationError: null,
               failedStep: null,
             },
+            relationships: {
+              prCard: {
+                links: {
+                  self: prCardUrl,
+                },
+              },
+            },
           },
         },
       },
-      'clears prior error attributes on the workflow card after the GitHub PR succeeds',
+      'clears prior error attributes on the workflow card after the GitHub PR succeeds, re-asserting the prCard link to survive any stale-fetch race',
     );
     let prBody =
       (
@@ -440,6 +449,7 @@ module('command runner', () => {
     ]);
     let dbAdapter = {
       kind: 'pg',
+      notify: async () => {},
       isClosed: false,
       execute: async (sql: string, opts?: ExecuteOptions) => {
         if (sql.includes('FROM bot_commands WHERE bot_id =')) {
@@ -534,6 +544,7 @@ module('command runner', () => {
     ]);
     let dbAdapter = {
       kind: 'pg',
+      notify: async () => {},
       isClosed: false,
       execute: async (sql: string, opts?: ExecuteOptions) => {
         if (sql.includes('FROM bot_commands WHERE bot_id =')) {
@@ -671,6 +682,7 @@ module('command runner', () => {
     ]);
     let dbAdapter = {
       kind: 'pg',
+      notify: async () => {},
       isClosed: false,
       execute: async (sql: string, opts?: ExecuteOptions) => {
         if (sql.includes('FROM bot_commands WHERE bot_id =')) {
@@ -883,6 +895,7 @@ module('command runner', () => {
     ]);
     let dbAdapter = {
       kind: 'pg',
+      notify: async () => {},
       isClosed: false,
       execute: async (sql: string, opts?: ExecuteOptions) => {
         if (sql.includes('FROM bot_commands WHERE bot_id =')) {
@@ -1002,6 +1015,7 @@ module('command runner', () => {
     ]);
     let dbAdapter = {
       kind: 'pg',
+      notify: async () => {},
       isClosed: false,
       execute: async (sql: string, opts?: ExecuteOptions) => {
         if (sql.includes('FROM bot_commands WHERE bot_id =')) {

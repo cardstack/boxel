@@ -247,7 +247,9 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
         : await this.runFreshPrCardFlow(ctx);
 
       await runStep('github-pr', () => this.pushToGitHub(ctx, prCardData));
-      await runStep('github-pr', () => this.clearWorkflowError(ctx));
+      await runStep('github-pr', () =>
+        this.clearWorkflowError(ctx, prCardData.prCardUrl),
+      );
 
       return prCardData.prCardResult;
     } catch (err) {
@@ -435,11 +437,19 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     });
   }
 
-  private async clearWorkflowError(ctx: WorkflowContext): Promise<void> {
+  private async clearWorkflowError(
+    ctx: WorkflowContext,
+    prCardUrl: string | null,
+  ): Promise<void> {
     if (!ctx.workflowCardUrl) return;
-    await this.patchWorkflowCard(ctx, {
+    let patch: Record<string, unknown> = {
       attributes: { prCreationError: null, failedStep: null },
-    });
+    };
+    // Re-assert prCard so a stale fetch can't drop the link.
+    if (prCardUrl) {
+      patch.relationships = { prCard: { links: { self: prCardUrl } } };
+    }
+    await this.patchWorkflowCard(ctx, patch);
   }
 
   private async recordWorkflowFailure(

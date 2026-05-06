@@ -112,6 +112,7 @@ module('timeline handler', () => {
 
   dbAdapter = {
     kind: 'pg',
+    notify: async () => {},
     isClosed: false,
     execute: async (sql: string, opts?: ExecuteOptions) => {
       if (sql.includes('FROM bot_registrations br')) {

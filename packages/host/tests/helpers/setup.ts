@@ -26,12 +26,27 @@ import { cleanupMonacoEditorModels } from './index';
 const inFlightFetches = new Map<number, string>();
 let nextFetchId = 0;
 
+// Track the most recent failed fetches per test so a "Promise rejected during X"
+// failure (which surfaces the generic browser TypeError "A network error
+// occurred." with no URL) can be correlated with the actual request that blew
+// up. Each entry is `${method} ${url}: ${reason}`; cleared in beforeEach.
+//
+// Each fetch captures `currentTestEpoch` at start; on failure, we only push to
+// the buffer when the captured epoch still matches the current one. Without
+// that gate, a fetch from test N rejecting after test N+1's beforeEach has
+// cleared the buffer would repopulate it and misattribute URLs to N+1.
+const recentFailedFetches: string[] = [];
+const RECENT_FAILED_FETCHES_LIMIT = 20;
+let currentTestEpoch = 0;
+
 function setupFetchDebugging(hooks: NestedHooks) {
   let originalFetch: typeof globalThis.fetch | undefined;
   let wrappedFetch: typeof globalThis.fetch | undefined;
 
   hooks.beforeEach(function () {
     inFlightFetches.clear();
+    recentFailedFetches.length = 0;
+    currentTestEpoch++;
     if (!globalThis.fetch) {
       return;
     }
@@ -40,13 +55,14 @@ function setupFetchDebugging(hooks: NestedHooks) {
     wrappedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       let { method, url } = describeFetchRequest(input, init);
       let id = nextFetchId++;
+      let epoch = currentTestEpoch;
       inFlightFetches.set(id, `${method} ${url}`);
       try {
         return await boundFetch(input, init);
       } catch (error) {
-        console.error(
-          `[test-fetch] ${method} ${url} failed: ${formatErrorForLog(error)}`,
-        );
+        let reason = formatErrorForLog(error);
+        console.error(`[test-fetch] ${method} ${url} failed: ${reason}`);
+        rememberFailedFetch(epoch, method, url, reason);
         throw error;
       } finally {
         inFlightFetches.delete(id);
@@ -65,10 +81,51 @@ function setupFetchDebugging(hooks: NestedHooks) {
   });
 }
 
+function rememberFailedFetch(
+  epoch: number,
+  method: string,
+  url: string,
+  reason: string,
+) {
+  // Drop late rejections from a prior test — the buffer is per-test and would
+  // otherwise contaminate the next test's diagnostic output.
+  if (epoch !== currentTestEpoch) {
+    return;
+  }
+  recentFailedFetches.push(`${method} ${url}: ${reason}`);
+  if (recentFailedFetches.length > RECENT_FAILED_FETCHES_LIMIT) {
+    recentFailedFetches.splice(
+      0,
+      recentFailedFetches.length - RECENT_FAILED_FETCHES_LIMIT,
+    );
+  }
+}
+
+// Resolve the qunit runtime object (the one the qunit package installs on the
+// global) rather than the ES module namespace. Importing `import * as QUnit
+// from 'qunit'` produces a frozen module record where `onUncaughtException`
+// is a getter-only export — assignments throw `TypeError: Cannot set property
+// onUncaughtException of #<Object> which has only a getter`. The runtime
+// global is writable; `suspendGlobalErrorHook` (uncaught-exceptions.ts) reads
+// and reassigns it the same way.
+function getQUnitRuntime():
+  | { onUncaughtException?: (error: unknown) => void }
+  | undefined {
+  let q = (globalThis as { QUnit?: unknown }).QUnit;
+  return q && typeof q === 'object'
+    ? (q as { onUncaughtException?: (error: unknown) => void })
+    : undefined;
+}
+
 // surface unhandled rejections during tests with full stacks + in-flight URLs
 function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
   let handler: ((event: PromiseRejectionEvent) => void) | undefined;
   let target: Window | undefined;
+  let originalOnUncaughtException:
+    | ((error: unknown) => void)
+    | undefined
+    | null;
+  let wrappedOnUncaughtException: ((error: unknown) => void) | undefined;
 
   hooks.beforeEach(function () {
     // Host tests run in the browser; if `window` is missing or doesn't expose
@@ -78,24 +135,47 @@ function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
       typeof window.addEventListener === 'function'
         ? window
         : undefined;
-    if (!target) {
-      return;
-    }
-    handler = (event: PromiseRejectionEvent) => {
-      // Observation only — do NOT call event.preventDefault(). QUnit's own
-      // unhandled-rejection handling must still run and fail the test.
-      let inFlightSnapshot = Array.from(inFlightFetches.values());
-      console.error(
-        [
+    if (target) {
+      handler = (event: PromiseRejectionEvent) => {
+        // Observation only — do NOT call event.preventDefault(). QUnit's own
+        // unhandled-rejection handling must still run and fail the test.
+        logRejectionDiagnostics(
           '[test-unhandled-rejection]',
           formatRejectionReason(event.reason),
-          inFlightSnapshot.length
-            ? `in-flight fetches at rejection time (${inFlightSnapshot.length}):\n  ${inFlightSnapshot.join('\n  ')}`
-            : 'in-flight fetches at rejection time: <none>',
-        ].join('\n'),
-      );
-    };
-    target.addEventListener('unhandledrejection', handler);
+        );
+      };
+      target.addEventListener('unhandledrejection', handler);
+    }
+
+    // Wrap QUnit.onUncaughtException so QUnit-handled rejections (e.g.,
+    // "Promise rejected during X: A network error occurred." — which propagates
+    // via the test's awaited promise chain rather than firing a global
+    // `unhandledrejection` event) also dump in-flight + recently-failed fetch
+    // context. Without this hook, the failure message exposes only the generic
+    // browser TypeError with no URL, making field-playground / code-submode
+    // network-error flakes effectively unattributable.
+    let qunitGlobal = getQUnitRuntime();
+    if (qunitGlobal) {
+      originalOnUncaughtException = qunitGlobal.onUncaughtException;
+      wrappedOnUncaughtException = (error: unknown) => {
+        try {
+          logRejectionDiagnostics(
+            '[test-qunit-uncaught]',
+            formatRejectionReason(error),
+          );
+        } catch (_e) {
+          // never let diagnostic logging swallow the original failure
+        }
+        if (typeof originalOnUncaughtException === 'function') {
+          // Preserve QUnit as the receiver in case any future hook reads
+          // `this` — current QUnit 2.x reads `config` from closure scope, but
+          // calling via `.call(qunitGlobal, ...)` keeps the wrapper's behavior
+          // identical to the unwrapped path regardless.
+          originalOnUncaughtException.call(qunitGlobal, error);
+        }
+      };
+      qunitGlobal.onUncaughtException = wrappedOnUncaughtException;
+    }
   });
 
   hooks.afterEach(function () {
@@ -104,7 +184,36 @@ function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
     }
     handler = undefined;
     target = undefined;
+
+    let qunitGlobal = getQUnitRuntime();
+    if (
+      qunitGlobal &&
+      qunitGlobal.onUncaughtException === wrappedOnUncaughtException
+    ) {
+      qunitGlobal.onUncaughtException = originalOnUncaughtException as
+        | ((error: unknown) => void)
+        | undefined;
+    }
+    wrappedOnUncaughtException = undefined;
+    originalOnUncaughtException = undefined;
   });
+}
+
+function logRejectionDiagnostics(prefix: string, formattedReason: string) {
+  let inFlightSnapshot = Array.from(inFlightFetches.values());
+  let recent = recentFailedFetches.slice();
+  console.error(
+    [
+      prefix,
+      formattedReason,
+      inFlightSnapshot.length
+        ? `in-flight fetches at rejection time (${inFlightSnapshot.length}):\n  ${inFlightSnapshot.join('\n  ')}`
+        : 'in-flight fetches at rejection time: <none>',
+      recent.length
+        ? `recent failed fetches this test (${recent.length}):\n  ${recent.join('\n  ')}`
+        : 'recent failed fetches this test: <none>',
+    ].join('\n'),
+  );
 }
 
 function formatRejectionReason(reason: unknown): string {
