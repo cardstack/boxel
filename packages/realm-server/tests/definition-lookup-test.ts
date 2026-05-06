@@ -2099,6 +2099,209 @@ module(basename(__filename), function () {
         'persist proceeded normally when nothing invalidated mid-flight',
       );
     });
+
+    test('parsed-entry cache short-circuits the DB read on repeat lookups', async function (assert) {
+      // The parsed cache populates on a successful DB hit, not on
+      // persist-after-prerender. So the first lookup (cold prerender +
+      // persist) leaves the in-memory cache empty; the second lookup
+      // reads the DB row and inserts it into the in-memory cache; the
+      // third lookup is the one we expect to short-circuit before the DB.
+      // Verify that path: after warm-up, deleting the row out from under
+      // the cache doesn't affect the next lookup (no DB read happens).
+      let moduleURL = `${realmURL}parsed-cache-warm.gts`;
+      let calls = 0;
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          return buildModuleResponse(args.url, 'ParsedCacheWarm', []);
+        },
+      };
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      // 1. Cold lookup: prerenders + persists.
+      await lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'ParsedCacheWarm',
+      });
+      assert.strictEqual(calls, 1, 'prerender ran once on cold lookup');
+
+      // 2. Warm-up lookup: hits DB and populates the in-memory cache.
+      await lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'ParsedCacheWarm',
+      });
+      assert.strictEqual(calls, 1, 'no re-prerender on second lookup');
+
+      // 3. Delete the row, then look up a third time. If the in-memory
+      // cache is doing its job, the lookup short-circuits before any DB
+      // read and never re-enters the prerender path.
+      await dbAdapter.execute('DELETE FROM modules WHERE url = $1', {
+        bind: [moduleURL],
+      });
+      let third = await lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'ParsedCacheWarm',
+      });
+      assert.strictEqual(
+        third?.displayName,
+        'ParsedCacheWarm',
+        'third lookup served from in-memory parsed cache',
+      );
+      assert.strictEqual(
+        calls,
+        1,
+        'no re-prerender — cache short-circuited before the DB read',
+      );
+    });
+
+    test('bumpModuleGeneration invalidates the parsed-entry cache for that module', async function (assert) {
+      // The cross-process NOTIFY listener (CS-10952) replays peer
+      // invalidations into this process by calling the public
+      // `bumpModuleGeneration`. After the bump, this process's parsed-cache
+      // entries with the matching (realm, moduleURL) snapshot are stale and
+      // must not be returned. Drives the same invalidation contract that
+      // already protects in-flight prerenders, extended to sit-on-the-shelf
+      // parsed entries.
+      let moduleURL = `${realmURL}parsed-cache-bump-module.gts`;
+      let calls = 0;
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          return buildModuleResponse(args.url, 'BumpModule', []);
+        },
+      };
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      // Cold lookup + warm-up to populate the in-memory parsed cache.
+      await lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'BumpModule',
+      });
+      await lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'BumpModule',
+      });
+      assert.strictEqual(calls, 1, 'cache warmed up after one prerender');
+
+      // Simulate a peer's invalidation arriving via NOTIFY: the row is
+      // deleted in the DB and the local listener bumps our counter.
+      await dbAdapter.execute('DELETE FROM modules WHERE url = $1', {
+        bind: [moduleURL],
+      });
+      lookup.bumpModuleGeneration(realmURL, moduleURL);
+
+      await lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'BumpModule',
+      });
+      assert.strictEqual(
+        calls,
+        2,
+        'parsed cache dropped on snapshot mismatch — falls through to prerender',
+      );
+    });
+
+    test('bumpGlobalGeneration invalidates the parsed-entry cache for every entry', async function (assert) {
+      // clearAllModules() bumps `#globalGeneration` and CS-10952's listener
+      // calls `bumpGlobalGeneration()` on peers. Either path must
+      // invalidate every parsed-cache entry on next access regardless of
+      // realm or module.
+      let moduleURL = `${realmURL}parsed-cache-bump-global.gts`;
+      let calls = 0;
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          return buildModuleResponse(args.url, 'BumpGlobal', []);
+        },
+      };
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      // Cold lookup + warm-up to populate the in-memory parsed cache.
+      await lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'BumpGlobal',
+      });
+      await lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'BumpGlobal',
+      });
+      assert.strictEqual(calls, 1, 'cache warmed up after one prerender');
+
+      await dbAdapter.execute('DELETE FROM modules WHERE url = $1', {
+        bind: [moduleURL],
+      });
+      lookup.bumpGlobalGeneration();
+
+      await lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'BumpGlobal',
+      });
+      assert.strictEqual(
+        calls,
+        2,
+        'global bump invalidates the parsed cache; lookup re-prerendered',
+      );
+    });
   });
 
   // Lightweight tests for the modules-table diagnostics persistence.

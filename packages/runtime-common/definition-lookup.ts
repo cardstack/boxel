@@ -38,6 +38,13 @@ import type { VirtualNetwork } from './virtual-network';
 
 const MODULES_TABLE = 'modules';
 const PREFERRED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
+// In-memory cap for the parsed `ModuleCacheEntry` cache, measured against the
+// JSON-text size of the cached `definitions`. Parsed JS objects are roughly
+// 2–3x the JSON-text byte count, so 256 MB of text corresponds to ~0.5–0.75 GB
+// of resident heap once across all entries. Sized to comfortably hold the
+// dominant card-definition modules in production (the largest observed are
+// ~60 MB JSON text). Evict-LRU when the running total exceeds this.
+const PARSED_CACHE_BUDGET_CHARS = 256 * 1024 * 1024;
 // Postgres NOTIFY channel for cross-instance module-cache invalidation
 // (CS-10952). Each invalidation path emits one or more notifications so
 // peer realm-server processes can bump their in-memory generation counters
@@ -128,6 +135,33 @@ function parseJsonValue<T>(value: T | string | null): T | null {
     }
   }
   return value as T;
+}
+
+// Approximate the JSON-text byte size of a `ModuleCacheEntry` for the
+// parsed-cache budget. The `definitions` blob dominates entry size by
+// orders of magnitude in production (the `deps` array and `error_doc`
+// row are bytes, not megabytes), so the size of the rest is negligible
+// for budget accounting.
+//
+// If the source row arrived as a JSON string (Postgres returned text),
+// its `.length` is exact and free. Otherwise (jsonb auto-decoded by the
+// driver to a JS object) we re-stringify the parsed `definitions` —
+// O(N) on the parsed object, but paid once per cache insert and
+// amortized over every subsequent hit. JSON.stringify can throw on
+// unexpected shapes (cycles, BigInts); fall back to 0 so a single
+// pathological insert can't poison the cache.
+function approximateEntrySizeChars(
+  entry: ModuleCacheEntry,
+  rawDefinitions: unknown,
+): number {
+  if (typeof rawDefinitions === 'string') {
+    return rawDefinitions.length;
+  }
+  try {
+    return JSON.stringify(entry.definitions).length;
+  } catch (_err) {
+    return 0;
+  }
 }
 
 export type CacheScope = 'public' | 'realm-auth';
@@ -246,6 +280,25 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   #moduleGenerations = new Map<string, number>();
   #realmGenerations = new Map<string, number>();
   #globalGeneration = 0;
+  // Parsed-entry cache. Front-ends `readFromDatabaseCache` so successful
+  // cache reads avoid re-running the SQL fetch + JSON.parse of the
+  // `modules.definitions` jsonb column on every lookup. Each entry
+  // captures the three-counter generation snapshot at insertion; lookups
+  // validate against the current snapshot and drop stale entries — so a
+  // local invalidate/clearRealmCache/clearAllModules (or a remote bump
+  // arriving via the cross-process NOTIFY listener) self-evicts on next
+  // access. Map insertion order is iteration order in JS, so re-inserting
+  // on hit gives LRU eviction. Bounded by `PARSED_CACHE_BUDGET_CHARS`
+  // (JSON-text-size proxy for heap).
+  #parsedCache = new Map<
+    string,
+    {
+      entry: ModuleCacheEntry;
+      snapshot: { module: number; realm: number; global: number };
+      sizeChars: number;
+    }
+  >();
+  #parsedCacheBytes = 0;
 
   constructor(
     dbAdapter: DBAdapter,
@@ -937,6 +990,43 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     authUserId: string,
     resolvedRealmURL: string,
   ): Promise<ModuleCacheEntry | undefined> {
+    // Parsed-entry cache short-circuit. Snapshot the generation counters
+    // first, then validate the cached entry's snapshot against them — if
+    // any counter has bumped (locally via invalidate/clearRealmCache/
+    // clearAllModules, or remotely via the cross-process NOTIFY listener
+    // calling the public bumpModuleGeneration / bumpRealmGeneration /
+    // bumpGlobalGeneration helpers), drop the entry and fall through to
+    // the SQL+parse path, which will return whatever the DB currently
+    // holds (undefined if the row was deleted, or a fresher row if a
+    // peer has already re-prerendered).
+    //
+    // Same key shape as `#inFlight`: the four-tuple that uniquely
+    // identifies a (realm, module URL, cache scope, auth user) lookup
+    // context.
+    let cacheKey = inFlightKey({
+      resolvedRealmURL,
+      moduleURL: moduleUrl,
+      cacheScope,
+      cacheUserId: authUserId,
+    });
+    let snapshotAtEntry = this.snapshotGeneration(resolvedRealmURL, moduleUrl);
+    let cached = this.#parsedCache.get(cacheKey);
+    if (cached) {
+      if (
+        cached.snapshot.module === snapshotAtEntry.module &&
+        cached.snapshot.realm === snapshotAtEntry.realm &&
+        cached.snapshot.global === snapshotAtEntry.global
+      ) {
+        // LRU touch: re-insert at end of map iteration order so the
+        // entry is youngest under the eviction policy.
+        this.#parsedCache.delete(cacheKey);
+        this.#parsedCache.set(cacheKey, cached);
+        return cached.entry;
+      }
+      this.#parsedCacheBytes -= cached.sizeChars;
+      this.#parsedCache.delete(cacheKey);
+    }
+
     let moduleAlias = normalizeExecutableURL(moduleUrl);
     let rows = (await this.query(
       [
@@ -980,7 +1070,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     }
     let error = parseJsonValue<ErrorEntry>(row.error_doc) ?? undefined;
     let createdAt = row.created_at ? parseInt(row.created_at) : undefined;
-    return {
+    let entry: ModuleCacheEntry = {
       definitions,
       deps,
       error,
@@ -989,6 +1079,54 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolvedRealmURL: row.resolved_realm_url || '',
       createdAt,
     };
+
+    // Don't cache error entries: they have a TTL (see `isExpiredErrorEntry`),
+    // and re-checking that TTL against an in-memory copy would either return
+    // a stale-but-still-cached error or require an extra TTL-aware eviction
+    // path. The SQL path handles errors correctly today; let it.
+    //
+    // Re-snapshot before insert: if a generation bumped between entry and
+    // here (e.g. an in-flight peer invalidation arrived during the SQL
+    // round-trip), the row we just read is already stale. Skip the cache
+    // insert; the next caller will re-read.
+    if (!error) {
+      let snapshotAtPersist = this.snapshotGeneration(
+        resolvedRealmURL,
+        moduleUrl,
+      );
+      if (
+        snapshotAtPersist.module === snapshotAtEntry.module &&
+        snapshotAtPersist.realm === snapshotAtEntry.realm &&
+        snapshotAtPersist.global === snapshotAtEntry.global
+      ) {
+        let sizeChars = approximateEntrySizeChars(entry, row.definitions);
+        this.#parsedCache.set(cacheKey, {
+          entry,
+          snapshot: snapshotAtPersist,
+          sizeChars,
+        });
+        this.#parsedCacheBytes += sizeChars;
+        this.evictParsedCacheUntilUnderBudget();
+      }
+    }
+    return entry;
+  }
+
+  private evictParsedCacheUntilUnderBudget(): void {
+    while (
+      this.#parsedCacheBytes > PARSED_CACHE_BUDGET_CHARS &&
+      this.#parsedCache.size > 0
+    ) {
+      let oldestKey = this.#parsedCache.keys().next().value;
+      if (oldestKey === undefined) {
+        return;
+      }
+      let oldest = this.#parsedCache.get(oldestKey);
+      if (oldest) {
+        this.#parsedCacheBytes -= oldest.sizeChars;
+      }
+      this.#parsedCache.delete(oldestKey);
+    }
   }
 
   async getModuleCacheEntries(
