@@ -7,10 +7,10 @@ import {
   deserializeForUI,
   serializeForUI,
 } from './card-api';
-import { TextInputValidator } from './text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
 import { getFormattedDisplayValue } from './number/util/index';
 import HashIcon from '@cardstack/boxel-icons/hash';
+import { TextInputValidator } from './text-input-validator';
 
 import { StatEmbedded, StatAtom } from './number/components/stat';
 import { ScoreEmbedded, ScoreAtom } from './number/components/score';
@@ -225,7 +225,10 @@ export default class NumberField extends BaseNumberField {
         @onInput={{this.textInputValidator.onInput}}
         @errorMessage={{this.textInputValidator.errorMessage}}
         @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
+        @min={{numberOption @configuration 'min'}}
+        @max={{numberOption @configuration 'max'}}
         @disabled={{not @canEdit}}
+        data-test-number-input
       />
     </template>
 
@@ -237,4 +240,16 @@ export default class NumberField extends BaseNumberField {
       NumberSerializer.validate,
     );
   };
+}
+
+function numberOption(
+  configuration: unknown,
+  key: 'min' | 'max',
+): number | undefined {
+  let config = configuration as NumberFieldConfiguration | undefined;
+  let raw = (config?.options as { min?: unknown; max?: unknown } | undefined)?.[
+    key
+  ];
+  let num = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(num) ? num : undefined;
 }
