@@ -1,10 +1,12 @@
-#!/bin/sh
+#!/usr/bin/env bash
 #MISE description="Start realm development server"
 #MISE depends=["infra:ensure-traefik", "infra:ensure-pg", "infra:ensure-db"]
 #MISE dir="packages/realm-server"
 
 # Propagate realm-server's exit status through the trailing `| dev-log-tee.sh`
 # pipeline so mise sees crashes instead of the tee stage's clean EOF.
+# `set -o pipefail` is a bashism — Ubuntu CI's /bin/sh is dash and rejects it
+# as "Illegal option", so this script must run under bash.
 set -o pipefail
 
 SCRIPTS_DIR="./scripts"
