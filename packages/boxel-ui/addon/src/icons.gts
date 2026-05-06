@@ -24,7 +24,6 @@ import Download from './icons/download.gts';
 import DropdownArrowDown from './icons/dropdown-arrow-down.gts';
 import DropdownArrowFilled from './icons/dropdown-arrow-filled.gts';
 import DropdownArrowUp from './icons/dropdown-arrow-up.gts';
-import Edit from './icons/edit.gts';
 import Embedded from './icons/embedded.gts';
 import Exclamation from './icons/exclamation.gts';
 import ExclamationCircle from './icons/exclamation-circle.gts';
@@ -106,7 +105,6 @@ export const ALL_ICON_COMPONENTS = [
   DropdownArrowDown,
   DropdownArrowFilled,
   DropdownArrowUp,
-  Edit,
   Embedded,
   Exclamation,
   ExclamationCircle,
@@ -190,7 +188,6 @@ export {
   DropdownArrowDown,
   DropdownArrowFilled,
   DropdownArrowUp,
-  Edit,
   Embedded,
   Exclamation,
   ExclamationCircle,

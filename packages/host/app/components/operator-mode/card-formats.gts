@@ -1,14 +1,17 @@
+import Metadata from '@cardstack/boxel-icons/clipboard-data';
+import Edit from '@cardstack/boxel-icons/pencil';
+
 import {
   Isolated,
   Embedded,
   Fitted,
   Atom,
-  Edit,
   Head,
   Markdown,
   Form,
   type Icon,
 } from '@cardstack/boxel-ui/icons';
+
 import { formats, type Format } from '@cardstack/runtime-common';
 export { Isolated, Embedded, Fitted, Atom, Edit, Head, Markdown, Form };
 
@@ -26,6 +29,7 @@ export const formatIcons: Partial<Record<Format, Icon>> = {
   form: Form,
   head: Head,
   markdown: Markdown,
+  metadata: Metadata,
 };
 
 export const formatsWithIcons: FormatWithIcon[] = formats.map((f) => ({

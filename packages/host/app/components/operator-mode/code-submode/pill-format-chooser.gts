@@ -7,9 +7,13 @@ import { tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { Button } from '@cardstack/boxel-ui/components';
+import { cn, eq, or } from '@cardstack/boxel-ui/helpers';
+import type { Icon } from '@cardstack/boxel-ui/icons';
 
 import { formats, type Format } from '@cardstack/runtime-common';
+
+import { formatIcons, type FormatWithIcon } from '../card-formats';
 
 interface Signature {
   Args: {
@@ -20,10 +24,8 @@ interface Signature {
   Element: HTMLElement;
 }
 
-/* Inline canvas measurement (no DOM mutation, no reflow). The same
-   pattern as the realm's `pretext-modifier` — a single offscreen
-   canvas + per-font cache. Used to size the morphing pill bg's path
-   exactly to the label's natural width. */
+/* Offscreen canvas measurement — no DOM mutation, no reflow.
+   Sizes the pill path to match each label's natural text width. */
 let _measureCtx: CanvasRenderingContext2D | null = null;
 const _measureCache = new Map<string, Map<string, number>>();
 function measureWord(text: string, font: string): number {
@@ -43,28 +45,21 @@ function measureWord(text: string, font: string): number {
   return w;
 }
 
-/* Pill geometry. PILL_SVG_W is the fixed width of the SVG container —
-   wide enough to hold the largest possible morphed pill, with the
-   path centered inside via tx offsets. PILL_R = PILL_H / 2 makes
-   every pill fully rounded (capsule) regardless of width. */
-/* Pill height is shorter than the outer chooser height (40px) so
-   the pill sits with breathing room top + bottom. PAD values are
-   tight around icon + label for a snug pill. */
-const PILL_H = 28;
+/* PILL_SVG_W is wide enough for the largest pill; the path is centered
+   inside via tx offsets. PILL_R = PILL_H / 2 makes every pill a capsule.
+   PILL_H is shorter than --pf-height so the pill has breathing room. */
+const PILL_H = 28; // --pf-pill-h
 const PILL_R = PILL_H / 2;
-const PILL_SVG_W = 240;
+const PILL_SVG_W = 240; // --pf-pill-svg-w
 
-const ICON_W = 16;
+const ICON_W = 16; // --pf-icon-w
 const LABEL_GAP = 5;
-const PAD_LEFT = 9;
+const PAD_LEFT = 9; // --pf-pad-left (var(--boxel-sp-xs))
 const PAD_RIGHT = 11;
-/* Extra column inserted before the "edit" group so the hard 1px
-   divider has breathing room on each side. The pill's translate
-   transition covers this gap during hover, so there is still no
-   visual seam as the pill slides across. */
-const DIVIDER_COL_W = 10; // matches --pf-divider-col-w
-// Mirrors --boxel-sp-xs (9px) — must stay in sync with the CSS gap.
-const GAP_PX = 9;
+/* Extra column before "edit"/"metadata" groups gives the divider breathing
+   room. The pill's translate transition covers this gap seamlessly. */
+const DIVIDER_COL_W = 10; // --pf-divider-col-w
+const GAP_PX = 5; // --pf-gap-px
 
 const PILL_LABEL_FONT =
   "600 12px 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif";
@@ -87,16 +82,15 @@ function pillWidthFor(fmt: Format, compact: boolean = false): number {
    so CSS `d:` interpolates between any pair smoothly — no flubber,
    no JS animation loop. */
 function pillPath(width: number): string {
-  const w = width;
-  const tx = (PILL_SVG_W - w) / 2;
+  const tx = (PILL_SVG_W - width) / 2;
   const r = PILL_R;
   const h = PILL_H;
   return [
     `M ${tx + r} 0`,
-    `H ${tx + w - r}`,
-    `Q ${tx + w} 0 ${tx + w} ${r}`,
+    `H ${tx + width - r}`,
+    `Q ${tx + width} 0 ${tx + width} ${r}`,
     `V ${h - r}`,
-    `Q ${tx + w} ${h} ${tx + w - r} ${h}`,
+    `Q ${tx + width} ${h} ${tx + width - r} ${h}`,
     `H ${tx + r}`,
     `Q ${tx} ${h} ${tx} ${h - r}`,
     `V ${r}`,
@@ -105,76 +99,17 @@ function pillPath(width: number): string {
   ].join(' ');
 }
 
-const ICONS: Partial<Record<Format | 'form', string>> = {
-  isolated: `<svg viewBox='0 0 16 16' fill='none' stroke='currentColor' stroke-width='1.5'>
-    <rect x='1.75' y='1' width='12.5' height='14' rx='1.25'/>
-    <line x1='4.5' y1='4.5' x2='11.5' y2='4.5'/>
-    <line x1='4.5' y1='7' x2='11.5' y2='7'/>
-    <line x1='4.5' y1='9.5' x2='11.5' y2='9.5'/>
-    <line x1='4.5' y1='12' x2='9' y2='12'/>
-  </svg>`,
-  embedded: `<svg viewBox='0 0 18 16' fill='none' stroke='currentColor' stroke-width='1.25'>
-    <rect x='1.25' y='3.5' width='15.5' height='9' rx='2' fill='currentColor' fill-opacity='0.18'/>
-    <rect x='1.25' y='3.5' width='15.5' height='9' rx='2'/>
-    <rect x='3' y='5.25' width='5' height='5.5' rx='0.75' fill='currentColor' stroke='none'/>
-    <line x1='9.5' y1='6.75' x2='14.75' y2='6.75'/>
-    <line x1='9.5' y1='8.5' x2='14.75' y2='8.5'/>
-    <line x1='9.5' y1='10.25' x2='12.75' y2='10.25'/>
-  </svg>`,
-  fitted: `<svg viewBox='0 0 16 16' fill='none' stroke='currentColor' stroke-width='1.25'>
-    <rect x='4.25' y='2.5' width='7.5' height='11' rx='0.5'/>
-    <circle cx='4.25' cy='2.5' r='1.4' fill='currentColor' stroke='none'/>
-    <circle cx='11.75' cy='2.5' r='1.4' fill='currentColor' stroke='none'/>
-    <circle cx='4.25' cy='13.5' r='1.4' fill='currentColor' stroke='none'/>
-    <circle cx='11.75' cy='13.5' r='1.4' fill='currentColor' stroke='none'/>
-  </svg>`,
-  atom: `<svg viewBox='0 0 16 16' fill='none' stroke='currentColor' stroke-width='1.5'>
-    <rect x='2' y='6' width='12' height='4' rx='2' fill='currentColor' fill-opacity='0.35'/>
-    <rect x='2' y='6' width='12' height='4' rx='2'/>
-  </svg>`,
-  edit: `<svg viewBox='2.5 2.5 18.75 18.75' fill='currentColor'>
-    <path d='M4 20.75a.75.75 0 0 1-.75-.75v-4.181a.76.76 0 0 1 .22-.53L14.711 4.05a2.72 2.72 0 0 1 3.848 0l1.391 1.391a2.72 2.72 0 0 1 0 3.848L8.712 20.53a.75.75 0 0 1-.531.22zm.75-4.621v3.121h3.12l7.91-7.91-3.12-3.12zm12.091-5.849 2.051-2.051a1.223 1.223 0 0 0 0-1.727l-1.393-1.394a1.22 1.22 0 0 0-1.727 0L13.72 7.16z'/>
-  </svg>`,
-  /* form — the auto-generated standard view ("Toggle Standard View"
-     in the overflow menu). Sits next to Edit (custom edit template)
-     when both are available. */
-  form: `<svg viewBox='0 0 16 16' fill='none' stroke='currentColor' stroke-width='1.4'>
-    <rect x='2' y='2' width='12' height='12' rx='1.25'/>
-    <line x1='4.5' y1='5.25' x2='9.5' y2='5.25'/>
-    <rect x='4.5' y='6.5' width='7' height='2' rx='0.5' fill='currentColor' fill-opacity='0.3' stroke='none'/>
-    <line x1='4.5' y1='10.5' x2='8' y2='10.5'/>
-    <rect x='4.5' y='11.75' width='7' height='1.75' rx='0.5' fill='currentColor' fill-opacity='0.3' stroke='none'/>
-  </svg>`,
-  head: `<svg viewBox='0 0 16 16' fill='currentColor' stroke='currentColor' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'>
-    <circle cx='12.25' cy='3.25' r='1.85' stroke='none'/>
-    <circle cx='3.75' cy='8' r='1.85' stroke='none'/>
-    <circle cx='12.25' cy='12.75' r='1.85' stroke='none'/>
-    <line x1='5.4' y1='9.05' x2='10.6' y2='11.7' fill='none'/>
-    <line x1='10.6' y1='4.3' x2='5.4' y2='6.95' fill='none'/>
-  </svg>`,
-  markdown: `<svg viewBox='0 0 16 16' fill='currentColor'>
-    <text x='8' y='11.5' text-anchor='middle' font-size='9.5' font-weight='800' font-family='ui-monospace, SFMono-Regular, Menlo, monospace'>MD</text>
-  </svg>`,
-  // metadata + spec aren't in the original FORMATS but the type
-  // includes them. Reuse appropriate icons / fall back to a neutral
-  // dot if the host ever passes them in via @formats.
-  // (unused in current contexts)
-};
-
 export default class PillFormatChooser extends Component<Signature> {
   @tracked private hoveredFmt: Format | null = null;
   @tracked private isDragging = false;
-  // Live parent content-box width, kept fresh by registerRow's
-  // ResizeObserver. Compact mode is a derived getter — no manual sync
-  // needed, so it reacts when the user changes active format too (which
-  // changes the natural width without firing a resize event).
+  // Smallest ancestor clientWidth, updated by ResizeObserver.
+  // Also reacts to active-format changes, which shift natural width without a resize event.
   @tracked private parentWidth: number = Infinity;
 
   private rowEl: HTMLElement | null = null;
   private buttonEls: Map<Format, HTMLElement> = new Map();
-  // After a drag that moved selection, the browser fires a synthetic
-  // click on the originally-pressed button (because of pointer capture)
-  // — that would revert active to the press-start format. Suppress it.
+  // After a drag that changed format, the browser fires a synthetic click
+  // on the press-start button — suppress it to avoid reverting the selection.
   private suppressNextClick = false;
 
   private get availableFormats(): Format[] {
@@ -190,9 +125,7 @@ export default class PillFormatChooser extends Component<Signature> {
     return this.hoveredFmt !== null && this.hoveredFmt !== this.args.format;
   }
 
-  /* Per-column width. ONLY ONE column at a time is wider:
-       previewing → hovered column expands (outlined white preview)
-       resting → active column expands (outlined green selected) */
+  /* One column wider at a time: hovered (preview) or active (rest). */
   private colWidthFor(f: Format): number {
     if (this.hasPreview) {
       return f === this.hoveredFmt ? pillWidthFor(f, this.isCompact) : 32;
@@ -204,9 +137,8 @@ export default class PillFormatChooser extends Component<Signature> {
     const cols: string[] = [];
     const fmts = this.availableFormats;
     for (const f of fmts) {
-      // Insert divider before "edit" — only if both edit AND a preceding
-      // non-edit format are in the available list.
-      if (f === 'edit' && fmts.indexOf('edit') > 0) {
+      // Insert divider before "edit" or "metadata" — only when not first.
+      if ((f === 'edit' || f === 'metadata') && fmts.indexOf(f) > 0) {
         cols.push(`${DIVIDER_COL_W}px`);
       }
       cols.push(`${this.colWidthFor(f)}px`);
@@ -214,16 +146,14 @@ export default class PillFormatChooser extends Component<Signature> {
     return htmlSafe(`grid-template-columns: ${cols.join(' ')};`);
   }
 
-  /* Computed center X for a given format under current grid layout.
-     PAD must match --boxel-sp-xs (horizontal padding of .pill-format-chooser). */
+  /* Center X of a format button under the current grid layout. */
   private centerXFor(target: Format): number {
-    const PAD = 9; // matches --boxel-sp-xs (horizontal padding)
-    let x = PAD;
+    let x = PAD_LEFT;
     let isFirst = true;
     const fmts = this.availableFormats;
     for (const f of fmts) {
-      if (f === 'edit' && fmts.indexOf('edit') > 0) {
-        // divider col + edit btn col separated by two gaps
+      if ((f === 'edit' || f === 'metadata') && fmts.indexOf(f) > 0) {
+        // divider col + btn col separated by two gaps
         x += GAP_PX + DIVIDER_COL_W + GAP_PX;
       } else {
         if (!isFirst) x += GAP_PX;
@@ -236,15 +166,9 @@ export default class PillFormatChooser extends Component<Signature> {
     return x;
   }
 
-  // Pill position + shape follow hovered format if previewing, else
-  // active. Stroke color is green when pill sits on active (hard
-  // select — including throughout a drag, since drag commits live),
-  // gray when previewing a different format via hover.
+  // Pill tracks hoveredFmt while previewing, active format at rest.
   get pillTargetFmt(): Format {
     return this.hoveredFmt ?? this.args.format;
-  }
-  get pillIsAtActive(): boolean {
-    return this.pillTargetFmt === this.args.format;
   }
   get pillStyle(): SafeString {
     const tx = this.centerXFor(this.pillTargetFmt) - PILL_SVG_W / 2;
@@ -253,31 +177,11 @@ export default class PillFormatChooser extends Component<Signature> {
   get pillPathD(): string {
     return pillPath(pillWidthFor(this.pillTargetFmt, this.isCompact));
   }
-  get pillStrokeColor(): string {
-    return this.pillIsAtActive ? 'var(--boxel-highlight)' : '#d8d8d8';
-  }
-  get pillContentColor(): SafeString {
-    const c = this.pillIsAtActive ? 'var(--boxel-highlight)' : '#d8d8d8';
-    return htmlSafe(`color: ${c};`);
-  }
-
   registerRow = modifier((el: HTMLElement) => {
     this.rowEl = el;
-    /* Width-constraint detection.
-
-       Walk up to 12 ancestors and use the smallest clientWidth as the
-       chooser's available room. This relies on the chooser's host
-       parents NOT being auto-sized to the chooser's content — host
-       layouts must give the chooser a full-width or otherwise
-       independently-constrained shell, otherwise this signal would
-       collapse with the chooser and stick in compact mode.
-
-       (See preview-panel/index.gts and playground-panel.gts CSS for
-       the full-width flex shells.)
-
-       Re-measures on: chooser-own resize, body resize, window resize.
-       Together these cover the realistic paths a layout change can
-       reach the chooser. */
+    /* Walk up to 12 ancestors; use the smallest clientWidth as available room.
+       Host layouts must give the chooser a full-width shell — auto-sized parents
+       would collapse with the chooser and lock it in compact mode. */
     const observers: ResizeObserver[] = [];
     const ancestors: HTMLElement[] = [];
     let node: HTMLElement | null = el.parentElement;
@@ -295,36 +199,57 @@ export default class PillFormatChooser extends Component<Signature> {
       if (smallest !== Infinity) this.parentWidth = smallest;
     };
     if (typeof ResizeObserver !== 'undefined') {
-      const choserRo = new ResizeObserver(measure);
-      choserRo.observe(el);
-      observers.push(choserRo);
-      for (const a of ancestors) {
-        const ro = new ResizeObserver(measure);
-        ro.observe(a);
-        observers.push(ro);
-      }
+      const ro = new ResizeObserver(measure);
+      ro.observe(el);
+      for (const a of ancestors) ro.observe(a);
+      observers.push(ro);
     }
-    const onResize = () => measure();
-    window.addEventListener('resize', onResize);
+    window.addEventListener('resize', measure);
     measure();
+
+    // Track hover via the stable container rather than mouseenter/mouseleave
+    // on individual buttons. Buttons change their own layout on hover (grid
+    // columns animate), which causes spurious leave/enter cycles that flicker.
+    const onMouseMove = (e: MouseEvent) => {
+      if (this.isDragging) return;
+      let found: Format | null = null;
+      this.buttonEls.forEach((btnEl, fmt) => {
+        const r = btnEl.getBoundingClientRect();
+        if (
+          e.clientX >= r.left &&
+          e.clientX <= r.right &&
+          e.clientY >= r.top &&
+          e.clientY <= r.bottom
+        ) {
+          found = fmt;
+        }
+      });
+      this.hoveredFmt = found;
+    };
+    const onMouseLeave = () => {
+      if (this.isDragging) return;
+      this.hoveredFmt = null;
+    };
+    el.addEventListener('mousemove', onMouseMove);
+    el.addEventListener('mouseleave', onMouseLeave);
+
     return () => {
       for (const ro of observers) ro.disconnect();
-      window.removeEventListener('resize', onResize);
+      window.removeEventListener('resize', measure);
+      el.removeEventListener('mousemove', onMouseMove);
+      el.removeEventListener('mouseleave', onMouseLeave);
       if (this.rowEl === el) this.rowEl = null;
     };
   });
 
-  /* Compact when the parent's available width can't fit the full
-     non-compact pill. We always compare against non-compact natural
-     so the trigger doesn't depend on current state — no oscillation,
-     no manual hysteresis. */
+  /* Always compare against non-compact width so the trigger is stateless —
+     no oscillation, no hysteresis. */
   get isCompact(): boolean {
-    const PAD_X = 9; // matches --boxel-sp-xs (horizontal padding)
-    let natural = 2 * PAD_X;
+    let natural = 2 * PAD_LEFT;
     let isFirst = true;
     const fmts = this.availableFormats;
     for (const f of fmts) {
-      if (f === 'edit' && fmts.indexOf('edit') > 0) {
+      if ((f === 'edit' || f === 'metadata') && fmts.indexOf(f) > 0) {
         natural += GAP_PX + DIVIDER_COL_W + GAP_PX;
       } else {
         if (!isFirst) natural += GAP_PX;
@@ -349,16 +274,6 @@ export default class PillFormatChooser extends Component<Signature> {
       el.removeEventListener('pointercancel', this.onPointerUp);
     };
   });
-
-  setHovered = (f: Format) => {
-    if (this.isDragging) return;
-    this.hoveredFmt = f;
-  };
-
-  clearHovered = () => {
-    if (this.isDragging) return;
-    this.hoveredFmt = null;
-  };
 
   onClick = (f: Format) => {
     if (this.suppressNextClick) {
@@ -410,148 +325,161 @@ export default class PillFormatChooser extends Component<Signature> {
       btn.releasePointerCapture(pe.pointerId);
     }
     this.isDragging = false;
-    // If the cursor ended on a different format than where it was
-    // pressed, the trailing synthetic click on the press-start button
-    // would revert the selection — suppress it.
+    // Suppress the trailing synthetic click that would revert to the press-start format.
     if (pressedFmt && pressedFmt !== this.args.format) {
       this.suppressNextClick = true;
     }
   };
 
-  iconFor = (f: Format): SafeString => htmlSafe(ICONS[f] ?? '');
+  private get availableFormatsWithIcons(): FormatWithIcon[] {
+    return this.availableFormats.map((f) => ({
+      format: f,
+      icon: formatIcons[f] ?? null,
+    }));
+  }
+
+  get pillTargetIcon(): Icon | null {
+    return formatIcons[this.pillTargetFmt] ?? null;
+  }
 
   <template>
     <div
-      class='pill-format-chooser
-        {{if this.isDragging "dragging"}}
-        {{if this.hasPreview "has-preview"}}
-        {{if this.isCompact "compact"}}'
+      class={{cn
+        'pill-format-chooser'
+        dragging=this.isDragging
+        has-preview=this.hasPreview
+        compact=this.isCompact
+      }}
       style={{this.gridStyle}}
+      role='group'
+      aria-label='Card format'
       data-test-pill-format-chooser
       {{this.registerRow}}
       ...attributes
     >
-      {{! ONE pill. Position + shape follow hovered (preview) or
-          active (rest). Stroke color flips instantly between green
-          (active match) and white (preview). On commit, only the
-          stroke color changes — no fade in/out. }}
+      {{! Single pill — slides and morphs to follow hover/active. Stroke snaps instantly on commit. }}
       <div class='pill-container' style={{this.pillStyle}} aria-hidden='true'>
-        <svg
-          class='pill-bg'
-          width={{PILL_SVG_W}}
-          height={{PILL_H}}
-          viewBox='0 0 240 28'
-        >
+        <svg class='pill-bg' width='240' height='28' viewBox='0 0 240 28'>
           <path
             class='pill-path'
             d={{this.pillPathD}}
-            fill='none'
-            stroke={{this.pillStrokeColor}}
+            fill='var(--pf-bg)'
+            stroke='var(--pf-preview-color)'
             stroke-width='1.5'
           />
         </svg>
-        <div class='pill-content' style={{this.pillContentColor}}>
-          <span class='pf-icon'>{{this.iconFor this.pillTargetFmt}}</span>
+        <div class='pill-content'>
+          {{#if this.pillTargetIcon}}
+            <this.pillTargetIcon class='pf-icon' width='16' height='16' />
+          {{/if}}
           <span class='pf-label'>{{this.pillTargetFmt}}</span>
         </div>
       </div>
 
-      {{#each this.availableFormats as |f i|}}
-        {{#if (eq f 'edit')}}
+      {{#each this.availableFormatsWithIcons as |fw i|}}
+        {{#if (or (eq fw.format 'metadata') (eq fw.format 'edit'))}}
           {{#unless (eq i 0)}}
             <span class='pf-divider'></span>
           {{/unless}}
         {{/if}}
-        <button
-          class='pf-btn
-            {{if (eq @format f) "active"}}
-            {{if (eq this.hoveredFmt f) "is-hover"}}'
+        <Button
+          @size='auto'
+          class={{cn
+            'pf-btn'
+            active=(eq @format fw.format)
+            is-hover=(eq this.hoveredFmt fw.format)
+          }}
           type='button'
-          data-fmt={{f}}
-          aria-label={{f}}
-          title={{f}}
-          data-test-format-chooser={{f}}
-          {{this.registerBtn f}}
-          {{on 'click' (fn this.onClick f)}}
-          {{on 'mouseenter' (fn this.setHovered f)}}
-          {{on 'mouseleave' this.clearHovered}}
+          data-fmt={{fw.format}}
+          aria-label={{fw.format}}
+          aria-pressed={{eq @format fw.format}}
+          title={{fw.format}}
+          data-test-format-chooser={{fw.format}}
+          {{this.registerBtn fw.format}}
+          {{on 'click' (fn this.onClick fw.format)}}
         >
-          <span class='pf-icon'>{{this.iconFor f}}</span>
-        </button>
+          {{#if fw.icon}}
+            <fw.icon class='pf-icon' width='16' height='16' />
+          {{/if}}
+        </Button>
       {{/each}}
     </div>
 
     <style scoped>
       .pill-format-chooser {
-        /* JS-mirrored layout tokens — keep in sync with the constants
-           GAP_PX, PAD (PAD_X), DIVIDER_COL_W, PILL_H, PILL_SVG_W, ICON_W. */
-        --pf-gap-px: var(--boxel-sp-xs);
-        --pf-pad-x: var(--boxel-sp-xs);
-        --pf-divider-col-w: 10px;
-        --pf-pill-h: 28px;
-        --pf-pill-svg-w: 240px;
-        --pf-icon-w: 16px;
+        /* JS-mirrored layout tokens — keep in sync with the corresponding constants. */
+        --pf-gap-px: 5px; /* GAP_PX */
+        --pf-pad-left: var(--boxel-sp-xs); /* PAD_LEFT */
+        --pf-divider-col-w: 10px; /* DIVIDER_COL_W */
+        --pf-pill-h: 28px; /* PILL_H */
+        --pf-pill-svg-w: 240px; /* PILL_SVG_W */
+        --pf-icon-w: 16px; /* ICON_W */
+
+        --pf-height: var(--boxel-form-control-height);
+        --pf-bg: var(--boxel-dark);
+        --pf-color: var(--boxel-light);
+        --pf-active-color: var(--boxel-highlight);
 
         --pf-btn-opacity: 0.55;
-        --pf-divider-opacity: 0.18;
+        --pf-divider-color: var(--boxel-500);
+        --pf-preview-color: var(--boxel-200);
+
+        --pf-transition: 320ms cubic-bezier(0.4, 0, 0.2, 1);
+        --pf-transition-drag: 60ms cubic-bezier(0.2, 0, 0, 1);
+        /* pill-path morph needs more time than snap reposition during drag */
+        --pf-transition-drag-path: 240ms cubic-bezier(0.2, 0, 0, 1);
+        --pf-transition-btn: 180ms ease;
+        --pf-transition-icon: 120ms ease;
 
         display: grid;
         align-items: center;
         gap: var(--pf-gap-px);
-        padding: var(--boxel-sp-3xs) var(--pf-pad-x);
+        padding: var(--boxel-sp-3xs) var(--pf-pad-left);
         position: relative;
         user-select: none;
-        height: var(--boxel-form-control-height);
+        height: var(--pf-height);
         box-sizing: border-box;
-        /* `min-width: 0` lets the chooser shrink below grid-content
-           min-content, so the parent's width constraint actually
-           reaches the chooser. `max-width: 100%` clamps to it.
-           `overflow: visible` so the compact-mode tooltip can extend
-           in any direction. We rely on the viewport-anchored
-           ResizeObserver below to flip into compact mode before the
-           chooser would visibly overflow its parent — no horizontal
-           clip safety net so tooltips on edge buttons render fully. */
+        /* min-width: 0 lets the chooser shrink below its grid min-content so
+           the parent constraint reaches it. overflow: visible lets compact
+           tooltips extend freely — compact mode kicks in before overflow occurs. */
         min-width: 0;
         max-width: 100%;
         overflow: visible;
-        background-color: var(--boxel-dark);
-        color: var(--boxel-light);
+        background-color: var(--pf-bg);
+        color: var(--pf-color);
         border-radius: var(--boxel-border-radius-2xl);
-        transition: grid-template-columns 320ms cubic-bezier(0.4, 0, 0.2, 1);
-        color: var(--boxel-light);
+        transition: grid-template-columns var(--pf-transition);
+      }
+      .pill-format-chooser:not(.has-preview) {
+        --pf-preview-color: var(--pf-active-color);
       }
       .pill-format-chooser.dragging {
-        transition: grid-template-columns 60ms cubic-bezier(0.2, 0, 0, 1);
+        transition: grid-template-columns var(--pf-transition-drag);
       }
       .pf-divider {
         width: 1px;
         height: 18px;
-        background: var(--boxel-light);
-        opacity: var(--pf-divider-opacity);
+        background: var(--pf-divider-color);
         justify-self: center;
         position: relative;
         z-index: 2;
       }
 
       /* Pill containers — outlined SVG bg + HTML content, sized
-         --boxel-button-sm, vertically centered in --boxel-form-control-height. */
+         --pf-pill-h, vertically centered in --pf-height. */
       .pill-container {
         position: absolute;
-        top: calc((var(--boxel-form-control-height) - var(--pf-pill-h)) / 2);
+        top: calc((var(--pf-height) - var(--pf-pill-h)) / 2);
         left: 0;
         width: var(--pf-pill-svg-w);
         height: var(--pf-pill-h);
         z-index: 1;
         pointer-events: none;
-        transition:
-          transform 320ms cubic-bezier(0.4, 0, 0.2, 1),
-          opacity 200ms ease;
+        transition: transform var(--pf-transition);
         will-change: transform;
       }
       .pill-format-chooser.dragging .pill-container {
-        transition:
-          transform 60ms cubic-bezier(0.2, 0, 0, 1),
-          opacity 200ms ease;
+        transition: transform var(--pf-transition-drag);
       }
       .pill-bg {
         position: absolute;
@@ -559,15 +487,13 @@ export default class PillFormatChooser extends Component<Signature> {
         left: 0;
         overflow: visible;
       }
-      /* Path morphs in shape (d) only — fill + stroke change
-         INSTANTLY on commit so the white→green outline swap is a
-         snap, not an animation. */
+      /* d morphs smoothly; stroke snaps instantly on commit (gray→green). */
       .pill-path {
-        transition: d 320ms cubic-bezier(0.4, 0, 0.2, 1);
+        transition: d var(--pf-transition);
         will-change: d;
       }
       .pill-format-chooser.dragging .pill-path {
-        transition: d 240ms cubic-bezier(0.2, 0, 0, 1);
+        transition: d var(--pf-transition-drag-path);
       }
       .pill-content {
         position: absolute;
@@ -582,63 +508,57 @@ export default class PillFormatChooser extends Component<Signature> {
         font-family: inherit;
         text-transform: capitalize;
         white-space: nowrap;
-        transition: color 200ms ease;
+        color: var(--pf-preview-color);
       }
       .pill-content .pf-icon {
         flex: 0 0 auto;
       }
 
-      /* Buttons — rectangular hit-targets above the pill containers
-         (z-index 5) so clicks always land on the button. Height matches
-         --boxel-button-sm so the button icon vertically lines up with
-         the pill icon (both centered in the same band). */
+      /* Buttons — rectangular hit-targets above pill containers (z-index 5).
+         Height matches --pf-pill-h so button icons align with pill icon. */
       .pf-btn {
-        position: relative;
-        z-index: 5;
+        --boxel-button-color: transparent;
+        --boxel-button-text-color: inherit;
+        --boxel-button-padding: 0;
+
         width: 100%;
         height: var(--pf-pill-h);
-        background: transparent;
-        color: inherit;
-        border: 0;
-        padding: 0;
-        border-radius: 0;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
+        border-color: transparent;
+        border-radius: var(--boxel-border-radius-sm);
+        position: relative;
+        z-index: 5;
         pointer-events: auto;
+        cursor: pointer;
         opacity: var(--pf-btn-opacity);
         transition:
-          opacity 180ms ease,
-          color 180ms ease;
+          opacity var(--pf-transition-btn),
+          color var(--pf-transition-btn);
       }
       .pf-btn:hover {
+        --boxel-button-color: transparent;
         opacity: 1;
       }
       .pill-format-chooser.dragging .pf-btn {
         cursor: grabbing;
+        transition:
+          opacity var(--pf-transition-drag),
+          color var(--pf-transition-drag);
       }
-      /* Whichever button the pill is currently over hides its own
-         icon (the pill carries one). At rest that's the active
-         button; while previewing it's the hovered button — and the
-         active button's icon comes back, colored GREEN to mark
-         "currently selected". During DRAG no green: active is
-         updating live so the previous-selection indicator would just
-         be the icon you're dragging from a moment ago. */
-      .pf-btn.active .pf-icon {
+      /* The pill carries the icon for its current button, so that button hides
+         its own icon. While previewing, the hovered button hides its icon and
+         the active button shows its icon in green ("currently selected").
+         During drag, no green — active changes live, green would flicker. */
+      .pf-btn.active .pf-icon,
+      .pf-btn.is-hover:not(.active) .pf-icon {
         opacity: 0;
-        transition: opacity 120ms ease;
+        transition: opacity var(--pf-transition-icon);
       }
       .pill-format-chooser.has-preview:not(.dragging) .pf-btn.active {
-        color: var(--boxel-highlight);
+        color: var(--pf-active-color);
         opacity: 1;
       }
       .pill-format-chooser.has-preview:not(.dragging) .pf-btn.active .pf-icon {
         opacity: 1;
-      }
-      .pf-btn.is-hover:not(.active) .pf-icon {
-        opacity: 0;
-        transition: opacity 120ms ease;
       }
       .pf-icon {
         flex: 0 0 auto;
@@ -653,18 +573,12 @@ export default class PillFormatChooser extends Component<Signature> {
         display: block;
       }
 
-      /* Compact mode — parent is too narrow for the full natural pill.
-         Collapse the morphing pill to icon-only (label hidden) so the
-         active button matches the other 32px columns. The whole chooser
-         shrinks uniformly. */
+      /* Compact mode — parent too narrow for the full pill; collapse to icon-only. */
       .pill-format-chooser.compact .pill-content .pf-label {
         display: none;
       }
-      /* Custom tooltip above the button on hover. Only shown in
-         compact mode (where icons stand alone with no visible label).
-         Uses data-fmt for the text so we get the bare format name
-         (not capitalized via JS). The native `title=` attr stays as
-         an accessibility / long-press fallback. */
+      /* Tooltip above button in compact mode (icons have no visible label).
+         Uses data-fmt so text is unmodified; title= is the a11y fallback. */
       .pill-format-chooser.compact .pf-btn {
         position: relative;
       }
@@ -676,6 +590,8 @@ export default class PillFormatChooser extends Component<Signature> {
         text-transform: capitalize;
         letter-spacing: var(--boxel-lsp-xs);
         padding: 5px 9px;
+        background: var(--pf-bg);
+        color: var(--pf-color);
         border-radius: var(--boxel-border-radius-sm);
         white-space: nowrap;
         pointer-events: none;
@@ -683,13 +599,9 @@ export default class PillFormatChooser extends Component<Signature> {
         transform: translateX(-50%);
         z-index: 10;
       }
-      /* Compact view = icon-only. The tooltip is the user's only way
-         to read a label, so it must appear instantly on hover with no
-         delay. During a drag, pointer-capture suppresses :hover events
-         on neighbor buttons, so we also show the tooltip on whichever
-         button is currently `active` (which updates live as the
-         cursor crosses buttons) — this makes the tooltip follow the
-         drag without lagging on the originally-pressed button. */
+      /* Show tooltip instantly — it's the only label in compact mode.
+         During drag, pointer-capture kills :hover on neighbors, so show
+         the tooltip on .active instead so it follows the cursor. */
       .pill-format-chooser.compact .pf-btn:hover::after,
       .pill-format-chooser.compact.dragging .pf-btn.active::after {
         opacity: 1;

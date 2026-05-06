@@ -51,9 +51,7 @@ import type {
   ViewCardFn,
 } from 'https://cardstack.com/base/card-api';
 
-import FormatChooser from '../code-submode/format-chooser';
 import PillFormatChooser from '../code-submode/pill-format-chooser';
-import { type FormatWithIcon, formatsWithIcons, Form } from '../card-formats';
 
 import FittedFormatGallery from './fitted-format-gallery';
 import MarkdownPreview from './markdown-preview';
@@ -89,7 +87,7 @@ export default class PreviewPanel extends Component<Signature> {
 
   private get format(): Format {
     let format = this.args.format ?? 'isolated';
-    if (!this.availableFormats.map((f) => f.format).includes(format)) {
+    if (!this.availableFormats.includes(format)) {
       return 'isolated';
     }
     return format;
@@ -178,33 +176,6 @@ export default class PreviewPanel extends Component<Signature> {
   }
 
   private get availableFormats() {
-    let allFormats = formatsWithIcons;
-    if (this.isCard) {
-      const ctor = (this.args.card as CardDef).constructor as typeof CardDef;
-      const hasCustomEdit = ctor.hasCustomEditTemplate;
-      // Insert 'form' (toggle standard view) right after 'edit' ONLY
-      // when this card has a custom edit template. Note: a card that
-      // shares the same component for edit and isolated (e.g.
-      // Polymorph: `static edit = PolymorphIsolated`) still counts as
-      // having a custom edit — `hasCustomEditTemplate` is `edit !==
-      // CardDef.edit`, regardless of whether it equals isolated.
-      const result: FormatWithIcon[] = [];
-      for (const f of allFormats) {
-        result.push(f);
-        if (f.format === 'edit' && hasCustomEdit) {
-          result.push({ format: 'form', icon: Form });
-        }
-      }
-      return result;
-    }
-    let formats = allFormats.filter((f) => f.format !== 'edit');
-    if (this.isFileDef) {
-      return [...formats, { format: 'metadata' as Format }];
-    }
-    return formats;
-  }
-
-  private get pillAvailableFormats() {
     if (this.isCard) {
       const ctor = (this.args.card as CardDef).constructor as typeof CardDef;
       const hasCustomEdit = ctor.hasCustomEditTemplate;
@@ -350,11 +321,11 @@ export default class PreviewPanel extends Component<Signature> {
       </div>
     </div>
     <div class='card-renderer-format-chooser-container'>
-      <FormatChooser
+      <PillFormatChooser
         class='card-renderer-format-chooser'
         @format={{this.format}}
         @setFormat={{@setFormat}}
-        @formatsWithIcons={{this.availableFormats}}
+        @formats={{this.availableFormats}}
       />
     </div>
 
