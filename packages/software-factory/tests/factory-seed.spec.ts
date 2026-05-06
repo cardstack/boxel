@@ -140,10 +140,13 @@ test('creates bootstrap seed issue in a live realm', async ({ realm }) => {
 
     // Realm-side source POST indexing is async, so the seed card may
     // not be in the search index yet. Bounded-poll until listIssues
-    // sees the seed (or the deadline elapses).
+    // sees the seed (or the deadline elapses). 30s allows the seed's
+    // incremental indexing to drain even when it's queued behind the
+    // realm's from-scratch index from test setup.
     let issues = await retryWithPoll(
       () => issueStore.listIssues(),
       (results) => !results.some((i) => i.id.includes('Issues/bootstrap-seed')),
+      { totalWaitMs: 30_000 },
     );
     let seedIssue = issues.find((i) => i.id.includes('Issues/bootstrap-seed'));
     expect(seedIssue).toBeDefined();
