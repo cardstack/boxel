@@ -174,7 +174,7 @@ export default class ColorPickerField extends Component<ColorFieldSignature> {
         {{else}}
           <ColorPicker
             @color={{@model}}
-            @onChange={{this.handleColorChange}}
+            @onChange={{this.handleColorChangeImmediate}}
             @disabled={{not @canEdit}}
           />
         {{/if}}
