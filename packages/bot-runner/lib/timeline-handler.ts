@@ -5,7 +5,8 @@ import {
   query,
 } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
-import { CommandRunner } from './command-runner';
+import { CommandRunner, makeEnqueueRunCommand } from './command-runner';
+import { PrListingWorkflowHandler } from './pr-listing/pr-listing-workflow-handler';
 import type { GitHubClient } from './github';
 import type { DBAdapter, QueuePublisher } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
@@ -32,12 +33,14 @@ export function onTimelineEvent({
   githubClient,
   startTime,
 }: TimelineHandlerOptions) {
-  let commandRunner = new CommandRunner(
-    authUserId,
-    dbAdapter,
-    queuePublisher,
+  let workflowHandler = new PrListingWorkflowHandler({
+    submissionBotUserId: authUserId,
+    enqueueRunCommand: makeEnqueueRunCommand(queuePublisher, dbAdapter),
     githubClient,
-  );
+  });
+  let commandRunner = new CommandRunner(dbAdapter, queuePublisher, [
+    workflowHandler,
+  ]);
   return async function handleTimelineEvent(
     event: MatrixEvent,
     room: Room | undefined,

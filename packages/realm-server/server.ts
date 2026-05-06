@@ -1046,9 +1046,22 @@ export class RealmServer {
         [ownerUserId]: DEFAULT_PERMISSIONS,
       });
 
-      writeJSONSync(join(realmPath, '.realm.json'), {
-        publishable: true,
-      });
+      // CS-10053: publishable lives in realm_metadata now, not the
+      // sidecar. The legacy .realm.json is no longer written here;
+      // hostHome/interactHome (still sidecar-owned until CS-10055)
+      // are absent on a fresh realm and don't need a placeholder file.
+      // Reset all mutable metadata columns on conflict so a stale row
+      // (e.g. left over from a previous realm at the same URL whose
+      // delete didn't clean up) doesn't bleed into the new realm.
+      await query(this.dbAdapter, [
+        `INSERT INTO realm_metadata (url, publishable, show_as_catalog) VALUES (`,
+        param(url),
+        `,`,
+        param(true),
+        `,`,
+        param(null),
+        `) ON CONFLICT (url) DO UPDATE SET publishable = true, show_as_catalog = NULL, updated_at = now()`,
+      ]);
       writeJSONSync(join(realmPath, 'realm.json'), {
         data: {
           type: 'card',

@@ -1,8 +1,9 @@
 import { Component, primitive, FieldDef } from './card-api';
+import GlimmerComponent from '@glimmer/component';
 import { isValid, parse } from 'date-fns';
 import { fn } from '@ember/helper';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { not, eq, formatDateTime } from '@cardstack/boxel-ui/helpers';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 import {
   DateSerializer,
@@ -11,6 +12,9 @@ import {
   isValidDate,
 } from '@cardstack/runtime-common';
 import { formatDateForMarkdown } from './markdown-helpers';
+import { Countdown } from './components/countdown';
+import { Timeline } from './components/timeline';
+import { Age } from './components/age';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
 // it in the application route at app startup.
@@ -22,7 +26,31 @@ const Format = new Intl.DateTimeFormat('en-US', {
 
 const { dateFormat } = DateSerializer;
 
-class View extends Component<typeof DateField> {
+interface DateFieldConfiguration {
+  presentation?: 'standard' | 'countdown' | 'timeline' | 'age';
+  preset?: 'tiny' | 'short' | 'medium' | 'long';
+  format?: string;
+  countdownOptions?: {
+    label?: string;
+    showControls?: boolean;
+  };
+  timelineOptions?: {
+    eventName?: string;
+    status?: 'complete' | 'active' | 'pending';
+  };
+  ageOptions?: {
+    showNextBirthday?: boolean;
+  };
+}
+
+interface ViewSignature {
+  Args: {
+    model: Date | null | undefined;
+    configuration?: unknown;
+  };
+}
+
+class View extends GlimmerComponent<ViewSignature> {
   <template>
     {{this.formatted}}
   </template>
@@ -37,13 +65,130 @@ class View extends Component<typeof DateField> {
   }
 }
 
+class EmbeddedView extends GlimmerComponent<ViewSignature> {
+  get config(): DateFieldConfiguration | undefined {
+    return this.args.configuration as DateFieldConfiguration | undefined;
+  }
+
+  get presentationMode() {
+    return this.config?.presentation ?? 'standard';
+  }
+
+  get displayValue() {
+    if (!this.args.model) return 'No date set';
+    try {
+      const date = new Date(this.args.model.toString());
+      const preset = this.config?.preset || 'long';
+      const customFormat = this.config?.format;
+      return formatDateTime(date, {
+        preset: customFormat ? undefined : preset,
+        format: customFormat,
+        fallback: 'Invalid date',
+      });
+    } catch {
+      return String(this.args.model);
+    }
+  }
+
+  <template>
+    {{#if (eq this.presentationMode 'age')}}
+      <Age @model={{@model}} @config={{this.config}} />
+    {{else if (eq this.presentationMode 'timeline')}}
+      <Timeline @model={{@model}} @config={{this.config}} />
+    {{else if (eq this.presentationMode 'countdown')}}
+      <Countdown @model={{@model}} @config={{this.config}} />
+    {{else if this.config}}
+      <div class='date-embedded' data-test-date-embedded>
+        <span class='date-value'>{{this.displayValue}}</span>
+      </div>
+    {{else}}
+      <View @model={{@model}} />
+    {{/if}}
+
+    <style scoped>
+      .date-embedded {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem;
+        font-size: 0.875rem;
+        color: var(--foreground, #1a1a1a);
+      }
+
+      .date-value {
+        font-weight: 500;
+      }
+    </style>
+  </template>
+}
+
+class AtomView extends GlimmerComponent<ViewSignature> {
+  get displayValue() {
+    if (!this.args.model) return 'No date';
+    try {
+      const date = new Date(String(this.args.model));
+      const config = this.args.configuration as DateFieldConfiguration | undefined;
+      return formatDateTime(date, {
+        preset: config?.preset || 'medium',
+        fallback: 'Invalid date',
+      });
+    } catch {
+      return String(this.args.model);
+    }
+  }
+
+  <template>
+    {{#if @configuration}}
+      <span class='date-atom' data-test-date-atom>
+        <CalendarIcon class='date-icon' />
+        <span class='date-value'>{{this.displayValue}}</span>
+      </span>
+    {{else}}
+      <View @model={{@model}} />
+    {{/if}}
+
+    <style scoped>
+      .date-atom {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.25rem 0.5rem;
+        background: var(--primary, #3b82f6);
+        color: var(--primary-foreground, #ffffff);
+        border-radius: var(--radius, 0.375rem);
+        font-size: 0.8125rem;
+        font-weight: 500;
+      }
+
+      .date-icon {
+        width: 0.875rem;
+        height: 0.875rem;
+        flex-shrink: 0;
+      }
+
+      .date-value {
+        white-space: nowrap;
+      }
+    </style>
+  </template>
+}
+
 export default class DateField extends FieldDef {
   static icon = CalendarIcon;
   static [primitive]: Date;
   static [fieldSerializer] = 'date' as const;
   static displayName = 'Date';
-  static embedded = View;
-  static atom = View;
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <EmbeddedView @model={{@model}} @configuration={{@configuration}} />
+    </template>
+  };
+
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      <AtomView @model={{@model}} @configuration={{@configuration}} />
+    </template>
+  };
 
   // CS-10786: emit a consistently-formatted, markdown-escaped date so the
   // value doesn't introduce accidental formatting when interpolated into a

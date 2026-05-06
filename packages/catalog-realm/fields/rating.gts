@@ -10,7 +10,7 @@ import NumberField, {
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
 
-import { getNumericValue, hasValue } from './number/util/index';
+import { getNumericValue, hasValue } from 'https://cardstack.com/base/number/util/index';
 
 // Options interface for rating field
 export interface RatingOptions {

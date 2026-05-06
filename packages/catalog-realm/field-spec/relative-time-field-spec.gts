@@ -10,7 +10,7 @@ import {
   contains,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import RelativeTimeField from '../fields/time/relative-time';
+import RelativeTimeField from 'https://cardstack.com/base/time/relative-time';
 import CodeSnippet from '../components/code-snippet';
 
 const standardFieldCode = `@field standard = contains(RelativeTimeField);`;

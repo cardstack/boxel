@@ -1,6 +1,6 @@
 import type { Realm } from '@cardstack/runtime-common';
 import { logger, param, query } from '@cardstack/runtime-common';
-import type { PgAdapter } from '@cardstack/postgres';
+import type { PgAdapter, NotificationSubscription } from '@cardstack/postgres';
 import { WorkLoop } from '@cardstack/postgres';
 
 const log = logger('realm-server:registry-reconciler');
@@ -65,6 +65,8 @@ export class RealmRegistryReconciler {
   #deps: ReconcilerDeps;
   #loop: WorkLoop;
   #started = false;
+  #subscription?: NotificationSubscription;
+  #starting?: Promise<void>;
   knownByUrl = new Map<string, RealmRegistryRow>();
   mounted = new Map<string, Realm>();
   pendingMounts = new Map<string, Promise<Realm>>();
@@ -102,28 +104,47 @@ export class RealmRegistryReconciler {
   }
 
   // Begin the LISTEN + poll loop. Safe to call once; no-ops on repeat.
-  start(): void {
+  async start(): Promise<void> {
     if (this.#started) {
+      await this.#starting;
       return;
     }
     this.#started = true;
-    this.#loop.run(async (loop) => {
-      await this.#deps.dbAdapter.listen(
+    this.#starting = (async () => {
+      this.#subscription = await this.#deps.dbAdapter.subscribe(
         CHANNEL,
-        loop.wake.bind(loop),
-        async () => {
-          // Run one reconcile immediately on start, then loop on wake-or-poll.
-          while (!loop.shuttingDown) {
-            await this.#safeReconcile();
-            await loop.sleep();
-          }
-        },
+        this.#loop.wake.bind(this.#loop),
       );
-    });
+      this.#loop.run(async (loop) => {
+        // Run one reconcile immediately on start, then loop on wake-or-poll.
+        while (!loop.shuttingDown) {
+          await this.#safeReconcile();
+          await loop.sleep();
+        }
+      });
+    })();
+    try {
+      await this.#starting;
+    } finally {
+      this.#starting = undefined;
+    }
   }
 
   async shutDown(): Promise<void> {
+    // Wait for any in-flight start() to finish wiring up #subscription before
+    // tearing down. Otherwise shutDown can race a still-pending subscribe()
+    // and leave a live subscription installed after we thought we were shut
+    // down. Swallow start() errors here — nothing to unsubscribe if startup
+    // failed.
+    try {
+      await this.#starting;
+    } catch {
+      // ignore
+    }
     await this.#loop.shutDown();
+    const sub = this.#subscription;
+    this.#subscription = undefined;
+    await sub?.unsubscribe();
   }
 
   async #safeReconcile(): Promise<void> {
