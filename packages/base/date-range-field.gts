@@ -12,8 +12,13 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { formatDateRangeForMarkdown } from './markdown-helpers';
+import { BusinessDays } from './components/business-days';
+
+interface DateRangeFieldConfiguration {
+  presentation?: 'standard' | 'businessDays';
+}
 
 const Format = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
@@ -180,8 +185,20 @@ export default class DateRangeField extends FieldDef {
   };
 
   static embedded = class Embedded extends Component<typeof this> {
+    get config(): DateRangeFieldConfiguration | undefined {
+      return this.args.configuration as DateRangeFieldConfiguration | undefined;
+    }
+
+    get presentationMode() {
+      return this.config?.presentation ?? 'standard';
+    }
+
     <template>
-      <@fields.start /> - <@fields.end />
+      {{#if (eq this.presentationMode 'businessDays')}}
+        <BusinessDays @model={{@model}} @config={{this.config}} />
+      {{else}}
+        <@fields.start /> - <@fields.end />
+      {{/if}}
     </template>
   };
 
