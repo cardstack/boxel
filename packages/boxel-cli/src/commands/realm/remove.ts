@@ -17,8 +17,12 @@ export interface RemoveRealmOptions {
 export interface RemoveRealmResult {
   /** Normalized URL the operation targeted (always trailing-slashed). */
   realmUrl: string;
-  /** True when account_data was modified. False for dry-run or not-in-list. */
+  /** True only when both server delete and Matrix unlink completed. */
   removed: boolean;
+  /** True when DELETE /_delete-realm returned 204. */
+  serverDeleted: boolean;
+  /** True when Matrix `app.boxel.realms` was rewritten without the URL. */
+  unlinked: boolean;
   /** Number of entries before the change. */
   previousCount: number;
   /** Number of entries the next list would contain (computed even on dry-run). */
@@ -32,8 +36,10 @@ export interface RemoveRealmResult {
 }
 
 /**
- * Soft-remove a realm URL from the active profile's `app.boxel.realms`
- * Matrix account_data list. Server-side files are untouched.
+ * Remove a realm: delete server-side files / index / registry via
+ * `DELETE /_delete-realm`, then unlink the URL from the active profile's
+ * `app.boxel.realms` Matrix account_data list. Mirrors the host UI's
+ * workspace delete flow and inverts `boxel realm create`.
  *
  * Programmatic API. Returns a result object on every code path; never
  * prompts and never calls `process.exit`. The CLI wraps this with a TTY
@@ -49,6 +55,8 @@ export async function removeRealm(
     return {
       realmUrl,
       removed: false,
+      serverDeleted: false,
+      unlinked: false,
       previousCount: 0,
       nextCount: 0,
       error: NO_ACTIVE_PROFILE_ERROR,
@@ -62,6 +70,8 @@ export async function removeRealm(
     return {
       realmUrl,
       removed: false,
+      serverDeleted: false,
+      unlinked: false,
       previousCount: 0,
       nextCount: 0,
       error: `Failed to load realm list: ${
@@ -76,6 +86,8 @@ export async function removeRealm(
     return {
       realmUrl,
       removed: false,
+      serverDeleted: false,
+      unlinked: false,
       previousCount,
       nextCount: previousCount,
       notInList: true,
@@ -86,22 +98,92 @@ export async function removeRealm(
   let nextCount = previousCount - 1;
 
   if (options.dryRun) {
-    return { realmUrl, removed: false, previousCount, nextCount };
+    return {
+      realmUrl,
+      removed: false,
+      serverDeleted: false,
+      unlinked: false,
+      previousCount,
+      nextCount,
+    };
   }
 
+  let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
+  let response: Response;
   try {
-    let removed = await pm.removeFromUserRealms(realmUrl);
-    return { realmUrl, removed, previousCount, nextCount };
+    response = await pm.authedRealmServerFetch(
+      `${realmServerUrl}/_delete-realm`,
+      {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/vnd.api+json' },
+        body: JSON.stringify({
+          data: { type: 'realm', id: realmUrl },
+        }),
+      },
+    );
   } catch (err) {
     return {
       realmUrl,
       removed: false,
+      serverDeleted: false,
+      unlinked: false,
       previousCount,
       nextCount: previousCount,
-      error: `Failed to update Matrix account data: ${
+      error: `Failed to reach realm server: ${
         err instanceof Error ? err.message : String(err)
       }`,
     };
+  }
+
+  if (!response.ok) {
+    let body = await safeReadResponseText(response);
+    let error =
+      response.status === 403
+        ? `You do not own this realm and cannot delete it on the server. Server returned 403: ${body}`
+        : `Realm server returned ${response.status}: ${body}`;
+    return {
+      realmUrl,
+      removed: false,
+      serverDeleted: false,
+      unlinked: false,
+      previousCount,
+      nextCount: previousCount,
+      error,
+    };
+  }
+
+  let unlinked: boolean;
+  try {
+    unlinked = await pm.removeFromUserRealms(realmUrl);
+  } catch (err) {
+    return {
+      realmUrl,
+      removed: false,
+      serverDeleted: true,
+      unlinked: false,
+      previousCount,
+      nextCount: previousCount,
+      error: `Server delete succeeded, but Matrix unlink failed: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    };
+  }
+
+  return {
+    realmUrl,
+    removed: true,
+    serverDeleted: true,
+    unlinked,
+    previousCount,
+    nextCount,
+  };
+}
+
+async function safeReadResponseText(response: Response): Promise<string> {
+  try {
+    return await response.text();
+  } catch {
+    return '<no response body>';
   }
 }
 
@@ -114,9 +196,9 @@ export function registerRemoveCommand(realm: Command): void {
   realm
     .command('remove')
     .description(
-      "Soft-remove a realm from the active profile's UI realm list (does not delete server files)",
+      'Remove a realm — deletes server-side files and unlinks it from your realm list',
     )
-    .argument('<realm-url>', 'realm URL to remove from app.boxel.realms')
+    .argument('<realm-url>', 'realm URL to remove')
     .option('-y, --yes', 'Skip the interactive confirmation prompt')
     .option('--dry-run', 'Preview the change without writing to Matrix')
     .action(async (realmUrlInput: string, opts: RemoveCliOptions) => {
@@ -137,14 +219,14 @@ export function registerRemoveCommand(realm: Command): void {
         process.exit(1);
       }
 
-      console.log(`Soft remove target: ${FG_CYAN}${preview.realmUrl}${RESET}`);
+      console.log(`Remove target: ${FG_CYAN}${preview.realmUrl}${RESET}`);
       console.log(
         `${DIM}app.boxel.realms: ${preview.previousCount} -> ${preview.nextCount}${RESET}`,
       );
 
       if (opts.dryRun) {
         console.log(
-          `${DIM}[DRY RUN] No Matrix account data changes sent.${RESET}`,
+          `${DIM}[DRY RUN] No server delete or Matrix changes sent.${RESET}`,
         );
         return;
       }
@@ -157,7 +239,7 @@ export function registerRemoveCommand(realm: Command): void {
           process.exit(1);
         }
         let answer = await prompt(
-          'Proceed with soft remove from your realm list? (y/N) ',
+          'This will permanently delete the realm files, indexer state, and registry entry on the server. Proceed? (y/N) ',
         );
         if (!/^y/i.test(answer)) {
           console.log(`${DIM}Cancelled.${RESET}`);
@@ -170,14 +252,16 @@ export function registerRemoveCommand(realm: Command): void {
         console.error(
           `${FG_RED}Error:${RESET} ${result.error ?? 'Removal did not complete.'}`,
         );
+        if (result.serverDeleted && !result.unlinked) {
+          console.error(
+            `${DIM}The realm is gone, but your account_data still references ${result.realmUrl}.${RESET}`,
+          );
+        }
         process.exit(1);
       }
 
       console.log(
         `${FG_GREEN}Removed:${RESET} ${FG_CYAN}${result.realmUrl}${RESET}`,
-      );
-      console.log(
-        `${DIM}Note: server files are not deleted by this command.${RESET}`,
       );
     });
 }
