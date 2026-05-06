@@ -60,6 +60,7 @@
 import { createServer as createHttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { randomUUID } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 
 import { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -234,8 +235,16 @@ export class OpencodeFactoryAgent implements LoopAgent {
     }
 
     try {
+      // Resolve the workspace to its canonical real path. opencode
+      // normalizes the directory query through its own realpath
+      // before storing the session (e.g. `/var/folders/...` →
+      // `/private/var/folders/...` on macOS). If we don't pre-
+      // resolve, the directory we pass to `session.status` later
+      // won't string-match the one opencode recorded at create
+      // time, so the status map comes back empty.
+      let workspaceDir = realpathSync(this.config.workspaceDir);
       let session = await client.session.create({
-        query: { directory: this.config.workspaceDir },
+        query: { directory: workspaceDir },
       });
       let sessionId = (session.data as { id: string }).id;
 
@@ -271,7 +280,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
         });
 
       try {
-        await waitForSessionIdle(client, sessionId, this.config.workspaceDir);
+        await waitForSessionIdle(client, sessionId, workspaceDir);
       } finally {
         // Best-effort: drain any pending prompt resolution before
         // teardown so its socket gets closed cleanly.
