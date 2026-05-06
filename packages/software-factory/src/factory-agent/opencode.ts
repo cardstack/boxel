@@ -255,14 +255,14 @@ export class OpencodeFactoryAgent implements LoopAgent {
       // until the model + tool loop completes, but in opencode
       // 1.14.34 the response often isn't flushed once the loop exits
       // — leaving the promise hanging long after the server-side
-      // session is idle. Same issue with the `client.event.subscribe`
-      // SSE stream (events that fire before the SSE connection is
-      // fully established are silently lost). Polling
-      // `client.session.status` is a coarse but reliable workaround:
-      // SessionStatus is a discriminated union of `idle | retry |
-      // busy`, so we wait until our session leaves `busy`. The
-      // prompt's return value is unused — DONE / CLARIFICATION
-      // signals come back through the MCP server, not the prompt.
+      // session is idle. The other obvious completion signals
+      // (`client.event.subscribe` SSE stream and
+      // `client.session.status` map) both turned out empty / racy in
+      // this version too. Watching `session.list[id].time.updated`
+      // through a stability window is the only signal that's both
+      // present and reliable here. The prompt's return value is
+      // unused — DONE / CLARIFICATION signals come back through the
+      // MCP server, not the prompt.
       let promptPromise = client.session
         .prompt({
           path: { id: sessionId },
@@ -557,29 +557,31 @@ function serializeSignalResult(result: unknown): unknown {
 }
 
 /**
- * Poll `client.session.status` until our session settles. Used as a
- * workaround for the unreliable completion signals on `session.prompt`
- * and `client.event.subscribe` in opencode 1.14.34.
+ * Poll `client.session.list` and watch `session.time.updated` until it
+ * stops advancing for `STABILITY_WINDOW_MS`. opencode bumps
+ * `time.updated` on every `message.part.delta` (and every step
+ * transition), so a few seconds of no change reliably means the model
+ * + tool loop has gone idle.
  *
- * Empirically, `/session/status` returns a map of *currently busy*
- * sessions: an entry appears when the session enters `busy`/`retry` and
- * disappears once the session goes idle. So we wait for our sessionId
- * to first show up (the prompt transitioned the session into busy) and
- * then for it to either report `type: 'idle'` or vanish from the map.
- * Both paths mean "the loop finished". The `directory` query has to
- * match the directory used at session-create time; otherwise the
- * response is `{}` regardless of session state. `MAX_WAIT_MS` bounds
- * the wait so a hung session can't trap the factory loop forever.
+ * This is the third workaround attempt for unreliable opencode 1.14.34
+ * completion signals, following the dead `await session.prompt` HTTP
+ * response and the empty `/session/status` map (which appears to be
+ * unused / always `{}` in this version regardless of canonical
+ * directory). The `directory` query has to match the canonical realpath
+ * opencode normalized at create time (`/var → /private/var` on macOS),
+ * which the caller has already resolved.
  */
 async function waitForSessionIdle(
-  client: { session: { status: (opts?: any) => Promise<unknown> } },
+  client: { session: { list: (opts?: any) => Promise<unknown> } },
   sessionId: string,
   workspaceDir: string,
 ): Promise<void> {
   const POLL_INTERVAL_MS = 750;
+  const STABILITY_WINDOW_MS = 5000;
   const MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes; comfortable upper bound for opus
   let started = Date.now();
-  let observedBusy = false;
+  let lastUpdated: number | undefined;
+  let stableSince: number | undefined;
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -589,24 +591,23 @@ async function waitForSessionIdle(
       );
     }
 
-    let res = (await client.session.status({
+    let res = (await client.session.list({
       query: { directory: workspaceDir },
     })) as {
-      data?: Record<string, { type: string }>;
+      data?: Array<{ id: string; time: { updated: number } }>;
     };
-    let status = res.data?.[sessionId];
-    if (status) {
-      // Session is in the status map — it's working (busy / retry) or
-      // the rare moment where it's reporting idle while still listed.
-      if (status.type !== 'idle') {
-        observedBusy = true;
-      } else if (observedBusy) {
+    let session = res.data?.find((s) => s.id === sessionId);
+    if (session) {
+      let updated = session.time.updated;
+      if (lastUpdated === undefined || updated !== lastUpdated) {
+        lastUpdated = updated;
+        stableSince = Date.now();
+      } else if (
+        stableSince !== undefined &&
+        Date.now() - stableSince >= STABILITY_WINDOW_MS
+      ) {
         return;
       }
-    } else if (observedBusy) {
-      // Session was previously in the map and has now disappeared —
-      // opencode dropped the entry on idle transition. We're done.
-      return;
     }
 
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
