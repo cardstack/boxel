@@ -306,11 +306,11 @@ export class OpencodeFactoryAgent implements LoopAgent {
       } catch {
         // best-effort
       }
-      // `opencode.close()` returns synchronously and doesn't wait for
-      // the subprocess to actually exit; the next iteration will hit
-      // EADDRINUSE on port 4096 if we don't poll the port until it's
-      // free here. 5s is generous — opencode usually exits in <1s.
-      await waitForPortFree(4096, 5000);
+      // `opencode.close()` only sends SIGTERM and the binary in 1.14.34
+      // ignores it. Wait briefly for graceful exit, then escalate to
+      // SIGKILL if the port is still held — otherwise the next
+      // iteration's `createOpencodeServer` always hits EADDRINUSE.
+      await waitForPortFree(4096, 1000);
       await mcp.close().catch(() => undefined);
     }
 
@@ -640,24 +640,60 @@ async function waitForSessionIdle(
 }
 
 /**
- * Block until a TCP port is free on localhost, or `timeoutMs` elapses
- * (whichever comes first). Used after `opencode.close()` because the
- * SDK's close call doesn't wait for the spawned subprocess to actually
- * exit and release the fixed port 4096 — without this guard the next
- * `OpencodeFactoryAgent.run()` in the same process hits EADDRINUSE.
+ * Block until a TCP port is free on localhost. Tries graceful drain
+ * first, then escalates to SIGKILL on whoever is listening — opencode
+ * 1.14.34 ignores the SIGTERM the SDK sends from `close()` (it spawns
+ * a precompiled binary that doesn't honour the signal), so without
+ * this the next iteration's `createOpencodeServer` always hits
+ * EADDRINUSE.
  */
-async function waitForPortFree(port: number, timeoutMs: number): Promise<void> {
-  let deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let free = await new Promise<boolean>((resolve) => {
-      let probe = createHttpServer();
-      probe.unref();
-      probe.once('error', () => resolve(false));
-      probe.listen(port, '127.0.0.1', () => {
-        probe.close(() => resolve(true));
-      });
-    });
-    if (free) return;
+async function waitForPortFree(port: number, graceMs: number): Promise<void> {
+  let graceDeadline = Date.now() + graceMs;
+  while (Date.now() < graceDeadline) {
+    if (await isPortFree(port)) return;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+  // Still held after the grace window — escalate to SIGKILL on
+  // whoever is listening. Best-effort: if `lsof` isn't available or
+  // finds nothing, leave the next iteration to throw a clearer
+  // EADDRINUSE rather than silently fail here.
+  let { execSync } = await import('node:child_process');
+  try {
+    let pids = execSync(`lsof -nP -iTCP:${port} -sTCP:LISTEN -t`, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .split('\n')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    for (let pid of pids) {
+      try {
+        process.kill(Number(pid), 'SIGKILL');
+        log.warn(
+          `forced SIGKILL on stale opencode pid=${pid} holding port ${port}`,
+        );
+      } catch {
+        // process already gone
+      }
+    }
+  } catch {
+    // lsof not on PATH or no listener — fall through to the post-kill
+    // wait, which will return immediately if the port is free.
+  }
+  let killDeadline = Date.now() + 2000;
+  while (Date.now() < killDeadline) {
+    if (await isPortFree(port)) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+async function isPortFree(port: number): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    let probe = createHttpServer();
+    probe.unref();
+    probe.once('error', () => resolve(false));
+    probe.listen(port, '127.0.0.1', () => {
+      probe.close(() => resolve(true));
+    });
+  });
 }
