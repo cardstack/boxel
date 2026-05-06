@@ -4,7 +4,7 @@ import type { GitHubClient } from '../lib/github';
 import {
   CreateListingPRHandler,
   type BotTriggerEventContent,
-} from '../lib/create-listing-pr-handler';
+} from '../lib/pr-listing/create-listing-pr-handler';
 
 function expectedFolderName(roomId: string, listingName: string): string {
   return toBranchName(roomId, listingName).split('/')[0];

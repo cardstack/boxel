@@ -9,11 +9,11 @@ import NumberField, {
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
 
-import { getNumericValue, getFormattedDisplayValue } from './number/util/index';
+import { getNumericValue, getFormattedDisplayValue } from 'https://cardstack.com/base/number/util/index';
 import {
   ProgressBarEmbedded,
   ProgressBarAtom,
-} from './number/components/progress-bar';
+} from 'https://cardstack.com/base/number/components/progress-bar';
 
 // Options interface for slider field
 export interface SliderOptions {

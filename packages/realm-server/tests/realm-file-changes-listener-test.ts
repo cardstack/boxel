@@ -162,11 +162,8 @@ module(basename(__filename), function () {
         dbAdapter,
         lookupMountedRealm: (url) => (url === realmUrl ? realmA : undefined),
       });
-      listener.start();
+      await listener.start();
       try {
-        // Give the LISTEN connection a moment to subscribe.
-        await new Promise((r) => setTimeout(r, 100));
-
         await query(dbAdapter, [
           `SELECT pg_notify(`,
           param('realm_file_changes'),
@@ -195,10 +192,8 @@ module(basename(__filename), function () {
           return undefined;
         },
       });
-      listener.start();
+      await listener.start();
       try {
-        await new Promise((r) => setTimeout(r, 100));
-
         await query(dbAdapter, [
           `SELECT pg_notify(`,
           param('realm_file_changes'),

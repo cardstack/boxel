@@ -10,6 +10,7 @@ import {
   type RenderRouteOptions,
   type ModuleRenderResponse,
   type RunCommandResponse,
+  type ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
 import {
   ecsMetadata,
@@ -128,6 +129,14 @@ export function buildPrerenderApp(options: {
     affinityValue: string;
     command: string;
     commandInput?: unknown;
+  };
+
+  type ScreenshotRouteArgs = RouteBaseArgs & {
+    affinityType: 'realm';
+    affinityValue: string;
+    realm: string;
+    url: string;
+    format: 'isolated' | 'embedded';
   };
 
   type RouteParseResult<A extends RouteBaseArgs> = {
@@ -264,6 +273,63 @@ export function buildPrerenderApp(options: {
       } affinityValue=${(rawAffinityValue as string | undefined) ?? '<missing>'} authProvided=${
         typeof rawAuth === 'string' && rawAuth.trim().length > 0
       } commandProvided=${Boolean(commandValue)}`,
+    };
+  };
+
+  let parseScreenshotAttributes = (
+    attrs: any,
+  ): RouteParseResult<ScreenshotRouteArgs> => {
+    let rawUrl = attrs.url;
+    let rawAuth = attrs.auth;
+    let rawRealm = attrs.realm;
+    let rawAffinityType = attrs.affinityType;
+    let rawAffinityValue = attrs.affinityValue;
+    let rawFormat = attrs.format;
+    let renderOptions = parseRenderOptions(attrs);
+    let priority = parsePriority(attrs);
+    let formatIsValid = rawFormat === 'isolated' || rawFormat === 'embedded';
+    let missing = missingAttrs([
+      { value: rawUrl, name: 'url' },
+      { value: rawRealm, name: 'realm' },
+      { value: rawAuth, name: 'auth' },
+      {
+        value: rawAffinityType === 'realm' ? rawAffinityType : undefined,
+        name: 'affinityType',
+      },
+      { value: rawAffinityValue, name: 'affinityValue' },
+      {
+        value: formatIsValid ? rawFormat : undefined,
+        name: 'format',
+      },
+    ]);
+    return {
+      args:
+        missing.length > 0
+          ? undefined
+          : {
+              affinityType: 'realm',
+              affinityValue: rawAffinityValue as string,
+              realm: rawRealm as string,
+              url: rawUrl as string,
+              auth: rawAuth as string,
+              format: rawFormat as 'isolated' | 'embedded',
+              renderOptions,
+              ...(priority !== undefined ? { priority } : {}),
+            },
+      missing,
+      missingMessage:
+        'Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (isolated|embedded)',
+      logTarget: (rawUrl as string | undefined) ?? '<missing>',
+      responseId: (rawUrl as string | undefined) ?? 'unknown',
+      rejectionLogDetails: `affinityType=${
+        (rawAffinityType as string | undefined) ?? '<missing>'
+      } affinityValue=${(rawAffinityValue as string | undefined) ?? '<missing>'} realm=${
+        (rawRealm as string | undefined) ?? '<missing>'
+      } url=${(rawUrl as string | undefined) ?? '<missing>'} format=${
+        (rawFormat as string | undefined) ?? '<missing>'
+      } authProvided=${
+        typeof rawAuth === 'string' && rawAuth.trim().length > 0
+      }`,
     };
   };
 
@@ -524,6 +590,28 @@ export function buildPrerenderApp(options: {
           command: args.command,
           commandInput: args.commandInput as Record<string, unknown> | null,
           ...(args.priority !== undefined ? { priority: args.priority } : {}),
+          signal,
+        }),
+      drainingPromise: options.drainingPromise,
+    },
+  );
+
+  registerPrerenderRoute<ScreenshotPrerenderResponse, ScreenshotRouteArgs>(
+    '/prerender-screenshot',
+    {
+      requestDescription: 'screenshot prerender request',
+      responseType: 'screenshot-result',
+      infoLabel: 'card screenshotted',
+      warnTimeoutMessage: (url) => `screenshot of ${url} timed out`,
+      errorContext: '/prerender-screenshot',
+      parseAttributes: parseScreenshotAttributes,
+      execute: (args, { signal }) =>
+        prerenderer.prerenderScreenshot({
+          realm: args.realm,
+          url: args.url,
+          auth: args.auth,
+          format: args.format,
+          priority: args.priority,
           signal,
         }),
       drainingPromise: options.drainingPromise,

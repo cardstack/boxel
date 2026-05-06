@@ -63,7 +63,15 @@ services:
       - ./loki/config.yaml:/etc/loki/local-config.yaml:ro
       - loki_data:/loki
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3100/ready"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3100/ready",
+        ]
       interval: 5s
       timeout: 3s
       retries: 10

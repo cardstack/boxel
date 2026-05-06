@@ -41,11 +41,19 @@ When you create a Project, Issue, or KnowledgeArticle JSON file, set
 `data.meta.adoptsFrom.module` to **`{{darkfactoryModuleUrl}}`** — this
 is the live module URL for the tracker schema in this run. The exact
 `adoptsFrom.name` per file (`Project` / `Issue` / `KnowledgeArticle`)
-and the JSON:API document shape are documented in the
+and the JSON:API document envelope are documented in the
 software-factory-bootstrap and software-factory-operations skills.
 
 Catalog Spec cards adopt from `https://cardstack.com/base/spec` /
 `Spec` instead, regardless of the target realm.
+
+**Always fetch the live schema before writing a tracker or Spec card.**
+Do not rely on memorized field names or enum values for these card
+types — call `get_card_schema({ module, name })` first and use the
+returned `{ attributes, relationships? }` JSON Schema verbatim. The
+tool introspects the real `CardDef` at runtime, so the shape stays
+correct as the tracker schema evolves. Schemas are cached per-process,
+so repeat calls are cheap.
 
 {{#each skills}}
 

@@ -63,6 +63,7 @@ import {
 } from './handlers/handle-webhook-commands';
 import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver';
 import handleRunCommand from './handlers/handle-run-command';
+import handleScreenshotCard from './handlers/handle-screenshot-card';
 import { buildCreatePrerenderAuth } from './prerender/auth';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler';
 
@@ -214,6 +215,11 @@ export function createRoutes(args: CreateRoutesArgs) {
       dbAdapter: args.dbAdapter,
       createPrerenderAuth,
     }),
+  );
+  router.post(
+    '/_screenshot-card',
+    jwtMiddleware(args.realmSecretSeed),
+    handleScreenshotCard(args),
   );
   router.post(
     '/_publish-realm',

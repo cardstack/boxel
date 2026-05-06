@@ -8,7 +8,9 @@
  */
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common/card-reference-resolver';
 
+import { fetchCardTypeSchema } from './darkfactory-schemas';
 import {
   runEvaluateInMemory,
   type RunEvaluateInMemoryOptions,
@@ -138,8 +140,11 @@ export function buildFactoryTools(
   // no fs / shell. Those wrappers are retired now that opencode
   // backs the OpenRouter path (CS-11034) — both backends use native
   // tools for fs and `boxel read-transpiled` / `boxel search` (via
-  // Bash) for realm reads.
+  // Bash) for realm reads. `get_card_schema` stays because it
+  // introspects the live `CardDef` via the realm-server prerenderer
+  // (no Bash equivalent).
   let tools: FactoryTool[] = [
+    buildGetCardSchemaTool(config),
     buildRunLintTool(config),
     buildRunTestsTool(config),
     buildRunEvaluateTool(config),
@@ -153,9 +158,10 @@ export function buildFactoryTools(
   // issue comments) used to have dedicated wrapper tools here that
   // auto-constructed the JSON:API document, enforced Issue-description
   // immutability, and so on. CS-10883 retired all five; the agent now
-  // writes those `.json` files directly via `Write` (Claude) /
-  // `write_file` (OpenRouter). The shapes and invariants are taught in
-  // the `software-factory-bootstrap` and `software-factory-operations`
+  // writes those `.json` files directly via the backend's native
+  // `Write` tool, after introspecting field shape with
+  // `get_card_schema`. The shapes and invariants are taught in the
+  // `software-factory-bootstrap` and `software-factory-operations`
   // skills, with the live `darkfactoryModuleUrl` named in the system
   // prompt for `adoptsFrom.module`.
 
@@ -178,12 +184,10 @@ export function buildFactoryTools(
 /**
  * Enforce that a required string argument is present and non-empty. Returns
  * the trimmed value or throws a clear error that propagates back to the
- * model as a tool-call result. This is the only runtime guardrail against
- * an LLM emitting a malformed tool call like `write_file({})` — the JSON
- * Schema `required` declaration is advisory for OpenRouter's tool-use and
- * the model can still send empty args. Without this check, path strings
- * like `"undefined"` would end up at the realm's root (e.g., a file named
- * `<realm>/undefined`).
+ * model as a tool-call result. The JSON Schema `required` declaration is
+ * advisory — the model can still send empty args — so this is the runtime
+ * guardrail that keeps a malformed tool call (e.g. `get_card_schema({})`)
+ * from sliding through with a `"undefined"` path or name.
  */
 export function requireStringArg(
   args: Record<string, unknown>,
@@ -203,6 +207,58 @@ export function requireStringArg(
 // ---------------------------------------------------------------------------
 // Factory-level tools
 // ---------------------------------------------------------------------------
+
+function buildGetCardSchemaTool(config: ToolBuilderConfig): FactoryTool {
+  return {
+    name: 'get_card_schema',
+    description:
+      'Fetch the live JSON Schema (attributes + relationships) for a card ' +
+      'definition by its CodeRef. Returns `{ attributes, relationships? }` ' +
+      'with field names, types, and enum values introspected from the ' +
+      'actual `CardDef` at runtime — never hard-coded. Use this BEFORE ' +
+      'writing a tracker JSON file (Project, Issue, KnowledgeArticle, ' +
+      'Spec, etc.) so the document you write matches the live schema, ' +
+      'even when the schema evolves. Schemas are fetched via the realm ' +
+      'server prerenderer (the same path the AI Bot uses) and cached ' +
+      'per-process, so repeated calls with the same code ref are cheap.',
+    parameters: {
+      type: 'object',
+      properties: {
+        module: {
+          type: 'string',
+          description:
+            'Absolute module URL of the card definition (e.g. the live ' +
+            '`darkfactoryModuleUrl` from the system prompt for tracker ' +
+            'cards, or `https://cardstack.com/base/spec` for catalog Spec).',
+        },
+        name: {
+          type: 'string',
+          description:
+            'Exported card name within the module (e.g. `Project`, ' +
+            '`Issue`, `KnowledgeArticle`, `Spec`).',
+        },
+      },
+      required: ['module', 'name'],
+    },
+    execute: async (args) => {
+      let module = requireStringArg(args, 'module', 'get_card_schema');
+      let name = requireStringArg(args, 'name', 'get_card_schema');
+      let schema = await fetchCardTypeSchema(
+        config.client,
+        config.realmServerUrl,
+        config.targetRealmUrl,
+        { module: module as RealmResourceIdentifier, name },
+      );
+      if (!schema) {
+        return {
+          ok: false,
+          error: `Failed to fetch schema for ${module}#${name}. Verify the module URL is reachable from the target realm and that the named export is a CardDef.`,
+        };
+      }
+      return { ok: true, schema };
+    },
+  };
+}
 
 function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
   let execute = config.runTestsInMemory ?? runTestsInMemory;
