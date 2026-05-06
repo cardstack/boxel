@@ -318,9 +318,9 @@ let reportFile = join(tmpdir(), `${endpoint}-playwright-report.json`);
 let playwrightConfig = resolve(process.cwd(), 'playwright.realm.config.ts');
 let playwrightEnv: NodeJS.ProcessEnv = {
   BOXEL_SOURCE_REALM_PATH: sourceRealmPath,
-  BOXEL_SOURCE_REALM_URL: sourceRealmIdentifier,
+  BOXEL_SOURCE_REALM_IDENTIFIER: sourceRealmIdentifier,
   BOXEL_TEST_REALM_PATH: scratchPath,
-  BOXEL_TEST_REALM_URL: scratchRealmUrl,
+  BOXEL_TEST_REALM_IDENTIFIER: scratchRealmUrl,
   PLAYWRIGHT_JSON_OUTPUT_FILE: reportFile,
 };
 let relativeSpecFiles = specFiles.map((filePath) =>
