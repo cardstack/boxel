@@ -113,6 +113,33 @@ GrammyAward/              # Instances in PascalCase directory
 }
 ```
 
+## containsMany Attributes (CRITICAL)
+
+**🔴 `containsMany` fields go in `attributes` as a real JSON array,
+not a comma-separated string.**
+
+```json
+{
+  "data": {
+    "attributes": {
+      "tags": ["sticky-note", "brief", "context", "scope"]
+    }
+  }
+}
+```
+
+### ❌ Wrong: comma-separated string (will fail with `Expected array for field value <name>`)
+
+```json
+{
+  "data": {
+    "attributes": {
+      "tags": "sticky-note, brief, context, scope"
+    }
+  }
+}
+```
+
 ## linksToMany Relationships (CRITICAL)
 
 **🔴 For `linksToMany` fields, use numbered keys like `fieldName.0`, `fieldName.1`, etc.**
@@ -304,6 +331,7 @@ When using the `/_search` API endpoint:
 | PascalCase for `.gts` files            | Use `kebab-case.gts`                          |
 | kebab-case for instance dirs           | Use `PascalCase/`                             |
 | `linksToMany` as array                 | Use numbered keys: `field.0`, `field.1`, etc. |
+| `containsMany` as comma-string         | Use a JSON array in `attributes`: `["a","b"]` |
 
 ## Essential Formats
 

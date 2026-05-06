@@ -114,6 +114,28 @@ dependency cards are implemented before cards that consume them.
 
 ## Instructions
 
+**Step 0 (MANDATORY before any `Write`).** Fetch the live schema for
+each card type you're about to write. Without this you will guess
+field names and array shapes and produce cards that fail to render
+with `Expected array for field value <X>` runtime errors:
+
+```
+get_card_schema({ module: "<darkfactoryModuleUrl from system prompt>", name: "Project" })
+get_card_schema({ module: "<darkfactoryModuleUrl from system prompt>", name: "KnowledgeArticle" })
+get_card_schema({ module: "<darkfactoryModuleUrl from system prompt>", name: "Issue" })
+```
+
+The returned `{ attributes, relationships? }` JSON Schema names every
+field, its type (`string`, `number`, `boolean`, **array** for
+`containsMany` / `linksToMany`, etc.), and any enum values
+(`status`, `priority`, `articleType`, `projectStatus`, `issueType`).
+Use those exact names, types, and enum values. **`containsMany`
+fields like `tags` must be JSON arrays in `attributes` — never a
+comma-separated string.**
+
+Then create the artifacts in order so relationship targets exist
+when referenced:
+
 1. The brief content is included verbatim in the issue description above. Do not fetch the URL — read the description.
 2. Derive the slug and project code from the brief title.
 3. Call `Write` to create the **Project card** at `Projects/<slug>.json`.
@@ -122,10 +144,8 @@ dependency cards are implemented before cards that consume them.
 6. Call `Write` to create **one implementation Issue per entry-point card** at `Issues/<slug>-<card-name-slug>.json`, with all relationships wired.
 7. Call **`signal_done`** (factory MCP tool) — the orchestrator manages issue status transitions. Do NOT set the issue status yourself.
 
-Create artifacts in the order listed — Project first, then Knowledge
-Articles, then Issues — so that relationship targets exist when
-referenced. **You must actually call the `Write` tool for each file.
-Calling `signal_done` without writing the artifacts is a failure.**
+**You must actually call the `Write` tool for each file. Calling
+`signal_done` without writing the artifacts is a failure.**
 
 Create artifacts in the order listed — Project first, then Knowledge Articles,
 then Issues — so that relationship targets exist when referenced.
