@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 
+import { retryWithPoll } from '@cardstack/boxel-cli/api';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 import { createSeedIssue } from '../src/factory-seed';
@@ -137,7 +138,13 @@ test('creates bootstrap seed issue in a live realm', async ({ realm }) => {
       workspaceDir,
     });
 
-    let issues = await issueStore.listIssues();
+    // Realm-side source POST indexing is async, so the seed card may
+    // not be in the search index yet. Bounded-poll until listIssues
+    // sees the seed (or the deadline elapses).
+    let issues = await retryWithPoll(
+      () => issueStore.listIssues(),
+      (results) => !results.some((i) => i.id.includes('Issues/bootstrap-seed')),
+    );
     let seedIssue = issues.find((i) => i.id.includes('Issues/bootstrap-seed'));
     expect(seedIssue).toBeDefined();
     expect(seedIssue!.status).toBe('backlog');
