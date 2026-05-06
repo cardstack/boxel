@@ -23,16 +23,17 @@ import {
   isResolvedCodeRef,
   removeFileExtension,
   rri,
+  type CommandContext,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import ListingCreateCommand from '@cardstack/host/commands/listing-create';
 import ModalContainer from '@cardstack/host/components/modal-container';
 import { SelectedTypePill } from '@cardstack/host/components/operator-mode/create-file-modal';
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type CommandService from '@cardstack/host/services/command-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 
@@ -42,6 +43,7 @@ interface Signature {
 
 export default class CreateListingModal extends Component<Signature> {
   @service declare private commandService: CommandService;
+  @service declare private loaderService: LoaderService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
 
@@ -148,6 +150,33 @@ export default class CreateListingModal extends Component<Signature> {
 
     let targetRealm = payload.targetRealm;
     let openCardIds = this.selectedExampleURLs;
+
+    // Load listing-create from the catalog realm at runtime so we pick up
+    // whatever version is shipped in the realm content, not a stale
+    // host-bundled copy.
+    //
+    // Why runtime `loader.import` and not a static ESM `import`: the
+    // `@cardstack/catalog/` prefix is resolved by the boxel virtual network
+    // (registered in services/network.ts) — that mapping only exists at
+    // runtime. Vite/Embroider has no equivalent alias and the host doesn't
+    // depend on `@cardstack/catalog`, so a static import would fail to
+    // resolve at build time. The realm content also imports things like
+    // `@cardstack/boxel-host/commands/...` which are likewise loader-only
+    // specifiers, so the catalog file isn't independently buildable. Going
+    // through the loader is the only path that resolves both correctly.
+    let module = await this.loaderService.loader.import<{
+      default: new (commandContext: CommandContext) => {
+        execute: (input: {
+          codeRef: ResolvedCodeRef;
+          targetRealm: string;
+          openCardIds: string[];
+        }) => Promise<{
+          listing?: { id?: string };
+          backgroundWork?: Promise<unknown>;
+        }>;
+      };
+    }>('@cardstack/catalog/commands/listing-create');
+    let ListingCreateCommand = module.default;
 
     let result = await new ListingCreateCommand(
       this.commandService.commandContext,
